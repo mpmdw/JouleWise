@@ -2,7 +2,9 @@
 
 Each planted fault moves one value by twice its family bar (or changes one word),
 and each test also shows the fault passing once the check that catches it is
-disabled (counterfactual). Synthetic values only; no repository code is imported.
+disabled (counterfactual). Synthetic values only. RC-CMP-10: the words a producer prints that the base needs
+(the p42 refusal code, the resolution's transport rule, the history lines) come from the producers themselves
+(producer_fixtures, detection_floor); the comparator still imports no repository code.
 """
 import contextlib
 import copy
@@ -16,6 +18,10 @@ import tempfile
 import unittest
 from unittest import mock
 
+from joulewise.detection_floor import TRANSPORT_RULE_ID
+
+from . import producer_fixtures
+
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("compare_b5_recompute_test_subject", ROOT / "scripts/compare_b5_recompute.py")
 cmp = importlib.util.module_from_spec(spec)
@@ -24,6 +30,13 @@ BARS = {name: ROOT / "tests/independent_recompute/bar_sets" / (name + ".json")
         for name in ("recompute_coded_7e322b76", "s13_block6")}
 DECODE, PREFILL = "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b", "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"
 SHA = "0" * 64
+# FS4 (RC-CMP-10): the synthetic window index the fixture's L9 run read (the record carries its digest); the
+# comparator's default --window-index is pointed at it, as the lead passes the full-size window's own index.
+WINDOW_INDEX = ROOT / "tests/independent_recompute/window_index/synthetic.json"
+cmp.WINDOW_INDEX = WINDOW_INDEX
+INDEX_ATTEMPTS = json.loads(WINDOW_INDEX.read_text())["attempts"]
+# The finalized manifest step 8 writes and the fill names (FABLE F4, RC-CMP-10): its lineage names the sealed manifest.
+FINALIZED = "finalized/am-synthetic.finalized.json"
 
 
 ALPHA_CELLS = {"absolute": "d117-df-ph-decode-qwen3-1p7b-absolute", "comparative": "d117-df-cmp-abba-ph-decode-qwen3-1p7b"}
@@ -70,7 +83,7 @@ def verdict_row(cid, p):
     a, b = CONDITIONS[cid]
     phase = "decode" if cid == DECODE else "prefill"
     resolutions = [{"status": "exact", "source_cell_ids": [cell], "transport_group_id": group,
-                    "transport_rule_id": "exact_stack_only.v1", "floor_abs_j": 43.0, "floor_cmp_j": 103.5,
+                    "transport_rule_id": TRANSPORT_RULE_ID, "floor_abs_j": 43.0, "floor_cmp_j": 103.5,
                     "floor_gate_j": 103.5, "reason_codes": []} for group, cell in zip(TRANSPORT_GROUPS[cid], FLOOR_CELLS[cid])]
     blocks = BLOCKS[cid]
     return {"contrast_id": cid, "plan_id": "plan-gamma", "family_instance_id": "fam-gamma-primary", "claim_role": "primary",
@@ -151,7 +164,7 @@ def kept_units_record(pack, runs, cell_id=None):
 
 NEG8_BASE = "bracket.claim_families.gross_energy."
 NEG8_VALUES = {"bound_envelope_j": 2.0, "bound_prediction_j": 1.5, "start.mean_j": 10.0, "midpoint.mean_j": 10.5,
-               "end.mean_j": 11.0, "trajectory_excursion_max_j": 1.0, "drift_allowance_j": 1.25}
+               "end.mean_j": 11.0, "trajectory_excursion_max_j": 1.0, "drift_allowance_j": 1.0}
 NEG8_WORDS = ("neg8_screen", "neg8_allowance", "reference_counts", "corpus_counts")
 
 
@@ -171,7 +184,7 @@ def neg8_recompute():
     """The recompute's NEG-8 terms of a window (windows.<PACK>.neg8), matching neg8_lines."""
     return {"source": "survivor_rescreen", "screen_decision": "passed", "bound_envelope_j": 2.0,
             "bound_prediction_j": 1.5, "start_mean_j": 10.0, "midpoint_j": 10.5, "end_mean_j": 11.0, "spread_j": 1.0,
-            "allowance_j": 1.25, "n_start": 2, "n_mid": 1, "n_end": 3, "corpus_n": 12}
+            "allowance_j": 1.0, "n_start": 2, "n_mid": 1, "n_end": 3, "corpus_n": 12}
 
 
 def structure_lines(pack):
@@ -252,7 +265,8 @@ def sensitivity_rows():
     for pack in ("alpha", "beta"):
         for phase, (cid, _) in reported_cells(pack).items():
             if phase == "prefill-p42":
-                reported.append({"pack": pack, "cell_id": cid, "status": "refused", "code": "p42_expected_unresolvable"})
+                reported.append({"pack": pack, "cell_id": cid, "status": "refused",
+                                 "code": producer_fixtures.p42_refusal_code()})
             else:
                 reported.append({"pack": pack, "cell_id": cid, "status": "computed", "primary": dict(REPORTED_VALUES),
                                  "sensitivity": dict(REPORTED_VALUES), "mean_and_half_width_equal_primary": True,
@@ -316,6 +330,9 @@ def l9_files():
     files["finalized/outputs/closeout.ratio-table.json"] = {"ratios": ratio_rows()}
     rows = [verdict_row(DECODE, 0.84), verdict_row(PREFILL, 0.68)]
     files[f"outputs/{SHA}-claim-verdicts.json"] = {"contrasts": rows}
+    files[FINALIZED] = {"schema_version": "joulewise.analysis_manifest.v3.finalized", "manifest_id": "am-synthetic",
+                        "freeze_status": "finalized",
+                        "lineage": {"prospective_manifest_sha256": cmp.REGISTRY_PINS[cmp.MANIFEST]}}
     windows = {p: {"plan_id": "plan-" + p, "attempt": 1, "harvest_pin": "a1b2c3d" + p, "record_shape": "second_seal"}
                for p in ("alpha", "beta", "gamma")}
     files[f"outputs/{SHA}-results-fill-input.json"] = {
@@ -324,7 +341,8 @@ def l9_files():
                           "harvest_record_sha256": "f" * 64} for p in ("alpha", "beta")},
         "gamma": {"claim_verdicts_id": "cv-synthetic", "claim_verdicts_sha256": "c" * 64, "evidence_class": "synthetic",
                   "limitations": ["synthetic limitation note"], "contrasts": [fill_row(row) for row in rows],
-                  "finalized_manifest": {"manifest_id": "am-synthetic", "file_sha256": "a" * 64},
+                  "finalized_manifest": {"manifest_id": "am-synthetic", "file_sha256": hashlib.sha256(written(
+                      FINALIZED, files[FINALIZED])).hexdigest()},
                   "floor_artifact": {"artifact_id": "floor-synthetic", "file_sha256": "b" * 64}, "exclusions_sha256": "e" * 64},
         "characterization": {"funded": False, "run": False, "verdict": None}}
     cells_lines, kept_cells = [], []
@@ -332,7 +350,7 @@ def l9_files():
         computed, refused = [], []
         for phase, (cid, _) in reported_cells(pack).items():
             if phase == "prefill-p42":
-                refused.append({"cell_id": cid, "code": "p42_expected_unresolvable"})
+                refused.append({"cell_id": cid, "code": producer_fixtures.p42_refusal_code()})
                 continue
             computed.append(dict(copy.deepcopy(REPORTED_PROJECTION), cell_id=cid))
             cells_lines += [
@@ -399,8 +417,8 @@ def l9_files():
                     for row in sensitivity["contrasts"]]
     block_lines += [item("sensitivity_boundary", True, "Sensitivity values are never composed into a primary number."),
                     item("harvest_once", False, "no analysed window was harvested twice", no_analysed_window_harvested_twice=True)]
-    block_lines += [item("attempt_count", False, f"{p}: attempts of this pack: 1 (causes none)", pack=p, superseded=False,
-                         count=1, causes=["none"]) for p in ("alpha", "beta", "gamma")]
+    # FS4 (RC-CMP-10): the history lines, printed by the producer from the window index's attempts.
+    block_lines += producer_fixtures.history_lines(INDEX_ATTEMPTS)
     for ratio in files["finalized/outputs/closeout.ratio-table.json"]["ratios"]:
         label = "R_cm" if ratio["numerator_field"].startswith("common_mode") else "R"
         block_lines.append(item("dominance_ratio", True,
@@ -523,8 +541,9 @@ class ComparatorTests(unittest.TestCase):
             raw = written(name, value)
             path.write_bytes(raw)
             outputs.append({"name": name, "sha256": hashlib.sha256(raw).hexdigest()})
-        (root / cmp.RECORD).write_text(json.dumps({"steps": [{"step": "11", "window": None, "status": "ok",
-                                                               "outputs": outputs}]}))
+        (root / cmp.RECORD).write_text(json.dumps({
+            "window_index_sha256": hashlib.sha256(Path(cmp.WINDOW_INDEX).read_bytes()).hexdigest(),
+            "steps": [{"step": "11", "window": None, "status": "ok", "outputs": outputs}]}))
         return root
 
     def run_compare(self, bars="recompute_coded_7e322b76", rules=RULES):
@@ -572,8 +591,12 @@ class ComparatorTests(unittest.TestCase):
 
     def test_planted_contrast(self):
         # RC-CMP-9: the sensitivity record's own primary D (read directly) and the sum of the verdict's printed
-        # deterministic terms see the moved D too.
-        self.numeric_fault("contrast_j", lambda t: t.ours["contrasts"][DECODE].update(D_j=2.75 * (1 + 2e-6)), rows=3)
+        # deterministic terms see the moved D too. RC-CMP-10 FS3: the record's not_below_primary word reads D's
+        # sensitivity - primary difference, which then disagrees beyond its bar (one outcome_word row).
+        self.ours["contrasts"][DECODE].update(D_j=2.75 * (1 + 2e-6))
+        self.assertEqual(self.fails(self.run_compare()), {"contrast_j": 3, "outcome_word": 1})
+        with mock.patch.object(cmp, "bar_for", return_value=float("inf")):
+            self.assertEqual(self.fails(self.run_compare()), {})
 
     def test_planted_contrast_p(self):
         self.numeric_fault("contrast_p", lambda t: t.ours["contrasts"][PREFILL].update(p=0.68 + 2e-6))
@@ -590,12 +613,16 @@ class ComparatorTests(unittest.TestCase):
         self.ours["contrasts"][DECODE].update(kept_quads=["b01"])
         fails = self.fails(self.run_compare())
         self.assertEqual(set(fails), {"kept_units", "routing_id"})
-        self.assertEqual(fails["kept_units"], 1)
+        # RC-CMP-10 FABLE F2: each registered block's included word is bound to the recompute's kept set too (nine
+        # kept blocks the recompute now leaves out).
+        self.assertEqual(fails["kept_units"], 1 + 9)
         original = cmp.Comparison.exact
 
         def lenient(c, fam, key, l9, ours, **raw):
-            return original(c, fam, key, l9, l9 if fam == "kept_units" else ours, **raw)
-        # Counterfactual: the kept_units row lenient, and neither the table nor the block-id positions.
+            return original(c, fam, key, l9, l9 if fam == "kept_units" or "sampling_removed_block_ids" in key else ours,
+                            **raw)
+        # Counterfactual: the kept_units rows lenient, and neither the table nor the block-id positions (RC-CMP-10:
+        # nor the verdict's own sampling copy).
         with mock.patch.object(cmp.Comparison, "exact", lenient), mock.patch.object(cmp, "compare_expected", no_table), \
                 mock.patch.object(cmp, "verdict_block_ids", lambda row: ([], [])), \
                 mock.patch.object(cmp, "registered_block_ids", lambda registry, cid, mine: ([], [])):
@@ -646,8 +673,9 @@ class ComparatorTests(unittest.TestCase):
         # The extraction report and the sensitivity record's refused p42 cell both see the moved status.
         # Since RC-CMP-7 F2 the sensitivity line's printed status and code words are compared too (outcome_word);
         # since RC-CMP-9 F4 the projection's refused p42 cell too (the base fixture lists it).
+        # RC-CMP-10 FS2: the projection's refused code is compared too (a third outcome_word row).
         self.ours["p42"]["df-ph-prefill-p42-qwen3-8b"].update(status="computed")
-        self.assertEqual(self.fails(self.run_compare()), {"p42_status": 3, "outcome_word": 2})
+        self.assertEqual(self.fails(self.run_compare()), {"p42_status": 3, "outcome_word": 3})
         original = cmp.Comparison.exact
 
         def lenient(c, fam, key, l9, ours, **raw):
@@ -778,7 +806,8 @@ class ComparatorTests(unittest.TestCase):
         self.assertNotRegex(text, r"(?m)^\s*(from|import)\s+(joulewise|scripts)\b")
         imports = {line.split()[1].split(".")[0] for line in text.splitlines()
                    if line.startswith(("import ", "from "))}
-        self.assertTrue(imports <= {"argparse", "hashlib", "json", "math", "pathlib", "re", "statistics", "sys"}, imports)
+        self.assertTrue(imports <= {"argparse", "hashlib", "itertools", "json", "math", "pathlib", "re", "statistics", "sys"},
+                        imports)
 
 
 if __name__ == "__main__":

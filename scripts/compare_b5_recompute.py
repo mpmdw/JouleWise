@@ -78,6 +78,7 @@ Rules (RC-CMP-1 A1-A4):
 """
 import argparse
 import hashlib
+import itertools
 import json
 import math
 from pathlib import Path
@@ -222,6 +223,57 @@ class Comparison:
             row["reason"] = "missing_or_null"
         return self.add(row)
 
+    def bar(self, family, key, reference):
+        if family not in self.bars["families"]:
+            raise Refusal("bars_family_missing:" + family)
+        return bar_for(family_spec(self.bars["families"][family], key), reference)
+
+    def word(self, family, key, l9, ours, atoms=(), decide=None, raw=MISSING):
+        """FS3 (RC-CMP-10): a word the producer derives from the sign of, or a threshold on, compared numbers.
+
+        Each atom is one such test (atom()): a compared number on each side, its threshold on each side and the
+        number's family bar. A test is decided when the number lies outside its bar from the threshold on both
+        sides. The word is compared exactly (exact) when every test it reads is decided, or when decide (the
+        recompute's word as a function of the tests' truth values) gives one word whatever the undecided tests
+        are. Otherwise the row records both words with within_bar_undetermined and the tests inside their bar
+        (restricted output), and it is AGREE only if every number the word reads agrees within its bar.
+        """
+        open_ = [a for a in atoms if a["within"]]
+        if open_ and decide is not None and all(a["truth"] is not None for a in atoms):
+            fixed = {a["name"]: a["truth"] for a in atoms if not a["within"]}
+            names = sorted({a["name"] for a in open_})
+            words = set()
+            for values in itertools.product((False, True), repeat=len(names)):
+                words.add(json.dumps(decide({**fixed, **dict(zip(names, values))}), sort_keys=True))
+                if len(words) > 1:
+                    break
+            if len(words) == 1:
+                open_ = []
+        if not open_:
+            return self.exact(family, key, l9, ours, raw=raw)
+        assert family in CATEGORICAL, family
+        agree = all(a["agree"] for a in atoms) and l9 is not None and ours is not None
+        row = {"family": family, "key": key, "l9": l9, "recompute": ours, "verdict": "AGREE" if agree else "DISAGREE",
+               "reason": "within_bar_undetermined", "within_bar": sorted({a["key"] for a in open_})}
+        if raw is not MISSING:
+            row["l9_raw"] = raw
+        return self.add(row)
+
+    def atom(self, name, family, key, l9, ours, threshold, test, l9_threshold=MISSING):
+        """One sign or threshold test of a compared number (FS3): test(number, threshold) on each side.
+
+        within: the number lies inside its family bar from the threshold on either side (both numbers and
+        thresholds finite); truth: the test on the recompute's side; agree: both numbers (and, where each side
+        has its own threshold, both thresholds) finite and within the bar of each other."""
+        l9_threshold = threshold if l9_threshold is MISSING else l9_threshold
+        values = (l9, ours, threshold, l9_threshold)
+        bar = self.bar(family, key, l9 if finite(l9) else ours if finite(ours) else 0.0)
+        known = all(finite(v) for v in values)
+        within = known and (abs(l9 - l9_threshold) <= bar or abs(ours - threshold) <= bar)
+        agree = known and abs(l9 - ours) <= bar and abs(l9_threshold - threshold) <= bar
+        return {"name": name, "key": key, "within": within, "agree": agree,
+                "truth": bool(test(ours, threshold)) if finite(ours) and finite(threshold) else None}
+
     def pairs(self, scope, *sides):
         """The one union (S3): each key of any side, with each side's item (None where absent).
 
@@ -329,24 +381,24 @@ class Custody:
 
     A step-11 output is read through the input gate (G1-G3) before anything sees it.
     """
-    def __init__(self, root, flags=None, registry=None):
+    def __init__(self, root, flags=None, registry=None, window_index=None):
         self.root = Path(root)
         self.restricted = self.root / RESTRICTED
         self.flags = [] if flags is None else flags
-        self.registry = load_registry() if registry is None else registry
+        registry = load_registry() if registry is None else registry
         try:
             self.record = json.loads((self.root / RECORD).read_bytes(), object_pairs_hook=unique("l9_record_duplicate_key"))
         except (OSError, ValueError):
             raise Refusal("l9_record_unreadable") from None
+        # FS4 (RC-CMP-10): the window index L9's run read (its digest is in L9's record), as a registered source.
+        self.registry = indexed(registry, load_window_index(WINDOW_INDEX if window_index is None else window_index,
+                                                            self.record if isinstance(self.record, dict) else {}))
         self.listed, self.status, self.nonfinite = {}, {}, {}
         for row in self.record.get("steps", []):
             key = (row.get("step"), row.get("window"))
             self.status[key] = row.get("status")
             for output in row.get("outputs", []):
                 self.listed[output["name"]] = output["sha256"]
-
-    def step_ok(self, step, window=None):
-        return self.status.get((step, window)) == "ok"
 
     def names(self, pattern):
         return sorted(name for name in self.listed if re.fullmatch(pattern, name))
@@ -420,6 +472,8 @@ class Registry:
         pins = REGISTRY_PINS if pins is None else pins
         self.digests, self.tables = {}, {"extraction": {}, "reported": {}, "floor": {}, "contrast": {}}
         self.roles, self.blocks = {}, {}
+        # FS4 (RC-CMP-10): the window index's attempts (indexed()), attached per run from the index L9 read.
+        self.index = None
         try:
             for pack, name in PLAN_TREES.items():
                 self.roles[pack] = plan_roles(self.read(root, name, pins))
@@ -465,11 +519,22 @@ class Registry:
                               transport_groups=tuple([
                                   next(group["transport_group_id"]
                                        for group in contrast["floor_dependency"]["transport"]["transport_groups"]
+                                       if group["condition_family_id"] == condition) for condition in (a, b)]),
+                              # FS1 (RC-CMP-10): the rule each arm's resolution applies is its transport group's
+                              # group_rule_id (the engine prints detection_floor.TRANSPORT_RULE_ID, the same word),
+                              # not the selector's transport_rule_id.
+                              transport_rules=tuple([
+                                  next(group["group_rule_id"]
+                                       for group in contrast["floor_dependency"]["transport"]["transport_groups"]
                                        if group["condition_family_id"] == condition) for condition in (a, b)]))
                 blocks = contrast["block_ids"]
                 if not all(isinstance(bid, str) for bid in blocks) or len(set(blocks)) != len(blocks):
                     raise ValueError(blocks)
                 self.blocks[contrast["contrast_id"]] = tuple(blocks)
+            # FS3 (RC-CMP-10): the familywise alpha the adjusted p is held against (PLAN 7.2; families[*].multiplicity).
+            (self.alpha,) = {family["multiplicity"]["alpha"] for family in manifest["families"]}
+            if not finite(self.alpha):
+                raise ValueError(self.alpha)
             declaration = self.read(root, DECLARATION, pins)
             decode = declaration["decode_floor_cells"]
             for phase, (a, b) in (("decode", (decode["condition_a"], decode["condition_b"])),
@@ -521,6 +586,12 @@ class Registry:
     def families(self, pack, p42):
         """The recompute's reported cell ids (condition families) of a window."""
         return {e["family"] for e in self.tables["reported"].values() if e["pack"] == pack and e["p42"] is p42}
+
+    def reported_id(self, pack, family):
+        """The registered non-p42 reported cell id of a window and recompute cell id (condition family), else None."""
+        found = [cid for cid, e in self.tables["reported"].items()
+                 if e["pack"] == pack and e["family"] == family and not e["p42"]]
+        return found[0] if len(found) == 1 else None
 
     def reported_family(self, pack, phase):
         """The one non-p42 reported cell id of a window and phase (the cross-window line's cell)."""
@@ -580,6 +651,66 @@ def plan_roles(tree):
 
 
 _REGISTRY = {}
+# FS4 (RC-CMP-10): the block's window index (b5_analysis/windows.load_window_index), the default --window-index. A run
+# reads the index whose digest L9's dry-run record carries (window_index_sha256); a synthetic window passes its own.
+WINDOW_INDEX = Path(__file__).resolve().parents[1] / "configs/analysis/b5/analysed_windows.json"
+WINDOW_INDEX_SCHEMA = "joulewise.b5_window_index.v1"
+# The index entry kind of an attempt with no archive (b5_analysis/archive.open_attempt_record); its history line
+# prints no harvest values. The deciding seal's word (disclosures._history_lines: superseded iff seal != second).
+NO_ARCHIVE = "no_archive"
+DECIDING_SEAL = "second"
+
+
+def load_window_index(path, record):
+    """The index's attempts, read only if its bytes are the ones L9's record names (window_index_sha256)."""
+    try:
+        raw = Path(path).read_bytes()
+    except OSError:
+        raise Refusal("window_index_unreadable") from None
+    if hashlib.sha256(raw).hexdigest() != record.get("window_index_sha256"):
+        raise Refusal("window_index_digest_differs")
+    try:
+        index = json.loads(raw, object_pairs_hook=unique("window_index_duplicate_key"))
+    except ValueError:
+        raise Refusal("window_index_unreadable") from None
+    attempts = index.get("attempts") if isinstance(index, dict) and index.get("schema") == WINDOW_INDEX_SCHEMA else None
+    if not isinstance(attempts, list):
+        raise Refusal("window_index_invalid")
+    entries, seen = [], set()
+    for row in attempts:
+        entry = {key: get(row, key) for key in ("pack", "plan_id", "attempt", "seal", "entry_kind", "verdict", "cause_key",
+                                                "g10_redraw_cycles")}
+        entry["g10_requested"] = get(row, "g10_requested", default=False)
+        if (not isinstance(row, dict) or entry["pack"] not in PACKS or type(entry["attempt"]) is not int
+                or not all(isinstance(entry[k], str) for k in ("plan_id", "seal", "entry_kind", "verdict"))
+                or not (entry["cause_key"] is None or isinstance(entry["cause_key"], str))
+                or type(entry["g10_requested"]) is not bool
+                or not (entry["g10_redraw_cycles"] is None or type(entry["g10_redraw_cycles"]) is int)
+                or (entry["pack"], entry["plan_id"]) in seen):
+            raise Refusal("window_index_invalid")
+        seen.add((entry["pack"], entry["plan_id"]))
+        entries.append(entry)
+    return tuple(entries)
+
+
+def indexed(registry, attempts):
+    """The registry with the run's window index attached (the registry itself is shared and never changed)."""
+    result = object.__new__(type(registry))
+    result.__dict__.update(registry.__dict__, index=attempts)
+    return result
+
+
+def history(attempts):
+    """disclosures._history_lines' groups: (pack, superseded) -> its attempts in attempt order, packs in registered
+    order, the deciding seal first."""
+    groups = {}
+    for superseded in (False, True):
+        for pack in PACKS:
+            entries = sorted((e for e in attempts if e["pack"] == pack and (e["seal"] != DECIDING_SEAL) == superseded),
+                             key=lambda e: e["attempt"])
+            if entries:
+                groups[(pack, superseded)] = entries
+    return groups
 
 
 def load_registry(root=CAMPAIGNS, pins=None):
@@ -602,7 +733,8 @@ REGISTERED_SOURCES = (
     "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
     # Bound by digest from the gamma plan tree (consumer declaration); the registry has read it since RC-CMP-6.
     "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/consumer_family_declaration.json",
-    # The window index: named, not read (absent from this branch); no entry is taken from it.
+    # FS4 (RC-CMP-10): the window index, read and bound by digest to L9's dry-run record (window_index_sha256);
+    # the history lines' entries are taken from it.
     "configs/analysis/b5/analysed_windows.json",
     "the registered packs (PACKS)",
     "the sealed registration and analysis-plan constants the producers apply, copied below as literals")
@@ -638,7 +770,12 @@ ENGINE_KEYS = {
     "loo": ("status", "rows"),
     "loo_row": ("omitted_block_id", "n_blocks", "df", "estimate", "metrology_aware_ci95", "decision_interval",
                 "floor_status", "raw_p", "adjusted_p", "outcome", "influence_triggers"),
-    "evaluation": ("outcome", "direction", "reason_codes", "claim_ready_for_l2_l3", "claim_level_ceiling")}
+    "evaluation": ("outcome", "direction", "reason_codes", "claim_ready_for_l2_l3", "claim_level_ceiling"),
+    # OPUS F2, FABLE F2 (RC-CMP-10): _BUNDLE_BLOCK_KEYS, _BLOCK_KEYS, _RANDOMIZATION_KEYS, _VARIANCE_CONTRIBUTION_KEYS.
+    "bundle_blocks": ("planned_block_ids", "included_bundle_ids", "blocks"),
+    "block": ("block_id", "bundle_a_id", "bundle_b_id", "included", "reason_codes"),
+    "randomization": ("status", "reason", "n_blocks", "exact_two_sided_p", "rejects"),
+    "variance_contribution": ("name", "summed_paired_variance", "squared_standard_error")}
 # results_fill_adapter.adapt_claim_verdicts (the 14 base keys of each contrast row and the 10 extended ones; the
 # output's gamma and characterization objects) and scripts/build_results_fill_input.py (each campaign's keys).
 FILL_SHAPE = {
@@ -701,6 +838,13 @@ def nested(prefix, keys):
     return tuple((prefix, key) for key in keys)
 
 
+# OPUS F2 (RC-CMP-10): the estimator's nested keys the engine always writes (artifact.py validates both intervals and
+# each variance contribution's exact keys), in the verdict and in the disclosure's primary_contrast copy.
+ESTIMATOR_NESTED = (tuple(("estimator", "repeat_point_CI95") + side for side in INTERVAL)
+                    + tuple(("estimator", "variance_contributions", "*", key)
+                            for key in ENGINE_KEYS["variance_contribution"]))
+
+
 def arms(path):
     """A registered-arm list's positions [A, B] (a contrast's floor cells: one per arm)."""
     return tuple(path + (index,) for index in ARMS)
@@ -734,9 +878,9 @@ def expected_checks(registry):
     """
     table = []
 
-    def add(kind, check, l9, recompute, condition=None):
+    def add(kind, check, l9, recompute, condition=None, expect=None):
         table.append({"kind": kind, "check": check, "l9": tuple(l9), "recompute": tuple(recompute),
-                      "condition": condition})
+                      "condition": condition, "expect": expect})
 
     contrasts = registry.tables["contrast"]
     floors = registry.tables["floor"]
@@ -746,6 +890,9 @@ def expected_checks(registry):
           + nested("characterization", FILL_SHAPE["characterization"])
           + tuple(("gamma", "floor_artifact", k) for k in FILL_SHAPE["floor_artifact"]))],
         [(("contrasts",), ()), (("inputs",), ())])
+    # FABLE F4 (RC-CMP-10): the finalized manifest the fill names (bound through L9's custody, compare_fill_identity).
+    add("fill_identity", "fill/gamma/finalized_manifest",
+        [("fill", ("gamma", "finalized_manifest"), tuple((k,) for k in FINALIZED_MANIFEST_KEYS))], [(("inputs",), ())])
     for pack in ("alpha", "beta"):
         add("fill_campaign", f"fill/campaigns/{pack}", [("fill", ("campaigns", pack), tuple((k,) for k in FILL_SHAPE["campaign"]))],
             [(("inputs", PACKS[pack]), (("claim_usable",), ("exclusions_sha256",)))])
@@ -781,15 +928,43 @@ def expected_checks(registry):
             add("window_line", f"disclosure/window_lines/{pack}/tripwire/{tripwire}",
                 [("disclosure", ("window_lines", pack, {"line": "tripwire", "tripwire": tripwire}), (("result",),))],
                 [(("windows", PACK), ())])
-        add("block_line", f"disclosure/block_lines/attempt_count/{pack}",
-            [("disclosure", ("block_lines", {"line": "attempt_count", "pack": pack, "superseded": False}),
-              (("count",), ("causes",)))], [(("windows", PACK), ())])
     for word in FIXED_SENTENCE_WORDS:
         add("fixed_sentence", f"disclosure/fixed_sentences/{word}",
             [("disclosure", ("fixed_sentences", {"line": word}), (("text",),))], [(("disclosures",), ())])
     for word in ("floor_drift_ownership", "gross_energy"):
         add("fixed_sentence", f"disclosure/fixed_sentences/{word}",
             [("disclosure", ("fixed_sentences", {"line": word}), (("text",),))], [(("disclosures",), ())])
+    # FS4 (RC-CMP-10): the history lines, one per window-index group and attempt (disclosures._history_lines).
+    for (pack, superseded), entries in history(registry.index or ()).items():
+        anchor = [(("windows", PACKS[pack]), ())]
+        group = "superseded" if superseded else "deciding"
+        add("block_line", f"disclosure/block_lines/attempt_count/{pack}/{group}",
+            [("disclosure", ("block_lines", {"line": "attempt_count", "pack": pack, "superseded": superseded}),
+              (("count",), ("causes",)))], anchor,
+            expect={"superseded": superseded, "count": len(entries), "causes": [e["cause_key"] for e in entries]})
+        for e in entries:
+            keys = HISTORY_KEYS + (HARVESTED_HISTORY_KEYS if e["entry_kind"] != NO_ARCHIVE else ())
+            add("history_line", f"disclosure/block_lines/attempt_history/{pack}/{e['plan_id']}",
+                [("disclosure", ("block_lines", {"line": "attempt_history", "pack": pack, "plan_id": e["plan_id"],
+                                                 "attempt": e["attempt"]}), tuple((k,) for k in keys))], anchor,
+                expect={"superseded": superseded, "verdict": e["verdict"], "cause_key": e["cause_key"]})
+            # A g10 line prints when the index requests G10 or the archive's flags carry a g10 code (the archive is
+            # not a registered source: that second case is conditional on L9's line, NEEDS_RULING RC-CMP-10 3).
+            add("history_line", f"disclosure/block_lines/g10/{pack}/{e['plan_id']}",
+                [("disclosure", ("block_lines", {"line": "g10", "pack": pack, "plan_id": e["plan_id"]}),
+                  (("codes",), ("redraw_cycles",)))], anchor,
+                None if e["g10_requested"] else ("history_printed", "g10", pack, e["plan_id"]),
+                expect={"redraw_cycles": e["g10_redraw_cycles"]})
+    if any(superseded for _, superseded in history(registry.index or ())):
+        add("history_line", "disclosure/block_lines/superseded_history",
+            [("disclosure", ("block_lines", {"line": "superseded_history"}), (("text",),))], [(("disclosures",), ())])
+    for pack in PACKS:
+        # A re-harvest account prints only when harvest_once says a window was harvested twice (its accounts come
+        # from the steps' record, not a registered source: conditional on L9's line, NEEDS_RULING RC-CMP-10 3).
+        add("history_line", f"disclosure/block_lines/reharvest_account/{pack}",
+            [("disclosure", ("block_lines", {"line": "reharvest_account", "pack": pack}),
+              tuple((k,) for k in LINE_KEYS["block_lines"]["reharvest_account"]))], [(("windows", PACKS[pack]), ())],
+            ("history_printed", "reharvest_account", pack, None))
     add("block_line", "disclosure/block_lines/harvest_once",
         [("disclosure", ("block_lines", {"line": "harvest_once"}), (("no_analysed_window_harvested_twice",),))],
         [(("disclosures",), ())])
@@ -934,7 +1109,8 @@ def expected_checks(registry):
                    + nested("floor", ENGINE_KEYS["floor"] + ENGINE_KEYS["v3_floor"]) + arms(("floor", "floor_row_ids"))
                    + nested("multiplicity", ENGINE_KEYS["multiplicity"]) + nested("loo", ENGINE_KEYS["loo"])
                    + nested("claim_evaluation", ENGINE_KEYS["evaluation"])
-                   + (("bundle_blocks", "planned_block_ids"), ("bundle_blocks", "blocks")))
+                   + nested("bundle_blocks", ENGINE_KEYS["bundle_blocks"]) + ESTIMATOR_NESTED
+                   + nested("randomization_check", ENGINE_KEYS["randomization"]))
         fill = (tuple((k,) for k in FILL_SHAPE["contrast"]) + nested("metric", ENGINE_KEYS["metric"])
                 + nested("conditions", ENGINE_KEYS["conditions"])
                 + nested("sampling", ENGINE_KEYS["sampling"] + ENGINE_KEYS["kept_sampling"])
@@ -946,8 +1122,11 @@ def expected_checks(registry):
         own = (("contrasts", cid), tuple((k,) for k in ("n", "dbar_j", "s_d_j", "se_j", "t_star", "metrology_interval_j",
                                                         "D_j", "decision_interval_j", "floor_gate_j", "p", "holm_p",
                                                         "holm_reject", "outcome", "ceiling", "loo", "kept_quads")))
+        # FABLE F2 (RC-CMP-10): each registered block's item carries the engine's block keys (artifact.py _BLOCK_KEYS).
+        blocks = [("verdicts", ("contrasts", match, "bundle_blocks", "blocks", {"block_id": block}),
+                   tuple((k,) for k in ENGINE_KEYS["block"])) for block in registry.blocks[cid]]
         add("contrast", f"contrast/{cid}", [("verdicts", ("contrasts", match), verdict),
-                                            ("fill", ("gamma", "contrasts", match), fill)], [own])
+                                            ("fill", ("gamma", "contrasts", match), fill)] + blocks, [own])
         for index, pack in ARMS.items():
             arm = f"{MODELS[pack]}/{entry['phase']}"
             for name, keys in (("arm_gates", tuple((k,) for k in ENGINE_KEYS["arm_gate"])),
@@ -970,7 +1149,7 @@ def expected_checks(registry):
         own_descriptive = (("descriptive", cid), (("per_token_difference_j",), ("per_token_metrology_interval_j",),
                                                   ("per_token_decision_interval_j",)))
         for word, keys, recompute, condition in (
-                ("primary_contrast", nested("estimator", ENGINE_KEYS["estimator"])
+                ("primary_contrast", nested("estimator", ENGINE_KEYS["estimator"]) + ESTIMATOR_NESTED
                  + tuple(("estimator", "metrology_aware_CI95") + s for s in INTERVAL)
                  + tuple(("decision_interval",) + s for s in INTERVAL), own, None),
                 ("battery_assist_contrast", (("status",), ("n",), ("assist_quads",), ("assist_members",)),
@@ -1022,7 +1201,11 @@ CELL_WORDS = ("reported_cell", "battery_assist_cell", "attribution_floor", "kept
 CONTRAST_WORDS = ("primary_contrast", "battery_assist_contrast", "magnitude_ratio", "magnitude_per_token",
                   "contrast_interval", "decision_floor", "loo_counts", "loo_magnitude", "kept_units")
 BLOCK_WORDS = ("sensitivity_bmax", "sensitivity_window", "sensitivity_reported", "sensitivity_floor",
-               "sensitivity_contrast", "sensitivity_boundary", "dominance_ratio", "dominance_branch", "harvest_once")
+               "sensitivity_contrast", "sensitivity_boundary", "dominance_ratio", "dominance_branch", "harvest_once",
+               "attempt_count", "attempt_history", "g10", "superseded_history", "reharvest_account")
+# FS4 (RC-CMP-10): the keys disclosures._history_lines writes on every attempt_history line, and on a harvested one.
+HISTORY_KEYS = ("pack", "plan_id", "attempt", "verdict", "cause_key", "superseded")
+HARVESTED_HISTORY_KEYS = ("flags_by_family", "collected", "planned", "catalog_path", "triggers")
 CLOSED = (("fill", ("gamma", "contrasts"), None), ("verdicts", ("contrasts",), None),
           ("fill", ("gamma", "contrasts", "*", "loo", "rows"), None), ("verdicts", ("contrasts", "*", "loo", "rows"), None),
           ("fill", ("gamma", "contrasts", "*", "floor", "arm_gates"), None),
@@ -1088,7 +1271,23 @@ def resolve(node, path):
 
 
 def absent_keys(item, keys):
-    return [key for key in keys if resolve(item, key)[0] in (MISSING, DUPLICATE)]
+    """The required key paths an item lacks. A "*" step requires a list there and the rest of the path on each of
+    its items (OPUS F2, RC-CMP-10: each variance contribution's keys)."""
+    missing = []
+    for key in keys:
+        if "*" not in key:
+            if resolve(item, key)[0] in (MISSING, DUPLICATE):
+                missing.append(key)
+            continue
+        star = key.index("*")
+        head, tail = key[:star], key[star + 1:]
+        node = resolve(item, head)[0]
+        if not isinstance(node, list):
+            missing.append(key)
+            continue
+        missing += [head + (index,) + tail for index, element in enumerate(node)
+                    if tail and resolve(element, tail)[0] in (MISSING, DUPLICATE)]
+    return missing
 
 
 def describe(step):
@@ -1146,7 +1345,7 @@ def condition_holds(condition, docs, ours, registry):
     if kind == "loo_block_kept":
         # The engine's leave-one-out rows (analysis_engine _loo_family): one per kept block of a complete contrast;
         # the recompute computes them from three kept quads (finish_contrast). Expected when either side keeps the
-        # block and either side's kept n is at least LOO_MIN.
+        # block and either side's kept n makes the engine print rows.
         _, cid, block = condition
         row = next((r for r in listed(get(docs["verdicts"], "contrasts")) if isinstance(r, dict)
                     and r.get("contrast_id") == cid), {})
@@ -1157,12 +1356,27 @@ def condition_holds(condition, docs, ours, registry):
                 or block in listed(get(ours, "contrasts", cid, "kept_quads"))
                 or any(isinstance(r, dict) and same(r.get("block_number"), position)
                        for r in listed(get(ours, "contrasts", cid, "loo"))))
-        return kept and any(n >= LOO_MIN for n in ns)
+        # OPUS F1 (RC-CMP-10): L9's rows are required from a kept n of 1 (the engine's rule); below LOO_MIN the
+        # recompute prints none, so the entry then refuses on the recompute's side (the safe side).
+        return kept and any(loo_rows_expected(n, registry.blocks[cid]) for n in ns)
+    if kind == "history_printed":
+        _, word, pack, plan_id = condition
+        return any(isinstance(line, dict) and line.get("line") == word and line.get("pack") == pack
+                   and (plan_id is None or line.get("plan_id") == plan_id)
+                   for line in listed(get(docs["disclosure"], "block_lines")))
     if kind == "ratio_computable":
         line = next((r for r in listed(get(docs["disclosure"], "contrasts")) if isinstance(r, dict)
                      and r.get("line") == "magnitude_ratio" and r.get("contrast_id") == condition[1]), {})
         return "ratio" in line or finite(get(ours, "descriptive", condition[1], "ratio"))
     raise ValueError(kind)
+
+
+def holds(custody, ours, condition):
+    """FABLE F1 (RC-CMP-10): a family builds the value rows of a conditional item under the same registered
+    condition the expected-check table uses (condition_holds, over the same documents)."""
+    if not hasattr(custody, "documents"):
+        custody.documents = Documents(custody)
+    return condition_holds(condition, custody.documents, ours, custody.registry)
 
 
 # The recompute's leave-one-out minimum (independent_recompute_b5.finish_contrast: rows from three kept quads).
@@ -1678,13 +1892,18 @@ def times(a, b):
     return a * b if finite(a) and finite(b) else None
 
 
+# The recompute's p42 status words (independent_recompute_b5.py: output["p42"][cid]["status"]); the comparator reads
+# L9's extractable flags into the same vocabulary (pinned by test_rc_cmp10.py).
+P42_UNRESOLVABLE = "expected_unresolvable"
+
+
 def p42_word(cells, registry, where):
     """L9's p42 status from its registered p42 cells: the registered exit when none is extractable; None when L9 lists none."""
     cells = [cell for cell in cells if isinstance(cell, dict)
              and registry.lookup(cell.get("cell_id"), ("extraction", "reported"), where)["p42"]]
     if not cells:
         return None
-    return "expected_unresolvable" if all(cell.get("extractable") is False for cell in cells) else "extractable"
+    return P42_UNRESOLVABLE if all(cell.get("extractable") is False for cell in cells) else "extractable"
 
 
 def p42_family(registry, pack):
@@ -1706,10 +1925,18 @@ def compare_floors(c, custody, ours):
         # Each cell by its registered id (G3): the spec's window, target phase and kind, never its spelling.
         l9_cells = keyed(cells, lambda cell: floor_key(registry.lookup(cell.get("cell_id"), ("extraction",), where, pack)),
                          "extraction_cell", lambda cell: not registry.lookup(cell.get("cell_id"), ("extraction",), where, pack)["p42"])
-        mine_cells = items(ours.get("floors"), lambda key, _: key.startswith(MODELS[pack] + "/"))
+        # FABLE F1 (RC-CMP-10): every registered floor cell of the window on the recompute's side, computed or not.
+        mine_cells = window_floors(ours, pack)
         for key, cell, mine in c.pairs("floor/", l9_cells, mine_cells):
             cell, mine = cell or {}, mine or get(ours, "floors", key, default={}) or {}
             floor = cell.get("floor") or {}
+            entry = registry.entry(cell.get("cell_id"), "extraction")
+            if entry is not None and not holds(custody, ours, ("floor_computed", pack, cell["cell_id"], key)):
+                # Not computed on either side: the status words agree (no floor; the recompute's status not
+                # computed) and no value row is built.
+                c.exact("outcome_word", key + "/floor_computed", floor.get("guarded_floor_j") is not None,
+                        mine.get("status", "computed") == "computed")
+                continue
             for field, other in FLOOR_FIELDS.items():
                 c.numeric("floor_j", key + "/" + field, floor.get(field), mine.get(other))
             c.numeric("floor_j", key + "/operative_floor_j", cell.get("operative_floor_j"),
@@ -1721,6 +1948,12 @@ def compare_floors(c, custody, ours):
                       plus(mine.get("operative_unguarded_floor_j"), mine.get("allowance_j")))
             c.numeric("count", key + "/n", floor.get("n"), mine.get("n"))
             c.numeric("count", key + "/n_admitted", cell.get("n_admitted"), mine.get("n"))
+
+
+def window_floors(ours, pack):
+    """FABLE F1 (RC-CMP-10): the recompute's floor cells of a window, computed or not."""
+    floors = ours.get("floors") if isinstance(ours.get("floors"), dict) else {}
+    return {key: item for key, item in floors.items() if isinstance(item, dict) and key.startswith(MODELS[pack] + "/")}
 
 
 def floor_key(entry):
@@ -1771,12 +2004,16 @@ def compare_aggregate(c, custody, ours):
         c.numeric("floor_gate_j", "aggregate_floor", None, None)
     closeout = custody.one(r"finalized/outputs/closeout\.json")
     ratios = custody.one(r"finalized/outputs/closeout\.ratio-table\.json")
-    c.exact("dominance_branch", "branch", get(closeout, "branch"), get(ours, "dominance", "branch"))
-    # F2: the licensed word follows the branch by registration (dominance_closeout: licensed iff branch A).
-    branch = get(ours, "dominance", "branch")
-    c.exact("dominance_branch", "dominance_sentence_licensed", get(closeout, "dominance_sentence_licensed"),
-            branch == "A" if branch in ("A", "B") else None)
     l9_rows, mine_rows = keyed(get(ratios, "ratios", default=[]), lambda row: ratio_label(row, registry), "ratio"), our_ratios(ours)
+    # FS3 (RC-CMP-10): the branch reads every ratio against the registered dominance threshold (branch A iff each
+    # passes; dominance_closeout DOMINANCE_THRESHOLD).
+    tests = branch_tests(c, l9_rows, mine_rows)
+    branch = get(ours, "dominance", "branch")
+    c.word("dominance_branch", "branch", get(closeout, "branch"), branch, tests,
+           lambda t: DOMINANCE_BRANCHES[0] if all(t.values()) else DOMINANCE_BRANCHES[1])
+    # F2: the licensed word follows the branch by registration (dominance_closeout: licensed iff branch A).
+    c.word("dominance_branch", "dominance_sentence_licensed", get(closeout, "dominance_sentence_licensed"),
+           branch == DOMINANCE_BRANCHES[0] if branch in DOMINANCE_BRANCHES else None, tests, lambda t: all(t.values()))
     if not l9_rows and not mine_rows:
         c.numeric("dominance_ratio", "ratio/none", None, None)
     # Ratio rows have their own key prefix: a ratio's n is not its floor cell's n (S3, Opus N2).
@@ -1790,6 +2027,18 @@ def compare_aggregate(c, custody, ours):
         c.numeric("floor_j", key + "/numerator_j", row.get("numerator_j"), mine.get("numerator_j"))
         c.numeric("floor_j", key + "/denominator_j", row.get("denominator_j"), mine.get("denominator_j"))
         c.numeric("count", key + "/n", row.get("n"), mine.get("n"))
+
+
+def branch_tests(c, l9_rows, mine_rows):
+    """FS3: each ratio against the dominance threshold (L9's ratio table row, the recompute's R or R_cm)."""
+    return [c.atom(label, "dominance_ratio", "ratio/" + label + "/ratio", get(l9_rows.get(label), "ratio"),
+                   (mine_rows.get(label) or {}).get("R_cm" if label.endswith("/common_mode") else "R"),
+                   DOMINANCE_THRESHOLD, GE) for label in sorted(set(l9_rows) | set(mine_rows))]
+
+
+# The D-165 closeout's dominance threshold and branch words (dominance_closeout.py; pinned by test_rc_cmp10.py).
+DOMINANCE_THRESHOLD = 2.0
+DOMINANCE_BRANCHES = ("A", "B")
 
 
 def interval(value):
@@ -1860,9 +2109,10 @@ def compare_arms(c, ours, cid, floor, registry):
         cell = f"{MODELS.get(pack)}/{phase}"
         for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
             c.numeric("floor_gate_j", f"{cid}/resolution/{index}/{field}", resolution.get(field), get(cells, cell, field))
-        # RC-CMP-8: the transfer rule each resolution applies, as the floor_selector registers it.
+        # FS1 (RC-CMP-10): the transfer rule each resolution applies, as the manifest registers it for the arm's
+        # transport group (group_rule_id); the floor_selector's transport_rule_id is not printed in any L9 output.
         c.exact("routing_id", f"contrast/{cid}/resolution/{index}/transport_rule_id", resolution.get("transport_rule_id"),
-                contrast.get("floor_rules", {}).get("transport_rule_id") if pack else None)
+                contrast["transport_rules"][index] if pack else None)
         # RC-CMP-9 A4: the arm's transport group, as the manifest registers it for the arm's condition family.
         c.exact("routing_id", f"contrast/{cid}/resolution/{index}/transport_group_id",
                 resolution.get("transport_group_id"), contrast["transport_groups"][index] if pack else None)
@@ -1908,6 +2158,18 @@ def registered_block_ids(registry, cid, mine):
     return [bid for bid in blocks if bid in kept], [bid for bid in blocks if bid not in kept]
 
 
+def registered_kept(registry, cid, mine):
+    """Each registered block of a contrast -> whether the recompute keeps it (None without a recompute contrast)."""
+    kept = listed(mine.get("kept_quads")) if mine else None
+    return {block: (block in kept if kept is not None else None) for block in registry.blocks.get(cid, ())}
+
+
+def printed_included(row, block):
+    """The verdict's included word for a registered block (None unless exactly one block item names it)."""
+    found = [b for b in listed(get(row, "bundle_blocks", "blocks")) if isinstance(b, dict) and b.get("block_id") == block]
+    return found[0].get("included") if len(found) == 1 else None
+
+
 def compare_floor_ids(c, scope, printed, contrast, registry):
     """A3 (RC-CMP-9): a contrast's printed floor cell ids (floor_row_ids, the fill's floor_source_cell_ids, the
     sensitivity record's floor_cell_ids), by position against the registered source cells [A, B]."""
@@ -1948,22 +2210,26 @@ def compare_contrasts(c, custody, ours):
         multiplicity = row.get("multiplicity") or {}
         c.numeric("contrast_p", f"{cid}/raw_p", multiplicity.get("raw_p"), mine.get("p"))
         c.numeric("contrast_p", f"{cid}/adjusted_p", multiplicity.get("adjusted_p"), mine.get("holm_p"))
-        c.exact("outcome_word", f"{cid}/holm_reject", multiplicity.get("rejected"), mine.get("holm_reject"))
+        floor_l9 = get(row, "floor", "active_floor_j")
+        numbers = contrast_numbers(row, mine, floor_l9)
+        tests = outcome_atoms(c, cid, *numbers, registry.alpha)
+        # FS3 (RC-CMP-10): the rejection word reads the adjusted p against the registered alpha.
+        c.word("outcome_word", f"{cid}/holm_reject", multiplicity.get("rejected"), mine.get("holm_reject"),
+               named(tests, "reject"), lambda t: t["reject"])
         c.numeric("count", f"{cid}/n", est.get("n"), mine.get("n"))
         c.numeric("count", f"{cid}/df", est.get("df"), mine["n"] - 1 if finite(mine.get("n")) else None)
         c.exact("kept_units", f"{cid}/kept_quads", kept_blocks(get(row, "bundle_blocks", "blocks", default=None)),
                 sorted(mine["kept_quads"]) if mine.get("kept_quads") else None)
         evaluation = row.get("claim_evaluation") or {}
-        c.exact("outcome_word", f"{cid}/outcome", evaluation.get("outcome"), mine.get("outcome"))
+        # FS3: the outcome and direction words read the outcome tests (none when a count or a missing input fixes
+        # the outcome).
+        tests = [] if threshold_free(mine.get("outcome")) else tests
+        c.word("outcome_word", f"{cid}/outcome", evaluation.get("outcome"), mine.get("outcome"), tests, decide_outcome)
         # L9 names a direction only for a supported claim; "none" is a value, absence is not.
-        c.exact("outcome_word", f"{cid}/direction", evaluation.get("direction") or "none" if evaluation else None,
-                (mine.get("direction") if mine.get("outcome") == "direction_supported" else "none") if mine else None,
-                raw=evaluation.get("direction") if "direction" in evaluation else MISSING)
-        c.exact("outcome_word", f"{cid}/ceiling", evaluation.get("claim_level_ceiling"), mine.get("ceiling"))
-        # F1 (RC-CMP-8): the engine fixes ready iff the ceiling permits L2 (artifact.py claim_ready_for_l2_l3).
-        ceiling = mine.get("ceiling")
-        c.exact("outcome_word", f"{cid}/claim_ready", evaluation.get("claim_ready_for_l2_l3"),
-                ceiling in READY_CEILINGS if isinstance(ceiling, str) else None)
+        c.word("outcome_word", f"{cid}/direction", evaluation.get("direction") or "none" if evaluation else None,
+               (mine.get("direction") if mine.get("outcome") == "direction_supported" else "none") if mine else None,
+               tests, lambda t: sign_word(t) if decide_outcome(t) == "direction_supported" else "none",
+               raw=evaluation.get("direction") if "direction" in evaluation else MISSING)
         # F2: the contrast-definition words, against the sealed manifest's registration.
         entry = registry.entry(cid, "contrast") or {}
         c.exact("outcome_word", f"{cid}/claim_role", row.get("claim_role"), entry.get("role"))
@@ -1972,13 +2238,22 @@ def compare_contrasts(c, custody, ours):
                 entry.get("confirmatory"))
         c.exact("outcome_word", f"{cid}/loo_status", get(row, "loo", "status"),
                 loo_status(mine.get("n"), registry.blocks.get(cid)) if mine else None)
-        # A2 (RC-CMP-9): each side's leave-one-out rows number its kept n (one row per kept block) when the
-        # recompute's rule computes them (LOO_MIN kept quads); a row dropped from both sides is DISAGREE here too.
+        # A2 (RC-CMP-9): each side's leave-one-out rows number its kept n (one row per kept block); a row dropped
+        # from both sides is DISAGREE here too. OPUS F1 (RC-CMP-10): L9's rows follow the engine's rule (a row per
+        # kept block from a kept n of 1, at most LOO_REQUIRED_MAX registered blocks), the recompute's its own
+        # (from LOO_MIN kept quads).
         n = mine.get("n")
-        if finite(n) and n >= LOO_MIN:
+        if loo_rows_expected(n, registry.blocks.get(cid)):
             c.numeric("count", f"{cid}/loo/l9_rows", len(listed(get(row, "loo", "rows"))) if row else None, n)
+        if finite(n) and n >= LOO_MIN:
             c.numeric("count", f"{cid}/loo/recompute_rows", est.get("n"),
                       len(mine["loo"]) if isinstance(mine.get("loo"), list) else None)
+        # FABLE F2 (RC-CMP-10): the verdict's own kept-sampling words and each registered block's included word.
+        c.numeric("count", f"{cid}/kept_n", get(row, "sampling", "kept_n"), n)
+        # (Each registered block once; a block the verdict prints under another id is the bundle_block_ids row's.)
+        blocks = registered_kept(registry, cid, mine)
+        for block, kept, _ in c.pairs(f"contrast/{cid}/blocks/", blocks, blocks):
+            c.exact("kept_units", f"contrast/{cid}/blocks/{block}/included", printed_included(row, block), kept)
         # A3: the floor source cells, against the contrast's registered cells; A4: the bundle's block ids.
         compare_floor_ids(c, f"contrast/{cid}/floor_row_ids", get(row, "floor", "floor_row_ids"),
                           registry.entry(cid, "contrast"), registry)
@@ -1996,6 +2271,9 @@ def compare_contrasts(c, custody, ours):
         for index, block, own in c.pairs(f"contrast/{cid}/removed_block_ids_position/", positions(removed_l9),
                                          positions(removed_own)):
             c.exact("routing_id", f"contrast/{cid}/removed_block_ids/{index}", block, own)
+        for index, block, own in c.pairs(f"contrast/{cid}/sampling_removed_block_ids_position/",
+                                         positions(get(row, "sampling", "removed_block_ids")), positions(removed_own)):
+            c.exact("routing_id", f"contrast/{cid}/sampling_removed_block_ids/{index}", block, own)
         # RC-CMP-8: the remaining registered words that assert a direction or relation (which condition is A and
         # B, the orientation of the difference, the quantity, the estimator, how the floor combines and transfers).
         definition = entry.get("definition") or {}
@@ -2016,30 +2294,65 @@ def compare_contrasts(c, custody, ours):
         loo_l9 = keyed(get(row, "loo", "rows", default=[]), lambda r: loo_key(registry, cid, r.get("omitted_block_id")),
                        "loo_row")
         loo_mine = keyed(mine.get("loo"), lambda r: block_key(r.get("block_number")), "recompute_loo_row")
+        influence_open = False
         for block, l9_loo, mine_loo in c.pairs(f"contrast/{cid}/loo/", loo_l9, loo_mine):
             l9_loo, mine_loo = l9_loo or {}, mine_loo or {}
             key = f"{cid}/loo/{block}"
             c.numeric("contrast_j", key + "/dbar_j", l9_loo.get("estimate"), mine_loo.get("dbar_j"))
             c.numeric("contrast_p", key + "/raw_p", l9_loo.get("raw_p"), mine_loo.get("p"))
             c.numeric("contrast_p", key + "/adjusted_p", l9_loo.get("adjusted_p"), mine_loo.get("holm_p"))
-            c.exact("outcome_word", key + "/outcome", l9_loo.get("outcome"), mine_loo.get("outcome"))
+            loo_tests = loo_numbers(l9_loo, mine_loo, floor_l9, mine.get("floor_gate_j"))
+            row_tests = outcome_atoms(c, key, *loo_tests, registry.alpha)
+            # FS3: the row's outcome and floor-status words read the row's outcome tests and |estimate| against
+            # the floor.
+            c.word("outcome_word", key + "/outcome", l9_loo.get("outcome"), mine_loo.get("outcome"),
+                   [] if threshold_free(mine_loo.get("outcome")) else row_tests, decide_outcome)
             for name, other in (("metrology_aware_ci95", "metrology_interval_j"), ("decision_interval", "decision_interval_j")):
-                for side, a, b in sides(l9_loo.get(name), mine_loo.get(other)):
-                    c.numeric("contrast_j", f"{key}/{other}/{side}", a, b)
+                for bound, a, b in sides(l9_loo.get(name), mine_loo.get(other)):
+                    c.numeric("contrast_j", f"{key}/{other}/{bound}", a, b)
             c.numeric("count", key + "/n", l9_loo.get("n_blocks"), mine_loo.get("n"))
             c.numeric("count", key + "/df", l9_loo.get("df"), mine_loo["n"] - 1 if finite(mine_loo.get("n")) else None)
             above = mine_loo.get("above_floor")
-            c.exact("outcome_word", key + "/floor_status", l9_loo.get("floor_status"),
-                    None if above is None else "above_floor" if above else "not_above_floor")
+            c.word("outcome_word", key + "/floor_status", l9_loo.get("floor_status"),
+                   None if above is None else FLOOR_STATUS_WORDS[0] if above else FLOOR_STATUS_WORDS[1],
+                   named(row_tests, "above_floor"),
+                   lambda t: FLOOR_STATUS_WORDS[0] if t["above_floor"] else FLOOR_STATUS_WORDS[1])
             # F2: the row's influence triggers, re-derived from the recompute's full and leave-one-out values.
+            # FS3: a trigger whose tests lie inside their bar is undetermined: it is left out of both lists, and the
+            # rows that print it are AGREE only if the numbers it reads agree.
             triggers = loo_triggers(mine, mine_loo) if mine_loo else None
-            c.exact("outcome_word", key + "/influence_triggers", l9_loo.get("influence_triggers"), triggers)
-            for index, word, own in c.pairs(key + "/influence_triggers/", positions(l9_loo.get("influence_triggers")),
-                                            positions(triggers)):
-                c.exact("outcome_word", f"{key}/influence_triggers/{index}", word, own)
+            tests_by_trigger = trigger_atoms(c, key, numbers, loo_tests, registry.alpha, mine.get("outcome"),
+                                             mine_loo.get("outcome"))
+            open_ = undetermined_triggers(c, tests_by_trigger) if mine_loo else []
+            influence_open |= bool(set(open_) & set(INFLUENCE_TRIGGERS[:4]))
+            printed = l9_loo.get("influence_triggers")
+            c.word("outcome_word", key + "/influence_triggers", decided_words(printed, open_), decided_words(triggers, open_),
+                   trigger_tests(tests_by_trigger, open_), raw=printed)
+            for index, word, _ in c.pairs(key + "/influence_triggers/", positions(printed), positions(printed)):
+                # Each printed trigger: present in the recompute's list, or undetermined (FS3); a trigger the
+                # recompute raises and L9 leaves out is DISAGREE in the whole-list row above.
+                c.word("outcome_word", f"{key}/influence_triggers/{index}", word,
+                       word if isinstance(triggers, list) and (word in triggers or word in open_) else None,
+                       tests_by_trigger[word][0] if word in open_ else ())
+        # The ceiling and readiness words read the outcome tests and the verdict triggers (the recompute's ceiling is
+        # L2 iff supported, positive and no verdict trigger; the engine's readiness iff the ceiling permits L2).
+        influence = [{"name": "influential", "key": f"{cid}/loo", "within": influence_open, "agree": True,
+                      "truth": mine.get("loo_verdict_influential")}] if tests else []
+
+        def ceiling_of(t):
+            return "L2" if decide_outcome(t) == "direction_supported" and t["positive"] and not t["influential"] else "L1"
+        c.word("outcome_word", f"{cid}/ceiling", evaluation.get("claim_level_ceiling"), mine.get("ceiling"),
+               tests + influence, ceiling_of)
+        # F1 (RC-CMP-8): the engine fixes ready iff the ceiling permits L2 (artifact.py claim_ready_for_l2_l3).
+        ceiling = mine.get("ceiling")
+        c.word("outcome_word", f"{cid}/claim_ready", evaluation.get("claim_ready_for_l2_l3"),
+               ceiling in READY_CEILINGS if isinstance(ceiling, str) else None, tests + influence,
+               lambda t: ceiling_of(t) in READY_CEILINGS)
     c.exact("holm_order", "raw_p_order", holm_order(l9_p), holm_order(our_p))
 
 
+# The engine's leave-one-out floor-status words (analysis_engine _loo_family; pinned by test_rc_cmp10.py).
+FLOOR_STATUS_WORDS = ("above_floor", "not_above_floor")
 # The v3 claim floor's aggregation word (analysis_engine/artifact.py: a v3 floor's aggregation must be max_never_sum).
 V3_AGGREGATION = "max_never_sum"
 # The ceilings that make a contrast claim-ready (analysis_engine/artifact.py: ready iff the ceiling is L2, L3 or L4).
@@ -2061,6 +2374,12 @@ def loo_status(n, blocks):
     return "complete" if n >= 1 else "not_run"
 
 
+def loo_rows_expected(n, blocks):
+    """OPUS F1 (RC-CMP-10): the engine prints a leave-one-out row per kept block of a complete contrast from a kept
+    n of 1 (analysis_engine _loo_family), with at most LOO_REQUIRED_MAX registered blocks (loo_status)."""
+    return loo_status(n, blocks) == "complete"
+
+
 def sign(value):
     return (value > 0) - (value < 0)
 
@@ -2072,18 +2391,161 @@ def loo_triggers(full, row):
     terms = (full.get("holm_reject"), row.get("holm_reject"), full.get("outcome"), row.get("outcome"), row.get("above_floor"))
     if not (finite(floor) and finite(estimate) and finite(loo)) or any(term is None for term in terms):
         return None
-    triggers = []
-    if sign(estimate) != sign(loo):
-        triggers.append("estimate_sign")
-    if (abs(estimate) > floor) != row["above_floor"]:
-        triggers.append("floor_status")
-    if bool(full["holm_reject"]) != bool(row["holm_reject"]):
-        triggers.append("adjusted_rejection")
-    if full["outcome"] != row["outcome"]:
-        triggers.append("outcome")
-    if abs(loo - estimate) > 0.25 * floor:
-        triggers.append("estimate_magnitude")
-    return triggers
+    tests = (sign(estimate) != sign(loo), (abs(estimate) > floor) != row["above_floor"],
+             bool(full["holm_reject"]) != bool(row["holm_reject"]), full["outcome"] != row["outcome"],
+             abs(loo - estimate) > MAGNITUDE_SHARE * floor)
+    return [name for name, raised in zip(INFLUENCE_TRIGGERS, tests) if raised]
+
+
+# FS3 (RC-CMP-10): the sign and threshold tests the producers' words read, and the words as functions of them.
+def GT(x, t):
+    return x > t
+
+
+def LT(x, t):
+    return x < t
+
+
+def LE(x, t):
+    return x <= t
+
+
+def GE(x, t):
+    return x >= t
+
+
+def NE(x, t):
+    return x != t
+
+
+def magnitude(value):
+    return abs(value) if finite(value) else None
+
+
+def side(value, index):
+    return interval(value)[index]
+
+
+def outcome_atoms(c, key, l9, ours, alpha, prefix=""):
+    """The tests the claim outcome reads (independent_recompute_b5.evaluate_outcome; the engine's _evaluation): the
+    estimate's sign, |estimate| against the floor, each end of the decision and metrology intervals against 0, and
+    the adjusted p against the registered alpha. l9 and ours: {mean, floor, decision, metrology, p}."""
+    return [c.atom(prefix + "positive", "contrast_j", key + "/dbar_j", l9["mean"], ours["mean"], 0.0, GT),
+            c.atom(prefix + "negative", "contrast_j", key + "/dbar_j", l9["mean"], ours["mean"], 0.0, LT),
+            c.atom(prefix + "above_floor", "contrast_j", key + "/dbar_j", magnitude(l9["mean"]), magnitude(ours["mean"]),
+                   ours["floor"], GT, l9["floor"]),
+            c.atom(prefix + "decision_lower", "contrast_j", key + "/decision_interval_j/lower", side(l9["decision"], 0),
+                   side(ours["decision"], 0), 0.0, LE),
+            c.atom(prefix + "decision_upper", "contrast_j", key + "/decision_interval_j/upper", side(l9["decision"], 1),
+                   side(ours["decision"], 1), 0.0, GE),
+            c.atom(prefix + "metrology_lower", "contrast_j", key + "/metrology_interval_j/lower",
+                   side(l9["metrology"], 0), side(ours["metrology"], 0), 0.0, LE),
+            c.atom(prefix + "metrology_upper", "contrast_j", key + "/metrology_interval_j/upper",
+                   side(l9["metrology"], 1), side(ours["metrology"], 1), 0.0, GE),
+            c.atom(prefix + "reject", "contrast_p", key + "/adjusted_p", l9["p"], ours["p"], alpha, LE)]
+
+
+def decide_outcome(t, prefix=""):
+    """The recompute's outcome word from the tests' truth values (independent_recompute_b5.evaluate_outcome)."""
+    if not (t[prefix + "positive"] or t[prefix + "negative"]) or not t[prefix + "above_floor"]:
+        return "not_resolvable"
+    metrology = t[prefix + "metrology_lower"] and t[prefix + "metrology_upper"]
+    if t[prefix + "decision_lower"] and t[prefix + "decision_upper"] and not metrology:
+        return "not_resolvable"
+    return "unresolved" if metrology or not t[prefix + "reject"] else "direction_supported"
+
+
+def threshold_free(word):
+    """An outcome no threshold decides: below the registered minimum, or missing inputs (evaluate_outcome)."""
+    return word == "not_estimable"
+
+
+def contrast_numbers(l9_row, mine, floor_l9):
+    """(L9's, the recompute's) numbers of a contrast's outcome tests."""
+    estimator = l9_row.get("estimator") or {}
+    return ({"mean": estimator.get("estimate"), "floor": floor_l9,
+             "decision": get(l9_row, "deterministic_bounds", "decision_interval"),
+             "metrology": estimator.get("metrology_aware_CI95"), "p": get(l9_row, "multiplicity", "adjusted_p")},
+            {"mean": mine.get("dbar_j"), "floor": mine.get("floor_gate_j"), "decision": mine.get("decision_interval_j"),
+             "metrology": mine.get("metrology_interval_j"), "p": mine.get("holm_p")})
+
+
+def loo_numbers(l9_loo, mine_loo, floor_l9, floor_ours):
+    return ({"mean": l9_loo.get("estimate"), "floor": floor_l9, "decision": l9_loo.get("decision_interval"),
+             "metrology": l9_loo.get("metrology_aware_ci95"), "p": l9_loo.get("adjusted_p")},
+            {"mean": mine_loo.get("dbar_j"), "floor": floor_ours, "decision": mine_loo.get("decision_interval_j"),
+             "metrology": mine_loo.get("metrology_interval_j"), "p": mine_loo.get("holm_p")})
+
+
+def sign_word(t, prefix=""):
+    return "positive" if t[prefix + "positive"] else "negative" if t[prefix + "negative"] else None
+
+
+# The engine's leave-one-out influence triggers, in its order (analysis_engine/sensitivity.py influence_triggers;
+# pinned by test_rc_cmp10.py); the first four are verdict triggers (the recompute's loo_verdict_influential).
+INFLUENCE_TRIGGERS = ("estimate_sign", "floor_status", "adjusted_rejection", "outcome", "estimate_magnitude")
+# PLAN 7.3's magnitude trigger: a leave-one-out movement beyond a quarter of the floor (the engine's threshold share).
+MAGNITUDE_SHARE = 0.25
+
+
+def trigger_atoms(c, key, full, loo, alpha, full_word, loo_word):
+    """FS3: each influence trigger's tests and its decision function (full and loo: (L9's, the recompute's) numbers;
+    full_word, loo_word: the recompute's outcome words, used as they are when no threshold decides them)."""
+    (fl9, fown), (ll9, lown) = full, loo
+    full_all = outcome_atoms(c, key.rsplit("/loo/", 1)[0], fl9, fown, alpha, "f_")
+    loo_all = outcome_atoms(c, key, ll9, lown, alpha, "l_")
+    full_atoms = [] if threshold_free(full_word) else full_all
+    loo_atoms = [] if threshold_free(loo_word) else loo_all
+
+    def outcome(t, prefix, word, atoms):
+        return decide_outcome(t, prefix) if atoms else word
+    sign_, floor_, rejection, outcome_, magnitude_ = INFLUENCE_TRIGGERS
+    return {
+        sign_: ([a for a in full_all + loo_all if a["name"][2:] in ("positive", "negative")],
+                lambda t: sign_word(t, "f_") != sign_word(t, "l_")),
+        floor_: ([a for a in full_all + loo_all if a["name"][2:] == "above_floor"],
+                 lambda t: t["f_above_floor"] != t["l_above_floor"]),
+        rejection: ([a for a in full_all + loo_all if a["name"][2:] == "reject"], lambda t: t["f_reject"] != t["l_reject"]),
+        outcome_: (full_atoms + loo_atoms,
+                   lambda t: outcome(t, "f_", full_word, full_atoms) != outcome(t, "l_", loo_word, loo_atoms)),
+        magnitude_: ([c.atom("movement", "contrast_j", key + "/dbar_j", magnitude(minus(ll9["mean"], fl9["mean"])),
+                             magnitude(minus(lown["mean"], fown["mean"])), times(MAGNITUDE_SHARE, fown["floor"]), GT,
+                             times(MAGNITUDE_SHARE, fl9["floor"]))], lambda t: t["movement"])}
+
+
+def named(tests, *names):
+    return [test for test in tests if test["name"] in names]
+
+
+def decided_words(words, undetermined):
+    """A trigger list without its undetermined triggers (FS3)."""
+    return [word for word in words if word not in undetermined] if isinstance(words, list) else words
+
+
+def trigger_tests(tests_by_trigger, names):
+    return [test for name in names for test in tests_by_trigger[name][0]]
+
+
+def unprefixed(tests, prefix):
+    return [{**test, "name": test["name"][len(prefix):]} for test in tests]
+
+
+def undetermined_triggers(c, tests):
+    """The trigger names whose word no decided test fixes (FS3)."""
+    names = []
+    for name, (atoms, decide) in tests.items():
+        open_ = [a for a in atoms if a["within"]]
+        if not open_:
+            continue
+        if all(a["truth"] is not None for a in atoms):
+            fixed = {a["name"]: a["truth"] for a in atoms if not a["within"]}
+            keys = sorted({a["name"] for a in open_})
+            words = {decide({**fixed, **dict(zip(keys, values))})
+                     for values in itertools.product((False, True), repeat=len(keys))}
+            if len(words) == 1:
+                continue
+        names.append(name)
+    return names
 
 
 def compare_campaigns(c, custody, ours):
@@ -2096,6 +2558,88 @@ def compare_campaigns(c, custody, ours):
     for pack in ("alpha", "beta"):
         c.exact("outcome_word", f"campaigns/{pack}/claim_usable", get(fill, "campaigns", pack, "claim_usable"),
                 get(ours, "inputs", PACKS[pack], "claim_usable"))
+
+
+# The finalized manifest step 8 writes (analysis_manifest_v3: <manifest_id>.finalized.json under the finalization
+# custody root), which the fill names (results_fill_adapter: gamma.finalized_manifest).
+FINALIZED_MANIFEST = r"finalized/[^/]+\.finalized\.json"
+# The fill's finalized_manifest keys (results_fill_adapter copies the claim artifact's inputs.analysis_manifest,
+# analysis_engine/artifact.py _INPUT_ARTIFACT_KEYS; pinned by test_rc_cmp10.py).
+FINALIZED_MANIFEST_KEYS = ("manifest_id", "file_sha256")
+
+
+def history_items(record, table):
+    """The history entries the table expects (a conditional one only when its line is printed) and the L9 line each
+    resolves to, with its position in block_lines."""
+    found, expected = {}, {}
+    for entry in table:
+        if entry["expect"] is None:
+            continue
+        item, at = resolve(record, entry["l9"][0][1])
+        if entry["condition"] is not None and item in (MISSING, DUPLICATE):
+            continue
+        expected[entry["check"]] = entry
+        if item not in (MISSING, DUPLICATE) and isinstance(item, dict):
+            found[entry["check"]] = (item, "/".join(map(str, at)))
+    return found, expected
+
+
+def condition_line(record, word):
+    return any(isinstance(line, dict) and line.get("line") == word for line in listed(get(record, "block_lines")))
+
+
+def nullable(value):
+    """A word that may print null, as a comparable value (exact refuses None as missing)."""
+    return [value]
+
+
+def compare_history(c, custody, ours):
+    """FS4 (RC-CMP-10): each history line the table expects, against its window-index attempts: the group's count,
+    its causes in attempt order and its superseded word; each attempt's verdict, cause key and superseded word; a
+    g10 line's redraw cycles. Rows key on the line's position in block_lines (block_lines/<i>)."""
+    names = custody.names(STEP11_SOURCES[1][1])
+    record = custody.read(names[0]) if len(names) == 1 else {}
+    found, expected = history_items(record, expected_checks(custody.registry))
+    for check, printed, entry in c.pairs("history/", found, expected):
+        if printed is None or entry is None:
+            continue
+        item, at = printed
+        expect = entry["expect"]
+        if "count" in expect:
+            c.numeric("count", f"history/{at}/count", item.get("count"), expect["count"])
+            printed_causes, own_causes = positions(item.get("causes")), positions(expect["causes"])
+            for index, cause, own in c.pairs(f"history/{at}/causes/", printed_causes, own_causes):
+                c.exact("outcome_word", f"history/{at}/causes/{index}",
+                        nullable(cause) if index in printed_causes else None,
+                        nullable(own) if index in own_causes else None, raw=cause)
+        if "verdict" in expect:
+            c.exact("outcome_word", f"history/{at}/verdict", item.get("verdict"), expect["verdict"])
+            c.exact("outcome_word", f"history/{at}/cause_key", nullable(item.get("cause_key")) if "cause_key" in item
+                    else None, nullable(expect["cause_key"]), raw=item.get("cause_key"))
+        if "superseded" in expect:
+            c.exact("outcome_word", f"history/{at}/superseded", item.get("superseded"), expect["superseded"])
+        if "redraw_cycles" in expect:
+            c.exact("outcome_word", f"history/{at}/redraw_cycles", nullable(item.get("redraw_cycles"))
+                    if "redraw_cycles" in item else None, nullable(expect["redraw_cycles"]), raw=item.get("redraw_cycles"))
+    # A re-harvest account prints exactly when harvest_once says a window was harvested twice (disclosures).
+    once = resolve(record, ("block_lines", {"line": "harvest_once"}))[0]
+    twice = get(once, "no_analysed_window_harvested_twice") if isinstance(once, dict) else None
+    c.exact("outcome_word", "history/reharvest_accounts_printed", condition_line(record, "reharvest_account"),
+            (not twice) if isinstance(twice, bool) else None)
+
+
+def compare_fill_identity(c, custody, ours):
+    """FABLE F4 (RC-CMP-10): the fill's finalized_manifest names the finalized manifest L9's custody lists (its
+    manifest id and listed digest), and that manifest's lineage names the sealed prospective manifest
+    (REGISTRY_PINS[MANIFEST]). The fill does not name the sealed file itself: the finalizer writes a new manifest."""
+    fill = custody.one(STEP11_SOURCES[0][1])
+    names = custody.names(FINALIZED_MANIFEST)
+    manifest = custody.read(names[0]) if len(names) == 1 else None
+    sealed = get(manifest, "lineage", "prospective_manifest_sha256") == REGISTRY_PINS[MANIFEST]
+    c.exact("routing_id", "fill/finalized_manifest/file_sha256", get(fill, "gamma", "finalized_manifest", "file_sha256"),
+            custody.listed[names[0]] if sealed else None)
+    c.exact("routing_id", "fill/finalized_manifest/manifest_id", get(fill, "gamma", "finalized_manifest", "manifest_id"),
+            get(manifest, "manifest_id") if sealed else None)
 
 
 def compare_brackets(c, custody, ours):
@@ -2190,8 +2734,10 @@ def sensitivity_reported(cells, registry):
 
 def our_sensitivity_reported(line, ours, registry):
     """The recompute's sensitivity cells, and its p42 cells (L9 lists them as refused cells), by registered window."""
+    # FABLE F1 (RC-CMP-10): every registered non-p42 cell the recompute lists, computed or refused.
     cells = {(pack, cid): item for pack in ("alpha", "beta")
-             for cid, item in items(line.get("reported_cells"), lambda key, _: key in registry.families(pack, False)).items()}
+             for cid, item in (line.get("reported_cells") if isinstance(line.get("reported_cells"), dict) else {}).items()
+             if isinstance(item, dict) and cid in registry.families(pack, False)}
     cells.update({(pack, cid): item for pack in ("alpha", "beta")
                   for cid, item in (ours.get("p42") or {}).items() if cid in registry.families(pack, True)})
     return cells
@@ -2213,9 +2759,14 @@ def compare_sensitivity(c, custody, ours):
         b_op, b_sens = get(ours, "windows", PACKS.get(pack, ""), "b_op_s"), get(line, "windows", PACKS.get(pack, ""), "b_sens_s")
         c.numeric("b_op_s", f"sensitivity/windows/{pack}/b_op_s", get(record, "windows", pack, "b_op_s"), b_op)
         c.numeric("b_op_s", f"sensitivity/windows/{pack}/b_sens_s", get(record, "windows", pack, "b_sens_s"), b_sens)
-        # F2: "values differ from primary" when the sensitivity bound is not the operative one.
-        c.exact("outcome_word", f"sensitivity/windows/{pack}/widened", get(record, "windows", pack, "widened"),
-                b_sens != b_op if finite(b_sens) and finite(b_op) else None)
+        # F2: "values differ from primary" when the sensitivity bound is not the operative one. FS3 (RC-CMP-10):
+        # the word reads b_sens - b_op against 0.
+        printed = get(record, "windows", pack, default={}) or {}
+        c.word("outcome_word", f"sensitivity/windows/{pack}/widened", printed.get("widened"),
+               b_sens != b_op if finite(b_sens) and finite(b_op) else None,
+               [c.atom("widened", "b_op_s", f"sensitivity/windows/{pack}/b_sens_s",
+                       minus(printed.get("b_sens_s"), printed.get("b_op_s")), minus(b_sens, b_op), 0.0, NE)],
+               lambda t: t["widened"])
     registry = custody.registry
     cells = keyed(record.get("floor_cells", []), lambda cell: cell_key(registry.lookup(
         cell.get("cell_id"), ("floor",), "sensitivity_floor_cell", cell.get("pack"))), "sensitivity_floor_cell")
@@ -2225,13 +2776,15 @@ def compare_sensitivity(c, custody, ours):
             c.numeric("floor_gate_j", f"sensitivity/{key}/{field}", get(cell, "sensitivity", field), mine.get(field))
         c.numeric("floor_j", f"sensitivity/{key}/allowance_j", get(cell, "sensitivity", "allowance_j"),
                   get(line, "floors", key + "/absolute", "allowance_j"))
+        # FABLE F1 (RC-CMP-10): the primary allowance is the window's whole-window drift allowance, which L9 reads
+        # from the extraction report whether or not the cell's floor is computed (sensitivity._compose_floor); the
+        # recompute's floor copies the same window value (make_floors: allowance_j = window.neg8.allowance_j).
         before = dict(get(ours, "floor_cells", key, default={}) or {},
-                      allowance_j=get(ours, "floors", key + "/absolute", "allowance_j"))
+                      allowance_j=get(ours, "windows", PACKS.get(pack_of_model(key.partition("/")[0]), ""), "neg8",
+                                      "allowance_j"))
         after = dict(mine, allowance_j=get(line, "floors", key + "/absolute", "allowance_j"))
-        c.exact("outcome_word", f"sensitivity/{key}/equals_primary", cell.get("equals_primary"),
-                relation(before, after, FLOOR_KEYS + ("allowance_j",), lambda a, b: a == b))
-        c.exact("outcome_word", f"sensitivity/{key}/not_below_primary", cell.get("not_below_primary"),
-                relation(before, after, FLOOR_KEYS, lambda a, b: b >= a))
+        families = dict.fromkeys(FLOOR_KEYS, "floor_gate_j") | {"allowance_j": "floor_j"}
+        relation_words(c, f"sensitivity/{key}", cell, before, after, FLOOR_KEYS + ("allowance_j",), FLOOR_KEYS, families)
         # F1 (RC-CMP-9): the record's own primary values, read directly (not only through the disclosure's copy).
         for field in FLOOR_KEYS:
             c.numeric("floor_gate_j", f"sensitivity/primary/{key}/{field}", get(cell, "primary", field), before.get(field))
@@ -2248,9 +2801,22 @@ def compare_sensitivity(c, custody, ours):
         for field in ("floor_abs_j", "floor_cmp_j"):
             c.numeric("floor_gate_j", f"sensitivity/{cid}/{field}", get(row, "sensitivity", field),
                       contrast_floor_part(line.get("floor_cells"), registry.entry(cid, "contrast"), field))
-        c.exact("outcome_word", f"sensitivity/{cid}/outcome", get(row, "sensitivity", "outcome"), mine.get("outcome"))
-        c.exact("outcome_word", f"sensitivity/{cid}/outcome_equals_primary", row.get("outcome_equals_primary"),
-                mine.get("outcome_equals_primary"))
+        # FS3 (RC-CMP-10): the sensitivity outcome reads the same tests as the primary one, against the
+        # sensitivity floor and decision interval (L9's: the metrology interval widened by the sensitivity D).
+        verdict = verdict_row_of(custody, cid)
+        primary_numbers = contrast_numbers(verdict, get(ours, "contrasts", cid, default={}) or {},
+                                           get(verdict, "floor", "active_floor_j"))
+        sensitivity_numbers = sensitivity_tests_numbers(primary_numbers, row, mine)
+        own_outcome, own_primary = mine.get("outcome"), (get(ours, "contrasts", cid, default={}) or {}).get("outcome")
+        s_tests = [] if threshold_free(own_outcome) else outcome_atoms(c, f"sensitivity/{cid}", *sensitivity_numbers,
+                                                                        registry.alpha, "s_")
+        p_tests = [] if threshold_free(own_primary) else outcome_atoms(c, cid, *primary_numbers, registry.alpha, "p_")
+        c.word("outcome_word", f"sensitivity/{cid}/outcome", get(row, "sensitivity", "outcome"), own_outcome, s_tests,
+               lambda t: decide_outcome(t, "s_"))
+        c.word("outcome_word", f"sensitivity/{cid}/outcome_equals_primary", row.get("outcome_equals_primary"),
+               mine.get("outcome_equals_primary"), s_tests + p_tests,
+               lambda t: (decide_outcome(t, "s_") if s_tests else own_outcome)
+               == (decide_outcome(t, "p_") if p_tests else own_primary))
         # F2: true by construction (sensitivity.py refuses sensitivity_changed_bound_independent_value otherwise).
         c.exact("outcome_word", f"sensitivity/{cid}/bound_independent_values_equal_primary",
                 row.get("bound_independent_values_equal_primary"), True)
@@ -2259,13 +2825,14 @@ def compare_sensitivity(c, custody, ours):
         before.update(floor_gate_j=primary.get("floor_gate_j"), D_j=primary.get("D_j"))
         after = {field: contrast_floor_part(line.get("floor_cells"), entry, field) for field in ("floor_abs_j", "floor_cmp_j")}
         after.update(floor_gate_j=mine.get("floor_gate_j"), D_j=mine.get("D_j"))
-        c.exact("outcome_word", f"sensitivity/{cid}/not_below_primary", row.get("not_below_primary"),
-                relation(before, after, FLOOR_KEYS + ("D_j",), lambda a, b: b >= a))
+        relation_words(c, f"sensitivity/{cid}", row, before, after, (), FLOOR_KEYS + ("D_j",),
+                       dict.fromkeys(FLOOR_KEYS, "floor_gate_j") | {"D_j": "contrast_j"})
         # F1 (RC-CMP-9): the record's own primary values; A3: its floor cell ids against the registered cells.
         for field in FLOOR_KEYS:
             c.numeric("floor_gate_j", f"sensitivity/primary/{cid}/{field}", get(row, "primary", field), before.get(field))
         c.numeric("contrast_j", f"sensitivity/primary/{cid}/D_j", get(row, "primary", "D_j"), before.get("D_j"))
-        c.exact("outcome_word", f"sensitivity/primary/{cid}/outcome", get(row, "primary", "outcome"), primary.get("outcome"))
+        c.word("outcome_word", f"sensitivity/primary/{cid}/outcome", get(row, "primary", "outcome"), primary.get("outcome"),
+               unprefixed(p_tests, "p_"), decide_outcome)
         compare_floor_ids(c, f"sensitivity/{cid}/floor_cell_ids", row.get("floor_cell_ids"), entry, registry)
     reported = sensitivity_reported(record.get("reported_cells", []), registry)
     for (pack, cid), cell, _ in c.pairs("sensitivity/reported_cells/", reported, our_sensitivity_reported(line, ours, registry)):
@@ -2274,13 +2841,32 @@ def compare_sensitivity(c, custody, ours):
         sens = cell.get("sensitivity") or {}
         if cid in registry.families(pack, True):
             # The registered p42 exit: no reported value on either side; compared as a status, not as numbers.
-            l9 = "expected_unresolvable" if not any_finite(sens) else "computed"
+            l9 = P42_UNRESOLVABLE if not any_finite(sens) else "computed"
             own = get(ours, "p42", cid, "status")
             c.exact("p42_status", f"sensitivity/{pack}/{cid}", l9, own)
-            # F2: the printed status and code words, against the registered exit's words (sensitivity.py).
-            exit_words = P42_EXIT if own == "expected_unresolvable" else (own, None)
-            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"), exit_words[0])
-            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/code", cell.get("code"), exit_words[1])
+            # F2: the printed status word, against the registered exit's (sensitivity.py); FS2 (RC-CMP-10): the code,
+            # a member of the producer's closed refusal codes and the same in every L9 copy (p42_code).
+            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"),
+                    P42_REFUSED_STATUS if own == P42_UNRESOLVABLE else own)
+            code = refused_code(custody, record, pack, cell.get("cell_id"))
+            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/code", cell.get("code"),
+                    code if own == P42_UNRESOLVABLE else None)
+            c.exact("outcome_word", f"{pack}/projection/refused/{cid}/code",
+                    code_of(projection_refused(custody, pack), cell.get("cell_id")), code if own == P42_UNRESOLVABLE else None)
+            continue
+        cell_id = registry.reported_id(pack, cid)
+        if not holds(custody, ours, ("reported_computed", pack, cell_id, cid)):
+            # FABLE F1 (RC-CMP-10; RC-CMP-9 OPEN ISSUE 1): refused on both sides (below the registered minimum). The
+            # status and code words are compared, through the registered mapping of the recompute's word, and no
+            # value row is built.
+            own = get(ours, "reported_cells", cid, "status")
+            refused = own == REPORTED_BELOW_MINIMUM
+            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"),
+                    P42_REFUSED_STATUS if refused else own)
+            code = refused_code(custody, record, pack, cell_id, BELOW_MINIMUM_CODE) if refused else None
+            c.exact("outcome_word", f"sensitivity/{pack}/{cid}/code", cell.get("code"), code)
+            c.exact("outcome_word", f"{pack}/projection/refused/{cid}/code",
+                    code_of(projection_refused(custody, pack), cell_id), code)
             continue
         c.exact("outcome_word", f"sensitivity/{pack}/{cid}/status", cell.get("status"),
                 "computed" if mine.get("status") == "computed" else mine.get("status"))
@@ -2289,10 +2875,8 @@ def compare_sensitivity(c, custody, ours):
         for field in REPORTED_VALUE_KEYS:
             c.numeric("reported_cell_j", f"sensitivity/primary/{pack}/{cid}/{field}", get(cell, "primary", field),
                       before.get(field))
-        c.exact("outcome_word", f"sensitivity/{pack}/{cid}/equals_primary", cell.get("equals_primary"),
-                relation(before, after, tuple(before), lambda a, b: a == b))
-        c.exact("outcome_word", f"sensitivity/{pack}/{cid}/not_below_primary", cell.get("not_below_primary"),
-                relation(before, after, ("attribution_floor_j",), lambda a, b: b >= a))
+        relation_words(c, f"sensitivity/{pack}/{cid}", cell, before, after, tuple(before), ("attribution_floor_j",),
+                       dict.fromkeys(before, "reported_cell_j"))
         # F2: true by construction (sensitivity.py refuses sensitivity_changed_bound_independent_value otherwise).
         c.exact("outcome_word", f"sensitivity/{pack}/{cid}/mean_and_half_width_equal_primary",
                 cell.get("mean_and_half_width_equal_primary"), True)
@@ -2304,10 +2888,62 @@ def compare_sensitivity(c, custody, ours):
                   get(mine, "attribution_floor", "value_j"))
 
 
-# The registered p42 exit as L9's sensitivity record prints it (b5_analysis/sensitivity.py: a refused
-# projection cell keeps its status and code); the recompute's word for it is expected_unresolvable.
-P42_EXIT = ("refused", "p42_expected_unresolvable")
+# FS2 (RC-CMP-10): the registered p42 exit as L9 prints it. b5_analysis/sensitivity.py keeps a refused projection
+# cell as status "refused" with the projection's code, and the code is one of the paper-reported-energy kernel's
+# closed refusal codes (paper_reported_energy.PAPER_REPORTED_ENERGY_REFUSAL_CODES, copied here and pinned by
+# test_rc_cmp10.py). The recompute derives no refusal reason (its p42 status is expected_unresolvable), so the
+# code must be a member of this set and the same in every L9 copy (projection, sensitivity record, its disclosure
+# copy and block line).
+P42_REFUSED_STATUS = "refused"
+# A reported cell below the registered minimum: the recompute's status word (independent_recompute_b5.py
+# reported_cell) and the kernel's code for it (paper_reported_energy.estimate_reported_cell), which the projection,
+# the sensitivity record and its copies print (FABLE F1, RC-CMP-10; pinned by test_rc_cmp10.py).
+REPORTED_BELOW_MINIMUM = "below_minimum"
+BELOW_MINIMUM_CODE = "paper_reported_energy_kept_units_below_minimum"
+REPORTED_REFUSAL_CODES = (
+    "paper_reported_energy_binding_mismatch", "paper_reported_energy_cell_census_invalid",
+    "paper_reported_energy_cell_identity_invalid", "paper_reported_energy_cell_registration_mismatch",
+    "paper_reported_energy_denominator_invalid", "paper_reported_energy_digest_invalid",
+    "paper_reported_energy_floor_census_invalid", "paper_reported_energy_floor_identity_mismatch",
+    "paper_reported_energy_floor_member_mismatch", "paper_reported_energy_floor_stratum_mismatch",
+    "paper_reported_energy_kept_units_below_minimum", "paper_reported_energy_whole_window_allowance_unrecorded",
+    "paper_reported_energy_member_count_invalid", "paper_reported_energy_member_duplicate",
+    "paper_reported_energy_member_identity_invalid", "paper_reported_energy_member_order_invalid",
+    "paper_reported_energy_model_invalid", "paper_reported_energy_number_invalid",
+    "paper_reported_energy_ordering_history_invalid", "paper_reported_energy_projection_absent",
+    "paper_reported_energy_projection_mismatch", "paper_reported_energy_prompt_surfaces_disagree",
+    "paper_reported_energy_ratio_estimand_invalid", "paper_reported_energy_record_identity_mismatch",
+    "paper_reported_energy_record_invalid", "paper_reported_energy_registration_digest_mismatch",
+    "paper_reported_energy_registration_invalid", "paper_reported_energy_registration_not_before_spec",
+    "paper_reported_energy_request_invalid", "paper_reported_energy_schema_invalid",
+    "paper_reported_energy_spec_binding_mismatch", "paper_reported_energy_spec_invalid",
+    "paper_reported_energy_token_scope_mismatch",)
 FLOOR_KEYS = ("floor_abs_j", "floor_cmp_j", "floor_gate_j")
+
+
+def projection_refused(custody, pack):
+    return get(custody.one(r"outputs/[0-9a-f]{64}-projection-" + pack + r"\.json"), "refused_cells")
+
+
+def code_of(rows, cell_id):
+    """The code of the one row of a list naming the cell (None when absent, duplicated or not a list)."""
+    found = [row for row in listed(rows) if isinstance(row, dict) and row.get("cell_id") == cell_id]
+    return found[0].get("code") if len(found) == 1 else None
+
+
+def refused_code(custody, record, pack, cell_id, expected=None):
+    """FS2 (RC-CMP-10): a refused cell's code as every L9 copy prints it (the projection's refused cell, the
+    sensitivity record, its disclosure copy and its block line), when they are all equal, the code is one of the
+    producer's closed refusal codes and (given) it is the expected code; else None (the code rows then DISAGREE)."""
+    names = custody.names(STEP11_SOURCES[1][1])
+    disclosure = custody.read(names[0]) if len(names) == 1 else None
+    lines = [line.get("record") for line in listed(get(disclosure, "block_lines"))
+             if isinstance(line, dict) and line.get("line") == "sensitivity_reported"]
+    copies = [code_of(projection_refused(custody, pack), cell_id), code_of(record.get("reported_cells"), cell_id),
+              code_of(get(disclosure, "sensitivity", "reported_cells"), cell_id), code_of(lines, cell_id)]
+    code = copies[0]
+    return code if isinstance(code, str) and code in REPORTED_REFUSAL_CODES and code == (expected or code) and all(
+        isinstance(other, str) and other == code for other in copies) else None
 
 
 def reported_values(cell):
@@ -2315,6 +2951,43 @@ def reported_values(cell):
     return {"mean_j": cell.get("mean_j"), "h_j": get(cell, "interval", "h_j"), "B_j": get(cell, "interval", "B_j"),
             "lower_j": cell.get("lower_j"), "upper_j": cell.get("upper_j"),
             "attribution_floor_j": get(cell, "attribution_floor", "value_j")}
+
+
+def sensitivity_tests_numbers(primary_numbers, row, mine):
+    """FS3: the sensitivity outcome's numbers on each side. The estimate, metrology interval and p are
+    bound-independent (sensitivity.py refuses unless they equal the primary values), so both sides read them from
+    the primary contrast; the floor and D are the sensitivity ones, the decision interval the metrology interval
+    widened by D."""
+    return tuple({**numbers, "floor": floor, "decision": widened_interval(numbers["metrology"], d)}
+                 for numbers, floor, d in ((primary_numbers[0], get(row, "sensitivity", "floor_gate_j"),
+                                            get(row, "sensitivity", "D_j")),
+                                           (primary_numbers[1], mine.get("floor_gate_j"), mine.get("D_j"))))
+
+
+def minus(a, b):
+    return a - b if finite(a) and finite(b) else None
+
+
+def widened_interval(value, d):
+    lower, upper = interval(value)
+    return [minus(lower, d), upper + d if finite(upper) and finite(d) else None]
+
+
+def relation_words(c, key, row, before, after, equal_keys, not_below_keys, families):
+    """FS3 (RC-CMP-10): a sensitivity row's equals_primary (each value equal to its primary value) and
+    not_below_primary (none below it) words, each from its tests sensitivity - primary against 0, on L9's printed
+    primary and sensitivity values and on the recompute's. A word is compared only when its tests fix it."""
+    def tests(keys, test):
+        return [c.atom(field, families[field], f"{key}/{field}", minus(get(row, "sensitivity", field),
+                                                                        get(row, "primary", field)),
+                       minus(after.get(field), before.get(field)), 0.0, test) for field in keys]
+    if equal_keys:
+        c.word("outcome_word", key + "/equals_primary", row.get("equals_primary"),
+               relation(before, after, equal_keys, lambda a, b: a == b), tests(equal_keys, NE),
+               lambda t: not any(t[field] for field in equal_keys))
+    c.word("outcome_word", key + "/not_below_primary", row.get("not_below_primary"),
+           relation(before, after, not_below_keys, lambda a, b: b >= a), tests(not_below_keys, GE),
+           lambda t: all(t[field] for field in not_below_keys))
 
 
 def relation(before, after, keys, test):
@@ -2360,7 +3033,48 @@ def magnitude_rows(contrast):
     if not (finite(floor) and finite(estimate)):
         return {}
     return {block_key(row.get("block_number")): abs(row["dbar_j"] - estimate) for row in contrast.get("loo") or []
-            if isinstance(row, dict) and finite(row.get("dbar_j")) and abs(row["dbar_j"] - estimate) > 0.25 * floor}
+            if isinstance(row, dict) and finite(row.get("dbar_j")) and abs(row["dbar_j"] - estimate) > MAGNITUDE_SHARE * floor}
+
+
+def agree_margin(row):
+    """|delta| less the combined half-width (the cross-window line's agree test)."""
+    values = [row.get(field) for field in ("delta_j", "h_G_j", "h_F_j")]
+    return abs(values[0]) - math.hypot(values[1], values[2]) if all(finite(v) for v in values) else None
+
+
+def verdict_row_of(custody, cid):
+    verdicts = custody.one(r"outputs/[0-9a-f]{64}-claim-verdicts\.json")
+    return next((r for r in listed(get(verdicts, "contrasts")) if isinstance(r, dict) and r.get("contrast_id") == cid), {})
+
+
+def magnitude_tests(c, key, verdict, contrast):
+    """FS3 (RC-CMP-10): each recompute leave-one-out row's magnitude test (movement against a quarter of the floor),
+    on L9's verdict row for the same block and the recompute's row, by the recompute's block key."""
+    floor, estimate = contrast.get("floor_gate_j"), contrast.get("dbar_j")
+    l9_floor, l9_estimate = get(verdict, "floor", "active_floor_j"), get(verdict, "estimator", "estimate")
+    rows = {loo_key_number(r.get("omitted_block_id"), verdict): r for r in listed(get(verdict, "loo", "rows"))
+            if isinstance(r, dict)}
+    tests = {}
+    for row in listed(contrast.get("loo")):
+        block = block_key(row.get("block_number")) if isinstance(row, dict) else None
+        if block is None or not (finite(row.get("dbar_j")) and finite(estimate) and finite(floor)):
+            continue
+        printed = get(rows.get(block), "estimate")
+        test = c.atom("raises", "contrast_j", f"{key}/{block}/movement_j",
+                      magnitude(minus(printed, l9_estimate)), abs(row["dbar_j"] - estimate), MAGNITUDE_SHARE * floor, GT,
+                      times(MAGNITUDE_SHARE, l9_floor))
+        tests[block] = dict(test, moved=abs(row["dbar_j"] - estimate))
+    return tests
+
+
+def undetermined_magnitudes(c, key, verdict, contrast):
+    return {block: test for block, test in magnitude_tests(c, key, verdict, contrast).items() if test["within"]}
+
+
+def loo_key_number(block_id, verdict):
+    """A verdict's omitted block id -> the recompute's block key, by its position in the verdict's planned blocks."""
+    planned = listed(get(verdict, "bundle_blocks", "planned_block_ids"))
+    return "b%02d" % (planned.index(block_id) + 1) if block_id in planned else None
 
 
 def window_line_names(window_lines):
@@ -2402,7 +3116,10 @@ def compare_disclosures(c, custody, ours):
             mine = get(disclosures, "cross_window", f"{MODELS.get(pack)}/{registry.phase_of_family(cid)}", default={}) or {}
             for field in ("F_j", "G_j", "delta_j", "h_F_j", "h_G_j"):
                 c.numeric("reported_cell_j", key + "/" + field, row.get(field), mine.get(field))
-            c.exact("outcome_word", key + "/agree", row.get("agree"), mine.get("agree"))
+            # FS3 (RC-CMP-10): agree reads |delta| against the combined half-width (disclosures: hypot(h_G, h_F)).
+            c.word("outcome_word", key + "/agree", row.get("agree"), mine.get("agree"),
+                   [c.atom("agree", "reported_cell_j", key + "/delta_j", agree_margin(row), agree_margin(mine), 0.0, LE)],
+                   lambda t: t["agree"])
         else:
             mine = get(disclosures, "battery_assist", cid, default={}) or {}
             without = row.get("without") or {}
@@ -2424,10 +3141,16 @@ def compare_disclosures(c, custody, ours):
         if kind == "battery_assist_contrast":
             mine = get(disclosures, "battery_assist", cid, default={}) or {}
             ivl = interval(mine.get("metrology_interval_j"))
+            # FABLE F1 (RC-CMP-10): the estimates the status word makes the producer print (STATUS_KEYS), by the
+            # status re-derived from the recompute's n or printed by L9: none for not_computable on both sides.
+            printed = set(STATUS_KEYS[("contrasts", "battery_assist_contrast")][1].get(paired_status(mine.get("n")), ())) \
+                | set(STATUS_KEYS[("contrasts", "battery_assist_contrast")][1].get(row.get("status"), ()))
             for field, value in (("mean_j", mine.get("dbar_j")), ("lower_j", ivl[0]), ("upper_j", ivl[1]),
                                  ("s_d", mine.get("s_d_j")), ("se", mine.get("se_j"))):
-                c.numeric("contrast_j", key + "/" + field, row.get(field), value)
-            c.numeric("contrast_p", key + "/t_star", row.get("t_star"), mine.get("t_star"))
+                if field in printed:
+                    c.numeric("contrast_j", key + "/" + field, row.get(field), value)
+            if "t_star" in printed:
+                c.numeric("contrast_p", key + "/t_star", row.get("t_star"), mine.get("t_star"))
             c.numeric("count", key + "/n", row.get("n"), mine.get("n"))
             # F2: the producer's status word is fixed by n (disclosures._paired_values).
             c.exact("outcome_word", key + "/status", row.get("status"), paired_status(mine.get("n")))
@@ -2438,6 +3161,10 @@ def compare_disclosures(c, custody, ours):
                 c.numeric("count", key + "/assist_members/" + stratum, a, b)
         elif kind == "magnitude_ratio":
             mine = get(ours, "descriptive", cid, default={}) or {}
+            if not holds(custody, ours, ("ratio_computable", cid)):
+                # FABLE F1 (RC-CMP-10): not computable on either side: no estimates on either side, no value rows.
+                c.exact("outcome_word", key + "/computable", "ratio" in row, finite(mine.get("ratio")))
+                continue
             ivl = interval(mine.get("ratio_interval"))
             for field, value in (("ratio", mine.get("ratio")), ("lower", ivl[0]), ("upper", ivl[1])):
                 c.numeric("descriptive_ratio", key + "/" + field, row.get(field), value)
@@ -2448,13 +3175,28 @@ def compare_disclosures(c, custody, ours):
                 for side, a, b in sides(row.get(name), mine.get(other)):
                     c.numeric("per_token_j", f"{key}/{name}/{side}", a, b)
         elif kind == "loo_counts":
-            loo = get(ours, "contrasts", cid, "loo")
-            c.numeric("count", key + "/count", row.get("count"), len(loo) if isinstance(loo, list) else None)
+            # OPUS F1 (RC-CMP-10): the count of the engine's rows, one per kept block (the kept n), never the
+            # number of rows the recompute printed (it computes rows only from LOO_MIN kept quads).
+            n = get(ours, "contrasts", cid, "n")
+            c.numeric("count", key + "/count", row.get("count"),
+                      n if loo_status(n, registry.blocks.get(cid)) is not None else None)
         else:
             # loo_magnitude: the rows raising the magnitude trigger, L9's against the recompute's own selection,
-            # each with its movement |LOO estimate - estimate|.
+            # each with its movement |LOO estimate - estimate|. FS3 (RC-CMP-10): a row whose movement lies inside
+            # its bar from a quarter of the floor is undetermined: whether it is printed is not compared, and its
+            # row is AGREE only if the movement agrees.
             l9_rows = keyed(row.get("rows"), lambda item: block_key(item.get("block_number")), "loo_magnitude_row")
-            for block, item, moved in c.pairs(key + "/", l9_rows, magnitude_rows(get(ours, "contrasts", cid, default={}) or {})):
+            contrast = get(ours, "contrasts", cid, default={}) or {}
+            open_ = undetermined_magnitudes(c, key, verdict_row_of(custody, cid), contrast)
+            selected = magnitude_rows(contrast)
+            # An undetermined row is on both sides of the union, so whether either side prints it is not compared.
+            for block, item, moved in c.pairs(key + "/", dict.fromkeys(open_) | l9_rows, dict.fromkeys(open_) | selected):
+                if block in open_:
+                    c.word("outcome_word", f"{key}/{block}/raises_magnitude", block in l9_rows, block in selected,
+                           [open_[block]])
+                    moved = open_[block]["moved"]
+                    if block not in l9_rows:
+                        continue
                 c.numeric("contrast_j", f"{key}/{block}/movement_j", (item or {}).get("movement_j"), moved)
     # RC-CMP-8: each floor-composition line's allowance source word, against the recompute's NEG-8 source of the
     # line's window (disclosures.py reads it from the window's derived/neg8-allowance.json).
@@ -2477,8 +3219,11 @@ def compare_disclosures(c, custody, ours):
             line, own = line or {}, get(ours, "windows", PACKS[pack], default={}) or {}
             if word == "below_screen_bound":
                 b_op = own.get("b_op_s")
-                c.exact("outcome_word", f"disclosure/{pack}/below_screen_bound/below", line.get("below"),
-                        b_op < SCREEN_BOUND_S if finite(b_op) else None)
+                # FS3 (RC-CMP-10): the word reads b_op against the registered screen bound.
+                c.word("outcome_word", f"disclosure/{pack}/below_screen_bound/below", line.get("below"),
+                       b_op < SCREEN_BOUND_S if finite(b_op) else None,
+                       [c.atom("below", "b_op_s", f"{pack}/b_op_s", line.get("b_op_s"), b_op, SCREEN_BOUND_S, LT)],
+                       lambda t: t["below"])
             else:
                 c.exact("outcome_word", f"disclosure/{pack}/neg8_screen/decision", line.get("decision"),
                         get(own, "neg8", "screen_decision"))
@@ -2591,7 +3336,13 @@ def compare_machine(c, custody, ours, meter_records):
             c.numeric("machine_j", key + "/rail_delta_J", row.get("rail_j"), own.get("rail_delta_J"))
             c.numeric("machine_j", key + "/delta_J", row.get("machine_j"), own.get("delta_J"))
             # F2: the member line's words, against the recompute's own member (machine_lines' plausibility rule).
-            c.exact("outcome_word", key + "/plausible", row.get("plausible"), plausible_rho(own) if own else None)
+            # FS3 (RC-CMP-10): plausible reads rho against 0 and 1 and the machine less the rail energy against 0.
+            c.word("outcome_word", key + "/plausible", row.get("plausible"), plausible_rho(own) if own else None,
+                   [c.atom("rho_positive", "rho", key + "/rho", row.get("rho"), own.get("rho"), 0.0, GT),
+                    c.atom("rho_at_most_one", "rho", key + "/rho", row.get("rho"), own.get("rho"), 1.0, LE),
+                    c.atom("machine_over_rail", "machine_j", key + "/delta_J", minus(row.get("machine_j"), row.get("rail_j")),
+                           minus(own.get("delta_J"), own.get("rail_delta_J")), 0.0, GE)],
+                   lambda t: all(t.values()))
             c.exact("battery_term", key + "/battery_term_available", row.get("battery_term_available"),
                     own.get("battery_term_available"))
             if stored is None:
@@ -2757,7 +3508,7 @@ COVERAGE = (
     (F + "j_per_token", NULL_NAMED + "null for a J contrast by registration (J/token contrasts only)"),
     (F + "j_per_token", "contrast_j", "{cid}/dbar_j"),
     (F + "(?P<field>n|df)", "count", "{cid}/{field}"),
-    (F + "sampling/kept_n", "count", "{cid}/n"),
+    (F + "sampling/kept_n", "count", "{cid}/kept_n"),
     (F + "sampling/(planned_n|observed_complete_n)", CONSTANT + "; the claim engine's complete-observation count beside the kept n (compared)"),
     (F + "t_critical_95", "contrast_p", "{cid}/t_critical"),
     (F + "multiplicity/(?P<field>raw_p|adjusted_p)", "contrast_p", "{cid}/{field}"),
@@ -2810,7 +3561,8 @@ COVERAGE = (
      "leave-one-out influence trigger these codes summarise are compared"),
     # A4 (RC-CMP-9): the fill's block ids, by position against the registered blocks the recompute keeps or leaves out.
     (F + r"kept_block_ids/\*", "routing_id", "contrast/{cid}/kept_block_ids/{kept_block}"),
-    (F + r"(sampling/)?removed_block_ids/\*", "routing_id", "contrast/{cid}/removed_block_ids/{removed_block}"),
+    (F + r"removed_block_ids/\*", "routing_id", "contrast/{cid}/removed_block_ids/{removed_block}"),
+    (F + r"sampling/removed_block_ids/\*", "routing_id", "contrast/{cid}/sampling_removed_block_ids/{removed_block}"),
     (F + r"(equivalence/method|conditions/(cell_a_id|cell_b_id)|metric/unit)",
      UNCOVERED + "contrast-definition words the sealed manifest's contrast row does not register (cell ids, the "
      "metric unit, the equivalence method of a contrast with none); they assert no claim, direction or status"),
@@ -2966,7 +3718,7 @@ COVERAGE = (
     (SF + r"sensitivity/(?P<field>floor_abs_j|floor_cmp_j|floor_gate_j)", "floor_gate_j", "sensitivity/{aggregate_cell}/{field}"),
     (SF + r"sensitivity/allowance_j", "floor_j", "sensitivity/{aggregate_cell}/allowance_j"),
     (SF + r"primary/(?P<field>floor_abs_j|floor_cmp_j|floor_gate_j)", "floor_gate_j", "{aggregate_cell}/{field}"),
-    (SF + r"primary/allowance_j", "floor_j", "{aggregate_cell}/absolute/whole_window_drift_allowance_j"),
+    (SF + r"primary/allowance_j", "floor_j", "sensitivity/primary/{aggregate_cell}/allowance_j"),
     (SC + r"sensitivity/(?P<field>floor_abs_j|floor_cmp_j|floor_gate_j)", "floor_gate_j", "sensitivity/{cid}/{field}"),
     (SC + r"sensitivity/D_j", "contrast_j", "sensitivity/{cid}/D_j"),
     (SC + r"sensitivity/outcome", "outcome_word", "sensitivity/{cid}/outcome"),
@@ -2975,6 +3727,16 @@ COVERAGE = (
     (SC + r"primary/D_j", "contrast_j", "{cid}/D_j"),
     (SC + r"primary/outcome", "outcome_word", "{cid}/outcome"),
     (SC + r"floor_cell_ids/\*", "routing_id", "sensitivity/{cid}/floor_cell_ids/{floor_cell}"),
+    # FS4 (RC-CMP-10): the history lines' words, against their window-index attempts (compare_history).
+    (D + r"block_lines/attempt_count/count", "count", "history/block_lines/{block_line}/count"),
+    (D + r"block_lines/attempt_count/causes/\*", "outcome_word", "history/block_lines/{block_line}/causes/{cause}"),
+    (D + r"block_lines/(attempt_count|attempt_history)/superseded", "outcome_word",
+     "history/block_lines/{block_line}/superseded"),
+    (D + r"block_lines/attempt_history/(?P<field>verdict|cause_key)", "outcome_word",
+     "history/block_lines/{block_line}/{field}"),
+    (D + r"block_lines/g10/redraw_cycles", "outcome_word", "history/block_lines/{block_line}/redraw_cycles"),
+    (D + r"block_lines/attempt_history/triggers", NULL_NAMED + "no calibration bracket recorded for the attempt: the "
+     "producer prints no trigger object (disclosures._trigger_values)"),
     (D + r"block_lines/(attempt_count/count|attempt_history/(attempt|collected|planned|flags_by_family/[A-Za-z0-9_.]+|"
      r"triggers/(doubling_count|systematic_sequences/\*))|g10/(codes/[A-Za-z0-9_.]+|redraw_cycles)|"
      r"reharvest_account/(survivors_before|survivors_after))", STRUCTURE_NUMBER),
@@ -2986,14 +3748,16 @@ COVERAGE = (
     (r"fill:campaigns/(alpha|beta)/attempt|disclosure:(cells|floors|contrasts)/removed_unit/positions/\*", IDENTITY_NUMBER),
     # Identity at the positions L9's producers print it (results_fill_adapter, build_results_fill_input, disclosures).
     (r"fill:campaigns/(?P<pack>alpha|beta)/claim_usable", "outcome_word", "campaigns/{pack}/claim_usable"),
+    # FABLE F4 (RC-CMP-10): the finalized manifest the fill names, bound through L9's custody to the sealed manifest.
+    (r"fill:gamma/finalized_manifest/(?P<field>manifest_id|file_sha256)", "routing_id", "fill/finalized_manifest/{field}"),
     (r"fill:(campaigns/(alpha|beta)/(plan_id|exclusions_sha256|harvest_record_sha256)|"
-     r"gamma/(claim_verdicts_id|claim_verdicts_sha256|exclusions_sha256|finalized_manifest/(manifest_id|file_sha256)|"
+     r"gamma/(claim_verdicts_id|claim_verdicts_sha256|exclusions_sha256|"
      r"floor_artifact/(artifact_id|file_sha256)|contrasts/\*/(contrast_id|plan_id|"
      r"floor/resolutions/\*/source_cell_ids/\*|loo/rows/\*/omitted_block_id)))", IDENTITY),
     (r"disclosure:(windows/[a-z]+/(plan_id|harvest_pin|record_shape)|"
      r"(cells|floors|contrasts)/[a-z_]+/(pack|cell_id|contrast_id|unit_id|stage_ids/\*)|"
      r"window_lines/[a-z]+/[a-z_]+/(pack|run_id|model|stage_id|harvest_pin|central_band/plan_id)|"
-     r"block_lines/[a-z_]+/(pack|plan_id|cell_id|component|record/(pack|cell_id|contrast_id))|"
+     r"block_lines/[a-z_0-9]+/(pack|plan_id|cell_id|component|record/(pack|cell_id|contrast_id))|"
      r"sensitivity/((reported_cells|floor_cells)/\*/(pack|cell_id)|contrasts/\*/contrast_id|"
      r"windows/[a-z]+/plan_id))", IDENTITY),
 )
@@ -3033,7 +3797,8 @@ IDENTITY_FIELDS = ("contrast_id", "cell_id", "pack", "run_id", "model", "compone
                    "block_number")
 POSITIONS = {"arm": "@arm_gates", "resolution": "@resolutions", "source": "@source_cell_ids", "trigger": "@influence_triggers",
              "floor_row": "@floor_row_ids", "floor_source": "@floor_source_cell_ids", "floor_cell": "@floor_cell_ids",
-             "kept_block": "@kept_block_ids", "removed_block": "@removed_block_ids"}
+             "kept_block": "@kept_block_ids", "removed_block": "@removed_block_ids", "block_line": "@block_lines",
+             "cause": "@causes"}
 
 
 def binding(context, groups, registry):
@@ -3104,7 +3869,8 @@ def admits(rule, value, number, nonfinite, word=False):
 # The fill's position-by-position copies of a verdict list, and the comparison rows of their positions.
 COPIED_LISTS = ((r"fill:gamma/contrasts/\*/kept_block_ids/\*", r"contrast/ctr-[^/]+/kept_block_ids/[0-9]+"),
                 (r"fill:gamma/contrasts/\*/removed_block_ids/\*", r"contrast/ctr-[^/]+/removed_block_ids/[0-9]+"),
-                (r"fill:gamma/contrasts/\*/sampling/removed_block_ids/\*", r"contrast/ctr-[^/]+/removed_block_ids/[0-9]+"),
+                (r"fill:gamma/contrasts/\*/sampling/removed_block_ids/\*",
+                 r"contrast/ctr-[^/]+/sampling_removed_block_ids/[0-9]+"),
                 (r"fill:gamma/contrasts/\*/loo/rows/\*/influence_triggers/\*",
                  r"ctr-[^/]+/loo/b[0-9]+/influence_triggers/[0-9]+"))
 
@@ -3185,11 +3951,11 @@ def coverage(custody, comparison, rules=None):
             "named_exemptions": {pattern: sorted(paths) for pattern, paths in sorted(exemptions.items())}}
 
 
-def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=(), registry=None):
+def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=(), registry=None, window_index=None):
     bars = load_bars(bars_path)
     flags = []
     meter_records, meter_digests = load_meter_records(meter, flags)
-    custody = Custody(l9_custody, flags, registry)
+    custody = Custody(l9_custody, flags, registry, window_index)
     try:
         ours = loads(Path(recompute_path).read_bytes(), flags, "recompute", duplicate="recompute_output_duplicate_key")
     except (OSError, ValueError):
@@ -3208,6 +3974,8 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
     compare_machine(c, custody, ours, meter_records)
     compare_exclusions(c, ours)
     compare_campaigns(c, custody, ours)
+    compare_fill_identity(c, custody, ours)
+    compare_history(c, custody, ours)
     cover = coverage(custody, c, rules)
     return {"schema": SCHEMA, "bar_set": bars.get("bar_set"), "bars": bars["families"],
             "l9_steps": {f"{s}/{w}" if w else str(s): v for (s, w), v in sorted(custody.status.items(), key=str)},
@@ -3229,6 +3997,9 @@ def main(argv=None):
                         help="bar-set config (joulewise.b5_comparator_bars.v1); default block 5's release set")
     parser.add_argument("--harvest-meter", action="append", default=[], metavar="PACK=PATH",
                         help="a window's withheld meter record (alpha, beta or gamma); repeat per window")
+    parser.add_argument("--window-index", default=None,
+                        help="the window index L9's run read (its digest must be the record's window_index_sha256); "
+                             "default block 5's tracked index, configs/analysis/b5/analysed_windows.json")
     parser.add_argument("--restricted-out", required=True, help="restricted file for values and differences")
     args = parser.parse_args(argv)
     out = Path(args.restricted_out)
@@ -3236,7 +4007,7 @@ def main(argv=None):
         print("refused=restricted_output_exists", file=sys.stderr)
         return 2
     try:
-        result = run(args.l9_custody, args.recompute, args.bars, meter=args.harvest_meter)
+        result = run(args.l9_custody, args.recompute, args.bars, meter=args.harvest_meter, window_index=args.window_index)
         out.write_text(json.dumps(result, sort_keys=True, indent=1, allow_nan=False) + "\n")
     except Refusal as exc:
         # The restricted output is always written; a refusal leaves its structure code there too.

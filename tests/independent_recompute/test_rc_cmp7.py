@@ -21,7 +21,7 @@ from .test_review_fixes import DISCLOSURE
 ALPHA_KEPT = f"kept-units/{SHA}-alpha.json"
 BASE = "bracket.claim_families.gross_energy."
 NEG8_VALUES = {"bound_envelope_j": 2.0, "bound_prediction_j": 1.5, "start.mean_j": 10.0, "midpoint.mean_j": 10.5,
-               "end.mean_j": 11.0, "trajectory_excursion_max_j": 1.0, "drift_allowance_j": 1.25}
+               "end.mean_j": 11.0, "trajectory_excursion_max_j": 1.0, "drift_allowance_j": 1.0}
 # RC-CMP-4 cause 1: the NEG-8 reference members the recompute marked selected in each window (12 corpus,
 # 3 window-end, 2 of 3 window-start, the midpoint), with their registered roles in the sealed plan trees.
 RC_CMP4_REFERENCES = ([f"neg8-refcorpus-r{i:02d}" for i in range(1, 13)] + [f"neg8-window-end-r{i}" for i in (1, 2, 3)]

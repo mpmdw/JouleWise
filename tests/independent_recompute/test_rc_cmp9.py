@@ -11,6 +11,7 @@ RC-CMP-9). The producer pins read origin/main as text (git show) and skip only w
 """
 import ast
 import copy
+import hashlib
 import re
 import subprocess
 import unittest
@@ -22,6 +23,13 @@ from .test_input_gate import CODED, GateCase
 from .test_rc_cmp7 import find, with_neg8, with_references
 from .test_rc_cmp8 import FAMILY, FLOOR_CELLS, PROJECTION, REPORTED, SENSITIVITY, contrast_rows, with_sensitivity
 from .test_review_fixes import DISCLOSURE, FILL, VERDICTS
+
+
+def indexed_registry():
+    """RC-CMP-10 FS4: the registry with the fixture's window index attached (as a run's Custody attaches it)."""
+    raw = test_comparator.WINDOW_INDEX.read_bytes()
+    return cmp.indexed(cmp.load_registry(), cmp.load_window_index(
+        test_comparator.WINDOW_INDEX, {"window_index_sha256": hashlib.sha256(raw).hexdigest()}))
 
 
 def producer(path):
@@ -258,21 +266,24 @@ class TableTests(GateCase):
         printed |= {("fixed_sentences", word) for word in cmp.FIXED_SENTENCE_WORDS}
         printed = {(where, word) for star, word in printed for where in
                    (("cells", "floors", "contrasts") if star == "*" else (star,))}
-        words = table_words(cmp.expected_checks(cmp.load_registry()))
+        words = table_words(cmp.expected_checks(indexed_registry()))
         self.assertEqual(printed - words, set())
         self.assertGreaterEqual(len(printed), 45)
         # The table's further lines, each printed under a registered condition (reported cell computed, floor
-        # computed, kept n), the D-165 closeout's branch (an exact closeout key), the window index's attempts.
+        # computed, kept n), the D-165 closeout's branch (an exact closeout key), the window index's attempts
+        # (RC-CMP-10 FS4: their counts, histories, G10 and re-harvest lines).
         self.assertEqual(words - printed, {("cells", "cross_window"), ("floors", "floor_composition"),
                                            ("fixed_sentences", "floor_drift_ownership"), ("fixed_sentences", "gross_energy"),
-                                           ("block_lines", "dominance_branch"), ("block_lines", "attempt_count")})
+                                           ("block_lines", "dominance_branch"), ("block_lines", "attempt_count"),
+                                           ("block_lines", "attempt_history"), ("block_lines", "g10"),
+                                           ("block_lines", "reharvest_account")})
 
     def test_unconditional_keys_of_each_line_are_required(self):
         source = producer("joulewise/b5_analysis/disclosures.py")
         if source is None:
             self.skipTest("origin/main is not available in this clone")
         required, selectors = {}, {}
-        for entry in cmp.expected_checks(cmp.load_registry()):
+        for entry in cmp.expected_checks(indexed_registry()):
             for locator in entry["l9"]:
                 if locator[0] == "disclosure" and locator[1] and isinstance(locator[1][-1], dict) \
                         and "line" in locator[1][-1]:
@@ -302,11 +313,14 @@ class TableTests(GateCase):
         self.assertEqual(len(cmp.REGISTERED_SOURCES), 10)
 
     def test_table_lists_each_registered_item_at_its_multiplicity(self):
-        table = cmp.expected_checks(cmp.load_registry())
+        table = cmp.expected_checks(indexed_registry())
         counts = {}
         for entry in table:
             counts[entry["kind"]] = counts.get(entry["kind"], 0) + 1
+        # RC-CMP-10: the history lines per window-index attempt (attempt_history, g10) and re-harvest account per
+        # pack; the fill's finalized manifest.
         self.assertEqual(counts, {
+            "history_line": 3 * 3, "fill_identity": 1,
             "fill_document": 1, "fill_campaign": 2, "verdicts_document": 1, "kept_units_record": 3,
             "disclosure_document": 1, "disclosure_window": 3, "window_line": 3 * (21 + 2), "block_line": 3 + 2,
             "fixed_sentence": 13, "sensitivity_record": 1, "sensitivity_bmax": 1, "sensitivity_window": 3,
@@ -402,7 +416,7 @@ class GenericDeletionTests(GateCase):
         out = self.exit_code(CODED)[2]
         agreeing = {r["key"][len("expected/"):] for r in out["comparisons"]
                     if r["key"].startswith("expected/") and r["verdict"] == "AGREE"}
-        return [entry for entry in cmp.expected_checks(cmp.load_registry()) if entry["check"] in agreeing]
+        return [entry for entry in cmp.expected_checks(indexed_registry()) if entry["check"] in agreeing]
 
     def assert_never_zero(self, kinds):
         entries = [entry for entry in self.active() if entry["kind"] in kinds]
@@ -415,7 +429,8 @@ class GenericDeletionTests(GateCase):
                 with self.subTest(check=entry["check"], side=side):
                     self.base()
                     if side != "recompute":
-                        self.assertTrue(all([delete_l9(self, locator) for locator in locators]), side)
+                        # Nested locators first (RC-CMP-10: a contrast's block items sit inside its verdict row).
+                        self.assertTrue(all([delete_l9(self, locator) for locator in reversed(locators)]), side)
                     if side in ("recompute", "both"):
                         self.assertTrue(all([delete_recompute(self, path) for path, _ in entry["recompute"]]), side)
                     self.assertNotEqual(self.outcome(), 0)
@@ -425,7 +440,8 @@ class GenericDeletionTests(GateCase):
                                 "disclosure_document", "disclosure_window", "sensitivity_record", "bracket"))
 
     def test_window_block_and_fixed_lines(self):
-        self.assert_never_zero(("window_line", "block_line", "fixed_sentence", "dominance_branch"))
+        self.assert_never_zero(("window_line", "block_line", "fixed_sentence", "dominance_branch", "history_line",
+                                "fill_identity"))
 
     def test_sensitivity_rows(self):
         self.assert_never_zero(("sensitivity_bmax", "sensitivity_window", "sensitivity_reported", "sensitivity_floor",
@@ -441,7 +457,7 @@ class GenericDeletionTests(GateCase):
 
     def test_every_kind_is_exercised(self):
         kinds = {entry["kind"] for entry in self.active()}
-        self.assertEqual(kinds, {entry["kind"] for entry in cmp.expected_checks(cmp.load_registry())})
+        self.assertEqual(kinds, {entry["kind"] for entry in cmp.expected_checks(indexed_registry())})
 
 
 # Opus probe_cmp8.py confirm: each single-output drop that exited 0 at 0d317afd4 (confirm.out there).
@@ -584,13 +600,17 @@ class OpusDropTests(GateCase):
             with self.subTest(label):
                 self.fresh(True)
                 edit(self)
-                # 0d317afd4's word, from the rows the recompute printed (compare_contrasts asks in contrast order).
-                old = [old_loo_status(self.ours["contrasts"][cid]["loo"], cmp.load_registry().blocks[cid])
-                       for cid in sorted(self.ours["contrasts"])]
+                # 0d317afd4's word, from the rows the recompute printed; its loo_counts reference, the recompute's
+                # printed rows (RC-CMP-10 OPUS F1 binds both to the kept n).
+                by_blocks = {blocks: cid for cid, blocks in cmp.load_registry().blocks.items()}
+
+                def old(n, blocks):
+                    rows = (self.ours["contrasts"].get(by_blocks.get(tuple(blocks or ()))) or {}).get("loo")
+                    return old_loo_status(rows, blocks)
                 with mock.patch.object(cmp, "compare_expected", no_table), \
                         mock.patch.object(cmp, "loo_status", side_effect=old), \
-                        mock.patch.object(cmp.Comparison, "numeric", numeric_off(cmp.Comparison.numeric,
-                                                                                 "/loo/l9_rows", "/loo/recompute_rows")):
+                        mock.patch.object(cmp.Comparison, "numeric", old_loo_counts(self, numeric_off(
+                            cmp.Comparison.numeric, "/loo/l9_rows", "/loo/recompute_rows"))):
                     self.assertEqual(self.outcome(), 0)
 
     def test_loo_status_follows_the_kept_n(self):
@@ -602,9 +622,25 @@ class OpusDropTests(GateCase):
         self.assertEqual((row["l9"], row["recompute"]), ("not_run", "complete"))
 
 
+# RC-CMP-10 FABLE F2: the verdict's own sampling/removed_block_ids rows and each block's included row (not at
+# 0d317afd4).
+RC_CMP10_SAMPLING_ROWS = tuple(f"/sampling_removed_block_ids{s}/{i}" for i in range(10)
+                               for s in ("", "_position")) + ("/included",)
+
+
 def rows_off(exact, *suffixes):
     def patched(self, family, key, l9, ours, raw=cmp.MISSING):
         return None if key.endswith(suffixes) else exact(self, family, key, l9, ours, raw)
+    return patched
+
+
+def old_loo_counts(case, numeric):
+    """0d317afd4's loo_counts reference: the number of rows the recompute printed."""
+    def patched(self, family, key, l9, ours):
+        if key.endswith("/loo_counts/count"):
+            cid = key.split("/")[1]
+            ours = len((case.ours["contrasts"].get(cid) or {}).get("loo") or [])
+        return numeric(self, family, key, l9, ours)
     return patched
 
 
@@ -669,7 +705,7 @@ class RegisteredIdentityTests(GateCase):
                 with mock.patch.object(cmp, "compare_expected", no_table), \
                         mock.patch.object(cmp.Comparison, "exact", rows_off(
                             cmp.Comparison.exact, "/kept_units/pack", "/planned_block_ids", "/bundle_block_ids",
-                            "/transport_group_id")), \
+                            "/transport_group_id", *RC_CMP10_SAMPLING_ROWS)), \
                         mock.patch.object(cmp, "verdict_block_ids", lambda row: ([], [])), \
                         mock.patch.object(cmp, "registered_block_ids", lambda registry, cid, mine: ([], [])), \
                         mock.patch.object(cmp, "COVERAGE", ((r"fill:gamma/contrasts/\*/(floor/resolutions/\*/"
@@ -820,15 +856,18 @@ class OverRefusalTests(GateCase):
 
     def test_conditional_items_follow_their_condition(self):
         registry = cmp.load_registry()
-        table = cmp.expected_checks(registry)
         custody = cmp.Custody(self.custody(), [], registry)
+        table = cmp.expected_checks(custody.registry)
         expected, l9, own, missing = cmp.expected_items(custody, self.ours, table, {})
         conditional = [entry["check"] for entry in table if entry["condition"] is not None]
-        # The base: every reported and floor cell computed, nine blocks kept per contrast (b01 left out), ratios.
+        # The base: every reported and floor cell computed, nine blocks kept per contrast (b01 left out), ratios;
+        # RC-CMP-10: no G10 requested or printed, no re-harvest account.
         self.assertEqual(sorted(check for check in conditional if check not in expected),
                          sorted([f"contrast/{cid}/loo/{blocks[0]}" for cid, blocks in test_comparator.BLOCKS.items()]
                                 + [f"sensitivity/reported_cells/{pack}/{cid}/refused" for pack in ("alpha", "beta")
                                    for phase, (cid, _) in test_comparator.reported_cells(pack).items()
-                                   if phase != "prefill-p42"]))
+                                   if phase != "prefill-p42"]
+                                + [f"disclosure/block_lines/g10/{p}/plan-{p}" for p in cmp.PACKS]
+                                + [f"disclosure/block_lines/reharvest_account/{p}" for p in cmp.PACKS]))
         self.assertEqual(set(expected), set(l9) - {k for k in l9 if k.startswith("unexpected/")})
         self.assertEqual(set(expected), set(own))
