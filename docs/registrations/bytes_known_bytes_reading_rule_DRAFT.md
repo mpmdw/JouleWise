@@ -233,11 +233,11 @@ Validate stack and capture containers leaf by leaf. An absent or invalid disclos
 remain available. Missing physical leaves charge the same classes as their physical differences.
 
 Each receipt must satisfy `idle_pre_start_ns <= idle_pre_end_ns <= start_ns < end_ns <= idle_post_start_ns <= idle_post_end_ns`.
-Native rails/GPU rows require `start_ns < end_ns`; native rows and meter stamps must respect their
+Native rails/GPU rows require `start_ns < end_ns` and `row[i].start_ns >= row[i-1].end_ns` (consecutive, disjoint intervals); native rows and meter stamps must respect their
 recorded time order. A violation (including a zero stamp that breaks order) makes the affected interval
 prerequisite missing, with the row named and retained as evidence; never drop it and recompute a bound.
 Rails, GPU and adapter-meter `power_w`, and `energy_j.rails`, must be non-negative. Battery power
-and battery edge energy remain signed; zero is valid.
+and its stream integral remain signed; zero is valid. Battery edge energy `battery_edge_j` is the non-negative bound v_edge = (T/n) × Σ |P_b| (registration §7); a negative or non-finite value is a missing prerequisite, never a smaller bound.
 
 **Capture and harvest.** One continuous `powermetrics` capture and one continuous meter stream cover all eight
 calls, with one meter clock fit for the test, from the test's own non-claim checkout with the chain extension (reg. §19).

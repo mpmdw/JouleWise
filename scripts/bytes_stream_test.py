@@ -213,7 +213,7 @@ def input_value(value, schema, path):
             if ((previous is not None and v < previous) or
                     (start is not None and v == 0 and start > 0)):
                 return None, f"{path}[{i}].{stamp} invalid time order"
-            previous = v
+            previous = row.get("end_ns", v)
         return rows, None
     if kind == "json":
         if isinstance(value, dict):
@@ -690,7 +690,7 @@ def read_known_bytes(records, scan):
         if reason:
             labels = {"adapter_max_w":"adapter rating missing", "adapter_source":"gap power sources must be named",
                 "battery_source":"gap power sources must be named", "r_max_s":"r_max missing",
-                "meter_edge_w":"meter edge powers missing", "battery_edge_j":"battery edge energy missing",
+                "meter_edge_w":"meter edge powers missing", "battery_edge_j":"battery edge energy missing or invalid",
                 "anchor_shift_j":"anchor shift bound missing", "tau_s":"tau missing"}
             label = labels.get(path.rsplit(".",1)[-1])
             if label:
@@ -703,6 +703,10 @@ def read_known_bytes(records, scan):
     scan = take(scan, {}, "scan", names, scan_errors, {})
     scan = dict(scan)
     scan["status"] = take(scan.get("status", ABSENT), TEXT, "scan.status", names, scan_errors)
+    # knee_scan emits only these two statuses (see its initializer/update).
+    if scan["status"] not in (None, "knee found", "knee not found") or (
+            scan["status"] == "knee not found" and scan.get("K") is not None):
+        scan_errors.append((names, "scan.status missing or invalid (inconsistent or unknown scan status)"))
     refused_scan = scan.get("status") == "knee not found" and "K" in scan and scan["K"] is None
     for key in ("K", "B", "Bc1", "Bc3", "Bc2"):
         # A missing knee is an ordinary scan refusal, not an invented size.
@@ -741,7 +745,7 @@ def read_known_bytes(records, scan):
         r["stack"] = stack_leaves(r.get("stack", ABSENT), STACK_INPUTS, path+".receipt.stack")
         h["capture_stack"] = stack_leaves(h.get("capture_stack", ABSENT), CAPTURE_INPUTS, path+".harvest.capture_stack")
         energy = take(h.get("energy_j", ABSENT), {}, path+".harvest.energy_j", names, errors, {})
-        h["energy_j"] = {k: take(energy.get(k, ABSENT), NONNEG if k == "rails" else NUMBER, path+".harvest.energy_j."+k,
+        h["energy_j"] = {k: take(energy.get(k, ABSENT), NUMBER if k == "battery" else NONNEG, path+".harvest.energy_j."+k,
             ("dc",) if k in ("meter","battery") else (k,), errors) for k in NATIVE_INPUTS}
         idle = take(h.get("idle", ABSENT), {}, path+".harvest.idle", names, errors, {})
         h["idle"] = {}
@@ -752,7 +756,7 @@ def read_known_bytes(records, scan):
                 path+".harvest.idle."+span+"."+k, ("dc",) if k in ("meter","battery") else (k,), errors, [])
                 for k, spec in NATIVE_INPUTS.items()}
         for key, spec, betas in (("tau_s",NONNEG,names), ("r_max_s",NONNEG,("dc",)),
-            ("meter_edge_w",EDGES,("dc",)), ("battery_edge_j",("signed_edges", 2),("dc",)),
+            ("meter_edge_w",EDGES,("dc",)), ("battery_edge_j",EDGES,("dc",)),
             ("anchor_shift_j",NONNEG,("rails","gpu")),
             ("battery_samples",("native", (NATIVE_INPUTS["battery"],
                 r.get("idle_pre_start_ns"))),("dc",))):
@@ -968,6 +972,11 @@ def read_known_bytes(records, scan):
                     ("delta","halfwidth","alpha","gamma_c","gamma_d","r","epsilon_flip",
                      "epsilon_flip_over_alpha","raw_stream_j_per_byte","arms")})
             output["boundaries"][beta] = value
+        elif isinstance(value.get("halfwidth"),(int,float)) and (
+                not finite_number(value["halfwidth"]) or value["halfwidth"] <= 0):
+            reason = beta+" halfwidth missing or invalid (must be finite and positive)"
+            value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason),
+                          "halfwidth":not_defined(reason),"upper_limit":not_defined(reason)})
         elif not isinstance(value.get("halfwidth"),(int,float)):
             reason = reason or value.get("reason","bound input missing")
             value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)})
@@ -1027,8 +1036,8 @@ def interval_places(halfwidth):
 
 def format_interval(value, halfwidth):
     """§14 H2: two significant half-width digits; estimate at the same place."""
-    if halfwidth == 0:
-        return f"{value:.2f} ± 0.00"
+    if not finite_number(halfwidth) or halfwidth <= 0:
+        raise ValueError("halfwidth must be finite and positive")
     rounded = arithmetic("halfwidth print conversion", lambda: float(format(halfwidth, ".2g")))
     places = 1-math.floor(math.log10(rounded))
     return f"{round(value,places):.{max(0,places)}f} ± {round(halfwidth,places):.{max(0,places)}f}"
@@ -1040,6 +1049,9 @@ def printed_record(result):
                "stack_comparisons": result["stack_comparisons"]}
     for boundary,value in result["boundaries"].items():
         try:
+            if isinstance(value.get("halfwidth"),(int,float)) and (
+                    not finite_number(value["halfwidth"]) or value["halfwidth"] <= 0):
+                raise ValueError("halfwidth must be finite and positive")
             interval = (format_interval(value["delta"],value["halfwidth"]) if isinstance(value.get("halfwidth"),(int,float))
                         else ((f"{value['delta']} J/GB; " if isinstance(value.get("delta"),(int,float)) else "")+value["description"]))
         except (ValueError, OverflowError) as exc:
@@ -1065,6 +1077,8 @@ def printed_record(result):
         printed["claim_lines"][boundary] = line
     if isinstance(result["share"]["f"],(float,int)):
         try:
+            if not finite_number(result["share"]["df"]) or result["share"]["df"] <= 0:
+                raise ValueError("share df must be finite and positive")
             printed["share"] = format_interval(result["share"]["f"],result["share"]["df"])
         except (ValueError, OverflowError) as exc:
             result["share"] = {key:not_defined("rails/DC share print: "+str(exc)) for key in ("f","df")}

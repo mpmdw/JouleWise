@@ -597,7 +597,7 @@ class ReaderTests(unittest.TestCase):
         baseline = self.read_cli(records)
         specs = {'receipt': {**probe.RECEIPT_INPUTS, 'stack':probe.STACK_INPUTS},
                  'harvest': {'capture_stack':probe.CAPTURE_INPUTS,
-                    'energy_j': {k:probe.NONNEG if k == 'rails' else probe.NUMBER for k in probe.NATIVE_INPUTS},
+                    'energy_j': {k:probe.NUMBER if k == 'battery' else probe.NONNEG for k in probe.NATIVE_INPUTS},
                     'idle':{span:probe.NATIVE_INPUTS for span in ('pre','post')},
                     'battery_samples':probe.NATIVE_INPUTS['battery'],
                     'meter_gaps':[{'span':probe.TEXT,'missing_samples':probe.COUNT}],
@@ -624,7 +624,8 @@ class ReaderTests(unittest.TestCase):
             if type(value) in (int,float):
                 modes.append('huge_integer')
             if ((path[-1] == 'power_w' and 'battery' not in path and 'battery_samples' not in path)
-                    or path == ('harvest','energy_j','rails')):
+                    or path[:2] == ('harvest','energy_j') and path[-1] != 'battery'
+                    or 'battery_edge_j' in path and isinstance(path[-1],int)):
                 modes.append('negative')
             receipt_order = ('idle_pre_start_ns','idle_pre_end_ns','start_ns','end_ns','idle_post_start_ns','idle_post_end_ns')
             if (path[0] == 'receipt' and path[-1] in receipt_order[1:] or
@@ -696,11 +697,47 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(len(result['calls']),8)
             self.assertTrue(all(v['class']=='UNDETERMINED' and key in v['reason']
                                 for v in result['boundaries'].values()))
-        for status in (None, 7):
+        for status in (None, 7, 'unknown', 'knee not found'):
             result = self.read_cli(records, {**self.scan, 'status':status})
             self.assertEqual(len(result['calls']),8)
             self.assertTrue(all(v['class']=='UNDETERMINED' and 'scan.status' in v['reason']
                                 for v in result['boundaries'].values()))
+        # Malformed edge bounds and overlapping/duplicate interval rows in
+        # every call: retain evidence, remove dependent widths, never shrink.
+        extra_count = 0
+        for i in range(8):
+            cases = []
+            for edge in range(2):
+                mutated = deepcopy(records)
+                mutated[i]['harvest']['battery_edge_j'][edge] = -1.0
+                cases.append((mutated, 'battery_edge_j', ('dc','rest')))
+            for span in ('pre','post'):
+                for kind in ('rails','gpu'):
+                    for duplicate in (False,True):
+                        mutated = deepcopy(records)
+                        rows = mutated[i]['harvest']['idle'][span][kind]
+                        if duplicate:
+                            rows[1] = deepcopy(rows[0])
+                        else:
+                            rows[1]['start_ns'] = rows[0]['end_ns']-1
+                        cases.append((mutated, f'idle.{span}.{kind}[1].start_ns',
+                                      ('rails','rest') if kind == 'rails' else ('gpu',)))
+            for mutated, leaf, betas in cases:
+                with self.subTest(call=i, leaf=leaf):
+                    result = self.read_cli(mutated)
+                    self.assertEqual(len(result['calls']),8)
+                    self.assertEqual(result['input_records'],mutated)
+                    for beta in betas:
+                        value = result['boundaries'][beta]
+                        self.assertEqual(value['class'],'UNDETERMINED')
+                        self.assertIn(f'records[{i}].harvest.'+leaf,value['reason'])
+                        self.assertNotIsInstance(value.get('halfwidth'),(int,float))
+                        self.assertNotIn('±',result['printed']['contrasts'][beta])
+                    for beta, base in baseline['boundaries'].items():
+                        width = result['boundaries'][beta].get('halfwidth')
+                        if isinstance(width,(int,float)):
+                            self.assertGreaterEqual(width,base['halfwidth'])
+                    extra_count += 1
         # Native support is a dependency of x as well as dx, at every
         # palindrome position. All 128 deficient collections use fresh CLIs.
         support_count = 0
@@ -767,7 +804,7 @@ class ReaderTests(unittest.TestCase):
             self.assertIn('harvest.energy_j.'+native,value['reason'])
             self.assertIn('not defined (',value['halfwidth'])
             self.assertNotIn('±',result['printed']['contrasts'][beta])
-        print('generated real read CLI leaf faults:',count+7+support_count+16+4)
+        print('generated real read CLI leaf faults:',count+9+support_count+16+4+extra_count)
 
     def test_null_containers_and_scan_inputs_keep_complete_records(self):
         paths = [('receipt',),('harvest',),('harvest','idle'),('harvest','idle','pre'),
@@ -819,6 +856,16 @@ class ReaderTests(unittest.TestCase):
                     for name in self.payload:
                         if name != arm:
                             self.assertEqual(arms[name],self.result['boundaries'][beta]['arms'][name])
+
+    def test_invalid_halfwidth_never_reaches_interval_formatter(self):
+        for width in (-1., 0., float('inf'), float('nan')):
+            value = {'delta':1., 'halfwidth':width, 'class':'RESOLVED'}
+            with patch.object(probe, 'format_interval', side_effect=AssertionError('invalid width formatted')):
+                result = probe.printed_record({'share':{'f':'not defined'},'stack_comparisons':[],
+                                               'boundaries':{'rails':value}})
+            self.assertEqual(value['class'],'UNDETERMINED')
+            self.assertIn('halfwidth',value['reason'])
+            self.assertNotIn('±',result['contrasts']['rails'])
 
     def test_scan_reference_and_negative_place_upper_limit(self):
         for key in ('cache_reference','dram_reference'):
