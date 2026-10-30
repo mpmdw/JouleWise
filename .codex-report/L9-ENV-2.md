@@ -1,4 +1,4 @@
-STATUS: DONE
+STATUS: BLOCKED E1-E5 are implemented and pushed, but the ruling's goal (dry run passing) needs two further rulings: N1, the reduce.py estimator pin makes the live calibration acceptance stale; N3, the strict re-reduction no longer equals the stored summaries
 
 # L9-ENV-2: clamp inverted corner windows in reduce.py (Ed's 2026-10-30 ruling)
 
@@ -30,6 +30,17 @@ Synthetic data only. No real block-5/6/BYTES data was opened or searched.
   therefore cannot pass with this branch alone. It also needs a science-neutral acceptance reissue that
   rotates only the reduce.py estimator pin (the r4–r8 precedent). That reissue is outside this
   WRITE_SCOPE and was not done.
+- **Second side-effect (NEEDS_RULING N3, owner notified by push).** The dry run's steps 1 and 2
+  re-reduce every kept bundle and require `energy_anchor_shift_envelopes` and
+  `window_evidence_precheck` to equal the stored summary
+  (`joulewise/b5_analysis/dry_run.py:741-755`, `REREDUCTION_REFIT_DIFFERS`). The CLI strict validator
+  does the same check (`summary_metrics.json does not match a fresh re-reduction ... differing keys:
+  energy_anchor_shift_envelopes./phase_energy_j/tokenize, window_evidence_precheck.phase.tokenize.reasons`).
+  With the clamp, a fresh mint defines envelopes for phases shorter than 2·edge_bound at the minted
+  bound, which origin/main omitted. Summaries minted at origin/main, which includes every block-5
+  night, therefore no longer match their re-reduction whenever such a phase exists. Synthetically
+  that is tokenize and generation_setup, and it is very likely on real MLX runs. Step 1/2 would refuse
+  `rereduction_calibration_dependent_fields_differ` before step 4 is reached.
 - At mint time the clamp also creates envelopes for phases that were always shorter than
   2·edge_bound (in the fixture: `tokenize` and `generation_setup`), with `lower_j == 0`. Their precheck
   reason moves from `anchor_energy_envelope_unrecorded` to `anchor_energy_envelope_exceeds_quarter_metric`.
@@ -145,7 +156,17 @@ acceptance artifacts, `calibration_bracketing.py`.
 
 ## OPEN ISSUES
 
+- O0: suites are red on the branch, and every branch-only failure is N1 or N3 (table below). Existing
+  tests that pin the old behaviour were not edited, because WRITE_SCOPE allows only new tests and
+  test_frozen_files.py: `tests/test_reduce.py::test_d138_reduce_source_bytes_remain_at_issued_pin`
+  (pins reduce.py = `7b9c0d28…` against the r7 acceptance) and
+  `tests/test_whole_window_selection.py::test_rederivation_covers_every_named_metric_family`
+  (exact pointer set; now also has `/phase_energy_j/tokenize` and `/phase_energy_j/generation_setup`).
 - O1 (= N1): the estimator-pin staleness blocks the dry run until the acceptance is reissued.
+- O1a: N1 also hits collection tooling. `tests/test_repin.py` shows
+  `scripts.validate_powermetrics_fiducial._AcceptancePreflightError: acceptance_artifact_stale`
+  (`pin g2_phase_d stale`), and `tests/test_harvest_b5_trigger_scope.py` shows that harvest bracket
+  evaluation returns `('failed', ('calibration_acceptance_bound_stale',))`.
 - O2: the v5 sealed inventory still lists reduce.py at `7b9c0d28…`. Executed-inventory flags on any
   further night under that inventory will show reduce.py as changed.
 - O3: newly defined tokenize/generation_setup envelopes in future mints (lower 0, ineligible). Check
@@ -159,6 +180,15 @@ acceptance artifacts, `calibration_bracketing.py`.
   `joulewise/reduce.py` estimator pin to `d37f731c…`, in its own lane, or rule that the clamp is
   exempt from `protocol_or_estimator_byte_change`. Stricter reading taken here: no change outside
   WRITE_SCOPE, acceptance left stale, flagged.
+- N3: how to reconcile the strict re-reduction with the clamp. Options: (a) apply the clamp only on
+  the authenticated-bound re-derivation path, for example a keyword argument passed only by
+  `_rederive_summary_for_authenticated_fiducial_bound`, so that a fresh mint stays byte-identical to
+  origin/main; (b) exempt newly defined envelopes of phases with D < 2g in
+  `require_rereduction_matches_stored` and the strict validator; (c) re-mint the stored summaries
+  (not acceptable for sealed nights). Option (a) needs a WRITE_SCOPE beyond "only the inversion
+  handling". Stricter reading taken here: the ruling is implemented exactly as worded, and N3 is
+  flagged.
+- N4: whether lanes that rotate pins may update the two existing pin tests in O0.
 - N2: whether the v5 sealed inventory or an addendum should record the post-ruling reduce.py digest.
   Stricter reading taken here: sealed files untouched, and the freeze test carries the rebinding.
 
@@ -171,4 +201,53 @@ test_whole_window_parallel_strict, test_axi_burst_reduce, test_audit_reduce_dege
 test_scored_reduce, test_envelope_gate, test_hazard_whole_window_verdict, plus the new
 test_reduce_inverted_corner_clamp.
 
-TAILS_PLACEHOLDER
+Baseline = origin/main 0f34b2ca in a separate worktree, same env. The first parallel b5_analysis
+runs hit `OSError: [Errno 28] No space left on device` (disk allowance) and are discarded. The serial
+runs below hit no ENOSPC (count 0).
+
+1. `python3.13 -m unittest discover -s tests/b5_analysis -t .`
+   - branch: `Ran 938 tests in 3058.087s` / `FAILED (failures=21, errors=12, skipped=12)` / exit=1
+   - origin/main: `Ran 1008 tests in 3743.107s` / `FAILED (failures=1, errors=5, skipped=13)` / exit=1
+   - Failing on both (environment: the clone lacks historical git objects, `git show <sha>:...` exit
+     128): test_adapter_no_context_three_cases_match_pinned_base,
+     test_build_roster_and_projection_helpers_are_source_equal_at_governing_pins,
+     test_no_context_blocks_1_to_3_byte_identical_to_pinned_base,
+     test_non_archive_session_attribute_matches_pinned_base_on_stored_failure,
+     test_only_git_seams_replay_registered_history_and_tracked_index.
+   - Failing only on origin/main: test_G6_finalizer_main.
+   - Failing only on the branch:
+     - N1 (`AssertionError: ('calibration_acceptance_bound_stale',)`): setUpClass of test_bracket,
+       test_claim_replay ×2, test_floor_kept_units.IndexedCliTests, test_issuer.IndexedCompositionTests
+       and test_sensitivity_guard. These six skip about 70 tests, which explains 938 vs 1008. Also
+       test_real_index_builder_refuses_a_floor_shaped_archive_as_gamma, test_v1_real_compositions_*,
+       test_v1_first_and_fourth_sites_*, test_f3a/f3b/f3c_*, test_ca_archive_changed_after_real_composition,
+       test_f1_composed_identity_and_mismatch, test_governed_spy_retains_real_context_and_units,
+       test_r8_report_without_context_first_refusal, test_real_composition_bracket_shape_and_allowance
+       and test_guard_setup_after_s4_preserves_the_cached_source.
+     - N3 (strict re-reduction / `rereduction_calibration_dependent_fields_differ` /
+       `['rereduced_alpha_first']` / tooling_refusal): the DeadlineTripwireTests
+       (test_tripwire_*, test_failed_reduce_*, test_step1_strict_validation_*, test_step2_deadline_hit_*,
+       test_unforced_step2_record_*), ObserverSitesTests.test_neg8_replay_strict_invalid_callback_firing_is_observed,
+       and SharedPhysicsCache / MetadataBoundPartition test_cached_and_uncached_*, test_cached_bound_*,
+       test_cross_call_reuse_*, test_a_higher_bound_seed_*.
+   - tests.b5_analysis.test_frozen_files alone: `Ran 5 tests` / `OK`.
+2. Reduce/whole_window modules (list above):
+   - branch: `Ran 363 tests in 878.767s` / `FAILED (failures=2, skipped=1)`
+   - origin/main: `Ran 353 tests in 885.827s` / `OK (skipped=1)`
+   - Branch-only: test_d138_reduce_source_bytes_remain_at_issued_pin
+     (`'d37f731c…' != '7b9c0d28…'`, N1 family) and test_rederivation_covers_every_named_metric_family
+     (extra `/phase_energy_j/tokenize`, `/phase_energy_j/generation_setup`, N3 family).
+   - tests.test_reduce_inverted_corner_clamp alone: `Ran 10 tests in 28.165s` / `OK`. Counterfactual
+     with origin/main functions swapped in: `Ran 10 tests` / `FAILED (failures=5, errors=2)`.
+3. `discover -s tests/independent_recompute -t .`
+   - On this branch and on origin/main: `ImportError: Start directory is not importable:
+     'tests/independent_recompute'` (the directory does not exist on main) / exit=1.
+   - On `origin/lane/2026-10-14-independent-recompute` 9ca87bcee: `Ran 114 tests in 73.889s` /
+     `OK (skipped=18)` / exit=0. That code imports no reduce.py, so the clamp cannot affect it.
+4. Extra estimator-pin modules (test_digest_pin_census, test_repin, test_calibration_bracketing,
+   test_harvest_b5_trigger_scope):
+   - branch: `Ran 192 tests in 265.756s` / `FAILED (failures=22, errors=703, skipped=1)`
+   - origin/main: `Ran 192 tests in 293.989s` / `FAILED (failures=1, errors=702, skipped=1)`
+   - The 701 census errors come from missing git objects and occur on both. Branch-only failures are
+     N1: harvest trigger-scope tests `('failed', ('calibration_acceptance_bound_stale',))`, repin
+     `acceptance_artifact_stale`, item5 error.
