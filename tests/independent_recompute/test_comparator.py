@@ -164,7 +164,7 @@ def neg8_lines(pack, start=2, deciding=12):
             item("reference_counts", False, f"{pack}: reference counts", counts={"start": start, "midpoint": 1, "end": 3},
                  planned={"start": 3, "midpoint": 1, "end": 3}),
             item("corpus_counts", False, f"{pack}: corpus counts", collected=12, in_window=12, deciding=deciding,
-                 desk_cap=[], drop_counts={})]
+                 desk_cap=[], drop_counts={"status": 0, "desk_cap": 0})]
 
 
 def neg8_recompute():
@@ -184,9 +184,10 @@ def structure_lines(pack):
             item("anchor_counts", False, f"{pack}: members with anchor status bounded: 9", count=9),
             item("anchor_bound", True, f"{pack}: largest effective anchor bound", value_s=0.001),
             item("host_cpu", False, f"{pack}: host's total busy CPU during requests: not recorded", value_s=None),
-            item("battery_counts", False, f"{pack}: battery observations", counts={"battery.assist": 0}),
+            item("battery_counts", False, f"{pack}: battery observations", counts=dict.fromkeys(cmp.BATTERY_CODES, 0)),
             item("bound_formula", False, f"{pack}: bound formula", formula="max(envelope, prediction)"),
-            item("erratum3_triggers", False, f"{pack}: sealed rule", values={"doubling_count": 0, "systematic_sequences": []}),
+            item("erratum3_triggers", False, f"{pack}: triggers", values={"observed_triggers": [], "recorded_only_triggers": [],
+                                                                       "doubling_count": 0, "systematic_sequences": []}),
             item("adapter_continuity", False, f"{pack}: adapter-continuity decision: stable", decision="stable"),
             item("stored_verdict_boundary", False, "The stored verdict's status and NEG-8 bracket decided nothing."),
             item("tripwire", False, f"{pack}: tripwire excluded_reference_in_screen: passed",
@@ -570,8 +571,9 @@ class ComparatorTests(unittest.TestCase):
         self.numeric_fault("dominance_ratio", lambda t: t.ours["dominance"]["ratios"]["Qwen3-1.7B-4bit/decode/absolute"].update(R=39.5 / 38.0 * (1 + 2e-6)))
 
     def test_planted_contrast(self):
-        # RC-CMP-9: the sensitivity record's own primary D (read directly) sees the moved D too.
-        self.numeric_fault("contrast_j", lambda t: t.ours["contrasts"][DECODE].update(D_j=2.75 * (1 + 2e-6)), rows=2)
+        # RC-CMP-9: the sensitivity record's own primary D (read directly) and the sum of the verdict's printed
+        # deterministic terms see the moved D too.
+        self.numeric_fault("contrast_j", lambda t: t.ours["contrasts"][DECODE].update(D_j=2.75 * (1 + 2e-6)), rows=3)
 
     def test_planted_contrast_p(self):
         self.numeric_fault("contrast_p", lambda t: t.ours["contrasts"][PREFILL].update(p=0.68 + 2e-6))
@@ -583,7 +585,21 @@ class ComparatorTests(unittest.TestCase):
         self.numeric_fault("per_token_j", lambda t: t.ours["descriptive"][DECODE].update(per_token_difference_j=-0.002 + 2e-6))
 
     def test_planted_kept_units(self):
-        self.exact_fault("kept_units", lambda t: t.ours["contrasts"][DECODE].update(kept_quads=["b01"]))
+        # RC-CMP-9: the recompute's kept set also fixes which leave-one-out rows are expected and the fill's
+        # kept and removed block ids by position, so those rows (routing_id) DISAGREE beside the kept_units row.
+        self.ours["contrasts"][DECODE].update(kept_quads=["b01"])
+        fails = self.fails(self.run_compare())
+        self.assertEqual(set(fails), {"kept_units", "routing_id"})
+        self.assertEqual(fails["kept_units"], 1)
+        original = cmp.Comparison.exact
+
+        def lenient(c, fam, key, l9, ours, **raw):
+            return original(c, fam, key, l9, l9 if fam == "kept_units" else ours, **raw)
+        # Counterfactual: the kept_units row lenient, and neither the table nor the block-id positions.
+        with mock.patch.object(cmp.Comparison, "exact", lenient), mock.patch.object(cmp, "compare_expected", no_table), \
+                mock.patch.object(cmp, "verdict_block_ids", lambda row: ([], [])), \
+                mock.patch.object(cmp, "registered_block_ids", lambda registry, cid, mine: ([], [])):
+            self.assertEqual(self.fails(self.run_compare()), {})
 
     def test_mapped_leaf_whose_value_was_not_compared_refuses(self):
         # The fill copies an estimate no comparison saw (a copy error in the adapter).

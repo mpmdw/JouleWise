@@ -208,7 +208,8 @@ class DefinitionAndStatusWordTests(Round):
         self.with_loo(["estimate_sign"], estimate=1.0)
         loo_b03(contrast_rows(self)[1])["influence_triggers"] = []
         self.assertEqual(self.outcome(), 2)
-        with mock.patch.object(cmp, "COVERAGE", OLD_RULES + cmp.COVERAGE):
+        # (RC-CMP-9's check that the fill prints every position of a copied list did not exist at c372211bf either.)
+        with mock.patch.object(cmp, "COVERAGE", OLD_RULES + cmp.COVERAGE), mock.patch.object(cmp, "COPIED_LISTS", ()):
             self.assertEqual(self.outcome(), 0)
 
     def test_loo_triggers_follow_the_engine_order(self):

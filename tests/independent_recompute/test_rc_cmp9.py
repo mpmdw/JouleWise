@@ -67,7 +67,7 @@ class ProducerPinTests(unittest.TestCase):
                  "sampling": "_CONTRAST_SAMPLING_KEYS", "estimator": "_ESTIMATOR_KEYS", "deterministic": "_DETERMINISTIC_KEYS",
                  "floor": "_FLOOR_KEYS", "v3_floor": "_V3_FLOOR_KEYS", "arm_gate": "_ARM_GATE_KEYS",
                  "resolution": "_FLOOR_RESOLUTION_KEYS", "multiplicity": "_MULTIPLICITY_EVIDENCE_KEYS", "loo": "_LOO_KEYS",
-                 "loo_row": "_LOO_ROW_KEYS", "evaluation": "_EVALUATION_KEYS"}
+                 "loo_row": "_LOO_ROW_KEYS", "evaluation": "_EVALUATION_KEYS", "deterministic_term": "_DETERMINISTIC_TERM_KEYS"}
         for key, name in names.items():
             with self.subTest(name):
                 self.assertEqual(set(cmp.ENGINE_KEYS[key]), sets[name])
@@ -131,6 +131,15 @@ class ProducerPinTests(unittest.TestCase):
                          and isinstance(node.iter, ast.Tuple) and all(isinstance(e, ast.Constant) for e in node.iter.elts))
         self.assertEqual(cmp.TRIPWIRES, tuple(e.value for e in tripwires.elts))
         self.assertIn(f"SCREEN_BOUND_S = {cmp.SCREEN_BOUND_S!r}", source)
+        codes = next(node.value for node in ast.walk(function(tree, "_monitor_lines")) if isinstance(node, ast.Assign)
+                     and ast.unparse(node.targets[0]) == "battery_codes")
+        self.assertEqual(cmp.BATTERY_CODES, tuple(e.value for e in codes.elts))
+        triggers = next(node.value for node in ast.walk(function(tree, "_trigger_values")) if isinstance(node, ast.Assign)
+                        and ast.unparse(node.targets[0]) == "result")
+        self.assertEqual(set(cmp.TRIGGER_KEYS), dict_keys(triggers))
+        self.assertIn('dropped_counts["status"]=', source)
+        self.assertIn('dropped_counts["desk_cap"]=', source)
+        self.assertEqual(cmp.CORPUS_DROPS, ("status", "desk_cap"))
 
     def test_sensitivity_shape(self):
         tree = ast.parse(self.source("joulewise/b5_analysis/sensitivity.py"))
@@ -655,15 +664,64 @@ class RegisteredIdentityTests(GateCase):
                 self.setUp()
                 edit(self)
                 self.assertNotEqual(self.outcome(), 0)
+                # Counterfactual: 0d317afd4's composition (no table, none of these binding rows, the identity rule
+                # for the fill's transport groups and block ids).
                 with mock.patch.object(cmp, "compare_expected", no_table), \
                         mock.patch.object(cmp.Comparison, "exact", rows_off(
                             cmp.Comparison.exact, "/kept_units/pack", "/planned_block_ids", "/bundle_block_ids",
                             "/transport_group_id")), \
-                        mock.patch.object(cmp, "COVERAGE", ((r"fill:gamma/contrasts/\*/floor/resolutions/\*/"
-                                                             r"transport_group_id", cmp.IDENTITY),) + cmp.COVERAGE):
+                        mock.patch.object(cmp, "verdict_block_ids", lambda row: ([], [])), \
+                        mock.patch.object(cmp, "registered_block_ids", lambda registry, cid, mine: ([], [])), \
+                        mock.patch.object(cmp, "COVERAGE", ((r"fill:gamma/contrasts/\*/(floor/resolutions/\*/"
+                                                             r"transport_group_id|kept_block_ids/\*|"
+                                                             r"(sampling/)?removed_block_ids/\*)", cmp.IDENTITY),)
+                                          + cmp.COVERAGE):
                     if label == "kept unit cell_id":
                         continue
                     self.assertEqual(self.outcome(), 0)
+
+    def test_fill_block_ids_bind_by_position(self):
+        for label, edit in (("kept relabelled", lambda c: fill_contrast(c)["kept_block_ids"].__setitem__(
+                                 0, "d117-decode-contrast-b01")),
+                            ("removed relabelled", lambda c: fill_contrast(c)["removed_block_ids"].__setitem__(
+                                 0, "d117-decode-contrast-b02")),
+                            ("sampling removed relabelled", lambda c: fill_contrast(c)["sampling"]["removed_block_ids"]
+                             .__setitem__(0, "d117-decode-contrast-b02")),
+                            ("kept order", lambda c: fill_contrast(c)["kept_block_ids"].reverse()),
+                            ("kept shortened", lambda c: fill_contrast(c)["kept_block_ids"].pop())):
+            with self.subTest(label):
+                self.setUp()
+                edit(self)
+                self.assertNotEqual(self.outcome(), 0)
+        self.setUp()
+        leaves = self.shipped()["coverage"]["leaves"]
+        for path in ("kept_block_ids/*", "removed_block_ids/*", "sampling/removed_block_ids/*"):
+            self.assertEqual(leaves["fill:gamma/contrasts/*/" + path], "routing_id")
+
+    def test_list_positions_and_terms_are_required(self):
+        cases = {
+            "fill floor_source_cell_ids shortened": lambda c: fill_contrast(c)["floor_source_cell_ids"].pop(),
+            "fill floor_row_ids shortened": lambda c: fill_contrast(c)["floor"]["floor_row_ids"].pop(),
+            "fill resolution source emptied": lambda c: fill_contrast(c)["floor"]["resolutions"][1]["source_cell_ids"].pop(),
+            "sensitivity copy floor_cell_ids shortened": lambda c: c.files[DISCLOSURE]["sensitivity"]["contrasts"][0][
+                "floor_cell_ids"].pop(),
+            "deterministic term dropped": lambda c: contrast_rows(c)[0]["deterministic_bounds"]["terms"].clear(),
+            "deterministic term name dropped": lambda c: contrast_rows(c)[0]["deterministic_bounds"]["terms"][0].pop("name"),
+            "battery count code dropped": lambda c: c.files[DISCLOSURE]["window_lines"]["alpha"][
+                find(c, "battery_counts")[1]]["counts"].pop("battery.assist"),
+            "corpus status drops dropped": lambda c: c.files[DISCLOSURE]["window_lines"]["alpha"][
+                find(c, "corpus_counts")[1]]["drop_counts"].pop("status"),
+            "trigger key dropped": lambda c: c.files[DISCLOSURE]["window_lines"]["alpha"][
+                find(c, "erratum3_triggers")[1]]["values"].pop("doubling_count")}
+        for label, edit in cases.items():
+            with self.subTest(label):
+                self.setUp()
+                edit(self)
+                self.assertNotEqual(self.outcome(), 0)
+        # A window whose record has no bracket prints no trigger object (values null): no key is required.
+        self.setUp()
+        self.files[DISCLOSURE]["window_lines"]["alpha"][find(self, "erratum3_triggers")[1]]["values"] = None
+        self.assertEqual(self.outcome(), 0)
 
     def test_projection_p42_row_is_unconditional(self):
         for label, edit in (("refused_cells dropped", lambda c: c.files[PROJECTION].pop("refused_cells")),
