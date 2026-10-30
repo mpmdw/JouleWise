@@ -7,10 +7,31 @@ Reviewed `origin/main..8222d0e47` (merge base `0a9ff426a`; `a92026c7f` code, `82
 BYTES data. Evidence files: `.codex-report/l9-step4-2-fable-rev/`.
 
 The code is faithful to the registered table and fixes attempt B's defect: a tooling or unlisted reason can no longer
-print as an outcome. The fixes are to the **table**, not the code: the blind MASK regex admitted codes that the plan
-itself routes to R3, so some tooling-class refusals still print as `outcome-class refusal at step 4`.
+print as an outcome. Two fixes are to **tests the delta left stale** (F0: the branch's own suite is red, 2 of 3 failures
+are delta-caused and deterministic). The rest are to the **table**, not the code: the blind MASK regex admitted codes
+that the plan itself routes to R3, so some tooling-class refusals still print as `outcome-class refusal at step 4`.
 
 ## Findings (ranked)
+
+**F0 (blocking: red suite). Two tests fail deterministically because of the delta; both pass at the merge base.**
+Whole-directory run at `8222d0e47`: `Ran 1020 tests in 3291.260s`, `FAILED (failures=3, skipped=13)` (answer 4).
+Counterfactuals in `failure_counterfactuals.txt`: the same three tests at `0a9ff426a` are `OK`; standalone at
+`8222d0e47` two fail.
+- `tests/b5_analysis/test_floor_kept_units.py:971` (`test_r14_real_index_context_composition_with_registered_p42_exit`):
+  the test's own seam gives the refused target `("window_evidence_precheck_missing",)`, a TOOLING code
+  (`test_floor_kept_units.py:947`), and still expects `floor_cell_not_extractable` (`:960`). The new answer
+  `extraction_cell_tooling_refusal` is the correct one; the expectation is stale. Fix: expect the tooling code, or
+  seam a mask reason if the test means to exercise the outcome branch.
+- `tests/b5_analysis/test_dry_run.py:515` (`test_T4_exception_and_tooling_detail_never_escape`): asserts `'7331'`
+  absent from the raw record text. The DriverDouble's step-4 report now carries `refusal_reasons`/`floor`, so the
+  alpha extraction output's content digest changed to `5d15a2…e328733164`, which contains `7331` (both hits are inside
+  that digest; zero hits after stripping 64-hex digests). The helper four lines above (`:508`) already strips digests
+  before searching; line 515 does not. Fix: search with digests removed as `:508` does.
+- `tests/b5_analysis/test_sensitivity_guard.py:131` (`test_G6_finalizer_main`, `assertFalse(output.exists())`):
+  fails only in whole-directory discovery; passes standalone and as a module at both commits. `fixtures_s5.py:197`
+  caches `_finalization_case` (`lru_cache`) and `finalization_case` restores only five input files, not a finalized
+  output written into the shared root by an earlier test. Not attributable to the delta on this evidence (the delta
+  adds no real finalization); it is a pre-existing fixture leak worth its own small fix.
 
 **F1 (fix before the dry run repeats). `kept_units_below_minimum` is MASK; plan section 2.2 makes it an R3 stop.**
 Emitted at `joulewise/floor_extraction.py:2461`, `:2515`, `:2820`, `:2974` when the kept units of a target cell
@@ -139,13 +160,23 @@ MASK entries are not reasons at all.
 (TMPDIR outside the checkout, no float-like token). Exact tail:
 
 ```
-@@TAIL@@
+  File "/home/user/JouleWise/tests/b5_analysis/test_sensitivity_guard.py", line 62, in invoke
+    self.assertFalse(output.exists())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 1020 tests in 3291.260s
+
+FAILED (failures=3, skipped=13)
+EXIT=1
 ```
 
 Targeted run of the new tests plus T8/T8b/T8c (`targeted_tests_tail.txt`): `Ran 28 tests in 1.545s`, `OK`.
 
 ## Fix list
 
+0. Make the branch green: update `test_r14` expectation and the `test_T4` search (F0). Both files are the lane's.
 1. Re-register the step-4 table by rule (blind, before the dry run repeats): move the 11 reachable codes above to
    TOOLING, or equivalently make the step-4 MASK empty, and re-pin `step4_reason_classes.json` with its new source.
    The code in `steps.py` needs no change; `test_R2_mask_only_reasons_are_the_outcome_class` and the DriverDouble's

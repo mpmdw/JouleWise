@@ -1,0 +1,23 @@
+# Three failures of the whole-directory run at 8222d0e47 (Ran 1020 tests in 3291.260s, FAILED (failures=3, skipped=13)).
+# All commands: JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest <names>, TMPDIR outside the checkout.
+
+## The same three tests at the merge base 0a9ff426a (scratch worktree):
+Ran 3 tests in 52.030s
+OK
+
+## The same three tests standalone at 8222d0e47:
+FAIL: test_T4_exception_and_tooling_detail_never_escape   AssertionError: '7331' unexpectedly found in '{"analysis_commit": ...
+FAIL: test_r14_real_index_context_composition_with_registered_p42_exit   AssertionError: 'extraction_cell_tooling_refusal' != 'floor_cell_not_extractable'
+Ran 3 tests in 51.873s
+FAILED (failures=2)
+(test_G6_finalizer_main passes standalone.)
+
+## tests.b5_analysis.test_sensitivity_guard as a module, at 8222d0e47 and at 0a9ff426a:
+Ran 12 tests in 45.934s / Ran 12 tests in 44.995s
+OK / OK
+
+## T4 marker location (python over the recorded assertion text):
+raw hits: 2
+ context: 3eb1fda33f8abf6eb72fd6d147e3f3c31db7e328733164-extraction-alpha.json",
+ context: 3eb1fda33f8abf6eb72fd6d147e3f3c31db7e328733164"}],"refusal":null,"regi
+hits after stripping 64-hex digests: 0
