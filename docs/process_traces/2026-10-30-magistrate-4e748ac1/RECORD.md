@@ -122,3 +122,13 @@ Neither Mac run has an executable recipe today.
 - Lead disposition: fix round 6 (Sol high; brief `~/night-archive/seats-4e748ac1/by-therm-fix6/brief.md`), rulings A1-A5 (Opus 1-3, Sol 1-2); Opus 4-5 unchanged.
   - Why a round and not a consult: the class appeared again, but each instance is a departure from the adopted consult's own rule (row 7 says the production parser's readings; X7/X8 say producer-possible identities), not a gap in the rule. Each fix is local and fully specified. A second consult would re-derive the same rule.
   - After round 6, the lead re-executes Opus's `probe_journal_divergence.py` and `misc_probes.py` and Sol's two repros. Another blind round follows only if a probe still changes which members count.
+
+## Clock-gate council (two blind seats)
+- **Sol** (`codex/2026-10-30-kb-clock-consult-sol` `16373533b`): (a) keep the strict 4629.6 s gate for the code as written. The production ACTIVE anchor method `CLOCK_METHOD_V3` refuses a capture whose wall-minus-RAW span exceeds 5 ms (`uncertainty_evidence.py:40, :1090-1125, :1374-1381`). At 2.718 ppm × 4629.6 s that span is 12.58 ms, so a live run would lose rails and GPU even with the gate removed. The synthetic capture seam supplies its anchor directly and hid this. Sol warns that naive re-anchoring at receipt or stdout time is unsound.
+- **Opus** (`claude/kb-clock-consult-opus`): (d) then the carried gate.
+  - Where the wall-vs-RAW rate enters a joule as coded: only a rigid ≤ 40.8 µs pairing offset, which `anchor_shift_j` already covers about 265 times over.
+  - Where it decides admission: the V3 cap. Executed: unknown at 2.718 ppm over 4629.6 s.
+  - Fix: the unchanged V3 estimator over a ≤ 123 s prefix, closed by an in-stream epoch/RAW stamp, plus an end-of-capture check. Executed: a constant ~115 µs error from first record to last.
+  - Then `t_stream_max_s` = 335 s, which refuses 0 of 3 recorded arms (4.694 ms, the value they printed).
+- Both agree that the rate does not reach the numbers once an anchor is resolved, and that the strict gate is correct for the code as written. They disagree on whether the prefix re-anchor is sound, which is a science question, so it goes to a **cold Fable 5.1 judge**: `session_01JActAYZjhhpgNjte13zbFk` (JouleWise-data `claude/kb-clock-judge`; brief `~/night-archive/seats-4e748ac1/clock-judge/brief.md`).
+- Consequence: the KB test is not armed in this activation. As coded it would collect no rails or GPU numbers on this Mac. The KB lane waits for the judge's ruling and then a build round with its own cold passes. BYTES stage 1 is planned for 12 Nov, so there is room.
