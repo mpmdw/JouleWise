@@ -3810,7 +3810,7 @@
         "evidence": [
           "Phase 1 (after the block-5 release): freeze tests check the b5/collection and b5/analysis tag trees rather than main's bytes; step-5 identity accepts HEAD equal to the registered analysis commit or a ruled descendant; calibration acceptance is commit-scoped and lands with the D-138 reissue carrying A178 and the L9-ENV-2 clamp (RUN_STATE item 145); line-number test pins are retired",
           "Phase 2: prune per TRIM_REPORT once phase 1 has landed",
-          "BYTES registration carries F1 (commit plus tree hash), F4 (commit-scoped acceptance) and F6 (environment lock) from the start"
+          "Block 6 and BYTES get clerical freeze-by-commit addenda (F1 commit plus tree hash, F4 commit-scoped acceptance, F6 environment lock) beside their unedited registrations, per Ed's 2026-10-30 ruling (RUN_STATE item 146, seat FBC-B6)"
         ],
         "pointer": {
           "json_pointer": "/tasks/FREEZE-BY-COMMIT-01/acceptance",
