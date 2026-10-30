@@ -631,6 +631,8 @@ def transform(mode, archive, output, export=None):
                 raw_sidecar, locator = sidecar.read_bytes(), None
             except ValueError:
                 locator = None
+            except OSError:
+                raw_sidecar, locator = None, None
             if locator:
                 try:
                     store = (export / locator).resolve()
@@ -643,7 +645,8 @@ def transform(mode, archive, output, export=None):
                 inputs.append((store, store_rel, True))
                 a, z = field_span(raw_sidecar, ("blinding", "withheld", "path"))
                 raw_sidecar = replace(raw_sidecar, [(a, z, json.dumps(store_rel.as_posix()))])
-            exports[Path(sidecar.name)] = raw_sidecar
+            if raw_sidecar is not None:
+                exports[Path(sidecar.name)] = raw_sidecar
         tables, seen, bad = [], set(), set()
         for source, relative, withheld in inputs:
             try:
