@@ -1874,3 +1874,27 @@ class ProducerTrustTests(unittest.TestCase):
                                  'not defined (journal does not reproduce the registered hull decision)' if present else 'equals registered line')
                 self.assertIn({'run_id': 'a', 'code': 'records.thermal_hull_replay_disagrees'}, record['notices'])
                 self.assertEqual((out / ACC).read_bytes(), (archive.a / ACC).read_bytes())
+
+    def test_journal_lines_use_the_same_lexer_and_blinding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for index, extra in enumerate((',"unused":NaN', ',"unused":1,"unused":2', r',"a":1,"\u0061":2')):
+                archive = TrustArchive(Path(tmp) / str(index), 'request-end-p1', True, True)
+                lines = archive.journal.read_text().splitlines()
+                archive.journal.write_text(''.join((line[:-1] + extra + '}' if json.loads(line)['values']['level'] else line) + '\n' for line in lines))
+                archive.seal()
+                record, _ = self.cli(archive, mode='request-end-p1')
+                self.assertEqual(record['member_statuses'][0]['status'], 'not defined (journal does not reproduce the registered hull decision)')
+                self.assertEqual(record['changes'], [])
+            archive = TrustArchive(Path(tmp) / 'opaque', 'request-end-p1', True, False)
+            lines = archive.journal.read_text().splitlines()
+            archive.journal.write_text(''.join(line[:-1] + ',"energy":6666.750}\n' for line in lines))
+            archive.seal()
+            loads = json.loads
+            def guarded(raw, *args, **kwargs):
+                raw = raw.decode() if isinstance(raw, bytes) else raw
+                self.assertNotIn('6666.750', raw)
+                return loads(raw, *args, **kwargs)
+            with patch.object(t.json, 'loads', side_effect=guarded):
+                record = t.transform('request-end-p1', archive.a, archive.root / 'out')
+            self.assertEqual(record['member_statuses'][0]['status'], 'evaluated')
+            self.assertEqual(record['changes'][0]['action'], 'removed')

@@ -379,17 +379,51 @@ def validate_seal(raw):
     return None, "journal provenance unavailable"
 
 
+def journal_readings(raw):
+    """Lex each JSONL value, then project only the production parser's inputs.
+
+    The production reader skips malformed lines. Keep that behavior, sorting and
+    parser, while never decoding unconsumed journal values (including numbers).
+    """
+    readings, malformed = [], 0
+    for line in raw.splitlines():
+        if not line.strip(b" \t\r\n"):
+            continue
+        try:
+            doc = document(line.decode("utf-8"))
+            projected = {key: doc.optional(key) for key in ("schema", "module", "kind")}
+            for key in ("started", "finished"):
+                stamp = doc.field(key)
+                projected[key] = {name: stamp.field(name).scalar() for name in h.STAMP_KEYS}
+            try:
+                values = doc.field("values")
+            except ValueError:
+                values = None
+            projected["values"] = ({"level": values.optional("level")} if values is not None and values.kind == "{"
+                                   else None if values is None or values.kind == "n" else [])
+            try:
+                error = doc.field("error")
+            except ValueError:
+                error = None
+            # Only error presence determines status; its contents are opaque.
+            projected["error"] = True if error is not None and error.kind != "n" else None
+            reading = h.parse_monitor_line("thermal", projected)
+        except (ValueError, TypeError):
+            malformed += 1
+            continue
+        if reading is not None:
+            readings.append(reading)
+    readings.sort(key=lambda item: (item.monotonic_ns, item.started_monotonic_ns))
+    return readings, malformed
+
+
 def validate_journal(journal, expected, sources):
     """Identity check and the production parser; per-member replay follows spans."""
     try:
         raw = h.read_bytes(journal)
         actual = journal if journal.is_file() else Path(str(journal) + ".zst")
         sources[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
-        try:
-            readings, malformed = h.read_monitor_journal(journal, "thermal")
-        except RecursionError:
-            # An unreadable sealed stream cannot reproduce a registered exclusion.
-            readings, malformed = [], 1
+        readings, malformed = journal_readings(raw)
         reason = ("journal provenance unavailable" if expected is None else
                   "journal differs from the harvest's" if hashlib.sha256(raw).hexdigest() != expected else None)
         return readings, malformed, reason
