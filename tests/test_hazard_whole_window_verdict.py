@@ -37,6 +37,7 @@ from joulewise import arm_readiness, controller, whole_window, window_lineage
 from joulewise.clock import FakeClock
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy
 from scripts import run_campaign
+from tests.custody_isolation import isolate_custody_parent
 from tests.test_window_lineage import (
     _MockWorkloadRegistry,
     POST_ATTEMPT,
@@ -122,6 +123,8 @@ class HazardWholeWindowVerdictTests(_SentinelMixin, unittest.TestCase):
             cls.corpus.append(bundle)
 
     def setUp(self) -> None:
+        # run_campaign.main can reach the custody registry; keep it off ~/night-custody.
+        isolate_custody_parent(self)
         self.w = type(self).w
         self.addCleanup(remove_night_records, self.w)
         self.addCleanup(self._reset_claim_records)
