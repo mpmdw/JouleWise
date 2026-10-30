@@ -668,15 +668,17 @@ def transform(mode, archive, output, export=None):
                             "reason": LABELS[mode]})
     exports = {}
     withheld_runs = set()
+    if export and (not isinstance(session, str) or not session or session in (".", "..")
+                   or any(c in session for c in ("/", "\\", "\x00"))):
+        reason = "acceptance missing session_id" if not isinstance(session, str) else "unsafe export session_id"
+        for member in roster:
+            if member.get("kind") == "science":
+                run = member.get("run_id")
+                undefined(run, reason)
+                after[run] = set(before[run])
+        changes = []
+        export = None
     if export:
-        if not isinstance(session, str):
-            session = None
-            for member in roster:
-                if member.get("kind") == "science":
-                    run = member.get("run_id")
-                    undefined(run, "acceptance missing session_id")
-                    after[run] = set(before[run])
-            changes = []
         path = export / ((session or "") + ".runs.csv")
         inputs = [(path, Path(path.name), False)] if session else []
         sidecar = export / ((session or "") + ".session.json")
@@ -853,6 +855,8 @@ def guard_destination(path, output, sources=()):
             raise ValueError("destination directory is a symlink: " + str(directory))
         if any(directory.resolve().is_relative_to(source) for source in sources):
             raise ValueError("destination directory resolves inside source: " + str(directory))
+    if not path.resolve().is_relative_to(output.resolve()):
+        raise ValueError("destination resolves outside output: " + str(path))
 
 
 def write_copy(path, content, output=None, sources=()):

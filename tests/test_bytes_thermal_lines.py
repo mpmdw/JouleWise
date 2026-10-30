@@ -1969,3 +1969,29 @@ class RoundSixTests(unittest.TestCase):
                         self.assertEqual(statuses[run], 'not defined (roster repeated run_id)')
                     self.assertEqual(record['changes'], [])
                     self.assertEqual((x.root / 'out' / ACC).read_bytes(), (x.a / ACC).read_bytes())
+
+    def test_export_session_component_and_writer_containment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sentinel = root / 'escape.withheld.csv'
+            sentinel.write_bytes(b'SENTINEL')
+            for i, session in enumerate(('../escape', '../../../escape', '/escape', r'a\b', '.', '..', 'a\x00b', '')):
+                x = TrustArchive(root / str(i), 'hull-p2', False, True)
+                acc = json.loads(x.text(ACC)); acc['session_id'] = session; x.put(ACC, acc)
+                export = x.root / 'export'; export.mkdir()
+                result = subprocess.run([sys.executable, t.__file__, 'hull-p2', str(x.a),
+                                         str(x.root / 'out'), '--export', str(export)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                record = json.loads(result.stdout)
+                self.assertEqual(record['member_statuses'][0]['status'], 'not defined (unsafe export session_id)')
+                self.assertEqual(record['changes'], [])
+                self.assertEqual(sentinel.read_bytes(), b'SENTINEL')
+                self.assertFalse((x.root / 'out/export').exists())
+            out = root / 'guard'; out.mkdir()
+            for path in (out / '../escape.withheld.csv', root / 'escape.withheld.csv'):
+                with self.assertRaisesRegex(ValueError, 'outside output|not in the subpath'):
+                    t.write_copy(path, 'changed', out)
+            link = out / 'leaf'; link.symlink_to(sentinel)
+            with self.assertRaisesRegex(ValueError, 'outside output'):
+                t.write_copy(link, 'changed', out)
+            self.assertEqual(sentinel.read_bytes(), b'SENTINEL')
