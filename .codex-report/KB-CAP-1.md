@@ -20,10 +20,12 @@ rejects multiple streams instead of fitting restarts separately.
 
 Before editing existing files, the stage dispatch/registry files in scope are:
 `joulewise/b5/chain.py` (tool/kind dispatch, graph validation and renderer);
-`tests/hazards/refusal_allowlist.json` and `tests/hazards/refusal_census.py`
+`configs/gates/hazard_refusals.json` and `tests/hazards/refusal_census.py`
 (refusal inventory, if the chain change changes its census);
 `tests/test_battery_float_sweep.py` (READERS classification, if new code names a
-bound lexeme). The import-fence lists are inspected, and extended only if the new
+bound lexeme). The actual refusal inventory is `configs/gates/hazard_refusals.json` (the
+initial scout spelling above was corrected before any registry edit).
+The import-fence lists are inspected, and extended only if the new
 entry requires it. No estimator, calibration implementation, reader or registered
 BYTES config is edited. A separate prepare writer in the new stage module avoids
 changing the claim-only assumptions of `joulewise/b5/plan.py`.

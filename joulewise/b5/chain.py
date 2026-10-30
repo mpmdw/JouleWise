@@ -138,6 +138,8 @@ class Tool:
 
 
 TOOLS = {
+    "bytes_stream_capture": Tool("joulewise.bytes_stream_capture.cli.v1", "python",
+                                 "joulewise/bytes_stream_capture.py"),
     "bracket_reserver": Tool("joulewise.calibration_window_bracket_reservation.cli.v1", "python",
                              "scripts/reserve_calibration_window_bracket.py"),
     "fiducial_capture": Tool("joulewise.powermetrics_fiducial.cli.v1", "python",
@@ -145,7 +147,8 @@ TOOLS = {
     "campaign_runner": Tool("joulewise.run_campaign.cli.v1", "python", "scripts/run_campaign.py"),
     "backup_runs": Tool("joulewise.backup_runs.cli.v1", "shell", "scripts/backup_runs.sh"),
 }
-IN_CHAIN_KINDS = ("bracket_reservation", "calibration_capture", "campaign_collection", "bound_derivation")
+IN_CHAIN_KINDS = ("bracket_reservation", "calibration_capture", "campaign_collection", "bound_derivation",
+                  "bytes_stream_capture")
 DESK_KINDS = ("whole_window_verdict", "backup")
 ARGUMENT_KINDS = ("literal", "binding", "binding_path", "repo_path", "tree_pointer")
 # The runbook's calibrate_slot passes these two to every live capture since
@@ -429,6 +432,16 @@ def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
     pre = [i for i, stage in enumerate(chain) if stage.slot == "pre"]
     post = [i for i, stage in enumerate(chain) if stage.slot == "post"]
     _require(len(pre) == 1 and len(post) == 1, "exactly one pre and one post calibration capture")
+    captures = [stage for stage in chain if stage.kind == "bytes_stream_capture"]
+    if captures:
+        _require(tree.get("non_claim") is True and len(captures) == 1
+                 and [s.kind for s in chain] == ["bracket_reservation", "calibration_capture",
+                                                "bytes_stream_capture", "calibration_capture"]
+                 and pre == [1] and post == [3]
+                 and captures[0].expected_count == 8
+                 and captures[0].commands[0].tool_id == "bytes_stream_capture",
+                 "known-bytes requires an isolated non-claim bracket and eight calls")
+        return stages
     collections = [i for i, stage in enumerate(chain) if stage.kind == "campaign_collection"]
     _require(bool(collections) and pre[0] < min(collections) and post[0] > max(collections),
              "the pre and post calibration captures must bracket every collection")
@@ -1195,6 +1208,9 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
                                  label=stage.stage_id + ".session-status",
                                  kind="session_status_record", suffix=".session-status",
                                  out=Shell('"$TRANSCRIPT_ROOT/' + TERMINAL_BOUNDARY + '"')))
+        elif stage.kind == "bytes_stream_capture":
+            lines.append("# Rule §1/§2: one continuous scan and palindrome capture; no member retries.")
+            lines.append(run(stage, argv))
         elif stage.kind == "campaign_collection":
             lines.append(f"# Collection stage {stage.stage_id}: {stage.expected_count} member(s).")
             lines.append(f"if horizon_allows {stage.stage_id} {collection_allowance(stage)} {remaining(stage)}; then")
