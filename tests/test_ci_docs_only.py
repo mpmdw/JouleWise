@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.git_fixture import init_git_fixture
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ci_docs_only.sh"
 
 
@@ -15,7 +17,7 @@ class DocsOnlyClassifierTests(unittest.TestCase):
         env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                "GIT_COMMITTER_EMAIL": "t@t"}
         self.env = env
-        self.git("init", "-q")
+        init_git_fixture(self.repo, "-q")
         self.write({"README.md": "x\n", "docs/notes.md": "x\n", "docs/seal.md": "x\n",
                     "tests/test_seal.py": "PATH = 'docs/seal.md'\n", "joulewise/core.py": "x = 1\n"})
         self.base = self.commit()
