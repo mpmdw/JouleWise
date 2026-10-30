@@ -1,0 +1,14 @@
+control: p42 cell d117-reported-mean-ph-prefill-p42-qwen3-1p7b status refused code paper_reported_energy_record_invalid | issuer's code: paper_reported_energy_record_invalid
+S0 control: exit=0 err=''
+S1 p42 code = the below-minimum code in every copy (a member code for a different exit): exit=0 err=''
+S2 every member code in every copy: 33 of 33 exit 0
+S3 a non-member code in every copy: exit=2 err='refused=step11_unmapped_fill' rows: sensitivity/alpha/df-ph-prefill-p42-qwen3-1p7b/code; alpha/projection/refused/df-ph-prefill-p42-qwen3-1p7b/code; sensitivity/beta/df-ph-prefill-p42-qwen3-8b/code; beta/projection/refused/df-ph-prefill-p42-qwen3-8b/code
+S4 the projection copy differs from the record copies: exit=2 err='refused=step11_unmapped_fill' rows: sensitivity/alpha/df-ph-prefill-p42-qwen3-1p7b/code; alpha/projection/refused/df-ph-prefill-p42-qwen3-1p7b/code; sensitivity/beta/df-ph-prefill-p42-qwen3-8b/code; beta/projection/refused/df-ph-prefill-p42-qwen3-8b/code
+S5 the projection lists no refused p42 cell (record copies keep the code): exit=2 err='refused=step11_unmapped_fill' rows: expected/projection/alpha/d117-reported-mean-ph-prefill-p42-qwen3-1p7b; alpha/projection/p42; sensitivity/alpha/df-ph-prefill-p42-qwen3-1p7b/code; alpha/projection/refused/df-ph-prefill-p42-qwen3-1p7b/code
+S6 the p42 cell also printed as a computed projection cell: exit=1 err='' rows: expected/unexpected/projection:alpha:cells/2; reported/alpha/df-ph-prefill-p42-qwen3-1p7b; alpha/df-ph-prefill-p42-qwen3-1p7b/mean_j; alpha/df-ph-prefill-p42-qwen3-1p7b/lower_j
+S7 the record copies print no code (projection keeps it): exit=2 err='refused=required_key_absent:disclosure:block_lines/sensitivity_reported/record/code'
+S8 the recompute's p42 status is not expected_unresolvable: exit=2 err='refused=step11_unmapped_fill' rows: alpha/extraction/p42; alpha/projection/p42; sensitivity/alpha/df-ph-prefill-p42-qwen3-1p7b; sensitivity/alpha/df-ph-prefill-p42-qwen3-1p7b/status
+S9 the record copies say status computed (projection still refuses): exit=2 err='refused=required_key_absent:disclosure:block_lines/sensitivity_reported/record/primary'
+S10 control: decode reported cell refused on both sides with the below-minimum code: exit=0 err=''
+S11 the same with a member code that is not the below-minimum code in every copy: exit=2 err='refused=step11_unmapped_fill' rows: sensitivity/alpha/df-ph-decode-qwen3-1p7b/code; alpha/projection/refused/df-ph-decode-qwen3-1p7b/code
+EXIT=0

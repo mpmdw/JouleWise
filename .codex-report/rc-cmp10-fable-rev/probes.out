@@ -1,0 +1,78 @@
+======== P0 control
+P0 control (base + with_sensitivity widened): exit=0 err='' fails={}
+======== P1/P2 reported_computed (a registered condition: the cell is computed on either side)
+P1 both sides refuse ALPHA's decode reported cell (condition false on both sides; the table must pass; OPEN ISSUE 1 expected elsewhere): exit=0 err='' fails={}
+P2.a L9 refuses, the recompute computes (must be non-zero): exit=2 err='refused=step11_unmapped_fill' fails={'count': 6, 'kept_units': 1, 'outcome_word': 7, 'reported_cell_j': 36, 'routing_id': 10}
+    table rows DISAGREE (6): disclosure/cells/attribution_floor/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=l9:disclosure:absent:cells/pack=alpha,cell_id=d117-reported-mean-ph-decode-qwen3-1p7b,line=attribution_floor; disclosure/cells/battery_assist_cell/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=l9:disclosure:absent:cells/pack=alpha,cell_id=d117-reported-mean-ph-decode-qwen3-1p7b,line=battery_assist_cell; disclosure/cells/cross_window/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=l9:disclosure:absent:cells/pack=alpha,cell_id=d117-reported-mean-ph-decode-qwen3-1p7b,line=cross_window; disclosure/cells/kept_units/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=l9:disclosure:absent:cells/pack=alpha,cell_id=d117-reported-mean-ph-decode-qwen3-1p7b,line=kept_units; disclosure/cells/reported_cell/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=l9:disclosure:absent:cells/pack=alpha,cell_id=d117-reported-mean-ph-decode-qwen3-1p7b,line=reported_cell; sensitivity/reported_cells/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=l9:sensitivity:key:reported_cells/0/mean_and_half_width_equal_primary,l9:sensitivity:key:reported_cells/0/equals_primary,l9:sensitivity:key:reported_cells/0/not
+    other rows DISAGREE (54): reported/alpha/df-ph-decode-qwen3-1p7b=(None,'reported/alpha/df-ph-decode-q); alpha/df-ph-decode-qwen3-1p7b/mean_j=(None,50.0); alpha/df-ph-decode-qwen3-1p7b/lower_j=(None,47.0); alpha/df-ph-decode-qwen3-1p7b/upper_j=(None,53.0); alpha/df-ph-decode-qwen3-1p7b/interval/h_j=(None,2.0); alpha/df-ph-decode-qwen3-1p7b/interval/B_j=(None,1.0)
+    unbound=[('disclosure:block_lines/sensitivity_reported/record/code', 'no_row'), ('disclosure:block_lines/sensitivity_reported/record/status', 'row_disagrees'), ('disclosure:sensitivity/reported_cells/*/code', 'no_row')]
+P2.b L9 computes, the recompute refuses (must be non-zero): exit=2 err='refused=step11_unmapped_fill' fails={'count': 6, 'kept_units': 1, 'outcome_word': 6, 'reported_cell_j': 36, 'routing_id': 8}
+    table rows DISAGREE (4): disclosure/cells/attribution_floor/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=recompute:absent:reported_cells/df-ph-decode-qwen3-1p7b/attribution_floor; disclosure/cells/battery_assist_cell/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=recompute:absent:disclosures/battery_assist/df-ph-decode-qwen3-1p7b; disclosure/cells/cross_window/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=recompute:absent:disclosures/cross_window/Qwen3-1.7B-4bit/decode; disclosure/cells/reported_cell/alpha/d117-reported-mean-ph-decode-qwen3-1p7b missing=recompute:key:reported_cells/df-ph-decode-qwen3-1p7b/mean_j,recompute:key:reported_cells/df-ph-decode-qwen3-1p7b/lower_j,recompute:key:reported_cells/df-ph-deco
+    other rows DISAGREE (53): reported/alpha/df-ph-decode-qwen3-1p7b=('reported/alpha/df-ph-decode-q,None); alpha/df-ph-decode-qwen3-1p7b/mean_j=(50.0,None); alpha/df-ph-decode-qwen3-1p7b/lower_j=(47.0,None); alpha/df-ph-decode-qwen3-1p7b/upper_j=(53.0,None); alpha/df-ph-decode-qwen3-1p7b/interval/h_j=(2.0,None); alpha/df-ph-decode-qwen3-1p7b/interval/B_j=(1.0,None)
+    unbound=[('disclosure:block_lines/sensitivity_reported/record/equals_primary', 'row_disagrees'), ('disclosure:block_lines/sensitivity_reported/record/not_below_primary', 'row_disagrees'), ('disclosure:block_lines/sensitivity_reported/record/primary/B_j', 'row_disagrees')]
+======== P3 floor_computed (extraction floor below the minimum on both sides)
+P3 both sides: the decode absolute floor is below the minimum (condition false both sides): exit=0 err='' fails={}
+P3.a L9 omits the floor, the recompute computes it (must be non-zero): exit=1 err='' fails={'count': 2, 'floor_j': 12, 'outcome_word': 1, 'routing_id': 3}
+    table rows DISAGREE (2): disclosure/floors/floor_composition/alpha/d117-df-ph-decode-qwen3-1p7b-absolute missing=l9:disclosure:absent:floors/line=floor_composition,pack=alpha,cell_id=d117-df-ph-decode-qwen3-1p7b-absolute; extraction/alpha/d117-df-ph-decode-qwen3-1p7b-absolute/floor missing=l9:extraction:alpha:key:cells/0/operative_floor_j,l9:extraction:alpha:key:cells/0/n_admitted,l9:extraction:alpha:key:cells/0/floor/corner_widened_unguarded_floo
+    other rows DISAGREE (16): Qwen3-1.7B-4bit/decode/absolute/corner_widened_unguarded_floor_j=(None,39.5); Qwen3-1.7B-4bit/decode/absolute/unguarded_floor_j=(None,39.5); Qwen3-1.7B-4bit/decode/absolute/guarded_floor_j=(None,42.0); Qwen3-1.7B-4bit/decode/absolute/drift_widened_guarded_floor_j=(None,43.0); Qwen3-1.7B-4bit/decode/absolute/prediction_component_j=(None,38.0); Qwen3-1.7B-4bit/decode/absolute/max_abs_deviation_j=(None,29.5)
+P3.b L9 prints the floor, the recompute refuses it (must be non-zero): exit=2 err='refused=step11_unmapped_fill' fails={'count': 2, 'floor_j': 12, 'routing_id': 3}
+    table rows DISAGREE (2): disclosure/floors/floor_composition/alpha/d117-df-ph-decode-qwen3-1p7b-absolute missing=recompute:key:floors/Qwen3-1.7B-4bit/decode/absolute/guarded_floor_j,recompute:key:floors/Qwen3-1.7B-4bit/decode/absolute/allowance_j,recompute:key:floors/Qwen3; extraction/alpha/d117-df-ph-decode-qwen3-1p7b-absolute/floor missing=recompute:key:floors/Qwen3-1.7B-4bit/decode/absolute/corner_widened_unguarded_floor_j,recompute:key:floors/Qwen3-1.7B-4bit/decode/absolute/operative_unguarded_f
+    other rows DISAGREE (15): Qwen3-1.7B-4bit/decode/absolute/corner_widened_unguarded_floor_j=(39.5,None); Qwen3-1.7B-4bit/decode/absolute/unguarded_floor_j=(39.5,None); Qwen3-1.7B-4bit/decode/absolute/guarded_floor_j=(42.0,None); Qwen3-1.7B-4bit/decode/absolute/drift_widened_guarded_floor_j=(43.0,None); Qwen3-1.7B-4bit/decode/absolute/prediction_component_j=(38.0,None); Qwen3-1.7B-4bit/decode/absolute/max_abs_deviation_j=(29.5,None)
+    unbound=[('disclosure:floors/floor_composition/allowance_j', 'row_disagrees'), ('disclosure:floors/floor_composition/drift_widened_j', 'row_disagrees'), ('disclosure:floors/floor_composition/guarded_j', 'row_disagrees')]
+======== P4 ratio_computable (magnitude ratio not computable on both sides)
+P4 both sides: ratio not computable: exit=0 err='' fails={}
+P4.a L9 bare line, recompute has a ratio (must be non-zero): exit=1 err='' fails={'descriptive_ratio': 3, 'routing_id': 1}
+    table rows DISAGREE (1): disclosure/contrasts/magnitude_ratio/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/estimates missing=l9:disclosure:key:contrasts/2/log_mean,l9:disclosure:key:contrasts/2/log_sd,l9:disclosure:key:contrasts/2/ratio,l9:disclosure:key:contrasts/2/lower,l9:disclosur
+    other rows DISAGREE (3): disclosure/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/magnitude_ratio/ratio=(None,0.99); disclosure/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/magnitude_ratio/lower=(None,0.875); disclosure/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/magnitude_ratio/upper=(None,1.125)
+P4.b L9 prints estimates, recompute has none (must be non-zero): exit=2 err='refused=step11_unmapped_fill' fails={'descriptive_ratio': 3}
+    other rows DISAGREE (3): disclosure/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/magnitude_ratio/ratio=(0.99,None); disclosure/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/magnitude_ratio/lower=(0.875,None); disclosure/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/magnitude_ratio/upper=(1.125,None)
+    unbound=[('disclosure:contrasts/magnitude_ratio/lower', 'row_disagrees'), ('disclosure:contrasts/magnitude_ratio/ratio', 'row_disagrees'), ('disclosure:contrasts/magnitude_ratio/upper', 'row_disagrees')]
+======== P5 the @ratio text selector (the one selector read from printed text)
+P5.a an independent ratio line's text says R_cm (its entry must be MISSING; the common-mode entry duplicated): exit=2 err='refused=step11_unmapped_fill' fails={'routing_id': 2}
+    table rows DISAGREE (2): ratio/Qwen3-1.7B-4bit/decode/absolute missing=l9:disclosure:absent:block_lines/line=dominance_ratio,cell_id=d117-qwen3-1p7b-decode-floor-v5,component=absolute,@ratio=R; unexpected/disclosure:block_lines/24 missing=l9:item_not_in_table
+    unbound=[('disclosure:block_lines/dominance_ratio/denominator_j', 'no_row'), ('disclosure:block_lines/dominance_ratio/n', 'no_row'), ('disclosure:block_lines/dominance_ratio/numerator_j', 'no_row')]
+P5.b the text carries no ratio word: exit=2 err='refused=step11_unmapped_fill' fails={'routing_id': 2}
+    table rows DISAGREE (2): ratio/Qwen3-1.7B-4bit/decode/absolute missing=l9:disclosure:absent:block_lines/line=dominance_ratio,cell_id=d117-qwen3-1p7b-decode-floor-v5,component=absolute,@ratio=R; unexpected/disclosure:block_lines/24 missing=l9:item_not_in_table
+    unbound=[('disclosure:block_lines/dominance_ratio/denominator_j', 'key_unresolved'), ('disclosure:block_lines/dominance_ratio/n', 'key_unresolved'), ('disclosure:block_lines/dominance_ratio/numerator_j', 'key_unresolved')]
+======== P6-P8 verdict-only words the table requires as keys
+P6.a verdict sampling/removed_block_ids emptied (fill copy intact): exit=2 err='refused=step11_unmapped_fill' fails={'routing_id': 2}
+    other rows DISAGREE (2): contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/sampling_removed_block_ids_position/0=(None,'contrast/ctr-d117-decode-qwen); contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/sampling_removed_block_ids/0=(None,'d117-decode-contrast-b01')
+    unbound=[('fill:gamma/contrasts/*/sampling/removed_block_ids/*', 'value_differs')]
+P6.b verdict sampling/kept_n = 5 against n = 9: exit=2 err='refused=step11_unmapped_fill' fails={'count': 1}
+    other rows DISAGREE (1): ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/kept_n=(5,9)
+    unbound=[('fill:gamma/contrasts/*/sampling/kept_n', 'value_differs')]
+P7.a the not-kept block's included word set to null (engine forbids a non-bool): exit=1 err='' fails={'kept_units': 1}
+    other rows DISAGREE (1): contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/blocks/d117-decode-contrast-b01/included=(None,False)
+P7.b the not-kept block relabelled to an unregistered id: exit=1 err='' fails={'kept_units': 1, 'routing_id': 2}
+    table rows DISAGREE (1): contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b missing=l9:verdicts:absent:contrasts/contrast_id=ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/bundle_blocks/blocks/block_id=d117-decode-contrast-b01
+    other rows DISAGREE (2): contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/blocks/d117-decode-contrast-b01/included=(None,False); contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/bundle_block_ids=(['d117-decode-contrast-b02', ',['d117-decode-contrast-b01', ')
+P8 fill finalized_manifest/file_sha256 differs from the registry's manifest pin (identity, declared uncovered): exit=2 err='refused=step11_unmapped_fill' fails={'routing_id': 1}
+    other rows DISAGREE (1): fill/finalized_manifest/file_sha256=('99999999999999999999999999999,'ba893196534ef2ab6ad001b57b542)
+    unbound=[('fill:gamma/finalized_manifest/file_sha256', 'row_disagrees')]
+======== P9-P10 closed lists
+P9.a an invented line word in cells (not in CELL_WORDS): exit=2 err='refused=line_word_unregistered:disclosure:cells' fails=None
+P9.b a producer-conditional load_correlated_cell line (uncovered LOAD_LINE): exit=0 err='' fails={}
+P10.a alpha's neg8_screen line printed twice (DUPLICATE selector): exit=2 err='refused=item_key_duplicated:window_claim_line' fails=None
+P10.b ALPHA's decode projection cell printed twice: exit=2 err='refused=item_key_duplicated:projection_cell' fails=None
+======== P11 joint leave-one-out drop (kept block b03, both copies and the recompute)
+P11.a b03's row dropped from the verdict, the fill and the recompute (block still kept): exit=1 err='' fails={'count': 2, 'routing_id': 1}
+    table rows DISAGREE (1): contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/d117-decode-contrast-b03 missing=l9:verdicts:absent:contrasts/contrast_id=ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/rows/omitted_block_id=d117-decode-contrast-b03,l9:fill:absent:gamma/contrast
+    other rows DISAGREE (2): ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/l9_rows=(8,9); ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/recompute_rows=(9,8)
+P11.b b03's row dropped from the verdict and the fill only: exit=1 err='' fails={'contrast_j': 5, 'contrast_p': 2, 'count': 3, 'outcome_word': 3, 'routing_id': 2}
+    table rows DISAGREE (1): contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/d117-decode-contrast-b03 missing=l9:verdicts:absent:contrasts/contrast_id=ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/rows/omitted_block_id=d117-decode-contrast-b03,l9:fill:absent:gamma/contrast
+    other rows DISAGREE (14): ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/l9_rows=(8,9); contrast/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/b03=(None,'contrast/ctr-d117-decode-qwen); ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/b03/dbar_j=(None,-1.25); ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/b03/raw_p=(None,0.84); ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/b03/adjusted_p=(None,1.0); ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/loo/b03/outcome=(None,'not_resolvable')
+======== P12 an item outside the table
+P12.a an unregistered contrast row added to the fill: exit=2 err='refused=routing_id_unregistered:fill:gamma/contrasts/*/contrast_id' fails=None
+P12.b an unregistered floor cell row added to the record and its copy: exit=2 err='refused=routing_id_unregistered:disclosure:sensitivity/floor_cells/*/cell_id' fails=None
+======== P13 over-refusal baseline
+P13 with_neg8 + with_references + with_sensitivity(widened=True): exit=0 err='' fails={}
+    rows=1428 non-AGREE=0 table rows=254
+P13 with_neg8 + with_references + with_sensitivity(widened=False): exit=0 err='' fails={}
+    rows=1428 non-AGREE=0 table rows=254
+======== EXTRA: the same registered-condition-false windows, unwidened
+X1 unwidened: both sides refuse ALPHA's decode reported cell: exit=0 err='' fails={}
+X3 unwidened: both sides refuse the decode absolute floor: exit=0 err='' fails={}
+X4 unwidened: both sides ratio not computable: exit=0 err='' fails={}
+======== EXTRA: P1 with the recompute's reported cell carrying only a status word (no counts)
+X5 widened: recompute reported cell = {status: below_minimum}: exit=0 err='' fails={}
+EXIT=0

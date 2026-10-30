@@ -1,0 +1,18 @@
+H0 control (6-attempt index, G10 requested on plan-beta with codes): exit=0 err=''
+H1 an unrequested g10 line (plan-alpha, codes from the archive, redraw_cycles null as the index): exit=0 err=''
+H2 the unrequested g10 line's redraw_cycles 7 against the index's null: exit=2 err='refused=step11_unmapped_fill' rows: history/block_lines/33/redraw_cycles
+H3 the unrequested g10 line's codes changed (g10.redraw 40, a code added): exit=0 err=''
+H3b the requested g10 line's codes emptied: exit=0 err=''
+H4 a g10 line for a plan the index lacks: exit=2 err='refused=step11_unmapped_fill' rows: expected/unexpected/disclosure:block_lines/44
+H5 the requested g10 line printed twice: exit=2 err='refused=step11_unmapped_fill' rows: expected/disclosure/block_lines/g10/beta/plan-beta; expected/unexpected/disclosure:block_lines/36; expected/unexpected/disclosure:block_lines/44; history/disclosure/block_lines/g10/beta/plan-beta
+H6 a g10 line for a registered plan under the wrong pack: exit=2 err='refused=step11_unmapped_fill' rows: expected/unexpected/disclosure:block_lines/44
+H7 harvest_once false, one alpha re-harvest account: exit=0 err=''
+H8 the account's survivors and reason changed (12 -> 1, reason 'because'): exit=0 err=''
+H9 two accounts for alpha: exit=1 err='' rows: expected/disclosure/block_lines/reharvest_account/alpha; expected/unexpected/disclosure:block_lines/44; expected/unexpected/disclosure:block_lines/45
+H10 an account for an unregistered pack: exit=2 err='refused=routing_id_unregistered:disclosure:block_lines/*/pack'
+H11 harvest_once false, no account at all: exit=1 err='' rows: history/reharvest_accounts_printed
+H12 accounts for alpha and beta: exit=0 err=''
+H13 attempt_history verdict COLLECTED where the index says HARVEST_FAULT (beta a1): exit=2 err='refused=step11_unmapped_fill' rows: history/block_lines/34/verdict
+H14 attempt_count causes reordered (alpha superseded: [NEG8+cell.below_minimum, null] -> [null, NEG8+...]): exit=2 err='refused=step11_unmapped_fill' rows: history/block_lines/40/causes/0; history/block_lines/40/causes/1
+H15 the recompute's windows/ALPHA removed (anchor): exit=2 err='refused=step11_unmapped_fill' rows: expected/brackets/alpha; expected/disclosure/block_lines/attempt_count/alpha/deciding; expected/disclosure/block_lines/attempt_count/alpha/superseded; expected/disclosure/block_lines/attempt_history/alpha/plan-alpha
+EXIT=0
