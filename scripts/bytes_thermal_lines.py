@@ -458,7 +458,12 @@ def validate_journal(journal, expected, sources):
 
 def validate_replay(member, request, readings, present, thresholds, reason, run):
     """V2 is checked before X5, using the unchanged production helper."""
-    found = {code for code, *_ in h.thermal_member_flags([member[0], request[1]], readings, thresholds)}
+    if reason:
+        return False, reason, False
+    try:
+        found = {code for code, *_ in h.thermal_member_flags([member[0], request[1]], readings, thresholds)}
+    except (OverflowError, ValueError, TypeError):
+        return False, "journal level conversion unavailable", False
     if CODE in found and not present and not reason:
         raise ValueError(f"request-end would add {CODE}: {run}")
     reason, disagrees = validate_hull_replay(member, readings, present, thresholds, reason)
@@ -468,8 +473,11 @@ def validate_replay(member, request, readings, present, thresholds, reason, run)
 def validate_hull_replay(member, readings, present, thresholds, reason):
     if reason:
         return reason, False
-    replayed = (None if member is None else
-                CODE in {code for code, *_ in h.thermal_member_flags(member, readings, thresholds)})
+    try:
+        replayed = (None if member is None else
+                    CODE in {code for code, *_ in h.thermal_member_flags(member, readings, thresholds)})
+    except (OverflowError, ValueError, TypeError):
+        return "journal level conversion unavailable", False
     disagrees = replayed is None or replayed != present
     return ("journal does not reproduce the registered hull decision" if disagrees else None), disagrees
 

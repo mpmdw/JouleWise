@@ -1995,3 +1995,21 @@ class RoundSixTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'outside output'):
                 t.write_copy(link, 'changed', out)
             self.assertEqual(sentinel.read_bytes(), b'SENTINEL')
+
+    def test_huge_level_is_unavailable_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for present in (False, True):
+                for fallback in (False, True):
+                    x = TrustArchive(Path(tmp) / f'{present}-{fallback}', 'request-end-p1', present, False)
+                    rows = x.journal_rows()
+                    rows[0]['values']['level'] = 10**1000
+                    x.write_journal(rows)
+                    if fallback:
+                        x.put(SPANS, {'spans': {'a': {'member': SPAN['member'], 'request': None}}})
+                    result = subprocess.run([sys.executable, t.__file__, 'request-end-p1', str(x.a), str(x.root / 'out')], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    record = json.loads(result.stdout)
+                    self.assertEqual(record['member_statuses'][0]['status'],
+                                     'not defined (journal level conversion unavailable)' if present else 'equals registered line')
+                    self.assertEqual(record['changes'], [])
+                    self.assertFalse(any(n['code'] == 'records.thermal_hull_replay_disagrees' for n in record['notices']))
