@@ -56,21 +56,50 @@ are killed:
   answer 4: "The `ERROR` was `[Errno 28] No space left on device`, caused by my parallel mutant worktrees. Rerun in
   isolation at 8222d0e47, `test_G6_finalizer_main` and `test_guard_setup_after_s4…` pass".
 - **The test alone at `8222d0e47`** (`/tmp/jw-s6/wt`, `TMPDIR=/tmp/jw-s6-tmp`): `Ran 1 test in 52.700s`, `OK`.
-- **Whole directory at `8222d0e47`:** see S-VERIFY. The test passed there too, so I have no traceback to capture.
-- **Conclusion: environment-dependent.** The test copies the S2/S4/mint fixtures into a fresh `tempfile.tempdir`,
-  so it needs the most free disk of any test in the module. ENOSPC is a disk-allowance failure, not a code or fixture
-  defect. I changed nothing.
+- **Whole directory at `8222d0e47`, run alone:** `Ran 1020 tests`, `FAILED (failures=3, skipped=13)`, 0 errors. The
+  three failures are T4, r14 and G6, exactly the lead's laptop result (RUN_STATE item 134). The S6 test passed, so
+  there is no traceback to capture.
+- **Same failure mode reproduced here.** My first attempt ran the `8222d0e47` and head suites at the same time and
+  used up this session's disk allowance. That run (`/tmp/jw-s6/whole-concurrent-enospc.txt`) stopped after 38 minutes
+  without a summary line. Its 9 errors were all `[Errno 28] No space left on device` in `test_fixture_shapes`
+  (`harvest.clone_tree` -> `shutil.copytree`). Opus describes the same mechanism, ENOSPC from parallel worktrees.
+- **Conclusion: environment-dependent (disk exhaustion), not a code or fixture defect.** I changed nothing. Whole runs
+  of this directory must not share a disk allowance with another whole run.
 
 ### S-VERIFY
 
 Command: `TMPDIR=/tmp/jw-l9s3-tmp JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3.13 -m unittest discover -s tests/b5_analysis -t .`
-from `/home/user/JouleWise` at `b898fbbc2`. TMPDIR is outside the checkout and contains no float-like token.
+from `/home/user/JouleWise`. TMPDIR is outside the checkout and contains no float-like token. Each run had the
+machine to itself.
 
-(pending: whole-directory run in progress)
+At the lane tip `c2ecb9588`, which carries this work, main with PR #603 merged in, and the lead's R3-list follow-up.
+This is the verification:
 
-Same command at `8222d0e47` (`/tmp/jw-s6/wt`, `TMPDIR=/tmp/jw-s6-tmpw`), run concurrently for S6:
+```
+Ran 1029 tests in 3192.772s
 
-(pending: whole-directory run in progress)
+OK (skipped=13)
+
+real	53m36.889s
+EXIT=0
+```
+
+At `b898fbbc2` (this seat's commit, before main's G6 fix landed): `Ran 1027 tests in 3130.654s`,
+`FAILED (failures=1, skipped=13)`. The one failure is `test_G6_finalizer_main`
+(`assertFalse(output.exists())`, `test_sensitivity_guard.py:62`), the known order-dependent fixture leak. PR #603
+fixed it, and it is gone at `c2ecb9588`.
+
+Same command at `8222d0e47` (`/tmp/jw-s6/wt`, `TMPDIR=/tmp/jw-s6-tmpw`), for S6 and as the baseline:
+
+```
+FAIL: test_T4_exception_and_tooling_detail_never_escape (tests.b5_analysis.test_dry_run.DriverAcceptanceTests.test_T4_exception_and_tooling_detail_never_escape)
+FAIL: test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests.test_r14_real_index_context_composition_with_registered_p42_exit)
+FAIL: test_G6_finalizer_main (tests.b5_analysis.test_sensitivity_guard.SensitivityGuardTests.test_G6_finalizer_main)
+Ran 1020 tests in 3216.947s
+
+FAILED (failures=3, skipped=13)
+EXIT=1
+```
 
 **Environment note.** This container's clone was shallow. With a shallow clone,
 `test_dry_run.JoinedHarnessMockTests.test_only_git_seams_replay_registered_history_and_tracked_index` errors with
@@ -121,9 +150,8 @@ fixtures are unchanged.
 
 ## OPEN ISSUES
 
-1. **G6.** PR #603 (`test_sensitivity_guard.test_G6_finalizer_main`, the order-dependent fixture leak) is not on
-   `origin/main` at the merge (`e9b8dc5`). If the whole-directory tail above shows G6, that is its cause. It passes
-   standalone, and this lane does not touch it.
+1. **G6: closed.** PR #603 reached main after my first merge. The lead's merge `492a30f42` brought it into the lane,
+   and the whole directory at `c2ecb9588` is OK.
 2. **Cloud runs need a full clone.** A shallow clone makes the joined-harness git test error, as described under
    S-VERIFY. Reviewers running in cloud containers should `git fetch --unshallow` first.
 3. **Attempt-B cure route.** With this ruling, a cure that changes which cells or units extract is still a selection
@@ -131,7 +159,11 @@ fixtures are unchanged.
 
 ## NEEDS_RULING
 
-1. **Plan §2.2 routes more member-level codes to R3 than the `r3` list holds.** Plan §2.2, bullet 3, names
+1. **Resolved by the lead in `c2ecb9588` (L9-STEP4-4).** `window_evidence_precheck_missing`,
+   `campaign_cooldown_evidence_missing` and `idle_window_suspect` were added to `r3`. r14's precheck subcase now
+   expects `extraction_cell_r3_refusal`. The claim-gate codes stay out, with a static test. The original question
+   follows for the record.
+   **Plan §2.2 routes more member-level codes to R3 than the `r3` list holds.** Plan §2.2, bullet 3, names
    `paired_block_incomplete`, `fixed_n_plan_incomplete`, `window_evidence_precheck_missing`,
    `campaign_cooldown_evidence_missing` and `idle_window_suspect`, plus the extractor's same-slot cooldown-cap
    exclusion. It says: "If one fires on a kept unit … the analysis stops and the step goes to R3."
