@@ -547,6 +547,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - WRITE_SCOPE: the script, all of `tests/independent_recompute`, the report. VERIFICATION: discover over the directory plus the earlier reviews' probes.
   - Stated as the last structural round; a further instance goes to Ed as a design question.
 
+121. **RC-CMP-9 done (registry-driven expected-check table); final delta reviews; dry-d at step 4 (reported by joulewise-28, 2026-10-30 01:26-01:28Z).**
+- RC-CMP-9 DONE at `f9f86869e` (`lane/2026-10-27-recompute-comparator`), 362 tests OK.
+  - `expected_checks(registry)`: 256 entries in 29 families, with 2,406 required nested key paths, built only from the closed `REGISTERED_SOURCES`.
+  - Every entry must be present on both sides; an item outside the table is DISAGREE; a compared leaf must sit inside a claimed item.
+  - Producer key sets are copied as literals, each pinned to its `origin/main` producer by a test.
+  - Opus's 22 single drops and the joint drops exit non-zero. Relabels: 4,081 tried, 0 exit 0 (was 623 tried, 64 exit 0).
+  - Fable F1-F5 closed; two conditional words declared (`flag_count`, `machine_absent`).
+  - The base fixture is producer-complete; the suite now takes 470 s (was 178 s).
+- 01:28Z: final delta reviews of `0d317afd4..f9f86869e`: Opus `trig_01HsdB4xVBRwxKbno7DBnnAU` -> `review/2026-10-30-rc-cmp9-opus-rev`, Fable `trig_016cf7iB4mFNVji6A89pS8Wk` -> `review/2026-10-30-rc-cmp9-fable-rev`, MCP cleared. Each runs the item-116 sweep, an independent derivation of the producer-unconditional output diffed against the table, Fable's 1,933-deletion sweep, and over-refusal with each registered condition set false. Each must state whether any instance of the class remains; if one does, it goes to Ed as a design question.
+- `dry-d` (official attempt B): steps 0-3b ok; step 4 running.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
