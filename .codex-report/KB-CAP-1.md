@@ -379,3 +379,131 @@ remains draft. CI is read again after the final report push and every job state
 is listed separately in the final response. The API hostname is blocked on this
 seat; the public GitHub checks page supplies that final-head observation.
 Pending or skipped jobs are not an all-green result.
+
+## Round 3
+
+Authority: magistrate activation 4e748ac1, 2026-10-30, rulings Z1–Z8.
+Continued `codex/2026-10-30-kb-capture` from `c2b850860`; first merged
+`codex/2026-10-28-kb-v2` at `a3226e87f` and pushed merge `5680e5e09`.
+The reading rule is admitted. Round-1 WRITE_SCOPE, numbers rule and safety
+switches remain in force. Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`,
+`PYTHONDONTWRITEBYTECODE=1`, `-B`; no hardware, MLX, real measurement data,
+live ledger, blinding key or notice was used. The cloud-environment runtime
+skill was used for readiness and network inspection.
+
+Decisions I made:
+
+- Z1: the continuous capture's planned length is
+  `3573.6 + 22*(3*2 + 4*10 + 2) = 4629.6 s`. Derive it beside
+  `CAPTURE_PLANNED_S` from the call lengths, idles, settles and preparation/pilot
+  allowances of rule §§1/2. Use it for both clock-span fields; retain the
+  existing clock formula, 3.7 ms allowance, 0.25 ppm margin and 5 ms limit.
+- Z2: malformed/non-object JSON or invalid receipt spans leave null affected
+  records/fields and reasoned diagnostics, with INPUT.json still written.
+  Reject non-finite JSON fields before serialization. A malformed thermal line
+  makes the thermal field null. Missing scan status cannot crash the summary.
+- Z3: resolve each input before opening it, including every file handed to the
+  governed calibration/native parsers. Diagnose and skip outside targets before
+  parsing or hashing; retain support for archive-internal links. Audit direct
+  file links, directory links and chained directory links through the real CLI.
+- Z4: include STAGE status/error/allocation_stop in provenance diagnostics and
+  the CLI summary, including a completed status. Diagnose absent calibration
+  captures/plists. Read capture-stop device metadata independently so a failed
+  native trace retains its capture_stack.
+- Z5: cite `docs/phase_2/window_c_operator_checklist.md:32`: 140 W Anker,
+  28 V × 4.99 A negotiated. The lifecycle requires the lead to set
+  ADAPTER_SOURCE to the actual nameplate or t0 power-path negotiation record,
+  passed as `--adapter-source`; it supplies no placeholder evidence.
+- Z6: the rendered graph has four budgeted stages: reservation, pre capture,
+  window calibration verdict and terminal session-status. Add their four
+  `BUDGET_GRACE_S = 30` allowances. Post capture is explicitly unbudgeted;
+  retain its existing 1800 s planning allowance without a SIGKILL grace.
+  `SPAN = ceil(4629.6 + 2*1800 + 900 + 600 + 600 + 4*30 + 60) = 10510 s`.
+  The unchanged sourced disk formula gives `56628644275` bytes; existing
+  minute rounding with the 3300 s t0-stage cap gives `window_max_s = 13860`.
+- Z7/Z8: bootstrap the stage's checkout root on sys.path for path execution;
+  mark sampling started only after start_sampling returns. Existing --out is
+  preserved with one stderr line and exit 2, including the create-once race
+  catcher. The README's archive-copy block exits loudly on an existing target
+  or copy failure. Opus 9's conservative battery tail and Fable 7's planning
+  allowances are unchanged.
+
+Z1 clock replay — NEEDS_RULING:
+
+The existing exact `measured_rate_bound` gives
+`H = (5 - 3.7)*1000/4629.6 - 0.25 = 0.03080179713150164 ppm`.
+Searched the committed tree, including fixtures and session records, for clock
+rates and arm/precheck receipts. Three earlier arm records contain explicit
+measured rates; no additional committed machine-readable arm/precheck rate
+receipt was found. Replay uses the recorded decimal, without inferring extra
+precision. The files below are under `docs/process_traces/2026-10-block5/`.
+
+| Arm record | Recorded rate | New bound | Refused | Subsequent session record |
+|---|---|---|---|---|
+| `seal2-beta-a5-arm.md:13` | 2.718 ppm | 17.4406528 ms > 5 ms | yes | No sleep; not claim-usable because calibration acceptance was stale |
+| `seal2-beta-a6-arm.md:15` | 2.718 ppm | 17.4406528 ms > 5 ms | yes | `seal2-beta-a6-window.md`: claim-usable, no sleep |
+| `seal2-gamma-a1-arm.md:19` | 2.718 ppm | 17.4406528 ms > 5 ms | yes | `seal2-gamma-a1-window.md`: claim-usable, no sleep |
+
+Thus it would refuse **2 of 2 known-good claim-usable sessions with recorded
+arm rates**, and all 3 recorded arm sessions (including the physically clean
+but calibration-stale BETA 5). Replay evidence: `/tmp/kbr3-clock-replay.json`;
+tracked-record search: `/tmp/kbr3-all-clock-records.txt`.
+Question: retain this strict derived hold, or authorize a prospective change
+to the clock rule? Recommendation: leave the ruled implementation intact until
+the magistrate adjudicates this replay. No loosening was made; live release
+under this gate remains unresolved. No other NEEDS_RULING was introduced.
+
+Executed verification:
+
+- Read both entire cold-pass reports and their repro scripts from JouleWise-data
+  `e7acfcd2f` and `acc3337ff`. Reran Opus's indep/worlds/refusals/alloc_stop/
+  opens_audit and Fable's recompute_input/meter_worlds/refusal_replays/
+  scan_stop_archive before and after the harvest fixes, both allocation ceilings
+  31 and 20. Refusal replays use the same immutable synthetic baseline archive.
+  The last Opus gap case was resumed from its verbatim script stanza after
+  stopping the sequential launcher also stopped that child. All resulting
+  harvest/read cases end reasoned; output overwrite is refused.
+  Both audit scripts report no outside reads. Opus W8 retains the expressly
+  unchanged conservative incomplete-tail departure; Fable's five worlds pass.
+- The initial 13 CLI regressions against the unfixed harvester produced
+  12 failures and 1 error, reproducing the cold-pass defects. Final
+  `tests.test_bytes_stream_capture tests.test_bytes_stream_harvest`:
+  **30 tests, 96.737 s, OK**. This includes 16 archive/lifecycle CLI cases and
+  subprocess checks of start failure and path execution. The strengthened
+  path-prepare refusal check was also rerun separately: **1 test, OK**.
+- `tests.test_b5_chain` plus both registries: **53 tests, 69.375 s, OK
+  (skipped=1)**. Final refusal/numeric-source registry rerun: **28 tests,
+  52.532 s, OK (skipped=1)**. Generator `--check` and `git diff --check` pass.
+  These are the requested targeted checks; no new canonical full-suite claim.
+- Whole-chain synthetic before and after, followed by the real harvest, scan
+  and read CLIs: all exit 0, eight calls, knee found, all four classes RESOLVED.
+  New archive: `/tmp/kbr3-after`; CLI products: `/tmp/kbr3-after-INPUT.json`,
+  `/tmp/kbr3-after-SCAN.json`, `/tmp/kbr3-after-READ.json`. Reharvested INPUT
+  equals the whole-chain INPUT. The complete reader printed dictionary equals
+  the baseline's, including these unchanged round-2 lines:
+
+```text
+rails RESOLVED: 7.000 ± 0.014 J/GB
+gpu RESOLVED: 7.000 ± 0.014 J/GB
+dc RESOLVED: 14.08 ± 0.10 J/GB
+rest RESOLVED: 7.077 ± 0.094 J/GB
+share: 0.4973 ± 0.0046
+claim_lines: {}
+```
+
+Both independent recomputes also pass on the new whole-chain archive:
+Opus calls 0/3/7 `FAILS []`; Fable all eight calls `FAILS: none`, worst
+energy-like difference `5.631760099755328e-06` of the allowed bar. Comparisons
+use the existing `5.7e-6 J/GB * payload_GB` bar and its dimensional derivatives.
+Logs are `/tmp/kbr3-opus-{before,after}-*.log`,
+`/tmp/kbr3-fable-baseline-*.log`, `/tmp/kbr3-fable-after-*.log`,
+`/tmp/kbr3-new-modules.log` and `/tmp/kbr3-chain-registries.log`.
+The native_trace, rail_energy, points and meter_fields function sources are
+byte-identical to `c2b850860`; reader, estimator and calibration code are unchanged.
+
+Git steps were committed and pushed separately: prerequisite merge `5680e5e09`,
+capture/lifecycle `0167af075`, harvest/CLI regressions `184dac954`, then this
+Round 3 report. Explicit feature-branch refspecs were used. PR #613 remains
+draft and CI-only. Final-report-head CI is read after its push and every job's
+observed state is listed separately in the final response; pending/skipped jobs
+are not an all-green result.
