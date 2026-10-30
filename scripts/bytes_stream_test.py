@@ -1129,8 +1129,13 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
     check = compare_stack(stack, reference, versions)
     reference_check = checkout_reference_check(repo_root)
 
-    data = mx.ones((byte_count,), dtype=mx.uint8)
-    mx.eval(data)
+    try:
+        data = mx.ones((byte_count,), dtype=mx.uint8)
+        mx.eval(data)
+    except (MemoryError, RuntimeError) as exc:
+        # MLX reports failed payload allocation/fill as RuntimeError; the
+        # unattended scan preserves it and stops at the allocatable prefix.
+        raise MemoryError("payload allocation/fill failed: " + str(exc)) from exc
     mx.synchronize()
     warm = mx.sum(data)
     mx.eval(warm)

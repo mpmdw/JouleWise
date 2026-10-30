@@ -35,7 +35,11 @@ plan tree, generator, telemetry-only config, README and genesis pin;
 `scripts/bytes_stream_harvest.py` produces INPUT.json from an immutable archive;
 `tests/test_bytes_stream_capture.py` and `tests/test_bytes_stream_harvest.py`
 exercise the new paths. The existing probe is imported without changing its
-scan/read functions.
+scan/read functions. Its stream-only allocation/fill block normalizes MLX
+RuntimeError to MemoryError so the scan can preserve an allocation stop.
+The refusal registry will also inventory the new stage and its probe dependency;
+this does not change the probe reader. No import-fence or READERS addition is
+needed: the new modules name no B lexeme and import no retired arm path.
 
 Rule-derived numbers (no new acceptance threshold):
 - §1: “run the probe at --bytes 2^k for k = 14 to 35 ... three calls per size,

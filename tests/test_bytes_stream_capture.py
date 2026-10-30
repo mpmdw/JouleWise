@@ -174,6 +174,46 @@ class CaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'injected'):
             cap.run_stage('/unused', device='macbook_m3_max')
 
+    def test_prepare_authors_isolated_night_plan_without_default_ledger(self):
+        from tests.git_fixture import init_git_fixture
+        with tempfile.TemporaryDirectory(prefix='kb-prepare-') as tmp:
+            root=Path(tmp)/'clone'
+            root.mkdir()
+            kit=root/cap.KIT
+            shutil.copytree(cap.ROOT/cap.KIT,kit)
+            for relative in (chain.RUNBOOK_RELATIVE,'configs/b6/registration/acceptance.json'):
+                target=root/relative
+                target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(cap.ROOT/relative,target)
+            init_git_fixture(root)
+            subprocess.run(['git','add','.'],cwd=root,check=True,capture_output=True)
+            subprocess.run(['git','commit','-m','synthetic inputs'],cwd=root,check=True,capture_output=True)
+            with patch.object(cap,'ROOT',root), contextlib.redirect_stdout(__import__('io').StringIO()):
+                # Span and disk bytes are synthetic plan inputs, with their
+                # explicit derivation/source strings, not acceptance limits.
+                value=cap.prepare(root,Path(tmp)/'session',t0=__import__('time').time()+420,
+                    adapter_max_w=140,adapter_source='synthetic 140 W adapter',disk_bytes=10**9,
+                    disk_derivation='synthetic frame envelope × planned records',
+                    programmed_span_s=10390,span_derivation='ceil(3573.6+22*48+2*1800+900+600+600+60)')
+            self.assertEqual(value['hazard_window']['member_count'],8)
+            self.assertIn('runs_bytes_stream_test/calibration_ledger.jsonl',
+                          value['hazard_window']['bindings']['ledger_path'])
+            self.assertFalse((root/'runs/calibration_observation_ledger.jsonl').exists())
+            self.assertEqual(len(chain.stage_plan(cap.read(kit/'plan_tree.json'))),4)
+
+    def test_allocation_stop_and_capture_teardown_are_reasoned(self):
+        with tempfile.TemporaryDirectory(prefix='kb-alloc-') as tmp:
+            clock=Clock()
+            mx=Array(clock)
+            mx.ones=lambda *a,**kw: (_ for _ in ()).throw(RuntimeError('synthetic allocation failure'))
+            adapter=Capture(clock,[])
+            value=cap.run_stage(Path(tmp)/'capture',device='synthetic',adapter=adapter,clock=clock,mx=mx)
+            self.assertEqual(value['status'],'knee not found')
+            self.assertEqual(adapter.starts,1)
+            self.assertEqual(adapter.stops,1)
+            self.assertIn('allocation_stop',value)
+            self.assertEqual(value['call_count'],0)
+
     def test_real_driver_chain_stage_and_harvest(self):
         with tempfile.TemporaryDirectory(prefix='kb-cap-e2e-') as tmp:
             synthetic_chain(self, Path(tmp)/'archive')

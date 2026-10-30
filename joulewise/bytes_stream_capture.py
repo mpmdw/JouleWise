@@ -13,8 +13,8 @@ import json
 import math
 import os
 from pathlib import Path
-import shlex
 import subprocess
+import signal
 import sys
 import time
 
@@ -47,6 +47,9 @@ def sha(path):
 
 class RawClock:
     """Adapter Clock interface using the receipt's RAW clock for its brackets."""
+    def raw_ns(self):
+        return time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW)
+
     def now(self):
         return time.time()
 
@@ -85,6 +88,7 @@ def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None)
     adapter = adapter or PowermetricsTelemetryAdapter(clock)
     context = RunContext(config, clock, 'known-bytes', archive, archive/'raw', archive/'logs', archive/'outputs')
     probe = probe or bt.stream
+    raw_ns = getattr(clock, "raw_ns", lambda: round(clock.stamp().monotonic_after_s*1e9))
     scan_calls, pilots, calls = [], [], []
     result = {'non_claim': True, 'status': 'started', 'device': device}
     write(archive/'capture_config.json', config.to_dict())
@@ -101,13 +105,13 @@ def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None)
             size = 2 ** exponent
             try:
                 pilot = probe(size, 1, device=device, idle_s=0, settle_s=0, mx=mx,
-                              clock_ns=lambda: round(clock.stamp().monotonic_after_s*1e9), sleep=clock.sleep)
+                              clock_ns=raw_ns, sleep=clock.sleep)
                 pilots.append(pilot)
                 write(archive/f'pilots/{exponent}.json', pilot)
                 count = max(1, math.floor(SCAN_CALL_S / (pilot['duration_s']/pilot['repeats'])))
                 for replicate in range(3):
                     receipt = probe(size, count, device=device, idle_s=0, settle_s=0, mx=mx,
-                                    clock_ns=lambda: round(clock.stamp().monotonic_after_s*1e9), sleep=clock.sleep)
+                                    clock_ns=raw_ns, sleep=clock.sleep)
                     scan_calls.append(receipt)
                     write(archive/f'scan/{exponent}-{replicate}.json', receipt)
             except MemoryError as exc:
@@ -128,14 +132,14 @@ def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None)
                 if counts[arm] <= 0:
                     raise ValueError('planned duration is shorter than one dispatch: ' + arm)
             result['planned_repeats'] = counts
-            result['measured_session_start_ns'] = round(clock.stamp().monotonic_after_s*1e9)
+            result['measured_session_start_ns'] = raw_ns()
             for i, arm in enumerate(ORDER):
                 receipt = probe(sizes[arm], counts[arm], device=device, idle_s=IDLE_S,
                                 settle_s=SETTLE_S, mx=mx,
-                                clock_ns=lambda: round(clock.stamp().monotonic_after_s*1e9), sleep=clock.sleep)
+                                clock_ns=raw_ns, sleep=clock.sleep)
                 calls.append(receipt)
                 write(archive/f'calls/{i+1:02d}-{arm}.json', receipt)
-            result['measured_session_end_ns'] = round(clock.stamp().monotonic_after_s*1e9)
+            result['measured_session_end_ns'] = raw_ns()
         result['status'] = 'completed' if calls else 'knee not found'
     except Exception as exc:
         result.update(status='incomplete', error=f'{type(exc).__name__}: {exc}')
@@ -282,6 +286,9 @@ def main(argv=None):
                 programmed_span_s=a.programmed_span_s, span_derivation=a.span_derivation,
                 disk_derivation=a.disk_derivation)
     elif a.command == 'stage':
+        def interrupted(signum, frame):
+            raise InterruptedError('night driver stopped the known-bytes stage')
+        signal.signal(signal.SIGTERM, interrupted)
         return 0 if run_stage(a.archive, device=a.device)['status'] in ('completed','knee not found') else 2
     else:
         p.error('choose prepare or stage')

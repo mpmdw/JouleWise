@@ -23,13 +23,14 @@ def native_trace(capture):
     Native elapsed_ns advances the RAW timeline. No point interpolation and
     no independent fit of the power trace is introduced here.
     """
-    from joulewise.adapters.powermetrics import parse_powermetrics_records
+    from joulewise.adapters.powermetrics import parse_powermetrics_records, decode_rich_telemetry
     stop = read(capture/'capture_stop.json')
     anchor = stop['uncertainty_evidence']['clock_anchor']['first_sample_end_point_epoch_s']
     if anchor is None:
         raise ValueError('continuous capture has no resolved native anchor')
-    records = parse_powermetrics_records((capture/'raw/powermetrics.plist').read_bytes(),
-                                         first_record_endpoint_s=anchor)
+    raw = (capture/'raw/powermetrics.plist').read_bytes()
+    records = parse_powermetrics_records(raw, first_record_endpoint_s=anchor)
+    rich = decode_rich_telemetry(raw, first_record_endpoint_s=anchor)
     stamp = stop['start_stamp']
     # The adapter used RAW brackets. Pair the first native endpoint with that
     # same epoch/RAW observation, then advance only by native integer durations.
@@ -52,7 +53,9 @@ def native_trace(capture):
     device = stop['device_metadata']
     stack = dict(telemetry_backend=device.get('telemetry'),
                  measurement_boundary_label={'rails': device.get('rail_manifest')})
-    return rows, stack
+    gpu = [dict(start_ns=row['start_ns'], end_ns=row['end_ns'], state=desc['gpu'])
+           for row,desc in zip(rows['gpu'],rich) if desc.get('gpu') is not None]
+    return rows, stack, gpu
 
 
 def rail_energy(rows, span, bound):
@@ -87,7 +90,7 @@ def meter_fields(stream, spans):
                     for s in ('pre','post')}, r_max_s=None, tau_s=None, meter_edge_w=None,
                     battery_edge_j=None, battery_samples=[], meter_gaps=None)
     for t, name in ((stream.host_ns, 'meter'), (stream.poll_ns, 'poll')):
-        if any(b <= a for a,b in zip(t,t[1:])):
+        if any(b < a for a,b in zip(t,t[1:])):
             raise ValueError(name + ' stamps not in native order')
     from joulewise.bytes_analysis import _battery_stream_data, _battery_delay_ns
     bt, bw, _ = _battery_stream_data(stream)
@@ -147,26 +150,42 @@ def harvest(archive):
     cal = calibration.evaluate(*own, reg, [], [archive.name], False)
     bound = None if cal['operative_bound_s'] is None else float(cal['operative_bound_s'])
     try:
-        native, stack = native_trace(capture)
+        native, stack, gpu = native_trace(capture)
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        native, stack = {'rails': [], 'gpu': []}, {}
+        native, stack, gpu = {'rails': [], 'gpu': []}, {}, []
         diagnostics.append('native capture unavailable: ' + str(exc))
     streams = sorted((archive/'custody/hazards/meter').glob('stream-*.jsonl'))
     meter = None
     if len(streams) == 1:
         try:
+            _, _, batches, _ = kp.load(streams[0])
+            # parse's governed sort must not repair an out-of-order archive.
+            if any(b['rx'] < a['rx'] for a,b in zip(batches,batches[1:])):
+                raise ValueError('meter poll order invalid in archive')
             meter = kp.parse(streams[0])  # one and only one fit
         except (OSError, ValueError, KeyError, TypeError) as exc:
             diagnostics.append('meter parse unavailable: ' + str(exc))
     else:
         diagnostics.append('one continuous meter stream required; found ' + str(len(streams)))
+    thermal_path = archive/'custody/hazards/monitor/thermal.jsonl'
+    thermal = []
+    if thermal_path.is_file():
+        for line in thermal_path.read_text().splitlines():
+            try:
+                thermal.append(json.loads(line))
+            except ValueError:
+                diagnostics.append('thermal journal malformed line retained in archive')
     records = []
     for path in sorted((capture/'calls').glob('*.json')):
         receipt = read(path)
         spans = dict(stream=(receipt['start_ns'],receipt['end_ns']),
             pre=(receipt['idle_pre_start_ns'],receipt['idle_pre_end_ns']),
             post=(receipt['idle_post_start_ns'],receipt['idle_post_end_ns']))
-        h = meter_fields(meter, spans)
+        try:
+            h = meter_fields(meter, spans)
+        except (ValueError, TypeError, KeyError, OverflowError) as exc:
+            diagnostics.append(path.name + ': meter spans unavailable: ' + str(exc))
+            h = meter_fields(None, spans)
         envelopes = []
         for key in ('rails','gpu'):
             energy, envelope = rail_energy(native[key],spans['stream'],bound)
@@ -179,6 +198,12 @@ def harvest(archive):
                  operative_timing_bound_s=bound, capture_stack=stack,
                  adapter_max_w=session['adapter_max_w'], adapter_source=session['adapter_source'],
                  battery_source='KM003C poll SMC B0AC/B0AV; km003c_parse.Stream.battery_watts')
+        if gpu:
+            h['gpu_state'] = [row for row in gpu if row['start_ns'] < spans['stream'][1]
+                              and row['end_ns'] > spans['stream'][0]]
+        if thermal:
+            h['thermal_spans'] = [row for row in thermal
+                if spans['stream'][0] <= (row.get('finished') or {}).get('monotonic_raw_ns',-1) <= spans['stream'][1]]
         records.append(dict(receipt=receipt,harvest=h))
     stage = read(capture/'STAGE.json') if (capture/'STAGE.json').is_file() else {}
     if all(k in stage for k in ('measured_session_start_ns','measured_session_end_ns')):
