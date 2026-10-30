@@ -1,0 +1,33 @@
+======== A. atom at bit-identical equality, each relation (family contrast_j, threshold 0.25)
+A GT strict: within=False truth=False agree=True  -> ok
+A LT strict: within=False truth=False agree=True  -> ok
+A NE strict: within=False truth=False agree=True  -> ok
+A LE non-strict: within=False truth=True agree=True  -> ok
+A GE non-strict: within=False truth=True agree=True  -> ok
+======== B. the same with the threshold given on each side (l9_threshold == threshold), and the controls
+B identical numbers and thresholds: within=False truth=False
+B identical numbers, thresholds one ulp apart (inside the bar): within=True (undetermined kept)
+B numbers one ulp apart against 0: within=True (undetermined kept)
+B +0.0 vs -0.0 against 0: within=False truth=False (Python == decides a signed-zero pair)
+B nan both sides: within=False truth=None agree=False (not known: never decided)
+======== C. each producer relation at equality next to the comparator's encoding (x == threshold on both sides)
+C ok       producer=True  comparator=True   equals_primary (sensitivity.py:303/320 _same; comparator NE on sensitivity - primary, word = not any)
+C ok       producer=True  comparator=True   not_below_primary (sensitivity.py:304/321/346 >=; comparator GE on sensitivity - primary)
+C ok       producer=False comparator=False  widened (sensitivity.py:279 b_sens > b_op, b_sens = max(b_op, b_max) bracket.py:387; comparator NE on b_sens - b_op)
+C ok       producer=False comparator=False  below_screen_bound (disclosures.py:1099 b_op < SCREEN_BOUND_S; comparator LT)
+C ok       producer=True  comparator=True   agree (disclosures.py:440 abs(delta) <= hypot; comparator LE on abs(delta) - hypot against 0)
+C ok       producer=False comparator=False  plausible rho > 0 (disclosures.py:653 0 < rho; comparator GT 0)
+C ok       producer=True  comparator=True   plausible rho <= 1 (disclosures.py:653; comparator LE 1)
+C ok       producer=True  comparator=True   plausible machine - rail >= 0 (disclosures.py:653; comparator GE 0)
+C ok       producer=True  comparator=True   holm_reject / rejected (multiplicity.py:157 adjusted_p <= threshold; comparator LE alpha)
+C ok       producer=True  comparator=True   dominance branch (dominance_closeout ratio >= DOMINANCE_THRESHOLD; comparator GE)
+C ok       producer=False comparator=False  above_floor (claims.py:343 abs(estimate) <= floor -> not above; engine __init__ floor_status abs > floor; comparator GT)
+C ok       producer=False comparator=False  estimate sign positive (claims.py:386 > 0.0; engine _sign > 0; comparator GT 0)
+C ok       producer=False comparator=False  estimate sign negative (engine _sign < 0; comparator LT 0)
+C ok       producer=True  comparator=True   decision/metrology contain zero (claims.py:370-371 lower <= 0.0 <= upper; comparator LE 0 / GE 0)
+C ok       producer=False comparator=False  magnitude trigger (engine sensitivity.py abs(loo - full) > 0.25 * threshold; comparator GT times(0.25, floor))
+C summary: 15 relations, 0 mismatched at equality
+======== D. the representation gap: _same is a canonical JSON digest (idle_admission.canonical_sha256)
+D primary=0.0 sensitivity=-0.0: producer _same=False (equals_primary printed False); comparator relation(==)=True, atom within=False truth=False -> word decided True  <- producer False vs comparator True: DISAGREE (over-refusal) if ever printed
+D primary=1 sensitivity=1.0: producer _same=False (equals_primary printed False); comparator relation(==)=True, atom within=False truth=False -> word decided True  <- producer False vs comparator True: DISAGREE (over-refusal) if ever printed
+D note: a sensitivity value equal to its primary value in binary64 but differing in sign of zero or in JSON number representation is the only pair the two encodings classify differently; both sides' values are computed by the same code path under an equal bound (b_sens == b_op), so no producer path is shown to print one.

@@ -1,0 +1,19 @@
+test_direction_words_pinned (tests.independent_recompute.test_rc_cmp11.DirectionTests.test_direction_words_pinned) ... ok
+test_falsy_and_foreign_directions_refuse (tests.independent_recompute.test_rc_cmp11.DirectionTests.test_falsy_and_foreign_directions_refuse) ... ok
+test_identical_b10_trigger_mismatch_refuses (tests.independent_recompute.test_rc_cmp11.ExactEqualityTests.test_identical_b10_trigger_mismatch_refuses) ... ok
+test_sound_windows_have_no_undetermined_relation_word (tests.independent_recompute.test_rc_cmp11.ExactEqualityTests.test_sound_windows_have_no_undetermined_relation_word) ... ok
+test_strict_claim_over_equal_values_fails (tests.independent_recompute.test_rc_cmp11.ExactEqualityTests.test_strict_claim_over_equal_values_fails) ... ok
+test_ulp_cases_stay_undetermined (tests.independent_recompute.test_rc_cmp11.ExactEqualityTests.test_ulp_cases_stay_undetermined) ... ok
+test_wrong_words_on_identical_values_refuse (tests.independent_recompute.test_rc_cmp11.ExactEqualityTests.test_wrong_words_on_identical_values_refuse) ... ok
+test_by_construction_true_literals (tests.independent_recompute.test_rc_cmp11.LiteralPinTests.test_by_construction_true_literals) ... ok
+test_every_other_member_code_refuses (tests.independent_recompute.test_rc_cmp11.P42ProducerCodeTests.test_every_other_member_code_refuses) ... ok
+test_the_code_is_pinned_to_the_producer (tests.independent_recompute.test_rc_cmp11.P42ProducerCodeTests.test_the_code_is_pinned_to_the_producer) ... ok
+test_duplicate_and_foreign_triggers_refuse (tests.independent_recompute.test_rc_cmp11.TriggerVocabularyTests.test_duplicate_and_foreign_triggers_refuse) ... ok
+test_duplicate_passed_before (tests.independent_recompute.test_rc_cmp11.TriggerVocabularyTests.test_duplicate_passed_before) ... ok
+test_trigger_vocabulary_is_the_engines (tests.independent_recompute.test_rc_cmp11.TriggerVocabularyTests.test_trigger_vocabulary_is_the_engines) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 13.370s
+
+OK
+exit=0
