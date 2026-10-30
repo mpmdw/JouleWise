@@ -1,0 +1,14 @@
+diff --git a/scripts/compare_b5_recompute.py b/scripts/compare_b5_recompute.py
+index 3bd00ed61..21559ec95 100644
+--- a/scripts/compare_b5_recompute.py
++++ b/scripts/compare_b5_recompute.py
+@@ -277,7 +277,8 @@ class Comparison:
+         values = (l9, ours, threshold, l9_threshold)
+         bar = self.bar(family, key, l9 if finite(l9) else ours if finite(ours) else 0.0)
+         known = all(finite(v) for v in values)
+-        within = known and (abs(l9 - l9_threshold) <= bar or abs(ours - threshold) <= bar)
++        within = known and (abs(l9 - l9_threshold) <= bar or abs(ours - threshold) <= bar) and not (
++            same(l9, l9_threshold) and ours == threshold)
+         agree = known and abs(l9 - ours) <= bar and abs(l9_threshold - threshold) <= bar
+         return {"name": name, "key": key, "within": within, "agree": agree,
+                 "truth": bool(test(ours, threshold)) if finite(ours) and finite(threshold) else None}

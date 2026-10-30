@@ -1,0 +1,5 @@
+FAIL: test_relation_words_inside_the_bar (tests.independent_recompute.test_rc_cmp10.WithinBarTests.test_relation_words_inside_the_bar)
+FAIL: test_planted_contrast (tests.independent_recompute.test_comparator.ComparatorTests.test_planted_contrast)
+Ran 86 tests in 83.268s
+FAILED (failures=2)
+exit 1
