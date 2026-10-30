@@ -132,3 +132,21 @@ Neither Mac run has an executable recipe today.
   - Then `t_stream_max_s` = 335 s, which refuses 0 of 3 recorded arms (4.694 ms, the value they printed).
 - Both agree that the rate does not reach the numbers once an anchor is resolved, and that the strict gate is correct for the code as written. They disagree on whether the prefix re-anchor is sound, which is a science question, so it goes to a **cold Fable 5.1 judge**: `session_01JActAYZjhhpgNjte13zbFk` (JouleWise-data `claude/kb-clock-judge`; brief `~/night-archive/seats-4e748ac1/clock-judge/brief.md`).
 - Consequence: the KB test is not armed in this activation. As coded it would collect no rails or GPU numbers on this Mac. The KB lane waits for the judge's ruling and then a build round with its own cold passes. BYTES stage 1 is planned for 12 Nov, so there is room.
+
+## Cold Fable judge on the clock question (`claude/kb-clock-judge-qenisv`), and the ruling
+- **Judgment: OTHER, which in practice means keep the strict gate with a word-0 precondition.**
+  - Opus's prefix anchor is a valid V3 use. Mid-capture stamps constrain only the clock line; latency, a record boundary at the stamp and a blocked sampler change nothing.
+  - Its end check certifies nothing. A 55 ms interior misplacement passed it with a 6 ms reading (S7), and its resolution is about 5 ms. A check that does certify is the whole-capture V3 arithmetic again.
+  - Sol's latency objection does not apply to that anchor. Sol is right that the joint whole-capture β is what certifies `elapsed_ns` ≡ RAW (to about 0.1 ppm over 4629.6 s).
+- **What both seats missed:** the 2.718 ppm on the three 10-11 arms is the kernel frequency-correction word at that time, not oscillator physics. Block 6's M3 measurement (2026-10-17, word 0.0 ppm, boot `ea2d3ec8`) found r = −4.67e-7 ppm over 51,514 s. At word 0 the pinned code works as written: the V3 anchor resolves over 4629.6 s, and the strict gate passes (3.7 + (4.67e-7 + 0.25) × 4.6296 = 4.857 ms ≤ 5 ms).
+- **Lead check, executed now:** `kernel_clock.read_kernel_frequency()` gives `raw_word 0`, `ppm 0.0`, `call_status 5`. `kern.bootsessionuuid` is `EA2D3EC8-…`, the M3 boot and the boot every BYTES session ran on.
+- **Ruling (lead):**
+  - The judge's primary is adopted. `t_stream_max_s` stays 4629.6 s (the threshold's own definition, the longest sampler stream), with h 3.7 ms, 0.25 ppm and 5 ms unchanged. No code change.
+  - Preconditions for the KB night:
+    - (1) the kernel frequency word is 0 at arm, read and recorded by the lead before prepare;
+    - (2) the arm's measured |r| ≤ 0.0308 ppm is the hold, as coded;
+    - (3) the capture's V3 anchor must come back bounded, or rails and GPU are null, as coded.
+  - At a hold the remedy is the registered redraw of the word (block-6 S-7), not a retry.
+  - Replay under doctrine rule 9: the three 10-11 arms are held (3 of 3), correctly for their word. The M3 state passes. The replay is not of known-good sessions under this test, because none exists at a nonzero word that this code could use.
+  - Recorded as the path not taken, for a nonzero word: the judge's §4 RAW-consumer anchor identity (V3 arithmetic with the 5 ms cap on placement only, a pairing term, the capture bound joined into the operative bound, a new method identity). Build it only if a night is ever held by the word.
+- PR #613 CI: shard 5 failed on `tests.test_bytes_stream_capture` `test_prepare_authors_isolated_night_plan_without_default_ledger`. The fixture's `git commit` had no identity on CI (exit 128). Fixed by the lead on the branch (`e91946490`), test-only, using the pattern of `tests/test_repin.py`.
