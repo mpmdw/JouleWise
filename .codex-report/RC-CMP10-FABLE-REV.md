@@ -25,7 +25,7 @@ for the genuinely noisy case (answer 2).
 (`scripts/compare_b5_recompute.py:280`) marks a test undetermined whenever either side's number lies within the bar
 of its threshold, and `Comparison.word` (`:249-266`) then compares only the numbers, never the words. For
 `relation_words` (`:2984`) the test is sensitivity minus primary against 0, so an unchanged value is always
-undetermined (DECISIONS 4), and the same holds for `widened` (`:2771`) when b_sens = b_op and for a loo trigger when
+undetermined (DECISIONS 4), and the same holds for `widened` (`:2773`) when b_sens = b_op and for a loo trigger when
 both estimates are identical. Executed (`fs3.out` B): of the 20 relation/widened words negated in every L9 copy, **8
 exit 0 at this head although L9's own printed numbers say the opposite word**: unwidened `equals_primary` (reported,
 floor), `not_below_primary` (reported, floor, contrast), `widened` (alpha, beta), and the widened prefill floor's
