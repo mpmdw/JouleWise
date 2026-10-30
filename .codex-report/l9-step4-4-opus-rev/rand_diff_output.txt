@@ -1,0 +1,6 @@
+$ cd /tmp && python3 -I rand_diff.py <before=492a30f42 worktree> <after=a7e00c9f7 worktree>
+(200000 random 4-cell reports, seed 20261030, exit status drawn from {0,1,1,1,2}; class + step_record status)
+changed {(1, ('extraction_cell_tooling_refusal', 'tooling_refusal'), ('extraction_cell_r3_refusal', 'tooling_refusal')): 16190}
+unexpected changes 0
+after exit1 classes Counter({('extraction_cell_r3_refusal', 'tooling_refusal'): 34461, ('extraction_report_malformed', 'tooling_refusal'): 28354, ('extraction_cell_tooling_refusal', 'tooling_refusal'): 27202, ('p42_floor_cells_only', 'ok'): 22607, ('extraction_exit_without_refused_cell', 'tooling_refusal'): 7527})
+after statuses for exit1 ok/outcome 0

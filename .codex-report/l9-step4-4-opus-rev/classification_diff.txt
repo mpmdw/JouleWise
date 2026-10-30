@@ -1,0 +1,10 @@
+before=492a30f42 (== 901956944 classification), after=a7e00c9f7; probes per code: target-only, p42-only, both (exit 1), exit 0, exit 2
+codes probed: 1942 probes: 9710
+mask unchanged: True  tooling unchanged: True
+r3 added: ['campaign_cooldown_evidence_missing', 'idle_window_suspect', 'window_evidence_precheck_missing']  removed: []
+CHANGED campaign_cooldown_evidence_missing|t=1|p=0 extraction_cell_tooling_refusal -> extraction_cell_r3_refusal
+CHANGED campaign_cooldown_evidence_missing|t=1|p=1 extraction_cell_tooling_refusal -> extraction_cell_r3_refusal
+CHANGED idle_window_suspect|t=1|p=0 extraction_cell_tooling_refusal -> extraction_cell_r3_refusal
+CHANGED idle_window_suspect|t=1|p=1 extraction_cell_tooling_refusal -> extraction_cell_r3_refusal
+CHANGED window_evidence_precheck_missing|t=1|p=0 extraction_cell_tooling_refusal -> extraction_cell_r3_refusal
+CHANGED window_evidence_precheck_missing|t=1|p=1 extraction_cell_tooling_refusal -> extraction_cell_r3_refusal

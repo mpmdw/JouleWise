@@ -1,0 +1,20 @@
+== none
+Ran 145 tests in 18.869s
+OK (skipped=2)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+== wepm
+Ran 145 tests in 18.761s
+OK (skipped=2)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+== idle
+Ran 145 tests in 18.651s
+OK (skipped=2)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+== ccem
+FAIL: test_missing_campaign_evidence_fails_the_whole_cell (tests.test_floor_extraction.AbsoluteCellExtractionTests.test_missing_campaign_evidence_fails_the_whole_cell)
+FAIL: test_tampered_cap_hit_evidence_refuses_instead_of_excluding (tests.test_floor_extraction.AbsoluteCellExtractionTests.test_tampered_cap_hit_evidence_refuses_instead_of_excluding)
+FAIL: test_spec_extraction_report_and_exit_codes (tests.test_floor_extraction.ExtractionCliTests.test_spec_extraction_report_and_exit_codes)
+Ran 145 tests in 18.525s
+FAILED (failures=3, skipped=2)
+
+[exited with code 0]
