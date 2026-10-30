@@ -558,6 +558,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - 01:28Z: final delta reviews of `0d317afd4..f9f86869e`: Opus `trig_01HsdB4xVBRwxKbno7DBnnAU` -> `review/2026-10-30-rc-cmp9-opus-rev`, Fable `trig_016cf7iB4mFNVji6A89pS8Wk` -> `review/2026-10-30-rc-cmp9-fable-rev`, MCP cleared. Each runs the item-116 sweep, an independent derivation of the producer-unconditional output diffed against the table, Fable's 1,933-deletion sweep, and over-refusal with each registered condition set false. Each must state whether any instance of the class remains; if one does, it goes to Ed as a design question.
 - `dry-d` (official attempt B): steps 0-3b ok; step 4 running.
 
+122. **RC-CMP-9 Fable delta ACCEPT_WITH_FIXES: the class is closed by structure (reported by joulewise-28, 2026-10-30 02:00Z).**
+- `review/2026-10-30-rc-cmp9-fable-rev` `f214db076`. Verdict on the class: "No check's existence, key or route depends on what one side printed."
+- Deletion sweep: 4,982 deletions; 735 exit 0, every one a declared conditional; 0 undeclared. Producer mutations: 20 of 20 break a pin. The table is a function of the seven pinned registry files and the literals alone, and no false pass was found.
+- Findings:
+  - F1 MEDIUM, fail-closed over-refusal: value rows for `floor_computed`, `ratio_computable` and `reported_computed` are built even when the condition is false on both sides, so they compare None with None.
+  - F2 LOW: the verdict's `kept_n`, `removed_block_ids` and `blocks/included` are required but bound to nothing.
+  - F3 LOW: the extended-fill precondition in `build_results_fill_input` is not pinned.
+  - F4 NOTE: `step_ok` has no caller; the fill identity pin is unbound.
+- The Opus final delta is pending. One small fix round (RC-CMP-10) follows once both are in.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
