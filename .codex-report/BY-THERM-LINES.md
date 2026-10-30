@@ -304,3 +304,46 @@ SHA-256 unchanged:
 ```
 
 Only the three authorized files changed. The tool reads no energy value; comparisons remain exact on codes, counts, integer stamps and hashes. No tolerance, numerical bar or NEEDS_RULING was needed. Final-head CI is read after this report's push and every job state is reported in the final handoff; no all-green claim is made here.
+
+## Fix round 5
+
+Activation `4e748ac1`, 2026-10-30. Implemented X1–X12 from the adopted consult (`JouleWise-data` `0858773e`), starting at `9615ea4a1` and applying its prototype first. Read the consult, matrix, ports and logs, and the Opus (`00d85f4b8`) and Sol (`157da571b`) round-4 reviews and scripts.
+
+Every source now passes through its validator before consumption. JSON validation covers the whole document, uses an explicit stack, rejects duplicate decoded keys and invalid lexemes, and leaves unconsumed values opaque. Navigation also avoids recursion. Typed projections, nested spans, the roster-named pack tree and registered-hull journal replay supply the trust reason to `member_status`, the sole science-status writer. Acceptance rows are spliced with retained row bytes intact. Verify uses validated control projections and structural link roots; directory records are flagged on stdout without replacement.
+
+Decisions I made:
+
+- Remove the no-`pack_id` allowance. Fixtures identify their pack and archive its tree under `sources/repo/configs/campaigns/<pack_id>/`. Unrelated trees do not carry the pass; multiple matching trees, unsafe pack names and missing identities are mismatches.
+- Apply X3 to consumed exclusion scopes and roster kinds as well as the explicitly listed fields. Invalid scopes, identities and units are W4 records faults; unidentified roster members are represented by null. Missing `excluding` is a W4 global fault under X10, rather than the prototype matrix's extra stop. A known member's missing code remains member-only.
+- Preserve the null-request fallback's registered codes while applying X5 to its journal trust. A contradictory replay produces the ruled reason and notice. The matching-seal would-add check retains priority for request-end evaluation.
+- Lex each JSONL value before projecting the production parser's consumed fields. Preserve malformed-line skipping, bookkeeping behavior, sorting, error-presence semantics and the unchanged production line parser and thermal flag helper. Unknown journal values, retained acceptance rows and verify control fields remain opaque.
+- Treat malformed, unlocatable or unreadable sidecars as an unlocated store; they never stop evaluation. Retain U1's fresh-output invocation precondition. X10 governs source-trust stops for valid new-output invocations.
+- Derive link roots by stripping the view-relative depth even when a damaged link changes its target tail. A damaged record cannot erase this structural protection. No numerical tolerance or new scientific bar was needed.
+
+Verification used Python 3.13.5 with `JW_B5_SYNTHETIC_ONLY=1` and `PYTHONDONTWRITEBYTECODE=1`:
+
+- Final `tests.test_bytes_thermal_lines`: **45 tests, OK, 1132.253 s**. Round-4 baseline: **36 tests, OK, 825.356 s**. Runtime remains within 1.5×. Replaced the subsumed, repetitive 144-cell test with the generated 684-cell matrix; retained every real-chain and grouped-analysis variant.
+- `tests.b6.test_bytes_p2_thermal_window` and `tests.test_harvest_b5_window`: **198 tests, OK, 11 skipped, 830.706 s**. Pass-1, block-5 and alpha each retain exact 177-file byte identity.
+- Consult matrix: baseline **237 failures / 684 cells**; final **684/684**. Expected outcomes come from W1 and fault classes, never tool results. Final Opus matrix: **324/324**. Sol document and fault matrices: **80/80** and **360/360**. Lexer break cases, million-level nesting, span edges, typed identities, null-request replay, sidecar faults and retained-row lexemes pass through the CLI.
+- All original and inherited reviewer entry points were replayed before/after, including argument-taking seal/pass/path utilities. Historical failures from superseded refusal/read-only expectations and missing fixture seals/pass identities remain labelled, not claimed as passes. X6 ports change fixture identities/tree locations and the corresponding no-repo deletion; the missing-`excluding` oracle follows X10.
+- `ReviewerRealChainTests`: **44/44 checks**, with explicit zero-untrusted-member and zero-replay-disagreement checks on native harvests. Grouped analysis: **30/30 checks**. Guarded sentinels report no decoded measurement sentinels and none in tool stdout/control records; withheld bytes remain intact.
+
+Census, source equals output on both passes:
+
+| Sessions | Public + withheld rows | Science records before stage-1 commit | After commit / archive |
+|---|---:|---:|---:|
+| s2, p1 and p2 | 63 + 50 = 113 | 50 | 100 / 100 |
+| s5, p1 and p2 | 13 + 50 = 63 | 0 | 50 / 50 |
+
+Every model set is preserved at both blinded stages and the archive stage. All four sessions have zero undefined members (113 members per s2 session, 63 per s5 session), exact target change lists, correct withheld labels and verified views.
+
+Discarded interrupted/mixed runs after an environment restart and a rewrite-time parser error. Retained synthetic reviewer fixtures also exhausted `/tmp`; removed only completed session-created fixtures, preserved logs, and reran affected checks. The completed final module and consult matrix use frozen script SHA-256 `e132ea161cabc6e0f8ce1c4fe7fe69087e20f7fa4bf077f8cb4cc77af039856f` at code head `5a91ce575`.
+
+Pinned files remain unchanged:
+
+```text
+18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71  joulewise/bytes_analysis.py
+2aec65877b3a7e6da096171eb305833750932e2b5e0674eb835f408a0ad6c744  joulewise/b5/harvest.py
+```
+
+`git diff --check` passes; fixture orphan census is `[]`, count 0, exit 0. Only the three authorized files changed. Synthetic fixtures only; no hardware or real BYTES data. All 13 code/test checkpoints were committed and pushed; this report is the separate final checkpoint. No NEEDS_RULING remains. CI is checked on the final pushed report commit and its job states are supplied separately in the handoff.
