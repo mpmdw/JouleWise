@@ -135,6 +135,12 @@ size cannot be allocated as one buffer, the scan stops at the largest size that 
    the specific reason. The measured hour then does not run; every class is UNDETERMINED (`knee not found`),
    and the slot records the scan and reason. Preserve the one scan's calls; do not retry it into acceptance.
 
+A `knee found` result must carry no `reason`, every `arm_checks[*].above` must be
+`true`, and its integer sizes must satisfy exactly `B = max(2**32, 64*K)` and
+`(Bc1, Bc3, Bc2) = (K//16, K//8, K//4)`, as written by `knee_scan`.
+An inconsistent success is a reasoned scan-status fault: keep records and calls,
+set every class UNDETERMINED and print no interval.
+
 The scan reads no energy and is not BYTES data.
 
 **Sizes.**
@@ -470,6 +476,9 @@ prints §1 from a JSON list of the 66 probe receipts (or the completed doubling 
 `/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py read INPUT.json` prints the full §3/§4 record, including the stack comparison
 in every outcome and H2-formatted claim lines. INPUT has `scan` (the scan command's result) and `records`
 (the eight entries in stamped palindrome order), each with `receipt` and `harvest`.
+Receipt integer counts must satisfy exactly `bytes_read = bytes_per_read * repeats`,
+as written by `stream()`. A violation is a missing prerequisite naming
+`records[i].receipt.repeats/bytes_read`; keep the record and its calls.
 The harvest contract is explicit: `energy_j` holds pass-1 stream integrals `rails`, `gpu`, `meter`, `battery`;
 `idle.pre`/`idle.post` hold native `rails`/`gpu` interval rows (`start_ns`, `end_ns`, `power_w`)
 and native `meter`/`battery` polls (`stamp_ns`, `power_w`), in RAW time. Supply the untrimmed native rows;

@@ -577,6 +577,91 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(cli.returncode,0,cli.stderr)
             return json.loads(cli.stdout)
 
+    def assert_ruled_fault(self, result, records, reason):
+        self.assertEqual(result['input_records'], records)
+        self.assertEqual(len(result['calls']), len(records))
+        for beta, value in result['boundaries'].items():
+            self.assertEqual(value['class'], 'UNDETERMINED')
+            self.assertIn(reason, value['reason'])
+            self.assertNotIn('±', result['printed']['contrasts'][beta])
+
+    def test_producer_invariants_through_real_read_cli(self):
+        for shape in ('repeats doubled', 'B=2^33', 'sizes doubled', 'S receipts relabelled',
+                      'S repeats doubled'):
+            with self.subTest(shape=shape):
+                records, scan = deepcopy(self.records), deepcopy(self.scan)
+                reason = 'scan.status'
+                if shape in ('repeats doubled', 'S repeats doubled'):
+                    indices = range(8) if shape == 'repeats doubled' else (0, 7)
+                    for i in indices:
+                        records[i]['receipt']['repeats'] *= 2
+                    reason = 'records[0].receipt.repeats/bytes_read'
+                elif shape == 'B=2^33':
+                    scan['B'] = 2**33
+                elif shape == 'S receipts relabelled':
+                    scan['B'] = 2**33
+                    for i in (0, 7):
+                        records[i]['receipt']['bytes_per_read'] = 2**33
+                        # Keep the receipt internally consistent to isolate the scan fault.
+                        records[i]['receipt']['bytes_read'] *= 2
+                else:
+                    for key, indices in (('Bc1', (1, 6)), ('Bc3', (2, 5)), ('Bc2', (3, 4))):
+                        scan[key] *= 2
+                        for i in indices:
+                            records[i]['receipt']['bytes_per_read'] *= 2
+                            records[i]['receipt']['bytes_read'] *= 2
+                self.assert_ruled_fault(self.read_cli(records, scan), records, reason)
+        for value in (False, None, 0, 1, 'true', 'missing'):
+            with self.subTest(above=value):
+                scan = deepcopy(self.scan)
+                if value == 'missing':
+                    del scan['arm_checks'][0]['above']
+                else:
+                    scan['arm_checks'][0]['above'] = value
+                self.assert_ruled_fault(self.read_cli(self.records, scan), self.records, 'scan.status')
+        for value in ('64 K > s_max', '', None):
+            with self.subTest(reason=value):
+                self.assert_ruled_fault(self.read_cli(self.records, {**self.scan, 'reason':value}),
+                                        self.records, 'scan.status')
+
+    def test_dc_width_common_gate_through_real_read_cli(self):
+        # Reducer-result injection is necessary: no producer input is known to
+        # make only DC's width invalid. Run the actual JSON read CLI in a fresh
+        # process, patching only that reducer result, as in the Opus repro.
+        code = """
+import sys
+from unittest.mock import patch
+from scripts import bytes_stream_test as p
+real = p.reduce_boundary
+def force(calls, sizes, boundary):
+    value = real(calls, sizes, boundary)
+    if boundary == 'dc': value['halfwidth'] = float(sys.argv[2])
+    return value
+with patch.object(p, 'reduce_boundary', force):
+    sys.exit(p.main(['read', sys.argv[1]]))
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'input.json'
+            path.write_text(json.dumps({'records':self.records, 'scan':self.scan}, allow_nan=False))
+            for width in ('-1e-6', '-0.5', '0', '-0', 'nan'):
+                with self.subTest(width=width):
+                    cli = subprocess.run([sys.executable, '-B', '-c', code, str(path), width],
+                                         cwd=probe.ROOT, capture_output=True, text=True)
+                    self.assertEqual(cli.returncode, 0, cli.stderr)
+                    self.assert_ruled_fault(json.loads(cli.stdout), self.records, 'DC contrast input missing')
+
+    def test_idle_overflow_names_power_leaf_through_real_read_cli(self):
+        records = deepcopy(self.records)
+        records[0]['harvest']['idle']['pre']['rails'][0]['power_w'] = 1e308
+        result = self.read_cli(records)
+        for beta in ('rails', 'rest'):
+            self.assertEqual(result['boundaries'][beta]['class'], 'UNDETERMINED')
+            self.assertIn('records[0].harvest.idle.pre.rails.power_w',
+                          result['boundaries'][beta]['reason'])
+            self.assertNotIn('±', result['printed']['contrasts'][beta])
+        self.assertEqual(result['input_records'], records)
+        self.assertEqual(len(result['calls']), 8)
+
     def test_generated_input_leaf_faults_through_real_read_cli(self):
         # Real stream receipts above, written/reloaded by every CLI invocation.
         # Compact native support still covers 57.6 s with >=3 bandwidths. Walk

@@ -250,7 +250,7 @@ def input_value(value, schema, path):
 RECEIPT_INPUTS = {**{k: NONNEG for k in (
     "start_ns", "end_ns", "idle_pre_start_ns", "idle_pre_end_ns",
     "idle_post_start_ns", "idle_post_end_ns")},
-    "bytes_per_read": POSCOUNT, "repeats": POSCOUNT, "settle_s": NONNEG}
+    "bytes_per_read": POSCOUNT, "repeats": POSCOUNT, "bytes_read": POSCOUNT, "settle_s": NONNEG}
 STACK_INPUTS = {"os_version": TEXT, "hardware_unit": {"machine": TEXT, "device": TEXT},
     "runtime_version": {"name": TEXT, "version": TEXT}, "kernel_library": TEXT,
     "python": TEXT, "packages": {key: TEXT for key in REFERENCE_VERSIONS["packages"]}}
@@ -710,7 +710,16 @@ def read_known_bytes(records, scan):
     refused_scan = scan.get("status") == "knee not found" and "K" in scan and scan["K"] is None
     for key in ("K", "B", "Bc1", "Bc3", "Bc2"):
         # A missing knee is an ordinary scan refusal, not an invented size.
-        scan[key] = take(scan.get(key, ABSENT), POSITIVE, "scan."+key, names, scan_errors)
+        scan[key] = take(scan.get(key, ABSENT), POSCOUNT, "scan."+key, names, scan_errors)
+    if scan["status"] == "knee found":
+        checks = take(scan.get("arm_checks", ABSENT), [{}], "scan.arm_checks", names, scan_errors, [])
+        if "reason" in scan or any(check.get("above") is not True for check in checks):
+            scan_errors.append((names, "scan.status missing or invalid (inconsistent or unknown scan status)"))
+        if all(scan[key] is not None for key in ("K", "B", "Bc1", "Bc3", "Bc2")):
+            k = scan["K"]
+            if (scan["B"], scan["Bc1"], scan["Bc3"], scan["Bc2"]) != (
+                    max(2**32, 64*k), k//16, k//8, k//4):
+                scan_errors.append((names, "scan.status missing or invalid (scan.B/Bc1/Bc3/Bc2 inconsistent with scan.K)"))
     if refused_scan:
         # §4 F8: these sizes are unavailable because the scan refused; retain
         # its established reason rather than relabeling refusal as corruption.
@@ -725,6 +734,9 @@ def read_known_bytes(records, scan):
         h = dict(take(raw.get("harvest", ABSENT), {}, path+".harvest", names, errors, {}))
         for key, spec in RECEIPT_INPUTS.items():
             r[key] = take(r.get(key, ABSENT), spec, path+".receipt."+key, names, errors)
+        if all(r[key] is not None for key in ("bytes_per_read", "repeats", "bytes_read")) and (
+                r["bytes_read"] != r["bytes_per_read"]*r["repeats"]):
+            errors.append((names, path+".receipt.repeats/bytes_read missing or invalid (bytes_read != bytes_per_read * repeats)"))
         def stack_leaves(value, spec, leaf_path, field=""):
             if isinstance(spec, dict):
                 source = value if isinstance(value, dict) else {}
@@ -848,7 +860,7 @@ def read_known_bytes(records, scan):
         for span, streams in prepost.items():
             for stream, stats in streams.items():
                 if "reason" in stats:
-                    stats["reason"] = f"records[{i-1}].harvest.idle.{span}.{stream}: "+stats["reason"]
+                    stats["reason"] = f"records[{i-1}].harvest.idle.{span}.{stream}.power_w: "+stats["reason"]
         idle = combined_idle(prepost["pre"],prepost["post"])
         for stream, stats in idle.items():
             if "reason" in stats and "records[" not in stats["reason"]:
@@ -946,24 +958,26 @@ def read_known_bytes(records, scan):
         call["gpu_state"] = h["gpu_state"]
         call["thermal"] = {"source":"hazards/monitor/thermal.jsonl","spans":h["thermal_spans"]}
     for beta in names:
-        if scan.get("K") is not None and all(sizes.values()):
+        if not scan_errors and scan.get("K") is not None and all(sizes.values()):
             output["boundaries"][beta] = reduce_boundary(output["calls"],sizes,beta)
             why = output["boundaries"][beta].get("reason", "")
             if "arithmetic unavailable" in why:
                 affected[beta].append(why)
     dc = output["boundaries"].get("dc")
     # DC is the common validity prerequisite. Keep other boundaries' numbers.
+    invalid_dc_width = False
     if affected["dc"]:
         reasons.extend(affected["dc"])
-    elif dc is None or not isinstance(dc.get("halfwidth"),(int,float)):
+    elif dc is None or not finite_number(dc.get("halfwidth")) or dc["halfwidth"] <= 0:
         reasons.append("DC contrast input missing")
+        invalid_dc_width = True
     elif dc["delta"]-dc["halfwidth"] <= 0:
         reasons.append("contrast not resolved")
     affected["rest"].extend(affected["rails"]+affected["dc"])
     output["reasons"] = list(dict.fromkeys(reasons+[r for rs in affected.values() for r in rs]))
     for beta in names:
         value = output["boundaries"].get(beta)
-        reason = next(iter(affected[beta]+reasons),None)
+        reason = next(iter([why for _, why in scan_errors]+affected[beta]+reasons),None)
         if value is None:
             reason = reason or "boundary input missing"
             value = {"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)}
@@ -972,6 +986,9 @@ def read_known_bytes(records, scan):
                     ("delta","halfwidth","alpha","gamma_c","gamma_d","r","epsilon_flip",
                      "epsilon_flip_over_alpha","raw_stream_j_per_byte","arms")})
             output["boundaries"][beta] = value
+        elif invalid_dc_width:
+            value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason),
+                          "halfwidth":not_defined(reason),"upper_limit":not_defined(reason)})
         elif isinstance(value.get("halfwidth"),(int,float)) and (
                 not finite_number(value["halfwidth"]) or value["halfwidth"] <= 0):
             reason = beta+" halfwidth missing or invalid (must be finite and positive)"
