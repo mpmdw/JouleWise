@@ -1,0 +1,12 @@
+b5_analysis | Ran 1035 tests in 4133.590s | FAILED (failures=1, skipped=13)
+tests.test_floor_extraction | Ran 145 tests in 33.992s | OK (skipped=2)
+tests.test_run_campaign | Ran 267 tests in 497.104s | OK (skipped=1)
+tests.test_run_campaign_hazard_flags | Ran 46 tests in 32.722s | OK (skipped=3)
+tests.test_run_campaign_max_blocks | Ran 22 tests in 11.810s | OK
+tests.test_run_campaign_p2_rc | Ran 35 tests in 47.235s | OK
+tests.test_whole_window | Ran 26 tests in 1.848s | OK
+tests.test_whole_window_analysis_clamp_flag | Ran 11 tests in 118.613s | OK
+tests.test_whole_window_inverted_corner_clamp | Ran 32 tests in 191.867s | OK
+tests.test_whole_window_parallel_strict | Ran 8 tests in 2.551s | OK
+tests.test_whole_window_selection | Ran 57 tests in 225.617s | OK
+baseline d8050fca6 seat modules | Ran 43 tests in 195.311s | OK

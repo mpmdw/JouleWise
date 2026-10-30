@@ -1,0 +1,12 @@
+N08_dry_run_flag_off | KILLED | Ran 43 tests in 206.825s | FAILED (failures=2) | test_dry_run_step_results_session_opts_in,test_every_analysis_consumer_passes_true
+N09_floor_extraction_flag_dropped | KILLED | Ran 43 tests in 207.899s | FAILED (failures=1, errors=1) | test_every_analysis_consumer_passes_true,test_floor_extraction_with_kept_units_opts_in
+O-M01_clamp_to_start | KILLED | Ran 43 tests in 204.453s | FAILED (failures=3) | test_clamp_position_is_the_midpoint_to_the_last_bit
+E-M02_clamp_to_end | KILLED | Ran 43 tests in 200.942s | FAILED (failures=1) | test_clamp_position_is_the_midpoint_to_the_last_bit
+R-M1_flag_ignored_with_archive_context | SURVIVED | Ran 43 tests in 200.569s | OK | 
+N12_floor_mint_estimator_gate_inverted | KILLED | Ran 43 tests in 188.750s | FAILED (failures=1) | test_every_analysis_consumer_passes_true
+N06_drop_OF3_reproduced_guard | KILLED | Ran 43 tests in 198.440s | FAILED (failures=3) | test_bounds_sweep_equals_oracle,test_no_reproduced_member_envelope_is_not_clamped,test_short_prefill_clamps_and_bounds_sweep_equals_oracle
+N07_drop_OF5_input_inversion_guard | KILLED | Ran 43 tests in 211.929s | FAILED (failures=3) | test_input_window_inverted_at_zero_shift_is_refused
+R-M2_flag_ignored_in_read_replay | SURVIVED | Ran 43 tests in 207.064s | OK | 
+N04_member_sessions_drop_flag | KILLED | Ran 43 tests in 209.330s | FAILED (failures=1) | test_removed_member_audit_sessions_inherit_the_flag
+O-M13_flag_on_session_unclamped(rt) | KILLED | Ran 43 tests in 180.329s | FAILED (errors=5) | test_flag_off_refuses_permanent_widening_like_origin_main,test_genuinely_missing_operative_envelope_still_refuses,test_prefill_just_over_twice_edge_bound_is_unchanged,test_short_prefill_under_dominating_bound
+O-M08_clamp_le | SURVIVED | Ran 43 tests in 196.572s | OK | 
