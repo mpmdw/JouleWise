@@ -1,0 +1,10 @@
+['kept_units_below_minimum']                                                -> floor_cell_not_extractable
+['admissible_set_uncertainty_dominates_point_floor']                        -> floor_cell_not_extractable
+['instrument_calibration_stale']                                            -> floor_cell_not_extractable
+['insufficient_in_window_samples', 'cadence_ratio_below_threshold']         -> floor_cell_not_extractable
+['calibration_bracket_exceeds_minted_bound']                                -> floor_cell_not_extractable
+['anchor_energy_envelope_exceeds_quarter_metric']                           -> floor_cell_not_extractable
+['insufficient_members_after_exclusion']                                    -> floor_cell_not_extractable
+['summary_unreadable']                                                      -> extraction_cell_tooling_refusal
+['kept_units_below_minimum', 'summary_unreadable']                          -> extraction_cell_tooling_refusal
+[]                                                                          -> floor_cell_not_extractable

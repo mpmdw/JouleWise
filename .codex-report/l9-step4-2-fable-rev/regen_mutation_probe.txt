@@ -1,0 +1,6 @@
+# make_table.py over a scratch copy of joulewise/ with two injected literals (floor_extraction.py tail): diff base -> after
+42a43
+>   "syn_new_value_exceeds_bound",
+1766a1768
+>   "syn_new_tooling_literal",
+diff exit=1
