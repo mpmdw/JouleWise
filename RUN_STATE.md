@@ -750,6 +750,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - In every category it adds the permanent synthetic widening case.
 - **Consequence:** attempt C may need an Ed decision, (b) or (c), before it can run. joulewise-28 will put the question to Ed as soon as the diagnosis lands.
 
+140. **Prefill envelope cause confirmed. Ed ruled to clamp inverted corner windows in frozen `reduce.py`. L9-ENV-2 launched (reported by joulewise-28, 2026-10-30 05:10-05:12Z).**
+- **Inversion check** on the real ALPHA inputs, booleans only: all 30 of 30 `None` results from `_corner_composed_anchor_shift_envelope` had valid guards and a window shorter than 2·`edge_bound_s`. 87 envelopes were returned. This confirms the orchestrator's hypothesis from reading the code. The fixed corner check `end_s < start_s` makes the function return `None` when a short phase window inverts at the (+edge, −edge) corner, and widening raises `edge_bound_s = fiducial_bound_s + wall_minus_monotonic_span_s`.
+- **Ed's ruling.** joulewise-28 relays it: Ed answered at 05:11Z in joulewise-28's session, not in this one.
+  - Ed chose option 1: **clamp in frozen `joulewise/reduce.py`.** An inverted corner window becomes zero-length and contributes 0 J, so the envelope is defined but wide.
+  - Rationale: power is non-negative, so energy is monotone in each edge. When the (+edge, −edge) corner inverts, the admissible set includes the empty interval. A wide or unresolvable prefill result is an honest outcome.
+  - Options not chosen: (2) an R3 ruling that prefill is non-claimable at the metric level; (3) staying fail-closed.
+- L9-ENV-1, the diagnose-and-stop seat, was disabled before it fired.
+- **L9-ENV-2** was launched at 05:12Z to implement the ruling. It is an Opus seat, `trig_01B8ziqZjv927yNg5rHBhpkD`, firing at 05:20Z with MCP cleared, on `lane/2026-10-30-l9-env-clamp`. Its brief:
+  - Make the clamp minimal. Keep every other `None` guard, and stay bit-identical for windows that do not invert.
+  - Add the permanent synthetic widening case, with windows just under and just over 2·edge, checking session readiness before and after. Add the counterfactual that a genuinely missing envelope still refuses.
+  - In `test_frozen_files`, rebind `reduce.py` to the reviewed digest after the ruling, citing the ruling. Every other frozen file stays unchanged, and `sealed_inventory` and `seal_pins` are untouched.
+  - Report whether the independent recompute or the comparator would disagree with the clamped values at release.
+- **Next:** two-family review, then a §3.1 rehearsal of the session on the real ALPHA inputs (structure-only, checking `session_ready`), then attempt C.
+- **Orchestrator check on the ruling's consequences:**
+  - Coverage still holds against the minted envelopes, because the clamped lower bound (0 J or more) is at or below the minted lower bound, and the (−edge, +edge) corner only lengthens the window, so the upper bound is at or above the minted upper bound.
+  - The independent recompute must either implement the same clamp or have its disagreement registered. The seat's release-comparison report covers this.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
