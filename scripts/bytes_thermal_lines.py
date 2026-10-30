@@ -379,6 +379,10 @@ def validate_seal(raw):
     return None, "journal provenance unavailable"
 
 
+class JournalProducerError(ValueError):
+    """JSON accepted by production, but impossible for the L1 writer."""
+
+
 def journal_readings(raw):
     """Lex each JSONL value, then project only the production parser's inputs.
 
@@ -391,6 +395,17 @@ def journal_readings(raw):
             continue
         try:
             doc = document(line.decode("utf-8"))
+        except (ValueError, UnicodeError):
+            # Recognition only: discard every numeric token without converting
+            # it. Never use this fallback's decoded object as evidence.
+            try:
+                json.loads(line, parse_int=lambda _: None, parse_float=lambda _: None,
+                           parse_constant=lambda _: None)
+            except (ValueError, RecursionError):
+                malformed += 1
+                continue
+            raise JournalProducerError("journal line not producer output")
+        try:
             projected = {key: doc.optional(key) for key in ("schema", "module", "kind")}
             if projected["kind"] != h.OBSERVATION_KIND["thermal"]:
                 # Bookkeeping lines have no observation stamps or values.
@@ -431,6 +446,8 @@ def validate_journal(journal, expected, sources):
         reason = ("journal provenance unavailable" if expected is None else
                   "journal differs from the harvest's" if hashlib.sha256(raw).hexdigest() != expected else None)
         return readings, malformed, reason
+    except JournalProducerError as exc:
+        return [], 0, str(exc)
     except (OSError, ValueError):
         return [], 0, "archived thermal journal unavailable"
 

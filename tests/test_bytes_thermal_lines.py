@@ -391,6 +391,15 @@ class ReviewerRealChainTests(unittest.TestCase):
                 result, _ = accept_archive(win.archive, plan, JW / "configs/b6/registration",
                                            plan_path=win.plan_path, replace_existing=True)
                 native_archives.add(win.archive)
+                journal = win.archive / "sources/night-custody/hazards/monitor/thermal.jsonl"
+                actual, malformed = t.journal_readings(t.h.read_bytes(journal))
+                expected, prod_malformed = t.h.read_monitor_journal(journal, "thermal")
+                def projection(rows):
+                    return [(r.monotonic_ns, r.monotonic_raw_ns, r.wall_ns,
+                             r.started_monotonic_ns, r.started_wall_ns, r.status,
+                             t.h._int(r.values.get("level"))) for r in rows]
+                self.assertEqual(projection(actual), projection(expected))
+                self.assertEqual(malformed, prod_malformed)
                 return win, result
 
 
@@ -1883,7 +1892,7 @@ class ProducerTrustTests(unittest.TestCase):
                 archive.journal.write_text(''.join((line[:-1] + extra + '}' if json.loads(line)['values']['level'] else line) + '\n' for line in lines))
                 archive.seal()
                 record, _ = self.cli(archive, mode='request-end-p1')
-                self.assertEqual(record['member_statuses'][0]['status'], 'not defined (journal does not reproduce the registered hull decision)')
+                self.assertEqual(record['member_statuses'][0]['status'], 'not defined (journal line not producer output)')
                 self.assertEqual(record['changes'], [])
             archive = TrustArchive(Path(tmp) / 'opaque', 'request-end-p1', True, False)
             lines = archive.journal.read_text().splitlines()
@@ -1901,3 +1910,45 @@ class ProducerTrustTests(unittest.TestCase):
                 self.assertEqual(t.journal_readings(bookkeeping.encode()), ([], 0))
             self.assertEqual(record['member_statuses'][0]['status'], 'evaluated')
             self.assertEqual(record['changes'][0]['action'], 'removed')
+
+
+class RoundSixTests(unittest.TestCase):
+    def test_production_json_divergence_never_restores(self):
+        variants = {
+            'dup-level': lambda s: s.replace('"level":1', '"level":0,"level":1'),
+            'nan-sibling': lambda s: s[:-1] + ',"x":NaN}',
+            'lone-surrogate': lambda s: s[:-1] + r',"x":"\ud800"}',
+            'bom': lambda s: '\ufeff' + s,
+            'utf16': lambda s: s,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, mutate in variants.items():
+                with self.subTest(name=name):
+                    x = TrustArchive(Path(tmp) / name, 'request-end-p1', True, False)
+                    fixtures.thermal_journal(range(0, 126, 5), {80, 95}).dump(x.journal)
+                    lines = x.journal.read_text().splitlines()
+                    data = []
+                    for line in lines:
+                        if json.loads(line)['finished']['monotonic_ns'] == 80 * fixtures.NS:
+                            line = mutate(line)
+                            data.append(line.encode('utf-16') if name == 'utf16' else line.encode())
+                        else:
+                            data.append(line.encode())
+                    x.journal.write_bytes(b'\n'.join(data) + b'\n')
+                    x.seal()
+                    record = t.transform('request-end-p1', x.a, x.root / 'out')
+                    self.assertEqual(record['member_statuses'][0]['status'],
+                                     'not defined (journal line not producer output)')
+                    self.assertEqual(record['restored_members'], [])
+                    self.assertEqual(record['changes'], [])
+                    self.assertFalse(any(n['code'] == 'records.monitor_line_malformed' for n in record['notices']))
+
+    def test_truncated_line_keeps_malformed_skip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            x = TrustArchive(Path(tmp), 'request-end-p1', True, False)
+            with x.journal.open('ab') as stream:
+                stream.write(b'{"truncated":')
+            x.seal()
+            record = t.transform('request-end-p1', x.a, x.root / 'out')
+            self.assertEqual(record['restored_members'], ['a'])
+            self.assertIn({'code': 'records.monitor_line_malformed'}, record['notices'])
