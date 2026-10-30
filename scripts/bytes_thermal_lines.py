@@ -259,6 +259,7 @@ def validate_roster(raw):
         run, kind = node.optional("run_id"), node.optional("kind")
         if not isinstance(run, str):
             reason = reason or "roster member missing run_id"
+            run = None
         if not isinstance(kind, str):
             reason = reason or "roster member kind invalid"
             kind = "science"
