@@ -2,7 +2,6 @@
 from collections import Counter
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import subprocess
@@ -21,11 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class MacKitTests(unittest.TestCase):
     def test_generated_tree_and_configs_validate_without_a_pack_registration(self):
-        # The committed kit is the frozen record of the H and BY-H2 sizing
-        # sessions, which ran from it. The generator's inputs have since moved
-        # on by design (the 8B-8bit revision, the pass-1 trees), so the
-        # committed files are validated as they stand, not regenerated.
-        files = {path: (ROOT / path).read_bytes() for path in kit.build_files(ROOT)}
+        # R8: all committed products must agree with the generator, including
+        # the README and the generator digest in plan_tree.json.
+        files = kit.build_files(ROOT)
+        for path, raw in files.items():
+            self.assertEqual((ROOT/path).read_bytes(),raw,str(path))
         tree = json.loads(files[kit.KIT / "plan_tree.json"])
         self.assertTrue(tree["non_claim"])
         self.assertEqual(len(chain.stage_plan(tree)), len(tree["stage_graph"]))
@@ -72,6 +71,19 @@ class MacKitTests(unittest.TestCase):
                 rows = [m for m in plan["members"] if m["stage_id"] == f"bytes-mac-check-test7-{mid}-{end}"]
                 self.assertEqual([m["model_id"] for m in rows], [mid, "reference"] * 2)
 
+    def test_readme_uses_absolute_python_and_current_probe_contract(self):
+        self.assertIn('/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py',kit.README)
+        self.assertIn('--device DEVICE --idle-s 57.6 --settle-s 3',kit.README)
+        self.assertIn('three 3 s settle gaps',kit.README)
+        self.assertIn('6731d5249',kit.README)
+        self.assertIn('physical_differences',kit.README)
+        self.assertNotIn('Run `python3.13',kit.README)
+        for command in ('scan SCAN.json','read INPUT.json'):
+            self.assertIn('/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py '+command,kit.README)
+            self.assertNotIn('`scripts/bytes_stream_test.py '+command,kit.README)
+        self.assertIn('/opt/homebrew/bin/python3.13 scripts/bytes_mac_kit.py --check',kit.README)
+        self.assertIn('measurement_boundary_label.rails',kit.README)
+
     def test_generator_reproduces_in_scratch_and_only_writes_scope(self):
         with tempfile.TemporaryDirectory() as tmp:
             files = kit.generate(tmp)
@@ -88,6 +100,7 @@ class MacKitTests(unittest.TestCase):
             (root / "mlx").mkdir()
             (root / "mlx/__init__.py").write_text("")
             (root / "mlx/core.py").write_text(
+                "__version__ = '0.31.2'\n"
                 "uint8 = 'uint8'\n"
                 "def ones(shape, dtype): return object()\n"
                 "def sum(data): return object()\n"
@@ -96,19 +109,28 @@ class MacKitTests(unittest.TestCase):
             receipt = root / "stream.json"
             env = {**os.environ, "PYTHONPATH": str(root)}
             result = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_stream_test.py"),
-                "--bytes", "1024", "--repeats", "3", "--out", str(receipt)],
+                "--bytes", "1024", "--repeats", "3", "--device", "macbook_m3_max",
+                "--idle-s", "0", "--settle-s", "0", "--out", str(receipt)],
                 env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             data = json.loads(receipt.read_bytes())
+            self.assertEqual(data["schema_version"], "joulewise.bytes_stream.v2")
+            self.assertEqual(data["stack"]["hardware_unit"]["device"], "macbook_m3_max")
+            self.assertEqual(data["stack"]["runtime_version"]["version"], "0.31.2")
             self.assertEqual(data["bytes_read"], 1024 * 3)
             self.assertEqual(data["clock"], "CLOCK_MONOTONIC_RAW")
             self.assertTrue(data["non_claim"])
             # A completed kernel must have a positive span, directly from
             # the ordering of its own monotonic stamps; no timing cutoff.
             self.assertGreater(data["end_ns"], data["start_ns"])
+            spans = [data[key] for key in ("idle_pre_start_ns", "idle_pre_end_ns",
+                "start_ns", "end_ns", "idle_post_start_ns", "idle_post_end_ns")]
+            self.assertTrue(all(type(stamp) is int for stamp in spans))
+            self.assertEqual(spans, sorted(spans))
 
     def test_stream_evaluates_each_read_and_records_own_span(self):
         class FakeMLX:
+            __version__ = "0.31.2"
             uint8 = "uint8"
             def __init__(self):
                 self.calls = []
@@ -125,14 +147,23 @@ class MacKitTests(unittest.TestCase):
         mx = FakeMLX()
         # Integer timestamps/counts are bit-exact properties. One second is
         # exactly 10^9 ns; no assertion compares measured hardware timings.
-        stamps = iter((4_000_000_000, 5_000_000_000))
-        result = probe.stream(1024, 3, mx=mx, clock_ns=lambda: next(stamps))
+        span_keys = ("idle_pre_start_ns", "idle_pre_end_ns", "start_ns", "end_ns",
+                     "idle_post_start_ns", "idle_post_end_ns")
+        span_values = (1_000_000_000, 2_000_000_000, 4_000_000_000, 5_000_000_000,
+                       7_000_000_000, 8_000_000_000)
+        stamps = iter(span_values)
+        sleeps = []
+        result = probe.stream(1024, 3, device="macbook_m3_max", idle_s=1, settle_s=2,
+                              mx=mx, clock_ns=lambda: next(stamps), sleep=sleeps.append)
+        self.assertEqual([result[key] for key in span_keys], list(span_values))
+        self.assertEqual(sleeps, [2, 1, 2, 2, 1])
+        self.assertEqual(result["schema_version"], "joulewise.bytes_stream.v2")
         self.assertEqual(result["bytes_read"], 3 * 1024)
-        # Duration has no half-width: the brief prescribes 1e-6 relative
-        # or absolute in seconds, above amplified floating noise.
-        self.assertTrue(math.isclose(result["duration_s"], 1, rel_tol=1e-6, abs_tol=1e-6))
-        self.assertEqual([c[0] for c in mx.calls], ["ones", "eval", "sync", "sum", "eval", "sum", "eval", "sum", "eval", "sync"])
-        self.assertEqual(len({id(c[1]) for c in mx.calls if c[0] == "eval"}), 4)
+        # Integer 10^9 ns divided by 10^9 is the bit-exact value 1.0.
+        self.assertEqual(result["duration_s"], 1.0)
+        self.assertEqual([c[0] for c in mx.calls], ["ones", "eval", "sync", "sum", "eval", "sync",
+            "sum", "eval", "sum", "eval", "sum", "eval", "sync"])
+        self.assertEqual(len({id(c[1]) for c in mx.calls if c[0] == "eval"}), 5)  # payload, warm-up, three measured reads
         for args in ((0, 3), (1024, 0), (True, 1)):
             with self.assertRaises(ValueError):
-                probe.stream(*args, mx=mx)
+                probe.stream(*args, device="macbook_m3_max", mx=mx)

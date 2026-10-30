@@ -150,7 +150,7 @@ def measurement_view(source, session):
     model_ids = {m['model']['source']: m['model_id'] for m in roster}
     # Acceptance assigns corpus/start/midpoint/end roles by these existing
     # input IDs. Stage IDs are not interchangeable with that interface.
-    external_ids = {m['manifest']['path']: m['external_input_id']
+    external_ids = {m['manifest']['manifest_id']: m['external_input_id']
                     for m in template['external_inputs']['manifests']}
     units, manifests, relocated = {}, [], {}
     dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, source)}
@@ -207,7 +207,7 @@ def measurement_view(source, session):
         stage['launch']['commands'][0]['argv_template']['arguments'][0] = {
             'kind': 'repo_path', 'value': directory.relative_to(view).as_posix()}
         if members:
-            manifests.append({'external_input_id': external_ids[manifest_path.relative_to(source).as_posix()],
+            manifests.append({'external_input_id': external_ids[manifest['manifest_id']],
                 # The controller compares this descriptor with stage.input
                 # exactly when recognizing auxiliary pre-slot members.
                 'manifest': dict(ref),

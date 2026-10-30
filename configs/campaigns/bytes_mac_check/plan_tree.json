@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/bytes_mac_kit.py",
-    "sha256": "51e738330a86313a2f9b48f0054c6785236b54605225777b6a79c1320ceef017"
+    "sha256": "7a11cd67331bfcfb928524833eedbf0b560938d21b3e9b89fc38e90820efb69e"
   },
   "module_order": [
     "bytes-qwen3-1p7b",
@@ -987,7 +987,7 @@
       "block_index": 1,
       "config": "bytes-mac-check-check-qwen3-8b-8bit-r01.json",
       "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r01.json",
-      "config_sha256": "d4b5fb0fd1542cd336bfe7218d6cc985f0fb1ff49fc6fc16440f3789fdb9470f",
+      "config_sha256": "bc1ae10e38a87faf12fd6013f91ed85b2763f14154d5660be26f730b7f862070",
       "index": 1,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-mac-check-qwen3-8b-8bit",
@@ -1006,7 +1006,7 @@
       "block_index": 2,
       "config": "bytes-mac-check-check-qwen3-8b-8bit-r02.json",
       "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r02.json",
-      "config_sha256": "8c2399cd7e7956bc13f7c449c2a81ebcd604da3b0a1145c80e074adc47adfd39",
+      "config_sha256": "e32321943b40d9331aae1908191d032461b4a4bf91b3ab75a04e21dbc9a2a56a",
       "index": 2,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-mac-check-qwen3-8b-8bit",
@@ -1025,7 +1025,7 @@
       "block_index": 3,
       "config": "bytes-mac-check-check-qwen3-8b-8bit-r03.json",
       "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r03.json",
-      "config_sha256": "056b1c69ea81bc4edad6160c835287b0d1da89083520d7e715639b4710184ddb",
+      "config_sha256": "0b78fbc811aad8f222ff65263b208e99b1a93158a7ea8e529a2376a9b791ebef",
       "index": 3,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-mac-check-qwen3-8b-8bit",
@@ -1044,7 +1044,7 @@
       "block_index": 4,
       "config": "bytes-mac-check-check-qwen3-8b-8bit-r04.json",
       "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r04.json",
-      "config_sha256": "fbc6b78152d11c540744f0262d9dcb6177eae8b480acae8d31f4c5a00b5c3f02",
+      "config_sha256": "7d2ff4a277fb0705aa7373c0b4400b8236bc9616920bcda5eb5426dd5cf4e4be",
       "index": 4,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-mac-check-qwen3-8b-8bit",
@@ -1063,7 +1063,7 @@
       "block_index": 5,
       "config": "bytes-mac-check-check-qwen3-8b-8bit-r05.json",
       "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r05.json",
-      "config_sha256": "70f24da675272393fbd4d6e0982a1dc1828212b11469e9a3c8c9e41b9456af41",
+      "config_sha256": "84b88d1e30e6c2469476b9ed14e9b13d07f91c64b6869e42bb23b098b33e6d3a",
       "index": 5,
       "model_tag": "qwen3-8b-8bit-mlx",
       "module_id": "bytes-mac-check-qwen3-8b-8bit",
@@ -2197,8 +2197,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-reference-corpus-order-v2",
-        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-bound-collection/order_manifest.json",
+        "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -2208,7 +2208,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-bound-collection"
                 },
                 {
                   "kind": "literal",
@@ -2358,8 +2358,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-start-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
-        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-start/order_manifest.json",
+        "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -2369,7 +2369,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-start"
                 },
                 {
                   "kind": "literal",
@@ -3470,7 +3470,7 @@
         "kind": "manifest",
         "manifest_id": "bytes-mac-check-check-qwen3-8b-8bit",
         "path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/order_manifest.json",
-        "sha256": "28624403e655eef3143c916053649aadaa38863e8f7d8bfe5cac7a2c66ec25e3"
+        "sha256": "ea92ba7c16f40ec0a0539e0ee7851d14199c9425890c58cbf99d87bfd6c0593f"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3772,8 +3772,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-midpoint-v1",
-        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-midpoint/order_manifest.json",
+        "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -3783,7 +3783,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-midpoint"
                 },
                 {
                   "kind": "literal",
@@ -4378,8 +4378,8 @@
       "input": {
         "kind": "manifest",
         "manifest_id": "neg8-window-reference-end-triplet-v1",
-        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
-        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-end/order_manifest.json",
+        "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -4389,7 +4389,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-end"
                 },
                 {
                   "kind": "literal",
