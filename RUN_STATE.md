@@ -778,6 +778,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Fable (`trig_01Rna9qSVtNGDXMRQZ4F1x4A`) checks the R3 list against plan §2.2 and §3.1.
 - **Still in flight:** RC-CMP-11 reviews (fired 05:14Z), L9-ENV-2 clamp (05:20Z), PR #603 CI.
 
+142. **PR #603 (G6) merged. Ed amended the clamp ruling to apply on the analysis side only. A repo-trimming mission started (2026-10-30, about 05:40Z).**
+- **PR #603 merged** at merge commit `93e7f5dd2`. joulewise-28 merged it under Ed's merge authorization, which was given in that session. The orchestrator verified on origin that the commit is on main. CI was green on head `61c3525cb`: test shards 1-12, quick, fences, gate-ledger, the calibration-exclusive jobs, build and installed-wheel. G6 no longer depends on test order. This was a release prerequisite from item 134.
+- **Ed's amended ruling: "Analysis-only clamp".** joulewise-28 relays it; Ed gave it in that session, not this one. It amends item 140.
+  - `reduce.py` is a pinned estimator path. Changing it would make the live calibration acceptance stale everywhere, collection nights included.
+  - So `reduce.py` and the acceptance stay untouched, and BYTES collection is unaffected.
+  - The same clamp goes into the analysis-side re-derivation in `whole_window.py`. That file is exempt from pin4 and is not an estimator path.
+  - The `reduce.py` patch from L9-ENV-2 (`e1b3a0510`) is kept only as a test oracle and will not be merged.
+- **L9-ENV-3** is firing to implement this.
+  - **Orchestrator note:** the analysis-side clamp must match the oracle bit for bit on every window, inverting or not, and must leave every other `None` guard and the `point_j` check from item 140 in place.
+  - The independent recompute still needs the same clamp, or a registered difference class. That stays joulewise-28's follow-on lane.
+- **Repo-trimming mission:** Ed started a separate Opus agent to remove deprecated and old-version cruft. It is scoped away from frozen, pinned, block-5 and collection files and will land as PRs.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
