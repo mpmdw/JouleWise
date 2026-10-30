@@ -1,0 +1,1315 @@
+{
+  "acceptance_policy": {
+    "arming_prerequisites": [
+      {
+        "id": "D117-U2",
+        "status": "required_before_arm"
+      },
+      {
+        "id": "D117-POSTCOLLECTION-TRUST-01",
+        "status": "required_before_mint"
+      },
+      {
+        "id": "D117-U11-IDPIN-PROJECTION",
+        "status": "required_before_arm"
+      }
+    ],
+    "issued_acceptance": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n24_25g83_r2",
+      "artifact_sha256": "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660",
+      "derivation_sha256": "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0",
+      "path": "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+    },
+    "issued_ledger_head": {
+      "head_sha256": "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014",
+      "path": "configs/calibration/calibration_ledger_head.json"
+    },
+    "selection": "issued_d116_artifact_only",
+    "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
+  },
+  "arm_attachments": {},
+  "attempt_policy": {
+    "authority": "R6; Block-6 catalog unchanged",
+    "minimum_kept_units_per_stratum": 5,
+    "outcome_dependent_top_up": "forbidden",
+    "science_member_replacements": 0
+  },
+  "b6_layout": {
+    "corpus": {
+      "planned": 18,
+      "stop_after_valid": 12
+    },
+    "packs": [
+      "bytes-mac-check-ext"
+    ],
+    "schema_version": "joulewise.b6_session_layout.v1"
+  },
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_b5.json",
+    "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
+  },
+  "closeout_attachments": {
+    "backup_requirements": {
+      "bound_root_verified": true,
+      "claim_root_verified": true,
+      "required_successful_backups": 2
+    },
+    "bracket_binding_sha256": null,
+    "evaluation_basis_sha256": null,
+    "extraction_report_sha256": null,
+    "postcollection_receipt_digests": [],
+    "terminal_ledger_head": null,
+    "todo": "TODO(postcollection): leave receipt-derived closeout fields empty until a completed claim window supplies authenticated evidence.",
+    "whole_window_verdict_sha256": null
+  },
+  "draft_status": "non-claim",
+  "external_inputs": [
+    "artifacts",
+    "manifests"
+  ],
+  "generator": {
+    "path": "scripts/bytes_mac_kit.py",
+    "sha256": "58ba27dd8a47e22884e73d42860f6c73164cb001c50492927824928f3a55dc62"
+  },
+  "module_order": [
+    "bytes-qwen3-1p7b",
+    "bytes-qwen3-4b"
+  ],
+  "non_claim": true,
+  "plan": {
+    "actual_sha256": "d0370c808d702835ede415efbdc51d8b9bdca7e5bf758fe203055d69f043626f",
+    "declared_sha256": "d0370c808d702835ede415efbdc51d8b9bdca7e5bf758fe203055d69f043626f",
+    "path": "collection_plan.json",
+    "plan_id": "bytes-mac-check-ext"
+  },
+  "roots": {
+    "bound_root_leaf": "runs_bytes_mac_check_ext_bound",
+    "claim_root_leaf": "runs_bytes_mac_check_ext"
+  },
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "science": [
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "bytes-qwen38-27b-8bit-abs-r01.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r01.json",
+      "config_sha256": "1003f4867d37b40fc48c0442fa95753190a5f233ea85401c5194cfcfe993e33e",
+      "index": 1,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r01",
+      "stage_id": "bytes-mac-check-ext-check-a",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "bytes-qwen38-27b-8bit-abs-r02.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r02.json",
+      "config_sha256": "b0604735136e4c2fe8220a4bd296aabe4e4dc52cd5597ec7c145909e42599ba6",
+      "index": 2,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r02",
+      "stage_id": "bytes-mac-check-ext-check-a",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "bytes-qwen38-27b-8bit-abs-r03.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/bytes-qwen38-27b-8bit-abs-r03.json",
+      "config_sha256": "bc8bd5cd65abb155222146280af275f4077ee78a4a56a6b21397a7af595eef8c",
+      "index": 3,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r03",
+      "stage_id": "bytes-mac-check-ext-check-a",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "bytes-qwen38-27b-8bit-abs-r04.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-b/bytes-qwen38-27b-8bit-abs-r04.json",
+      "config_sha256": "83715e665d0c8fd5c5218eb65b3b1b8e8965fd567dd080e02541b74030dcfb5d",
+      "index": 1,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r04",
+      "stage_id": "bytes-mac-check-ext-check-b",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "bytes-qwen38-27b-8bit-abs-r05.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-b/bytes-qwen38-27b-8bit-abs-r05.json",
+      "config_sha256": "dfe822014dbd123247ca5934e8edc06ad28a474886079ff5916851d801403163",
+      "index": 2,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r05",
+      "stage_id": "bytes-mac-check-ext-check-b",
+      "workload": "bytes_synthetic_2048_decode_512"
+    }
+  ],
+  "stage_graph": [
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings"
+      },
+      "kind": "bracket_reservation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes-s1-p1/collection_plan.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ],
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "tool_id": "bracket_reserver"
+            },
+            "command_id": "bytes-mac-check-ext-bracket-reservation.bracket_reservation",
+            "command_kind": "bracket_reservation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 1,
+      "predecessor": null,
+      "stage_id": "bytes-mac-check-ext-bracket-reservation",
+      "successor": "bytes-mac-check-ext-pre-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "pre"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "bytes-mac-check-ext-pre-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 2,
+      "predecessor": "bytes-mac-check-ext-bracket-reservation",
+      "stage_id": "bytes-mac-check-ext-pre-calibration",
+      "successor": "bytes-mac-check-ext-bound-collection"
+    },
+    {
+      "corpus": {
+        "planned": 18,
+        "stop_after_valid": 12
+      },
+      "expected_count": 18,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-reference-corpus-order-v2",
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-bound-collection/order_manifest.json",
+        "sha256": "efc52c737424cb8dcdb489dab445ac686a074df2d6d45e19b1af65325d8580aa"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-bound-collection"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-bound-collection.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 3,
+      "predecessor": "bytes-mac-check-ext-pre-calibration",
+      "stage_id": "bytes-mac-check-ext-bound-collection",
+      "successor": "bytes-mac-check-ext-bound-derivation"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "external_artifact",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+      },
+      "kind": "bound_derivation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-bound-derivation.bound_derivation",
+            "command_kind": "bound_derivation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 4,
+      "predecessor": "bytes-mac-check-ext-bound-collection",
+      "stage_id": "bytes-mac-check-ext-bound-derivation",
+      "successor": "bytes-mac-check-ext-reference-start"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-start-triplet-v1",
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-start/order_manifest.json",
+        "sha256": "aafa3325acb042f758548a36e8bc4e36f4f483b17187ba2e75c91228dd8fbdfe"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-start"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-reference-start.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 5,
+      "predecessor": "bytes-mac-check-ext-bound-derivation",
+      "stage_id": "bytes-mac-check-ext-reference-start",
+      "successor": "bytes-mac-check-ext-check-a"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-mac-check-ext-check-a",
+        "path": "configs/campaigns/bytes_mac_check_ext/stages/check-a/order_manifest.json",
+        "sha256": "b092bca9ce6e4cc143c2d8f8a9d9b92c02c30364155eeeade525bf40e78f1e39"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_mac_check_ext/stages/check-a"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-check-a.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 6,
+      "predecessor": "bytes-mac-check-ext-reference-start",
+      "stage_id": "bytes-mac-check-ext-check-a",
+      "successor": "bytes-mac-check-ext-reference-midpoint"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-midpoint-v1",
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-midpoint/order_manifest.json",
+        "sha256": "a5c85f5a31c18b7028d3da475b836d740d9191fecb8f093dec66713e6994df62"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-reference-midpoint.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 7,
+      "predecessor": "bytes-mac-check-ext-check-a",
+      "stage_id": "bytes-mac-check-ext-reference-midpoint",
+      "successor": "bytes-mac-check-ext-check-b"
+    },
+    {
+      "expected_count": 2,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-mac-check-ext-check-b",
+        "path": "configs/campaigns/bytes_mac_check_ext/stages/check-b/order_manifest.json",
+        "sha256": "f09c95534b0b729fbdc19db10f89936511d7fc1a7c62c920e0ca4f9052e9154b"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_mac_check_ext/stages/check-b"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-check-b.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 8,
+      "predecessor": "bytes-mac-check-ext-reference-midpoint",
+      "stage_id": "bytes-mac-check-ext-check-b",
+      "successor": "bytes-mac-check-ext-reference-end"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-end-triplet-v1",
+        "path": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-end/order_manifest.json",
+        "sha256": "3329af44e372e7e5892e902776d7e44829d6cf57b2213fdd7c5312f7e14f6440"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes-s1-p1/members/bytes-s1-p1-reference-end"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-reference-end.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 9,
+      "predecessor": "bytes-mac-check-ext-check-b",
+      "stage_id": "bytes-mac-check-ext-reference-end",
+      "successor": "bytes-mac-check-ext-post-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "post"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "bytes-mac-check-ext-post-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 10,
+      "predecessor": "bytes-mac-check-ext-reference-end",
+      "stage_id": "bytes-mac-check-ext-post-calibration",
+      "successor": "bytes-mac-check-ext-whole-window-verdict"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "whole_window_verdict",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-mac-check-ext-whole-window-verdict.whole_window_verdict",
+            "command_kind": "whole_window_verdict",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 11,
+      "predecessor": "bytes-mac-check-ext-post-calibration",
+      "stage_id": "bytes-mac-check-ext-whole-window-verdict",
+      "successor": "bytes-mac-check-ext-backup"
+    },
+    {
+      "expected_count": 2,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "backup",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "bytes-mac-check-ext-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "bytes-mac-check-ext-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 12,
+      "predecessor": "bytes-mac-check-ext-whole-window-verdict",
+      "stage_id": "bytes-mac-check-ext-backup",
+      "successor": null
+    }
+  ],
+  "window_identity": {
+    "evidence_root_id": "evidence-bytes-mac-check-ext",
+    "window_id": "bytes-mac-check-ext"
+  }
+}

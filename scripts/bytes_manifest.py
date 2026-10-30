@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import platform
 import re
 import struct
@@ -24,7 +25,7 @@ if str(ROOT) not in sys.path:
 DTYPE_BYTES = {"BOOL": 1, "U8": 1, "I8": 1, "F8_E4M3": 1, "F8_E5M2": 1,
                "I16": 2, "U16": 2, "F16": 2, "BF16": 2, "I32": 4, "U32": 4,
                "F32": 4, "I64": 8, "U64": 8, "F64": 8}
-FAMILIES = {"qwen3", "qwen3_moe", "qwen3_next", "qwen3_5_moe", "qwen3_5_moe_text", "llama"}
+FAMILIES = {"qwen3_5", "qwen3_5_text", "qwen3", "qwen3_moe", "qwen3_next", "qwen3_5_moe", "qwen3_5_moe_text", "llama"}
 
 
 def digest(raw):
@@ -274,6 +275,7 @@ def registered_config_key(model_name):
 
 # Registration bytes_pack_v1 §§2 and 9; IDs agree with the generated harvest families.
 ANALYSIS_MODELS = {
+    "Qwen3.8-27B-8bit": ("qwen38-27b-8bit", "extension_held_out", None, False),
     "Qwen3-1.7B-4bit": ("qwen3-1p7b", "fit", None, True),
     "Qwen3-4B-4bit": ("qwen3-4b", "fit", None, True),
     "Qwen3-8B-4bit": ("qwen3-8b", "fit", None, True),
@@ -301,6 +303,9 @@ def analysis_fields(header):
 
 
 def merge(header_records, kv_records, pilot_rows):
+    roles = {analysis_fields(h)['role'] for h in header_records}
+    if 'extension_held_out' in roles and roles != {'extension_held_out'}:
+        raise ValueError('extension merge refuses registered model headers')
     by_dir = {r["model_dir"]: r for r in kv_records}
     if len(by_dir) != len(kv_records):
         raise ValueError("duplicate KV model")
@@ -349,8 +354,20 @@ def main(argv=None):
     sub.add_argument("--headers", nargs="+", required=True, type=Path)
     sub.add_argument("--kv", nargs="+", required=True, type=Path)
     sub.add_argument("--pilot", type=Path, default=ROOT / "docs/design/bytes_pilot/summary_rows.json")
-    sub.add_argument("--out", type=Path, default=ROOT / "configs/bytes/bytes_manifest.json")
+    sub.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
+    if args.command == "merge":
+        headers_in = [json.loads(p.read_bytes()) for p in args.headers]
+        extension = any(analysis_fields(h)['role'] == 'extension_held_out' for h in headers_in)
+        frozen = ROOT / 'configs/bytes/bytes_manifest.json'
+        if extension:
+            if args.out is None:
+                parser.error('extension merge requires an explicit separate --out')
+            if args.out.resolve().is_relative_to((ROOT / 'configs').resolve()):
+                parser.error('extension merge --out must be outside configs/')
+            if args.out.exists() and os.path.samefile(args.out, frozen):
+                parser.error('extension merge --out is the frozen manifest (same file)')
+        args.out = args.out or ROOT / "configs/bytes/bytes_manifest.json"
     if args.command == "merge":
         result, differences = merge([json.loads(p.read_bytes()) for p in args.headers],
                                     [json.loads(p.read_bytes()) for p in args.kv], json.loads(args.pilot.read_bytes()))

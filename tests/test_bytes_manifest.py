@@ -349,3 +349,96 @@ class FrozenManifestTests(unittest.TestCase):
         families = {c['cell_id'] for pack in (root / 'configs/campaigns').glob('bytes-s*-p1')
                     for c in l4_exclusion_inputs(build_roster(pack, root), {}, plan_id=None, attempt=None)[0]['cells']}
         self.assertEqual({cell for m in result['models'] for cell in m['cell_ids']}, families)
+
+
+class ExtensionReceiptTests(unittest.TestCase):
+    def test_exact_committed_headers(self):
+        from fractions import Fraction
+        root = Path(__file__).resolve().parents[1]
+        receipts = root / 'configs/campaigns/bytes_v1/extension/receipts'
+        dump = json.loads((receipts / 'qwen38-27b-8bit-safetensors-headers.json').read_bytes())
+        config = (receipts / 'qwen38-27b-8bit-config.json').read_bytes()
+        totals = dict.fromkeys(('embed', 'lm_head', 'always_active', 'routed_experts', 'shared_experts', 'not_loaded'), 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / 'Qwen3.8-27B-8bit'
+            directory.mkdir()
+            (directory / 'config.json').write_bytes(config)
+            for shard, header in dump.items():
+                raw = json.dumps(header).encode()
+                end = 0
+                for name, item in header.items():
+                    if name == '__metadata__':
+                        continue
+                    # Independent census: this dense checkpoint has only these namespaces.
+                    cat = ('not_loaded' if name.startswith('vision_tower.') else
+                           'embed' if '.embed_tokens.' in name else
+                           'lm_head' if '.lm_head.' in name else 'always_active')
+                    totals[cat] += item['data_offsets'][1] - item['data_offsets'][0]
+                    end = max(end, item['data_offsets'][1])
+                with (directory / shard).open('wb') as stream:
+                    stream.write(struct.pack('<Q', len(raw)) + raw)
+                    stream.truncate(8 + len(raw) + end)  # sparse; no tensor body read
+            row = b.headers(directory, '815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9')
+            self.assertEqual(row['categories'], totals)
+            vocab = json.loads(config)['text_config']['vocab_size']
+            w = totals['always_active'] + totals['lm_head'] + Fraction(totals['embed'], vocab)
+            self.assertEqual(w.denominator, 1)
+            self.assertEqual(row['W_bytes'], int(w))
+            self.assertEqual(row['R_bytes'], sum(totals.values()) - totals['not_loaded'])
+            self.assertEqual(b.analysis_fields(row), {'model': 'Qwen3.8-27B-8bit',
+                'role': 'extension_held_out', 'moe': False, 'tier': False,
+                'cell_ids': ['bytes-qwen38-27b-8bit-decode']})
+            self.assertTrue(b.registered_config_key('Qwen3.8-27B-8bit'))
+
+    def test_registered_manifest_remerges_byte_identically(self):
+        root = Path(__file__).resolve().parents[1]
+        path = root / 'configs/bytes/bytes_manifest.json'
+        original = json.loads(path.read_bytes())
+        pilot = json.loads((root / 'docs/design/bytes_pilot/summary_rows.json').read_bytes())
+        headers = [{k: v for k, v in row.items() if k not in
+                    {'model', 'role', 'moe', 'tier', 'cell_ids', 'config_key', 'kv', 'KV_bytes',
+                     'b_bytes', 'W_GB', 'KV_GB', 'b_GB', 'R_GB', 'pilot_difference'}} for row in original['models']]
+        result, _ = b.merge(headers, [row['kv'] for row in original['models']], pilot)
+        self.assertEqual(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + '\n', path.read_text())
+
+
+class ExtensionMergeGuardTests(unittest.TestCase):
+    def test_protected_destinations_and_mixed_headers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            frozen = root / 'configs/bytes/bytes_manifest.json'
+            frozen.parent.mkdir(parents=True)
+            frozen.write_text('frozen')
+            header = {'model_name': 'Qwen3.8-27B-8bit', 'model_dir': '/extension'}
+            hp = root / 'header.json'
+            b.write_json(hp, header)
+            args = ['merge', '--headers', str(hp), '--kv', str(root / 'unused')]
+            symlink, hardlink = root / 'symlink', root / 'hardlink'
+            symlink.symlink_to(frozen)
+            hardlink.hardlink_to(frozen)
+            targets = [None, frozen, symlink, hardlink,
+                       root / 'configs/bytes/records/model.headers.json',
+                       root / 'configs/bytes/identity_pins.json',
+                       root / 'configs/b6/packs/synthetic/registration.json']
+            for target in targets[4:]:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('protected')
+            with mock.patch.object(b, 'ROOT', root):
+                for target in targets:
+                    with self.subTest(target=target), contextlib.redirect_stderr(io.StringIO()):
+                        with self.assertRaises(SystemExit) as caught:
+                            b.main(args + ([] if target is None else ['--out', str(target)]))
+                        self.assertEqual(caught.exception.code, 2)
+                        self.assertEqual(frozen.read_text(), 'frozen')
+                        for protected in targets[4:]:
+                            self.assertEqual(protected.read_text(), 'protected')
+            registered = {'model_name': 'Qwen3-8B-4bit', 'model_dir': '/registered'}
+            with self.assertRaisesRegex(ValueError, 'registered model headers'):
+                b.merge([header, registered], [], [])
+            # Missing model_name must still detect extension identity.
+            fallback = dict(header, model_dir='/Qwen3.8-27B-8bit')
+            fallback.pop('model_name')
+            b.write_json(hp, fallback)
+            with mock.patch.object(b, 'ROOT', root), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    b.main(args)

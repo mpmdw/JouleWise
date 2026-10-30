@@ -1,0 +1,43 @@
+{
+  "executed_order": [
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "bytes-qwen38-27b-8bit-abs-r04.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-b/bytes-qwen38-27b-8bit-abs-r04.json",
+      "config_sha256": "83715e665d0c8fd5c5218eb65b3b1b8e8965fd567dd080e02541b74030dcfb5d",
+      "index": 1,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r04",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "bytes-qwen38-27b-8bit-abs-r05.json",
+      "config_path": "configs/campaigns/bytes_mac_check_ext/stages/check-b/bytes-qwen38-27b-8bit-abs-r05.json",
+      "config_sha256": "dfe822014dbd123247ca5934e8edc06ad28a474886079ff5916851d801403163",
+      "index": 2,
+      "model_tag": "qwen38-27b-8bit-mlx",
+      "module_id": "bytes-mac-check-ext-qwen38-27b-8bit",
+      "pack_id": "bytes-mac-check-ext",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen38-27b-8bit-abs-r05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    }
+  ],
+  "manifest_id": "bytes-mac-check-ext-check-b",
+  "planned_n_bundles": 2,
+  "schema_version": "joulewise.order_manifest.v1"
+}

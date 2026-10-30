@@ -35,8 +35,12 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def build_files(root=ROOT):
+def build_files(root=ROOT, *, extension=None):
     root = Path(root)
+    if extension not in (None, 'qwen38-27b-8bit'):
+        raise ValueError('unknown extension')
+    kit = KIT if extension is None else Path('configs/campaigns/bytes_mac_check_ext')
+    kit_id = 'bytes-mac-check' if extension is None else 'bytes-mac-check-ext'
     # Use the actual block-6 composer for the calibrated reference/launch
     # scaffold. The kit is a fixed session, with no pack registration at all.
     reg = load(root / "configs/b6/packs/bytes-s1-p1/registration.json")
@@ -48,12 +52,12 @@ def build_files(root=ROOT):
 
     def collection(label, conditions):
         stage = deepcopy(source_science)
-        stage.update(stage_id="bytes-mac-check-" + label, entries=[], expected_count=len(conditions))
-        directory = KIT / "stages" / label
+        stage.update(stage_id=kit_id + "-" + label, entries=[], expected_count=len(conditions))
+        directory = kit / "stages" / label
         rows = []
         for index, (source, model_id, purpose, end) in enumerate(conditions, 1):
             cfg = json.loads((root / source["config_path"]).read_bytes())
-            run_id = f"bytes-mac-check-{label}-r{index:02}"
+            run_id = source["run_id"] if extension else f"bytes-mac-check-{label}-r{index:02}"
             cfg["run_id"] = run_id
             cfg["hardware_target"]["notes"] = "R8.6 non-claim structural session; never a registered pack."
             cfg["run_metadata"]["tags"] = ["bytes-mac-check", "non-claim", "launch_lineage_required",
@@ -66,7 +70,7 @@ def build_files(root=ROOT):
                      "role": "absolute_repeat", "block_id": None, "block_index": index,
                      "position": None, "position_in_block": 1, "arm": None,
                      "model_tag": model_id + "-mlx", "workload": cfg["workload_profile"]["name"],
-                     "module_id": "bytes-mac-check-" + model_id, "pack_id": "bytes-mac-check"}
+                     "module_id": kit_id + "-" + model_id, "pack_id": kit_id}
             rows.append(entry)
             members.append({"run_id": run_id, "model_id": model_id, "purpose": purpose, "end": end,
                             "stage_id": stage["stage_id"], "non_claim": True,
@@ -84,6 +88,11 @@ def build_files(root=ROOT):
         entry = json.loads((root / directory / "order_manifest.json").read_bytes())["executed_order"][0]
         sources[model_id] = {**entry, "config_path": (directory / entry["config"]).as_posix()}
 
+    if extension:
+        directory = Path('configs/campaigns/bytes_v1/extension') / extension / '01_decode_absolute'
+        entries = json.loads((root / directory / 'order_manifest.json').read_bytes())['executed_order'][:CHECK_RUNS]
+        extension_sources = [{**e, 'config_path': (directory / e['config']).as_posix()} for e in entries]
+
     def transfer(end):
         return [collection(f"test7-{model_id}-{end}", [
             (source, mid, "test7", end) for _ in range(TEST7_PAIRS)
@@ -98,6 +107,12 @@ def build_files(root=ROOT):
     # Corpus/start precede test 7, then all checks, shared midpoint and soaks,
     # test 7 at the end, end references and closing calibration.
     stages = fixed[:5] + transfer("start") + checks + [fixed[5]] + soaks + transfer("end") + fixed[6:]
+    if extension:
+        first = collection('check-a', [(e, extension, 'check', 'middle') for e in extension_sources[:3]])
+        last = collection('check-b', [(e, extension, 'check', 'middle') for e in extension_sources[3:]])
+        stages = fixed[:5] + [first, fixed[5], last] + fixed[6:]
+        members = [m for m in members if m['model_id'] == extension]
+        files = {p: raw for p, raw in files.items() if p.parent.name in ('check-a', 'check-b')}
     for stage in stages:
         stage["stage_id"] = stage["stage_id"].replace("bytes-s1-p1", "bytes-mac-check")
         stage.pop("spare_retry", None)
@@ -128,7 +143,7 @@ def build_files(root=ROOT):
                        "test7_pairs_per_end": TEST7_PAIRS, "long_regimes": list(LONG),
                        "authority": "BYTES R2/R8.6; block-6 design §14; threshold note §4 test 7"}
     raw = raw_json(collection_plan)
-    files[KIT / "collection_plan.json"] = raw
+    files[kit / "collection_plan.json"] = raw
     tree["plan"] = {"path": "collection_plan.json", "plan_id": "bytes-mac-check",
                     "actual_sha256": sha(raw), "declared_sha256": sha(raw)}
     # Bind reservations to this kit rather than the inherited BETA floor plan.
@@ -137,10 +152,21 @@ def build_files(root=ROOT):
         for command in stage["launch"]["commands"]:
             for arg in command["argv_template"]["arguments"]:
                 if arg == {"kind": "repo_path", "value": "configs/campaigns/d117_floor_qwen3-8b_v5/calibration_plan.json"}:
-                    arg["value"] = (KIT / "collection_plan.json").as_posix()
+                    arg["value"] = (kit / "collection_plan.json").as_posix()
     chain.stage_plan(tree)
-    files[KIT / "plan_tree.json"] = raw_json(tree)
-    files[KIT / "README.md"] = README.encode()
+    files[kit / "plan_tree.json"] = raw_json(tree)
+    if extension:
+        # Replace scaffold session identity recursively, including reservations and roots.
+        tree = json.loads(json.dumps(tree).replace('bytes_mac_check_ext', 'bytes_mac_check').replace(kit_id, 'bytes-mac-check').replace('bytes-mac-check', kit_id).replace('bytes_mac_check', 'bytes_mac_check_ext'))
+        collection_plan = json.loads(json.dumps(collection_plan).replace(kit_id, 'bytes-mac-check').replace('bytes-mac-check', kit_id))
+        collection_plan.update(plan_id=kit_id, soak_runs_per_model=0, test7_pairs_per_end=0, long_regimes=[])
+        raw = raw_json(collection_plan)
+        files[kit / 'collection_plan.json'] = raw
+        tree['plan'].update(plan_id=kit_id, actual_sha256=sha(raw), declared_sha256=sha(raw))
+        files[kit / 'plan_tree.json'] = raw_json(tree)
+        files[kit / 'README.md'] = EXT_README.encode()
+        return files
+    files[kit / "README.md"] = README.encode()
     smoke_path = Path("configs/b6/smoke_keep.json")
     smoke = json.loads((root / smoke_path).read_bytes())
     smoke["bytes_mac_check"] = compose.smoke_keep(layout)
@@ -148,8 +174,8 @@ def build_files(root=ROOT):
     return files
 
 
-def generate(output_root=ROOT, *, check=False, source_root=ROOT):
-    files = build_files(source_root)
+def generate(output_root=ROOT, *, check=False, source_root=ROOT, extension=None):
+    files = build_files(source_root, extension=extension)
     for path, raw in files.items():
         target = Path(output_root) / path
         if check:
@@ -275,12 +301,195 @@ test 7 the ruled scaled drift allowance still applies.
 """
 
 
+
+EXT_README = """# BYTES extension Mac check: non-claim
+
+Generate: `python3.13 -B scripts/bytes_mac_kit.py --extension qwen38-27b-8bit`.
+Verify: add `--check`. The original kit is frozen and unchanged.
+
+This separate fixed tree has five extension absolute runs (the exact source
+run IDs r01..r05), split 3/2 around the inherited midpoint reference. It reuses
+the block-6 corpus (18 planned, stop at 12 valid), start triplet, midpoint and
+end triplet, calibration and launch scaffold. R2 is unchanged: 2,048 prompt
+and 512 output tokens with existing warm-up and settle.
+
+The original kit's R8.6 rule is "five structural runs per model and twelve
+additional soak runs for 70B/122B". Its threshold note §4 row 7 implementation
+uses "two large runs at each end" for 70B, 122B and Next-80B (alternating with
+references per design §14). This 27B dense model is outside those regimes:
+no soak or test-7 stages are added. No new numerical threshold is introduced.
+
+Only the lead runs on the Mac, in a desk worktree with the loop held and no
+agent alive. Never register this kit or add it to loop.json/base_order. Dedicated
+roots are runs_bytes_mac_check_ext and runs_bytes_mac_check_ext_bound. C4,
+calibration, pins and precheck remain lead-owned; do not integrate this change
+into the measurement checkout without its fingerprint review.
+
+Mac commands (Python 3.13 measurement venv; JW_B5_SYNTHETIC_ONLY must be unset
+for live collection):
+
+```sh
+python3.13 -B scripts/bytes_mac_kit.py --extension qwen38-27b-8bit --check
+python3.13 -B scripts/check_b5_chain.py --pack-root configs/campaigns/bytes_mac_check_ext --no-live-identity
+```
+
+Use the existing desk/chain tooling with fixed campaign
+`configs/campaigns/bytes_mac_check_ext/plan_tree.json`, as for the original kit.
+The check command validates the fixed tree without launching a measurement. Export explicitly with
+`joulewise.b6.export_runs.export(..., non_claim=True)` (or the harvest CLI's
+`--non-claim`); the tree label alone is not an export switch. Preserve native
+EXPORT.runs.csv and EXPORT.session.json together, including scaffold rows and
+failed/skipped rows. No blinding keys are used.
+
+Harvest the lead-prepared session plan (PLAN, ARCHIVE, REGISTRATION and
+PACK_RECORDS are the desk's existing session paths, not new pack registrations):
+
+```sh
+python3.13 -B scripts/harvest_b6_session.py --plan "$PLAN" --archive-root "$ARCHIVE" --registration-dir "$REGISTRATION" --pack-records-root "$PACK_RECORDS" --export-dir "$EXPORT_DIR" --non-claim
+```
+
+Prepare MEASUREMENTS.json with schema_version
+joulewise.bytes_mac_measurements.v1, non_claim true, the export session_id,
+and a runs map with every exported run_id. As in the original kit, each receipt
+has request_s, member_wall_s (whole member including preparation and wind-down)
+and stream_s (that run's first/last paired wall/RAW stamps, including idle).
+Keep the source journals; do not substitute decode time or whole-session spans.
+For step-7 sizing also supply sizing.fixed_desk_s and
+sizing.collection_stage_overhead_s, disjoint measured terms as in the original kit.
+
+```sh
+python3.13 -B scripts/bytes_mac_kit.py --extension qwen38-27b-8bit --runs EXPORT.runs.csv --measurements MEASUREMENTS.json --out resolvability.json
+```
+
+Exit 0 passes, 2 fails the five-run rule, malformed input raises an error.
+The checker requires five succeeded, unexcluded, 512-token runs with finite
+positive dur_decode_s contained in its request (dur_decode_s <= request_s). It prints no energy result. It records runs_checked,
+decode_phase_s_range, verdict, per-member walls and stream spans, and sizing
+operands plus S and T_stream_max for the lead. S uses the registered formula
+for the eventual 50-science-member single-model pack, 25 references and seven
+collections; it is not the duration of this diagnostic kit. Missing planned
+members fail; export corpus members past the 12-valid stop as non-succeeded rows.
+Missing sizing receipts leave S unavailable.
+Run the checker from the same commit the session ran from and compare its recorded plan hash with that commit's tree. Only Mac receipts may fill slots;
+this checker never writes slots or registrations.
+"""
+
+
+def evaluate_extension(rows, sidecar, measured):
+    """Native non-claim export only; no energy fields or new threshold."""
+    import math
+    from scripts.bytes_gates import sizing_span
+    def positive(value):
+        if isinstance(value, bool):
+            raise ValueError('boolean duration')
+        value = float(value)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError('duration must be finite and positive')
+        return value
+    session = sidecar['session_id']
+    if (sidecar.get('non_claim') is not True or sidecar.get('pack_id') != 'bytes-mac-check-ext'
+            or measured.get('non_claim') is not True or measured.get('session_id') != session
+            or measured.get('schema_version') != 'joulewise.bytes_mac_measurements.v1'):
+        raise ValueError('requires matching non-claim extension session')
+    by_id = {}
+    for row in rows:
+        if (row['run_id'] in by_id or row['session_id'] != session
+                or row['pack_id'] != 'bytes-mac-check-ext' or row['non_claim'] != 'True'):
+            raise ValueError('duplicate, claim or foreign export row')
+        by_id[row['run_id']] = row
+    if set(measured['runs']) != set(by_id):
+        raise ValueError('timing receipt membership differs from export')
+    if not by_id:
+        raise ValueError('empty export')
+    expected = [f'bytes-qwen38-27b-8bit-abs-r{i:02}' for i in range(1, 6)]
+    details, phases = [], []
+    for rid in expected:
+        row = by_id.get(rid, {})
+        ok = (row.get('status') == 'succeeded' and row.get('excluded') == 'False'
+              and row.get('emitted_tokens') == '512')
+        try:
+            phase = positive(row.get('dur_decode_s'))
+        except (ValueError, TypeError):
+            phase, ok = None, False
+        if phase is not None:
+            phases.append(phase)
+        details.append({'run_id': rid, 'pass': ok, 'decode_phase_s': phase})
+    timings = {}
+    for rid, receipt in measured['runs'].items():
+        if by_id[rid]['status'] == 'succeeded':
+            timings[rid] = {k: positive(receipt[k]) for k in ('request_s', 'member_wall_s', 'stream_s')}
+            if min(timings[rid]['member_wall_s'], timings[rid]['stream_s']) < timings[rid]['request_s']:
+                raise ValueError('member/stream shorter than request')
+    for detail in details:
+        rid = detail['run_id']
+        if detail['pass'] and detail['decode_phase_s'] > timings[rid]['request_s']:
+            detail.update({'pass': False, 'reason': 'decode phase is not contained in its request'})
+    verdict = 'pass' if all(d['pass'] for d in details) else 'fail'
+    science = [timings[r] for r in expected if r in timings]
+    refs = [v for r, v in timings.items() if by_id[r].get('role') in ('corpus', 'start', 'midpoint', 'end')]
+    sizing = measured.get('sizing', {})
+    for key in ('fixed_desk_s', 'collection_stage_overhead_s'):
+        if key in sizing:
+            value = sizing[key]
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                raise ValueError(key + ' must be a finite nonnegative measured number')
+    span = None
+    margin = None
+    # The scaffold plans every row, including corpus skips. Do not size from
+    # a partial harvest or a lone surviving reference.
+    tree = json.loads((ROOT / 'configs/campaigns/bytes_mac_check_ext/plan_tree.json').read_bytes())
+    inventory = set()
+    for stage in tree['stage_graph']:
+        ref = stage.get('input', {})
+        if ref.get('kind') == 'manifest':
+            manifest = json.loads((ROOT / ref['path']).read_bytes())
+            inventory.update(e['run_id'] for e in manifest['executed_order'])
+    if set(by_id) - inventory:
+        raise ValueError('export contains unplanned runs')
+    missing = inventory - set(by_id)
+    if missing:
+        raise ValueError('harvest is missing planned kit members: ' + ', '.join(sorted(missing)))
+    roles = {role: sum(by_id[r].get('role') == role for r in timings)
+             for role in ('corpus', 'start', 'midpoint', 'end')}
+    complete = (set(by_id) == inventory and roles['corpus'] >= 12
+                and roles['start'] == 3 and roles['midpoint'] == 1 and roles['end'] == 3)
+    if verdict == 'pass' and len(science) == 5 and complete:
+        margin = max(v['request_s'] for v in science) / min(v['request_s'] for v in science) - 1
+        if all(k in sizing for k in ('fixed_desk_s', 'collection_stage_overhead_s')):
+            fixed, overhead = (float(sizing[k]) for k in ('fixed_desk_s', 'collection_stage_overhead_s'))
+            if not all(math.isfinite(v) and v >= 0 for v in (fixed, overhead)):
+                raise ValueError('invalid sizing duration')
+            span = sizing_span(50 * sum(v['member_wall_s'] for v in science) / 5, 25,
+                               sum(v['member_wall_s'] for v in refs) / len(refs), margin, 7, overhead, fixed)
+    return {'non_claim': True, 'runs_checked': len(expected), 'verdict': verdict,
+            'decode_phase_s_range': [min(phases), max(phases)] if phases else None,
+            'runs': details, 'member_timings': timings, 'measured_margin': margin,
+            'S': span, 'T_stream_max': max((v['stream_s'] for v in science), default=None)}
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, default=ROOT)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument('--extension', choices=['qwen38-27b-8bit'])
+    parser.add_argument('--runs', type=Path, help='harvested native .runs.csv to evaluate')
+    parser.add_argument('--measurements', type=Path, help='member timing receipts, as in the original kit')
+    parser.add_argument('--out', type=Path)
     args = parser.parse_args(argv)
-    generate(args.output_root, check=args.check)
+    if args.runs:
+        if not args.extension or not args.measurements or not args.out:
+            parser.error('--runs requires --extension, --measurements and --out')
+        import csv
+        with args.runs.open(newline='') as stream:
+            rows = list(csv.DictReader(stream))
+        sidecar_path = args.runs.with_suffix('').with_suffix('.session.json')
+        result = evaluate_extension(rows, json.loads(sidecar_path.read_bytes()),
+                                    json.loads(args.measurements.read_bytes()))
+        result['inputs_sha256'] = {str(p): sha(p.read_bytes()) for p in
+                                  (args.runs, sidecar_path, args.measurements,
+                                   ROOT / 'configs/campaigns/bytes_mac_check_ext/plan_tree.json')}
+        args.out.write_bytes(raw_json(result))
+        return 0 if result['verdict'] == 'pass' else 2
+    generate(args.output_root, check=args.check, extension=args.extension)
     print("verified non-claim Mac kit" if args.check else "generated non-claim Mac kit")
     return 0
 

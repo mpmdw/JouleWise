@@ -136,3 +136,141 @@ class MacKitTests(unittest.TestCase):
         for args in ((0, 3), (1024, 0), (True, 1)):
             with self.assertRaises(ValueError):
                 probe.stream(*args, mx=mx)
+
+
+class ExtensionKitTests(unittest.TestCase):
+    def test_extension_generation_and_scaffold(self):
+        files = kit.build_files(extension='qwen38-27b-8bit')
+        base = Path('configs/campaigns/bytes_mac_check_ext')
+        self.assertTrue(all(p.is_relative_to(base) for p in files))
+        tree = json.loads(files[base / 'plan_tree.json'])
+        self.assertTrue(tree['non_claim'])
+        self.assertEqual(len(chain.stage_plan(tree)), len(tree['stage_graph']))
+        plan = json.loads(files[base / 'collection_plan.json'])
+        self.assertEqual([m['run_id'] for m in plan['members']],
+                         [f'bytes-qwen38-27b-8bit-abs-r{i:02}' for i in range(1, 6)])
+        self.assertEqual((plan['soak_runs_per_model'], plan['test7_pairs_per_end']), (0, 0))
+        for stage in tree['stage_graph']:
+            self.assertNotIn('soak', stage['stage_id'])
+            self.assertNotIn('test7', stage['stage_id'])
+            ref = stage.get('input', {})
+            if ref.get('kind') == 'manifest':
+                path = Path(ref['path'])
+                raw = files[path] if path in files else (ROOT / path).read_bytes()
+                self.assertEqual(kit.sha(raw), ref['sha256'])
+        for member in plan['members']:
+            self.assertIn(member['stage_id'], {s['stage_id'] for s in tree['stage_graph']})
+            cfg = json.loads(files[Path(member['config_path'])])
+            self.assertFalse(BenchmarkConfig.from_mapping(cfg).config_warnings)
+            source = ROOT / 'configs/campaigns/bytes_v1/extension/qwen38-27b-8bit/01_decode_absolute' / (member['run_id'] + '.json')
+            original = json.loads(source.read_bytes())
+            for key in ('model', 'workload_profile', 'adapter_options', 'quantization'):
+                self.assertEqual(cfg.get(key), original.get(key))
+        with tempfile.TemporaryDirectory() as tmp:
+            kit.generate(tmp, extension='qwen38-27b-8bit')
+            kit.generate(tmp, extension='qwen38-27b-8bit', check=True)
+
+    def fixture(self):
+        rows = [dict(run_id=f'bytes-qwen38-27b-8bit-abs-r{i:02}',
+            session_id='synthetic', pack_id='bytes-mac-check-ext', non_claim='True',
+            status='succeeded', excluded='False', emitted_tokens='512', dur_decode_s='16')
+            for i in range(1, 6)]
+        sidecar = dict(session_id='synthetic', pack_id='bytes-mac-check-ext', non_claim=True)
+        measured = dict(schema_version='joulewise.bytes_mac_measurements.v1', non_claim=True,
+            session_id='synthetic', runs={r['run_id']: dict(request_s=32, member_wall_s=64, stream_s=48) for r in rows})
+        base = ROOT / 'configs/campaigns/bytes_mac_check_ext'
+        tree = json.loads((base / 'plan_tree.json').read_bytes())
+        for stage in tree['stage_graph']:
+            ref = stage.get('input', {})
+            if ref.get('kind') != 'manifest' or stage['stage_id'].endswith(('-check-a', '-check-b')):
+                continue
+            role = ('corpus' if 'bound-collection' in stage['stage_id'] else
+                    stage['stage_id'].rsplit('-', 1)[-1])
+            for entry in json.loads((ROOT / ref['path']).read_bytes())['executed_order']:
+                row = dict(rows[0], run_id=entry['run_id'], role=role)
+                rows.append(row)
+                measured['runs'][entry['run_id']] = dict(request_s=32, member_wall_s=64, stream_s=48)
+        return rows, sidecar, measured
+
+    def test_pass_rule_and_timings(self):
+        rows, sidecar, measured = self.fixture()
+        result = kit.evaluate_extension(rows, sidecar, measured)
+        self.assertEqual((result['runs_checked'], result['verdict'], result['decode_phase_s_range']), (5, 'pass', [16, 16]))
+        self.assertEqual(result['T_stream_max'], 48)
+        self.assertIsNone(result['S'])
+        for field, value in [('status', 'failed'), ('excluded', 'True'), ('emitted_tokens', '511'),
+                             ('dur_decode_s', ''), ('dur_decode_s', 'nan'), ('dur_decode_s', '0')]:
+            with self.subTest(field=field, value=value):
+                changed = [dict(r) for r in rows]
+                changed[0][field] = value
+                self.assertEqual(kit.evaluate_extension(changed, sidecar, measured)['verdict'], 'fail')
+        missing = rows[:-1]
+        measured['runs'].pop(rows[-1]['run_id'])
+        with self.assertRaisesRegex(ValueError, rows[-1]['run_id']):
+            kit.evaluate_extension(missing, sidecar, measured)
+
+    def test_claim_foreign_and_duplicate_rows_refuse(self):
+        rows, sidecar, measured = self.fixture()
+        for field, value in [('non_claim', 'False'), ('pack_id', 'bytes-mac-check'), ('session_id', 'other')]:
+            bad = [dict(r) for r in rows]
+            bad[0][field] = value
+            with self.assertRaises(ValueError):
+                kit.evaluate_extension(bad, sidecar, measured)
+        with self.assertRaises(ValueError):
+            kit.evaluate_extension(rows + rows[:1], sidecar, measured)
+
+    def test_complete_scaffold_sizes_with_registered_formula(self):
+        rows, sidecar, measured = self.fixture()
+        measured['sizing'] = dict(fixed_desk_s=10, collection_stage_overhead_s=2)
+        result = kit.evaluate_extension(rows, sidecar, measured)
+        # Exact equality holds only because these fixture values are exact in binary.
+        # Synthetic seconds: (50*64+25*64)*(1+0)+8*60+7*2+10.
+        self.assertEqual(result['S'], 5304)
+
+
+    def test_decode_contained_in_request(self):
+        for phase in ('60', '1e12'):
+            rows, sidecar, measured = self.fixture()
+            rid = rows[0]['run_id']
+            rows[0]['dur_decode_s'] = phase
+            measured['runs'][rid]['request_s'] = 50
+            measured['runs'][rid]['stream_s'] = 64
+            result = kit.evaluate_extension(rows, sidecar, measured)
+            self.assertEqual(result['verdict'], 'fail')
+            self.assertIn('contained in its request', result['runs'][0]['reason'])
+        rows[0]['dur_decode_s'] = '50'
+        self.assertEqual(kit.evaluate_extension(rows, sidecar, measured)['verdict'], 'pass')
+
+    def test_missing_midpoint_and_only_science_refuse(self):
+        for only_science in (False, True):
+            rows, sidecar, measured = self.fixture()
+            removed = [r for r in rows if r.get('role') == 'midpoint' or
+                       (only_science and 'role' in r)]
+            for row in removed:
+                rows.remove(row)
+                measured['runs'].pop(row['run_id'])
+            with self.assertRaises(ValueError) as caught:
+                kit.evaluate_extension(rows, sidecar, measured)
+            self.assertIn('missing planned kit members', str(caught.exception))
+            for row in removed:
+                self.assertIn(row['run_id'], str(caught.exception))
+
+    def test_stopped_corpus_rows_are_present_but_not_succeeded(self):
+        rows, sidecar, measured = self.fixture()
+        corpus = [r for r in rows if r.get('role') == 'corpus']
+        self.assertEqual(len(corpus), 18)
+        for row in corpus[12:]:
+            row['status'] = 'skipped'
+            measured['runs'][row['run_id']] = {}
+        measured['sizing'] = dict(fixed_desk_s=10, collection_stage_overhead_s=2)
+        result = kit.evaluate_extension(rows, sidecar, measured)
+        self.assertEqual(result['verdict'], 'pass')
+        self.assertIsNotNone(result['S'])
+
+    def test_sizing_rejects_bool_and_string(self):
+        for key in ('fixed_desk_s', 'collection_stage_overhead_s'):
+            for value in (True, '600'):
+                rows, sidecar, measured = self.fixture()
+                measured['sizing'] = {key: value}
+                with self.assertRaisesRegex(ValueError, key + ' must be'):
+                    kit.evaluate_extension(rows, sidecar, measured)
