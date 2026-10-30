@@ -10,6 +10,11 @@ L9-STEP4-3 records the lead's ruling (RUN_STATE items 132-133 and 138) beside
 the generator output, never inside it: the 'r3' list of plan section 2.2 codes
 and the step-4 rule. The registered file must equal generator output plus
 RULING below, byte for byte, so the table and this test change together.
+
+L9-STEP4-4 (lead ruling, plan-literal reading of section 2.2 bullet 3; Fable
+F1 of L9-STEP4-3-FABLE-REV): every member-level code that bullet names
+literally and that can reach a step-4 extractor cell is R3 too. The two it
+names that never reach a cell (claim-gate codes) are pinned out below.
 """
 import hashlib
 import json
@@ -38,9 +43,11 @@ HEADER = {
 }
 RULING = {
     'r3': ['anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_below_threshold',
-           'calibration_acceptance_bound_stale', 'clock_bound_exceeds_quarter_window',
+           'calibration_acceptance_bound_stale', 'campaign_cooldown_evidence_missing',
+           'clock_bound_exceeds_quarter_window', 'idle_window_suspect',
            'instrument_calibration_stale', 'insufficient_in_window_samples',
-           'insufficient_members_after_exclusion', 'kept_units_below_minimum'],
+           'insufficient_members_after_exclusion', 'kept_units_below_minimum',
+           'window_evidence_precheck_missing'],
     'step4_rule': {
         'ruling': 'L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind',
         'refused_cells_only_p42': 'p42_floor_cells_only',
@@ -74,8 +81,21 @@ R3_PINS = {
         ('joulewise/reduce.py', 'return None, "instrument_calibration_stale"', MEMBER_RULE),
     'calibration_acceptance_bound_stale':
         ('joulewise/calibration_bracketing.py', 'return finish(("calibration_acceptance_bound_stale",))', MEMBER_RULE),
+    # L9-STEP4-4: the bullet's own member-level codes that the precheck emits; the
+    # extractor extends every member's reasons with them (floor_extraction.py, only
+    # cooldown_cap_hit is filtered).
+    'window_evidence_precheck_missing':
+        ('joulewise/analysis_engine/inputs.py', 'reasons.append("window_evidence_precheck_missing")', MEMBER_RULE),
+    'campaign_cooldown_evidence_missing':
+        ('joulewise/analysis_engine/inputs.py', 'reasons.append("campaign_cooldown_evidence_missing")', MEMBER_RULE),
+    'idle_window_suspect':
+        ('joulewise/analysis_engine/inputs.py', 'reasons.append("idle_window_suspect")', MEMBER_RULE),
 }
-# The six member-level codes the window-evidence precheck forwards onto kept units (Fable F2).
+# The member-level codes plan 2.2 bullet 3 names literally that reach an extractor cell.
+PLAN_NAMED = {'window_evidence_precheck_missing', 'campaign_cooldown_evidence_missing', 'idle_window_suspect'}
+# The bullet's claim-gate codes: never in an extractor cell, so never R3 at step 4.
+CLAIM_GATE_ONLY = ('paired_block_incomplete', 'fixed_n_plan_incomplete')
+# Every member-rule code the window-evidence precheck forwards onto kept units (Fable F2, L9-STEP4-4 F1).
 FORWARDED_PRECHECK = {code for code, pin in R3_PINS.items() if pin[2] is MEMBER_RULE}
 
 
@@ -112,11 +132,27 @@ class Step4ReasonTableTests(unittest.TestCase):
         self.assertEqual(self.table, expected)
         self.assertEqual(self.raw, (json.dumps(expected, indent=1) + '\n').encode())
 
-    def test_R3_list_is_read_by_the_classifier_and_drawn_from_the_blind_mask(self):
+    def test_R3_list_is_read_by_the_classifier_and_is_mask_codes_plus_plan_named_codes(self):
         self.assertEqual(steps.step4_r3_reasons(), frozenset(RULING['r3']))
         self.assertEqual(set(R3_PINS), set(RULING['r3']))
-        # Every R3 code was a blind MASK code; the ruling moves none of them to an outcome.
-        self.assertLessEqual(set(RULING['r3']), set(self.table['mask']))
+        # L9-STEP4-4 invariant: r3 is the blind MASK codes the ruling routes to R3 plus the
+        # three plan-named member codes, which are blind tooling codes pinned to the
+        # precheck and the member rule. No outcome; nothing else moves out of tooling.
+        mask, tooling = set(self.table['mask']), set(self.table['tooling'])
+        self.assertEqual(set(RULING['r3']) - mask, PLAN_NAMED)
+        self.assertLessEqual(PLAN_NAMED, tooling)
+        plan = ' '.join(PLAN.read_text().split())
+        bullet = plan[plan.index('- Nothing else excludes a member'):plan.index('- **p42.**')]
+        self.assertIn(MEMBER_RULE, bullet)
+        for code in PLAN_NAMED:
+            with self.subTest(code=code):
+                self.assertEqual(R3_PINS[code][:1] + R3_PINS[code][2:],
+                                 ('joulewise/analysis_engine/inputs.py', MEMBER_RULE))
+                self.assertIn('`%s`' % code, bullet)
+        for code in CLAIM_GATE_ONLY:
+            with self.subTest(code=code):
+                self.assertIn('`%s`' % code, bullet)
+                self.assertNotIn(code, RULING['r3'])
 
     def test_R3_step4_rule_names_the_classifier_codes_and_they_are_registered(self):
         rule = self.table['step4_rule']
@@ -140,11 +176,35 @@ class Step4ReasonTableTests(unittest.TestCase):
 
     def test_R3_forwarded_precheck_codes_are_exactly_the_blind_mask_reducer_codes(self):
         from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
-        self.assertEqual(len(FORWARDED_PRECHECK), 6)
-        self.assertEqual(set(self.table['mask']) & REDUCER_REASON_CODES, FORWARDED_PRECHECK)
+        self.assertEqual(len(FORWARDED_PRECHECK), 9)
+        self.assertEqual(set(self.table['mask']) & REDUCER_REASON_CODES, FORWARDED_PRECHECK - PLAN_NAMED)
+        # The plan-named codes are the precheck's own, not reducer vocabulary.
+        self.assertFalse(PLAN_NAMED & REDUCER_REASON_CODES)
         # The window-evidence precheck forwards reducer reasons onto the cell's members.
         inputs = (ROOT / 'joulewise/analysis_engine/inputs.py').read_text()
         self.assertRegex(inputs, re.compile(r'def window_evidence_precheck\b'))
+
+    def test_R3_claim_gate_member_codes_cannot_reach_a_step4_cell(self):
+        # The precheck forwards only reducer vocabulary (anything else becomes
+        # window_evidence_precheck_missing), and in the eleven extractor modules these
+        # literals occur only as the code argument of a kept-unit stop, which raises
+        # member_code_on_kept_unit (exit 2) instead of entering a cell's reasons.
+        import ast
+        from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
+        self.assertFalse(set(CLAIM_GATE_ONLY) & REDUCER_REASON_CODES)
+        self.assertFalse(set(CLAIM_GATE_ONLY) & set(self.table['mask']))
+        seen = {code: 0 for code in CLAIM_GATE_ONLY}
+        for module in self.table['modules']:
+            tree = ast.parse((ROOT / module).read_text())
+            stop_args = {id(call.args[2]) for call in ast.walk(tree)
+                         if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                         and call.func.attr == 'stop_if_member_code_on_kept_unit' and len(call.args) >= 3}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Constant) and node.value in seen:
+                    seen[node.value] += 1
+                    with self.subTest(module=module, code=node.value, line=node.lineno):
+                        self.assertIn(id(node), stop_args)
+        self.assertEqual(seen['fixed_n_plan_incomplete'], 0)
 
 
 if __name__ == '__main__':

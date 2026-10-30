@@ -1968,11 +1968,14 @@
   "anchor_energy_envelope_exceeds_quarter_metric",
   "cadence_ratio_below_threshold",
   "calibration_acceptance_bound_stale",
+  "campaign_cooldown_evidence_missing",
   "clock_bound_exceeds_quarter_window",
+  "idle_window_suspect",
   "instrument_calibration_stale",
   "insufficient_in_window_samples",
   "insufficient_members_after_exclusion",
-  "kept_units_below_minimum"
+  "kept_units_below_minimum",
+  "window_evidence_precheck_missing"
  ],
  "step4_rule": {
   "ruling": "L9-STEP4-3 lead ruling, RUN_STATE items 132-133 and 138, made blind",

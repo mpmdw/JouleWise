@@ -25,9 +25,10 @@ TOOLING = 'marker_self_digest_mismatch'
 UNLISTED = 'syn_reason_in_neither_list'
 R3 = 'kept_units_below_minimum'
 R3_CODES = ('anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_below_threshold',
-            'calibration_acceptance_bound_stale', 'clock_bound_exceeds_quarter_window',
+            'calibration_acceptance_bound_stale', 'campaign_cooldown_evidence_missing',
+            'clock_bound_exceeds_quarter_window', 'idle_window_suspect',
             'insufficient_in_window_samples', 'insufficient_members_after_exclusion',
-            'instrument_calibration_stale', 'kept_units_below_minimum')
+            'instrument_calibration_stale', 'kept_units_below_minimum', 'window_evidence_precheck_missing')
 
 
 def cell(cell_id, refused, reasons=(MASK,)):
@@ -169,7 +170,10 @@ class Step4ReasonClassTests(unittest.TestCase):
     assertClass = Step4ExitClassTests.assertClass
 
     def test_R2_tooling_only_reasons_are_a_tooling_refusal(self):
-        for reasons in ((TOOLING,), (TOOLING, 'content_digest'), ('window_evidence_precheck_missing',)):
+        # L9-STEP4-4: window_evidence_precheck_missing moved to R3; its unknown-state sibling
+        # and the same-slot cooldown-cap code stay tooling.
+        for reasons in ((TOOLING,), (TOOLING, 'content_digest'), ('idle_window_suspect_unknown',),
+                        ('cooldown_cap_hit',)):
             with self.subTest(reasons=reasons):
                 rep = report(('syn-target',), {'syn-target': reasons})
                 self.assertClass(rep, 'extraction_cell_tooling_refusal', 'tooling_refusal')
@@ -190,6 +194,19 @@ class Step4ReasonClassTests(unittest.TestCase):
                                  'extraction_cell_r3_refusal', 'tooling_refusal')
         rep = report(('syn-target', 'syn-cmp'), {'syn-target': R3_CODES, 'syn-cmp': (R3,)})
         self.assertClass(rep, 'extraction_cell_r3_refusal', 'tooling_refusal')
+
+    def test_R2_plan_named_member_codes_are_r3_and_claim_gate_codes_are_not(self):
+        # L9-STEP4-4 counterfactual: each of these three gave extraction_cell_tooling_refusal
+        # at 901956944; the claim-gate codes never reach a cell and stay out of R3.
+        for code in ('window_evidence_precheck_missing', 'campaign_cooldown_evidence_missing',
+                     'idle_window_suspect'):
+            with self.subTest(code=code):
+                self.assertClass(report(('syn-target',), {'syn-target': (code,)}),
+                                 'extraction_cell_r3_refusal', 'tooling_refusal')
+        for code in ('paired_block_incomplete', 'fixed_n_plan_incomplete'):
+            with self.subTest(code=code):
+                self.assertClass(report(('syn-target',), {'syn-target': (code,)}),
+                                 'extraction_cell_tooling_refusal', 'tooling_refusal')
 
     def test_R2_r3_takes_precedence_over_tooling_on_any_refused_non_p42_cell(self):
         for refused, reasons in ((('syn-target',), {'syn-target': (TOOLING, R3)}),

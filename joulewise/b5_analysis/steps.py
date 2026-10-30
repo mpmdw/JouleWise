@@ -43,7 +43,7 @@ _STEP4_REASON_TABLE = Path(__file__).resolve().parents[2] / "configs/analysis/b5
 
 @lru_cache(maxsize=1)
 def step4_r3_reasons() -> frozenset[str]:
-    """The plan section 2.2 R3 codes recorded beside the blind table (L9-STEP4-3 ruling)."""
+    """The plan section 2.2 R3 codes recorded beside the blind table (L9-STEP4-3 and -4 rulings)."""
     return frozenset(json.loads(_STEP4_REASON_TABLE.read_bytes())["r3"])
 
 

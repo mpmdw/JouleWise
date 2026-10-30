@@ -961,11 +961,14 @@ class IndexedCliTests(unittest.TestCase):
     def test_r14_real_index_context_composition_with_registered_p42_exit(self):
         self.real_composition = cli.extract_indexed_pack
         # L9-STEP4-3: a refused target is a stop named by its reasons' class. The seam's
-        # window_evidence_precheck_missing is tooling; cadence_ratio_below_threshold is a plan
-        # section 2.2 R3 code. Both were floor_cell_not_extractable at origin/main 0a9ff42.
+        # window_evidence_precheck_missing (plan 2.2 bullet 3 names it; tooling until
+        # L9-STEP4-4) and cadence_ratio_below_threshold are plan section 2.2 R3 codes;
+        # marker_self_digest_mismatch is tooling. The first two were floor_cell_not_extractable
+        # at origin/main 0a9ff42.
         for target_refused, reason, expected in (
                 (False, None, "p42_floor_cells_only"),
-                (True, "window_evidence_precheck_missing", "extraction_cell_tooling_refusal"),
+                (True, "window_evidence_precheck_missing", "extraction_cell_r3_refusal"),
+                (True, "marker_self_digest_mismatch", "extraction_cell_tooling_refusal"),
                 (True, "cadence_ratio_below_threshold", "extraction_cell_r3_refusal")):
             with self.subTest(target_refused=target_refused, reason=reason):
                 output = self.real_output(target_refused, reason)
