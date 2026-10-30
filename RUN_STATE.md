@@ -891,6 +891,34 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **KB-V2:** round 8 done (`4a63b50b9`). Sol delta: ACCEPT_WITH_FIXES with two MINORs: a 5,001-digit JSON integer crashes at the parser, and one overflow reason lacks its leaf name (label only). CI 20/20 green. Opus delta is running (`session_01JActAYH474T924o7WDsMys`, `claude/kb-v2-delta-opus-5`).
 - **BY-EXT-2:** done (`ec2798aa2`). Draft PR #608 is CI only. Opus executing review is running (`session_01JActAac69GqbBKLLLDDhC1`, `claude/byext2-rev-opus`).
 
+151. **Magistrate activation 4e748ac1 (Opus 5.5, headless, 2026-10-30 from 11:26 PDT).** Record: `docs/process_traces/2026-10-30-magistrate-4e748ac1/RECORD.md`. No pending notices and no mail from Ed.
+- **BYTES collection is complete.**
+  - `r2-bytes-s1-p2` counts: 125/125 runs succeeded, ACCEPT, no exclusions of any kind, NEG-8 clean n 12 with the screen passed, both cells 10/10 quads and 10/10 repeats, member hull 0 of 100.
+  - All 12 sub-packs count, and the loop is DONE.
+  - The measurement line's final head is `1aca17e27`, pushed to `records/bytes-pass2-heads`. All of pass 2 ran `2649fad54`, and BYTES addendum §5 is appended.
+  - Verdict email Gmail `1a18e7d872dd7507`.
+- **BYTES extension (Qwen3.8-27B-8bit) dropped** under its registered rule ("extension sessions are dropped first"). It still lacked a runner, sizing inputs, a kit run, a gate and a session before 11-05, and the known-bytes test needs the same quiet Mac first. Ed was told and may overrule ("keep the extension"). BY-EXT-2 was fixed (E1-E5, `ee439ce19`) and lead-verified; it stays on `desk/2026-10-29-byext-slots` (PR #608 retargeted to `ci/2026-10-30-byext-base`).
+- **KB-V2 reading rule ADMITTED** by the lead at `559197821` (status line `a3226e87f`) after round 9. The lead re-ran Opus 5's MAJOR repros: every shape now ends UNDETERMINED with its reason, and the worked output is bit-identical.
+- **KB-CAP-1 built** (`codex/2026-10-30-kb-capture`, PR #613): the capture and harvest chain extension for the known-bytes test.
+  - Rounds 1-3 by Sol.
+  - Blind cold passes by Opus and Fable: both ACCEPT_WITH_FIXES. The independent recompute agrees on every field to at most 5.6e-6 of the bar. Fixed in round 3.
+  - Clock gate: a two-seat council split and a cold Fable judge ruled. Keep `t_stream_max_s` = 4629.6 s, with the kernel frequency word at 0 as the precondition. The 10-11 arms' 2.718 ppm was the word, not the oscillator. M3 (10-17, word 0) measured −4.67e-7 ppm. The lead read the word as 0 on boot `EA2D3EC8` today.
+  - CI test-identity fix by the lead, `e91946490`.
+- **BY-THERM-LINES**:
+  - Fable consult adopted (X1-X12), round 5 built.
+  - Sol delta: ACCEPT_WITH_FIXES. Opus delta: REJECT, because the journal is not parsed as production parses it, and repeated roster ids are accepted.
+  - Round 6 (A1-A5) is running: Codex Cloud `01a18e99-bc3d-7399-aa7b-87c932b5c000`.
+
+**Next activation (written 2026-10-30 by activation 4e748ac1; item 151; item 150's pointer otherwise holds, with its BYTES steps done):**
+(1) **KB night.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-bytes-stream-test/attempt-1/night_plan.json` and `.../attempt-1/custody/night/result.json` does not exist, exit at once, quietly. Its t0 and maximum are given in the line under this pointer, and in the arm notice.
+  - Once the terminal record exists, run the README desk steps from `/Users/edr/code/bytes-stream-test` (`configs/campaigns/bytes_stream_test/README.md`): copy the archive once to `/Users/edr/night-archive/bytes-stream-test/attempt-1`, then `bytes_stream_harvest.py`, then `scan` and `read`. Then uninstall the night agents with the installer's `--uninstall`.
+  - The outcome fills the reg §1 slot, so it is a claim-bearing result: its cold science gate (raw re-derivation; Fable plus Opus, blind, executing) comes before the slot is written. Email Ed the outcome.
+  - If the arm held on the clock rate: the remedy is the registered word redraw (block-6 S-7), then a fresh prepare. Do not retry unchanged.
+(2) **BY-THERM-LINES round 6:** read `.codex-report/BY-THERM-LINES.md` "Fix round 6" (or `codex-cloud-run.mjs --attach 01a18e99-bc3d-7399-aa7b-87c932b5c000`).
+  - The lead re-runs Opus's `probe_journal_divergence.py` and `misc_probes.py` (JouleWise-data `e1b61a4d7`) and Sol's `session_path.py` and `large_level.py`.
+  - If none changes which members count, the tool is admitted. It then runs on the real pass-1 and pass-2 archives locally (blinded data stays local) before the pass-2 analysis.
+(3) Directive #587's standing items stay with the laptop lead. BYTES stage 1 is planned for 12 Nov (contingency plan), after the KB outcome.
+
 **Next activation (written 2026-10-30 by activation a7d07c32; item 150; item 123's pointer otherwise holds):**
 (1) BYTES pass 2 as item 123 (1). Only s1-p2 remains; no t0 after 2026-11-05 00:00 PDT. At its SESSION_DESK, send the verdict email and append s1-p2's measurement HEAD to BYTES addendum §5 (push the new head to `records/bytes-pass2-heads`). After s1-p2's desk, the loop is DONE: then the BY-EXT Mac steps 4-6 (headers, `kv`, the kit run, with the loop held and no agent alive during the kit run), and the KB-V2 stream test on the Mac once the rule is admitted.
 (1b) KB-V2: read the Opus delta (`kb-v2-delta-opus-5/REPORT.md` on JouleWise-data). If it brings no MAJOR, the lead admits the rule, and Sol's two MINORs become a small fix or a recorded flag. The 5,001-digit case is an absurd input that the producer never writes.
