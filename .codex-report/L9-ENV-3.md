@@ -291,3 +291,16 @@ tests.test_harvest_v5_g2b_window | Ran 28 tests in 17.214s | OK
 The failing assertion looks for the token `b'314159'` anywhere in the bytes of a locator file. That file contains
 sha256 values that depend on the random temp-directory name, so one run matched by chance. This is
 OPEN ISSUE O4. Every other failure appears identically at origin/main.
+
+## CORRECTIONS (L9-ENV-4, after L9-ENV-3-FABLE-REV)
+
+- SUMMARY "equal, dict and JSON bytes including key order": at `3e4d359c2` this held only when
+  reduce recorded at least one envelope. When reduce recorded no map, the key was appended last
+  (reviewer F2). L9-ENV-4 now inserts it at its `SummaryMetrics` position, so the claim holds.
+- NEEDS_RULING R2 scope was wrong. A clamped envelope that passes the quarter-metric gate is
+  reachable with ordinary multi-interval phases (one short inverting interval plus a long one), not
+  only with all-zero power. At `3e4d359c2` such a gate was left `{"eligible": false, "reasons": []}`
+  (reviewer F1). L9-ENV-4 does not add such an envelope (stricter reading). See L9-ENV-4 NR1.
+- "only caller ... the consumption session": correct at function level. L9-ENV-4 *Reach* lists
+  every consumer of `AuthenticatedConsumptionSession`, including `run_campaign.py whole-window-verdict`
+  (reviewer F3).
