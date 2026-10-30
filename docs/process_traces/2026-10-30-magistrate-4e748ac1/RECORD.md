@@ -62,3 +62,10 @@ Neither Mac run has an executable recipe today.
   - Y5: run the slow stream module to completion.
 - Then a blind executing review by Opus and Fable. KB fills a registration claim slot (§1), so cold passes come before the live run.
 - PR #608: retargeting did not start `ci.yml`, because `edited` is not one of its trigger types. Closing and reopening the PR started it.
+
+## KB-CAP-1 round 2 (Sol high, `01a18e47-295c-7019-845e-2fc3da1a103f`; head `c2b850860`)
+- Y1: synthetic pre/post calibration now carries authenticated fiducials, and the real `read_own_capture` and `calibration.evaluate` run. The whole chain ends with rails 7.000 ± 0.014, GPU 7.000 ± 0.014, DC 14.08 ± 0.10 and rest 7.077 ± 0.094 J/GB, share 0.4973 ± 0.0046, all RESOLVED from computed bounds. The missing-fiducial chain stays reasoned UNDETERMINED (DC still RESOLVED).
+- Y2: an independent first-call recompute agrees within 5.7e-6 J/GB × 4883.38 GB = 0.0278 J (rails 41118.84 J, meter 82186.93 J, both edge arrays). The missing-sample count matches exactly.
+- Y4: adapter 140 W from `bytes_pack_v1.md:176`. Disk `2*ceil(rate*10390)+4046531103 = 56,028,277,617` B from `sizing_b5.json` `/packs/bytes-s1-p1/disk_derivation`.
+- Y5: `tests.test_bytes_stream_test` 49 OK (894.6 s); new modules 12 OK; registries 28 OK.
+- Cold executing passes launched, blind to each other: Opus 5.5 `session_01JActAcJs7nY7T1hiBnqf4T` (JouleWise-data `claude/kb-cap-cold-opus`) and Fable 5.1 `session_01JActAaXwrUjxrXHGpzBuet` (`claude/kb-cap-cold-fable`). Briefs are in `~/night-archive/seats-4e748ac1/kb-cap-cold/`.
