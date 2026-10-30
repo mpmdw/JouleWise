@@ -1,0 +1,9 @@
+/tmp/jwmain 0a9ff426a
+Ran 3 tests in 95.789s
+OK
+/tmp/jwbase 8222d0e47
+FAIL: test_r14_real_index_context_composition_with_registered_p42_exit (tests.b5_analysis.test_floor_kept_units.IndexedCliTests.test_r14_real_index_context_composition_with_registered_p42_exit)
+Ran 3 tests in 98.887s
+FAILED (failures=1)
+
+[exited with code 0]

@@ -1,0 +1,10 @@
+baseline: FAILED (failures=1, skipped=3)
+M1_no_mask_check: FAILED (failures=12, skipped=3)
+M2_any_mask: FAILED (failures=5, skipped=3)
+M3_no_floor_rule: FAILED (failures=3, skipped=3)
+M4_floor_key_absent_ok: FAILED (failures=2, skipped=3)
+M5_no_malformed: FAILED (failures=14, errors=3, skipped=3)
+M6_p42_only_targets: FAILED (failures=11, skipped=3)
+M7_mask_is_tooling: FAILED (failures=16, skipped=3)
+
+[exited with code 0]
