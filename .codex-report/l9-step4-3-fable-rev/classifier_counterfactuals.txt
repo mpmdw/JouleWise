@@ -1,0 +1,40 @@
+r3 subset of blind mask: True | r3 == classifier set: True
+paired_block_incomplete                in r3=False in blind tooling=True  in blind mask=False
+fixed_n_plan_incomplete                in r3=False in blind tooling=False in blind mask=False
+window_evidence_precheck_missing       in r3=False in blind tooling=True  in blind mask=False
+campaign_cooldown_evidence_missing     in r3=False in blind tooling=True  in blind mask=False
+idle_window_suspect                    in r3=False in blind tooling=True  in blind mask=False
+cooldown_cap_hit                       in r3=False in blind tooling=True  in blind mask=False
+cooldown_cap_hit_unverified            in r3=False in blind tooling=True  in blind mask=False
+--- plan 2.2 member-level codes named literally, on a refused target (exit 1)
+target [paired_block_incomplete]                        -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target [fixed_n_plan_incomplete]                        -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target [window_evidence_precheck_missing]               -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target [campaign_cooldown_evidence_missing]             -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target [idle_window_suspect]                            -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target [cooldown_cap_hit]                               -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target [cooldown_cap_hit_unverified]                    -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+--- the eight recorded r3 codes
+target [anchor_energy_envelope_exceeds_quarter_metric]  -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [cadence_ratio_below_threshold]                  -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [calibration_acceptance_bound_stale]             -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [clock_bound_exceeds_quarter_window]             -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [instrument_calibration_stale]                   -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [insufficient_in_window_samples]                 -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [insufficient_members_after_exclusion]           -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [kept_units_below_minimum]                       -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+--- precedence and edge cases
+target [tooling, kept_units_below_minimum]              -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [tooling]; cmp [cadence_ratio_below_threshold]   -> extraction_cell_r3_refusal         record=(tooling_refusal, extraction_cell_r3_refusal)
+target [tooling]; p42 [kept_units_below_minimum]        -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+p42 only [kept_units_below_minimum]                     -> p42_floor_cells_only               record=(ok, None)
+p42 only []                                             -> p42_floor_cells_only               record=(ok, None)
+target []                                               -> extraction_report_malformed        record=(tooling_refusal, extraction_report_malformed)
+target []; cmp [kept_units_below_minimum]               -> extraction_report_malformed        record=(tooling_refusal, extraction_report_malformed)
+target [insufficient_idle_samples] (blind mask, not r3) -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target ["KEPT_UNITS_BELOW_MINIMUM"]                     -> extraction_cell_tooling_refusal    record=(tooling_refusal, extraction_cell_tooling_refusal)
+target [kept_units_below_minimum] but exit 0 (pre-existing) -> ok                                 record=(ok, None)
+target [kept_units_below_minimum] exit 2                -> refused                            record=(unclassified_refusal, unclassified refusal at step 4)
+--- registry: outcome_class = ['dominance_ratio_zero_denominator']
+both stop codes in tooling_refusal: True
+floor_cell_not_extractable anywhere: False

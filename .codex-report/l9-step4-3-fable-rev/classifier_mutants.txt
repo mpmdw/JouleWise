@@ -1,0 +1,18 @@
+== control
+Ran 58 tests in 6.244s
+OK
+== M-a: R3 branch removed (always tooling)
+Ran 58 tests in 4.042s
+FAILED (failures=15)
+== M-b: r3 read on every refused cell, p42 included
+Ran 58 tests in 3.796s
+FAILED (failures=1)
+== M-c: empty reasons on a target fall through (not malformed)
+Ran 58 tests in 5.494s
+FAILED (failures=4)
+== M-d: classifier reads a hard-coded r3 set instead of the registered file (one code dropped)
+Ran 58 tests in 4.868s
+FAILED (failures=1)
+== restored control
+Ran 58 tests in 4.783s
+OK

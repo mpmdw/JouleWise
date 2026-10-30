@@ -1,0 +1,14 @@
+== M-gen: new extractor literal appended to floor_extraction.py
+FAIL: test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file)
+AssertionError: {'sch[2176 chars]l', 'wall_minus_monotonic_rate_exceeded', 'wal[49472 chars] 4'}} != {'sch[2176 chars]l', 'syn_value_below_floor_threshold', 'wall_m[49536 chars] 4'}}
+Ran 7 tests in 1.473s
+FAILED (failures=1)
+== M-json: a ninth r3 code added to the JSON only
+FAIL: test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R1_generator_output_plus_the_recorded_ruling_is_the_registered_file)
+FAIL: test_R3_list_is_read_by_the_classifier_and_drawn_from_the_blind_mask (tests.b5_analysis.test_step4_reason_table.Step4ReasonTableTests.test_R3_list_is_read_by_the_classifier_and_drawn_from_the_blind_mask)
+Ran 7 tests in 1.475s
+FAILED (failures=2)
+== control: clean copy
+Ran 7 tests in 1.277s
+
+OK
