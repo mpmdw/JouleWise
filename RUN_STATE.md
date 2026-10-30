@@ -724,6 +724,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Verification runs over the whole directory. The lead reruns the full-size window at the head.
 - Still waiting: Opus's review of L9-STEP4-2, which gates L9-STEP4-3, and the pointer-name diagnostic, which gates L9-ENV-1 (item 136).
 
+138. **L9-STEP4-2 Opus review: ACCEPT_WITH_FIXES. L9-STEP4-3 launched. G6 fix is PR #603 (reported by joulewise-28 and the orchestrator, 2026-10-30, 04:45-04:56Z).**
+- **Opus review** on branch `review/2026-10-30-l9-step4-2-opus-rev` at `acd6a2b6e`.
+  - The classifier is sound. 26 adversarial reports and mutants M1-M7 were all killed. No reason code leaks to the record, stdout or stderr.
+  - F1 (stale r14 pin) and F2 (T4 digest collision) match item 134.
+  - F3: six more MASK codes are integrity, config or numeric tooling: `sensitivity_bound_below_operative`, `calibration_bracket_exceeds_minted_bound`, `instrument_calibration_stale`, `calibration_acceptance_bound_stale`, `numeric_padding_insufficient` and `proposal_count_exceeds_configured_cap`. Opus recommends a reviewed override list in the fail-closed direction.
+  - Opus's full run also showed an ERROR in `test_mint_kept_units.SensitivityFixtureIsolationTests`.
+- **Orchestrator note on that ERROR:** it passed in the orchestrator's laptop discover run at main `f0269c5c5`: 1008 tests OK. Its mechanism differs from G6's. It patches `tempfile.tempdir` and clears the S2, S4 and mint caches, then runs `SensitivityGuardTests.setUpClass` and checks the S2 source bytes and cache identity. It does not use the finalization root, so PR #603 is unlikely to resolve it. The L9-STEP4-3 seat needs the actual error text from Opus's run. It should not assume the cause is the G6 leak.
+- **L9-STEP4-3 launched 04:56Z.** It is an Opus seat, `trig_01RjZrvU8MbxWwFmjbWqsvZk`, firing at 05:05Z with MCP cleared. It implements the step-4 ruling from items 132-133:
+  - Every refused non-p42 cell is a STOP. The code is `extraction_cell_r3_refusal` if any §2.2 R3 code is present, and R3 takes precedence. The R3 codes are `kept_units_below_minimum`, `insufficient_members_after_exclusion` and the six forwarded precheck codes. Otherwise the code is `extraction_cell_tooling_refusal`. A refused cell with no reasons is malformed. `floor_cell_not_extractable` is not returned at step 4.
+  - The blind generator stays byte-identical, the ruling is recorded separately, and the regeneration test checks both.
+  - It also carries the r14 and T4 fixes (sentinel `Q7331Z` plus digest stripping, as T3 does), the `mint_kept_units` ERROR, and a whole-directory verification.
+- **G6** (items 134-135) is PR #603: lane `lane/2026-10-30-g6-order`, head `61c3525cb`, light tier, tests only.
+  - Discover over the whole `tests/b5_analysis` directory at the head: 1008 tests, OK (skipped=10). The other fixture users: 48 tests, OK. The gate ledger validates.
+  - joulewise-28 read the diff as the light-tier review. It will merge on green CI under Ed's merge authorization, given in its own session, and tell Ed.
+
 **Next activation (written 2026-10-27 by interactive cloud session 015ASG1T; item 77; supersedes item 76's pointer, whose BYTES steps still hold):** read directive #587 first.
 (0) DONE (item 82): the BYTES end date is applied (`e624d67c7`). If PR #590's re-run shard 10 failed on something other than the known slow synthetic test, look at it at the next desk.
 (0b) **RC-CMP-1 queued** (Ed, 2026-10-27): the recompute-versus-L9 comparator, recompute hygiene and a full-size synthetic agreement run, brief `docs/process_traces/2026-10-27-recompute-comparator/BRIEF.md`. Before launching, check whether `lane/2026-10-27-recompute-comparator` exists: interactive session 015ASG1T may already be running it as a Sol seat on Ed's MacBook Air. If not, launch it as a cloud seat. Never run it on the measurement Mac.
