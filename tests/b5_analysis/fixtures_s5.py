@@ -269,14 +269,26 @@ def _finalization_case(*, removed=(4,)):
 
 @contextlib.contextmanager
 def finalization_case(*, removed=(4,)):
+    """Yield the cached case and restore its whole root tree on exit.
+
+    Every caller in the process shares this root. Callers write finalized
+    manifests into it and delete removed-member run directories from it, so
+    without a full restore a later caller (G6 in test_sensitivity_guard) sees
+    another test's output.
+    """
     fixture=_finalization_case(removed=tuple(removed))
-    paths=[fixture['verdict_path'],fixture['ledger_path'],fixture['bracket_path'],fixture['floor_path'],
-           fixture['runs_root']/'campaign_log.jsonl']
-    originals={path:path.read_bytes() for path in paths}
+    root=fixture['root']
+    files={path:path.read_bytes() for path in root.rglob('*') if path.is_file()}
+    dirs={path for path in root.rglob('*') if path.is_dir()}
     try:
         yield fixture
     finally:
-        for path,raw in originals.items():path.write_bytes(raw)
+        for path in [path for path in root.rglob('*') if path.is_file() and path not in files]:path.unlink()
+        for path in sorted((path for path in root.rglob('*') if path.is_dir() and path not in dirs),
+                           key=lambda path:len(path.parts),reverse=True):path.rmdir()
+        for path in sorted(dirs,key=lambda path:len(path.parts)):path.mkdir(exist_ok=True)
+        for path,raw in files.items():
+            if not path.is_file() or path.read_bytes()!=raw:path.write_bytes(raw)
 
 
 @lru_cache(maxsize=1)
