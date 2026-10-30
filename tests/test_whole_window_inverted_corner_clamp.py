@@ -616,6 +616,17 @@ class PermanentWideningCaseTests(unittest.TestCase):
         self.assertEqual((base_gate["eligible"], base_gate["reasons"]), (False, []))
         self.assertNotIn(("phase", "prefill"), whole_window._classify_precheck_refusals(base)[1])
 
+        # The joint interpolation bound counts (reviewer mutant M16): with it
+        # large enough the same envelope refuses, so it is added and restamped.
+        wide_joint = json.loads(json.dumps(bare))
+        wide_joint["energy_bound_terms_j"]["E_interpolation_joint_edge_bound_j"] = 1e6
+        patcher, _ = self._with_long_prefill(whole_window, just_under)
+        with patcher:
+            added = _clamp_inverted_operative_envelopes(self.bundle, wide_joint, **kwargs)
+        self.assertEqual(added["energy_anchor_shift_envelopes"][PREFILL], oracle_env)
+        self.assertEqual(_gate_for(added, PREFILL)["reasons"], [EXCEEDS])
+        assert_gates_self_consistent(self, added)
+
     def test_genuinely_missing_operative_envelope_still_refuses(self) -> None:
         just_under, _over = self._bounds()
         _old, new, _oracle = self._rederive(just_under)
@@ -658,6 +669,11 @@ class PermanentWideningCaseTests(unittest.TestCase):
         unstamped = json.loads(json.dumps(old))
         _gate_for(unstamped, PREFILL)["reasons"].remove(UNRECORDED)
         self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, unstamped, **kwargs), unstamped)
+        # A recorded group pointer the mirror does not know (mutant M18).
+        foreign = json.loads(json.dumps(old))
+        envelopes = foreign["energy_anchor_shift_envelopes"]
+        envelopes["/phase_energy_j/ghost"] = envelopes["/phase_energy_j/decode"]
+        self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, foreign, **kwargs), foreign)
         # Positive control: the same summary unmodified does clamp prefill.
         self.assertIn(PREFILL, _clamp_inverted_operative_envelopes(
             self.bundle, old, **kwargs)["energy_anchor_shift_envelopes"])
@@ -734,6 +750,43 @@ class AxiV062ClampTests(unittest.TestCase):
             with self.subTest(pointer=pointer):
                 envelope = reduce_module._corner_composed_anchor_shift_envelope(contributions, *bounds)
                 self.assertEqual(json.dumps(envelope), json.dumps(recorded.get(pointer)))
+
+    def test_mirror_groups_per_source_with_shifted_source_curves(self) -> None:
+        """Two sources, overlapping requests, nonzero anchor shift (M11/M17)."""
+
+        raw = interval_curve(stepped_rows(1_784_491_122.0, 80, 0.05, 5))
+        sources = {
+            "src-b": interval_curve(stepped_rows(1_784_491_122.0, 80, 0.05, 9)),
+            "src-a": interval_curve(stepped_rows(1_784_491_122.0, 80, 0.05, 11)),
+        }
+        base_s = 1_784_491_122.5
+        request_windows = {
+            ("src-b", "request-000", "prefill", 0): Window(base_s, base_s + 0.2),
+            ("src-b", "request-001", "prefill", 0): Window(base_s + 0.1, base_s + 0.4),
+            ("src-a", "request-000", "prefill", 0): Window(base_s + 1.0, base_s + 1.1),
+            ("src-a", "request-000", "decode", 1): Window(base_s + 1.1, base_s + 2.0),
+        }
+        reader = SimpleNamespace(
+            summed_curve=lambda: raw,
+            request_phase_windows=lambda: dict(request_windows),
+            source_curve=lambda source: sources[source],
+        )
+        shift_s = 0.0123
+        rows = whole_window._group_envelope_contributions(
+            reader, reduce_module.AXI_REDUCER_VERSION, reduce_module._shift_curve(raw, shift_s))
+
+        def shifted(source):
+            return reduce_module._shift_curve(sources[source], raw[0].t + shift_s - raw[0].t)
+
+        expected = [
+            ("/phase_energy_j/decode", [(shifted("src-a"), [Window(base_s + 1.1, base_s + 2.0)])]),
+            (PREFILL, [
+                (shifted("src-a"), [Window(base_s + 1.0, base_s + 1.1)]),
+                (shifted("src-b"), [Window(base_s, base_s + 0.4)]),
+            ]),
+        ]
+        self.assertEqual(rows, expected)
+        self.assertNotEqual(shifted("src-a"), reduce_module._shift_curve(raw, shift_s))
 
     def test_short_prefill_clamps_and_bounds_sweep_equals_oracle(self) -> None:
         critical_s = self._critical()
