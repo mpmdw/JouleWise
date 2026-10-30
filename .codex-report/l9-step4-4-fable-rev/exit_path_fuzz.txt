@@ -1,0 +1,10 @@
+outcome registry: ['dominance_ratio_zero_denominator']
+classes seen (class, record status): count
+   ('extraction_cell_r3_refusal', 'tooling_refusal') 165
+   ('extraction_cell_tooling_refusal', 'tooling_refusal') 8716
+   ('extraction_exit_without_refused_cell', 'tooling_refusal') 484
+   ('extraction_extractable_not_boolean', 'tooling_refusal') 784
+   ('extraction_report_malformed', 'tooling_refusal') 6939
+   ('extraction_spec_membership_refused', 'tooling_refusal') 562
+   ('p42_floor_cells_only', 'ok') 2350
+violations: 0

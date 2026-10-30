@@ -1,0 +1,20 @@
+# Item 3: regeneration check at a7e00c9f7 (c2ecb9588 is the only code commit)
+command: python3.13 -I tests/b5_analysis/step4_reasons/make_table.py . > gen_out.json; then HEADER + {modules,mask_rule,mask,tooling} + RULING from the test module, json.dumps(indent=1)+'\n'
+registered file bytes == json.dumps(HEADER+generator+RULING, indent=1)+newline: True
+generator keys: ['mask', 'mask_rule', 'modules', 'tooling'] ; mask/tooling lengths: 42 1898
+tests/b5_analysis/step4_reasons/make_table.py sha256: 051c13b267c747f3c4bf88318c819bcb9c5c603ba608160ca04389e817a549d2
+blind generator at 08ea5c958 sha256:               051c13b267c747f3c4bf88318c819bcb9c5c603ba608160ca04389e817a549d2
+fresh mask == blind CLASS_TABLE mask: True ; fresh tooling == blind tooling: True
+key order equal before/after: True
+  schema_version  unchanged
+  source          unchanged
+  modules         unchanged
+  mask_rule       unchanged
+  mask            unchanged
+  tooling         unchanged
+  r3              CHANGED: added ['campaign_cooldown_evidence_missing', 'idle_window_suspect', 'window_evidence_precheck_missing'] removed []
+  step4_rule      unchanged
+r3 sorted and unique: True ; len r3: 11
+
+git diff 492a30f42 c2ecb9588 --stat -- tests/b5_analysis/step4_reasons:
+(empty = generator unchanged)

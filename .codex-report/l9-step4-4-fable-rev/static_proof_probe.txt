@@ -1,0 +1,81 @@
+import closure size: 84 ; outside the eleven: 73
+   joulewise/__init__.py
+   joulewise/adapters/__init__.py
+   joulewise/adapters/local_transport.py
+   joulewise/adapters/mlx_runtime.py
+   joulewise/adapters/mock_runtime.py
+   joulewise/adapters/mock_spec_runtime.py
+   joulewise/adapters/mock_telemetry.py
+   joulewise/adapters/node_client.py
+   joulewise/adapters/nvidia_smi.py
+   joulewise/adapters/powermetrics.py
+   joulewise/adapters/suite_control.py
+   joulewise/aggregate.py
+   joulewise/analysis_engine/__init__.py
+   joulewise/analysis_engine/artifact.py
+   joulewise/analysis_engine/multiplicity.py
+   joulewise/analysis_engine/registry.py
+   joulewise/analysis_manifest.py
+   joulewise/analysis_manifest_v3.py
+   joulewise/axi_decode_config.py
+   joulewise/b5/__init__.py
+   joulewise/b5_analysis/__init__.py
+   joulewise/b5_analysis/archive.py
+   joulewise/b5_analysis/bracket.py
+   joulewise/b5_analysis/context.py
+   joulewise/b5_analysis/kept_units.py
+   joulewise/b5_analysis/steps.py
+   joulewise/b5_analysis/windows.py
+   joulewise/bundle.py
+   joulewise/calibration_bracketing.py
+   joulewise/calibration_custody_worker.py
+   joulewise/calibration_dispositions.py
+   joulewise/calibration_epoch_continuation.py
+   joulewise/calibration_exits.py
+   joulewise/calibration_ledger.py
+   joulewise/campaign_provenance.py
+   joulewise/cli.py
+   joulewise/clock.py
+   joulewise/controller.py
+   joulewise/cooldown.py
+   joulewise/cooldown_anchor.py
+   joulewise/detection_floor_registry.py
+   joulewise/determinism_gate.py
+   joulewise/doctor.py
+   joulewise/dominance_closeout.py
+   joulewise/envelope_gate.py
+   joulewise/environment.py
+   joulewise/flags/__init__.py
+   joulewise/flags/catalog.py
+   joulewise/flags/exclusions.py
+   joulewise/flags/schema.py
+   joulewise/identity_pins.py
+   joulewise/idle_admission.py
+   joulewise/idle_dependence.py
+   joulewise/interfaces.py
+   joulewise/kv_size.py
+   joulewise/measurement_liveness.py
+   joulewise/neg8_survivors.py
+   joulewise/night_gate.py
+   joulewise/night_kinds.py
+   joulewise/output_identity.py
+   joulewise/powermetrics_fiducial.py
+   joulewise/provenance.py
+   joulewise/publication_privacy.py
+   joulewise/quiet_admission.py
+   joulewise/report.py
+   joulewise/salvage_dangler.py
+   joulewise/sampler_teardown.py
+   joulewise/schemas.py
+   joulewise/suite.py
+   joulewise/t0_rehearsal.py
+   joulewise/v5_qualification.py
+   joulewise/validation.py
+   scripts/extract_detection_floors.py
+paired_block_incomplete literal sites in closure: ['joulewise/analysis_engine/inputs.py:3590', 'joulewise/analysis_engine/inputs.py:3746', 'joulewise/analysis_engine/__init__.py:562', 'joulewise/analysis_engine/__init__.py:780', 'joulewise/analysis_engine/__init__.py:1015', 'joulewise/analysis_engine/__init__.py:590', 'joulewise/analysis_engine/__init__.py:875', 'joulewise/analysis_engine/__init__.py:589', 'joulewise/analysis_engine/__init__.py:615', 'joulewise/analysis_engine/__init__.py:632']
+fixed_n_plan_incomplete literal sites in closure: ['joulewise/analysis_engine/__init__.py:562', 'joulewise/analysis_engine/__init__.py:1363', 'joulewise/analysis_engine/__init__.py:778', 'joulewise/analysis_engine/__init__.py:1013', 'joulewise/analysis_engine/__init__.py:1159']
+window_evidence_precheck_missing literal sites in closure: ['joulewise/analysis_engine/inputs.py:4062', 'joulewise/analysis_engine/inputs.py:4066', 'joulewise/analysis_engine/inputs.py:4079', 'joulewise/analysis_engine/inputs.py:4068', 'joulewise/analysis_engine/inputs.py:4073', 'joulewise/analysis_engine/inputs.py:4077', 'joulewise/analysis_engine/__init__.py:562']
+campaign_cooldown_evidence_missing literal sites in closure: ['joulewise/floor_extraction.py:203', 'joulewise/analysis_engine/inputs.py:4101', 'joulewise/analysis_engine/__init__.py:563']
+idle_window_suspect literal sites in closure: ['joulewise/analysis_engine/inputs.py:682', 'joulewise/analysis_engine/inputs.py:4103', 'joulewise/analysis_engine/inputs.py:4105', 'joulewise/analysis_engine/inputs.py:682', 'joulewise/schemas.py:1609', 'joulewise/schemas.py:2006', 'joulewise/schemas.py:2096', 'joulewise/cli.py:1478', 'joulewise/cli.py:1479', 'joulewise/adapters/powermetrics.py:2005', 'joulewise/adapters/powermetrics.py:1977', 'joulewise/adapters/powermetrics.py:355', 'joulewise/adapters/powermetrics.py:1067', 'joulewise/adapters/powermetrics.py:1068', 'joulewise/v5_qualification.py:142', 'joulewise/reduce.py:235', 'joulewise/cooldown_anchor.py:168', 'joulewise/controller.py:4484', 'joulewise/analysis_engine/__init__.py:563', 'joulewise/analysis_engine/artifact.py:113', 'joulewise/analysis_engine/artifact.py:1374', 'joulewise/publication_privacy.py:260']
+analysis_engine/__init__.py in closure: True
+names imported from joulewise.analysis_engine (package) by the closure: ['analyze_claims']

@@ -1,0 +1,17 @@
+# Item 1: classification of every blind-table code before (492a30f42 = 901956944 + origin/main merge) and after (c2ecb9588).
+# Produced by classify_all.py (this directory) run with -I against each checkout. Each code is placed alone on a refused
+# non-p42 target (target), alone on a refused p42 cell (p42_only), on a refused p42 cell beside a tooling-refused target
+# (target_tooling_plus_p42), and on a refused target at exit 0 and exit 2.
+codes compared: 1943 (42 mask + 1898 tooling + extras: fixed_n_plan_incomplete, syn_reason_in_neither_list, member_code_on_kept_unit, "")
+codes whose classification changed: 3
+  campaign_cooldown_evidence_missing: target extraction_cell_tooling_refusal -> extraction_cell_r3_refusal; other columns unchanged: True
+  idle_window_suspect: target extraction_cell_tooling_refusal -> extraction_cell_r3_refusal; other columns unchanged: True
+  window_evidence_precheck_missing: target extraction_cell_tooling_refusal -> extraction_cell_r3_refusal; other columns unchanged: True
+before target histogram: {'extraction_cell_tooling_refusal': 1935, 'extraction_cell_r3_refusal': 8}
+after  target histogram: {'extraction_cell_tooling_refusal': 1932, 'extraction_cell_r3_refusal': 11}
+after p42_only histogram: {'p42_floor_cells_only': 1943} (before identical: True)
+after target_tooling_plus_p42 histogram: {'extraction_cell_tooling_refusal': 1943} (before identical: True)
+after exit0 histogram: {'ok': 1943} (before identical: True)
+after exit2 histogram: {'refused': 1943} (before identical: True)
+r3 codes after: ['anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_below_threshold', 'calibration_acceptance_bound_stale', 'campaign_cooldown_evidence_missing', 'clock_bound_exceeds_quarter_window', 'idle_window_suspect', 'instrument_calibration_stale', 'insufficient_in_window_samples', 'insufficient_members_after_exclusion', 'kept_units_below_minimum', 'window_evidence_precheck_missing']
+r3 codes before: ['anchor_energy_envelope_exceeds_quarter_metric', 'cadence_ratio_below_threshold', 'calibration_acceptance_bound_stale', 'clock_bound_exceeds_quarter_window', 'instrument_calibration_stale', 'insufficient_in_window_samples', 'insufficient_members_after_exclusion', 'kept_units_below_minimum']
