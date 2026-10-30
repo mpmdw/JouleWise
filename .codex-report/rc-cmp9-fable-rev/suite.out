@@ -1,0 +1,10 @@
+...............synthetic_fit_agreement={"agreement_bar_J": 0.000124000131874, "energy_difference_J": 0.0, "old_sample_time_difference_ns": 1249, "sample_time_difference_ns": 0}
+................................................................................................................................................meter_fit_long_origin_counterfactual={"failing": 240, "failing_near_ties": 211, "streams": 1041}
+.meter_fit_counterfactual={"failing_patterns": 239, "failing_within_cap": 80, "patterns": 240}
+..meter_fit_property={"fallback_patterns": 80, "max_host_difference_ns": 0, "patterns": 240}
+..................................................................................ss.........sssssss..............................................................sssssssss.............................
+----------------------------------------------------------------------
+Ran 362 tests in 497.511s
+
+OK (skipped=18)
+exit=0

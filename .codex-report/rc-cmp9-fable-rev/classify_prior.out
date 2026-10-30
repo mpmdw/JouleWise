@@ -1,0 +1,16 @@
+exit-0 deletions: 735; declared exemption, identity or text: 724; producer-unconditional claim value, object or line: 11
+
+disclosures/SHA.json: 9
+   window_lines/alpha/1
+   window_lines/alpha/23
+   window_lines/beta/1
+   window_lines/beta/23
+   window_lines/gamma/1
+   window_lines/gamma/23
+   block_lines/18/causes/0
+   block_lines/19/causes/0
+   block_lines/20/causes/0
+
+recompute: 2
+   disclosures/battery_assist/ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b/status
+   disclosures/battery_assist/ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b/status

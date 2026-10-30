@@ -1,0 +1,19 @@
+(a) files the registry read: ['d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json', 'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/consumer_family_declaration.json', 'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json', 'd117_floor_qwen3-1p7b_v5/extraction_spec.json', 'd117_floor_qwen3-1p7b_v5/plan_tree.json', 'd117_floor_qwen3-8b_v5/extraction_spec.json', 'd117_floor_qwen3-8b_v5/plan_tree.json']
+    REGISTRY_PINS keys     : ['d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json', 'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/consumer_family_declaration.json', 'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json', 'd117_floor_qwen3-1p7b_v5/extraction_spec.json', 'd117_floor_qwen3-1p7b_v5/plan_tree.json', 'd117_floor_qwen3-8b_v5/extraction_spec.json', 'd117_floor_qwen3-8b_v5/plan_tree.json']
+    REGISTERED_SOURCES files: ['configs/analysis/b5/analysed_windows.json', 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json', 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/consumer_family_declaration.json', 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json', 'configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json', 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json', 'configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json', 'configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json']
+    read == pinned: True
+    pinned ⊆ named: True
+    named − pinned: ['configs/analysis/b5/analysed_windows.json']
+    pins hold on this checkout (no refusal): True
+(b) functions reached from expected_checks: ['arms', 'cell_key', 'expected_checks', 'floor_key', 'get', 'items', 'nested']
+    arms: globals=['ARMS'] flagged=[]
+    cell_key: globals=[] flagged=[]
+    expected_checks: globals=['ARMS', 'BATTERY_CODES', 'CLOSEOUT_RATIOS', 'CORPUS_DROPS', 'DISCLOSURE_SHAPE', 'ENGINE_KEYS', 'FILL_SHAPE', 'FIXED_SENTENCE_WORDS', 'FLOOR_FIELDS', 'INTERVAL', 'LINE_KEYS', 'MODELS', 'NEG8_OWN', 'NEG8_TERMS', 'PACKS', 'PROJECTION_KEYS', 'SENSITIVITY_KEYS', 'SENSITIVITY_SHAPE', 'TRIPWIRES', 'WINDOW_LINES', 'arms', 'cell_key', 'floor_key', 'get', 'items', 'nested'] flagged=[]
+    floor_key: globals=[] flagged=[]
+    get: globals=[] flagged=[]
+    items: globals=['get', 'items'] flagged=[]
+    nested: globals=[] flagged=[]
+    argument of expected_checks: ('registry',)
+(c) table.append / add( sites: 39 inside expected_checks: 39 outside: []
+    compare_expected builds the table from custody.registry only: True
+(d) two independently loaded registries give equal tables: True entries: 256

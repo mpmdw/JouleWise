@@ -1,0 +1,15 @@
+exit-0 deletions: 735
+  514  text, label, restricted (TEXT / DISCLOSURE_CONTROL rules)
+   15  flag_count line and its keys (NEEDS_RULING 4: the flag catalog is not a registered source)
+    3  machine_absent line (NEEDS_RULING 4: conditional on the meter-absent flag)
+    3  attempt_count causes (NEEDS_RULING 3: the window index is not read)
+  102  verdict-only engine internals (declared): bundle ids, reason codes, included flag of a block, included_bundle_ids
+   22  verdict-only engine internals (declared): randomization_check, variance_contributions, repeat_point_CI95
+    2  verdict's own sampling/removed_block_ids members (declared; the fill's copy is bound)
+   12  estimator internals in the disclosure copy (ESTIMATOR_INTERNALS)
+    7  limitation notes and reason codes (declared)
+    2  fill identity pins (IDENTITY rule): finalized_manifest ids
+   21  kept-units record identity and harvest fields (declared)
+   14  kept-units record cell fields (declared: identity, positions, counts the floor's n covers)
+   18  recompute unread fields (declared): program_sha256, unselected corpus member, GAMMA claim_usable, direction, assist strata, the recompute's own assist status word
+    0  UNDECLARED

@@ -1,0 +1,10 @@
+line words in the table: 59; producer _item words: 82
+declared conditional paths (skipped in the risk pass): {'attribution_floor': ['attained_by', 'minimum_j', 'value_j'], 'battery_assist_cell': ['assist_members', 'n_b', 'n_r', 'primary/B_j', 'primary/h_j', 'primary/lower_j', 'primary/mean_j', 'primary/status', 'primary/upper_j', 'removed_unit_ids', 'without', 'without/status'], 'cross_window': ['F_j', 'G_j', 'agree', 'delta_j', 'h_F_j', 'h_G_j'], 'floor_composition': ['allowance_j', 'cell_id', 'drift_widened_j', 'guarded_j', 'minted_j', 'pack', 'source'], 'kept_units': ['n_b', 'n_r'], 'magnitude_ratio': ['log_mean', 'log_sd', 'lower', 'ratio', 'upper'], 'reported_cell': ['B_j', 'h_j', 'lower_j', 'mean_j', 'status', 'upper_j'], 'sensitivity_reported': ['record/cell_id', 'record/code', 'record/equals_primary', 'record/mean_and_half_width_equal_primary', 'record/not_below_primary', 'record/pack', 'record/primary/B_j', 'record/primary/attribution_floor_j', 'record/primary/h_j', 'record/primary/lower_j', 'record/primary/mean_j', 'record/primary/upper_j', 'record/sensitivity/B_j', 'record/sensitivity/attribution_floor_j', 'record/sensitivity/h_j', 'record/sensitivity/lower_j', 'record/sensitivity/mean_j', 'record/sensitivity/upper_j', 'record/status']}
+
+OVER-REFUSAL RISKS (required path not unconditional in the producer): 0
+
+GAPS (producer-unconditional key or nested key the table does not require): 0
+
+UNRESOLVED (needs a manual expansion): 0
+
+producer line words not in the table (conditional lines, by the producer's own branches): ['arm_hazards', 'arm_unmeasured', 'attempt_history', 'battery_discharged', 'battery_phase', 'battery_temperature', 'battery_temperature_sentence', 'catalog_path', 'corpus_physics_drop', 'flag_count', 'g10', 'load_correlated_cell', 'load_correlated_contrast', 'lost_midpoint', 'machine_absent', 'machine_member', 'machine_summary', 'reference_lost', 'reference_spare', 'reharvest_account', 'stored_condition', 'superseded_history', 'temperature_disagreement']
