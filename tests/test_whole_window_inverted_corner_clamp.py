@@ -133,6 +133,79 @@ def pristine_module():
     return _PRISTINE
 
 
+_SEAT_BASE = None
+SEAT_BASE_COMMIT = "3e4d359c2"
+
+
+def seat_base_whole_window():
+    """L9-ENV-3's whole_window.py (3e4d359c2), for L9-ENV-4 counterfactuals."""
+
+    global _SEAT_BASE
+    if _SEAT_BASE is None:
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), "show", f"{SEAT_BASE_COMMIT}:joulewise/whole_window.py"],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise unittest.SkipTest(f"{SEAT_BASE_COMMIT} not in this clone")
+        _SEAT_BASE = _load_shadow("tests._whole_window_3e4d359c2", result.stdout)
+    return _SEAT_BASE
+
+
+def _gate_for(summary: dict, pointer: str) -> dict:
+    for group_key, prefix in whole_window._CLAMP_GROUP_PREFIXES:
+        if pointer.startswith(prefix):
+            for member, gate in summary["window_evidence_precheck"][group_key].items():
+                if prefix + reduce_module._json_pointer_token(str(member)) == pointer:
+                    return gate
+    raise KeyError(pointer)
+
+
+def assert_gates_self_consistent(test: unittest.TestCase, summary: dict) -> None:
+    """L9-ENV-4 F1: no member gate is ineligible without a reason."""
+
+    def walk(gate, where):
+        if isinstance(gate, dict):
+            if "eligible" in gate and "reasons" in gate and gate["eligible"] is False:
+                test.assertTrue(gate["reasons"], f"{where}: eligible False with no reason")
+            for key, value in gate.items():
+                walk(value, f"{where}/{key}")
+        elif isinstance(gate, list):
+            for index, value in enumerate(gate):
+                walk(value, f"{where}/{index}")
+
+    walk(summary.get("window_evidence_precheck"), "window_evidence_precheck")
+
+
+def expected_from_oracle(old: dict, oracle: dict) -> tuple[dict, list[str]]:
+    """The analysis summary L9-ENV-4 expects, derived from e1b3a0510's.
+
+    Equal to the oracle except for a clamped pointer whose envelope passes the
+    envelope gate (no gate reasons): the oracle records it and leaves the gate
+    eligible, the analysis path does not add it (the member keeps reduce's
+    ``unrecorded`` refusal).  Returns the excluded pointers too.
+    """
+
+    old_env = old.get("energy_anchor_shift_envelopes") or {}
+    oracle_env = oracle.get("energy_anchor_shift_envelopes") or {}
+    joint_j = (oracle.get("energy_bound_terms_j") or {}).get("E_interpolation_joint_edge_bound_j")
+    excluded = [
+        pointer for pointer, envelope in oracle_env.items()
+        if pointer not in old_env
+        and not reduce_module._anchor_envelope_gate_reasons(envelope, joint_j)
+    ]
+    if not excluded:
+        return oracle, []
+    if set(oracle_env) - set(excluded) == set(old_env):
+        return old, excluded
+    expected = json.loads(json.dumps(oracle))
+    for pointer in excluded:
+        expected["energy_anchor_shift_envelopes"].pop(pointer)
+        _gate_for(expected, pointer).clear()
+        _gate_for(expected, pointer).update(json.loads(json.dumps(_gate_for(old, pointer))))
+    return expected, excluded
+
+
 def interval_curve(rows):
     return [
         TracePoint(t=(start + end) / 2.0, power_w=power, support_start_s=start, support_end_s=end)
@@ -348,6 +421,7 @@ class PermanentWideningCaseTests(unittest.TestCase):
         oracle = oracle_module()._rederive_summary_for_authenticated_fiducial_bound(self.bundle, **kwargs)
         for summary in (old, new, oracle):
             self.assertEqual(summary["status"], "succeeded")
+        assert_gates_self_consistent(self, new)
         self.assertEqual(whole_window._classify_precheck_refusals(old)[0],
                          whole_window._classify_precheck_refusals(new)[0])
         return old, new, oracle
@@ -438,11 +512,109 @@ class PermanentWideningCaseTests(unittest.TestCase):
 
     def test_bounds_sweep_equals_oracle(self) -> None:
         just_under, just_over = self._bounds()
+        critical_s = (just_under + just_over) / 2.0
         for bound_s in (self.minted_bound * 1.5, just_over, just_over + 0.0019, just_under - 0.0019,
-                        just_under, just_under * 1.5):
+                        just_under, just_under * 1.5, critical_s * 3.0):
             with self.subTest(bound=bound_s):
-                _old, new, oracle = self._rederive(bound_s)
-                self.assertEqual(json.dumps(new), json.dumps(oracle))
+                old, new, oracle = self._rederive(bound_s)
+                expected, excluded = expected_from_oracle(old, oracle)
+                # No envelope on this fixture passes after clamping (single
+                # windows): the analysis path equals the oracle here.
+                self.assertEqual(excluded, [])
+                self.assertEqual(json.dumps(new), json.dumps(expected))
+
+    def test_key_position_when_reduce_recorded_no_envelope_map(self) -> None:
+        """L9-ENV-4 F2: the map is inserted at its SummaryMetrics position."""
+
+        just_under, just_over = self._bounds()
+        bound_s = (just_under + just_over) / 2.0 * 3.0
+        old, new, oracle = self._rederive(bound_s)
+        self.assertNotIn("energy_anchor_shift_envelopes", old)
+        self.assertEqual(list(new["energy_anchor_shift_envelopes"]), ["/phase_energy_j/decode"])
+        self.assertEqual(list(new), list(oracle))
+        self.assertEqual(json.dumps(new), json.dumps(oracle))
+        keys = list(new)
+        self.assertEqual(keys[keys.index("energy_anchor_shift_envelopes") + 1], "window_evidence_precheck")
+        # Counterfactual at 3e4d359c2: dict-equal, key appended last.
+        base = seat_base_whole_window()._clamp_inverted_operative_envelopes(
+            self.bundle, old, authenticated_fiducial_bound_s=bound_s,
+            instrument_calibration_physics_cache=self._cache)
+        self.assertEqual(base, oracle)
+        self.assertEqual(list(base)[-1], "energy_anchor_shift_envelopes")
+        self.assertNotEqual(json.dumps(base), json.dumps(oracle))
+
+    def _with_long_prefill(self, module, bound_s: float):
+        """Mirror whose prefill row is the reviewer's [short, long] phase.
+
+        Flat 10 W; windows [0.005 s, 8 s] at the operative bound: the short
+        interval inverts, so reduce omits the envelope, and the clamped
+        envelope passes the quarter-metric gate (lower_j > 0).
+        """
+
+        curve = interval_curve([(-5.0 + i * 0.05, -5.0 + (i + 1) * 0.05, 10.0) for i in range(400)])
+        long_prefill = [(curve, [Window(0.5, 0.505), Window(3.0, 11.0)])]
+        real = module._group_envelope_contributions
+
+        def rows(reader, version, anchor_curve):
+            return [(pointer, long_prefill if pointer == PREFILL else contributions)
+                    for pointer, contributions in real(reader, version, anchor_curve)]
+
+        return patch.object(module, "_group_envelope_contributions", side_effect=rows), long_prefill
+
+    def test_passing_clamped_envelope_is_not_added(self) -> None:
+        """L9-ENV-4 F1: a clamped envelope never makes a member eligible."""
+
+        just_under, _over = self._bounds()
+        old, _new, _oracle = self._rederive(just_under)
+        # A long multi-interval member whose other checks pass: only reduce's
+        # envelope stamp refuses it.
+        bare = json.loads(json.dumps(old))
+        gate = _gate_for(bare, PREFILL)
+        gate["reasons"] = [UNRECORDED]
+        for inner in gate.get("windows", []):
+            inner["reasons"] = [UNRECORDED]
+        kwargs = dict(authenticated_fiducial_bound_s=just_under,
+                      instrument_calibration_physics_cache=self._cache)
+
+        patcher, long_prefill = self._with_long_prefill(whole_window, just_under)
+        with patcher:
+            new = _clamp_inverted_operative_envelopes(self.bundle, bare, **kwargs)
+        envelopes = new["energy_anchor_shift_envelopes"]
+        self.assertNotIn(PREFILL, envelopes)
+        self.assertEqual(_gate_for(new, PREFILL), _gate_for(bare, PREFILL))
+        self.assertEqual(_gate_for(new, PREFILL)["reasons"], [UNRECORDED])
+        # The other short phases still clamp (their envelopes refuse).
+        for pointer in ("/phase_energy_j/tokenize", "/phase_energy_j/generation_setup"):
+            self.assertIn(pointer, envelopes)
+            self.assertIn(EXCEEDS, _gate_for(new, pointer)["reasons"])
+        assert_gates_self_consistent(self, new)
+        self.assertIn(("phase", "prefill"), whole_window._classify_precheck_refusals(new)[1])
+
+        # The oracle (e1b3a0510) defines a passing envelope here; that is the
+        # one deliberate difference from it.
+        anchor = reduce_module._derive_anchor_context(
+            reduce_module.BundleReader(self.bundle), reduce_module.BundleReader(self.bundle).metadata(),
+            strict_calibration=True, reducer_version=reduce_module.REDUCER_VERSION,
+            authenticated_fiducial_bound_override_s=just_under,
+            instrument_calibration_physics_cache=self._cache)
+        bounds = (anchor.bundle_bound_s, anchor.fiducial_bound_s or 0.0, anchor.edge_span_s)
+        self.assertIsNone(reduce_module._corner_composed_anchor_shift_envelope(long_prefill, *bounds))
+        oracle_env = oracle_module()._corner_composed_anchor_shift_envelope(long_prefill, *bounds)
+        self.assertGreater(oracle_env["lower_j"], 0.0)
+        joint_j = bare["energy_bound_terms_j"]["E_interpolation_joint_edge_bound_j"]
+        self.assertEqual(reduce_module._anchor_envelope_gate_reasons(oracle_env, joint_j), [])
+        self.assertEqual(_clamped_corner_composed_anchor_shift_envelope(long_prefill, *bounds), oracle_env)
+
+        # Counterfactual at 3e4d359c2: the envelope is added and the gate is
+        # left {"eligible": false, "reasons": []} (self-inconsistent).
+        base_module = seat_base_whole_window()
+        patcher, _ = self._with_long_prefill(base_module, just_under)
+        with patcher:
+            base = base_module._clamp_inverted_operative_envelopes(self.bundle, bare, **kwargs)
+        self.assertEqual(base["energy_anchor_shift_envelopes"][PREFILL], oracle_env)
+        base_gate = _gate_for(base, PREFILL)
+        self.assertEqual((base_gate["eligible"], base_gate["reasons"]), (False, []))
+        self.assertNotIn(("phase", "prefill"), whole_window._classify_precheck_refusals(base)[1])
 
     def test_genuinely_missing_operative_envelope_still_refuses(self) -> None:
         just_under, _over = self._bounds()
@@ -473,6 +645,117 @@ class PermanentWideningCaseTests(unittest.TestCase):
         self.assertIn(PREFILL, clamped["energy_anchor_shift_envelopes"])
         # Unreadable path: unchanged summary (origin/main behaviour).
         self.assertIs(_clamp_inverted_operative_envelopes(self.root / "absent", old, **kwargs), old)
+        # _restamp_clamped_gate fail-closed branches (reviewer mutants M09,
+        # M15): an eligible gate, an inner window without the stamp, a gate
+        # without the stamp.
+        eligible = json.loads(json.dumps(old))
+        _gate_for(eligible, PREFILL)["eligible"] = True
+        self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, eligible, **kwargs), eligible)
+        inner = json.loads(json.dumps(old))
+        self.assertTrue(_gate_for(inner, PREFILL)["windows"])
+        _gate_for(inner, PREFILL)["windows"][0]["reasons"] = []
+        self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, inner, **kwargs), inner)
+        unstamped = json.loads(json.dumps(old))
+        _gate_for(unstamped, PREFILL)["reasons"].remove(UNRECORDED)
+        self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, unstamped, **kwargs), unstamped)
+        # Positive control: the same summary unmodified does clamp prefill.
+        self.assertIn(PREFILL, _clamp_inverted_operative_envelopes(
+            self.bundle, old, **kwargs)["energy_anchor_shift_envelopes"])
+
+
+class AxiV062ClampTests(unittest.TestCase):
+    """L9-ENV-4 F5: the 0.6.2 mirror on the real AXI event-v2 fixture.
+
+    ``_install_axi_shape`` binds the committed AXI fixture to the same real
+    powermetrics bytes; the per-source request-phase unions and the shifted
+    source curves are what reviewer mutants M11/M17 break.
+    """
+
+    _cache: dict[str, float] = {}
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from tests.test_whole_window_selection import MaxBracketConsumptionTests
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls._tmp.name)
+        class_scope = SimpleNamespace(addCleanup=cls.addClassCleanup)
+        source, cls.minted52, cls.minted_bound = _bundle_fixture(class_scope, cls.root / "fixture")
+        cls.bundle = MaxBracketConsumptionTests._install_axi_shape(
+            cls.root / "axi-v062", calibrated_source=source)
+        cls.minted = reduce_module.reduce_bundle(
+            cls.bundle, reducer_version=reduce_module.AXI_REDUCER_VERSION,
+            _instrument_calibration_physics_cache=cls._cache).to_dict()
+        (cls.bundle / "summary_metrics.json").write_text(
+            json.dumps(cls.minted, sort_keys=True) + "\n", encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def _critical(self) -> float:
+        span_s = self.minted["energy_anchor_shift_envelopes"][PREFILL][
+            "wall_minus_monotonic_independent_edge_span_s"]
+        return _phase_durations(self.minted)["prefill"] / 2.0 - span_s
+
+    def _rederive(self, bound_s: float) -> tuple[dict, dict, dict]:
+        kwargs = dict(authenticated_fiducial_bound_s=bound_s,
+                      _instrument_calibration_physics_cache=self._cache)
+        old = reduce_module._rederive_summary_for_authenticated_fiducial_bound(self.bundle, **kwargs)
+        new = _rederive_operative_summary(self.bundle, **kwargs)
+        oracle = oracle_module()._rederive_summary_for_authenticated_fiducial_bound(self.bundle, **kwargs)
+        for summary in (old, new, oracle):
+            self.assertEqual(summary["status"], "succeeded")
+            self.assertEqual(summary["summary_provenance"]["reducer_version"],
+                             reduce_module.AXI_REDUCER_VERSION)
+        assert_gates_self_consistent(self, new)
+        self.assertEqual(whole_window._classify_precheck_refusals(old)[0],
+                         whole_window._classify_precheck_refusals(new)[0])
+        return old, new, oracle
+
+    def test_mirror_reproduces_every_recorded_envelope(self) -> None:
+        bound_s = self._critical() + 0.002
+        old, _new, _oracle = self._rederive(bound_s)
+        reader = reduce_module.BundleReader(self.bundle)
+        anchor = reduce_module._derive_anchor_context(
+            reader, reader.metadata(), strict_calibration=True,
+            reducer_version=reduce_module.AXI_REDUCER_VERSION,
+            authenticated_fiducial_bound_override_s=bound_s,
+            instrument_calibration_physics_cache=self._cache)
+        self.assertNotEqual(anchor.curve[0].t, reader.summed_curve()[0].t)
+        rows = whole_window._group_envelope_contributions(
+            reader, reduce_module.AXI_REDUCER_VERSION, anchor.curve)
+        bounds = (anchor.bundle_bound_s, anchor.fiducial_bound_s or 0.0, anchor.edge_span_s)
+        recorded = old["energy_anchor_shift_envelopes"]
+        self.assertEqual([pointer for pointer, _rows in rows], ["/phase_energy_j/decode", PREFILL])
+        self.assertIn("/phase_energy_j/decode", recorded)
+        self.assertNotIn(PREFILL, recorded)
+        for pointer, contributions in rows:
+            with self.subTest(pointer=pointer):
+                envelope = reduce_module._corner_composed_anchor_shift_envelope(contributions, *bounds)
+                self.assertEqual(json.dumps(envelope), json.dumps(recorded.get(pointer)))
+
+    def test_short_prefill_clamps_and_bounds_sweep_equals_oracle(self) -> None:
+        critical_s = self._critical()
+        clamped_at = []
+        for bound_s in (self.minted_bound, critical_s - 0.002, critical_s + 0.002,
+                        critical_s * 1.5, critical_s * 3.0):
+            with self.subTest(bound=bound_s):
+                old, new, oracle = self._rederive(bound_s)
+                expected, excluded = expected_from_oracle(old, oracle)
+                self.assertEqual(excluded, [])
+                self.assertEqual(json.dumps(new), json.dumps(expected))
+                added = set(new.get("energy_anchor_shift_envelopes") or {}) - set(
+                    old.get("energy_anchor_shift_envelopes") or {})
+                for pointer in added:
+                    old_gate, new_gate = _gate_for(old, pointer), _gate_for(new, pointer)
+                    self.assertEqual(set(old_gate["reasons"]) - set(new_gate["reasons"]), {UNRECORDED})
+                    self.assertEqual(set(new_gate["reasons"]) - set(old_gate["reasons"]), {EXCEEDS})
+                    self.assertIs(new_gate["eligible"], False)
+                if PREFILL in added:
+                    clamped_at.append(bound_s)
+                    self.assertEqual(new["energy_anchor_shift_envelopes"][PREFILL]["lower_j"], 0.0)
+        self.assertEqual(clamped_at, [critical_s + 0.002, critical_s * 1.5, critical_s * 3.0])
 
 
 class FreezeProofTests(unittest.TestCase):

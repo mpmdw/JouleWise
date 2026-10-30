@@ -1171,8 +1171,9 @@ def _restamp_clamped_gate(gate: dict[str, Any], reasons: list[str]) -> bool:
     ``anchor_energy_envelope_unrecorded`` has exactly one producer, the
     envelope gate for this pointer, so removing it and merging the clamped
     envelope's reasons is what reduce's gate would have stamped.  The gate
-    must already be ineligible (reduce's merge made it so) and stays so, which
-    is stricter than reduce when the clamped envelope itself passes.
+    must already be ineligible (reduce's merge made it so) and stays so; the
+    caller passes only non-empty ``reasons`` (a clamped envelope that passes
+    the envelope gate is never added, L9-ENV-4 F1).
     """
 
     existing = gate.get("reasons")
@@ -1207,10 +1208,13 @@ def _clamp_inverted_operative_envelopes(
     operative bound.  Every pointer it recorded is kept as is; a group pointer
     it omitted gains the analysis-side clamped envelope and its precheck
     reason moves from ``anchor_energy_envelope_unrecorded`` to the clamped
-    envelope's own gate reasons.  Gross-family pointers are never clamped
-    here (NEEDS_RULING in .codex-report/L9-ENV-3.md).  Any doubt, including a
-    reconstruction that does not reproduce a recorded envelope exactly,
-    returns ``summary`` unchanged, i.e. reduce's fail-closed behaviour.
+    envelope's own gate reasons.  A clamped envelope whose own gate reasons
+    are empty is not added (the member keeps the ``unrecorded`` refusal), so
+    the clamp never makes a member eligible.  Gross-family pointers are never
+    clamped here (NEEDS_RULING in .codex-report/L9-ENV-3.md).  Any doubt,
+    including a reconstruction that does not reproduce a recorded envelope
+    exactly, returns ``summary`` unchanged, i.e. reduce's fail-closed
+    behaviour.
     """
 
     reducer_version = _summary_reducer_version(summary)
@@ -1273,6 +1277,24 @@ def _clamp_inverted_operative_envelopes(
         OverflowError,
     ):
         return summary
+    joint_bound_j = (summary.get("energy_bound_terms_j") or {}).get(
+        "E_interpolation_joint_edge_bound_j"
+    )
+    # L9-ENV-4 (F1): a clamped envelope never makes a member eligible.  One
+    # that passes the envelope gate (a multi-interval member with one short
+    # inverting interval) is not added, so the member keeps reduce's
+    # ``unrecorded`` refusal and every gate stays ineligible with a reason.
+    # e1b3a0510's reducer would record it and pass the gate; this is the one
+    # deliberate difference from that oracle.
+    clamped_reasons = {
+        pointer: _anchor_envelope_gate_reasons(envelope, joint_bound_j)
+        for pointer, envelope in clamped.items()
+    }
+    clamped = {
+        pointer: envelope
+        for pointer, envelope in clamped.items()
+        if clamped_reasons[pointer]
+    }
     if not clamped:
         return summary
     group_pointers = {pointer for pointer, _contributions in rows}
@@ -1296,17 +1318,32 @@ def _clamp_inverted_operative_envelopes(
             ordered[pointer] = recorded[pointer]
         elif pointer in clamped:
             ordered[pointer] = clamped[pointer]
-    operative["energy_anchor_shift_envelopes"] = ordered
+    if "energy_anchor_shift_envelopes" in operative:
+        operative["energy_anchor_shift_envelopes"] = ordered
+    else:
+        # SummaryMetrics omits an unset map; insert the key at its field
+        # position so the JSON bytes equal a mint that recorded it (L9-ENV-4 F2).
+        # Local import: the lane's write scope is these clamp functions only.
+        from dataclasses import fields
+
+        from joulewise.schemas import SummaryMetrics
+
+        names = [item.name for item in fields(SummaryMetrics)]
+        later = set(names[names.index("energy_anchor_shift_envelopes") + 1:])
+        rebuilt: dict[str, Any] = {}
+        for key, value in operative.items():
+            if key in later and "energy_anchor_shift_envelopes" not in rebuilt:
+                rebuilt["energy_anchor_shift_envelopes"] = ordered
+            rebuilt[key] = value
+        rebuilt.setdefault("energy_anchor_shift_envelopes", ordered)
+        operative = rebuilt
     if (
         anchor_ctx.detail == "post_window_trace_tail_shorter_than_anchor_bound"
     ):
         # Reduce stamps no envelope gate reasons on this resolved refusal.
         return operative
     prechecks = operative.get("window_evidence_precheck")
-    joint_bound_j = (operative.get("energy_bound_terms_j") or {}).get(
-        "E_interpolation_joint_edge_bound_j"
-    )
-    for pointer, envelope in clamped.items():
+    for pointer in clamped:
         group_key, prefix = next(
             (key, prefix)
             for key, prefix in _CLAMP_GROUP_PREFIXES
@@ -1319,9 +1356,7 @@ def _clamp_inverted_operative_envelopes(
             if (
                 isinstance(gate, dict)
                 and prefix + _json_pointer_token(str(member)) == pointer
-                and not _restamp_clamped_gate(
-                    gate, _anchor_envelope_gate_reasons(envelope, joint_bound_j)
-                )
+                and not _restamp_clamped_gate(gate, clamped_reasons[pointer])
             ):
                 return summary
     return operative
