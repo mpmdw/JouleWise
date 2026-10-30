@@ -189,7 +189,7 @@ class CaptureTests(unittest.TestCase):
                 shutil.copyfile(cap.ROOT/relative,target)
             init_git_fixture(root)
             subprocess.run(['git','add','.'],cwd=root,check=True,capture_output=True)
-            subprocess.run(['git','commit','-m','synthetic inputs'],cwd=root,check=True,capture_output=True)
+            subprocess.run(['git','-c','user.name=t','-c','user.email=t@t','-c','commit.gpgsign=false','commit','-m','synthetic inputs'],cwd=root,check=True,capture_output=True)
             with patch.object(cap,'ROOT',root), contextlib.redirect_stdout(__import__('io').StringIO()):
                 # Span and disk bytes are synthetic plan inputs, with their
                 # explicit derivation/source strings, not acceptance limits.
