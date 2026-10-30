@@ -2039,3 +2039,39 @@ Decisions I made:
 - Replay scripts and write their scratch evidence in temporary mirrors, preserving both review branches and the exhaustive repository write scope.
 
 No NEEDS_RULING or scope expansion. Only the four authorized files changed. No hardware measurement, admission or merge. Final-head CI is read after pushing this report; every observed job state is reported separately in the final handoff, without an advance green claim.
+
+## Round 9 (fix round)
+
+Activation `4e748ac1`, 2026-10-30. Continued `codex/2026-10-28-kb-v2` from `4a63b50b9` (draft PR #593). Read the full Opus report/scripts at JouleWise-data `b9352203` and Sol report on `codex/2026-10-30-kb-v2-rev-sol-6`. Code steps committed and pushed as `20b0e0518` and `aa101880c`.
+
+L1–L4 implemented. Receipt integer counts must satisfy `bytes_read == bytes_per_read * repeats`; inconsistency names `records[i].receipt.repeats/bytes_read` and preserves records/calls. Successful scans require exact producer sizes, no `reason` key, and strictly true arm checks. Scan faults retain evidence and computable central contrasts, make every class UNDETERMINED and suppress intervals. DC validity checks finite, positive uncertainty before subtraction; invalid DC uncertainty blocks every class with `DC contrast input missing` and suppresses affected intervals. Native idle-overflow reasons now name `power_w`.
+
+Verification: Python 3.13.5, `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`.
+
+- All four requested modules: **127 tests, OK, 2425.119 s**, including **1140 generated real read CLI leaf faults**. The three added methods cover every ruled L1 shape, L2 reason/strict-boolean shapes, all five L3 widths, and L4 leaf naming, asserting classes, reasons, retained evidence/calls and no affected printed interval. Three focused methods also passed separately in 113.944 s.
+- The 49 reader tests and five kit tests completed within **1224.2 s** (an observed upper bound), below round 8's recorded 1672.6 s for 46 reader tests. The full combined run also includes the 36 session and 37 repin tests.
+- Standalone `scripts/repin.py --check`: **PASS, 16 pin families current**, exit 0; its existing sealed-inventory divergence warning remains. `git diff --check` passes. No pin regeneration. The full repository suite was not run locally.
+- Both versions completed the major/grid/targeted/scan-size/sign-split repros. Both legacy replays completed **53 CLI cases**, all exit 0, eight calls, zero tracebacks/shrink flags, plus **nine battery-edge overflow cases**. Sol's 136 order cases passed before and after; the adjusted final targeted replay passed with **74 finite-positive formatter calls**.
+- Both full Opus leaf walks completed **62046 cases and 640 real CLI checks each**: zero crashes, lost calls, nonzero CLI exits or CLI/class mismatches. Both have exactly the same **177 shrink-flag identities and 820 silent-change identities**, matching the review's valid-input changes; no new flag. Sol's two defect repros ran before and after: overflow now names `power_w`; the ruled parser-limit case remains exit 1 before the reader.
+- Interrupted runs and the optional incomplete Sol numeric walks are not counted as passes. Review scripts, fixture and scratch logs are under `/tmp/kb9-review`, `/tmp/kb8`, `/tmp/kb9-sol` and `/tmp/kb9-*.log`; the review branches and their committed artifacts remain unchanged.
+
+Worked boundary/share objects and printed output are bit-identical to `4a63b50b9` on the fixture rebuilt by the original `e2e_nonneg.py` through `run_with_clock.py`:
+
+```text
+rails 0.06672 ± 0.00057 J/GB  RESOLVED
+GPU   0.03332 ± 0.00029 J/GB  RESOLVED
+DC    0.1929 ± 0.0025 J/GB    RESOLVED
+rest  0.1262 ± 0.0024 J/GB    RESOLVED
+share 0.3458 ± 0.0075
+```
+
+Decisions I made:
+
+- Enforce integer producer identities exactly, without an epsilon, new maximum or replacement value. Give scan faults diagnostic precedence over secondary receipt inconsistencies from relabelling.
+- Keep computable central contrasts on scan faults while withholding their intervals. Suppress every affected interval when DC uncertainty fails the common validity gate.
+- Exercise the five L3 values through the real JSON `read` CLI in fresh processes, injecting only the reducer's DC-width result because the review found no producer input yielding that isolated defect.
+- Preserve the unchanged Sol targeted replay and its obsolete-assertion failure; complete a scratch replay with only the L1/L3-obsoleted assertions updated. Committed review scripts and evidence remain unchanged.
+- Sol MINOR 1: no parser change for the 5,001-digit integer, as ruled; the producer never writes it and no number is at stake.
+- Keep the acceptance bars unchanged: 4.5e-7 GB/s and 5.7e-6 J/GB, each 1% of its column's smallest printed uncertainty. No new acceptance bar.
+
+Only the four authorized files changed. No NEEDS_RULING, scope expansion, hardware measurement, admission or merge. Final-head CI is read after pushing this report; every observed job state is listed in the final handoff.
