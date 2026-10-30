@@ -30,6 +30,97 @@ LABELS = {
 # Lex JSON without decoding numbers or string values. Object keys alone are
 # decoded during navigation. This also supplies exact replacement offsets.
 TOKEN = re.compile(r'\s*("(?:[^"\\]|\\.)*"|[{}\[\]:,]|[^\s{}\[\]:,]+)')
+# PROTOTYPE (consult): the lexical grammar of RFC 8259. A number lexeme is
+# matched against this pattern and never converted; a string lexeme is
+# matched for valid escapes and never decoded unless it is an object key.
+STRING = re.compile(r'"(?:[^"\\\x00-\x1f]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*"')
+NUMBER = re.compile(r'-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?')
+LITERALS = frozenset({"true", "false", "null"})
+
+
+def lex(raw):
+    """Tokens of exactly one complete JSON text; ValueError otherwise.
+
+    Every lexeme must match the JSON lexical grammar, the tokens must form one
+    value under the JSON grammar (checked with an explicit stack, so depth
+    cannot crash the check), objects may not repeat a key (the producers
+    serialize dicts), and nothing but whitespace may follow the value. Values
+    are matched, never converted: measurement lexemes stay opaque.
+    """
+    tokens, position = [], 0
+    for match in TOKEN.finditer(raw):
+        if match.start() != position:
+            raise ValueError("JSON text contains unlexable bytes")
+        position = match.end()
+        lexeme = match.group(1)
+        if lexeme[0] == '"':
+            if STRING.fullmatch(lexeme) is None:
+                raise ValueError("invalid JSON string lexeme")
+        elif lexeme not in "{}[]:," and lexeme not in LITERALS and NUMBER.fullmatch(lexeme) is None:
+            raise ValueError("invalid JSON lexeme")
+        tokens.append(match)
+    if raw[position:].strip():
+        raise ValueError("JSON text has trailing bytes")
+    if not tokens:
+        raise ValueError("empty JSON text")
+    stack, index, expect = [], 0, "value"
+    while True:
+        if index >= len(tokens):
+            raise ValueError("incomplete JSON text")
+        lexeme = tokens[index].group(1)
+        index += 1
+        if expect == "value":
+            if lexeme == "{":
+                stack.append(("{", set()))
+                expect = "key-or-close"
+                continue
+            if lexeme == "[":
+                stack.append(("[", None))
+                expect = "value-or-close"
+                continue
+            if lexeme in "{}[]:,":
+                raise ValueError("JSON value expected")
+        elif expect in ("key-or-close", "key"):
+            if lexeme == "}" and expect == "key-or-close":
+                stack.pop()
+            elif lexeme[0] == '"':
+                key = json.loads(lexeme)
+                if key in stack[-1][1]:
+                    raise ValueError("JSON object repeats a key")
+                stack[-1][1].add(key)
+                expect = "colon"
+                continue
+            else:
+                raise ValueError("JSON object key expected")
+        elif expect == "colon":
+            if lexeme != ":":
+                raise ValueError("JSON colon expected")
+            expect = "value"
+            continue
+        elif expect == "value-or-close":
+            if lexeme == "]":
+                stack.pop()
+            else:
+                index -= 1
+                expect = "value"
+                continue
+        # A value has just ended: close containers or continue the enclosing one.
+        while True:
+            if not stack:
+                if index != len(tokens):
+                    raise ValueError("JSON text has more than one value")
+                return tokens
+            if index >= len(tokens):
+                raise ValueError("incomplete JSON text")
+            lexeme = tokens[index].group(1)
+            index += 1
+            if lexeme == ",":
+                expect = "key" if stack[-1][0] == "{" else "value"
+                break
+            if (lexeme == "}" and stack[-1][0] == "{") or (lexeme == "]" and stack[-1][0] == "["):
+                stack.pop()
+                continue
+            raise ValueError("JSON separator or close expected")
 
 
 def end_value(tokens, index):
@@ -46,8 +137,19 @@ def end_value(tokens, index):
     return index + 1
 
 
+_DOCUMENTS = {}
+
+
+def tokens_of(raw):
+    """The validated token stream of one source text, lexed once per text."""
+    tokens = _DOCUMENTS.get(raw)
+    if tokens is None:
+        tokens = _DOCUMENTS[raw] = lex(raw)
+    return tokens
+
+
 def field_span(raw, keys):
-    tokens = list(TOKEN.finditer(raw))
+    tokens = tokens_of(raw)
     index = 0
     for key in keys:
         if tokens[index].group(1) != "{":
@@ -70,6 +172,21 @@ def field_span(raw, keys):
 def selected(raw, *keys):
     a, z = field_span(raw, keys)
     return json.loads(raw[a:z])
+
+
+def item_spans(raw, keys):
+    """Exact offsets of each element of the JSON array at ``keys``."""
+    tokens = tokens_of(raw)
+    start, _end = field_span(raw, keys)
+    index = next(i for i, token in enumerate(tokens) if token.start(1) == start)
+    if tokens[index].group(1) != "[":
+        raise ValueError("expected JSON array")
+    spans, index = [], index + 1
+    while tokens[index].group(1) != "]":
+        end = end_value(tokens, index)
+        spans.append((tokens[index].start(1), tokens[end - 1].end(1)))
+        index = end + (tokens[end].group(1) == ",")
+    return spans
 
 
 def csv_fields(raw):
@@ -148,8 +265,22 @@ def transform(mode, archive, output, export=None):
     exclusions = selected(raw_acceptance, "excluding")
     roster_raw = read(archive / "derived/roster.json")
     roster = selected(roster_raw, "members")
+    if not isinstance(roster, list) or any(not isinstance(m, dict) for m in roster):
+        raise ValueError("roster members is not a list of objects")
+    # PROTOTYPE: the harvest archives the pack at repo/<pack relative>/plan_tree.json
+    # and names the pack by that directory (build_roster: pack_id = pack_root.name).
+    # With a pack identity, exactly that tree carries the pass. Without one (the
+    # synthetic fixtures), every archived tree must carry it: a fixture allowance.
+    try:
+        pack_id = selected(roster_raw, "pack_id")
+    except ValueError:
+        pack_id = None
     trees = sorted((archive / "sources/repo").rglob("plan_tree.json"))
-    pass_mismatch = not trees
+    if isinstance(pack_id, str) and pack_id:
+        trees = [tree for tree in trees if tree.parent.name == pack_id]
+        pass_mismatch = len(trees) != 1
+    else:
+        pass_mismatch = not trees
     for tree in trees:
         try:
             pass_id = selected(read(tree), "bytes_pass")
@@ -166,14 +297,29 @@ def transform(mode, archive, output, export=None):
     missing_identity = any(not isinstance(m.get("run_id"), str) for m in roster)
     if missing_identity:
         global_fault = "roster member missing run_id"
+
+    def unit_valid(unit):
+        return (isinstance(unit, dict) and {"cell_id", "stratum", "unit_id"} <= unit.keys()
+                and all(type(unit[k]) in (str, int) for k in ("cell_id", "stratum", "unit_id")))
+
+    if any(not isinstance(m.get("units", []), list) or not all(unit_valid(u) for u in m.get("units", []))
+           for m in roster):
+        global_fault = global_fault or "roster member units invalid"
     before = {m.get("run_id"): set() for m in roster}
     for row in exclusions:
-        if row.get("scope") == "member":
+        if not isinstance(row, dict):
+            global_fault = global_fault or "acceptance exclusion row is not an object"
+        elif row.get("scope") == "member":
             run = row.get("run_id")
-            if not isinstance(row.get("code"), str):
+            if not isinstance(run, str):
+                global_fault = global_fault or "exclusion row missing run_id"
+            elif run not in before:
+                # Acceptance lists codes only for roster members (L4 compute over the roster).
+                global_fault = global_fault or "exclusion row names a run outside the roster"
+            elif not isinstance(row.get("code"), str):
                 structural[run] = "exclusion row missing code"
             else:
-                before.setdefault(run, set()).add(row["code"])
+                before[run].add(row["code"])
     after = {run: set(codes) for run, codes in before.items()}
     notices, changes, statuses = [], [], {}
     if pass_mismatch:
@@ -260,12 +406,24 @@ def transform(mode, archive, output, export=None):
                         raise ValueError("member span unavailable")
                     if any(not isinstance(span[k], list) or len(span[k]) != 2 for k in ("member", "request")):
                         raise ValueError("invalid span")
-                    stamps = [span["member"][0], span["request"][1]]
-                    if any(type(v) is not int for v in stamps):
+                    member_span, request_span = span["member"], span["request"]
+                    if any(type(v) is not int or v < 0 for v in member_span + request_span):
                         raise ValueError("noninteger span")
+                    # PROTOTYPE: member_spans writes member = [min(starts), max(ends)] with the
+                    # request's stamps among them, so the request lies inside the member span.
+                    if not (member_span[0] <= request_span[0] <= request_span[1] <= member_span[1]):
+                        raise ValueError("invalid span")
+                    stamps = [member_span[0], request_span[1]]
                     found = {code for code, *_ in h.thermal_member_flags(stamps, readings, thresholds)}
                     if CODE in found and CODE not in before[run] and not reason:
                         raise ValueError(f"request-end would add {CODE}: {run}")
+                    # PROTOTYPE: the pass-1 harvest wrote the registered code from exactly this
+                    # function on the member hull. The journal and span are trusted for this
+                    # member only if that replay reproduces the registered decision.
+                    hull = {code for code, *_ in h.thermal_member_flags(member_span, readings, thresholds)}
+                    if (CODE in hull) != (CODE in before[run]) and not reason:
+                        notices.append({"run_id": run, "code": "records.thermal_hull_replay_disagrees"})
+                        raise ValueError("journal does not reproduce the registered hull decision")
                     if CODE not in found:
                         candidate.discard(CODE)
             except (TypeError, IndexError, AttributeError):
@@ -305,9 +463,13 @@ def transform(mode, archive, output, export=None):
         inputs = [(path, Path(path.name), False)] if session else []
         sidecar = export / ((session or "") + ".session.json")
         if sidecar.is_file():
-            raw_sidecar = read(sidecar)
             try:
+                raw_sidecar = read(sidecar)
                 locator = selected(raw_sidecar, "blinding", "withheld", "path")
+                if not isinstance(locator, str) or not locator:
+                    locator = None
+            except UnicodeDecodeError:
+                raw_sidecar, locator = sidecar.read_bytes(), None
             except ValueError:
                 locator = None
             if locator:
@@ -379,19 +541,26 @@ def transform(mode, archive, output, export=None):
                     if "excluded" in header:
                         edits.append((*row[header.index("excluded")], str(bool(after[run]))))
             exports[relative] = replace(raw, edits)
-    new_exclusions = [row for row in exclusions if not (
-        row.get("scope") == "member" and isinstance(row.get("code"), str) and row["code"] not in after[row["run_id"]])]
-    for change in changes:
-        if change["action"] == "added":
-            new_exclusions.append({"scope": "member", "run_id": change["run_id"], "code": CODE, "why": CODE})
-    a, z = field_span(raw_acceptance, ("excluding",))
-    new_acceptance = (raw_acceptance if not changes else
-                      replace(raw_acceptance, [(a, z, json.dumps(new_exclusions, ensure_ascii=False))]))
+    # PROTOTYPE: retained rows keep their exact source lexemes (spliced, never
+    # re-encoded); only removed rows leave and added rows are appended.
+    new_acceptance = raw_acceptance
+    if changes:
+        kept = [raw_acceptance[p:q] for row, (p, q) in zip(exclusions, item_spans(raw_acceptance, ("excluding",)))
+                if not (isinstance(row, dict) and row.get("scope") == "member" and isinstance(row.get("code"), str)
+                        and isinstance(row.get("run_id"), str) and row["run_id"] in after
+                        and row["code"] not in after[row["run_id"]])]
+        for change in changes:
+            if change["action"] == "added":
+                kept.append(json.dumps({"scope": "member", "run_id": change["run_id"], "code": CODE, "why": CODE},
+                                       ensure_ascii=False))
+        a, z = field_span(raw_acceptance, ("excluding",))
+        new_acceptance = replace(raw_acceptance, [(a, z, "[" + ", ".join(kept) + "]")])
     units = {}
     for member in roster:
-        for unit in member.get("units", []):
-            key = (unit["cell_id"], unit["stratum"], unit["unit_id"])
-            units.setdefault(key, []).append(member.get("run_id"))
+        for unit in (member.get("units") if isinstance(member.get("units"), list) else []):
+            if unit_valid(unit):
+                key = (unit["cell_id"], unit["stratum"], unit["unit_id"])
+                units.setdefault(key, []).append(member.get("run_id"))
     undefined_statuses = sorted({value for value in statuses.values() if value.startswith("not defined")})
     line_status = ("; ".join(undefined_statuses) if undefined_statuses else
                    "evaluated" if changes else "equals registered line")
@@ -482,6 +651,22 @@ def write_copy(path, content, output=None, sources=()):
     path.chmod(0o444)
 
 
+def linked_roots(output):
+    """Archive roots the view's own links point into: target minus the link's relative path."""
+    roots = []
+    for path in output.rglob("*"):
+        if not path.is_symlink():
+            continue
+        relative = path.relative_to(output).parts
+        try:
+            target = path.resolve(strict=True)
+        except OSError:
+            continue
+        if target.parts[-len(relative):] == relative:
+            roots.append(target.parents[len(relative) - 1])
+    return roots
+
+
 def view_files(output):
     files = []
     for path in sorted(output.rglob("*")):
@@ -536,14 +721,13 @@ def verify(output):
         return ["output missing"]
     record_path = output / "thermal_line.json"
     different, reasons = [], []
-    source_roots = []
+    # PROTOTYPE: source roots come from the view's own links (structural, record
+    # independent) and, once the record is validated, from its recorded sources.
+    source_roots = linked_roots(output)
     try:
+        if record_path.is_dir():
+            raise ValueError("thermal line record is a directory")
         record = json.loads(record_path.read_bytes())
-        if isinstance(record, dict) and isinstance(record.get("source_sha256"), dict):
-            for source in record["source_sha256"]:
-                if isinstance(source, str):
-                    path = Path(source).resolve()
-                    source_roots.append(path.parent.parent if path.name == "b6-acceptance.json" else path.parent)
         if (not isinstance(record, dict) or not isinstance(record.get("notices"), list)
                 or any(not isinstance(n, dict) or not isinstance(n.get("code"), str)
                        for n in record["notices"])
@@ -553,6 +737,9 @@ def verify(output):
                 or not isinstance(record.get("view_manifest_sha256"), str)
                 or re.fullmatch(r"[0-9a-f]{64}", record["view_manifest_sha256"]) is None):
             raise ValueError("invalid thermal line record")
+        for source in record["source_sha256"]:
+            path = Path(source).resolve()
+            source_roots.append(path.parent.parent if path.name == "b6-acceptance.json" else path.parent)
     except (OSError, ValueError, TypeError, RecursionError):
         record = {"notices": []}
         different.append("thermal_line.json")
@@ -588,7 +775,7 @@ def verify(output):
         record["notices"].append({"code": "records.thermal_view_changed",
                                   "reason": "; ".join(reasons) if reasons else "payload differs from manifest"})
     record["view_differing_paths"] = sorted(set(different))
-    if any(output.is_relative_to(root) for root in source_roots):
+    if any(output.is_relative_to(root) for root in source_roots) or record_path.is_dir():
         print(json.dumps(record, indent=2))
     else:
         write_copy(record_path, json.dumps(record, indent=2) + "\n", output)
