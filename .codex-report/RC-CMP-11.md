@@ -64,7 +64,7 @@ The finding is still real: at 1affc4208 the corrected D1-D4 exit 0.
   (vacuous, see note; corrected probe above).
 - Fable `fs3.py`: A 0 undetermined rows on both sound windows; B 0 wrong words exit 0; C head: sound 0/0, b10 flip
   0, b10 identical with a missing trigger 2. `fs3b.py`: E as above; F 15 tests, 0 failures.
-- Fable `sweep.py` + `classify.py`: running at `d97e55d1f`; result added in a follow-up commit.
+- Fable `sweep.py` + `classify.py` at `d97e55d1f`: `deletions tried: 5035; exits: {1: 1701, 2: 2691, 0: 643}`, **0 UNDECLARED**. The 643 exit-0 deletions match RC-CMP-10 (same classes and counts). 28 deletions moved from exit 2 to exit 1 (RC-CMP-10: `{1: 1673, 2: 2719}`).
 - The lead's full-size window rerun at this head is still to do (laptop).
 
 ## FILES CHANGED
