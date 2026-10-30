@@ -400,3 +400,40 @@ class ExtensionReceiptTests(unittest.TestCase):
                      'b_bytes', 'W_GB', 'KV_GB', 'b_GB', 'R_GB', 'pilot_difference'}} for row in original['models']]
         result, _ = b.merge(headers, [row['kv'] for row in original['models']], pilot)
         self.assertEqual(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + '\n', path.read_text())
+
+
+class ExtensionMergeGuardTests(unittest.TestCase):
+    def test_protected_destinations_and_mixed_headers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            frozen = root / 'configs/bytes/bytes_manifest.json'
+            frozen.parent.mkdir(parents=True)
+            frozen.write_text('frozen')
+            header = {'model_name': 'Qwen3.8-27B-8bit', 'model_dir': '/extension'}
+            hp = root / 'header.json'
+            b.write_json(hp, header)
+            args = ['merge', '--headers', str(hp), '--kv', str(root / 'unused')]
+            symlink, hardlink = root / 'symlink', root / 'hardlink'
+            symlink.symlink_to(frozen)
+            hardlink.hardlink_to(frozen)
+            targets = [None, frozen, symlink, hardlink,
+                       root / 'configs/bytes/records/model.headers.json',
+                       root / 'configs/bytes/identity_pins.json',
+                       root / 'configs/b6/packs/synthetic/registration.json']
+            with mock.patch.object(b, 'ROOT', root):
+                for target in targets:
+                    with self.subTest(target=target), contextlib.redirect_stderr(io.StringIO()):
+                        with self.assertRaises(SystemExit) as caught:
+                            b.main(args + ([] if target is None else ['--out', str(target)]))
+                        self.assertEqual(caught.exception.code, 2)
+                        self.assertEqual(frozen.read_text(), 'frozen')
+            registered = {'model_name': 'Qwen3-8B-4bit', 'model_dir': '/registered'}
+            with self.assertRaisesRegex(ValueError, 'registered model headers'):
+                b.merge([header, registered], [], [])
+            # Missing model_name must still detect extension identity.
+            fallback = dict(header, model_dir='/Qwen3.8-27B-8bit')
+            fallback.pop('model_name')
+            b.write_json(hp, fallback)
+            with mock.patch.object(b, 'ROOT', root), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    b.main(args)

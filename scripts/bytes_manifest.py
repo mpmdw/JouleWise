@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import platform
 import re
 import struct
@@ -302,6 +303,9 @@ def analysis_fields(header):
 
 
 def merge(header_records, kv_records, pilot_rows):
+    roles = {analysis_fields(h)['role'] for h in header_records}
+    if 'extension_held_out' in roles and roles != {'extension_held_out'}:
+        raise ValueError('extension merge refuses registered model headers')
     by_dir = {r["model_dir"]: r for r in kv_records}
     if len(by_dir) != len(kv_records):
         raise ValueError("duplicate KV model")
@@ -353,9 +357,16 @@ def main(argv=None):
     sub.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     if args.command == "merge":
-        extension = any(json.loads(p.read_bytes()).get("model_name") == "Qwen3.8-27B-8bit" for p in args.headers)
-        if extension and (args.out is None or args.out.resolve() == (ROOT / "configs/bytes/bytes_manifest.json").resolve()):
-            parser.error("extension merge requires an explicit separate --out")
+        headers_in = [json.loads(p.read_bytes()) for p in args.headers]
+        extension = any(analysis_fields(h)['role'] == 'extension_held_out' for h in headers_in)
+        frozen = ROOT / 'configs/bytes/bytes_manifest.json'
+        if extension:
+            if args.out is None:
+                parser.error('extension merge requires an explicit separate --out')
+            if args.out.resolve().is_relative_to((ROOT / 'configs').resolve()):
+                parser.error('extension merge --out must be outside configs/')
+            if args.out.exists() and os.path.samefile(args.out, frozen):
+                parser.error('extension merge --out is the frozen manifest (same file)')
         args.out = args.out or ROOT / "configs/bytes/bytes_manifest.json"
     if args.command == "merge":
         result, differences = merge([json.loads(p.read_bytes()) for p in args.headers],
