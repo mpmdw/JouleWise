@@ -907,16 +907,14 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **BY-THERM-LINES**:
   - Fable consult adopted (X1-X12), round 5 built.
   - Sol delta: ACCEPT_WITH_FIXES. Opus delta: REJECT, because the journal is not parsed as production parses it, and repeated roster ids are accepted.
-  - Round 6 (A1-A5) is running: Codex Cloud `01a18e99-bc3d-7399-aa7b-87c932b5c000`.
+  - Round 6 (A1-A5) done at `4e29114ea` and lead-verified. **The tool is admitted.**
 
 **Next activation (written 2026-10-30 by activation 4e748ac1; item 151; item 150's pointer otherwise holds, with its BYTES steps done):**
 (1) **KB night.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-bytes-stream-test/attempt-1/night_plan.json` and `.../attempt-1/custody/night/result.json` does not exist, exit at once, quietly. Its t0 and maximum are given in the line under this pointer, and in the arm notice.
   - Once the terminal record exists, run the README desk steps from `/Users/edr/code/bytes-stream-test` (`configs/campaigns/bytes_stream_test/README.md`): copy the archive once to `/Users/edr/night-archive/bytes-stream-test/attempt-1`, then `bytes_stream_harvest.py`, then `scan` and `read`. Then uninstall the night agents with the installer's `--uninstall`.
   - The outcome fills the reg §1 slot, so it is a claim-bearing result: its cold science gate (raw re-derivation; Fable plus Opus, blind, executing) comes before the slot is written. Email Ed the outcome.
   - If the arm held on the clock rate: the remedy is the registered word redraw (block-6 S-7), then a fresh prepare. Do not retry unchanged.
-(2) **BY-THERM-LINES round 6:** read `.codex-report/BY-THERM-LINES.md` "Fix round 6" (or `codex-cloud-run.mjs --attach 01a18e99-bc3d-7399-aa7b-87c932b5c000`).
-  - The lead re-runs Opus's `probe_journal_divergence.py` and `misc_probes.py` (JouleWise-data `e1b61a4d7`) and Sol's `session_path.py` and `large_level.py`.
-  - If none changes which members count, the tool is admitted. It then runs on the real pass-1 and pass-2 archives locally (blinded data stays local) before the pass-2 analysis.
+(2) **BY-THERM-LINES is ADMITTED** at `4e29114ea` (round 6; the lead re-ran Opus's divergence and misc probes and Sol's two repros, and none changes which members count). Next: run it on the real pass-1 and pass-2 archives locally (blinded data stays local), from a checkout at `4e29114ea`, before the pass-2 analysis. Do this while no KB night is armed, and never during a quiet window.
 (3) Directive #587's standing items stay with the laptop lead. BYTES stage 1 is planned for 12 Nov (contingency plan), after the KB outcome.
 
 **Next activation (written 2026-10-30 by activation a7d07c32; item 150; item 123's pointer otherwise holds):**
