@@ -1,0 +1,11 @@
+EDGE_CHANGES []
+EDGE_REMAINING [('dup', 'thermal.os_level_nonzero'), ('dup', 'thermal.os_level_nonzero'), ('other', 'thermal.os_level_nonzero'), ('ref', 'thermal.os_level_nonzero'), ('absent', 'thermal.os_level_nonzero'), ('equal', 'thermal.os_level_nonzero'), ('edge', 'thermal.os_level_nonzero'), ('nonnumeric', 'thermal.os_level_nonzero'), ('other', 'thermal.powermetrics_pressure_elevated')]
+MALFORMED_NOTICE [{'code': 'records.thermal_pass_mismatch', 'reason': 'pass mismatch'}, {'code': 'records.thermal_journal_provenance_unavailable'}, {'code': 'records.monitor_line_malformed'}, {'run_id': 'dup', 'code': 'records.thermal_line_undefined', 'reason': 'pass mismatch'}, {'run_id': 'other', 'code': 'records.thermal_line_undefined', 'reason': 'pass mismatch'}, {'run_id': 'ref', 'code': 'reference.unchanged'}, {'run_id': 'absent', 'code': 'records.thermal_line_undefined', 'reason': 'pass mismatch'}, {'run_id': 'equal', 'code': 'records.thermal_line_undefined', 'reason': 'pass mismatch'}, {'run_id': 'edge', 'code': 'records.thermal_line_undefined', 'reason': 'pass mismatch'}, {'run_id': 'nonnumeric', 'code': 'records.thermal_line_undefined', 'reason': 'pass mismatch'}]
+Traceback (most recent call last):
+  File "/workspace/JouleWise/.codex-report/by-therm-lines-rev-sol-4/prior_sol/sol_probes.py", line 82, in <module>
+    if __name__=='__main__': run()
+                             ~~~^^
+  File "/workspace/JouleWise/.codex-report/by-therm-lines-rev-sol-4/prior_sol/sol_probes.py", line 44, in run
+    assert [r['run_id'] for r in result['changes']]==['dup','other','nonnumeric']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

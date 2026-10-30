@@ -1,0 +1,5 @@
+SEALED_JOURNAL valid exit 0 status evaluated restored ['a'] codes []
+SEALED_JOURNAL not-json exit 0 status evaluated restored ['a'] codes []
+SEALED_JOURNAL missing-level exit 0 status evaluated restored ['a'] codes []
+SEALED_JOURNAL wrong-level exit 0 status evaluated restored ['a'] codes []
+SEALED_JOURNAL empty exit 0 status evaluated restored ['a'] codes []

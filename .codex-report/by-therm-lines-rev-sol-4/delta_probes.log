@@ -1,0 +1,9 @@
+MISMATCH not defined (journal differs from the harvest's) changes 0
+MISSING_SEAL not defined (journal provenance unavailable) changes 0 codes [('a', 'thermal.os_level_nonzero')]
+Traceback (most recent call last):
+  File "/workspace/JouleWise/.codex-report/by-therm-lines-rev-sol-4/prior_sol/delta_probes.py", line 31, in <module>
+    t.transform('request-end-p1', f.archive, out)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/JouleWise/scripts/bytes_thermal_lines.py", line 137, in transform
+    raise ValueError("output must be a new directory")
+ValueError: output must be a new directory

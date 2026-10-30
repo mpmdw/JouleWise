@@ -1,0 +1,10 @@
+REFUSED existing output must be a new directory source_unchanged True
+REFUSED symlink output overlaps source archive/export source_unchanged True
+REFUSED dangling output must be a new directory source_unchanged True
+REFUSED inside output overlaps source archive/export source_unchanged True
+FRESH_MANIFEST_AND_CHANGES_BYTE_IDENTICAL True
+GUARD_REFUSED False destination directory is a symlink True
+GUARD_REFUSED True destination directory is a symlink True
+WOULD_ADD mismatched equals registered line
+WOULD_ADD missing equals registered line
+WOULD_ADD matched STOP_BEFORE_WRITE request-end would add thermal.os_level_nonzero: a

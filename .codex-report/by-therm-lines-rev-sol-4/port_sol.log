@@ -1,0 +1,7 @@
+EDGE_CHANGES [('dup', 'removed'), ('other', 'removed'), ('nonnumeric', 'removed')]
+EDGE_REMAINING [('ref', 'thermal.os_level_nonzero'), ('absent', 'thermal.os_level_nonzero'), ('equal', 'thermal.os_level_nonzero'), ('edge', 'thermal.os_level_nonzero'), ('other', 'thermal.powermetrics_pressure_elevated')]
+MALFORMED_NOTICE [{'code': 'records.monitor_line_malformed'}, {'run_id': 'ref', 'code': 'reference.unchanged'}, {'run_id': 'absent', 'code': 'records.thermal_line_undefined', 'reason': 'member span unavailable'}]
+NONNUMERIC_NEXT_BOUNDARY []
+LINK_MUTATION True all_recorded_hashes_match True
+HULL_NULL_UNAVAILABLE_REFERENCE_DUPLICATES_UNCHANGED [{'run_id': 'dup', 'code': 'member.span_unknown'}, {'run_id': 'other', 'code': 'thermal.unmeasured'}, {'run_id': 'ref', 'code': 'reference.unchanged'}]
+PROBES_PASS

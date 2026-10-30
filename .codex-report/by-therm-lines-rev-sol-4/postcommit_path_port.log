@@ -1,0 +1,2 @@
+source [('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)] records 100
+line [('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)] records 100

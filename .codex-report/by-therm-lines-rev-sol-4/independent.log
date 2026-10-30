@@ -1,0 +1,23 @@
+DIRECTION hull-p2 absent ['equals registered line', 'not defined (hull assessment unavailable)'] False
+DIRECTION hull-p2 member-missing ['equals registered line', 'not defined (hull assessment unavailable)'] False
+DIRECTION hull-p2 field-missing ['equals registered line', 'not defined (hull assessment unavailable)'] False
+DIRECTION hull-p2 null ['equals registered line', 'not defined (hull assessment unavailable)'] False
+DIRECTION hull-p2 journal-unavailable ['equals registered line', 'not defined (hull assessment unavailable)'] False
+DIRECTION hull-p2 wrong-pass ['equals registered line', 'not defined (pass mismatch)'] False
+DIRECTION request-end-p1 absent ['not defined (archived thermal journal unavailable)', 'equals registered line'] False
+DIRECTION request-end-p1 member-missing ['not defined (archived thermal journal unavailable)', 'equals registered line'] False
+DIRECTION request-end-p1 field-missing ['not defined (archived thermal journal unavailable)', 'equals registered line'] False
+DIRECTION request-end-p1 null ['not defined (archived thermal journal unavailable)', 'equals registered line'] False
+DIRECTION request-end-p1 journal-unavailable ['not defined (archived thermal journal unavailable)', 'equals registered line'] False
+DIRECTION request-end-p1 wrong-pass ['not defined (pass mismatch)', 'equals registered line'] False
+NONZERO_UNTRUSTED missing [('a', 'not defined (journal provenance unavailable)')] False []
+NONZERO_UNTRUSTED mismatch [('a', "not defined (journal differs from the harvest's)")] False []
+NONZERO_UNTRUSTED matching [('a', 'equals registered line')] True []
+DAMAGED_RECORD source-null (0, 'withheld/spans.json') flag True
+DAMAGED_RECORD source-list (0, 'withheld/spans.json') flag True
+DAMAGED_RECORD notice-null (0, 'withheld/spans.json') flag True
+DAMAGED_RECORD notice-empty (0, 'withheld/spans.json') flag True
+DAMAGED_RECORD missing-binding (0, 'withheld/spans.json') flag True
+INTEGER_EXCLUDED 0 ['equals registered line', 'not defined (pass mismatch)'] False []
+INTEGER_EXCLUDED 1 ['equals registered line', 'not defined (pass mismatch)'] False []
+OUTSIDE_GIT 0 None None

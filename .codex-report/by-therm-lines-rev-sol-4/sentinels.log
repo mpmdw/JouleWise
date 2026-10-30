@@ -1,0 +1,4 @@
+PROBE BLIND decoded-sentinels []
+PROBE BLIND sentinels-in-stdout-or-record []
+PROBE BLIND withheld-copy-bytes (True, 1)
+PROBE BLIND sidecar-copy {"operative_bound_s": 645192837.465564, "blinding": {"withheld": {"path": "withheld/s.withheld.csv", "row_count": 1}}}

@@ -1,0 +1,28 @@
+PROBE T2 export-without-exclusion_codes-column (0, '}', True)
+PROBE T2 empty-public-csv (0, '}', True)
+PROBE T2 withheld-store-absent (0, '}', 'not defined (pass mismatch)', ['not defined (pass mismatch)', 'equals registered line'], ['s.runs.csv', 's.session.json'])
+PROBE T2 hull-record-missing-journal_available (0, '}', True)
+PROBE T3 no-window_flags.json (0, '}', ['records.thermal_pass_mismatch', 'records.thermal_journal_provenance_unavailable', 'records.thermal_line_undefined'], [])
+PROBE T3 sealed-journal-null (0, '}', ['records.thermal_pass_mismatch', 'records.thermal_journal_provenance_unavailable', 'records.thermal_line_undefined'], 'not defined (pass mismatch)')
+PROBE T3 mismatch-and-would-add (0, '}', True)
+PROBE T3 matching-seal (0, '}', [], 'not defined (pass mismatch)')
+PROBE T3 one-byte-journal-change (0, '}', [], 'not defined (pass mismatch)', [])
+PROBE T4 modes-of-copies {'thermal_line.json': '0o444', 'view_manifest.json': '0o444', 'derived/b6-acceptance.json': '0o444'}
+PROBE T4 baseline (0, 'view verified')
+PROBE T4 identical-bytes-new-inode (0, 'withheld/reductions/a.json')
+PROBE T4 identical-bytes-touch-only (0, 'derived/roster.json', 'flag=True')
+PROBE T4 deleted-linked-source (0, 'source changed since transform: /tmp/tmpceux56mf/t4c1/archive/withheld/spans.json', 'flag=True')
+PROBE T4 added-file-in-view (0, 'derived/extra.json', 'flag=True')
+PROBE T4 deleted-file-in-view (0, 'derived/roster.json', 'flag=True')
+PROBE T4 manifest-not-json (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 manifest-deleted (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 manifest-files-list-of-ints (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 thermal_line-deleted (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 thermal_line-not-json (0, 'withheld/spans.json', 'flag=True')
+PROBE T4 source-acceptance-only-changed (0, 'source changed since transform: /tmp/tmpceux56mf/t4c9/archive/derived/b6-acceptance.json', 'flag=True')
+PROBE T4 source-export-rewritten-after-transform (0, 'source changed since transform: /tmp/tmpceux56mf/t4x/export/s.runs.csv')
+PROBE BLIND decoded-sentinels []
+PROBE BLIND sentinels-in-stdout-or-record []
+PROBE BLIND withheld-copy-bytes (False, 1)
+PROBE BLIND sidecar-copy {"operative_bound_s": 645192837.465564, "blinding": {"withheld": {"path": "withheld/s.withheld.csv", "row_count": 1}}}
+PROBE T3 gap-independence {'comparisons': 24000, 'os_decision_differs': 0, 'comparisons_with_unmeasured_holes': 19486}

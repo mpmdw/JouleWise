@@ -1,0 +1,2 @@
+REAL_GAPS_OS_PROJECTION_EXACT 3 variants x 3 gap thresholds OK
+ADDED_DELETED exit 0 paths ['added.txt', 'withheld/spans.json'] flag True

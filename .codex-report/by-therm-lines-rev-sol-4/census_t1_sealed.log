@@ -1,0 +1,69 @@
+FAIL bytes-s2-p1 change list == targets :: ([], ['qwen3-30b-a3b-4bit-10', 'qwen3-8b-4bit-10'])
+PASS bytes-s2-p1 (d) copied store named SESSION.withheld.csv under output :: export/withheld/bytes-s2-p1.withheld.csv
+PASS bytes-s2-p1 (d) no extra *.runs.csv under output export
+PASS bytes-s2-p1 (a) public+withheld census :: (63, 50, 63, 50)
+PASS bytes-s2-p1 (c) rows differ exactly on change list, codes==output acceptance, other fields equal :: ([], [])
+FAIL bytes-s2-p1 withheld changed member: blinded_status row withheld
+PASS bytes-s2-p1 (b) commit=False record census source==output :: (50, 50)
+PASS bytes-s2-p1 (b) commit=False model set source==output :: ([('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)], [('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)])
+PASS bytes-s2-p1 (d) commit=False analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s2-p1-line/export/bytes-s2-p1.runs.csv']
+MODELS bytes-s2-p1 commit False source [('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)] line [('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)]
+PASS bytes-s2-p1 (b) commit=True record census source==output :: (100, 100)
+PASS bytes-s2-p1 (b) commit=True model set source==output :: ([('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)], [('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)])
+PASS bytes-s2-p1 (d) commit=True analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s2-p1-line/export/bytes-s2-p1.runs.csv', '/tmp/tmp38r5pysv/bytes-s2-p1-line/export/withheld/bytes-s2-p1.withheld.csv']
+MODELS bytes-s2-p1 commit True source [('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)] line [('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)]
+ARCHIVE bytes-s2-p1 source ['Qwen3-30B-A3B-4bit', 'Qwen3-8B-4bit'] 100 [('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)]
+ARCHIVE bytes-s2-p1 line ['Qwen3-30B-A3B-4bit', 'Qwen3-8B-4bit'] 100 [('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-30B-A3B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9), ('Qwen3-8B-4bit', 'computed', 9)]
+PASS bytes-s2-p1 verify view
+FAIL bytes-s5-p1 change list == targets :: ([], ['llama-3-3-70b-instruct-4bit-10'])
+PASS bytes-s5-p1 (d) copied store named SESSION.withheld.csv under output :: export/withheld/bytes-s5-p1.withheld.csv
+PASS bytes-s5-p1 (d) no extra *.runs.csv under output export
+PASS bytes-s5-p1 (a) public+withheld census :: (13, 50, 13, 50)
+PASS bytes-s5-p1 (c) rows differ exactly on change list, codes==output acceptance, other fields equal :: ([], [])
+FAIL bytes-s5-p1 withheld changed member: blinded_status row withheld
+PASS bytes-s5-p1 (b) commit=False record census source==output :: (0, 0)
+PASS bytes-s5-p1 (b) commit=False model set source==output :: ([], [])
+PASS bytes-s5-p1 (d) commit=False analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s5-p1-line/export/bytes-s5-p1.runs.csv']
+MODELS bytes-s5-p1 commit False source [] line []
+PASS bytes-s5-p1 (b) commit=True record census source==output :: (50, 50)
+PASS bytes-s5-p1 (b) commit=True model set source==output :: ([('Llama-3.3-70B-Instruct-4bit', 'computed', 9), ('Llama-3.3-70B-Instruct-4bit', 'computed', 9)], [('Llama-3.3-70B-Instruct-4bit', 'computed', 9), ('Llama-3.3-70B-Instruct-4bit', 'computed', 9)])
+PASS bytes-s5-p1 (d) commit=True analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s5-p1-line/export/bytes-s5-p1.runs.csv', '/tmp/tmp38r5pysv/bytes-s5-p1-line/export/withheld/bytes-s5-p1.withheld.csv']
+MODELS bytes-s5-p1 commit True source [('Llama-3.3-70B-Instruct-4bit', 'computed', 9), ('Llama-3.3-70B-Instruct-4bit', 'computed', 9)] line [('Llama-3.3-70B-Instruct-4bit', 'computed', 9), ('Llama-3.3-70B-Instruct-4bit', 'computed', 9)]
+ARCHIVE bytes-s5-p1 source ['Llama-3.3-70B-Instruct-4bit'] 50 [('Llama-3.3-70B-Instruct-4bit', 'computed', 9), ('Llama-3.3-70B-Instruct-4bit', 'computed', 9)]
+ARCHIVE bytes-s5-p1 line ['Llama-3.3-70B-Instruct-4bit'] 50 [('Llama-3.3-70B-Instruct-4bit', 'computed', 9), ('Llama-3.3-70B-Instruct-4bit', 'computed', 9)]
+PASS bytes-s5-p1 verify view
+FAIL bytes-s5-p2 change list == targets :: ([], ['llama-3-3-70b-instruct-4bit-10'])
+PASS bytes-s5-p2 (d) copied store named SESSION.withheld.csv under output :: export/withheld/bytes-s5-p2.withheld.csv
+PASS bytes-s5-p2 (d) no extra *.runs.csv under output export
+PASS bytes-s5-p2 (a) public+withheld census :: (13, 50, 13, 50)
+PASS bytes-s5-p2 (c) rows differ exactly on change list, codes==output acceptance, other fields equal :: ([], [])
+FAIL bytes-s5-p2 withheld changed member: blinded_status row withheld
+PASS bytes-s5-p2 (b) commit=False record census source==output :: (0, 0)
+PASS bytes-s5-p2 (b) commit=False model set source==output :: ([], [])
+PASS bytes-s5-p2 (d) commit=False analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s5-p2-line/export/bytes-s5-p2.runs.csv']
+MODELS bytes-s5-p2 commit False source [] line []
+PASS bytes-s5-p2 (b) commit=True record census source==output :: (50, 50)
+PASS bytes-s5-p2 (b) commit=True model set source==output :: ([('Llama-3.3-70B-Instruct-4bit', 'computed', 10), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10)], [('Llama-3.3-70B-Instruct-4bit', 'computed', 10), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10)])
+PASS bytes-s5-p2 (d) commit=True analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s5-p2-line/export/bytes-s5-p2.runs.csv', '/tmp/tmp38r5pysv/bytes-s5-p2-line/export/withheld/bytes-s5-p2.withheld.csv']
+MODELS bytes-s5-p2 commit True source [('Llama-3.3-70B-Instruct-4bit', 'computed', 10), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10)] line [('Llama-3.3-70B-Instruct-4bit', 'computed', 10), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10)]
+ARCHIVE bytes-s5-p2 source ['Llama-3.3-70B-Instruct-4bit'] 50 [('Llama-3.3-70B-Instruct-4bit', 'computed', 10), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10)]
+ARCHIVE bytes-s5-p2 line ['Llama-3.3-70B-Instruct-4bit'] 50 [('Llama-3.3-70B-Instruct-4bit', 'computed', 10), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10)]
+PASS bytes-s5-p2 verify view
+FAIL bytes-s2-p2 change list == targets :: ([], ['qwen3-30b-a3b-4bit-10', 'qwen3-8b-4bit-10'])
+PASS bytes-s2-p2 (d) copied store named SESSION.withheld.csv under output :: export/withheld/bytes-s2-p2.withheld.csv
+PASS bytes-s2-p2 (d) no extra *.runs.csv under output export
+PASS bytes-s2-p2 (a) public+withheld census :: (63, 50, 63, 50)
+PASS bytes-s2-p2 (c) rows differ exactly on change list, codes==output acceptance, other fields equal :: ([], [])
+FAIL bytes-s2-p2 withheld changed member: blinded_status row withheld
+PASS bytes-s2-p2 (b) commit=False record census source==output :: (50, 50)
+PASS bytes-s2-p2 (b) commit=False model set source==output :: ([('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)], [('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)])
+PASS bytes-s2-p2 (d) commit=False analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s2-p2-line/export/bytes-s2-p2.runs.csv']
+MODELS bytes-s2-p2 commit False source [('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)] line [('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)]
+PASS bytes-s2-p2 (b) commit=True record census source==output :: (100, 100)
+PASS bytes-s2-p2 (b) commit=True model set source==output :: ([('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)], [('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)])
+PASS bytes-s2-p2 (d) commit=True analysis opened exactly the output's own tables :: ['/tmp/tmp38r5pysv/bytes-s2-p2-line/export/bytes-s2-p2.runs.csv', '/tmp/tmp38r5pysv/bytes-s2-p2-line/export/withheld/bytes-s2-p2.withheld.csv']
+MODELS bytes-s2-p2 commit True source [('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)] line [('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)]
+ARCHIVE bytes-s2-p2 source ['Qwen3-30B-A3B-4bit', 'Qwen3-8B-4bit'] 100 [('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)]
+ARCHIVE bytes-s2-p2 line ['Qwen3-30B-A3B-4bit', 'Qwen3-8B-4bit'] 100 [('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-30B-A3B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10), ('Qwen3-8B-4bit', 'computed', 10)]
+PASS bytes-s2-p2 verify view
+SUMMARY fails ['bytes-s2-p1 change list == targets', 'bytes-s2-p1 withheld changed member: blinded_status row withheld', 'bytes-s5-p1 change list == targets', 'bytes-s5-p1 withheld changed member: blinded_status row withheld', 'bytes-s5-p2 change list == targets', 'bytes-s5-p2 withheld changed member: blinded_status row withheld', 'bytes-s2-p2 change list == targets', 'bytes-s2-p2 withheld changed member: blinded_status row withheld']

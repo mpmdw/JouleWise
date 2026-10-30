@@ -1,0 +1,46 @@
+NATIVE_CAMPAIGN_GENERATED
+INVALID bytes-s2-p1 source []
+ARCHIVE bytes-s2-p1 source [('quad', '0', 'qwen3-8b-4bit-10')] [('Qwen3-8B-4bit', 'computed', 10, 9, None), ('Qwen3-8B-4bit', 'computed', 10, 9, None)]
+INVALID bytes-s2-p1 output []
+ARCHIVE bytes-s2-p1 output [('quad', '0', 'qwen3-8b-4bit-10')] [('Qwen3-8B-4bit', 'computed', 10, 9, None), ('Qwen3-8B-4bit', 'computed', 10, 9, None)]
+ANALYSIS_SOURCE_UNCHANGED bytes-s2-p1
+CSV_TRANSFORM bytes-s2-p1 success
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s2-p1 False 63 63 OK
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s2-p1 True 113 113 OK
+BLINDED_SOURCE_CENSUS bytes-s2-p1 100 model_rows 50
+BLINDED_OUTPUT_CENSUS bytes-s2-p1 100
+BLINDED_OUTPUT_MODELS bytes-s2-p1 [('Qwen3-8B-4bit', 'computed', 9, None), ('Qwen3-8B-4bit', 'computed', 9, None)]
+INVALID bytes-s5-p1 source []
+ARCHIVE bytes-s5-p1 source [('quad', '0', 'llama-3-3-70b-instruct-4bit-10')] [('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 9, None), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 9, None)]
+INVALID bytes-s5-p1 output []
+ARCHIVE bytes-s5-p1 output [('quad', '0', 'llama-3-3-70b-instruct-4bit-10')] [('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 9, None), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 9, None)]
+ANALYSIS_SOURCE_UNCHANGED bytes-s5-p1
+CSV_TRANSFORM bytes-s5-p1 success
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s5-p1 False 13 13 OK
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s5-p1 True 63 63 OK
+BLINDED_SOURCE_CENSUS bytes-s5-p1 50 model_rows 50
+BLINDED_OUTPUT_CENSUS bytes-s5-p1 50
+BLINDED_OUTPUT_MODELS bytes-s5-p1 [('Llama-3.3-70B-Instruct-4bit', 'computed', 9, None), ('Llama-3.3-70B-Instruct-4bit', 'computed', 9, None)]
+INVALID bytes-s5-p2 source []
+ARCHIVE bytes-s5-p2 source [] [('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 10, None), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 10, None)]
+INVALID bytes-s5-p2 output []
+ARCHIVE bytes-s5-p2 output [] [('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 10, None), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10, 10, None)]
+ANALYSIS_SOURCE_UNCHANGED bytes-s5-p2
+CSV_TRANSFORM bytes-s5-p2 success
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s5-p2 False 13 13 OK
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s5-p2 True 63 63 OK
+BLINDED_SOURCE_CENSUS bytes-s5-p2 50 model_rows 50
+BLINDED_OUTPUT_CENSUS bytes-s5-p2 50
+BLINDED_OUTPUT_MODELS bytes-s5-p2 [('Llama-3.3-70B-Instruct-4bit', 'computed', 10, None), ('Llama-3.3-70B-Instruct-4bit', 'computed', 10, None)]
+INVALID bytes-s2-p2 source []
+ARCHIVE bytes-s2-p2 source [] [('Qwen3-8B-4bit', 'computed', 10, 10, None), ('Qwen3-8B-4bit', 'computed', 10, 10, None)]
+INVALID bytes-s2-p2 output []
+ARCHIVE bytes-s2-p2 output [] [('Qwen3-8B-4bit', 'computed', 10, 10, None), ('Qwen3-8B-4bit', 'computed', 10, 10, None)]
+ANALYSIS_SOURCE_UNCHANGED bytes-s2-p2
+CSV_TRANSFORM bytes-s2-p2 success
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s2-p2 False 63 63 OK
+DELTA_CENSUS_CODES_MODELS_STORE_GATE bytes-s2-p2 True 113 113 OK
+BLINDED_SOURCE_CENSUS bytes-s2-p2 100 model_rows 50
+BLINDED_OUTPUT_CENSUS bytes-s2-p2 100
+BLINDED_OUTPUT_MODELS bytes-s2-p2 [('Qwen3-8B-4bit', 'computed', 10, None), ('Qwen3-8B-4bit', 'computed', 10, None)]
+CAMPAIGN_DONE

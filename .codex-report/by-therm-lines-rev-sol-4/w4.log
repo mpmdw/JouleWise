@@ -1,0 +1,10 @@
+W4 hull-p2 excluding-null 0 {'a': 'not defined (acceptance excluding is not a list)', 'b': 'not defined (acceptance excluding is not a list)'} SOURCE_UNCHANGED True
+W4 hull-p2 missing-code 0 {'a': 'not defined (exclusion row missing code)', 'b': 'equals registered line'} SOURCE_UNCHANGED True
+W4 hull-p2 missing-run 0 {None: 'not defined (roster member missing run_id)', 'b': 'not defined (roster member missing run_id)'} SOURCE_UNCHANGED True
+W4 hull-p2 nonutf8 0 {'a': 'not defined (export CSV is not UTF-8)', 'b': 'not defined (export CSV is not UTF-8)'} SOURCE_UNCHANGED True
+W4 hull-p2 missing-session 0 {'a': 'not defined (acceptance missing session_id)', 'b': 'not defined (acceptance missing session_id)'} SOURCE_UNCHANGED True
+W4 request-end-p1 excluding-null 0 {'a': 'not defined (acceptance excluding is not a list)', 'b': 'not defined (acceptance excluding is not a list)'} SOURCE_UNCHANGED True
+W4 request-end-p1 missing-code 0 {'a': 'not defined (exclusion row missing code)', 'b': 'equals registered line'} SOURCE_UNCHANGED True
+W4 request-end-p1 missing-run 0 {None: 'not defined (roster member missing run_id)', 'b': 'not defined (roster member missing run_id)'} SOURCE_UNCHANGED True
+W4 request-end-p1 nonutf8 0 {'a': 'not defined (export CSV is not UTF-8)', 'b': 'not defined (export CSV is not UTF-8)'} SOURCE_UNCHANGED True
+W4 request-end-p1 missing-session 0 {'a': 'not defined (acceptance missing session_id)', 'b': 'not defined (acceptance missing session_id)'} SOURCE_UNCHANGED True

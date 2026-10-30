@@ -1,0 +1,8 @@
+MISMATCH not defined (journal differs from the harvest's) changes 0
+MISSING_SEAL not defined (journal provenance unavailable) changes 0 codes [('a', 'thermal.os_level_nonzero')]
+REUSE refused: output must be a new directory
+REUSE_VERIFY ['sources/repo/plan_tree.json', 'source changed since transform: /tmp/tmplv0zs424/archive/sources/repo/plan_tree.json']
+DAMAGED_MANIFEST exit 0 tail source changed since transform: /tmp/tmplv0zs424/archive/sources/repo/plan_tree.json
+DAMAGED_MANIFEST_FLAG True
+LINKED refused: output must be a new directory
+SOURCE_EXPORT_CHANGED False

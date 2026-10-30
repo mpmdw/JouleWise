@@ -1,0 +1,10 @@
+DAMAGE notices-int 0 True True
+DAMAGE notices-code-int 0 True True
+DAMAGE source-list 0 True True
+DAMAGE source-value-int 0 True True
+DAMAGE binding-null 0 True True
+DAMAGE binding-missing 0 True True
+SYMLINK 0 view verified
+MISSING 0 output missing False
+INSIDE_SOURCE 0 True UNCHANGED True
+INSIDE_SOURCE_DAMAGED_ROOTS 0 UNCHANGED False TAIL ['withheld/spans.json']

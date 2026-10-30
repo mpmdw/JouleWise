@@ -1,0 +1,28 @@
+pass-1 primary member codes: {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}
+pass-2 primary member codes: {}
+PASS real acceptance carries OS code on every pass-1 science member: {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}
+PASS real pass-2 primary carries no OS code
+PASS request-end-p1 exit 0 on real archive
+PASS (c) request-end-p1(pass1) == pass-2 primary (exact): {'re1': {}, 'p2': {}}
+PASS hull-p2 exit 0 on real archive
+PASS (a) hull-p2(pass2) == pass-1 primary (exact): {'hull2': {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}, 'p1': {'b5t-abs-r01': ['thermal.os_level_nonzero'], 'b5t-abs-r02': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b1': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-b2': ['thermal.os_level_nonzero'], 'b5t-cmp-b01-a2': ['thermal.os_level_nonzero']}}
+PASS (a) quad drops whole in hull record: [['b5t-abs-r01'], ['b5t-abs-r02'], ['b5t-cmp-b01-a1', 'b5t-cmp-b01-b1', 'b5t-cmp-b01-b2', 'b5t-cmp-b01-a2']]
+PASS (f) source archives unchanged
+PASS (f) hull-p2 idempotent on its own output
+FAIL pass mismatch refused
+PASS (c) inside-request member stays dropped; others restored; equals pass-2 primary: {'out': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'p2': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS level==1 at exactly request-end stamp: tool == pass-2 primary: {'out': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'p2': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'p1': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS malformed lines + non-numeric level: tool == pass-2 primary, malformed noticed: {'out': {}, 'p2': {}, 'err': ''}
+PASS dup OS row fully removed; other thermal code and battery code kept: {'got': {'b5t-abs-r02': ['thermal.unmeasured'], 'b5t-cmp-b01-a1': ['battery.member_span']}, 'err': ''}
+PASS member absent from spans keeps hull OS code: {'got': {'b5t-cmp-b01-b1': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS request == hull keeps hull OS code: {'got': {'b5t-cmp-b01-b2': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS reference member OS code untouched: {'got': {'b5t-abs-r01': ['thermal.os_level_nonzero']}, 'err': ''}
+PASS zst journal: production reader reads it, tool refuses (expected per brief? see report): {'production_readings': 102, 'tool_exit': 0, 'err': ''}
+PASS JSON sentinel absent from stdout and record, byte-copied in output
+PASS output files are symlinks into the source
+PASS record lists the sources it hashed: ['b6-acceptance.json', 'plan_tree.json', 'roster.json', 'spans.json', 'thermal.jsonl', 'window_flags.json']
+FAIL output view is read-only w.r.t. source (open r+b through link fails): opening the output's derived/roster.json for writing reaches the source file
+PASS moving the source leaves the output dangling (detected only by failure): {'dangling_after_move': True}
+PASS linked files whose SHA-256 is NOT in the record: {'count': 174, 'example': 'harvest.json'}
+
+SUMMARY 22 / 24 pass; root /tmp/btl-chain-qkfgr3he

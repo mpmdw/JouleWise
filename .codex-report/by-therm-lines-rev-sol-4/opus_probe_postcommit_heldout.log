@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/workspace/JouleWise/.codex-report/by-therm-lines-rev-sol-4/prior_sol/opus_probe_postcommit_heldout.py", line 8, in <module>
+    design = ba.read_json(Path('/tmp/jw/tests/fixtures/bytes/campaign_design.json'))
+  File "/workspace/JouleWise/joulewise/bytes_analysis.py", line 68, in read_json
+    return json.loads(read_bytes(Path(path)).decode("utf-8"))
+                      ~~~~~~~~~~^^^^^^^^^^^^
+  File "/workspace/JouleWise/joulewise/desk_compress.py", line 141, in read_bytes
+    with open_bytes(path) as stream:
+         ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/JouleWise/joulewise/desk_compress.py", line 112, in open_bytes
+    raise FileNotFoundError(errno.ENOENT, "file not found", str(compressed))
+FileNotFoundError: [Errno 2] file not found: '/tmp/jw/tests/fixtures/bytes/campaign_design.json.zst'
