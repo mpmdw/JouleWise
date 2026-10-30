@@ -1036,7 +1036,9 @@ def interval_places(halfwidth):
 
 def format_interval(value, halfwidth):
     """§14 H2: two significant half-width digits; estimate at the same place."""
-    if not finite_number(halfwidth) or halfwidth <= 0:
+    if halfwidth == 0:
+        return f"{value:.2f} ± 0.00"
+    if not finite_number(halfwidth) or halfwidth < 0:
         raise ValueError("halfwidth must be finite and positive")
     rounded = arithmetic("halfwidth print conversion", lambda: float(format(halfwidth, ".2g")))
     places = 1-math.floor(math.log10(rounded))
