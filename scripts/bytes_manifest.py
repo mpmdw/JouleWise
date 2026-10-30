@@ -24,7 +24,7 @@ if str(ROOT) not in sys.path:
 DTYPE_BYTES = {"BOOL": 1, "U8": 1, "I8": 1, "F8_E4M3": 1, "F8_E5M2": 1,
                "I16": 2, "U16": 2, "F16": 2, "BF16": 2, "I32": 4, "U32": 4,
                "F32": 4, "I64": 8, "U64": 8, "F64": 8}
-FAMILIES = {"qwen3", "qwen3_moe", "qwen3_next", "qwen3_5_moe", "qwen3_5_moe_text", "llama"}
+FAMILIES = {"qwen3_5", "qwen3_5_text", "qwen3", "qwen3_moe", "qwen3_next", "qwen3_5_moe", "qwen3_5_moe_text", "llama"}
 
 
 def digest(raw):
@@ -274,6 +274,7 @@ def registered_config_key(model_name):
 
 # Registration bytes_pack_v1 §§2 and 9; IDs agree with the generated harvest families.
 ANALYSIS_MODELS = {
+    "Qwen3.8-27B-8bit": ("qwen38-27b-8bit", "extension_held_out", None, False),
     "Qwen3-1.7B-4bit": ("qwen3-1p7b", "fit", None, True),
     "Qwen3-4B-4bit": ("qwen3-4b", "fit", None, True),
     "Qwen3-8B-4bit": ("qwen3-8b", "fit", None, True),
@@ -349,8 +350,13 @@ def main(argv=None):
     sub.add_argument("--headers", nargs="+", required=True, type=Path)
     sub.add_argument("--kv", nargs="+", required=True, type=Path)
     sub.add_argument("--pilot", type=Path, default=ROOT / "docs/design/bytes_pilot/summary_rows.json")
-    sub.add_argument("--out", type=Path, default=ROOT / "configs/bytes/bytes_manifest.json")
+    sub.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
+    if args.command == "merge":
+        extension = any(json.loads(p.read_bytes()).get("model_name") == "Qwen3.8-27B-8bit" for p in args.headers)
+        if extension and (args.out is None or args.out.resolve() == (ROOT / "configs/bytes/bytes_manifest.json").resolve()):
+            parser.error("extension merge requires an explicit separate --out")
+        args.out = args.out or ROOT / "configs/bytes/bytes_manifest.json"
     if args.command == "merge":
         result, differences = merge([json.loads(p.read_bytes()) for p in args.headers],
                                     [json.loads(p.read_bytes()) for p in args.kv], json.loads(args.pilot.read_bytes()))

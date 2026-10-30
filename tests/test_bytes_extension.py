@@ -97,13 +97,18 @@ class ExtensionGeneratorTests(unittest.TestCase):
         self.assertIsNone(module["est_minutes"])
         self.assertEqual(module["est_minutes_source"]["status"], ext.MAC_PENDING)
         pending = set(reg["bytes_extension"]["pending_slots"])
-        for slot in ("/models/qwen38-27b-8bit/revision", "/models/qwen38-27b-8bit/manifest",
-                     "/models/qwen38-27b-8bit/resolvability", "/models/qwen38-27b-8bit/download",
+        for slot in ("/models/qwen38-27b-8bit/manifest",
+                     "/models/qwen38-27b-8bit/resolvability",
                      "/packs/bytes-s7-p1/sizing_row", "/packs/bytes-s7-p1/disk"):
             self.assertIn(slot, pending)
         self.assertEqual(sorted(pending), ext.pending_slots(ext.read_slots(), "qwen38-27b-8bit"))
         cfg = read(ROOT / ext.config_dirs("qwen38-27b-8bit")[0] / "bytes-qwen38-27b-8bit-abs-r01.json")
-        self.assertIsNone(cfg["model"]["revision"])
+        self.assertEqual(cfg["model"]["revision"], "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9")
+        model_slots = ext.read_slots()["models"]["qwen38-27b-8bit"]
+        for name in ("revision", "download", "hf_repo", "config_model_type", "group_size"):
+            self.assertEqual(model_slots[name] if name == "revision" else model_slots[name]["status"],
+                             cfg["model"]["revision"] if name == "revision" else "filled")
+            self.assertNotIn("/models/qwen38-27b-8bit/" + name, pending)
         # The only validator objection is the pending module estimate.
         errors = pack_registration.validate(pack_registration.Registration(reg), load_catalog(ROOT / reg["flag_catalog"]), root=ROOT)
         self.assertEqual(errors, ["modules[0].est_minutes"])
@@ -182,7 +187,7 @@ class ExclusionTests(unittest.TestCase):
         paths += [f"configs/campaigns/bytes-s{n}-p{p}" for n in range(1, 7) for p in (1, 2)]
         paths += ["configs/campaigns/bytes_v1/roster.json", "configs/campaigns/bytes_v1/pass_order.json",
                   "configs/campaigns/bytes_v1/generate_configs.py", "scripts/bytes_plan_trees.py",
-                  "scripts/bytes_manifest.py", "joulewise/bytes_analysis.py", "configs/bytes",
+                  "joulewise/bytes_analysis.py", "configs/bytes",
                   "configs/b6/loop.json", "configs/b6/smoke_keep.json", "configs/b6/registration"]
         paths += [f"configs/campaigns/bytes_v1/{spec[0]}" for spec in registered_configs.ROSTER]
         diff = subprocess.run(["git", "-C", str(ROOT), "diff", "--name-only", BASE, "--", *paths],
