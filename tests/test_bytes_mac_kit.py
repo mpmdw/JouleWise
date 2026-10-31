@@ -14,6 +14,7 @@ from joulewise.b6 import compose, queue
 from joulewise.b6.pack_registration import Registration
 from joulewise.schemas import BenchmarkConfig
 from scripts import bytes_mac_kit as kit, bytes_stream_test as probe
+from tests.test_bytes_stream_capture import Array, Buffer, Clock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -102,22 +103,26 @@ class MacKitTests(unittest.TestCase):
             (root / "mlx/core.py").write_text(
                 "__version__ = '0.31.2'\n"
                 "uint8 = 'uint8'\n"
-                "def ones(shape, dtype): return object()\n"
+                "from tests.test_bytes_stream_capture import Buffer\n"
+                "def ones(shape, dtype):\n"
+                "    if any(n > 2**31-1 for n in shape): raise TypeError('axis limit')\n"
+                "    return Buffer(shape)\n"
+                "def reshape(data,shape): return Buffer(shape,data.storage,data.offset)\n"
                 "def sum(data): return object()\n"
-                "def eval(value): pass\n"
+                "def eval(*values): pass\n"
                 "def synchronize(): pass\n")
             receipt = root / "stream.json"
             env = {**os.environ, "PYTHONPATH": str(root)}
             result = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_stream_test.py"),
-                "--bytes", "1024", "--repeats", "3", "--device", "macbook_m3_max",
+                "--bytes", str(probe.GEOMETRY_BYTES), "--repeats", str(probe.RING_BYTES//probe.GEOMETRY_BYTES), "--arm", "R", "--device", "macbook_m3_max",
                 "--idle-s", "0", "--settle-s", "0", "--out", str(receipt)],
                 env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             data = json.loads(receipt.read_bytes())
-            self.assertEqual(data["schema_version"], "joulewise.bytes_stream.v2")
+            self.assertEqual(data["schema_version"], probe.SCHEMA)
             self.assertEqual(data["stack"]["hardware_unit"]["device"], "macbook_m3_max")
             self.assertEqual(data["stack"]["runtime_version"]["version"], "0.31.2")
-            self.assertEqual(data["bytes_read"], 1024 * 3)
+            self.assertEqual(data["bytes_read"], probe.RING_BYTES)
             self.assertEqual(data["clock"], "CLOCK_MONOTONIC_RAW")
             self.assertTrue(data["non_claim"])
             # A completed kernel must have a positive span, directly from
@@ -129,22 +134,15 @@ class MacKitTests(unittest.TestCase):
             self.assertEqual(spans, sorted(spans))
 
     def test_stream_evaluates_each_read_and_records_own_span(self):
-        class FakeMLX:
-            __version__ = "0.31.2"
-            uint8 = "uint8"
+        class FakeMLX(Array):
             def __init__(self):
-                self.calls = []
-            def ones(self, shape, dtype):
-                self.calls.append(("ones", shape, dtype))
+                super().__init__(Clock());self.sums=0;self.evaluations=0
+            def sum(self,value):
+                self.sums+=1
                 return object()
-            def eval(self, value):
-                self.calls.append(("eval", value))
-            def sum(self, value):
-                self.calls.append(("sum", value))
-                return object()
-            def synchronize(self):
-                self.calls.append(("sync",))
-        mx = FakeMLX()
+            def eval(self,*values):
+                self.evaluations+=1
+        mx=FakeMLX()
         # Integer timestamps/counts are bit-exact properties. One second is
         # exactly 10^9 ns; no assertion compares measured hardware timings.
         span_keys = ("idle_pre_start_ns", "idle_pre_end_ns", "start_ns", "end_ns",
@@ -153,17 +151,16 @@ class MacKitTests(unittest.TestCase):
                        7_000_000_000, 8_000_000_000)
         stamps = iter(span_values)
         sleeps = []
-        result = probe.stream(1024, 3, device="macbook_m3_max", idle_s=1, settle_s=2,
+        result = probe.stream(probe.GEOMETRY_BYTES, probe.RING_BYTES//probe.GEOMETRY_BYTES, arm="R", device="macbook_m3_max", idle_s=1, settle_s=2,
                               mx=mx, clock_ns=lambda: next(stamps), sleep=sleeps.append)
         self.assertEqual([result[key] for key in span_keys], list(span_values))
         self.assertEqual(sleeps, [2, 1, 2, 2, 1])
-        self.assertEqual(result["schema_version"], "joulewise.bytes_stream.v2")
-        self.assertEqual(result["bytes_read"], 3 * 1024)
+        self.assertEqual(result["schema_version"], probe.SCHEMA)
+        self.assertEqual(result["bytes_read"], probe.RING_BYTES)
         # Integer 10^9 ns divided by 10^9 is the bit-exact value 1.0.
         self.assertEqual(result["duration_s"], 1.0)
-        self.assertEqual([c[0] for c in mx.calls], ["ones", "eval", "sync", "sum", "eval", "sync",
-            "sum", "eval", "sum", "eval", "sum", "eval", "sync"])
-        self.assertEqual(len({id(c[1]) for c in mx.calls if c[0] == "eval"}), 5)  # payload, warm-up, three measured reads
+        self.assertEqual(mx.sums,1+probe.RING_BYTES//probe.GEOMETRY_BYTES)  # Warm + one sweep.
+        self.assertEqual(mx.evaluations,2+mx.sums)  # Ring, all views, every fresh sum.
         for args in ((0, 3), (1024, 0), (True, 1)):
             with self.assertRaises(ValueError):
                 probe.stream(*args, device="macbook_m3_max", mx=mx)

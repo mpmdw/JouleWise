@@ -438,9 +438,9 @@ def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
                  and [s.kind for s in chain] == ["bracket_reservation", "calibration_capture",
                                                 "bytes_stream_capture", "calibration_capture"]
                  and pre == [1] and post == [3]
-                 and captures[0].expected_count == 8
+                 and captures[0].expected_count == 4
                  and captures[0].commands[0].tool_id == "bytes_stream_capture",
-                 "known-bytes requires an isolated non-claim bracket and eight calls")
+                 "known-bytes requires an isolated non-claim bracket and four calls")
         return stages
     collections = [i for i, stage in enumerate(chain) if stage.kind == "campaign_collection"]
     _require(bool(collections) and pre[0] < min(collections) and post[0] > max(collections),

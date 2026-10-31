@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+from fractions import Fraction
 import hashlib
 import json
 import math
@@ -22,18 +23,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 KIT = Path('configs/campaigns/bytes_stream_test')
-ORDER = ('S', 'C1', 'C3', 'C2', 'C2', 'C3', 'C1', 'S')
-# Reading rule §1: 22 powers, three ~2 s timing calls per size.
-SCAN_EXPONENTS = range(14, 36)
-SCAN_CALL_S = 2
-# Reading rule §1 planned call lengths; §2 own idle and three settle gaps.
-CALL_S = {'S': 500, 'C1': 250, 'C3': 250, 'C2': 250}
+ORDER = ('R', 'C', 'C', 'R')
+CALL_S = {'R':759.2,'C':759.2}  # Rule §1: (3573.6 - 4*134.2)/4.
 IDLE_S, SETTLE_S = 57.6, 3
-# Rule §§1/2, same terms as the lifecycle span: palindrome 3573.6 s
-# (calls + 16 idles + 24 settles + eight 10 s preparations), plus 22 sizes
-# with three 2 s calls, four 10 s preparations and a 2 s pilot allowance.
-CAPTURE_PLANNED_S = (sum(CALL_S[a] + 2*IDLE_S + 3*SETTLE_S + 10 for a in ORDER)
-                     + len(SCAN_EXPONENTS)*(3*SCAN_CALL_S + 4*10 + SCAN_CALL_S))
+# Rule §1 R5: all eight rungs ~270 s plus one ~10 s allocation/fill.
+CHECK_PLANNED_S = 270 + 10
+# Rule §§1/2: four streams + eight idles + twelve gaps + four ~10 s
+# preparations = 3573.6 s; stage planning adds the worst-case residency check.
+MEASURED_PLANNED_S = float(sum(Fraction(str(CALL_S[a]))+2*Fraction(str(IDLE_S))+
+                               3*Fraction(str(SETTLE_S))+10 for a in ORDER))
+CAPTURE_PLANNED_S = MEASURED_PLANNED_S + CHECK_PLANNED_S
 
 
 def write(path, value):
@@ -75,12 +74,73 @@ class RawClock:
         return {'kind': 'CLOCK_MONOTONIC_RAW', 'stamp': dataclasses.asdict(self.stamp())}
 
 
-def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None):
-    """One capture, one scan, at most one complete palindrome, durable receipts.
+def run_residency(archive, *, device, mx, clock, probe):
+    """Retain the completed prefix even if view-building or a probe raises."""
+    from scripts import bytes_stream_test as bt
+    try:
+        return _run_residency(archive,device=device,mx=mx,clock=clock,probe=probe)
+    except Exception as exc:
+        receipts = [read(path) for path in sorted((archive/'check').glob('*.json'))]
+        reason = (f'allocation failed ({bt.RING_BYTES} B ring)' if isinstance(exc,MemoryError)
+                  else f'check-status fault ({type(exc).__name__}: {exc})')
+        result = bt.check_failure(reason,receipts,bt.residency_check(receipts)['rungs'])
+        if not (archive/'CHECK_RECEIPTS.json').exists():
+            write(archive/'CHECK_RECEIPTS.json',receipts)
+        if not (archive/'CHECK.json').exists():
+            write(archive/'CHECK.json',result)
+        if isinstance(exc,MemoryError):
+            return result
+        raise
 
-    Adapter/clock/mx injection is the hardware seam, not a second stage path.
-    An exception retains completed receipts and a stage diagnostic; finally
-    stops and preserves the continuous capture before returning.
+
+def _run_residency(archive, *, device, mx, clock, probe):
+    """One allocation, one ordered check; every completed receipt is durable."""
+    from scripts import bytes_stream_test as bt
+    receipts = []
+    raw_ns = getattr(clock,"raw_ns",lambda: round(clock.stamp().monotonic_after_s*1e9))
+    def finish(result):
+        write(archive/'CHECK_RECEIPTS.json',receipts)
+        write(archive/'CHECK.json',result)
+        return result
+    try:
+        ring = bt.allocate_ring(mx)
+    except MemoryError as exc:
+        return finish(bt.check_failure(str(exc),receipts))
+    for k,b in enumerate(bt.LADDER):
+        rows = bt.ring_views(mx,ring,b)
+        for arm in ('C','R'):
+            count = bt.RING_BYTES//b
+            for j in range(4):  # One pilot, then the admitted three timing calls.
+                receipt = probe(b,count,device=device,arm='check-'+arm,idle_s=0,settle_s=0,
+                    mx=mx,clock_ns=raw_ns,sleep=clock.sleep,prepared_views=rows,warm=j == 0,
+                    rung_index=k,check_phase='pilot' if j == 0 else 'timing')
+                receipts.append(receipt)
+                write(archive/f'check/{k}-{arm}-{j}.json',receipt)
+                error = bt.geometry_error(receipt,b)
+                if error:
+                    return finish(bt.residency_check(receipts))
+                try:
+                    bt.clock_duration_bound_ns(receipt)
+                except ValueError:
+                    return finish(bt.residency_check(receipts))
+                if j == 0:
+                    t = (receipt['end_ns']-receipt['start_ns'])/1e9/receipt['repeats']
+                    count = bt.planned_repeats(b,t,bt.CHECK_CALL_S,at_least_one=True)
+        result = bt.residency_check(receipts)
+        if result['status'] == 'residency resolved':
+            return finish(result)
+        # The only expected partial status after a complete unresolved rung
+        # is the not-yet-run next rung. Other faults stop immediately.
+        if result['reason'] != f'check-status fault (incomplete rung {k+1})':
+            return finish(result)
+    return finish(bt.residency_check(receipts))
+
+
+def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None):
+    """One residency check, at most one palindrome, durable failure evidence.
+
+    Only the palindrome needs continuous energy capture. All completed receipts
+    survive an exception, and a started capture always gets its teardown attempt.
     """
     from scripts import bytes_stream_test as bt
     from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
@@ -88,84 +148,71 @@ def run_stage(archive, *, device, adapter=None, clock=None, mx=None, probe=None)
     from joulewise.schemas import BenchmarkConfig
     if os.environ.get('JW_B5_SYNTHETIC_ONLY') == '1' and (adapter is None or mx is None):
         raise ValueError('synthetic-only stage requires injected capture and array hardware seams')
+    if mx is None:
+        import mlx.core as mx
     archive = Path(archive)
-    archive.mkdir(parents=True, exist_ok=False)
-    config = BenchmarkConfig.from_mapping(read(ROOT / KIT / 'telemetry.json'))
+    archive.mkdir(parents=True,exist_ok=False)
+    config = BenchmarkConfig.from_mapping(read(ROOT/KIT/'telemetry.json'))
     clock = clock or RawClock()
     adapter = adapter or PowermetricsTelemetryAdapter(clock)
-    context = RunContext(config, clock, 'known-bytes', archive, archive/'raw', archive/'logs', archive/'outputs')
+    context = RunContext(config,clock,'known-bytes',archive,archive/'raw',archive/'logs',archive/'outputs')
     probe = probe or bt.stream
-    raw_ns = getattr(clock, "raw_ns", lambda: round(clock.stamp().monotonic_after_s*1e9))
-    scan_calls, pilots, calls = [], [], []
-    result = {'non_claim': True, 'status': 'started', 'device': device}
-    write(archive/'capture_config.json', config.to_dict())
-    start = clock.stamp()
+    raw_ns = getattr(clock,"raw_ns",lambda: round(clock.stamp().monotonic_after_s*1e9))
+    calls = []
+    result = {'non_claim':True,'status':'started','device':device}
+    write(archive/'capture_config.json',config.to_dict())
     started = False
+    start = clock.stamp()
     try:
-        admission = adapter.start_sampling(config, context)
+        check = run_residency(archive,device=device,mx=mx,clock=clock,probe=probe)
+        result['check_status'] = check['status']
+        if check['status'] != 'residency resolved':
+            result.update(status='residency not resolved',reason=check['reason'])
+            if check['reason'].startswith('allocation failed'):
+                result['allocation_stop'] = {'bytes':bt.RING_BYTES,'reason':check['reason']}
+            return result
+        counts = {a:bt.planned_repeats(check['b'],check['rungs'][-1][a]['t_s'],CALL_S[a]) for a in ('R','C')}
+        if any(n <= 0 for n in counts.values()):
+            raise ValueError('planned duration is shorter than one whole sweep')
+        result['planned_repeats'] = counts
+        admission = adapter.start_sampling(config,context)
         started = True
-        result['capture_start'] = {'ok': admission.ok, 'message': admission.message}
+        result['capture_start'] = {'ok':admission.ok,'message':admission.message}
         if not admission.ok:
-            raise ValueError('continuous capture could not start: ' + str(admission.message))
+            raise ValueError('continuous capture could not start: '+str(admission.message))
         start = clock.stamp()
-        for exponent in SCAN_EXPONENTS:
-            size = 2 ** exponent
-            try:
-                pilot = probe(size, 1, device=device, idle_s=0, settle_s=0, mx=mx,
-                              clock_ns=raw_ns, sleep=clock.sleep)
-                pilots.append(pilot)
-                write(archive/f'pilots/{exponent}.json', pilot)
-                count = max(1, math.floor(SCAN_CALL_S / (pilot['duration_s']/pilot['repeats'])))
-                for replicate in range(3):
-                    receipt = probe(size, count, device=device, idle_s=0, settle_s=0, mx=mx,
-                                    clock_ns=raw_ns, sleep=clock.sleep)
-                    scan_calls.append(receipt)
-                    write(archive/f'scan/{exponent}-{replicate}.json', receipt)
-            except MemoryError as exc:
-                result['allocation_stop'] = {'bytes': size, 'reason': str(exc)}
-                # Incomplete triplets cannot enter the scan, but remain in raw receipts.
-                scan_calls = [r for r in scan_calls if r['bytes_per_read'] != size]
+        result['measured_session_start_ns'] = raw_ns()
+        for i,arm in enumerate(ORDER):
+            receipt = probe(check['b'],counts[arm],device=device,arm=arm,idle_s=IDLE_S,
+                            settle_s=SETTLE_S,mx=mx,clock_ns=raw_ns,sleep=clock.sleep)
+            calls.append(receipt)
+            write(archive/f'calls/{i+1:02d}-{arm}.json',receipt)
+            error = bt.geometry_error(receipt,check['b'])
+            if error:
+                result.update(status='incomplete',reason=error)
                 break
-        scan = bt.knee_scan(scan_calls)
-        write(archive/'SCAN_RECEIPTS.json', scan_calls)
-        write(archive/'SCAN.json', scan)
-        if scan['status'] == 'knee found':
-            sizes = dict(zip(('S','C1','C3','C2'), (scan[k] for k in ('B','Bc1','Bc3','Bc2'))))
-            counts = {}
-            for arm, size in sizes.items():
-                own = [r for r in scan_calls if r['bytes_per_read'] == size]
-                if len(own) != 3:
-                    raise ValueError('planned arm payload has no allocatable scan triplet: ' + arm)
-                t_dispatch = math.fsum(r['duration_s']/r['repeats'] for r in own) / len(own)
-                counts[arm] = math.floor(CALL_S[arm]/t_dispatch)
-                if counts[arm] <= 0:
-                    raise ValueError('planned duration is shorter than one dispatch: ' + arm)
-            result['planned_repeats'] = counts
-            result['measured_session_start_ns'] = raw_ns()
-            for i, arm in enumerate(ORDER):
-                receipt = probe(sizes[arm], counts[arm], device=device, idle_s=IDLE_S,
-                                settle_s=SETTLE_S, mx=mx,
-                                clock_ns=raw_ns, sleep=clock.sleep)
-                calls.append(receipt)
-                write(archive/f'calls/{i+1:02d}-{arm}.json', receipt)
-            result['measured_session_end_ns'] = raw_ns()
-        result['status'] = 'completed' if calls else 'knee not found'
+        else:
+            result['status'] = 'completed'
+        result['measured_session_end_ns'] = raw_ns()
+    except MemoryError as exc:
+        result.update(status='incomplete',reason=str(exc),error=f'MemoryError: {exc}')
+        result['allocation_stop'] = {'bytes':bt.RING_BYTES,'reason':str(exc)}
     except Exception as exc:
-        result.update(status='incomplete', error=f'{type(exc).__name__}: {exc}')
+        result.update(status='incomplete',error=f'{type(exc).__name__}: {exc}')
     finally:
         stop = clock.stamp()
         if started:
             try:
-                stopped = adapter.stop_sampling_with_evidence(config, context,
-                    sampling_started=start, sampling_stopped=stop)
-                write(archive/'capture_stop.json', {'samples': [dataclasses.asdict(s) for s in stopped.samples],
-                      'uncertainty_evidence': stopped.uncertainty_evidence,
-                      'start_stamp': dataclasses.asdict(start), 'stop_stamp': dataclasses.asdict(stop),
-                      'device_metadata': adapter.device_metadata(config)})
+                stopped = adapter.stop_sampling_with_evidence(config,context,
+                    sampling_started=start,sampling_stopped=stop)
+                write(archive/'capture_stop.json',{'samples':[dataclasses.asdict(s) for s in stopped.samples],
+                    'uncertainty_evidence':stopped.uncertainty_evidence,
+                    'start_stamp':dataclasses.asdict(start),'stop_stamp':dataclasses.asdict(stop),
+                    'device_metadata':adapter.device_metadata(config)})
             except Exception as exc:
                 result['capture_stop_error'] = f'{type(exc).__name__}: {exc}'
         result['call_count'] = len(calls)
-        write(archive/'STAGE.json', result)
+        write(archive/'STAGE.json',result)
     return result
 
 
@@ -245,7 +292,7 @@ def prepare(checkout, session, *, t0, adapter_max_w, adapter_source, disk_bytes,
                   plan_tree_sha256=sha(pack/'plan_tree.json'), pack_plan_id='bytes-stream-test',
                   window_id='bytes-stream-test', evidence_root_id='bytes-stream-test'),
         bracket_session_id=sid, bindings=bindings, runs_roots={k:str(v) for k,v in roots.items()},
-        T_stream_max_s=CAPTURE_PLANNED_S, planned_bytes=disk_bytes, member_count=8, thresholds=thresholds,
+        T_stream_max_s=CAPTURE_PLANNED_S, planned_bytes=disk_bytes, member_count=len(ORDER), thresholds=thresholds,
         g10=False, programmed_span_s=programmed_span_s, t0_stage_cap_s=bp.T0_STAGE_CAP_S,
         settle_s=chain.SETTLE_S, window_env=dict(path=str(custody/'window.env'),sha256=sha(custody/'window.env')),
         registration=None, chain_deviations=list(chain.DEVIATIONS), disk_volumes=[str(v) for v in roots.values()],
@@ -264,7 +311,7 @@ def prepare(checkout, session, *, t0, adapter_max_w, adapter_source, disk_bytes,
     notice = dict(plan_id=sid, head=head, plan_sha256=sha(session/'night_plan.json'), t0_epoch_s=t0,
         window_max_s=maximum, roots={k:str(v) for k,v in roots.items()}, non_claim=True,
         message='Lead sends Ed: known-bytes non-claim test; these exact head/plan/root/t0/duration values; '
-                'one scan and palindrome, no BYTES data/keys; exit all agents before t0; Ed NO overrides.')
+                'one residency check and palindrome, no BYTES data/keys; exit all agents before t0; Ed NO overrides.')
     print(json.dumps(notice, indent=2))
     return plan
 
@@ -298,7 +345,7 @@ def main(argv=None):
         def interrupted(signum, frame):
             raise InterruptedError('night driver stopped the known-bytes stage')
         signal.signal(signal.SIGTERM, interrupted)
-        return 0 if run_stage(a.archive, device=a.device)['status'] in ('completed','knee not found') else 2
+        return 0 if run_stage(a.archive, device=a.device)['status'] in ('completed','residency not resolved') else 2
     else:
         p.error('choose prepare or stage')
     return 0

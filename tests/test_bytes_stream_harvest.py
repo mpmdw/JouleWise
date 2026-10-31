@@ -22,10 +22,15 @@ def independent_arithmetic(test, archive, record):
     r, actual = record['receipt'], record['harvest']
     lo, hi = r['start_ns'], r['end_ns']
     duration = (hi-lo)/1e9
-    # 5.7e-6 J/GB * this call's payload GB = comparison bar in joules.
+    # Rule §3: 1% of the smallest H2-printed width, above 1e6× propagated
+    # binary64 noise. Derive from this synthetic run, never the old example.
+    reader = read(archive/'READ.json')
+    bar = .01*min(float(format(v['halfwidth'],'.2g')) for v in reader['boundaries'].values())
     payload_gb = r['bytes_read']/1e9
-    tolerance_j = 5.7e-6 * payload_gb
-    message = f"5.7e-6 J/GB * {payload_gb} GB = {tolerance_j} J for this call"
+    tolerance_j = bar * payload_gb
+    float_noise = 1e6*2.2e-16*sum(abs(v) for v in actual['energy_j'].values() if v is not None)
+    test.assertGreater(tolerance_j,float_noise)
+    message = f"{bar} J/GB * {payload_gb} GB = {tolerance_j} J for this call"
     raw = (archive/'runs_bytes_stream_test/capture/raw/powermetrics.plist').read_bytes()
     # Native plist dates have whole-second precision. Use the capture's
     # precise first endpoint, then advance on raw integer elapsed_ns support.
@@ -142,7 +147,7 @@ class HarvestTests(unittest.TestCase):
                 calibration_registration={'calibration':dict(alignment_reference_s='.03',acceptance_corpus=[],
                     bracket_screen_s='.01',operative_bound_stop_s=None,max_budgetable_drift_s='.02')}))
             capture=root/'runs_bytes_stream_test/capture'
-            write(capture/'SCAN.json',dict(status='knee not found',K=None,reason='synthetic scan refusal'))
+            write(capture/'CHECK.json',dict(status='residency not resolved',b=None,reason='residency not resolved'))
             for count in (0,2):
                 directory=root/'custody/hazards/meter'
                 directory.mkdir(parents=True,exist_ok=True)
@@ -151,7 +156,7 @@ class HarvestTests(unittest.TestCase):
                 with patch.object(kp,'clock_fit',side_effect=AssertionError('must not fit multiple streams')):
                     out=h.harvest(root)
                 self.assertEqual(out['provenance']['meter_stream_count'],count)
-                result=bt.read_known_bytes(out['records'],out['scan'])
+                result=bt.read_known_bytes(out['records'],out['check'])
                 self.assertEqual(result['boundaries']['dc']['class'],'UNDETERMINED')
 
 class ArchiveCliTests(unittest.TestCase):
@@ -165,15 +170,15 @@ class ArchiveCliTests(unittest.TestCase):
         reg = read(h.ROOT/'configs/b6/registration/acceptance.json')
         write(self.root/'SESSION.json', dict(calibration_registration=reg,
               adapter_max_w=140, adapter_source='synthetic nameplate'))
-        write(self.capture/'SCAN.json', dict(status='knee not found', K=None))
+        write(self.capture/'CHECK.json', dict(status='residency not resolved', b=None))
         write(self.capture/'STAGE.json', dict(status='incomplete', error='synthetic failure',
               allocation_stop={'bytes': 2**31, 'reason': 'synthetic allocation stop'}))
         write(self.capture/'capture_stop.json', dict(device_metadata={
               'telemetry': 'powermetrics', 'rail_manifest': ['cpu_power','gpu_power','ane_power']}))
-        self.receipt = dict(start_ns=10**9, end_ns=2*10**9,
+        self.receipt = dict(schema_version=bt.SCHEMA,start_ns=10**9, end_ns=2*10**9,
             idle_pre_start_ns=0, idle_pre_end_ns=10**9,
             idle_post_start_ns=2*10**9, idle_post_end_ns=3*10**9)
-        write(self.capture/'calls/01-S.json', self.receipt)
+        write(self.capture/'calls/01-R.json', self.receipt)
         self.python = sys.executable
 
     def cli(self):
@@ -202,32 +207,42 @@ class ArchiveCliTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)['diagnostics'], data['provenance']['diagnostics'])
         return data
 
+    def test_v2_is_retained_and_not_integrated(self):
+        self.receipt['schema_version']='joulewise.bytes_stream.v2'
+        (self.capture/'calls/01-R.json').write_text(json.dumps(self.receipt))
+        data=self.cli()
+        self.assertEqual(data['records'][0]['receipt']['schema_version'],'joulewise.bytes_stream.v2')
+        self.assertIsNone(data['records'][0]['harvest'])
+        self.assertIn('v3 required',str(data['provenance']['diagnostics']))
+
     def test_truncated_receipt(self):
-        (self.capture/'calls/01-S.json').write_text('{')
+        (self.capture/'calls/01-R.json').write_text('{')
         data = self.cli()
         self.assertIsNone(data['records'][0]['receipt'])
         self.assertIsNone(data['records'][0]['harvest'])
-        self.assertIn('01-S.json', str(data['provenance']['diagnostics']))
+        self.assertIn('01-R.json', str(data['provenance']['diagnostics']))
 
     def test_malformed_receipt_fields(self):
-        (self.capture/'calls/01-S.json').write_text('{"start_ns": []}')
-        self.assertIsNone(self.cli()['records'][0]['receipt'])
+        (self.capture/'calls/01-R.json').write_text('{"start_ns": []}')
+        data = self.cli()
+        self.assertIsNone(data['records'][0]['harvest'])
+        self.assertIn('schema_version',str(data['provenance']['diagnostics']))
 
-    def test_truncated_scan(self):
-        (self.capture/'SCAN.json').write_text('{')
-        self.assertIsNone(self.cli()['scan']['status'])
+    def test_truncated_check(self):
+        (self.capture/'CHECK.json').write_text('{')
+        self.assertIsNone(self.cli()['check']['status'])
 
-    def test_malformed_scan_fields(self):
-        (self.capture/'SCAN.json').write_text('{"K": NaN}')
-        self.assertIsNone(self.cli()['scan']['status'])
+    def test_malformed_check_fields(self):
+        (self.capture/'CHECK.json').write_text('{"b": NaN}')
+        self.assertIsNone(self.cli()['check']['status'])
 
-    def test_missing_scan_status(self):
-        (self.capture/'SCAN.json').write_text('{}')
-        self.assertEqual(self.cli()['scan'], {})
+    def test_missing_check_status(self):
+        (self.capture/'CHECK.json').write_text('{}')
+        self.assertEqual(self.cli()['check'], {})
 
-    def test_nonobject_scan(self):
-        (self.capture/'SCAN.json').write_text('1')
-        self.assertIsNone(self.cli()['scan']['status'])
+    def test_nonobject_check(self):
+        (self.capture/'CHECK.json').write_text('1')
+        self.assertIsNone(self.cli()['check']['status'])
 
     def test_truncated_stage(self):
         (self.capture/'STAGE.json').write_text('{')
@@ -249,7 +264,7 @@ class ArchiveCliTests(unittest.TestCase):
         outside = Path(self.tmp.name)/'outside'
         outside.mkdir()
         (outside/'secret.json').write_text('{"outside_secret": true}')
-        for path in (self.capture/'calls/02-C1.json', self.capture/'SCAN.json',
+        for path in (self.capture/'calls/02-C.json', self.capture/'CHECK.json',
                      self.root/'custody/hazards/meter/stream-001.jsonl'):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.unlink(missing_ok=True)
@@ -265,7 +280,7 @@ class ArchiveCliTests(unittest.TestCase):
         self.audit_outside = outside
         data = self.cli()
         self.assertIn('outside archive symlink not read', str(data['provenance']['diagnostics']))
-        self.assertNotIn('calls/02-C1.json', str(data['provenance']['sources']))
+        self.assertNotIn('calls/02-C.json', str(data['provenance']['sources']))
         self.assertNotIn('outside_secret', json.dumps(data))
         self.assertEqual(data['provenance']['meter_stream_count'], 0)
 

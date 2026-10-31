@@ -82,7 +82,7 @@
                 },
                 {
                   "kind": "literal",
-                  "value": "4cd6629cff94641b1c63248d840554688362cc7a74ab4bee8e88b8f3eafd9fb3"
+                  "value": "c506f06cdbf47f222022bf8eabf581696fdc31714495fda3897d973d73f7be63"
                 },
                 {
                   "kind": "literal",
@@ -268,7 +268,7 @@
       "successor": "known-bytes"
     },
     {
-      "expected_count": 8,
+      "expected_count": 4,
       "kind": "bytes_stream_capture",
       "launch": {
         "commands": [

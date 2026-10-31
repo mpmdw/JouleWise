@@ -184,9 +184,9 @@ def harvest(archive):
     session = object_json(archive/'SESSION.json') or {}
     claim = archive/'runs_bytes_stream_test'
     capture = claim/'capture'
-    scan = object_json(capture/'SCAN.json')
-    if scan is None:
-        scan = {'status': None, 'K': None, 'reason': 'scan unavailable; see provenance.diagnostics'}
+    check = object_json(capture/'CHECK.json')
+    if check is None:
+        check = {'status':None,'b':None,'reason':'check unavailable; see provenance.diagnostics'}
     reg = session.get('calibration_registration')
     own = []
     for slot in ('pre','post'):
@@ -250,6 +250,12 @@ def harvest(archive):
     records = []
     for path in archive_files(capture/'calls', '*.json'):
         receipt = object_json(path)
+        # This harvest accepts only the matched v3 receipt. Keep rejected input
+        # verbatim for the reader's reason; never integrate a v2 call as v3.
+        if not isinstance(receipt,dict) or receipt.get('schema_version') != 'joulewise.bytes_stream.v3':
+            diagnostics.append(path.name+': receipt schema_version unavailable or unsupported (v3 required)')
+            records.append(dict(receipt=receipt,harvest=None))
+            continue
         try:
             spans = {name: (receipt[start], receipt[end]) for name, start, end in (
                 ('stream', 'start_ns', 'end_ns'), ('pre', 'idle_pre_start_ns', 'idle_pre_end_ns'),
@@ -291,7 +297,15 @@ def harvest(archive):
                 if spans['stream'][0] <= (row.get('finished') or {}).get('monotonic_raw_ns',-1) <= spans['stream'][1]]
         records.append(dict(receipt=receipt,harvest=h))
     stage = object_json(capture/'STAGE.json') or {}
-    stage_diagnostic = {key: stage.get(key) for key in ('status','error','allocation_stop')}
+    stage_diagnostic = {key: stage.get(key) for key in ('status','reason','error','allocation_stop')}
+    # A later allocation/geometry failure refuses the hour with its registered
+    # reason. Preserve the completed pre-hour check separately for audit.
+    stage_reason = stage.get('reason')
+    if isinstance(stage_reason,str) and stage_reason.startswith(('allocation failed (','geometry check failed (')):
+        from scripts.bytes_stream_test import check_failure
+        completed_check = check
+        check = check_failure(stage_reason,completed_check.get('receipts',[]),completed_check.get('rungs',[]))
+        check['completed_check'] = completed_check
     diagnostics.append('STAGE.json: ' + json.dumps(stage_diagnostic, sort_keys=True))
     if all(k in stage for k in ('measured_session_start_ns','measured_session_end_ns')):
         try:
@@ -305,7 +319,7 @@ def harvest(archive):
             diagnostics.append('STAGE.json: measured session span unavailable: ' + str(exc))
     sources = {str(p.relative_to(archive)): sha(p) for p in files
                if p.name not in ('INPUT.json','HARVEST.json','READ.json')}
-    return dict(scan=scan, records=records, non_claim=True,
+    return dict(check=check, records=records, non_claim=True,
                 provenance=dict(sources=sources, calibration=cal, diagnostics=diagnostics,
                                 meter_stream_count=len(streams)))
 
@@ -324,7 +338,7 @@ def main(argv=None):
     except FileExistsError:
         print(f'output already exists; preserved: {a.out}', file=sys.stderr)
         return 2
-    print(json.dumps({'records': len(result['records']), 'scan': result['scan'].get('status'),
+    print(json.dumps({'records': len(result['records']), 'check': result['check'].get('status'),
                       'diagnostics': result['provenance']['diagnostics']}))
     return 0
 

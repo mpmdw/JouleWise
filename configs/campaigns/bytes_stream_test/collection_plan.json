@@ -1,4 +1,44 @@
 {
   "non_claim": true,
-  "plan_id": "bytes-stream-test"
+  "plan_id": "bytes-stream-test",
+  "planning": {
+    "check_derivation": "rule \u00a71 R5: ~270 s for eight rungs + one ~10 s allocation/fill",
+    "check_max_s": 280,
+    "disk_bytes": 52746273217,
+    "disk_derivation": "peak_copies*ceil((stream_rate numerator/denominator)*programmed_span_s)+fixed_retained_bytes; two copies include archive; no new reserve",
+    "disk_inputs": {
+      "fixed_retained_bytes": 4046531103,
+      "peak_copies": 2,
+      "stream_rate_bytes_per_s": {
+        "denominator": 1799796660838183,
+        "numerator": 4502241280000000000000
+      }
+    },
+    "disk_source": "configs/b6/registration/sizing_b5.json/packs/bytes-s1-p1/disk_derivation",
+    "ladder_bytes": [
+      67108864,
+      33554432,
+      16777216,
+      8388608,
+      4194304,
+      2097152,
+      1048576,
+      524288
+    ],
+    "ladder_derivation": "rule \u00a71 R1: G/2^k, G=2^26 B, k=0..7; bottom=128*1024*4 B",
+    "measured_derivation": "rule \u00a7\u00a71/2: 4*759.2 + 8*57.6 + 12*3 + 4*10 = 3573.6 s",
+    "measured_session_s": 3573.6,
+    "order": [
+      "R",
+      "C",
+      "C",
+      "R"
+    ],
+    "programmed_span_s": 9734,
+    "ring_bytes": 34359738368,
+    "ring_derivation": "rule \u00a71: 64 \u00d7 admitted 512 MiB capacity envelope = 2^35 B",
+    "span_derivation": "ceil(stage_s + 2*1800 + 900 + 600 + 600 + 4*30 + 60); existing chain wall allowances",
+    "stage_derivation": "measured_session_s + check_max_s",
+    "stage_s": 3853.6
+  }
 }
