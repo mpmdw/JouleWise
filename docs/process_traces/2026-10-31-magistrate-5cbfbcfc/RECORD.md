@@ -1,0 +1,17 @@
+# Magistrate activation 5cbfbcfc (Opus 5.5, headless, 2026-10-31 from 00:42 PDT)
+
+No pending watchdog notices. No unread mail from Ed at launch. Open directives unchanged (#587 and the standing older ones).
+
+## KB night attempt 3: collected, residency resolved, all four boundaries RESOLVED (pending the cold science gate)
+- `/Users/edr/night-bytes-stream-test/attempt-3/custody/night/result.json`: verdict GO, chain exit 0, 23:21:05 PDT 10-30 to 00:38:13 PDT 10-31, 147 censuses, no census hits; arm `go: true`, `not_pass` empty.
+- Stages: pre screen rc 0, calibration verdict rc 0, **known-bytes rc 0** (23:29:36 to 00:34:12 PDT; 3,876 s), post calibration rc 0, session status rc 0. `STAGE.json`: `completed`, `residency resolved`, 4 calls (R, C, C, R), planned repeats R 2,394,112 and C 2,672,640.
+- Desk steps (README; item 153 pointer): session copied once to `/Users/edr/night-archive/bytes-stream-test/attempt-3` (then made read-only); harvest wrote `/Users/edr/night-bytes-stream-test/attempt-3-INPUT.json` (sha256 `4e0863e0…0c60`, 4 records, no diagnostics beyond the completed stage); `check` on the archived receipts reproduces `residency resolved`; `read` output saved to `/Users/edr/night-archive/bytes-stream-test/attempt-3-READ.out` (sha256 `f33c58cc…942f`).
+- Reader outcome (J/GB, rotate minus repeat, b = 33,554,432 B, W = 32 GiB, Q = 1024, G = 2**26 B, φ_U = 1/64, ρ_L = 0.0714025, κ = 14.0051): rails 0.0092 ± 0.0021 RESOLVED; GPU 0.00879 ± 0.00010 RESOLVED; DC 0.0389 ± 0.0072 RESOLVED; rest 0.0296 ± 0.0084 RESOLVED; no reasons. Description: f = 0.238 ± 0.098; GPU excess-power contrast 0.144 W; GPU active frequency 1379.6 / 1379.6 MHz (R / C); hour as run 3,558.8 s.
+- Night agents uninstalled (`install_night_agent.sh --plan .../attempt-3/custody/night_plan.json --uninstall`, rc 0); no `com.joulewise.night*` in launchctl or LaunchAgents. Canonical root fast-forwarded to `998974808`.
+
+## Cold science gate (raw re-derivation), launched 00:58 PDT
+- Fable 5.1 high and Opus 5.5 high, blind, local `claude -p` from fresh worktrees `/Users/edr/code/jw-wt/kb3-gate-{fable,opus}` at `53bcceeac`. Charge `~/night-archive/seats-5cbfbcfc/kb3-science-gate/CHARGE.md`: independent program from the rule text (no import of the reader/harvest/stage), recompute from raw powermetrics/meter/receipts; bars set by the lead: Δ and δΔ to 1% of each boundary's printed half-width (rails 2.07e-5, GPU 1.05e-6, DC 7.24e-5, rest 8.44e-5 J/GB), κ/ρ_L/f to 1e-6 relative, integers and classes exact. Reports `{fable,opus}-report.md`.
+
+## PR #614 CI
+- PR #614 was merged into `codex/2026-10-30-kb-capture` at 06:04Z (base branch, not main). Shard 10 looked hung, but it was not: run 41171097423 on `53bcceeac` finished green at 07:58Z (40 modules, 1,437 tests). `tests.test_bytes_analysis` alone took 8,973 s (`test_a4_01_unusable_member_all_stages_and_nonsynthetic`, tests/test_bytes_analysis.py:1147, about 5 min of CPU per stage-defect subTest). **CI is green on the final head.** Sonnet investigation.
+- Cause of the slow shard: `scripts/test_timings.json` has no weight for the BYTES lineage's modules, so each gets the unknown weight of 27 s. Real costs: `test_bytes_analysis` 7,200-9,000 s, `test_bytes_coverage_map` 2,200-2,800 s, `tests.b6.test_cold_pass_fixes` about 2,000 s, `test_bytes_h_session` about 1,850 s, `test_bytes_agreement` 1,200-1,900 s. Follow-up (scheduling hint only): add their hosted weights and list `test_bytes_analysis` in `split_modules` on the BYTES/KB lineage. Main does not carry these tests.
