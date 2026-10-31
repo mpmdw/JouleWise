@@ -108,6 +108,20 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(receipt["stack_check"]["status"], "pending_capture")
         self.assertEqual(receipt, json.loads(json.dumps(receipt, allow_nan=False)))
 
+    def test_payload_above_mlx_axis_limit_is_whole_rows(self):
+        # KB attempt 2: a flat 2**31-element mx.ones raised TypeError.
+        self.assertEqual(probe.payload_shape(2**31 - 1), (2**31 - 1,))
+        self.assertEqual(probe.payload_shape(2**31), (2, 2**30))
+        self.assertEqual(probe.payload_shape(2**35), (32, 2**30))
+        with self.assertRaises(ValueError):
+            probe.payload_shape(2**31 + 1)
+        mx = FakeMLX()
+        with patch.object(probe, "collect_stack", return_value=self.stack):
+            receipt = probe.stream(2**31, 1, device="macbook_m3_max", mx=mx, idle_s=0, settle_s=0,
+                                   clock_ns=mx.clock, sleep=mx.sleep)
+        self.assertEqual(mx.events[0], ("ones", (2, 2**30), "uint8"))
+        self.assertEqual(receipt["bytes_per_read"], 2**31)
+
     def test_stamps_use_one_clock_and_exclude_idle_settle_and_warmup(self):
         receipt, mx = self.run_stream()
         keys = ("idle_pre_start_ns", "idle_pre_end_ns", "start_ns", "end_ns",

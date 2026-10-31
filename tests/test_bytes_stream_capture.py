@@ -40,7 +40,11 @@ class Array:
     def __init__(self, clock):
         self.clock = clock
     def ones(self, shape, dtype):
-        return shape[0]
+        # As MLX 0.31.2 on the Mac: each axis is signed 32-bit, and a longer
+        # one raises TypeError (KB attempt 2's flat 2**31-byte payload).
+        if any(n > 2**31 - 1 for n in shape):
+            raise TypeError('ones(): incompatible function arguments')
+        return math.prod(shape)
     def sum(self, size):
         # Synthetic cache transition; no acceptance choice. C sizes have the
         # same fixed dispatch work, with DRAM 10x slower per payload byte.
@@ -263,7 +267,7 @@ class CaptureTests(unittest.TestCase):
             mx=Array(clock)
             allocate=mx.ones
             def limited(shape,dtype):
-                if shape[0]>2**31:
+                if math.prod(shape)>2**31:
                     raise RuntimeError('synthetic allocation ceiling')
                 return allocate(shape,dtype)
             mx.ones=limited

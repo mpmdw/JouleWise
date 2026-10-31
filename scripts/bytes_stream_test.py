@@ -1111,11 +1111,28 @@ def _seconds(value):
     return value
 
 
+# MLX array dimensions are signed 32-bit: a flat uint8 payload stops at
+# 2**31 - 1 bytes, and mx.ones raises TypeError above it (KB attempt 2 stopped
+# at its 2**31-byte scan size). A C-contiguous (rows, 2**30) payload holds the
+# same bytes and mx.sum over all axes reads each once: measured on this Mac
+# 2026-10-30, 369-400 GB/s from 2**30 to 2**33 B, sums exact mod 2**32.
+PAYLOAD_ROW_BYTES = 2 ** 30
+
+
+def payload_shape(byte_count):
+    if byte_count < 2 ** 31:
+        return (byte_count,)
+    if byte_count % PAYLOAD_ROW_BYTES:
+        raise ValueError("a payload of 2**31 bytes or more must be whole 2**30-byte rows")
+    return (byte_count // PAYLOAD_ROW_BYTES, PAYLOAD_ROW_BYTES)
+
+
 def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
            mx=None, clock_ns=None, sleep=None, repo_root=ROOT):
     if type(byte_count) is not int or byte_count <= 0 or type(repeats) is not int or repeats <= 0:
         raise ValueError("byte count and repeats must be positive integer counts")
     idle_s, settle_s = _seconds(idle_s), _seconds(settle_s)
+    shape = payload_shape(byte_count)
     if not isinstance(device, str) or not device.strip():
         raise ValueError("device must be the checkout's hardware_target.id")
     if mx is None:
@@ -1130,7 +1147,7 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
     reference_check = checkout_reference_check(repo_root)
 
     try:
-        data = mx.ones((byte_count,), dtype=mx.uint8)
+        data = mx.ones(shape, dtype=mx.uint8)
         mx.eval(data)
     except (MemoryError, RuntimeError) as exc:
         # MLX reports failed payload allocation/fill as RuntimeError; the
