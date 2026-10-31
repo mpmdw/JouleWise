@@ -88,3 +88,14 @@ Before re-arming, the lead ran the whole §1 scan through the real `run_stage` w
   3. Revision writer: Opus 5.5 seat, local `claude -p` (charge `kb-knee-council/revision/charge.md`; outputs `RULE-REVISION.md`, `NOTES.md`).
   4. Then: Sol build, cold Fable + Opus passes (shape fix bundled), desk rehearsal with a refusal count, attempt 3.
 - Catches this session that touched a number: the desk rule-9 replay (the admitted rule would have spent attempt 3 on `knee not found`); Sol's source finding of the launch-geometry branch (a confound in the registered contrast that neither earlier cold pass found).
+
+## Revision written; build launched
+- Opus 5.5 writer seat (20:48-21:00), `kb-knee-council/revision/RULE-REVISION.md` + `NOTES.md`.
+  - Two arms R and C at one b. A residency ladder from 64 MiB down to 512 KiB replaces the knee scan and stops at the first resolved repeat-versus-rotate rung. G = 2**26 B from the pinned MLX source, with a geometry check on every receipt. W = 32 GiB ring.
+  - α, γ_c, C1 and C3 are gone. Δ = (x_R − x_C)/b, half-width (δx_R + δx_C)/b.
+  - Palindrome R, C, C, R of 759.2 s streams; the measured hour is unchanged at 3,573.6 s. The residency check takes 40 s to 4.5 min.
+  - Correction κ = 1/ρ_L from the check's timings: 6.213 on the diagnostic.
+  - Refusal replay: 0 of 1 replayable run refused (diag-matched run-2 has no SUMMARY.json: the lead's `head -2` cut that run short after its 32 MiB line).
+  - Open points for the cold review: false residency 3-9% per rung in a world with no cache (it wastes the hour; it cannot make RESOLVED); the 512 MiB cache-capacity premise; ring allocation time; a 64 MiB view of the ring times slower than a standalone 64 MiB buffer.
+- Lead check: the revision follows the ruling. κ is accepted as written: it is conservative because the dispatch's fixed time is in t_R, and it touches only BELOW ATTRIBUTION LEVEL and the NOT RESOLVED upper limit.
+- Build: Sol 6.1 xhigh, local `codex-run-v3`, worktree `/Users/edr/code/jw-wt/kb-matched` (branch `codex/2026-10-31-kb-matched` from `79de7be49`). Brief `kb-knee-council/build/BRIEF.md`; report `build/sol-build.md`; log `build/sol-build.log`.
