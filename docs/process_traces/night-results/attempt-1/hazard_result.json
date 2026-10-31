@@ -1,0 +1,59 @@
+{
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": false,
+    "reasons": [
+      "disk REFUSE: /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test, /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test_bound, /Users/edr/night-bytes-stream-test/attempt-1/custody, /Users/edr/night-bytes-stream-test/attempt-1, /Users/edr/night-bytes-stream-test/attempt-1: 169.7 GiB free < 178.2 GiB required (3 planned copies + headroom)"
+    ],
+    "record_path": "/Users/edr/night-bytes-stream-test/attempt-1/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "NOT_EVALUATED",
+      "disk": "REFUSE",
+      "instrument": "NOT_EVALUATED",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "diagnostics": [],
+  "ended": {
+    "monotonic_ns": 1391841964191083,
+    "monotonic_raw_ns": 1391841964190750,
+    "wall_s": 1793407504.980407
+  },
+  "flags_emitted": [],
+  "keep_awake": {
+    "pid": 2842,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "pack_id": "bytes_stream_test",
+  "plan_id": "attempt-1",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "hazard arm did not return GO; non-PASS: contention=NOT_EVALUATED, disk=REFUSE, instrument=NOT_EVALUATED; disk REFUSE: /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test, /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test_bound, /Users/edr/night-bytes-stream-test/attempt-1/custody, /Users/edr/night-bytes-stream-test/attempt-1, /Users/edr/night-bytes-stream-test/attempt-1: 169.7 GiB free < 178.2 GiB required (3 planned copies + headroom)",
+    "reason": "night_refused_hazard"
+  },
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": null,
+    "runs_excluded": []
+  },
+  "stage_reached": "arm",
+  "started": {
+    "monotonic_ns": 1391841467587250,
+    "monotonic_raw_ns": 1391841467586500,
+    "wall_s": 1793407504.4838028
+  },
+  "verdict": "REFUSED"
+}

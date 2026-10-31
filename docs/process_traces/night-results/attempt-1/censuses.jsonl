@@ -1,0 +1,1 @@
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 1391841440838000, "refusal": null, "stderr": "", "stdout": ""}

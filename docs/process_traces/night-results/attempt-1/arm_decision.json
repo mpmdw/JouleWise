@@ -1,0 +1,58 @@
+{
+  "arm_deadline_epoch_s": 1793410800.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-bytes-stream-test/attempt-1/custody/hazards/arm.json",
+    "sha256": "4635884d35e7103cba062f1da19d21510ed39abdf9e3c9436bc6f8b6aed20ea2"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 1391841440838000,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 1391841953094208,
+    "monotonic_raw_ns": 1391841953093750,
+    "wall_s": 1793407504.969311
+  },
+  "go": false,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 0,
+  "not_pass": [
+    "contention",
+    "disk",
+    "instrument"
+  ],
+  "plan_id": "attempt-1",
+  "reasons": [
+    "disk REFUSE: /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test, /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test_bound, /Users/edr/night-bytes-stream-test/attempt-1/custody, /Users/edr/night-bytes-stream-test/attempt-1, /Users/edr/night-bytes-stream-test/attempt-1: 169.7 GiB free < 178.2 GiB required (3 planned copies + headroom)"
+  ],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 1391841481175625,
+    "monotonic_raw_ns": 1391841481175375,
+    "wall_s": 1793407504.4973922
+  },
+  "unmeasured": [
+    "contention"
+  ],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "NOT_EVALUATED",
+    "disk": "REFUSE",
+    "instrument": "NOT_EVALUATED",
+    "thermal": "PASS"
+  }
+}

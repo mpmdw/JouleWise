@@ -1,0 +1,24 @@
+{
+  "plan_id": "attempt-1",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "hazard arm did not return GO; non-PASS: contention=NOT_EVALUATED, disk=REFUSE, instrument=NOT_EVALUATED; disk REFUSE: /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test, /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test_bound, /Users/edr/night-bytes-stream-test/attempt-1/custody, /Users/edr/night-bytes-stream-test/attempt-1, /Users/edr/night-bytes-stream-test/attempt-1: 169.7 GiB free < 178.2 GiB required (3 planned copies + headroom)",
+    "evidence": {
+      "arm_decision": "night/arm_decision.json",
+      "reasons": [
+        "disk REFUSE: /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test, /Users/edr/night-bytes-stream-test/attempt-1/runs_bytes_stream_test_bound, /Users/edr/night-bytes-stream-test/attempt-1/custody, /Users/edr/night-bytes-stream-test/attempt-1, /Users/edr/night-bytes-stream-test/attempt-1: 169.7 GiB free < 178.2 GiB required (3 planned copies + headroom)"
+      ],
+      "verdicts": {
+        "battery": "PASS",
+        "clock": "PASS",
+        "contention": "NOT_EVALUATED",
+        "disk": "REFUSE",
+        "instrument": "NOT_EVALUATED",
+        "thermal": "PASS"
+      }
+    },
+    "reason": "night_refused_hazard"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}
