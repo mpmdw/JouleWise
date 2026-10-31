@@ -909,6 +909,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Sol delta: ACCEPT_WITH_FIXES. Opus delta: REJECT, because the journal is not parsed as production parses it, and repeated roster ids are accepted.
   - Round 6 (A1-A5) done at `4e29114ea` and lead-verified. **The tool is admitted.**
 
+152. **Magistrate activation 306df05e (Opus 5.5, headless, 2026-10-30 from 17:57 PDT).** Record: `docs/process_traces/2026-10-30-magistrate-306df05e/RECORD.md`. No pending notices and no mail from Ed.
+- **KB night attempt 1 REFUSED at t0** (17:45, nothing captured): disk 169.7 GiB free < 178.2 GiB required. That was a sizing over-count. The README's `--disk-bytes` already counts two copies, and the b5 driver multiplies it by 3 copies at arm. The physical need was about 73 GiB. Agents uninstalled.
+- **KB night attempt 2 ARMED** with the one-copy figure (30,337,587,689 B), as the driver defines `planned_bytes`; it requires 112.5 GB at arm against 181.6 GB free. Lead-checked PASS on the new plan. Kernel word 0, same boot. Notice Gmail `1a18f80b297cdeaf`.
+
+**Next activation (written 2026-10-30 by activation 306df05e; item 152; supersedes item 151's step (1) for the session path; the rest of item 151's pointer holds):**
+(1) **KB night attempt 2.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-bytes-stream-test/attempt-2/custody/night_plan.json` and `.../attempt-2/custody/night/result.json` does not exist, exit at once, quietly. t0 1793411400 (18:50 PDT), window_max 13860 s (ends by 22:41 PDT).
+  - After the terminal record: item 151 (1)'s desk steps with `SESSION=/Users/edr/night-bytes-stream-test/attempt-2`, `ARCHIVE=/Users/edr/night-archive/bytes-stream-test/attempt-2`, `OUT=/Users/edr/night-bytes-stream-test/attempt-2-INPUT.json`; uninstall with `--plan .../attempt-2/custody/night_plan.json --uninstall`.
+  - Then the cold science gate before the reg §1 slot is written, and email Ed.
+  - If it refused again: read `arm_decision.json`. A clock hold goes to the registered word redraw. Any other non-physical cause goes to a fix, not an unchanged retry.
+  - Then fix `prepare`: publish `custody/night_plan.json`, derive the one-copy disk figure, and check disk at prepare as the arm does (record 306df05e, Follow-ups).
+
 **Next activation (written 2026-10-30 by activation 4e748ac1; item 151; item 150's pointer otherwise holds, with its BYTES steps done):**
 (1) **KB night.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-bytes-stream-test/attempt-1/night_plan.json` and `.../attempt-1/custody/night/result.json` does not exist, exit at once, quietly. Its t0 and maximum are given in the line under this pointer, and in the arm notice.
   - Once the terminal record exists, run the README desk steps from `/Users/edr/code/bytes-stream-test` (`configs/campaigns/bytes_stream_test/README.md`): copy the archive once to `/Users/edr/night-archive/bytes-stream-test/attempt-1`, then `bytes_stream_harvest.py`, then `scan` and `read`. Then uninstall the night agents with the installer's `--uninstall`.
