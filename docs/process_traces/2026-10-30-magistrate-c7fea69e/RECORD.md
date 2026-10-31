@@ -44,3 +44,25 @@ Before re-arming, the lead ran the whole §1 scan through the real `run_stage` w
 
 ## Mail
 - Ed, Gmail `1a18fe945ccd99c4` (thread `1a174cad9022cac9`): attempt 2 outcome, the fix, the desk refusals, and the council; no question; a NO keeps the unchanged rule.
+
+## Council round 1 (20:06-20:26) and the lead's ruling
+- **Sol 6.1 xhigh: MORE-DATA** (`kb-knee-council/sol-report.md`, scratch `sol-scratch/`).
+  - Replay: 5 of 5 refusals (four desk scans, plus attempt 2's partial live scan rebuilt from its 51 receipts).
+  - MLX 0.31.2's contiguous all-reduce switches launch geometry above 64 MiB (128 to 4096 first-pass threadgroups). So the fast 64→128 MiB pair need not mean cache.
+  - It built and rejected the obvious repair (K from the two arm pairs). On a DRAM-only Gaussian-noise witness built from clean-3's spreads, that repair accepts a false K = 64 MiB where the admitted rule refuses.
+  - Its proposal: a ~51 s timing diagnostic across the branch.
+- **Fable 5.1 high: CHANGE** (`kb-knee-council/fable-report.md`).
+  - It names three refusal routes: (a) the rebound pair; (b) plateau wobble against a threshold 0.5% above the single top pair (clean-2's 2**33 pair cleared it by 0.04 GB/s); (c) the 4 MiB arm increment, too small to resolve.
+  - Its proposal: step 5 becomes the first cache-to-DRAM transition plus a derived straddle check. Replay: 4 of 5 refused, finding K = 2**26 only on clean-1. 0 false knees in 40,000 DRAM-only draws at 1× and 2× the observed noise; about 1 in 4,000 for both rules at 0.5×.
+  - NEEDS_RULING: adopt; a DRAM reference envelope; printing late pairs.
+- **Diagnostic (lead, quiet Mac, 3 runs; `kb-knee-council/diag/`, table `DIAG-TABLE.txt`):**
+  - 32→45 MiB: 330-370 GB/s.
+  - 45→64 MiB: about 140 GB/s, tight, in all 3 runs.
+  - 64 MiB → 64 MiB + 1 B: about +30 µs on the clean run; the other two runs were noisy.
+  - 90→128 MiB: about 600 GB/s.
+  - So the slow/fast pattern at 64 MiB is largely the launch-geometry switch. And the cache arms (≤ 16 MiB, small launch) and S (≥ 4 GiB, large launch) do not run the same GPU work, contrary to §1's premise.
+- **Ruling (lead):**
+  1. No attempt 3 under the admitted rule.
+  2. Fable's step-5 text is not adopted as written: it still refuses 2 of 3 quiet scans on route (c), and its straddle signature sits on the geometry branch.
+  3. Design round 2, two blind seats (Sol xhigh, Fable high). Charge: whether the geometry difference between the arms can change a printed quantity, and the smallest design that removes it; a knee rule that handles routes a-c and refuses DRAM-only nulls; the cost. Brief `kb-knee-council/round2/BRIEF.md`.
+  - The seats disagreed on a science question. A cold judge was not convened, because the diagnostic changed the question both positions answered; round 2 takes it up.
