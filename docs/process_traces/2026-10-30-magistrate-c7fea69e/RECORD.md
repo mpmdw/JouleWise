@@ -128,3 +128,27 @@ Before re-arming, the lead ran the whole §1 scan through the real `run_stage` w
   - All MINORs fixed.
   - Every correction is to text, display or tests, so the lead re-executes after the fix; no second cold round (doctrine: delta re-audits only for fixes to number-bearing code).
 - Fix round 1: Sol 6.1 high, brief `kb-knee-council/fix1/BRIEF.md`, report `fix1/sol-fix1.md`.
+
+## Fix round committed; CI; KB attempt 3 ARMED
+- Fix round 1 (Sol high) applied all ten dispositions (one phrase, "beside a `not defined` half-width", was lost from the brief by an unquoted heredoc; the seat had Fable's full text). Lead commit `53bcceeac` also:
+  - updates `configs/gates/hazard_refusals.json` (new known-bytes refusal sites, NUMBER_INTEGRITY with the existing known-bytes wording; stale sites removed; changed guards refreshed; 23+/18− lines);
+  - appends the `configs/b6/executing_reviews.json` row for `c9e218c8e`'s `joulewise/b5/chain.py` change, citing both cold passes.
+  - CI on `c9e218c8e` had failed only on that registry (shard 1).
+- Lead re-execution: 110 tests across the touched modules and both registries (one known linked-worktree failure); the 23 modules importing `joulewise/b5/chain.py`, 670 tests, OK.
+- CI on `53bcceeac` (run 41171097423): 16 of 18 green when armed, shard 1 among them; shards 8 and 10 still running, on modules the change does not touch. Shard 10 has run 1.5-2 h before. **Decision: arm without waiting**, as attempt 2 was armed with shard 10 pending. Quiet Mac time is the scarce resource, and the touched modules were covered.
+- `codex/2026-10-30-kb-capture` fast-forwarded to `53bcceeac`; `/Users/edr/code/bytes-stream-test` pulled (clean, no night agent). Clone rehearsal: residency resolved at 32 MiB, κ 17.92 (5 of 5 rehearsals resolved).
+- **Prepare** (`/Users/edr/night-bytes-stream-test/attempt-3`):
+  - kernel word 0;
+  - SPAN 9734 s, from the kit's collection plan;
+  - one-copy disk 28,396,402,160 B (attempt 2's ruling); the arm requires 106,664,042,960 B against 176,554,246,144 B free;
+  - plan sha256 `30a3afec2a0846778360a70125568ad2cf96bc4ee527735e65211f54288bc0b8`, copied byte-identical to `custody/night_plan.json`;
+  - **t0 1793427660 (23:21:00 PDT), window_max 13080 s (ends by 02:59 PDT)**.
+- Arm notice Gmail `1a190900c6b4b8c1` (thread `1a174cad9022cac9`), sent before install, with Ed's NO and the uninstall command.
+- Installed 23:05 PDT, rc 0. Plists: night `d4a8d4ae…`, probe `583badcc…`, deadman `7a809202…`.
+- This activation exits before t0.
+
+## Pruning list (this session)
+- Desk rule-9 replay before arming: caught that the admitted knee rule would spend attempt 3 on `knee not found` (5 of 5 refusals). Number-touching.
+- Two-seat council: Sol's source finding of MLX's launch-geometry branch, a confound in the registered contrast. Number-touching.
+- Cold passes (Fable + Opus, executing): Opus MAJOR-1/2 changed what RESOLVED claims and what is disclosed; no arithmetic defect. Interpretive.
+- Refusal-site census (CI): caught an unregistered registry change; no number.
