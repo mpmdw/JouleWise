@@ -99,3 +99,15 @@ Before re-arming, the lead ran the whole §1 scan through the real `run_stage` w
   - Open points for the cold review: false residency 3-9% per rung in a world with no cache (it wastes the hour; it cannot make RESOLVED); the 512 MiB cache-capacity premise; ring allocation time; a 64 MiB view of the ring times slower than a standalone 64 MiB buffer.
 - Lead check: the revision follows the ruling. κ is accepted as written: it is conservative because the dispatch's fixed time is in t_R, and it touches only BELOW ATTRIBUTION LEVEL and the NOT RESOLVED upper limit.
 - Build: Sol 6.1 xhigh, local `codex-run-v3`, worktree `/Users/edr/code/jw-wt/kb-matched` (branch `codex/2026-10-31-kb-matched` from `79de7be49`). Brief `kb-knee-council/build/BRIEF.md`; report `build/sol-build.md`; log `build/sol-build.log`.
+
+## Build done; hardware rehearsal; draft PR; cold passes launched
+- Sol build, round 1, stopped at its write list: it needed `joulewise/b5/chain.py`, where the known-bytes check required eight calls, and its sandbox cannot write a linked worktree's git metadata. Both were the brief's fault. The lead granted `chain.py` for that check only and told the seat to leave its changes uncommitted.
+- Resumed build: complete. 79 tests, 78 pass; the one failure is the known linked-worktree test. Synthetic chains run end to end, resolved (4 records, all classes RESOLVED) and unresolved (0 records, all UNDETERMINED). The worked example was recomputed through the real reader; refusal replay 0 of 1. Report `.codex-report/KB-MATCHED.md`.
+- The lead committed it as `c9e218c8e` and re-ran the four touched modules outside the sandbox: 79 run, the same single linked-worktree failure. Two orphaned test sleepers left by the seat's sandbox were killed.
+- **Hardware desk rehearsal** (`kb-knee-council/build/rehearse_matched.py`): real MLX and the real `run_stage`, energy capture stubbed; the first hour call shortened to one 1,024-dispatch sweep with no idle, then a stop. 4 runs, about 22 s each:
+  - **residency resolved at b = 32 MiB in 4 of 4 (0 refusals)**; κ 21.43, 17.64, 23.67, 19.18;
+  - 32 MiB rung: C 283.0-286.0 µs (δt 9-12 µs), R 311.5-312.2 µs (δt 0.3-1.7 µs); 64 MiB not resolved in any run;
+  - the hour-call path allocates the 32 GiB ring and runs one sweep in 1.1 s.
+  - Open for the cold passes: C at 32 MiB reads about 284 µs in the stage, against 256 µs in the 8 GiB diagnostic.
+- Branch pushed. Draft PR **#614** (base `codex/2026-10-30-kb-capture`, bundle `9d45a2ea6..c9e218c8e`) for CI.
+- **Cold final passes** (blind, executing, local `claude -p`, fresh worktrees `/Users/edr/code/jw-wt/kb-cold-{fable,opus}` at `c9e218c8e`): Fable 5.1 high and Opus 5.5 high. Charge `kb-knee-council/cold/CHARGE.md`; reports `cold/{fable,opus}-report.md`.
