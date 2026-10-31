@@ -1123,5 +1123,24 @@
    "paper": "/Users/edr/night-archive/seats-4e748ac1/kb-cap-cold/fable-REPORT.md"
   }
  ]
-}
+},
+ {
+  "commit": "c9e218c8e42a9bd914384d3c4d97c8d30beeef29",
+  "number_bearing_paths": [
+   "joulewise/b5/chain.py"
+  ],
+  "change": "KB-MATCHED: the known-bytes chain check takes the matched-geometry R, C, C, R palindrome (four calls) instead of eight (non-claim test)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5, cold executing pass, blind (non-author), 2026-10-30",
+    "covered": "9d45a2ea6..c9e218c8e",
+    "paper": "/Users/edr/night-archive/seats-c7fea69e/kb-knee-council/cold/opus-report.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold executing pass, blind (non-author), 2026-10-30",
+    "covered": "9d45a2ea6..c9e218c8e",
+    "paper": "/Users/edr/night-archive/seats-c7fea69e/kb-knee-council/cold/fable-report.md"
+   }
+  ]
+ }
 ]

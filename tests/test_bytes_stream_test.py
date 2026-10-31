@@ -246,6 +246,7 @@ class ResidencyTests(unittest.TestCase):
         self.assertAlmostEqual(result["kappa"],6.213,delta=.0005)
         row=result["rungs"][-1]
         expected=1/((1-Fraction(1,64))*Fraction(row["D_s"]-row["dD_s"])/Fraction(row["R"]["t_s"]+row["R"]["dt_s"]))
+        # κ: 1e6×float noise (≈1e-8 after ≈21× amplification) < 1e-6 < 4-s.f. half-unit (≥5e-5 relative).
         self.assertAlmostEqual(result["kappa"],float(expected),delta=1e-6*abs(float(expected)))
 
     def test_unresolved_ladder_and_no_retries(self):
@@ -267,6 +268,7 @@ class ResidencyTests(unittest.TestCase):
             self.assertEqual(len(result["receipts"]),len(rows))
         receipt=check_receipts()[1]
         actual=probe.clock_duration_bound_ns(receipt)/receipt["repeats"]
+        # q: 1e6×4ε q < 1e-6 q; converting ns to s puts that bar below .01×smallest δt (0.086 µs).
         self.assertAlmostEqual(actual,86/receipt["repeats"],delta=1e-6*86/receipt["repeats"])
 
     def test_geometry_check_includes_pilots_and_later_receipts(self):
@@ -280,8 +282,9 @@ class ResidencyTests(unittest.TestCase):
         values=[Fraction(c["end_ns"]-c["start_ns"],10**9*c["repeats"]) for c in calls]
         mean=sum(values)/3
         width=max(abs(v-mean) for v in values)+sum(Fraction(86,10**9*c["repeats"]) for c in calls)/3
-        # No displayed width: mandated 1e-6 relative bar.
+        # t: 1e6×4ε t ≈ 6e-13 s < 1e-6 t ≈ 7e-10 s < .01×smallest printed δt (8.6e-10 s).
         self.assertAlmostEqual(result["t_s"],float(mean),delta=1e-6*abs(float(mean)))
+        # δt: 1e6×4ε t ≈ 6e-13 s < 1e-6 δt ≈ 9.6e-11 s < .01×smallest printed δt (8.6e-10 s).
         self.assertAlmostEqual(result["dt_s"],float(width),delta=1e-6*abs(float(width)))
 
     def test_serialized_success_is_recomputed(self):
@@ -303,7 +306,9 @@ class ArithmeticTests(unittest.TestCase):
             calls.append({'arm':'R','receipt':{'start_ns':a,'end_ns':b},'gpu_state':[
                 {'start_ns':a,'end_ns':b,'state':{'idle_ratio':idle,'active_freq_mhz_weighted':freq}}]})
         result=probe.describe_gpu_arms(calls)['R']
+        # Frequency (description only): 1e6×8ε≈1.8e-9 < 1e-6 < .01×smallest printed relative width (.00031/.075≈.0041).
         self.assertAlmostEqual(result['active_frequency_mhz'],500,delta=1e-6*500)
+        # Residency (description only): 1e6×8ε≈1.8e-9 < 1e-6 < .01×smallest printed relative width (.00031/.075≈.0041).
         self.assertAlmostEqual(result['active_residency'],.5,delta=1e-6*.5)
         calls[0]['gpu_state'][0]['end_ns']-=1  # Exactly one native ns missing.
         self.assertIn('support incomplete',probe.describe_gpu_arms(calls)['R']['active_residency'])
@@ -347,7 +352,8 @@ class ArithmeticTests(unittest.TestCase):
         self.assertEqual(probe.classify(0,epsilon/4,2)["class"],"BELOW ATTRIBUTION LEVEL")
         result=probe.classify(0,epsilon,2)
         self.assertEqual(result["class"],"NOT RESOLVED")
-        self.assertAlmostEqual(result["upper_limit"],2*epsilon,delta=1e-6*2*epsilon)
+        # Identical endpoint addition and multiplication on identical binary64 inputs.
+        self.assertEqual(result["upper_limit"],2*(0+epsilon))
         self.assertEqual(probe.classify(-2*epsilon,epsilon,2)["reason"],"contrast negative")
         self.assertEqual(probe.format_interval(0,0),"0.00 ± 0.00")
 
@@ -512,6 +518,7 @@ class ReaderTests(unittest.TestCase):
     def test_gap_sources_and_transient(self):
         records=deepcopy(self.records);records[1]['harvest']['meter_gaps']=[{'span':'stream','missing_samples':1}]
         result=probe.read_known_bytes(records,self.check)
+        # Gap: 1e6×4ε×2.8≈2.5e-9 J < 2.8e-6 J; divided by 2*N_C*b_GB it is < .01*.00031 J/GB.
         self.assertAlmostEqual(result['calls'][1]['meter_gaps']['bound_j'],.020*140,delta=1e-6*.020*140)
         for beta,w in [('dc',.002403097),('rest',.002709920)]:
             self.assertAlmostEqual(result['boundaries'][beta]['halfwidth'],w,delta=.01*.00031)
@@ -538,10 +545,12 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(value['class'],'NOT RESOLVED')
         self.assertAlmostEqual(value['delta'],target,delta=.01*.00031)  # §5's common bar.
         expected=float((Fraction(value['delta'])+Fraction(value['halfwidth']))*Fraction(result['kappa']))
+        # Upper limit: 1e6×4ε×.00377≈3.3e-12 < 1e-6×.00377≈3.8e-9 < .01*.00031 J/GB.
         self.assertAlmostEqual(value['upper_limit'],expected,delta=1e-6*abs(expected))
         self.assertIn('0.00030 ± 0.00031',result['printed']['claim_lines']['rails'])
-        # §4 requires the interval's decimal place: .00377, which rounds to
-        # the illustrative §5 upper limit .0038 at two significant figures.
+        self.assertIn('memory-traffic energy contrast',result['printed']['claim_lines']['rails'])
+        self.assertIn('under the stated model and constant payload',result['printed']['claim_lines']['rails'])
+        # §4 and §5 require the interval's decimal place: .00377.
         self.assertIn('upper limit 0.00377 J/GB',result['printed']['claim_lines']['rails'])
         self.assertEqual(format(value['upper_limit'],'.2g'),'0.0038')
 
@@ -551,6 +560,12 @@ class ReaderTests(unittest.TestCase):
             result=probe.read_known_bytes(records,self.check)
             for beta in affected: self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
             self.assertIsInstance(result['boundaries']['rails']['delta'],float)
+            if leaf == 'anchor_shift_j':
+                # §3/§4: retain the numeric estimate, but no precision without its half-width.
+                for beta in ('rails','gpu','rest'):
+                    self.assertEqual(result['printed']['contrasts'][beta],
+                                     result['boundaries'][beta]['description'])
+                    self.assertTrue(result['printed']['contrasts'][beta].startswith('not defined ('))
         records=deepcopy(self.records);records[0]['harvest']['idle']['pre']['gpu']=[]
         result=probe.read_known_bytes(records,self.check)
         self.assertEqual(result['boundaries']['gpu']['class'],'UNDETERMINED')

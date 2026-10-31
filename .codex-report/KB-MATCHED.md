@@ -319,3 +319,92 @@ archived timing evidence only. The 32 GiB row-view allocation/build time, source
 pin on the actual build, capacity premise and timing-model premise retain their
 registered status; no live validation is claimed. No commit was attempted after
 the resumed instruction to leave the tree uncommitted.
+
+## Fix round 1
+
+This section supersedes the build record's workspace and verification state above.
+Started at `c9e218c8e42a9bd914384d3c4d97c8d30beeef29` on
+`codex/2026-10-31-kb-matched`, with a clean tree. The lead's ten dispositions
+are the complete scope of this round. Both cold reports were read in full:
+`/Users/edr/night-archive/seats-c7fea69e/kb-knee-council/cold/opus-report.md`
+and `fable-report.md` beside it. The four rehearsal CHECK.json files were read
+directly; no raw evidence was changed and no live measurement ran.
+
+| Item | Disposition implemented | File and line |
+|---|---|---|
+| 1 — Opus MAJOR-1 | Define the outcome as repeat-versus-rotate memory-traffic energy, including translation and row locality. Correct False residency and No cache: an R-only fixed stall can resolve the check and add energy; κ is not conservative if it dominates. No intercept-free signature adopted. Keep reader claim lines consistent. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:40`, `:373`, `:463`, `:514`, `:542`, `:711`; `scripts/bytes_stream_test.py:1222`, `:1228` |
+| 1 — Fable MINOR 3(iii) | Give the 64 MiB diagnostic C/R timings and all four rehearsal means, whose contrasts do not resolve; translation reuse alone is not shown to produce the 32 MiB contrast. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:161` |
+| 2 — Opus MAJOR-2 | Add the four rehearsal κ/t_C values and C triplets beside §5, top-down history and the hour's 60.6 s idle/settle, and both reviewers' readings without adjudicating. Update §4 to κ 17.6–23.7 and about 110–150 ε₀ at the illustration's width. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:525`, `:652` |
+| 3 — Opus m3 / Fable MINOR 3(i) | Disclose per-call energy that survives N_R ≠ N_C: a common 10 J ramp gives about 2e-5 J/GB (0.065 δΔ_rails, 0.4 ε₀); a returning R-only 0.2 s × 30 W first sweep gives about 7e-5 J/GB (0.23 δΔ_rails, 1.5 ε₀). Give the observed 506–518 versus 311 µs and both assumptions. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:437` |
+| 4 — Fable MINOR 3(ii) | Name common cache throughput across arms, hence GPU clock state, beside overlapped stalls in κ's timing-model limitation. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:433` |
+| 5 — Opus m12 | Disclose constant mx.ones payload, minimum bus toggling and bias toward zero relative to real weights; qualify decode transfer of the null upper limit and BELOW ATTRIBUTION LEVEL. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:129`, `:515`, `:542`; `scripts/bytes_stream_test.py:1224`, `:1229` |
+| 6 — Fable MINOR 1 | Use the reader's upper limit 0.00377 at the H2 interval's decimal place; update the test's explanatory comment. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:707`; `tests/test_bytes_stream_test.py:553` |
+| 6 — Fable MINOR 2 / Opus m6 | Correct equal-length overhead to 0.22%. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:222` |
+| 6 — Fable MINOR 5 / Opus m3 | Distinguish pilot-based count planning from measured duration: calls about 1 s and two rungs 18–19 s; retain the planning ladder and counts. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:177` |
+| 6 — Fable MINOR 6 | State in §4 and the slot that κ about 18–24 needs δΔ_rails about 2.4e-6 J/GB even at Δ=0, unreachable here, so null reads NOT RESOLVED. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:525`, `:562` |
+| 6 — Opus m4 | State allocation-before-pre-idle assumption, about 6.5 s common offset and 1793.3 s paired midpoint; linear-drift cancellation is unaffected. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:205`, `:672` |
+| 6 — Opus m7 | Mark the multi-cache/alpha-term and epsilon-flip decisions as superseded by the matched revision. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:722`, `:735` |
+| 6 — Opus m8a | Derive κ's 1e-6 relative bar between amplified 1e6×float noise about 1e-8 and the four-significant-figure half-unit at least 5e-5. | `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:482` |
+| 7 — Fable MINOR 4 | Choose reason-only printing when the half-width is undefined; keep the full central estimate in the numeric record. State that choice in the rule and check it for rails, GPU and rest in an existing missing-bound test. | `scripts/bytes_stream_test.py:1210`; `docs/registrations/bytes_known_bytes_reading_rule_DRAFT.md:603`; `tests/test_bytes_stream_test.py:564` |
+| 8 — Opus m8b | Add one-line float-noise/printed-width derivations for q, t, δt, GPU frequency/residency, gap and upper-limit bars; preserve their values. GPU descriptions use a dimensionless relative-width comparison. Use exact equality for identical endpoint arithmetic on identical inputs in the zero-contrast upper-limit test. Also document κ's existing bar. | `tests/test_bytes_stream_test.py:249`, `:271`, `:285`, `:287`, `:309`, `:311`, `:355`, `:521`, `:548` |
+| 9 — Fable MINOR 7 / Opus m10 | Resolve the fixture's ROOT before patching it, matching prepare's resolved checkout comparison even with a symlinked TMPDIR. | `tests/test_bytes_stream_capture.py:217` |
+| 10 — round report | Record every disposition, exact locations, verification and remaining lead work in this section. | `.codex-report/KB-MATCHED.md:323` |
+
+Data nuance: the 32 MiB C triplets rise monotonically in all four rehearsals.
+The 64 MiB triplets also slow from first to last, but rehearsals 2 and 3 have
+small middle-to-last reversals (471.796→471.645 and 470.371→468.077 µs).
+The disclosure states those recorded values rather than claiming strict
+monotonicity for those two triplets. Neither reviewer's interpretation is chosen.
+
+Verification:
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR=/private/tmp /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_stream_test tests.test_bytes_stream_capture tests.test_bytes_stream_harvest tests.test_bytes_mac_kit
+```
+
+Exit 1: **79 tests in 115.023 s; 78 passed, one failed**. The only failure is
+`CaptureTests.test_path_cli_bootstrap_without_editable_install`, which expects
+the later clean-checkout/minimum-lead refusal but encounters
+`prepare must run from its own ordinary clone (no linked checkout)` first.
+Both cold reports establish that same failure at the starting head. It was
+not changed: the dispositions authorize fixing the symlinked ROOT fixture,
+not changing this production refusal or the bootstrap test's expectations.
+There are no other failures or errors. `/private/tmp` is the resolved TMPDIR.
+
+The explicit regression with a symlinked TMPDIR also passes:
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR=/tmp /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_stream_capture.CaptureTests.test_prepare_authors_isolated_night_plan_without_default_ledger
+```
+
+Exit 0: **one test in 0.213 s; OK**. `/tmp` exercises the symlink alias;
+the required four-module run above uses the resolved path.
+
+`git diff --check` exits 0. AST inspection against HEAD confirms that
+`printed_record` is the sole changed production function, all modified Python
+parses, and the changed-path set equals the five-file allowlist. Numerical
+arithmetic, class conditions, check design and count planning are unchanged.
+No tolerance value was relaxed.
+
+The synthetic chain fixtures' tracked-child cleanup and journaled-group
+signalling ran, and their assertions that every owned child had exited passed.
+All synchronous test subprocesses were waited. No test-started child is
+intentionally retained. The required observational census was attempted:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B scripts/fixture_orphan_census.py --fail-on-orphans
+```
+
+Exit 2: `{"error": "PermissionError: [Errno 1] Operation not permitted: 'ps'"}`.
+This sandbox cannot independently census the process table; that is not an
+empty-census claim. The three synthetic chain fixtures likewise retain the
+driver's sandbox-census REFUSED result after chain exit 0, as their existing
+tests require, and still complete harvest and cleanup.
+
+No scope expansion or ruling is requested. Exactly the five authorized files
+are modified; there was no pre-existing dirty work. HEAD remains
+`c9e218c8e42a9bd914384d3c4d97c8d30beeef29`; no commit, push or linked-worktree
+Git-metadata write was attempted. Lead next step: review the uncommitted diff, run the
+four modules in an ordinary clone and the lead-owned final suite/gates, then
+commit from the lead's writable Git environment. The rule remains pending
+admission; this round provides synthetic and archived evidence only.

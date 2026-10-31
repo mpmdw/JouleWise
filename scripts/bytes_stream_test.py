@@ -1207,7 +1207,7 @@ def printed_record(result):
                     not finite_number(value["halfwidth"]) or value["halfwidth"] < 0):
                 raise ValueError("halfwidth must be finite and nonnegative")
             interval = (format_interval(value["delta"],value["halfwidth"]) if isinstance(value.get("halfwidth"),(int,float))
-                        else ((f"{value['delta']} J/GB; " if isinstance(value.get("delta"),(int,float)) else "")+value["description"]))
+                        else value["description"])
         except (ValueError, OverflowError) as exc:
             why = boundary+" delta/halfwidth print arithmetic unavailable: "+str(exc)
             value.update({"class":"UNDETERMINED","reason":why,"description":not_defined(why),
@@ -1219,14 +1219,14 @@ def printed_record(result):
         if value["class"] == "UNDETERMINED":
             line = f"Known-bytes check: {boundary} memory-traffic attribution is undetermined ({value['reason']})."
         elif value["class"] == "BELOW ATTRIBUTION LEVEL":
-            line = (f"Known-bytes check: {boundary} energy per DRAM-sourced byte differed from cache-sourced by {interval} J/GB "
-                    f"(DRAM minus cache, {result['b']}-byte matched dispatches), within the 1 J-per-run attribution level ({1e9/(512*39_852_331_520):.4g} J/GB) "
-                    f"after the contrast-fraction correction ×{result['kappa']:.4g}; {boundary} lines here carry no resolvable memory-traffic energy.")
+            line = (f"Known-bytes check: the {boundary} memory-traffic energy contrast is {interval} J/GB "
+                    f"(rotate minus repeat, {result['b']}-byte matched dispatches), within the 1 J-per-run attribution level ({1e9/(512*39_852_331_520):.4g} J/GB) "
+                    f"after the contrast-fraction correction ×{result['kappa']:.4g}; {boundary} lines here carry no resolvable memory-traffic energy under the stated model and constant payload.")
         else:
             # The upper limit uses the estimate's printed decimal place.
             digits = interval_places(value["halfwidth"])
-            line = (f"Known-bytes check: the {boundary} response to DRAM-sourced bytes is not resolved ({interval} J/GB, "
-                    f"contrast-fraction-corrected upper limit {round(value['upper_limit'],digits):.{max(0,digits)}f} J/GB); "
+            line = (f"Known-bytes check: the {boundary} memory-traffic energy contrast is not resolved ({interval} J/GB, "
+                    f"contrast-fraction-corrected upper limit {round(value['upper_limit'],digits):.{max(0,digits)}f} J/GB under the stated model and constant payload); "
                     f"whether {boundary} lines include memory-traffic energy is not established.")
         printed["claim_lines"][boundary] = line
     if isinstance(result["share"]["f"],(float,int)):

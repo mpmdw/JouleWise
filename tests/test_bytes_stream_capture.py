@@ -214,7 +214,7 @@ class CaptureTests(unittest.TestCase):
     def test_prepare_authors_isolated_night_plan_without_default_ledger(self):
         from tests.git_fixture import init_git_fixture
         with tempfile.TemporaryDirectory(prefix='kb-prepare-') as tmp:
-            root=Path(tmp)/'clone'
+            root=(Path(tmp)/'clone').resolve()
             root.mkdir()
             kit=root/cap.KIT
             shutil.copytree(cap.ROOT/cap.KIT,kit)

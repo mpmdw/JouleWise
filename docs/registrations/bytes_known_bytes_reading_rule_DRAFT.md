@@ -38,13 +38,14 @@ adapter delivers) and **rest** (DC input minus rails: memory chips, power conver
 may show in rails (if the circuits that move bytes are on a reported rail) and part only in rest (the memory chips
 themselves). Reg. §1 registers the expectation: the chip's share appears in rails, the memory chips' share in rest.
 
-The test streams a known number of bytes through the GPU and asks whether each boundary's energy rises **because
-the bytes came from DRAM**. A stream on its own cannot answer that: reading bytes keeps the GPU busy, so the GPU
+The test streams a known number of bytes through the GPU and asks whether each boundary's energy rises with
+**memory traffic**. A stream on its own cannot answer that: reading bytes keeps the GPU busy, so the GPU
 rail rises whether or not the memory controller is on it. The test therefore compares two ways of doing the same
-GPU work, one whose bytes come from DRAM and one whose bytes come from on-chip cache (§1). The difference is
-**memory-traffic energy**: the extra energy per byte when the byte comes from DRAM. It includes everything that
-changes with the byte's source: the memory controller, the on-chip fabric, the GPU's time stalled waiting on
-memory, and the GPU clock state (DVFS, dynamic voltage and frequency scaling) a DRAM-bound kernel runs at.
+GPU work, rotating addresses intended to read DRAM and repeating addresses intended to read on-chip cache (§1).
+The difference is **memory-traffic energy** per logical byte. It can include address translation and DRAM row
+locality as well as byte source: the memory controller, the on-chip fabric, the GPU's time stalled waiting on
+memory, and the GPU clock state (DVFS, dynamic voltage and frequency scaling). The timing check resolves an
+address-reuse contrast; it does not isolate energy per DRAM-sourced byte.
 
 Both design seats agreed on the limit, and it is adopted: a positive difference on the GPU rail shows that memory
 traffic costs energy on that rail. It cannot say whether the energy is the memory controller, the fabric, or GPU
@@ -72,7 +73,7 @@ by `mx.sum(view); mx.eval(...)`. One such reduction, sent to the GPU and waited 
 **The two arms.** Both arms run the identical Python loop over a list of Q view references. The k-th dispatch reduces
 `views[k mod Q]`, and every call allocates the same ring.
 
-| Arm | List of Q references | Where the bytes come from |
+| Arm | List of Q references | Intended byte source |
 |---|---|---|
 | R (rotate) | the Q distinct views 0, …, Q−1 | DRAM: each view is next read a whole ring later |
 | C (repeat) | Q references to view 0 | cache: the same b bytes are re-read every dispatch |
@@ -125,6 +126,9 @@ in cache. Let K_c be the largest number of bytes any on-chip cache between the G
   what a breach does.
 - *Allocation.* Allocate as `mx.ones((Q, b), dtype=mx.uint8)` with Q = W/b. Both axes stay below 2^31 for every b on
   the ladder (Q ≤ 2^16 and b ≤ 2^26), so the per-axis allocation limit fixed at `79de7be49` is not reached.
+- *Payload content.* `mx.ones` is constant data, which minimises DRAM-bus toggle energy. Relative to real model
+  weights, this biases Δ toward zero. It weakens the NOT RESOLVED upper limit and BELOW ATTRIBUTION LEVEL as
+  statements about decode traffic; the test measures this constant payload.
 
 **Residency check (replaces the knee scan).** It runs before the measured hour, with no energy capture and with
 `--idle-s 0 --settle-s 0`.
@@ -157,7 +161,11 @@ R3. **Timing per mode, unchanged from the admitted step 1.**
 R4. **Residency contrast.** At rung b_k, let D = t_R − t_C and δD = δt_R + δt_C.
 - The contrast is **resolved** when D > δD.
 - *Derivation.* The two modes differ only in address reuse, so a C dispatch faster than an R dispatch by more than
-  both observed envelopes together is timing evidence that C's bytes are served from cache.
+  both observed envelopes together resolves a repeat-versus-rotate timing contrast. Cache residency can cause it,
+  but address translation and DRAM row locality can also contribute (§3, "False residency"). At 64 MiB, repeat
+  is not resolved as faster than rotate: the diagnostic gives 705.550 versus 663.892 µs; the four rehearsals give
+  C/R means 462.2/466.5, 455.3/518.7, 450.8/468.1 and 498.3/469.5 µs, all with D ≤ δD (§5). Translation reuse
+  alone is therefore not shown to produce the 32 MiB contrast.
 - No threshold, multiplier or band is added. This is an observed-spread bound, not a confidence statement, and not
   a hardware residency counter.
 - The ladder stops at the first resolved rung, and **b = that rung's b_k**.
@@ -166,13 +174,15 @@ R4. **Residency contrast.** At rung b_k, let D = t_R − t_C and δD = δt_R + �
   more bytes as b grows, so the largest resolved b gives the smallest δΔ.
 - Print every measured rung: t, δt, all calls, D, δD, and the verdict. Rungs below the chosen b are not run.
 
-R5. **Cost** (planning, not a threshold). A rung costs per mode one pilot sweep plus three calls of max(2 s, one
-sweep). One sweep lasts Q × t ≈ (W/b) × t.
-- With the archived fixed time t₀ ≈ 205 µs, rungs from 64 MiB to 4 MiB take about 16 s each.
+R5. **Cost** (planning, not a threshold). A rung costs per mode one pilot sweep plus three calls with counts set
+by R2's pilot, not a guaranteed 2 s duration. One sweep lasts Q × t ≈ (W/b) × t.
+- If pilot and timing-call rates agree, the archived fixed time t₀ ≈ 205 µs gives about 16 s per rung from
+  64 MiB to 4 MiB (about 32 s for two rungs).
 - 2 MiB takes about 27 s, 1 MiB about 54 s and 512 KiB about 108 s, because there one sweep exceeds 2 s.
 - If all eight rungs run, the total is about 270 s, plus one ring allocation and fill (planned at the admitted
   "about 10 s").
-- If rung 0 or 1 resolves, about 32 s per rung is spent.
+- Measured on this Mac, timing calls last about 1 s because the slow pilots set smaller counts; the first two
+  rungs together took 18–19 s in the rehearsals. These measured costs do not change the planning counts or ladder.
 
 R6. **Refusal.** The residency check fails, and **the measured hour does not run**, in any of four cases. Each
 prints its specific reason, and every class is UNDETERMINED with that reason:
@@ -183,8 +193,8 @@ prints its specific reason, and every class is UNDETERMINED with that reason:
 
 In every case, the slot records the check's receipts, every rung's comparison, and the reason. Preserve the one
 check's calls; do not repeat, extend or retry it into acceptance. Observed-spread intervals do not guarantee against
-a false residency or a false refusal under timing noise. §3 ("Bias") says why a false residency cannot by itself
-produce a RESOLVED class.
+a false residency or a false refusal under timing noise. §3 ("Bias") explains how an R-only stall can resolve
+the check and produce a RESOLVED memory-traffic class even without a byte-source difference.
 
 A `residency resolved` result must carry no reason. Its b must equal the first resolved rung exactly, with
 Q = W/b; every check receipt must pass the geometry check. An inconsistent success is a reasoned check-status fault:
@@ -194,8 +204,9 @@ The check reads no energy and is not BYTES data.
 
 **Order.** Four probe calls in a palindrome, **R, C, C, R**, all with the same planned length. Each arm's two stream
 midpoints then have the same mean time, so a drift linear in time puts both arms at the same mean state (§5 checks
-these mean times). The extra settle gap before pre-idle shifts that common time 1.5 s beyond the session midpoint;
-this shared offset does not change the cancellation. This is the reasoning of the registration's null quads (A, B, B,
+these mean times). With the planned 10 s allocation/fill/warm-up all before pre-idle (§2's order), that common
+time is about 6.5 s beyond the session midpoint; this shared offset does not change the cancellation. This is
+the reasoning of the registration's null quads (A, B, B,
 A, reg. §5) applied to arms.
 
 **Repeats and the hour.** Each call's dispatches are N = Q × floor(T_call / (Q × t_a)): whole sweeps. Here t_a is the
@@ -208,7 +219,7 @@ Logical bytes per call are N × b.
   call's fixed overhead (115.2 idle + 9 settle + 10 allocation).
 - *Why equal lengths.* The baseline row per dispatch does not depend on T_call; the edge rows per dispatch scale
   as t_a/T_a. For a fixed total stream time, the sum t_R/T_R + t_C/T_C is smallest at T_R/T_C = √(t_R/t_C). At the
-  diagnostic's ratio t_R/t_C = 1.2045, equal lengths are within 0.21% of that optimum on this one row, so equal
+  diagnostic's ratio t_R/t_C = 1.2045, equal lengths are within 0.22% of that optimum on this one row, so equal
   lengths are used.
 
 These are planning choices, not thresholds; the arithmetic uses the actual stamped spans.
@@ -361,8 +372,9 @@ without that prerequisite the supply/baseline and DC validity cannot be evaluate
 3. Excess per dispatch of arm a ∈ {R, C}: x_a = Σ X_i / Σ N_i over the arm's two calls; per call, x_a,i = X_i / N_i.
 4. **Reported quantity: Δ_β = (x_R − x_C) / b**, in J/GB. This is the extra energy on β per logical byte when a
    b-byte dispatch reads addresses not re-read since the previous sweep, rather than re-reading the same b bytes.
-   Shape, dtype, expression and launch geometry are identical. With the residency check resolved, this is the
-   energy per byte read from DRAM rather than cache.
+   Shape, dtype, expression and launch geometry are identical. A resolved check establishes a repeat-versus-rotate
+   timing contrast. Δ is memory-traffic energy per logical byte, including translation and row-locality effects;
+   it is not an isolated energy per byte read from DRAM rather than cache.
    - *Why α cancels.* Write x_a = α + b × e_a, where α is the per-dispatch fixed energy (launch, synchronization,
      CPU work) and e_a the energy per byte. Both arms run the same dispatch at the same b with the same Python path,
      so α is the same in both and x_R − x_C = b(e_R − e_C) exactly. Any fixed energy that does depend on address
@@ -419,13 +431,23 @@ No α, |α|/B or cross-size term remains.
   from memory, and Δ includes it, as §0 includes stall time and clock state. It is not separable from the
   controller or the fabric.
 - *The timing model behind κ* (below): a dispatch's time as a fixed part plus a sum of per-byte times by source.
-  This is the model the admitted step 4 used. Overlapped stalls can depart from it, and κ is then not guaranteed.
+  This is the model the admitted step 4 used. Overlapped stalls and unequal cache throughput across arms (GPU
+  clock state) can depart from it, and κ is then not guaranteed. In particular, κ is not conservative when an
+  R-only fixed time, such as address translation, dominates the timing contrast.
+- *Per-call fixed energy.* Unlike per-dispatch α, a clock ramp at stream start after idle does not divide out
+  because N_R ≠ N_C. Assuming the same 10 J ramp in both calls gives
+  E_ramp(1/N_R − 1/N_C)/b ≈ 2 × 10⁻⁵ J/GB on §5's counts: about 0.065 δΔ_rails and 0.4 ε₀. R's first sweep
+  is another possible per-call term: its 32 MiB rehearsal pilots took 506–518 µs per dispatch versus about
+  311 µs steady. If that penalty returns after the hour's 60.6 s idle/settle, an R-only 0.2 s × 30 W ≈ 6 J
+  per call gives about 7 × 10⁻⁵ J/GB, about 0.23 δΔ_rails and 1.5 ε₀. These are separate estimates with
+  different assumptions, not measured hour energies. An equal penalty in both R calls is invisible to rep_R.
 - *An excursion present equally in both calls of one arm,* as before.
 - *The capacity premise K_c ≤ W/64* (§1), which this rule does not test.
 
 **Bias, printed beside Δ: the contrast fraction ρ and its correction κ.**
 - *Fractions.* Let φ be R's cached fraction and λ the fraction of C's bytes that leak to DRAM. If the per-byte
-  energies are e_d (DRAM) and e_c (cache), then e_R = (1 − φ) e_d + φ e_c and e_C = λ e_d + (1 − λ) e_c. Hence
+  energies are e_d (DRAM) and e_c (cache), and there is no additional arm-only fixed time/energy, then
+  e_R = (1 − φ) e_d + φ e_c and e_C = λ e_d + (1 − λ) e_c. Hence, under this source-mixture model,
   **Δ measured = ρ × (e_d − e_c)**, with ρ = 1 − φ − λ.
 - *Bounding ρ from the check's timing.* By the same mixture, t_R − t_C = ρ × Θ, where Θ = b(1/v_d − 1/v_c) and v_d,
   v_c are the DRAM and cache throughputs. Θ ≤ b/v_d. R's time includes its DRAM-sourced bytes, t_R ≥ (1 − φ) b/v_d,
@@ -438,10 +460,12 @@ No α, |α|/B or cross-size term remains.
   RESOLVED upper limit.
 - *Direction of the bias.* Both leakages pull Δ toward zero, never toward "resolved". This covers cache leakage only;
   see "Repeatability" and the paragraph above for errors of either sign.
-- *False residency.* Suppose a rung resolves by timing chance while C actually reads DRAM. Then both arms read the
-  same source with the same geometry, and Δ's expectation is the address-reuse remainder only. RESOLVED still
-  requires Δ − δΔ > 0. And such a rung's D − δD is small, so κ is large, which makes row 3 hard to reach. A false
-  residency therefore spends the hour; it does not, by itself, produce a class.
+- *False residency.* Both arms can read DRAM and still differ in address reuse. An R-only fixed stall, such as
+  translation, can resolve the timing check and add R-only energy, producing RESOLVED when Δ − δΔ > 0.
+  For example, a 26 µs R-only stall at 30 W gives about 0.02325 J/GB at 32 MiB even without a source contrast.
+  In that case the shared-fixed-time mixture model fails: true source contrast ρ can approach zero while ρ_L
+  remains positive, so κ is not conservative. RESOLVED identifies memory-traffic energy including translation,
+  not DRAM-source energy alone. No intercept-free residency signature is adopted in this revision.
 - *If the capacity premise fails.* Then φ may exceed 1/64, κ is understated, and only rows 3 and the upper limit
   are affected.
 
@@ -455,7 +479,9 @@ full-precision values.
 - every class identical;
 - b, W, Q, φ_U and every count identical;
 - every Δ and δΔ within one bar, 1% of the smallest printed δΔ among the boundaries;
-- κ within 10⁻⁶ relative (it comes from the check's receipts by closed form);
+- κ within 10⁻⁶ relative (it comes from the check's receipts by closed form): float noise is amplified by about
+  t_R/(D − δD) ≈ 21, so 10⁶ × noise ≈ 10⁻⁸; half a unit at 4 significant figures is at least 5 × 10⁻⁵
+  relative. The 10⁻⁶ bar lies between those scales;
 - any other printed quantity within half a unit in its last printed decimal (reg. §12).
 
 The bar must exceed 10⁶ × float noise. Float noise is the propagation above applied to a relative error of
@@ -485,8 +511,8 @@ are tested **in order** and the first that holds is the class, so exactly one ho
 | Order | Class | Condition | Meaning |
 |---|---|---|---|
 | 1 | UNDETERMINED | residency check failed (any §1 R6 reason); geometry check failed on an hour receipt; physically relevant stack differs; a required call, integral, bound, gap source, battery reading or native-support prerequisite is missing; validity fails; or Δ + δΔ < 0 on this boundary | the test cannot be read on this boundary; a wholly negative contrast is a failed control, not an immaterial one |
-| 2 | RESOLVED | Δ − δΔ > 0 | memory-traffic energy is resolved on this boundary |
-| 3 | BELOW ATTRIBUTION LEVEL | κ × max(\|Δ − δΔ\|, \|Δ + δΔ\|) ≤ ε₀ | the interval spans 0, and every value in it, corrected for the contrast fraction, is too small to move any registered model's run by the instrument's per-run attribution limit; this does **not** say the controller is off this rail |
+| 2 | RESOLVED | Δ − δΔ > 0 | memory-traffic energy, including translation and row-locality effects, is resolved on this boundary |
+| 3 | BELOW ATTRIBUTION LEVEL | κ × max(\|Δ − δΔ\|, \|Δ + δΔ\|) ≤ ε₀ | under the stated model and constant payload, the interval spans 0 and every contrast-fraction-corrected value is below the registered per-run attribution limit; transfer to real decode traffic is limited (§1), and this does **not** say the controller is off this rail |
 | 4 | NOT RESOLVED | otherwise | neither is shown |
 
 Row 3 bounds both ends because a large negative value inside I would move runs as much as a large positive one.
@@ -496,9 +522,11 @@ Row 3 bounds both ends because a large negative value inside I would move runs a
 registered decode phase reads: 512 decode passes (reg. §3) × 39,852,331,520 bytes per pass (b_max, Llama-3.3-70B, the
 largest b of the reg. §4 table) = 20,404.4 GB. Using the largest b gives the smallest, strictest ε₀. This is the Opus
 seat's threshold; Sol argued no threshold can show exclusion, which is why the class is named for what it shows
-(immaterial at the instrument's resolution), not "excludes". With κ ≈ 6 (§5),
-row 3 is reachable only when κ × (|Δ| + δΔ) ≤ ε₀. On the §5 inputs, a zero true Δ_rails gives
-κ × δΔ_rails = 0.0019 J/GB, about 39 ε₀. Then a near-zero Δ reads NOT RESOLVED, which is the honest reading.
+(immaterial at the instrument's resolution), not "excludes". With the rehearsed κ = 17.6–23.7 (§5),
+row 3 is reachable only when κ × (|Δ| + δΔ) ≤ ε₀. At §5's illustrative δΔ_rails, a zero true Δ_rails gives
+κ × δΔ_rails ≈ 0.0054–0.0073 J/GB, about 110–150 ε₀. With κ about 18–24, BELOW ATTRIBUTION LEVEL needs
+δΔ_rails ≤ about 2.4 × 10⁻⁶ J/GB (2.0–2.7 × 10⁻⁶ across that range), even at Δ = 0. That is unreachable
+on this hardware at the illustrated width of about 3 × 10⁻⁴ J/GB, so a null result reads NOT RESOLVED.
 
 **What "responds as registered" means (reg. §19).** Reg. §1 expects the chip's share in rails and the memory chips' share in
 rest. So rails responds as registered when its class is RESOLVED, and rest when its class is RESOLVED, in the
@@ -511,8 +539,8 @@ alone); it fills the reg. §1 slot.
 **Printed lines.** One line beside the rails claim lines and one beside the rest claim lines, whenever that
 boundary's class is not RESOLVED. Values are filled from the test record; Δ is signed, rotate minus repeat:
 
-- BELOW ATTRIBUTION LEVEL: `Known-bytes check: {boundary} energy per DRAM-sourced byte differed from cache-sourced by {Δ} ± {δΔ} J/GB (DRAM minus cache, {b}-byte matched dispatches), within the 1 J-per-run attribution level ({ε₀} J/GB) after the contrast-fraction correction ×{κ}; {boundary} lines here carry no resolvable memory-traffic energy.`
-- NOT RESOLVED: `Known-bytes check: the {boundary} response to DRAM-sourced bytes is not resolved ({Δ} ± {δΔ} J/GB, contrast-fraction-corrected upper limit {κ(Δ+δΔ)} J/GB); whether {boundary} lines include memory-traffic energy is not established.`
+- BELOW ATTRIBUTION LEVEL: `Known-bytes check: the {boundary} memory-traffic energy contrast is {Δ} ± {δΔ} J/GB (rotate minus repeat, {b}-byte matched dispatches), within the 1 J-per-run attribution level ({ε₀} J/GB) after the contrast-fraction correction ×{κ}; {boundary} lines here carry no resolvable memory-traffic energy under the stated model and constant payload.`
+- NOT RESOLVED: `Known-bytes check: the {boundary} memory-traffic energy contrast is not resolved ({Δ} ± {δΔ} J/GB, contrast-fraction-corrected upper limit {κ(Δ+δΔ)} J/GB under the stated model and constant payload); whether {boundary} lines include memory-traffic energy is not established.`
 - UNDETERMINED: `Known-bytes check: {boundary} memory-traffic attribution is undetermined ({reason}).` The reason is one of:
   `residency not resolved`, `geometry check failed (<field>)`, `allocation failed (<bytes> B ring)`,
   `clock prerequisite missing (<field>)`, `stack differs in: <physical fields>`, `battery reading missing in call <i>`,
@@ -530,6 +558,9 @@ When a boundary is RESOLVED, nothing prints beside its claim lines. Inside print
 - the sentence: "The test identifies memory-traffic energy on a boundary, not whether it is the memory controller,
   the fabric or the GPU waiting on memory; on rest it does not separate the memory chips from power conversion and
   fans."
+
+At the rehearsed κ about 18–24, the slot's BELOW ATTRIBUTION LEVEL would need δΔ_rails ≤ about
+2.4 × 10⁻⁶ J/GB even at Δ = 0, unreachable here; a null result reads NOT RESOLVED.
 
 *Wording of reg. §1 on admission (proposed, changes no number).* Reg. §1's sentence "Whether the GPU rail includes the memory
 controller is measured by the known-bytes stream test" claims more than the slot can show; it becomes "Whether
@@ -569,7 +600,8 @@ their explicit role.
 - *Failed check.* With the residency check failed, every b-dependent quantity, including the share and the GPU
   arm-power contrast, is `not defined (<check reason>)`.
 - *Display.* The NOT RESOLVED upper limit uses the same decimal place as its H2 interval. A zero half-width uses a
-  fixed two-decimal display (`0.00`), since zero has no significant digit.
+  fixed two-decimal display (`0.00`), since zero has no significant digit. If a half-width is undefined, the
+  printed contrast contains only `not defined (<reason>)`; a computable central value stays in the numeric record.
 
 **Executable reader (synthetic or harvested products).** The CLI shape is unchanged; its inputs change.
 - `scripts/bytes_stream_test.py check CHECK.json` prints §1 R1–R6 from a JSON list of the residency-check receipts
@@ -617,9 +649,29 @@ Then φ_U = 1/64 and ρ_L = (63/64)(52.410 − 1.931)/(308.646 + 0.086) = **0.16
 not resolved. Run 2's receipts are not archived; its reported 32 MiB values, 257.40 ± 1.83 against 308.97 ± 0.04 µs,
 also resolve, with ρ_L = 0.1583.)
 
+**Production-order rehearsals (timing evidence, not hour energy).** The four archived
+`kb-knee-council/build/rehearsal-{1,2,3,4}/CHECK.json` files use the specified 32 GiB ring and top-down ladder:
+
+| rehearsal | 32 MiB t_C (µs) | C's three calls (µs) | κ |
+|---|---|---|---|
+| 1 | 285.1 | 273.8 → 286.2 → 295.2 | 21.43 |
+| 2 | 283.0 | 273.8 → 287.5 → 287.6 | 17.64 |
+| 3 | 286.0 | 274.0 → 290.1 → 294.0 | 23.67 |
+| 4 | 284.0 | 273.0 → 287.7 → 291.4 | 19.18 |
+
+Thus κ spans 17.6–23.7 and t_C 283.0–286.0 µs, against 256–257 µs in the bottom-up 8 GiB diagnostic.
+C rises monotonically within each 32 MiB rung. At 64 MiB it rises from 414–422 µs on the first call to
+468–610 µs on the third (small middle-to-last reversals occur in rehearsals 2 and 3); none of those rungs
+resolves (§1 R4). The top-down ladder measures C after a DRAM-heavy rung, so its state can differ from the
+hour's, which has 60.6 s idle/settle before each call. Opus reads this as weaker residency evidence in
+production order; Fable reads it as GPU clock state on the cache-bound arm, since loss of residency would
+not restart at about 274 µs each time. This rule does not choose between those readings. The hour's own
+timing contrast is printed beside the check's, as §4 requires; κ remains fixed by the check.
+
 **Hour.** One call = 10 + 9 + 115.2 + 759.2 = 893.4 s, and four calls make 3,573.6 s.
-- *Midpoints.* Each arm's paired stream midpoints average 1,788.3 s, 1.5 s beyond the session midpoint of
-  1,786.8 s. R uses calls 1 and 4, C uses calls 2 and 3.
+- *Midpoints.* Assuming the planned 10 s allocation/fill/warm-up all precedes pre-idle (§2), each arm's paired
+  stream midpoints average 1,793.3 s, about 6.5 s beyond the session midpoint of 1,786.8 s. R uses calls 1
+  and 4, C uses calls 2 and 3; the shared offset leaves linear-drift cancellation unaffected.
 - *R per call.* One sweep takes 1,024 × 308.646 µs = 0.31605 s, so N_R = 1,024 × floor(759.2/0.31605) = 1,024 ×
   2,402 = **2,459,648** dispatches (82,532 GB logical).
 - *C per call.* One sweep takes 0.26239 s, so N_C = 1,024 × 2,893 = **2,962,432** dispatches (99,403 GB logical).
@@ -653,20 +705,22 @@ The new assumptions, standing in for what the test measures:
   that call's DC and rest b_i. Δ_DC = 0.3445 ± 0.0024 and Δ_rest = 0.2695 ± 0.0027; both stay RESOLVED, and the gap
   prints as a disclosure.
 - **Small true Δ.** True Δ_rails = 0.00030 gives 0.00030 ± 0.00031, so I = [−0.0000068, 0.00061] spans 0.
-  κ × 0.00061 = 0.0038 > ε₀, so rails is NOT RESOLVED, upper limit 0.0038 J/GB.
+  κ × (Δ + δΔ) > ε₀, so rails is NOT RESOLVED, upper limit 0.00377 J/GB at the interval's decimal place.
 - **Transient.** A 5 W transient through the whole first R call gives Δ_rails = 0.098 ± 0.023: still RESOLVED, and
   the repeatability term carries the half-width from 0.00031 to 0.023.
-- **No cache.** In a world without cache, where the check's rung resolved by chance and C reads DRAM, x_C has the
-  same expectation as x_R. Δ is then near zero and NOT RESOLVED, with κ from a marginal contrast inflating the upper
-  limit.
+- **No cache.** If both arms read DRAM and have no address-reuse energy difference, Δ is near zero and reads
+  NOT RESOLVED if the check resolved by timing chance. But an R-only fixed stall, such as translation, can both
+  resolve the check and add R-only energy: a 26 µs stall at 30 W can give rails RESOLVED at about
+  0.02325 ± 0.00032 J/GB. That is memory-traffic energy including translation; κ's source-mixture model is
+  not conservative when such an R-only fixed time dominates.
 - **Check refusal.** If both archived rungs, and the six below them, had read like the 64 MiB rung, every class
   would be UNDETERMINED (`residency not resolved`) and the hour would not run.
 
 ## 6. Decisions
 
 Made by the lead between the design seats:
-- Contrast design: Opus's unchanged kernel with several cache sizes and the |α|/B term, over Sol's single matched
-  cache arm (no new kernel code).
+- Contrast design (**superseded by the matched-geometry revision below**): Opus's unchanged kernel with several
+  cache sizes and the |α|/B term, over Sol's single matched cache arm (no new kernel code).
 - Classes: Opus's two thresholds (0 and ε₀), with the lower class renamed from "EXCLUDES" to "BELOW ATTRIBUTION
   LEVEL" and NOT RESOLVED printing its upper limit, per Sol's point that non-detection cannot show exclusion.
 - Idle: 57.6 s spans per call (the registered pass-1 idle length), not Sol's 300 s, because the baseline is per
@@ -678,8 +732,8 @@ Made by the lead between the design seats:
 - The "not measured" line (the Opus seat's decision 11) is adopted.
 
 Made in the revision, where the cold passes offered a choice (reasons in `kb-revise/CHANGES.md`):
-- Fixed-cost non-constancy: Fable's third cache size with its residual charged, not a new kernel; the unbounded
-  remainder is stated (§3) and ε_flip printed.
+- Fixed-cost non-constancy (**superseded by the matched-geometry revision below**): Fable's third cache size with
+  its residual charged, not a new kernel; the unbounded remainder was stated and ε_flip printed.
 - Arm repeatability: Opus's additive term, not an agreement check that would set every class UNDETERMINED.
 - Meter gap (superseded by Round 3 R5): keep every call; bound each known missing duration by supplied power (§3).
 - Agreement bar: one bar, 1% of the smallest printed δΔ, for every Δ and δΔ.
