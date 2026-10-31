@@ -1,172 +1,138 @@
-"""Synthetic §2 receipt checks. No Metal, telemetry or hardware timing evidence."""
+"""Matched v3 probe/check/reader: synthetic fixtures, never hardware evidence."""
 from copy import deepcopy
+from fractions import Fraction
 import io
 import json
 import math
-import statistics
-import random
-from fractions import Fraction as F
 from pathlib import Path
+import statistics
 import subprocess
 import sys
 import tempfile
-from types import ModuleType
 import unittest
 from unittest.mock import patch
-import weakref
 
 from scripts import bytes_stream_test as probe
 from joulewise.flags.collect import RUNTIME_PACKAGES
+from tests.test_bytes_stream_capture import Array, Buffer, Clock
 
 
 def synthetic_clock():
-    return {"clock": "CLOCK_MONOTONIC_RAW", "clock_resolution_s": 4.2e-8,
-            "clock_tick_num_ns": 125, "clock_tick_den": 3,
-            "clock_tick_source": "synthetic 125/3 ns model (lead measurement 2026-10-28)",
-            "clock_ns_conversion": "unknown", "clock_ns_conversion_source": "synthetic"}
+    # Recorded Mac: r=max(42,125/3) ns; two endpoints × (r+1 ns)=86 ns.
+    return {"clock":"CLOCK_MONOTONIC_RAW","clock_resolution_s":4.2e-8,
+            "clock_tick_num_ns":125,"clock_tick_den":3,"clock_tick_source":"synthetic recorded Mac 125/3 ns",
+            "clock_ns_conversion":"unknown","clock_ns_conversion_source":"synthetic"}
 
 
-class Array:
-    pass
+def identity():
+    return {**deepcopy(probe.REFERENCE_STACK),**deepcopy(probe.REFERENCE_VERSIONS),"git_commit":"synthetic"}
 
 
-class FakeMLX:
-    uint8 = "uint8"
-    __version__ = "0.31.2"
+def timing_receipt(b,n,t,arm,*,start=0,rung_index=None,phase=None):
+    """Integer RAW stamps over a synthetic span; metadata follows v3 exactly."""
+    end = start+round(t*n*1e9)
+    q = probe.RING_BYTES//b
+    return {"schema_version":probe.SCHEMA,**synthetic_clock(),"start_ns":start,"end_ns":end,
+            "idle_pre_start_ns":start,"idle_pre_end_ns":start,"idle_post_start_ns":end,"idle_post_end_ns":end,
+            "bytes_per_read":b,"repeats":n,"bytes_read":b*n,"logical_bytes":b*n,"duration_s":(end-start)/1e9,
+            "settle_s":0,"idle_s":0,"arm":arm,"ring_bytes":probe.RING_BYTES,"ring_shape":[q,b],
+            "dtype":"uint8","view_nbytes":b,"view_order":"rotate" if arm.endswith("R") else "repeat",
+            "sweeps":n//q,"geometry_branch_bytes":probe.GEOMETRY_BYTES,"geometry_source":probe.GEOMETRY_SOURCE,
+            "launch_side":"small","stack":identity(),"rung_index":rung_index,"check_phase":phase}
 
-    def __init__(self):
-        self.events = []
-        self.ns = 0
-        self.results = []
-        self.payload = None
 
-    def ones(self, shape, dtype):
-        self.events.append(("ones", shape, dtype))
-        data = Array()
-        self.payload = weakref.ref(data)
-        return data
+# Revision §5's archived per-dispatch spans. Transposition to production
+# whole-sweep counts is a synthetic fixture, not new diagnostic evidence.
+EXAMPLE_TIMES = {
+    2**26:{"C":[.0006139860881990132,.0007013643176398026,.0008012981428865132],
+           "R":[.000664278361328125,.000661487466796875,.0006659087724609375]},
+    2**25:{"C":[.000254390858203125,.0002570832140625,.00025723296979166666],
+           "R":[.00030861413854166666,.00030873202057291667,.00030859111328125004]}}
 
-    def sum(self, data):
-        assert data is self.payload()
-        self.events.append(("sum",))
-        self.ns += 100_000_000
-        result = Array()
-        self.results.append(result)
-        return result
 
-    def eval(self, value):
-        self.events.append(("eval", id(value)))
-        self.ns += 25_000_000
-
-    def synchronize(self):
-        self.events.append(("sync",))
-        self.ns += 125_000_000
-
-    def clock(self):
-        self.events.append(("stamp", self.ns))
-        return self.ns
-
-    def sleep(self, seconds):
-        assert self.payload() is not None, "payload must stay resident through post-idle"
-        self.events.append(("sleep", seconds))
-        self.ns += round(seconds * 1_000_000_000)
+def check_receipts(*,resolves=True):
+    result=[]; start=0
+    for k,b in enumerate(probe.LADDER):
+        for arm in ("C","R"):
+            times = EXAMPLE_TIMES[b][arm] if resolves else [205e-6+b/3e11]*3
+            mean = statistics.mean(times)
+            q = probe.RING_BYTES//b
+            pilot = timing_receipt(b,q,mean,"check-"+arm,start=start,rung_index=k,phase="pilot")
+            result.append(pilot);start=pilot["end_ns"]
+            n = probe.planned_repeats(b,pilot["duration_s"]/q,probe.CHECK_CALL_S,at_least_one=True)
+            for value in times:
+                receipt=timing_receipt(b,n,value,"check-"+arm,start=start,rung_index=k,phase="timing")
+                result.append(receipt);start=receipt["end_ns"]
+        if resolves and b == 2**25:
+            break
+    return result
 
 
 class ReceiptTests(unittest.TestCase):
     def setUp(self):
-        self.reference, self.versions = probe.registered_stack()
-        self.stack = {key: deepcopy(self.reference[key]) for key in
-                      ("os_version", "hardware_unit", "runtime_version", "kernel_library")}
-        self.stack.update(deepcopy(self.versions))
-        self.stack["git_commit"] = "a different checkout by design"
-        self.stack.update({field: "not_applicable" for field in probe.NOT_APPLICABLE})
-        self.capture = {key: deepcopy(self.reference[key]) for key in
-                        ("telemetry_backend", "measurement_boundary_label")}
+        self.reference,self.versions=probe.registered_stack()
+        self.stack=identity()
+        self.capture={"telemetry_backend":"powermetrics","measurement_boundary_label":deepcopy(self.reference["measurement_boundary_label"])}
 
-    def run_stream(self, mx=None, **kwargs):
-        mx = mx or FakeMLX()
-        with patch.object(probe, "collect_stack", return_value=self.stack):
-            return probe.stream(1024, 3, device="macbook_m3_max", mx=mx,
-                                clock_ns=kwargs.pop("clock_ns", mx.clock), sleep=mx.sleep, **kwargs), mx
+    def run_stream(self,arm="R",**kw):
+        clock=Clock(); mx=Array(clock)
+        with patch.object(probe,"collect_stack",return_value=self.stack), patch.object(probe,"clock_metadata",return_value=synthetic_clock()):
+            receipt=probe.stream(probe.GEOMETRY_BYTES,probe.RING_BYTES//probe.GEOMETRY_BYTES,
+                device="macbook_m3_max",arm=arm,mx=mx,clock_ns=lambda:clock.ns,sleep=clock.sleep,**kw)
+        return receipt,mx
 
-    def test_order_warmup_idles_settle_and_fresh_reductions(self):
-        receipt, mx = self.run_stream()
-        names = [event[0] for event in mx.events]
-        self.assertEqual(names, ["ones", "eval", "sync", "sum", "eval", "sync",
-                                 "sleep", "stamp", "sleep", "stamp", "sleep", "stamp",
-                                 "sum", "eval", "sum", "eval", "sum", "eval", "sync",
-                                 "stamp", "sleep", "stamp", "sleep", "stamp"])
-        self.assertEqual([event[1] for event in mx.events if event[0] == "sleep"], [3, 57.6, 3, 3, 57.6])
-        self.assertEqual(mx.events[0], ("ones", (1024,), "uint8"))
-        self.assertEqual(len(mx.results), 4)  # one warm-up plus three measured reads
-        self.assertEqual(len({event[1] for event in mx.events if event[0] == "eval"}), 5)
-        self.assertEqual(receipt["schema_version"], "joulewise.bytes_stream.v2")
-        self.assertEqual(receipt["bytes_read"], 3072)  # excludes the warm-up
-        self.assertEqual(receipt["bytes_per_read"], 1024)
-        self.assertEqual(receipt["repeats"], 3)
-        self.assertIs(receipt["non_claim"], True)
-        self.assertEqual(receipt["stack_check"]["status"], "pending_capture")
-        self.assertEqual(receipt, json.loads(json.dumps(receipt, allow_nan=False)))
+    def test_v3_counts_geometry_and_order(self):
+        r,mx=self.run_stream()
+        self.assertEqual(r["schema_version"],probe.SCHEMA)
+        self.assertEqual(r["bytes_read"],probe.RING_BYTES)  # One sweep, excludes warm-up.
+        self.assertEqual(r["sweeps"],1)
+        self.assertEqual(mx.allocations,[(probe.RING_BYTES//probe.GEOMETRY_BYTES,probe.GEOMETRY_BYTES)])
+        self.assertIsNone(probe.geometry_error(r))
+        self.assertEqual(r["stack_check"]["status"],"pending_capture")
+        self.assertEqual(r,json.loads(json.dumps(r,allow_nan=False)))
+        keys=("idle_pre_start_ns","idle_pre_end_ns","start_ns","end_ns","idle_post_start_ns","idle_post_end_ns")
+        self.assertEqual(sorted(r[k] for k in keys),[r[k] for k in keys])
+        for a,b,seconds in ((keys[0],keys[1],57.6),(keys[1],keys[2],3),(keys[3],keys[4],3),(keys[4],keys[5],57.6)):
+            self.assertEqual(r[b]-r[a],round(seconds*1e9))  # Exact synthetic sleep stamps.
 
-    def test_stamps_use_one_clock_and_exclude_idle_settle_and_warmup(self):
-        receipt, mx = self.run_stream()
-        keys = ("idle_pre_start_ns", "idle_pre_end_ns", "start_ns", "end_ns",
-                "idle_post_start_ns", "idle_post_end_ns")
-        self.assertEqual([receipt[k] for k in keys], [v[1] for v in mx.events if v[0] == "stamp"])
-        self.assertEqual(receipt["clock"], "CLOCK_MONOTONIC_RAW")
-        self.assertEqual(receipt["idle_pre_end_ns"] - receipt["idle_pre_start_ns"], 57_600_000_000)
-        self.assertEqual(receipt["idle_post_end_ns"] - receipt["idle_post_start_ns"], 57_600_000_000)
-        self.assertEqual(receipt["start_ns"] - receipt["idle_pre_end_ns"], 3_000_000_000)
-        self.assertEqual(receipt["idle_post_start_ns"] - receipt["end_ns"], 3_000_000_000)
-        self.assertEqual(receipt["end_ns"] - receipt["start_ns"], 500_000_000)
-        # Exact only because this synthetic interval is the binary-exact 1/2 s.
-        self.assertEqual(receipt["duration_s"], 0.5)
+    def test_matched_modes_differ_only_in_address_reuse(self):
+        rotate,_=self.run_stream("R",idle_s=0,settle_s=0)
+        repeat,_=self.run_stream("C",idle_s=0,settle_s=0)
+        for field in ("bytes_per_read","ring_shape","dtype","view_nbytes","repeats","logical_bytes","geometry_source","launch_side"):
+            self.assertEqual(rotate[field],repeat[field])
+        self.assertGreater(rotate["duration_s"],repeat["duration_s"])
 
-    def test_scan_zero_idle_and_settle_still_stamps_and_warms(self):
-        receipt, mx = self.run_stream(idle_s=0, settle_s=0)
-        self.assertNotIn("sleep", [v[0] for v in mx.events])
-        self.assertEqual(receipt["idle_pre_start_ns"], receipt["idle_pre_end_ns"])
-        self.assertEqual(receipt["idle_pre_end_ns"], receipt["start_ns"])
-        self.assertEqual(receipt["end_ns"], receipt["idle_post_start_ns"])
-        self.assertEqual(receipt["idle_post_start_ns"], receipt["idle_post_end_ns"])
-        self.assertEqual(len(mx.results), 4)
+    def test_signed_axis_reasoning_retained_and_bad_counts_refused(self):
+        self.assertEqual(probe.payload_shape(2**31-1),(2**31-1,))
+        self.assertEqual(probe.payload_shape(2**35),(32,2**30))
+        with self.assertRaises(ValueError): probe.payload_shape(2**31+1)
+        for b,n in ((0,1),(True,1),(2**27,512),(2**26,1),(2**26,0),(3,512)):
+            with self.subTest(b=b,n=n), self.assertRaises(ValueError):
+                probe.stream(b,n,device="synthetic",mx=Array(Clock()))
 
-    def test_default_clock_is_raw_for_every_stamp(self):
-        mx = FakeMLX()
-        with patch.object(probe, "collect_stack", return_value=self.stack), \
-             patch.object(probe.time, "clock_gettime_ns", side_effect=lambda _: mx.clock()) as raw:
-            probe.stream(1, 1, device="macbook_m3_max", mx=mx, sleep=mx.sleep)
-        self.assertEqual(raw.call_count, 6)
-        for call in raw.call_args_list:
-            self.assertEqual(call.args, (probe.time.CLOCK_MONOTONIC_RAW,))
+    def test_all_geometry_leaves_are_required(self):
+        receipt,_=self.run_stream()
+        fields=("schema_version","ring_bytes","ring_shape","dtype","view_nbytes","view_order","arm",
+                "sweeps","logical_bytes","bytes_read","bytes_per_read","repeats","geometry_branch_bytes",
+                "geometry_source","launch_side")
+        for field in fields:
+            row=deepcopy(receipt);del row[field]
+            with self.subTest(field=field): self.assertIn(field,probe.geometry_error(row))
+        for field in ("runtime_version.version","packages.mlx","packages.mlx-metal"):
+            row=deepcopy(receipt);parent,key=field.split(".");row["stack"][parent][key]="other"
+            self.assertIn(field,probe.geometry_error(row))
 
-    def test_bad_counts_devices_or_seconds_fail_before_array_calls(self):
-        mx = FakeMLX()
-        for byte_count, repeats in ((0, 1), (1, 0), (True, 1), (1, True), (1.0, 1), (-1, 1)):
-            with self.subTest(counts=(byte_count, repeats)), self.assertRaises(ValueError):
-                probe.stream(byte_count, repeats, device="macbook_m3_max", mx=mx)
-        for name in ("idle_s", "settle_s"):
-            for value in (-1, float("nan"), float("inf"), True, "3"):
-                with self.subTest(name=name, value=value), self.assertRaises(ValueError):
-                    probe.stream(1, 1, device="macbook_m3_max", mx=mx, **{name: value})
-        for device in (None, "", " "):
-            with self.subTest(device=device), self.assertRaises(ValueError):
-                probe.stream(1, 1, device=device, mx=mx)
-        self.assertEqual(mx.events, [])
-
-    def test_invalid_clocks_do_not_emit_a_receipt(self):
-        for stamps in ((0, 1, 2, 2, 3, 4), (0, 2, 1, 3, 4, 5), (1, 0, 2, 3, 4, 5),
-                       (0, 1, 2, 3, 4, 4), (-1, 1, 2, 3, 4, 5), (0, 1, 2.0, 3, 4, 5)):
-            with self.subTest(stamps=stamps), self.assertRaises(ValueError):
-                values = iter(stamps)
-                self.run_stream(clock_ns=lambda: next(values))
+    def test_invalid_stamps(self):
+        clock=Clock();mx=Array(clock)
+        with patch.object(probe,"collect_stack",return_value=identity()), self.assertRaises(ValueError):
+            probe.stream(2**26,512,device="synthetic",mx=mx,clock_ns=lambda:-1,sleep=clock.sleep)
 
     def test_collect_stack_uses_pass1_sources_and_explicit_device(self):
         with patch.object(probe, "runtime_versions", return_value=self.versions) as versions, \
              patch.object(probe.platform, "platform", return_value="observed-os"), \
              patch.object(probe.platform, "machine", return_value="observed-machine"), \
              patch.object(probe.subprocess, "check_output", return_value="observed-head\n") as git:
-            stack = probe.collect_stack(FakeMLX(), "config-device")
+            stack = probe.collect_stack(Array(Clock()), "config-device")
         versions.assert_called_once_with(sys.executable)
         self.assertEqual(stack["os_version"], "observed-os")
         self.assertEqual(stack["hardware_unit"], {"machine": "observed-machine", "device": "config-device"})
@@ -180,10 +146,11 @@ class ReceiptTests(unittest.TestCase):
 
     def test_kernel_library_uses_prepare_fallback(self):
         with patch.object(probe, "runtime_versions", return_value=self.versions), \
+             patch.object(probe.platform, "platform", return_value="synthetic-os"), \
              patch.object(probe.subprocess, "check_output", return_value="head"):
             for prepare, expected in ((None, "unavailable"), ({}, "unavailable"),
                                       ({"kernel_library": "observed-kernel"}, "observed-kernel")):
-                self.assertEqual(probe.collect_stack(FakeMLX(), "device", prepare=prepare)["kernel_library"], expected)
+                self.assertEqual(probe.collect_stack(Array(Clock()), "device", prepare=prepare)["kernel_library"], expected)
 
     def test_match_compares_projections_not_model_adapter_config_or_git(self):
         self.stack["hardware_unit"]["config_id"] = "not compared"
@@ -236,12 +203,6 @@ class ReceiptTests(unittest.TestCase):
                 self.assertEqual(probe.compare_stack(self.stack, self.reference, self.versions,
                                                     capture_stack=capture)["differences"], [field])
 
-    def test_mismatch_preserves_receipt_instead_of_discarding_measurement(self):
-        self.stack["os_version"] = "different"
-        receipt, _ = self.run_stream()
-        self.assertEqual(receipt["stack_check"]["differences"], ["os_version"])
-        self.assertEqual(receipt["bytes_read"], 3072)
-
     def test_registered_unit_projections_and_all_seven_package_keys(self):
         self.assertEqual(set(self.versions["packages"]), set(RUNTIME_PACKAGES))
         self.assertEqual(self.reference["runtime_version"]["version"], "0.31.2")
@@ -268,85 +229,89 @@ class ReceiptTests(unittest.TestCase):
         self.assertTrue(probe.checkout_reference_check("/nonexistent/kb-reference")["errors"])
 
 
-    def test_cli_flags_and_receipt_serialization_without_metal(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(probe, "stream", return_value={"fake": True}) as stream, \
-             patch("sys.stdout", new_callable=io.StringIO) as stdout:
-            out = Path(tmp) / "receipt.json"
-            self.assertEqual(probe.main(["--bytes", "1024", "--repeats", "3", "--device", "config-device",
-                                         "--idle-s", "0", "--settle-s", "0", "--out", str(out)]), 0)
-            stream.assert_called_once_with(1024, 3, device="config-device", idle_s=0, settle_s=0)
-            self.assertEqual(out.read_text(), '{\n  "fake": true\n}\n')
-            self.assertEqual(json.loads(stdout.getvalue()), {"fake": True})
 
-    def test_cli_end_to_end_with_fake_mlx_and_real_identity_sources(self):
-        mx = FakeMLX()
-        real_stream = probe.stream
-        package = ModuleType("mlx")
-        package.core = mx
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(sys.modules, {"mlx": package, "mlx.core": mx}), \
-             patch.object(probe, "stream", side_effect=lambda *a, **kw: real_stream(*a, sleep=mx.sleep, **kw)), \
-             patch.object(probe.time, "clock_gettime_ns", side_effect=lambda _: mx.clock()), \
-             patch("sys.stdout", new_callable=io.StringIO) as stdout:
-            out = Path(tmp) / "receipt.json"
-            probe.main(["--bytes", "1024", "--repeats", "3", "--device", "macbook_m3_max",
-                        "--out", str(out)])
-            receipt = json.loads(out.read_text())
-            self.assertEqual(receipt, json.loads(stdout.getvalue()))
-        self.assertEqual(receipt["schema_version"], "joulewise.bytes_stream.v2")
-        self.assertEqual(receipt["bytes_read"], 3072)
-        self.assertEqual(receipt["stack"]["python"], probe.platform.python_version())
-        self.assertEqual(set(receipt["stack"]["packages"]), set(RUNTIME_PACKAGES))
-        self.assertEqual(len(receipt["stack"]["git_commit"]), 40)
-        self.assertEqual(receipt["stack_check"]["pending_fields"], list(probe.CAPTURE_FIELDS))
-
-    def test_help_needs_no_mlx(self):
-        result = subprocess.run([sys.executable, "-B", str(probe.ROOT / "scripts/bytes_stream_test.py"), "--help"],
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--idle-s", result.stdout)
-        self.assertIn("--settle-s", result.stdout)
-        self.assertIn("--device", result.stdout)
+    def test_help_needs_no_metal(self):
+        out=subprocess.run([sys.executable,"-I","-B",str(probe.ROOT/"scripts/bytes_stream_test.py"),"--help"],capture_output=True,text=True)
+        self.assertEqual(out.returncode,0,out.stderr)
+        self.assertIn("--arm",out.stdout)
 
 
-class ReadingRuleArithmeticTests(unittest.TestCase):
-    """Independent arithmetic fixtures for the normative rule, not hardware evidence."""
+class ResidencyTests(unittest.TestCase):
+    def test_first_resolved_rung_and_conservative_correction(self):
+        result=probe.residency_check(check_receipts())
+        self.assertEqual(result["status"],"residency resolved")
+        self.assertEqual((result["b"],result["W"],result["Q"]),(2**25,2**35,1024))
+        self.assertEqual([r["resolved"] for r in result["rungs"]],[False,True])
+        # κ prints four significant figures: half a last-place unit.
+        self.assertAlmostEqual(result["kappa"],6.213,delta=.0005)
+        row=result["rungs"][-1]
+        expected=1/((1-Fraction(1,64))*Fraction(row["D_s"]-row["dD_s"])/Fraction(row["R"]["t_s"]+row["R"]["dt_s"]))
+        # κ: 1e6×float noise (≈1e-8 after ≈21× amplification) < 1e-6 < 4-s.f. half-unit (≥5e-5 relative).
+        self.assertAlmostEqual(result["kappa"],float(expected),delta=1e-6*abs(float(expected)))
 
-    @staticmethod
-    def knee(calls):
-        receipts = [{"bytes_per_read": size, "start_ns": 0, "end_ns": duration*1e9,
-                     "repeats": n, **synthetic_clock()} for size, rows in calls.items() for duration, n in rows]
-        result = probe.knee_scan(receipts)
-        marg = {p["size"]: p["m_bytes_s"] for p in result["pairs"] if p["m_bytes_s"] is not None}
-        dm = {p["size"]: p["dm_bytes_s"] for p in result["pairs"] if p["m_bytes_s"] is not None}
-        return result["K"], marg, dm, result["threshold"]
+    def test_unresolved_ladder_and_no_retries(self):
+        receipts=check_receipts(resolves=False)
+        result=probe.residency_check(receipts)
+        self.assertEqual(result["reason"],"residency not resolved")
+        self.assertEqual(len(result["rungs"]),len(probe.LADDER))
+        self.assertEqual(len(result["receipts"]),len(probe.LADDER)*2*4)  # C/R × pilot+three.
+        self.assertIsNone(result["b"])
+        for rows in (check_receipts()[:-1],check_receipts()+check_receipts()[-1:]):
+            self.assertIn("check-status fault",probe.residency_check(rows)["reason"])
 
-    @staticmethod
-    def scan_model(cache, quantized):
-        calls = {}
-        for s in (2**k for k in range(14, 36)):
-            throughput = 1e12 if cache and s < 2**26 else 331.6e9
-            td = 50e-6 + s / throughput
-            n = math.floor(2 / td)
-            duration = round(n * td * 1e9) / 1e9 if quantized else n * td
-            calls[s] = [(duration, n)] * 3
-        return calls
+    def test_clock_prerequisite_never_uses_one_ns_fallback(self):
+        for field in ("clock","clock_resolution_s","clock_tick_source","clock_tick_num_ns","clock_tick_den"):
+            rows=check_receipts();rows[0].pop(field)
+            result=probe.residency_check(rows)
+            self.assertIn("clock prerequisite missing",result["reason"])
+            self.assertIn(field,result["reason"])
+            self.assertEqual(len(result["receipts"]),len(rows))
+        receipt=check_receipts()[1]
+        actual=probe.clock_duration_bound_ns(receipt)/receipt["repeats"]
+        # q: 1e6×4ε q < 1e-6 q; converting ns to s puts that bar below .01×smallest δt (0.086 µs).
+        self.assertAlmostEqual(actual,86/receipt["repeats"],delta=1e-6*86/receipt["repeats"])
 
-    def test_dram_only_rounding_never_supplies_cache_evidence(self):
-        for quantized in (False, True):
-            with self.subTest(quantized=quantized):
-                self.assertIsNone(self.knee(self.scan_model(False, quantized))[0])
+    def test_geometry_check_includes_pilots_and_later_receipts(self):
+        for index in (0,1,7,15):
+            rows=check_receipts();rows[index]["view_nbytes"]+=1
+            self.assertEqual(probe.residency_check(rows)["reason"],"geometry check failed (view_nbytes)")
 
-    def test_worked_example_knee_survives_stamp_quantization(self):
-        for quantized in (False, True):
-            with self.subTest(quantized=quantized):
-                self.assertEqual(self.knee(self.scan_model(True, quantized))[0], 2**26)
+    def test_clock_and_observed_spread_are_added(self):
+        calls=check_receipts()[1:4]
+        result=probe.timing_summary(calls)
+        values=[Fraction(c["end_ns"]-c["start_ns"],10**9*c["repeats"]) for c in calls]
+        mean=sum(values)/3
+        width=max(abs(v-mean) for v in values)+sum(Fraction(86,10**9*c["repeats"]) for c in calls)/3
+        # t: 1e6×4ε t ≈ 6e-13 s < 1e-6 t ≈ 7e-10 s < .01×smallest printed δt (8.6e-10 s).
+        self.assertAlmostEqual(result["t_s"],float(mean),delta=1e-6*abs(float(mean)))
+        # δt: 1e6×4ε t ≈ 6e-13 s < 1e-6 δt ≈ 9.6e-11 s < .01×smallest printed δt (8.6e-10 s).
+        self.assertAlmostEqual(result["dt_s"],float(width),delta=1e-6*abs(float(width)))
 
-    def test_zero_negative_and_uncertain_differences_are_undefined(self):
-        for duration in (1.0, 0.9, 1.000000001):
-            calls = {2**k: [(duration if k == 15 else 1.0, 1)] * 3 for k in range(14, 36)}
-            k, marg, _, _ = self.knee(calls)
-            self.assertNotIn(2**15, marg)
-            self.assertIsNone(k)
+    def test_serialized_success_is_recomputed(self):
+        check=probe.residency_check(check_receipts())
+        check["kappa"]=123  # Deliberate corruption, not a threshold.
+        self.assertNotEqual(probe.validated_check(check)["kappa"],check["kappa"])
+        for field,value in (("b",2**24),("W",2**33),("Q",512),("reason",None),("receipts",[]),("status","other")):
+            bad=deepcopy(check);bad[field]=value
+            self.assertEqual(probe.validated_check(bad)["status"],"residency not resolved")
+
+
+class ArithmeticTests(unittest.TestCase):
+    def test_native_gpu_means_and_missing_support_are_descriptions(self):
+        # Two one-second synthetic calls: 0.75 s active at 400 MHz and
+        # 0.25 s at 800 MHz -> 500 MHz active mean, 1/2 time active.
+        calls=[]
+        for i,(idle,freq) in enumerate(((.25,400),(.75,800))):
+            a,b=i*10**9,(i+1)*10**9
+            calls.append({'arm':'R','receipt':{'start_ns':a,'end_ns':b},'gpu_state':[
+                {'start_ns':a,'end_ns':b,'state':{'idle_ratio':idle,'active_freq_mhz_weighted':freq}}]})
+        result=probe.describe_gpu_arms(calls)['R']
+        # Frequency (description only): 1e6×8ε≈1.8e-9 < 1e-6 < .01×smallest printed relative width (.00031/.075≈.0041).
+        self.assertAlmostEqual(result['active_frequency_mhz'],500,delta=1e-6*500)
+        # Residency (description only): 1e6×8ε≈1.8e-9 < 1e-6 < .01×smallest printed relative width (.00031/.075≈.0041).
+        self.assertAlmostEqual(result['active_residency'],.5,delta=1e-6*.5)
+        calls[0]['gpu_state'][0]['end_ns']-=1  # Exactly one native ns missing.
+        self.assertIn('support incomplete',probe.describe_gpu_arms(calls)['R']['active_residency'])
 
     def test_native_dc_variance_needs_no_alignment(self):
         from joulewise.idle_dependence import estimate_newey_west_bartlett as nw
@@ -379,880 +344,326 @@ class ReadingRuleArithmeticTests(unittest.TestCase):
             self.assertIn('arithmetic unavailable',result['reason'])
             self.assertNotIn('mean_w',result)
 
-    def test_revised_worked_energy_publication_digits_and_bounded_gap(self):
-        # Recompute §3 directly from §5 input ratios. Compare publication
-        # strings; these are rounding properties, not new acceptance bars.
-        gb, b = 1e9, 2**32
-        payload = {'S': b, 'C1': 2**22, 'C3': 2**23, 'C2': 2**24}
-        thr = 4597412096 * 512 / 7.098
-        idle_r, idle_dc = .051, (6101.072862 - 5967.417892) / 56.018813
-        sr = 223.22/7.098 - idle_r
-        se = 577.210005/11.017813 - (idle_dc - idle_r)
-        rows = {}
-        for arm, size in payload.items():
-            td = 50e-6 + size / (thr if arm == 'S' else 1e12)
-            n = math.floor((500 if arm == 'S' else 250) / td)
-            t = n * td
-            pr, pe = (sr, se) if arm == 'S' else (28., 25.)
-            br = .5388 + t * (.002 + 2 * math.sqrt(1.2037e-4/2))
-            bd = 2 * (pr+pe+idle_dc) * (.017762388+.020) + t * (.05 + 2 * (.05+.01)/math.sqrt(2))
-            rows[arm] = (n, {'rails': pr*t/n, 'dc': (pr+pe)*t/n, 'rest': pe*t/n},
-                         {'rails': br/n, 'dc': bd/n, 'rest': (br+bd)/n})
-        def reduce(beta, gap_j=0):
-            calls = []
-            for arm in ('S','C1','C3','C2','C2','C3','C1','S'):
-                n,energy,bounds = rows[arm]
-                calls.append({'arm': arm, 'N': n, 'boundaries': {beta: {
-                    'excess_j': energy[beta]*n,
-                    'bound_j': bounds[beta]*n + (gap_j if arm=='C2' and beta!='rails' and
-                                                not any(c['arm']=='C2' for c in calls) else 0)}}})
-            v = probe.reduce_boundary(calls, payload, beta)
-            return v['delta'],v['halfwidth'],v['epsilon_flip']*1e6
-        self.assertEqual([f'{reduce(x)[1]:.8f}' for x in ('rails','dc','rest')],
-                         ['0.00057180','0.00252421','0.00244408'])
-        self.assertEqual([f'{reduce(x)[2]:.2f}' for x in ('rails','dc','rest')], ['7.20','31.79','30.78'])
-        for beta, digits in (('dc','0.00255396'), ('rest','0.00247383')):
-            delta, width, _ = reduce(beta, .020*140)
-            self.assertEqual(f'{width:.8f}', digits)
-            self.assertGreater(delta-width, 0)
-        dr, ur, _ = reduce('rails')
-        dd, ud, _ = reduce('dc')
-        f = dr/dd
-        self.assertEqual(f'{f:.4f}', '0.3458')
-        self.assertEqual(f'{(ur+abs(f)*ud)/abs(dd):.4f}', '0.0075')
-        # Sol's zero-rails case is nonsingular with valid DC.
-        self.assertEqual((.001 + abs(0/.1)*.002)/abs(.1), .01)
+
+    def test_classes_and_zero_width(self):
+        epsilon=1e9/(512*39_852_331_520)
+        # Hand-set endpoints derived from ε₀; κ=2 doubles the corrected scale.
+        self.assertEqual(probe.classify(epsilon/4,epsilon/8,2)["class"],"RESOLVED")
+        self.assertEqual(probe.classify(0,epsilon/4,2)["class"],"BELOW ATTRIBUTION LEVEL")
+        result=probe.classify(0,epsilon,2)
+        self.assertEqual(result["class"],"NOT RESOLVED")
+        # Identical endpoint addition and multiplication on identical binary64 inputs.
+        self.assertEqual(result["upper_limit"],2*(0+epsilon))
+        self.assertEqual(probe.classify(-2*epsilon,epsilon,2)["reason"],"contrast negative")
+        self.assertEqual(probe.format_interval(0,0),"0.00 ± 0.00")
+
+
+class ExampleArray(Array):
+    def __init__(self,clock,t_s):
+        super().__init__(clock);self.t_s=t_s;self.count=0
+    def sum(self,view):
+        # Quantize accumulated elapsed time: at most one ns error per span,
+        # preserving the archived per-dispatch mean in this synthetic example.
+        before=round(self.count*self.t_s*1e9);self.count+=1
+        self.clock.ns+=round(self.count*self.t_s*1e9)-before
+        return None
+
+
+def worked_records():
+    """Real stream and full reader with §5 powers and native idle variance."""
+    from joulewise.idle_dependence import estimate_newey_west_bartlett as nw
+    check=probe.residency_check(check_receipts())
+    shapes={}
+    for kind,step,se in [('rails',100_000_000,math.sqrt(1.2037e-4)),('gpu',100_000_000,0),
+                         ('meter',20_000_000,.05),('battery',200_000_000,.01)]:
+        n=57_600_000_000//step  # Registered idle span at each native cadence.
+        values=[(63 if i%64 == 0 else -1) if kind=='rails' else (-1)**i for i in range(n)]
+        variance=nw(values,10_000_000_000//step,[57.6/n]*n).governed_variance_of_mean_w2
+        shapes[kind]=(step,[v*se/math.sqrt(variance) for v in values])
+    records=[];clock=Clock()
+    for arm in probe.ORDER:
+        t_s=statistics.mean(EXAMPLE_TIMES[2**25][arm])
+        n=probe.planned_repeats(check['b'],t_s,probe.CALL_S)
+        mx=ExampleArray(clock,t_s)
+        with patch.object(probe,'collect_stack',return_value=identity()),patch.object(probe,'clock_metadata',return_value=synthetic_clock()):
+            r=probe.stream(check['b'],n,arm=arm,device='macbook_m3_max',mx=mx,clock_ns=lambda:clock.ns,sleep=clock.sleep)
+        duration=r['duration_s']
+        pr,pe=(31.399,50.055) if arm=='R' else (28,25)  # §5 excess powers.
+        h={'energy_j':{'rails':(.051+pr)*duration,'gpu':pr/2*duration,
+                        'meter':(2.386+pr+pe+10)*duration,'battery':-10*duration},
+           'idle':{},'anchor_shift_j':.5388,'r_max_s':.01776,'tau_s':2.302,
+           'meter_edge_w':[2.386+pr+pe]*2,'battery_edge_j':[0,0],
+           'capture_stack':deepcopy(probe.REFERENCE_STACK),'adapter_max_w':140,
+           'adapter_source':'H 140 W adapter','battery_source':'synthetic native charging polls',
+           'meter_gaps':[],'hour_as_run_s':3573.6}
+        for name,sign in [('pre',1),('post',-1)]:
+            start=r['idle_'+name+'_start_ns'];h['idle'][name]={}
+            for kind,(step,values) in shapes.items():
+                mean={'rails':.051+sign*.002,'gpu':0,'meter':2.386+10+sign*.05,'battery':-10}[kind]
+                h['idle'][name][kind]=[dict({'stamp_ns':start+i*step} if kind in ('meter','battery') else
+                    {'start_ns':start+i*step,'end_ns':start+(i+1)*step},power_w=mean+v) for i,v in enumerate(values)]
+        h['battery_samples']=h['idle']['pre']['battery']+h['idle']['post']['battery']
+        records.append({'receipt':r,'harvest':h})
+    return records,check
+
+
+def replay_archive(directory):
+    """NOTES §1's historical timing replay, not admission of legacy data as v3.
+
+    SUMMARY contains d_j and N, but neither clock nor new geometry leaves.
+    Use NOTES' explicitly supplied 42 ns/125:3 clock for the R3/R4 replay.
+    The actual ring was 8 GiB; never relabel it as a production 32-GiB ring.
+    """
+    source=Path(directory)/'SUMMARY.json'
+    raw=json.loads(source.read_text())
+    bysize={}
+    for row in raw:
+        if row['bytes'] not in probe.LADDER:
+            continue
+        calls=[{'start_ns':0,'end_ns':round(d*row['repeats']*1e9),
+                'repeats':row['repeats'],**synthetic_clock()} for d in row['d_s']]
+        bysize.setdefault(row['bytes'],{})['C' if row['mode']=='repeat' else 'R']=probe.timing_summary(calls)
+    rungs=[]
+    for b in probe.LADDER:
+        if b not in bysize or set(bysize[b]) != {'R','C'}:
+            raise ValueError('archive is incomplete before a resolved rung; not replayable as a whole')
+        row=probe.residency_rung(b,bysize[b]['C'],bysize[b]['R']);rungs.append(row)
+        print(f"archive b={b}: D={row['D_s']*1e6:.6f} µs; δD={row['dD_s']*1e6:.6f} µs; "+
+              ('resolved' if row['resolved'] else 'not resolved'))
+        if row['resolved']:
+            break
+    refusal=int(not rungs[-1]['resolved'])
+    print(f"Refusal count: {refusal} of 1 replayable run; b={rungs[-1]['b']}; κ={rungs[-1].get('kappa',float('nan')):.4g}")
+    print('Historical timing replay only: actual 8 GiB ring; clock supplied by NOTES §1; v3 geometry not attested.')
+    print('Strict v3 reader gate: '+probe.residency_check(raw)['reason'])
+    return rungs,refusal
 
 
 class ReaderTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Real stream(), full §5 counts and sizes, constant-memory fake array.
-        # Per-dispatch clocks use integer ns, as the actual receipts do.
-        class ProductionMLX:
-            uint8 = 'uint8'
-            __version__ = '0.31.2'
-            def __init__(self, ns, dispatch_ns):
-                self.ns,self.dispatch_ns,self.sums,self.sleeps = ns,dispatch_ns,0,[]
-            def ones(self, shape, dtype):
-                return Array()
-            def sum(self, data):
-                self.sums += 1
-                return Array()
-            def eval(self, value):
-                self.ns += self.dispatch_ns
-            def synchronize(self):
-                pass
-            def sleep(self, seconds):
-                self.sleeps.append(seconds)
-                self.ns += round(seconds*1e9)
-        from joulewise.idle_dependence import estimate_newey_west_bartlett as nw
-        cls.payload = {'S': 2**32,'C1':2**22,'C3':2**23,'C2':2**24}
-        cls.scan = real_scan_cli(worked5)
-        cls.dram_scan = real_scan_cli(dram_only)
-        reference,versions = probe.registered_stack()
-        stack = deepcopy(reference);stack.update(versions)
-        cls.records=[]
-        ns=0
-        idle_dc=(6101.072862-5967.417892)/56.018813
-        # Native alternating fixtures scaled so governed per-span SEs are
-        # the §5 assumptions. Battery is charging, so measured max discharge=0.
-        shapes={}
-        for kind,step,se in [('rails',100_000_000,math.sqrt(1.2037e-4)),('gpu',100_000_000,0),
-                             ('meter',20_000_000,.05),('battery',200_000_000,.01)]:
-            n=57_600_000_000//step
-            # Sparse non-negative rails after centering/scaling retain the
-            # registered mean and governed SE; alternating rails went negative.
-            values=[(63 if i%64 == 0 else -1) if kind == 'rails' else (-1)**i for i in range(n)]
-            var=nw(values,10_000_000_000//step,[57.6/n]*n).governed_variance_of_mean_w2
-            shapes[kind]=(step,[v*se/math.sqrt(var) for v in values])
-        for arm in ('S','C1','C3','C2','C2','C3','C1','S'):
-            size=cls.payload[arm]
-            td=50e-6+size/(4597412096*512/7.098 if arm=='S' else 1e12)
-            n=math.floor((500 if arm=='S' else 250)/td)
-            mx=ProductionMLX(ns,round(td*1e9))
-            with patch.object(probe,'collect_stack',return_value=deepcopy(stack)):
-                r=probe.stream(size,n,device='macbook_m3_max',mx=mx,clock_ns=lambda:mx.ns,sleep=mx.sleep)
-            assert mx.sums==n+1
-            assert mx.sleeps==[3,57.6,3,3,57.6]
-            ns=mx.ns
-            t=r['duration_s']
-            pr,pe=(223.22/7.098-.051,577.210005/11.017813-(idle_dc-.051)) if arm=='S' else (28.,25.)
-            h={'energy_j':{'rails':(.051+pr)*t,'gpu':(pr/2)*t,
-                           'meter':(idle_dc+pr+pe+10)*t,'battery':-10*t},
-               'idle':{},'anchor_shift_j':.5388,'r_max_s':.017762388,'tau_s':2.302,
-               'meter_edge_w':[idle_dc+pr+pe]*2,'battery_edge_j':[0,0],
-               'capture_stack':reference,'adapter_max_w':140,'adapter_source':'H adapter nameplate 140 W',
-               'battery_source':'synthetic native battery polls','meter_gaps':[]}
-            for name,sign in [('pre',1),('post',-1)]:
-                start=r['idle_'+name+'_start_ns'];h['idle'][name]={}
-                for kind,(step,values) in shapes.items():
-                    mean={'rails':.051+sign*.002,'gpu':0,'meter':idle_dc+10+sign*.05,'battery':-10}[kind]
-                    h['idle'][name][kind]=[dict({'stamp_ns':start+i*step} if kind in ('meter','battery') else
-                        {'start_ns':start+i*step,'end_ns':start+(i+1)*step},power_w=mean+v) for i,v in enumerate(values)]
-            h['battery_samples']=h['idle']['pre']['battery']+h['idle']['post']['battery']
-            cls.records.append({'receipt':r,'harvest':h})
-        cls.result=probe.read_known_bytes(cls.records,cls.scan)
+        cls.records,cls.check=worked_records()
+        cls.result=probe.read_known_bytes(cls.records,cls.check)
 
-    def test_full_production_shaped_palindrome_reader_and_cli(self):
-        res=self.result
-        self.assertEqual([c['arm'] for c in res['calls']],['S','C1','C3','C2','C2','C3','C1','S'])
-        # Common bar 5.7e-6 J/GB is derived in §3/§5, not a new tolerance.
-        for beta,delta,width in [('rails',.066716626,.000571796),('dc',.192943505,.002524213),
-                                  ('rest',.126226879,.002444084)]:
-            v=res['boundaries'][beta]
-            self.assertLessEqual(abs(v['delta']-delta),5.7e-6)
-            self.assertLessEqual(abs(v['halfwidth']-width),5.7e-6)
+    def test_worked_example_and_independent_arithmetic(self):
+        # §5: 1% of smallest displayed width .00031 J/GB exceeds
+        # 1e6×float-noise (3.2e-10 J/GB); no fitted tolerance.
+        bar=.01*.00031
+        for boundary,delta,width in [('rails',.075,.000306823),('dc',.344513,.002389013),('rest',.269513,.002695836)]:
+            v=self.result['boundaries'][boundary]
+            self.assertAlmostEqual(v['delta'],delta,delta=bar)
+            self.assertAlmostEqual(v['halfwidth'],width,delta=bar)
             self.assertEqual(v['class'],'RESOLVED')
-        self.assertEqual(f"{res['share']['df']:.4f}",'0.0075')
-        self.assertEqual(res['printed']['contrasts']['dc'],'0.1929 ± 0.0025')
-        self.assertEqual(res['printed']['share'],'0.3458 ± 0.0075')
-        self.assertEqual(res['calls'][0]['thermal']['spans'],'not defined (thermal journal missing)')
-        # Real read CLI serialization from the same production-shaped records.
-        with tempfile.TemporaryDirectory() as tmp, patch('sys.stdout',new_callable=io.StringIO) as out:
-            path=Path(tmp)/'input.json'
-            path.write_text(json.dumps({'scan':self.scan,'records':self.records},allow_nan=False))
-            self.assertEqual(probe.main(['read',str(path)]),0)
-            self.assertEqual(json.loads(out.getvalue()),json.loads(json.dumps(res)))
+            arms={}
+            for arm in ('R','C'):
+                rows=[c for c in self.result['calls'] if c['arm']==arm]
+                count=sum(c['N'] for c in rows)
+                x=sum(Fraction(c['boundaries'][boundary]['excess_j']) for c in rows)/count
+                dx=sum(Fraction(c['boundaries'][boundary]['bound_j']) for c in rows)/count
+                rep=abs(Fraction(rows[0]['boundaries'][boundary]['excess_j'])/rows[0]['N']-
+                        Fraction(rows[1]['boundaries'][boundary]['excess_j'])/rows[1]['N'])*max(c['N'] for c in rows)/count
+                arms[arm]=(x,dx+rep)
+            self.assertAlmostEqual(v['delta'],float((arms['R'][0]-arms['C'][0])*10**9/2**25),delta=bar)
+            self.assertAlmostEqual(v['halfwidth'],float((arms['R'][1]+arms['C'][1])*10**9/2**25),delta=bar)
+            for retired in ('alpha','gamma_c','gamma_d','r','epsilon_flip'): self.assertNotIn(retired,v)
+        self.assertEqual([c['N'] for c in self.result['calls']],[2459648,2962432,2962432,2459648])
+        self.assertEqual(self.result['printed']['contrasts']['rails'],'0.07500 ± 0.00031')
+        self.assertEqual(self.result['printed']['share'],'0.2177 ± 0.0024')
+        self.assertEqual(self.result['printed']['claim_lines'],{})
 
-    def test_stream_and_idle_gaps_preserve_validity_and_disclose_sources(self):
-        records=deepcopy(self.records)
-        records[3]['harvest']['meter_gaps']=[{'span':'stream','missing_samples':1}]
-        res=probe.read_known_bytes(records,self.scan)
-        self.assertEqual(f"{res['calls'][3]['meter_gaps']['bound_j']:.1f}",'2.8')
-        for beta in ('dc','rest'):
-            self.assertEqual(res['boundaries'][beta]['class'],'RESOLVED')
-        for beta,width in [('dc',.00255396),('rest',.00247383)]:
-            self.assertLessEqual(abs(res['boundaries'][beta]['halfwidth']-width),5.7e-6)
-        direct=probe.meter_gap_bound([{'span':'pre','missing_samples':2},{'span':'post','missing_samples':1}],
-            duration_s=250,idle_lengths_s={'pre':57.6,'post':57.6},adapter_max_w=140,
-            adapter_source='nameplate',battery_max_w=5,battery_source='native polls')
-        self.assertEqual(direct['P_max_w'],145)
-        self.assertEqual(direct['bound_j'],sum(n*.020*145*250/(2*57.6) for n in (2,1)))
-
-    def test_metadata_disclosure_and_physical_mismatch_classes(self):
-        records=deepcopy(self.records)
-        records[0]['receipt']['stack']['packages']['transformers']='metadata-only'
-        res=probe.read_known_bytes(records,self.scan)
-        self.assertEqual(res['boundaries']['rails']['class'],'RESOLVED')
-        self.assertIn('packages.transformers',res['stack_comparisons'][0]['disclosure_differences'])
-        records[0]['receipt']['stack']['os_version']='different-build'
-        res=probe.read_known_bytes(records,self.scan)
-        self.assertEqual(res['boundaries']['rails']['class'],'UNDETERMINED')
-        self.assertEqual(res['boundaries']['rails']['reason'],'stack differs in: os_version')
-
-    def test_missing_native_support_and_battery_keep_receipts_and_rails_numbers(self):
-        records=deepcopy(self.records)
-        records[0]['harvest']['idle']['pre']['battery']=[]
-        records[0]['harvest']['energy_j']['battery']=None
-        res=probe.read_known_bytes(records,self.scan)
-        self.assertIn('delta',res['boundaries']['rails'])
-        self.assertEqual(len(res['calls']),8)
-        self.assertEqual(res['share']['f'],'not defined (DC contrast not valid)')
-        records=deepcopy(self.records)
-        records[0]['harvest']['idle']['pre']['meter']=records[0]['harvest']['idle']['pre']['meter'][:4]
-        res=probe.read_known_bytes(records,self.scan)
-        self.assertTrue(any('idle variance not defined' in s for s in res['reasons']))
-
-    def test_missing_knee_and_invalid_dc_are_reasoned_results(self):
-        result=probe.read_known_bytes(self.records,{'K':None,'status':'knee not found'})
-        self.assertEqual(result['boundaries']['rails']['reason'],'knee not found')
-        self.assertEqual(result['boundaries']['rails']['description'],'not defined (knee not found)')
-        records=deepcopy(self.records)
-        for record in records:
-            h=record['harvest'];t=record['receipt']['duration_s']
-            h['energy_j']['meter']=(10+(6101.072862-5967.417892)/56.018813)*t
-        result=probe.read_known_bytes(records,self.scan)
-        self.assertEqual(result['boundaries']['rails']['reason'],'contrast not resolved')
-        self.assertEqual(result['share']['df'],'not defined (DC contrast not valid)')
-
-    def read_cli(self, records, scan=None):
-        # Every variant serializes/reloads the real stream receipts and all
-        # harvest data before entering the actual read CLI. Synthetic only.
+    def test_real_cli(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path=Path(tmp)/'input.json'
-            path.write_text(json.dumps({'records':records,'scan':self.scan if scan is None else scan},allow_nan=False))
-            cli=subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
-                                'read',str(path)],capture_output=True,text=True)
-            self.assertEqual(cli.returncode,0,cli.stderr)
-            return json.loads(cli.stdout)
+            p=Path(tmp)/'input.json';p.write_text(json.dumps({'records':self.records,'check':self.check}))
+            result=subprocess.run([sys.executable,'-I','-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),'read',str(p)],text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(json.loads(result.stdout),json.loads(json.dumps(self.result)))  # Identical code/inputs.
 
-    def assert_ruled_fault(self, result, records, reason):
-        self.assertEqual(result['input_records'], records)
-        self.assertEqual(len(result['calls']), len(records))
-        for beta, value in result['boundaries'].items():
-            self.assertEqual(value['class'], 'UNDETERMINED')
-            self.assertIn(reason, value['reason'])
-            self.assertNotIn('±', result['printed']['contrasts'][beta])
+    def test_failed_check_prints_no_interval(self):
+        for check in (probe.residency_check(check_receipts(resolves=False)),{},None,
+                      {**self.check,'reason':'spurious'},{**self.check,'b':2**24}):
+            result=probe.read_known_bytes(self.records,check)
+            for v in result['boundaries'].values(): self.assertEqual(v['class'],'UNDETERMINED')
+            self.assertNotIn('±',json.dumps(result['printed']['contrasts']))
+            self.assertIsInstance(result['share']['f'],str)
+            self.assertEqual(len(result['calls']),len(probe.ORDER))
 
-    def test_producer_invariants_through_real_read_cli(self):
-        for shape in ('repeats doubled', 'B=2^33', 'sizes doubled', 'S receipts relabelled',
-                      'S repeats doubled'):
-            with self.subTest(shape=shape):
-                records, scan = deepcopy(self.records), deepcopy(self.scan)
-                reason = 'scan.status'
-                if shape in ('repeats doubled', 'S repeats doubled'):
-                    indices = range(8) if shape == 'repeats doubled' else (0, 7)
-                    for i in indices:
-                        records[i]['receipt']['repeats'] *= 2
-                    reason = 'records[0].receipt.repeats/bytes_read'
-                elif shape == 'B=2^33':
-                    scan['B'] = 2**33
-                elif shape == 'S receipts relabelled':
-                    scan['B'] = 2**33
-                    for i in (0, 7):
-                        records[i]['receipt']['bytes_per_read'] = 2**33
-                        # Keep the receipt internally consistent to isolate the scan fault.
-                        records[i]['receipt']['bytes_read'] *= 2
-                else:
-                    for key, indices in (('Bc1', (1, 6)), ('Bc3', (2, 5)), ('Bc2', (3, 4))):
-                        scan[key] *= 2
-                        for i in indices:
-                            records[i]['receipt']['bytes_per_read'] *= 2
-                            records[i]['receipt']['bytes_read'] *= 2
-                self.assert_ruled_fault(self.read_cli(records, scan), records, reason)
-        for value in (False, None, 0, 1, 'true', 'missing'):
-            with self.subTest(above=value):
-                scan = deepcopy(self.scan)
-                if value == 'missing':
-                    del scan['arm_checks'][0]['above']
-                else:
-                    scan['arm_checks'][0]['above'] = value
-                self.assert_ruled_fault(self.read_cli(self.records, scan), self.records, 'scan.status')
-        for value in ('64 K > s_max', '', None):
-            with self.subTest(reason=value):
-                self.assert_ruled_fault(self.read_cli(self.records, {**self.scan, 'reason':value}),
-                                        self.records, 'scan.status')
+    def test_geometry_and_legacy_schema_faults(self):
+        for field,value in (('schema_version','joulewise.bytes_stream.v2'),('ring_shape',[1024,2**24]),
+                            ('view_nbytes',2**24),('bytes_read',0),('sweeps',0),('view_order','repeat')):
+            records=deepcopy(self.records);records[0]['receipt'][field]=value
+            result=probe.read_known_bytes(records,self.check)
+            self.assertEqual(result['boundaries']['rails']['class'],'UNDETERMINED')
+            self.assertIn(field,result['boundaries']['rails']['reason'])
+            self.assertNotIn('±',json.dumps(result['printed']['contrasts']))
 
-    def test_dc_width_common_gate_through_real_read_cli(self):
-        # Reducer-result injection is necessary: no producer input is known to
-        # make only DC's width invalid. Run the actual JSON read CLI in a fresh
-        # process, patching only that reducer result, as in the Opus repro.
-        code = """
-import sys
-from unittest.mock import patch
-from scripts import bytes_stream_test as p
-real = p.reduce_boundary
-def force(calls, sizes, boundary):
-    value = real(calls, sizes, boundary)
-    if boundary == 'dc': value['halfwidth'] = float(sys.argv[2])
-    return value
-with patch.object(p, 'reduce_boundary', force):
-    sys.exit(p.main(['read', sys.argv[1]]))
-"""
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp)/'input.json'
-            path.write_text(json.dumps({'records':self.records, 'scan':self.scan}, allow_nan=False))
-            for width in ('-1e-6', '-0.5', '0', '-0', 'nan'):
-                with self.subTest(width=width):
-                    cli = subprocess.run([sys.executable, '-B', '-c', code, str(path), width],
-                                         cwd=probe.ROOT, capture_output=True, text=True)
-                    self.assertEqual(cli.returncode, 0, cli.stderr)
-                    self.assert_ruled_fault(json.loads(cli.stdout), self.records, 'DC contrast input missing')
+    def test_hour_clock_prerequisite_is_retained_and_refuses(self):
+        for field in ('clock','clock_resolution_s','clock_tick_den'):
+            records=deepcopy(self.records);del records[0]['receipt'][field]
+            result=probe.read_known_bytes(records,self.check)
+            for value in result['boundaries'].values():
+                self.assertEqual(value['class'],'UNDETERMINED')
+                self.assertIn('clock prerequisite missing',value['reason'])
+                self.assertIn(field,value['reason'])
+            self.assertNotIn('±',json.dumps(result['printed']['contrasts']))
+            self.assertEqual(len(result['input_records']),len(probe.ORDER))
 
-    def test_idle_overflow_names_power_leaf_through_real_read_cli(self):
-        records = deepcopy(self.records)
-        records[0]['harvest']['idle']['pre']['rails'][0]['power_w'] = 1e308
-        result = self.read_cli(records)
-        for beta in ('rails', 'rest'):
-            self.assertEqual(result['boundaries'][beta]['class'], 'UNDETERMINED')
-            self.assertIn('records[0].harvest.idle.pre.rails.power_w',
-                          result['boundaries'][beta]['reason'])
-            self.assertNotIn('±', result['printed']['contrasts'][beta])
-        self.assertEqual(result['input_records'], records)
-        self.assertEqual(len(result['calls']), 8)
-
-    def test_generated_input_leaf_faults_through_real_read_cli(self):
-        # Real stream receipts above, written/reloaded by every CLI invocation.
-        # Compact native support still covers 57.6 s with >=3 bandwidths. Walk
-        # every consumed leaf, including every row, rather than sampling paths.
-        records = deepcopy(self.records)
-        for record in records:
-            h = record['harvest']
-            for span in ('pre', 'post'):
-                start = record['receipt']['idle_'+span+'_start_ns']
-                for kind in probe.NATIVE_INPUTS:
-                    mean = sum(r['power_w'] for r in h['idle'][span][kind])/len(h['idle'][span][kind])
-                    h['idle'][span][kind] = [dict(
-                        {'stamp_ns': start+i*14_400_000_000} if kind in ('meter','battery') else
-                        {'start_ns':start+i*14_400_000_000,'end_ns':start+(i+1)*14_400_000_000},
-                        power_w=mean) for i in range(4)]
-            h['battery_samples'] = deepcopy(h['idle']['pre']['battery']+h['idle']['post']['battery'])
-            h['meter_gaps'] = [{'span':'stream','missing_samples':1}]
-        baseline = self.read_cli(records)
-        specs = {'receipt': {**probe.RECEIPT_INPUTS, 'stack':probe.STACK_INPUTS},
-                 'harvest': {'capture_stack':probe.CAPTURE_INPUTS,
-                    'energy_j': {k:probe.NUMBER if k == 'battery' else probe.NONNEG for k in probe.NATIVE_INPUTS},
-                    'idle':{span:probe.NATIVE_INPUTS for span in ('pre','post')},
-                    'battery_samples':probe.NATIVE_INPUTS['battery'],
-                    'meter_gaps':[{'span':probe.TEXT,'missing_samples':probe.COUNT}],
-                    'adapter_max_w':probe.POSITIVE,'adapter_source':probe.TEXT,'battery_source':probe.TEXT,
-                    'tau_s':probe.NONNEG,'r_max_s':probe.NONNEG,'anchor_shift_j':probe.NONNEG,
-                    'meter_edge_w':probe.EDGES,'battery_edge_j':probe.EDGES}}
-        def walk(value, spec, path=()):
-            if isinstance(spec, dict):
-                for key, child in spec.items():
-                    yield from walk(value[key], child, path+(key,))
-            elif isinstance(spec, list):
-                for i, row in enumerate(value):
-                    yield from walk(row, spec[0], path+(i,))
-            else:
-                yield path, value, spec
-                if spec == probe.EDGES:
-                    for i, item in enumerate(value):
-                        yield path+(i,), item, probe.NONNEG
-        # All eight positions use the same accessor; exhaust the production
-        # schema in one call, and separately test lost calls in every arm.
-        count = 0
-        for path, value, spec in walk(records[0], specs):
-            modes = ['deleted','null','wrong_type','non_finite','wrong_length']
-            if type(value) in (int,float):
-                modes.append('huge_integer')
-            if ((path[-1] == 'power_w' and 'battery' not in path and 'battery_samples' not in path)
-                    or path[:2] == ('harvest','energy_j') and path[-1] != 'battery'
-                    or 'battery_edge_j' in path and isinstance(path[-1],int)):
-                modes.append('negative')
-            receipt_order = ('idle_pre_start_ns','idle_pre_end_ns','start_ns','end_ns','idle_post_start_ns','idle_post_end_ns')
-            if (path[0] == 'receipt' and path[-1] in receipt_order[1:] or
-                    'idle' in path and path[-1] == 'end_ns' or path[-1] == 'stamp_ns'):
-                modes.append('order')
-            for mode in modes:
-                with self.subTest(path=path, mode=mode):
-                    mutated = deepcopy(records)
-                    parent = mutated[0]
-                    for key in path[:-1]:
-                        parent = parent[key]
-                    key = path[-1]
-                    if mode == 'deleted': del parent[key]
-                    elif mode == 'null': parent[key] = None
-                    elif mode == 'wrong_type': parent[key] = {} if not isinstance(value,dict) else 7
-                    elif mode == 'non_finite': parent[key] = float('nan')
-                    elif mode == 'huge_integer': parent[key] = 10**400
-                    elif mode == 'negative': parent[key] = -abs(value)-1
-                    elif mode == 'order':
-                        if path[0] == 'receipt':
-                            previous = receipt_order[receipt_order.index(key)-1]
-                            parent[key] = parent[previous] if key == 'end_ns' else parent[previous]-1
-                        else:
-                            parent[key] = parent['start_ns'] if key == 'end_ns' else 0
-                    else: parent[key] = value[:1] if isinstance(value,list) else []
-                    with tempfile.TemporaryDirectory() as tmp:
-                        file = Path(tmp)/'read.json'
-                        file.write_text(json.dumps({'records':mutated,'scan':self.scan}))
-                        proc = subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
-                                               'read',str(file)],capture_output=True,text=True)
-                    self.assertEqual(proc.returncode,0,proc.stderr)
-                    result = json.loads(proc.stdout)
-                    self.assertEqual(len(result['calls']),8)
-                    leaf = '.'.join(str(k) for k in path)
-                    leaf_name = next(k for k in reversed(path) if isinstance(k,str))
-                    stack_field = '.'.join(k for k in path[2:] if isinstance(k,str))
-                    disclosure = (path[:2] in (('receipt','stack'),('harvest','capture_stack'))
-                                  and stack_field not in probe.PHYSICAL_FIELDS)
-                    if disclosure:
-                        self.assertIn('not recorded (records[0].'+'.'.join(str(k) for k in path),
-                                      json.dumps(result['stack_comparisons']))
-                        self.assertEqual({k:v['class'] for k,v in result['boundaries'].items()},
-                                         {k:v['class'] for k,v in baseline['boundaries'].items()})
-                    else:
-                        self.assertTrue(any(leaf_name in reason for reason in result['reasons']),leaf)
-                    undefined = [v for v in result['boundaries'].values() if v['class']=='UNDETERMINED']
-                    if not disclosure:
-                        self.assertTrue(undefined,leaf)
-                        self.assertTrue(any(leaf_name in v['reason'] for v in undefined),leaf)
-                        self.assertTrue(any('not defined (' in v['description'] for v in undefined))
-                    # No still-defined propagated bound may shrink. Undefined
-                    # widths are deliberately not replaced with numeric zero.
-                    for beta, base in baseline['boundaries'].items():
-                        width = result['boundaries'][beta].get('halfwidth')
-                        if isinstance(width,(float,int)):
-                            self.assertGreaterEqual(width,base['halfwidth'])
-                    for call, original in zip(result['calls'],baseline['calls']):
-                        gap = call.get('meter_gaps',{}).get('bound_j')
-                        if isinstance(gap,(int,float)):
-                            self.assertGreaterEqual(gap,original['meter_gaps']['bound_j'])
-                        for beta, row in call['boundaries'].items():
-                            for field in ('bound_j','edge_bound_j','baseline_bound_j'):
-                                bound = row.get(field)
-                                if isinstance(bound,(int,float)):
-                                    self.assertGreaterEqual(bound,original['boundaries'][beta][field])
-                    count += 1
-        for key in ('K','B','Bc1','Bc3','Bc2'):
-            result = self.read_cli(records, {**self.scan, key:10**400})
-            self.assertEqual(len(result['calls']),8)
-            self.assertTrue(all(v['class']=='UNDETERMINED' and key in v['reason']
-                                for v in result['boundaries'].values()))
-        for status in (None, 7, 'unknown', 'knee not found'):
-            result = self.read_cli(records, {**self.scan, 'status':status})
-            self.assertEqual(len(result['calls']),8)
-            self.assertTrue(all(v['class']=='UNDETERMINED' and 'scan.status' in v['reason']
-                                for v in result['boundaries'].values()))
-        # Malformed edge bounds and overlapping/duplicate interval rows in
-        # every call: retain evidence, remove dependent widths, never shrink.
-        extra_count = 0
-        for i in range(8):
-            cases = []
-            for edge in range(2):
-                mutated = deepcopy(records)
-                mutated[i]['harvest']['battery_edge_j'][edge] = -1.0
-                cases.append((mutated, 'battery_edge_j', ('dc','rest')))
-            for span in ('pre','post'):
-                for kind in ('rails','gpu'):
-                    for duplicate in (False,True):
-                        mutated = deepcopy(records)
-                        rows = mutated[i]['harvest']['idle'][span][kind]
-                        if duplicate:
-                            rows[1] = deepcopy(rows[0])
-                        else:
-                            rows[1]['start_ns'] = rows[0]['end_ns']-1
-                        cases.append((mutated, f'idle.{span}.{kind}[1].start_ns',
-                                      ('rails','rest') if kind == 'rails' else ('gpu',)))
-            for mutated, leaf, betas in cases:
-                with self.subTest(call=i, leaf=leaf):
-                    result = self.read_cli(mutated)
-                    self.assertEqual(len(result['calls']),8)
-                    self.assertEqual(result['input_records'],mutated)
-                    for beta in betas:
-                        value = result['boundaries'][beta]
-                        self.assertEqual(value['class'],'UNDETERMINED')
-                        self.assertIn(f'records[{i}].harvest.'+leaf,value['reason'])
-                        self.assertNotIsInstance(value.get('halfwidth'),(int,float))
-                        self.assertNotIn('±',result['printed']['contrasts'][beta])
-                    for beta, base in baseline['boundaries'].items():
-                        width = result['boundaries'][beta].get('halfwidth')
-                        if isinstance(width,(int,float)):
-                            self.assertGreaterEqual(width,base['halfwidth'])
-                    extra_count += 1
-        # Native support is a dependency of x as well as dx, at every
-        # palindrome position. All 128 deficient collections use fresh CLIs.
-        support_count = 0
-        for i in range(8):
-            for span in ('pre','post'):
-                for kind in probe.NATIVE_INPUTS:
-                    for length in (1,0):
-                        with self.subTest(call=i, span=span, kind=kind, length=length):
-                            mutated = deepcopy(records)
-                            mutated[i]['harvest']['idle'][span][kind] = mutated[i]['harvest']['idle'][span][kind][:length]
-                            result = self.read_cli(mutated)
-                            self.assertEqual(len(result['calls']),8)
-                            self.assertEqual(result['input_records'],mutated)
-                            betas = ('dc','rest') if kind in ('meter','battery') else ('rails','rest') if kind == 'rails' else ('gpu',)
-                            for beta in betas:
-                                value = result['boundaries'][beta]
-                                self.assertEqual(value['class'],'UNDETERMINED')
-                                self.assertIn(f'records[{i}].harvest.idle.{span}.{kind}',value['reason'])
-                                arm = baseline['calls'][i]['arm']
-                                for key in ('x','dx'):
-                                    self.assertIn('not defined (',value['arms'][arm][key])
-                                for key in ('r','halfwidth','epsilon_flip','epsilon_flip_over_alpha'):
-                                    self.assertIn('not defined (',value[key])
-                                self.assertNotIn('±',result['printed']['contrasts'][beta])
-                                if arm == 'C3':
-                                    for key in ('gamma_c','alpha','gamma_d','delta'):
-                                        self.assertEqual(value[key],baseline['boundaries'][beta][key])
-                            for beta, base in baseline['boundaries'].items():
-                                width = result['boundaries'][beta].get('halfwidth')
-                                if isinstance(width,(int,float)):
-                                    self.assertGreaterEqual(width,base['halfwidth'])
-                            for call, original in zip(result['calls'],baseline['calls']):
-                                for beta, row in call['boundaries'].items():
-                                    for key in ('bound_j','edge_bound_j','baseline_bound_j'):
-                                        if isinstance(row.get(key),(int,float)):
-                                            self.assertGreaterEqual(row[key],original['boundaries'][beta][key])
-                            support_count += 1
-        # Both accepted finite trim leaves are exercised at every position.
-        for i in range(8):
-            for section, key in (('harvest','tau_s'),('receipt','settle_s')):
-                mutated = deepcopy(records)
-                mutated[i][section][key] = 1e308
-                result = self.read_cli(mutated)
-                self.assertEqual(len(result['calls']),8)
-                self.assertEqual(result['input_records'],mutated)
-                if key == 'tau_s':
-                    self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
-                    self.assertTrue(any(f'records[{i}].harvest.tau_s' in r for r in result['reasons']))
-                    self.assertTrue(all(not isinstance(v['halfwidth'],(int,float)) for v in result['boundaries'].values()))
-                else:
-                    # Finite large settle gives zero trim: subtraction is safe.
-                    self.assertEqual(result['printed'],baseline['printed'])
-        for native in probe.NATIVE_INPUTS:
-            mutated = deepcopy(records)
-            for i in (0,7):
-                mutated[i]['harvest']['energy_j'][native] = 1.79e308
-            result = self.read_cli(mutated)
-            beta = 'dc' if native in ('meter','battery') else native
-            value = result['boundaries'][beta]
-            self.assertEqual(len(result['calls']),8)
-            self.assertEqual(result['input_records'],mutated)
-            self.assertEqual(value['class'],'UNDETERMINED')
-            self.assertIn('arithmetic unavailable',value['reason'])
-            self.assertIn('harvest.energy_j.'+native,value['reason'])
-            self.assertIn('not defined (',value['halfwidth'])
-            self.assertNotIn('±',result['printed']['contrasts'][beta])
-        print('generated real read CLI leaf faults:',count+9+support_count+16+4+extra_count)
-
-    def test_null_containers_and_scan_inputs_keep_complete_records(self):
-        paths = [('receipt',),('harvest',),('harvest','idle'),('harvest','idle','pre'),
-                 ('harvest','energy_j'),('harvest','meter_gaps')]
-        for path in paths:
-            for value in (None, 7, 'wrong'):
-                records = deepcopy(self.records)
-                parent = records[0]
-                for key in path[:-1]: parent = parent[key]
-                parent[path[-1]] = value
-                result = self.read_cli(records)
-                self.assertEqual(len(result['calls']),8)
-                self.assertTrue(any(str(path[-1]) in why for why in result['reasons']))
-                self.assertTrue(any(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
-        for key in ('K','B','Bc1','Bc3','Bc2'):
-            scan = deepcopy(self.scan); scan[key] = 'invalid'
-            result = self.read_cli(self.records, scan)
-            self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
-        for path in ('repeats','start_ns','end_ns','bytes_per_read','clock_resolution_s',
-                     'clock_tick_num_ns','clock_tick_den','clock','clock_tick_source'):
-            for value in (None, {}, float('nan'), 10**400):
-                receipts = [{'bytes_per_read':size,'repeats':1,'start_ns':0,'end_ns':100+size,
-                             **synthetic_clock()} for size in (16,32) for _ in range(3)]
-                receipts[0][path] = value
-                result = probe.knee_scan(receipts)
-                self.assertEqual(result['status'],'knee not found')
-                self.assertIn(path,result['reason'])
-                json.dumps(result, allow_nan=False)
-
-    def test_lost_calls_preserve_other_arm_reductions(self):
-        for i in range(8):
-            for lost in (None, {}):
-                records = deepcopy(self.records)
-                arm = self.result['calls'][i]['arm']
-                if lost is None: records.pop(i)
-                else: records[i] = lost
-                result = self.read_cli(records)
-                for beta in ('rails','gpu','dc','rest'):
-                    value = result['boundaries'][beta]
-                    arms = value['arms']
-                    if arm == 'C3':
-                        for key in ('gamma_c','alpha','gamma_d','delta'):
-                            self.assertEqual(value[key],self.result['boundaries'][beta][key])
-                        for key in ('r','halfwidth','epsilon_flip','epsilon_flip_over_alpha'):
-                            self.assertIn('not defined (',value[key])
-                    elif arm == 'S':
-                        for key in ('gamma_c','alpha'):
-                            self.assertEqual(value[key],self.result['boundaries'][beta][key])
-                    for name in self.payload:
-                        if name != arm:
-                            self.assertEqual(arms[name],self.result['boundaries'][beta]['arms'][name])
-
-    def test_invalid_halfwidth_never_reaches_interval_formatter(self):
-        for width in (-1., 0., float('inf'), float('nan')):
-            value = {'delta':1., 'halfwidth':width, 'class':'RESOLVED'}
-            with patch.object(probe, 'format_interval', side_effect=AssertionError('invalid width formatted')):
-                result = probe.printed_record({'share':{'f':'not defined'},'stack_comparisons':[],
-                                               'boundaries':{'rails':value}})
-            self.assertEqual(value['class'],'UNDETERMINED')
-            self.assertIn('halfwidth',value['reason'])
-            self.assertNotIn('±',result['contrasts']['rails'])
-
-    def test_scan_reference_and_negative_place_upper_limit(self):
-        for key in ('cache_reference','dram_reference'):
-            ref = self.scan[key]
-            self.assertEqual(ref,next(p for p in self.scan['pairs'] if p['size']==ref['size']))
-        value = {'delta':5.,'halfwidth':150.,**probe.classify(5.,150.,1/64)}
-        printed = probe.printed_record({'share':{'f':'x'},'stack_comparisons':[],
-                                       'boundaries':{'rails':value}})
-        self.assertIn('upper limit 160 J/GB',printed['claim_lines']['rails'])
-
-    def test_missing_prerequisites_print_complete_results_through_cli(self):
-        cases=[('adapter_source','',True,'gap power sources must be named'),
-               ('battery_source',None,True,'gap power sources must be named'),
-               ('adapter_max_w',None,True,'adapter rating missing'),
-               ('r_max_s',None,False,'r_max missing'),
-               ('meter_edge_w',None,False,'meter edge powers missing'),
-               ('battery_edge_j',None,False,'battery edge energy missing'),
-               ('anchor_shift_j',None,False,'anchor shift bound missing'),
-               ('tau_s',None,False,'tau missing')]
-        for field,value,gap,reason in cases:
-            with self.subTest(field=field):
-                records=deepcopy(self.records);h=records[0]['harvest']
-                if value is None: del h[field]
-                else: h[field]=value
-                if gap: h['meter_gaps']=[{'span':'stream','missing_samples':1}]
-                result=self.read_cli(records)
-                self.assertEqual(len(result['calls']),8)
-                self.assertEqual(result['input_records'],records)
-                self.assertTrue(any(reason in r for r in result['reasons']))
-                beta='rails' if field in ('anchor_shift_j','tau_s') else 'dc'
-                self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
-                self.assertIn('not defined (',result['boundaries'][beta]['description'])
-                if field=='anchor_shift_j':
-                    self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
-                elif field!='tau_s':
-                    self.assertIn('delta',result['boundaries']['rails'])
-                    self.assertIn('delta',result['boundaries']['dc'])
-        for beta in ('rails','gpu','meter','battery'):
-            with self.subTest(integral=beta):
-                records=deepcopy(self.records);del records[0]['harvest']['energy_j'][beta]
-                result=self.read_cli(records)
-                self.assertEqual(len(result['calls']),8)
-                self.assertTrue(any('stream integral missing' in r or 'battery reading missing' in r for r in result['reasons']))
-        for records in (self.records[:7],[],[{}]+self.records[1:]):
-            result=self.read_cli(records)
+    def test_order_and_missing_call_preserve_computable_arms(self):
+        for records in (self.records[:-1],[self.records[i] for i in (0,2,1,3)]):
+            result=probe.read_known_bytes(records,self.check)
+            self.assertEqual(result['boundaries']['rails']['class'],'UNDETERMINED')
             self.assertEqual(len(result['calls']),len(records))
-            self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
+        c=probe.read_known_bytes(self.records[1:],self.check)['boundaries']['rails']['arms']['C']
+        self.assertIsInstance(c['x'],float)
 
-    def test_duplicate_stamps_are_disclosed_and_keep_native_variance(self):
-        for stream,expected in (('meter',20_000_000),('battery',200_000_000)):
-            records=deepcopy(self.records)
-            rows=records[0]['harvest']['idle']['pre'][stream]
-            rows[1]['stamp_ns']=rows[0]['stamp_ns']
-            result=self.read_cli(records)
-            stats=result['calls'][0]['native_idle']['pre'][stream]
-            self.assertEqual(stats['duplicate_stamp_count'],1)
-            self.assertEqual(stats['sample_count'],len(rows))
-            self.assertEqual(stats['native_interval_ns'],expected)
-            self.assertIn('variance_w2',stats)
-            self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
+    def test_gap_sources_and_transient(self):
+        records=deepcopy(self.records);records[1]['harvest']['meter_gaps']=[{'span':'stream','missing_samples':1}]
+        result=probe.read_known_bytes(records,self.check)
+        # Gap: 1e6×4ε×2.8≈2.5e-9 J < 2.8e-6 J; divided by 2*N_C*b_GB it is < .01*.00031 J/GB.
+        self.assertAlmostEqual(result['calls'][1]['meter_gaps']['bound_j'],.020*140,delta=1e-6*.020*140)
+        for beta,w in [('dc',.002403097),('rest',.002709920)]:
+            self.assertAlmostEqual(result['boundaries'][beta]['halfwidth'],w,delta=.01*.00031)
+        records[1]['harvest']['adapter_source']=''
+        self.assertIn('gap power sources',probe.read_known_bytes(records,self.check)['boundaries']['dc']['reason'])
+        records=deepcopy(self.records);records[0]['harvest']['energy_j']['rails']+=5*records[0]['receipt']['duration_s']
+        v=probe.read_known_bytes(records,self.check)['boundaries']['rails']
+        self.assertEqual(probe.format_interval(v['delta'],v['halfwidth']),'0.098 ± 0.023')
+        self.assertEqual(v['class'],'RESOLVED')
+        self.assertGreater(v['arms']['R']['rep'],0)
 
-    def test_different_rail_set_has_boundary_specific_physical_effect(self):
+    def test_small_true_contrast_uses_check_kappa_and_h2_upper_place(self):
+        # Revision §5's .00030 J/GB case. Set R's per-dispatch excess to
+        # x_C + b*Δ/1e9; all baseline and edge inputs stay the example's.
         records=deepcopy(self.records)
-        records[0]['harvest']['capture_stack']['measurement_boundary_label']['rails']=['cpu_power','gpu_power']
-        result=self.read_cli(records)
-        self.assertIn('measurement_boundary_label.rails',result['stack_comparisons'][0]['physical_differences'])
-        for beta in ('rails','rest'):
-            self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
-            self.assertIn('measured rails boundary differs',result['boundaries'][beta]['reason'])
-            self.assertIn('delta',result['boundaries'][beta])
+        target=.00030
+        xc=self.result['boundaries']['rails']['arms']['C']['x']
+        for row in records:
+            r,h=row['receipt'],row['harvest']
+            if r['arm']=='R':
+                h['energy_j']['rails']=.051*r['duration_s']+r['repeats']*(xc+r['bytes_per_read']*target/1e9)
+        result=probe.read_known_bytes(records,self.check)
+        value=result['boundaries']['rails']
+        self.assertEqual(value['class'],'NOT RESOLVED')
+        self.assertAlmostEqual(value['delta'],target,delta=.01*.00031)  # §5's common bar.
+        expected=float((Fraction(value['delta'])+Fraction(value['halfwidth']))*Fraction(result['kappa']))
+        # Upper limit: 1e6×4ε×.00377≈3.3e-12 < 1e-6×.00377≈3.8e-9 < .01*.00031 J/GB.
+        self.assertAlmostEqual(value['upper_limit'],expected,delta=1e-6*abs(expected))
+        self.assertIn('0.00030 ± 0.00031',result['printed']['claim_lines']['rails'])
+        self.assertIn('memory-traffic energy contrast',result['printed']['claim_lines']['rails'])
+        self.assertIn('under the stated model and constant payload',result['printed']['claim_lines']['rails'])
+        # §4 and §5 require the interval's decimal place: .00377.
+        self.assertIn('upper limit 0.00377 J/GB',result['printed']['claim_lines']['rails'])
+        self.assertEqual(format(value['upper_limit'],'.2g'),'0.0038')
+
+    def test_boundary_specific_missing_fields(self):
+        for leaf,affected in [('r_max_s',('rails','gpu','dc','rest')),('anchor_shift_j',('rails','gpu','rest'))]:
+            records=deepcopy(self.records);del records[0]['harvest'][leaf]
+            result=probe.read_known_bytes(records,self.check)
+            for beta in affected: self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
+            self.assertIsInstance(result['boundaries']['rails']['delta'],float)
+            if leaf == 'anchor_shift_j':
+                # §3/§4: retain the numeric estimate, but no precision without its half-width.
+                for beta in ('rails','gpu','rest'):
+                    self.assertEqual(result['printed']['contrasts'][beta],
+                                     result['boundaries'][beta]['description'])
+                    self.assertTrue(result['printed']['contrasts'][beta].startswith('not defined ('))
+        records=deepcopy(self.records);records[0]['harvest']['idle']['pre']['gpu']=[]
+        result=probe.read_known_bytes(records,self.check)
+        self.assertEqual(result['boundaries']['gpu']['class'],'UNDETERMINED')
+        self.assertEqual(result['boundaries']['rails']['class'],'RESOLVED')
+
+    def test_stack_scope(self):
+        for field in ('python','kernel_library','os_version'):
+            records=deepcopy(self.records);records[0]['receipt']['stack'][field]='different'
+            result=probe.read_known_bytes(records,self.check)
+            self.assertEqual(result['boundaries']['rails']['class'],'UNDETERMINED' if field=='os_version' else 'RESOLVED')
+        records=deepcopy(self.records);records[0]['harvest']['capture_stack']['measurement_boundary_label']['rails']=['cpu_power']
+        result=probe.read_known_bytes(records,self.check)
         self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
-        self.assertEqual(result['boundaries']['gpu']['class'],'RESOLVED')
+        for beta in ('rails','rest','gpu'): self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
 
-    def test_gpu_source_must_exist_in_recorded_rail_sets(self):
-        records = deepcopy(self.records)
-        records[0]['harvest']['capture_stack']['measurement_boundary_label']['rails'] = ['cpu_power','ane_power']
-        observed = self.read_cli(records)
-        reference, versions = probe.registered_stack()
-        reference['measurement_boundary_label']['rails'] = ['cpu_power','ane_power']
-        with patch.object(probe,'registered_stack',return_value=(reference,versions)):
-            expected = probe.read_known_bytes(self.records,self.scan)
-        for result in (observed, expected):
-            self.assertEqual(result['boundaries']['gpu']['class'], 'UNDETERMINED')
-            self.assertIn('gpu_power', result['boundaries']['gpu']['reason'])
-            self.assertEqual(result['boundaries']['dc']['class'], 'RESOLVED')
+    def test_native_order_not_repaired(self):
+        for stream in ('rails','gpu','meter','battery'):
+            records=deepcopy(self.records);rows=records[0]['harvest']['idle']['pre'][stream]
+            rows[1],rows[0]=rows[0],rows[1]
+            result=probe.read_known_bytes(records,self.check)
+            beta='dc' if stream in ('meter','battery') else stream
+            self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
+            self.assertIn(stream,result['boundaries'][beta]['reason'])
+            self.assertEqual(len(result['input_records'][0]['harvest']['idle']['pre'][stream]),len(rows))
 
-    def test_phi_is_recomputed_from_its_defining_sizes(self):
-        scan=deepcopy(self.scan);del scan['phi']
-        result=self.read_cli(self.records,scan)
-        self.assertEqual(result['phi'],1/64)  # power-of-two fraction is bit exact
-        self.assertEqual(result['printed']['contrasts']['dc'],'0.1929 ± 0.0025')
+    def test_hour_timing_is_description_only(self):
+        result=self.result
+        self.assertIn('thermal journal missing',result['calls'][0]['thermal']['spans'])
+        records=deepcopy(self.records)
+        for row in records:
+            r=row['receipt'];r['end_ns']=r['start_ns']+round(r['duration_s']*(.5 if r['arm']=='R' else 1)*1e9)
+        actual=probe.read_known_bytes(records,self.check)
+        self.assertLess(actual['hour_timing']['D_s'],0)
+        self.assertEqual(actual['kappa'],result['kappa'])  # Identical check code/input.
 
-    def test_no_knee_descriptions_and_h2_upper_limit_rounding(self):
-        result=self.read_cli(self.records,self.dram_scan)
-        self.assertEqual(result['share'],{k:'not defined (knee not found)' for k in ('f','df')})
-        self.assertEqual(result['gpu_power_contrast_w'],'not defined (knee not found)')
-        self.assertEqual(result['phi'],'not defined (knee not found)')
-        for beta in result['boundaries'].values():
-            for key in ('delta','halfwidth','alpha','gamma_c','gamma_d','r','epsilon_flip','raw_stream_j_per_byte'):
-                self.assertEqual(beta[key],'not defined (knee not found)')
-        value={'delta':0.,'halfwidth':.000996,**probe.classify(0.,.000996,1/64)}
-        printed=probe.printed_record({'share':{'f':'unknown'},'stack_comparisons':[], 'boundaries':{'rails':value}})
-        self.assertEqual(printed['contrasts']['rails'],'0.0000 ± 0.0010')
-        self.assertIn('upper limit 0.0010 J/GB',printed['claim_lines']['rails'])
-        self.assertEqual(probe.format_interval(.1+.2,0),'0.30 ± 0.00')
+    def test_missing_and_invalid_native_leaves_preserve_boundary_scope(self):
+        # Fault the admitted native prerequisites; these tests survive the
+        # change in contrast geometry. No invalid row may be dropped to shrink
+        # a width, and a DC prerequisite prevents every boundary's validity.
+        cases=[
+            (('energy_j','rails'),None,('rails','rest')),
+            (('energy_j','gpu'),None,('gpu',)),
+            (('energy_j','meter'),None,('rails','gpu','dc','rest')),
+            (('energy_j','battery'),None,('rails','gpu','dc','rest')),
+            (('battery_edge_j',),[-1,0],('rails','gpu','dc','rest')),
+            (('meter_edge_w',),[None,0],('rails','gpu','dc','rest')),
+            (('meter_gaps',),[{'span':'invalid','missing_samples':1}],('rails','gpu','dc','rest')),
+            (('battery_samples',),[],('rails','gpu','dc','rest')),
+            (('tau_s',),None,('rails','gpu','dc','rest')),
+        ]
+        for stream in ('rails','gpu','meter','battery'):
+            cases.append((('idle','pre',stream,0,'power_w'),float('nan'),
+                          ('rails','gpu','dc','rest') if stream in ('meter','battery') else
+                          ('rails','rest') if stream=='rails' else ('gpu',)))
+        for path,bad,affected in cases:
+            records=deepcopy(self.records);parent=records[0]['harvest']
+            for key in path[:-1]: parent=parent[key]
+            parent[path[-1]]=bad
+            with self.subTest(path=path):
+                result=probe.read_known_bytes(records,self.check)
+                self.assertEqual(len(result['input_records']),len(records))
+                for beta in affected:
+                    self.assertEqual(result['boundaries'][beta]['class'],'UNDETERMINED')
+                if 'rails' not in affected:
+                    self.assertEqual(result['boundaries']['rails']['class'],'RESOLVED')
+                if 'dc' not in affected:
+                    self.assertEqual(result['boundaries']['dc']['class'],'RESOLVED')
 
-    def test_nonsingular_descriptions_and_ordered_classes(self):
-        self.assertEqual(probe.describe_share({'delta':0.,'halfwidth':.001},{'delta':.1,'halfwidth':.002}),
-                         {'f':0.,'df':.01})
-        self.assertEqual(probe.describe_share(None,{'delta':0.,'halfwidth':0.})['df'],
-                         'not defined (DC contrast not valid)')
-        for delta,width,expected in [(2.5e-5,1e-5,'RESOLVED'),(-.0100,.0020,'UNDETERMINED'),
-                                     (1e-5,2e-5,'BELOW ATTRIBUTION LEVEL'),(0,.00057,'NOT RESOLVED')]:
-            self.assertEqual(probe.classify(delta,width,1/64)['class'],expected)
-        # The attribution ratio overflows although its later upper limit is
-        # zero. Checking only the final returned dictionary would miss it.
-        with self.assertRaisesRegex(ValueError,'scan.K/B attribution ratio'):
-            probe.classify(-8e307,8e307,.99)
-        calls=[{'arm':a,'N':1,'boundaries':{'rails':{'excess_j':self.payload[a]*1e-9,'bound_j':.001}}}
-               for a in ('S','C1','C3','C2','C2','C3','C1','S')]
-        value=probe.reduce_boundary(calls,self.payload,'rails')
-        self.assertEqual(value['epsilon_flip_over_alpha'],'not defined (alpha is zero)')
-
-
-
-def dram_only(s):
-    return 50e-6+s/331.6e9
-
-
-def worked5(s):
-    # marginal: 1000 GB/s up to 32 MiB; 32->64 MiB pair at 198.8 GB/s; 331.6 from 64 MiB up
-    k = 64*2**20
-    if s <= k//2:
-        return 50e-6+s/1e12
-    t32 = 50e-6+(k//2)/1e12
-    t64 = t32+(k//2)/198.8e9
-    return t64+(s-k)/331.6e9
-
-
-def quantized_stamp(tick_index, rounding):
-    value = tick_index*125
-    return value//3 if rounding == 'floor' else (value+1)//3
-
-
-def receipts(model, sigma, rng, rounding='floor'):
-    out=[]
-    for s in (2**k for k in range(14,36)):
-        td=model(s)
-        n=math.floor(2/td)
-        for j in range(3):
-            dur=n*td*(1+rng.gauss(0,sigma))
-            # Random phase in one physical tick, at random integer tick epoch.
-            # Integer arithmetic for the large epoch avoids floating cancellation.
-            phase=rng.random()
-            index=rng.randrange(24_000_000_000,48_000_000_000)
-            end_index=index+math.floor(phase+dur*1e9/(125/3))
-            start=quantized_stamp(index,rounding)
-            end=quantized_stamp(end_index,rounding)
-            out.append(dict(bytes_per_read=s,repeats=n,start_ns=start,end_ns=end,
-                **{**synthetic_clock(), "clock_ns_conversion": rounding}))
-    return out
+    def test_dc_zero_lower_endpoint_refuses_and_null_containers_are_reasoned(self):
+        real=probe.reduce_boundary
+        def zero_lower(calls,sizes,boundary):
+            value=real(calls,sizes,boundary)
+            if boundary=='dc': value['delta']=value['halfwidth']
+            return value
+        with patch.object(probe,'reduce_boundary',side_effect=zero_lower):
+            result=probe.read_known_bytes(self.records,self.check)
+        for v in result['boundaries'].values():
+            self.assertEqual(v['class'],'UNDETERMINED')
+            self.assertEqual(v['reason'],'contrast not resolved')  # DC requires strictly >0.
+        for records in (None,{},[None],[{'receipt':None,'harvest':None}]):
+            result=probe.read_known_bytes(records,self.check)
+            self.assertTrue(all(v['class']=='UNDETERMINED' for v in result['boundaries'].values()))
+            json.dumps(result,allow_nan=False)
 
 
-def exact_reference(rec):
-    times={}
-    for s in sorted({c['bytes_per_read'] for c in rec}):
-        calls=[c for c in rec if c['bytes_per_read']==s]
-        ds=[F(c['end_ns']-c['start_ns'],10**9*c['repeats']) for c in calls]
-        t=sum(ds)/len(ds)
-        qs=[2*(max(F(str(c['clock_resolution_s']))*10**9, F(c['clock_tick_num_ns'],c['clock_tick_den']))+1)
-            / (10**9*c['repeats']) for c in calls]
-        times[s]=(t,max(abs(d-t) for d in ds)+sum(qs)/len(qs))
-    pairs={}
-    sizes=sorted(times)
-    for lo,hi in zip(sizes,sizes[1:]):
-        d=times[hi][0]-times[lo][0]
-        dd=times[hi][1]+times[lo][1]
-        if d>dd:
-            pairs[hi]={'m_bytes_s':F(hi-lo)/d,'lower':F(hi-lo)/(d+dd),'upper':F(hi-lo)/(d-dd)}
-    c=max(pairs,key=lambda s:pairs[s]['lower'])
-    md,mc=pairs[sizes[-1]],pairs[c]
-    h=lambda x,y:1/(F(63,64)/x+F(1,64)/y)
-    th={key:h(md[key],mc[key]) for key in ('m_bytes_s','lower','upper')}
-    target=pairs[2**25]
-    target.update(margin=target['m_bytes_s']-th['m_bytes_s'],
-                  bar=target['m_bytes_s']-target['lower']+th['upper']-th['m_bytes_s'])
-    return th,target
-
-
-
-def real_scan_cli(model):
-    class ScanMX:
-        uint8='uint8'
-        def __init__(self, td): self.td,self.count=td,0
-        def ones(self, shape, dtype): return object()
-        def sum(self, data): return object()
-        def eval(self, value): self.count+=1
-        def synchronize(self): pass
-        def clock(self): return 10**12+round(self.count*self.td*1e9)
-    reference,versions=probe.registered_stack()
-    stack={**reference,**versions}
-    calls=[]
-    with tempfile.TemporaryDirectory() as tmp:
-        for size in (2**k for k in range(14,36)):
-            for j in range(3):
-                mx=ScanMX(model(size));n=math.floor(2/model(size))
-                with patch.object(probe,'collect_stack',return_value=stack), \
-                     patch.object(probe,'clock_metadata',return_value=synthetic_clock()):
-                    rec=probe.stream(size,n,device='synthetic',idle_s=0,settle_s=0,
-                                     mx=mx,clock_ns=mx.clock,sleep=lambda _:None)
-                path=Path(tmp)/f'{size}-{j}.json'
-                path.write_text(json.dumps(rec,allow_nan=False))
-                calls.append(json.loads(path.read_text()))
-        path=Path(tmp)/'scan.json';path.write_text(json.dumps(calls))
-        cli=subprocess.run([sys.executable,'-B',str(probe.ROOT/'scripts/bytes_stream_test.py'),
-                            'scan',str(path)],capture_output=True,text=True,check=True)
-        return json.loads(cli.stdout)
-
-
-class ExactKneeTests(unittest.TestCase):
-    def test_rational_worked_comparison(self):
-        rec=receipts(worked5,0,random.Random(8))
-        result=probe.knee_scan(rec)
-        th,pair=exact_reference(rec)
-        actual=next(p for p in result['pairs'] if p['size']==2**25)
-        differences=[float(abs(F(actual[key])-pair[key]))/1e9
-                     for key in ('m_bytes_s','lower','upper','margin','bar')]
-        differences += [float(abs(F(result[outkey])-th[key]))/1e9 for outkey,key in
-                        [('threshold','m_bytes_s'),('threshold_lower','lower'),('threshold_upper','upper')]]
-        # Consult verify.py: 1% of H2's smallest printed uncertainty,
-        # 0.000045 GB/s, is 4.5e-7 GB/s. Against the exact rationals,
-        # 1e6 * binary64 discrepancy must also fit below that same bar.
-        agreement=4.5e-7
-        self.assertLess(1e6*max(differences),agreement)
-        for difference in differences:
-            self.assertLess(difference,agreement)
-        self.assertEqual(result['K'],2**26)  # discrete output identity
-
-    def test_reduced_consult_noise_sweep(self):
-        # Fixed assumptions, not fitted tolerances; retain outcomes without
-        # asserting rates. 20 trials/cell keeps this regression in seconds.
-        for rounding in ('floor','nearest'):
-            for level,sigma in enumerate((0,.0005,.002,.005,.01)):
-                for world,model in enumerate((worked5,dram_only)):
-                    rng=random.Random(20261028+level*10+world)
-                    for trial in range(20):
-                        rec=receipts(model,sigma,rng,rounding)
-                        result=probe.knee_scan(rec)
-                        self.assertEqual(len(result['pairs']),21)
-                        if sigma == 0:
-                            self.assertEqual(result['K'],2**26 if world==0 else None)
-                        if result['K'] is not None:
-                            self.assertTrue(all(p['above'] for p in result['arm_checks']))
-                            self.assertTrue(all(p['lower']>result['threshold_upper'] for p in
-                                                result['pairs'] if p['above']))
-
-    def test_real_stream_scan_receipts_reloaded_through_cli(self):
-        for model,expected in ((worked5,2**26),(dram_only,None)):
-            result=real_scan_cli(model)
-            self.assertEqual(result['K'],expected)
-            self.assertEqual(len(result['receipts']),66)
-
-    def test_isolated_late_pair_is_retained_and_does_not_shrink_k(self):
-        def late_model(s):
-            if 2**26 < s <= 2**27:
-                return worked5(2**26)+(s-2**26)/1e12
-            return worked5(s)
-        result=probe.knee_scan(receipts(late_model,0,random.Random(8)))
-        self.assertTrue(next(p for p in result['pairs'] if p['size']==2**27)['above'])
-        self.assertEqual(result['candidate_K'],2**28)
-        self.assertIsNone(result['K'])
-        self.assertEqual(result['reason'],'cache arm pairs not both resolved')
-        self.assertEqual(len(result['pairs']),21)
-        self.assertEqual([p['size'] for p in result['arm_checks']],[2**25,2**26])
-
-    def test_missing_clock_retains_all_calls_and_reason(self):
-        rec=receipts(worked5,0,random.Random(8))
-        del rec[0]['clock_resolution_s']
-        result=probe.knee_scan(rec)
-        self.assertIsNone(result['K'])
-        self.assertIn('clock resolution missing',result['reason'])
-        self.assertEqual(result['receipts'],rec)
-
-    def test_clock_receipt_and_measured_mac_timebase(self):
-        self.assertEqual(probe.clock_duration_bound_ns(synthetic_clock()),86.)
-        metadata=probe.clock_metadata()
-        self.assertEqual(metadata['clock_resolution_s'],probe.time.clock_getres(probe.time.CLOCK_MONOTONIC_RAW))
-        self.assertEqual(metadata['clock_ns_conversion'],'unknown')
-        # Exercise the actual macOS collection path via a fake C ABI, rather
-        # than substituting this seat's Linux clock for the Mac timebase.
-        class Mach:
-            def __call__(self, ptr):
-                ptr._obj.numer,ptr._obj.denom=125,3
-                return 0
-        class Lib:
-            mach_timebase_info=Mach()
-        with patch.object(probe.sys,'platform','darwin'), patch('ctypes.CDLL',return_value=Lib()), \
-             patch.object(probe.time,'clock_getres',return_value=4.2e-8):
-            mac=probe.clock_metadata()
-        self.assertEqual((mac['clock_tick_num_ns'],mac['clock_tick_den']),(125,3))
-        self.assertEqual(mac['clock_duration_bound_ns'],86.)
-
-
-if __name__ == "__main__":
-    unittest.main()
+if __name__=='__main__':
+    if '--replay-archive' in sys.argv:
+        replay_archive(sys.argv[-1])
+    elif '--worked-example' in sys.argv:
+        records,check=worked_records(); result=probe.read_known_bytes(records,check)
+        print('Revision / real reader (J/GB):')
+        for beta,delta,width in [('rails',.075,.000306823),('dc',.344513,.002389013),('rest',.269513,.002695836)]:
+            v=result['boundaries'][beta]
+            print(f"{beta}: revision {delta:.9f} ± {width:.9f}; reader {v['delta']:.9f} ± {v['halfwidth']:.9f}; {v['class']}")
+        print('Revision κ=6.213; reader κ='+format(result['kappa'],'.4g'))
+        print('Revision f=0.2177 ± 0.0024; reader f='+result['printed']['share'])
+        for beta in ('rails','dc','rest'):
+            print(beta+' x_R/x_C mJ='+', '.join(format(result['boundaries'][beta]['arms'][a]['x']*1000,'.7f') for a in ('R','C')))
+            print(beta+' δx_R/δx_C µJ='+', '.join(format(result['boundaries'][beta]['arms'][a]['dx']*1e6,'.4f') for a in ('R','C')))
+    else:
+        unittest.main()

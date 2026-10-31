@@ -1,0 +1,332 @@
+"""Span adapters preserve pass-1 integration and the reader's native rows."""
+import copy
+from decimal import Decimal
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from joulewise.b6 import calibration
+from joulewise.bytes_stream_capture import write, read
+from joulewise.external import km003c_parse as kp
+from scripts import bytes_stream_harvest as h
+from scripts import bytes_stream_test as bt
+from tests.test_bytes_stream_capture import write_meter
+
+
+def independent_arithmetic(test, archive, record):
+    """Independent arithmetic over raw native streams; no producer integrators."""
+    import math
+    import plistlib
+    r, actual = record['receipt'], record['harvest']
+    lo, hi = r['start_ns'], r['end_ns']
+    duration = (hi-lo)/1e9
+    # Rule §3: 1% of the smallest H2-printed width, above 1e6× propagated
+    # binary64 noise. Derive from this synthetic run, never the old example.
+    reader = read(archive/'READ.json')
+    bar = .01*min(float(format(v['halfwidth'],'.2g')) for v in reader['boundaries'].values())
+    payload_gb = r['bytes_read']/1e9
+    tolerance_j = bar * payload_gb
+    float_noise = 1e6*2.2e-16*sum(abs(v) for v in actual['energy_j'].values() if v is not None)
+    test.assertGreater(tolerance_j,float_noise)
+    message = f"{bar} J/GB * {payload_gb} GB = {tolerance_j} J for this call"
+    raw = (archive/'runs_bytes_stream_test/capture/raw/powermetrics.plist').read_bytes()
+    # Native plist dates have whole-second precision. Use the capture's
+    # precise first endpoint, then advance on raw integer elapsed_ns support.
+    stop = read(archive/'runs_bytes_stream_test/capture/capture_stop.json')
+    end = round((stop['uncertainty_evidence']['clock_anchor']['first_sample_end_point_epoch_s']
+                 - 1_000_000)*1e9)
+    rails = []
+    for chunk in raw.split(b'\0'):
+        if not chunk.strip():
+            continue
+        doc = plistlib.loads(chunk)
+        # Synthetic epoch = 1,000,000 + RAW seconds (Capture's source clock).
+        if rails:
+            end += doc['elapsed_ns']
+        start = end-doc['elapsed_ns']
+        power = sum(doc['processor'][k] for k in ('cpu_power','gpu_power','ane_power'))/1000
+        rails.append(power*max(0,min(hi,end)-max(lo,start))/1e9)
+    test.assertAlmostEqual(actual['energy_j']['rails'], math.fsum(rails), delta=tolerance_j, msg=message)
+    # Decode raw meter bytes with the governed single clock fit; integrate
+    # independently with a direct half-open sample selection and arithmetic mean.
+    stream = kp.parse(next((archive/'custody/hazards/meter').glob('stream-*.jsonl')))
+    selected = [w for t,w in zip(stream.host_ns,stream.watts) if lo <= t < hi]
+    meter = math.fsum(selected)/len(selected)*duration
+    test.assertAlmostEqual(actual['energy_j']['meter'], meter, delta=tolerance_j, msg=message)
+    battery = [(t,-s['B0AC']*s['B0AV']/1e6) for t,s in zip(stream.poll_ns,stream.smc)
+               if 'B0AC' in s and 'B0AV' in s]
+    n = sum(lo <= t < hi for t,w in battery)
+    residual_ns = max(abs(stream.fit.stats[k]) for k in
+                      ('excess_latency_ms_min','excess_latency_ms_max'))*1e6
+    # BAT-2: one second averaged, one held, plus the largest raw poll gap.
+    tau_ns = 2_000_000_000 + max(b-a for a,b in zip(stream.poll_ns,stream.poll_ns[1:]))
+    # Edge power compared in W at a stricter energy-equivalent bar over T_call.
+    for index, edge in enumerate((lo,hi)):
+        right = next(i for i,t in enumerate(stream.host_ns) if t >= edge)
+        radius = residual_ns
+        powers = [w for i,(t,w) in enumerate(zip(stream.host_ns,stream.watts))
+                  if i in (right-1,right) or edge-radius <= t <= edge+radius]
+        test.assertAlmostEqual(actual['meter_edge_w'][index], max(powers),
+                               delta=tolerance_j/duration, msg=message+'; W bar = J bar / T_call')
+        charge = duration/n*math.fsum(abs(w) for t,w in battery
+                                   if edge <= t < edge+tau_ns)
+        test.assertAlmostEqual(actual['battery_edge_j'][index], charge, delta=tolerance_j, msg=message)
+    test.assertEqual(sum(g['missing_samples'] for g in actual['meter_gaps'] if g['span']=='stream'),2)
+    print(f"Independent arithmetic: {message}; rails={math.fsum(rails)} J; meter={meter} J; "
+          f"meter_edge_w={actual['meter_edge_w']}; battery_edge_j={actual['battery_edge_j']}")
+
+
+class HarvestTests(unittest.TestCase):
+    def test_native_support_integral_and_anchor_envelope(self):
+        # Compare identical governed functions on identical inputs: exact is
+        # appropriate here, not an approximate test of a new estimator.
+        from joulewise.bundle_read import TracePoint, Window
+        from joulewise.reduce import _integrate, _anchor_shift_envelope
+        rows=[dict(start_ns=i*10**8,end_ns=(i+1)*10**8,power_w=2+i%3) for i in range(100)]
+        span=(123456789,9123456789)
+        actual,env=h.rail_energy(rows,span,.03)
+        curve=[TracePoint((r['end_ns']-span[0])/1e9,r['power_w'],
+                          (r['start_ns']-span[0])/1e9,(r['end_ns']-span[0])/1e9) for r in rows]
+        window=Window(0,(span[1]-span[0])/1e9)
+        self.assertEqual(actual,_integrate(curve,window.start_s,window.end_s))
+        self.assertEqual(env,_anchor_shift_envelope([(curve,[window])],.03)['max_abs_delta_j'])
+        self.assertIsNone(h.rail_energy(rows,(-1,9*10**9),.03)[0])
+        self.assertIsNone(h.rail_energy(rows,span,None)[1])
+
+    def stream(self,root):
+        r={'start_ns':10*10**9,'end_ns':20*10**9,'bytes_per_read':2**32,
+           'repeats':10,'duration_s':10}
+        path=root/'meter.jsonl'
+        write_meter(path,[r],0,30*10**9)
+        return kp.parse(path)
+
+    def test_meter_is_already_raw_and_signed_battery_and_gap_survive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stream=self.stream(Path(tmp))
+            spans={'pre':(2*10**9,5*10**9),'stream':(10*10**9,20*10**9),'post':(24*10**9,27*10**9)}
+            result=h.meter_fields(stream,spans)
+            # Identical integrator, identical RAW inputs, not offset twice.
+            self.assertEqual(result['energy_j']['meter'],kp.integrate(stream.host_ns,stream.watts,*spans['stream'])[0])
+            times,watts=stream.battery_watts()
+            self.assertEqual(result['energy_j']['battery'],kp.integrate(times,watts,*spans['stream'])[0])
+            self.assertGreater(result['energy_j']['battery'],0)
+            self.assertEqual(sum(g['missing_samples'] for g in result['meter_gaps']),2)
+            from joulewise.bytes_analysis import _battery_delay_ns
+            # Same governed function and same stream: exact replay, not a
+            # comparison against a separately rounded floating literal.
+            self.assertEqual(result['tau_s'],_battery_delay_ns(stream)/1e9)
+            self.assertEqual(result['idle']['pre']['meter'],h.points(stream.host_ns,stream.watts,spans['pre']))
+            # Charging is retained signed, never clamped to zero.
+            stream.smc=[dict(B0AC=250,B0AV=12000) for _ in stream.smc]
+            self.assertLess(h.meter_fields(stream,spans)['energy_j']['battery'],0)
+
+    def test_uncovered_idle_is_unavailable_not_a_partial_mean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stream=self.stream(Path(tmp))
+            spans={'pre':(-2*10**9,5*10**9),'stream':(10*10**9,20*10**9),'post':(24*10**9,27*10**9)}
+            result=h.meter_fields(stream,spans)
+            self.assertEqual(result['idle']['pre']['meter'],[])
+            self.assertIsNotNone(result['energy_j']['meter'])
+
+    def test_missing_battery_readings_remain_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stream=self.stream(Path(tmp))
+            stream.smc=[{} for _ in stream.smc]
+            spans={'pre':(2*10**9,5*10**9),'stream':(10*10**9,20*10**9),'post':(24*10**9,27*10**9)}
+            result=h.meter_fields(stream,spans)
+            self.assertIsNone(result['energy_j']['battery'])
+            self.assertIsNone(result['battery_edge_j'])
+            self.assertEqual(result['battery_samples'],[])
+
+    def test_absent_and_restarted_meter_never_get_silently_refit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            write(root/'SESSION.json',dict(adapter_max_w=140,adapter_source='synthetic',
+                calibration_registration={'calibration':dict(alignment_reference_s='.03',acceptance_corpus=[],
+                    bracket_screen_s='.01',operative_bound_stop_s=None,max_budgetable_drift_s='.02')}))
+            capture=root/'runs_bytes_stream_test/capture'
+            write(capture/'CHECK.json',dict(status='residency not resolved',b=None,reason='residency not resolved'))
+            for count in (0,2):
+                directory=root/'custody/hazards/meter'
+                directory.mkdir(parents=True,exist_ok=True)
+                for i in range(count):
+                    (directory/f'stream-{i:03d}.jsonl').write_text('{}\n')
+                with patch.object(kp,'clock_fit',side_effect=AssertionError('must not fit multiple streams')):
+                    out=h.harvest(root)
+                self.assertEqual(out['provenance']['meter_stream_count'],count)
+                result=bt.read_known_bytes(out['records'],out['check'])
+                self.assertEqual(result['boundaries']['dc']['class'],'UNDETERMINED')
+
+class ArchiveCliTests(unittest.TestCase):
+    """Malformed and missing archive inputs through the production CLI."""
+    def setUp(self):
+        import sys
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)/'archive'
+        self.capture = self.root/'runs_bytes_stream_test/capture'
+        reg = read(h.ROOT/'configs/b6/registration/acceptance.json')
+        write(self.root/'SESSION.json', dict(calibration_registration=reg,
+              adapter_max_w=140, adapter_source='synthetic nameplate'))
+        write(self.capture/'CHECK.json', dict(status='residency not resolved', b=None))
+        write(self.capture/'STAGE.json', dict(status='incomplete', error='synthetic failure',
+              allocation_stop={'bytes': 2**31, 'reason': 'synthetic allocation stop'}))
+        write(self.capture/'capture_stop.json', dict(device_metadata={
+              'telemetry': 'powermetrics', 'rail_manifest': ['cpu_power','gpu_power','ane_power']}))
+        self.receipt = dict(schema_version=bt.SCHEMA,start_ns=10**9, end_ns=2*10**9,
+            idle_pre_start_ns=0, idle_pre_end_ns=10**9,
+            idle_post_start_ns=2*10**9, idle_post_end_ns=3*10**9)
+        write(self.capture/'calls/01-R.json', self.receipt)
+        self.python = sys.executable
+
+    def cli(self):
+        import subprocess
+        out = Path(self.tmp.name)/'INPUT.json'
+        argv = [self.python, '-I', '-B', str(h.ROOT/'scripts/bytes_stream_harvest.py'),
+                '--archive', str(self.root), '--out', str(out)]
+        if getattr(self, 'audit_outside', None):
+            hook = ('import sys,runpy; from pathlib import Path\n'
+                    f'outside = Path({str(self.audit_outside)!r})\n'
+                    'def audit(event,args):\n'
+                    '    if event == "open" and isinstance(args[0], (str, bytes)):\n'
+                    '        assert not Path(args[0]).resolve().is_relative_to(outside), args[0]\n'
+                    'sys.addaudithook(audit)\n'
+                    'sys.argv = sys.argv[1:]\n'
+                    'runpy.run_path(sys.argv[0], run_name="__main__")\n')
+            argv[3:3] = ['-c', hook]
+        result = subprocess.run(argv, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+        data = read(out)
+        reader = subprocess.run([self.python, '-I', '-B', str(h.ROOT/'scripts/bytes_stream_test.py'),
+            'read', str(out)], text=True, capture_output=True)
+        self.assertEqual(reader.returncode, 0, reader.stderr)
+        self.assertNotIn('Traceback', reader.stderr)
+        self.assertEqual(json.loads(result.stdout)['diagnostics'], data['provenance']['diagnostics'])
+        return data
+
+    def test_v2_is_retained_and_not_integrated(self):
+        self.receipt['schema_version']='joulewise.bytes_stream.v2'
+        (self.capture/'calls/01-R.json').write_text(json.dumps(self.receipt))
+        data=self.cli()
+        self.assertEqual(data['records'][0]['receipt']['schema_version'],'joulewise.bytes_stream.v2')
+        self.assertIsNone(data['records'][0]['harvest'])
+        self.assertIn('v3 required',str(data['provenance']['diagnostics']))
+
+    def test_truncated_receipt(self):
+        (self.capture/'calls/01-R.json').write_text('{')
+        data = self.cli()
+        self.assertIsNone(data['records'][0]['receipt'])
+        self.assertIsNone(data['records'][0]['harvest'])
+        self.assertIn('01-R.json', str(data['provenance']['diagnostics']))
+
+    def test_malformed_receipt_fields(self):
+        (self.capture/'calls/01-R.json').write_text('{"start_ns": []}')
+        data = self.cli()
+        self.assertIsNone(data['records'][0]['harvest'])
+        self.assertIn('schema_version',str(data['provenance']['diagnostics']))
+
+    def test_truncated_check(self):
+        (self.capture/'CHECK.json').write_text('{')
+        self.assertIsNone(self.cli()['check']['status'])
+
+    def test_malformed_check_fields(self):
+        (self.capture/'CHECK.json').write_text('{"b": NaN}')
+        self.assertIsNone(self.cli()['check']['status'])
+
+    def test_missing_check_status(self):
+        (self.capture/'CHECK.json').write_text('{}')
+        self.assertEqual(self.cli()['check'], {})
+
+    def test_nonobject_check(self):
+        (self.capture/'CHECK.json').write_text('1')
+        self.assertIsNone(self.cli()['check']['status'])
+
+    def test_truncated_stage(self):
+        (self.capture/'STAGE.json').write_text('{')
+        self.assertIn('STAGE.json', str(self.cli()['provenance']['diagnostics']))
+
+    def test_malformed_stage_fields(self):
+        (self.capture/'STAGE.json').write_text('{"measured_session_start_ns": [], "measured_session_end_ns": 1}')
+        self.assertIn('span unavailable', str(self.cli()['provenance']['diagnostics']))
+
+    def test_nonobject_thermal(self):
+        path = self.root/'custody/hazards/monitor/thermal.jsonl'
+        path.parent.mkdir(parents=True)
+        path.write_text('1\n')
+        data = self.cli()
+        self.assertIn('thermal journal malformed', str(data['provenance']['diagnostics']))
+        self.assertIsNone(data['records'][0]['harvest']['thermal_spans'])
+
+    def test_outside_symlinks_never_read(self):
+        outside = Path(self.tmp.name)/'outside'
+        outside.mkdir()
+        (outside/'secret.json').write_text('{"outside_secret": true}')
+        for path in (self.capture/'calls/02-C.json', self.capture/'CHECK.json',
+                     self.root/'custody/hazards/meter/stream-001.jsonl'):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.unlink(missing_ok=True)
+            path.symlink_to(outside/'secret.json')
+        (self.root/'linked-directory').symlink_to(outside, target_is_directory=True)
+        raw = self.root/'aliased-raw'
+        raw.mkdir()
+        (raw/'powermetrics.plist').symlink_to(outside/'secret.json')
+        (self.capture/'raw').symlink_to(raw, target_is_directory=True)
+        calibration = self.root/'runs_bytes_stream_test/instrument_validation/pre'
+        calibration.mkdir(parents=True)
+        (calibration/'raw').symlink_to(raw, target_is_directory=True)
+        self.audit_outside = outside
+        data = self.cli()
+        self.assertIn('outside archive symlink not read', str(data['provenance']['diagnostics']))
+        self.assertNotIn('calls/02-C.json', str(data['provenance']['sources']))
+        self.assertNotIn('outside_secret', json.dumps(data))
+        self.assertEqual(data['provenance']['meter_stream_count'], 0)
+
+    def test_stage_specific_diagnostics(self):
+        diagnostics = str(self.cli()['provenance']['diagnostics'])
+        for text in ('incomplete', 'synthetic failure', 'allocation_stop'):
+            self.assertIn(text, diagnostics)
+
+    def test_native_failure_keeps_capture_stack(self):
+        stack = self.cli()['records'][0]['harvest']['capture_stack']
+        self.assertEqual(stack['telemetry_backend'], 'powermetrics')
+        self.assertEqual(stack['measurement_boundary_label']['rails'], ['cpu_power','gpu_power','ane_power'])
+
+    def test_absent_calibration_capture_diagnostic(self):
+        self.assertIn('calibration pre unavailable: absent', str(self.cli()['provenance']['diagnostics']))
+
+    def test_absent_calibration_plist_diagnostic(self):
+        directory = self.root/'runs_bytes_stream_test/instrument_validation/pre'
+        write(directory/'instrument_evidence.json', {'b_fiducial_s': '.01'})
+        self.assertIn('calibration pre unavailable: refit_failed', str(self.cli()['provenance']['diagnostics']))
+
+    def test_readme_archive_copy_refuses_existing_target(self):
+        import os
+        import subprocess
+        readme = (h.ROOT/'configs/campaigns/bytes_stream_test/README.md').read_text()
+        start = readme.index('mkdir -p "${ARCHIVE%/*}"')
+        snippet = readme[start:readme.index('PYTHONDONTWRITEBYTECODE=', start)]
+        marker = self.root/'preserved'
+        marker.write_text('preserve')
+        result = subprocess.run(['/bin/sh', '-c', snippet], text=True, capture_output=True,
+            env={**os.environ, 'ARCHIVE': str(self.root), 'SESSION': str(self.root/'missing-source')})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('Archive target already exists', result.stderr)
+        self.assertEqual(marker.read_text(), 'preserve')
+
+    def test_existing_out_one_line_and_unchanged(self):
+        import subprocess
+        out = Path(self.tmp.name)/'INPUT.json'
+        out.write_text('preserve these bytes')
+        result = subprocess.run([self.python, '-I', '-B', str(h.ROOT/'scripts/bytes_stream_harvest.py'),
+            '--archive', str(self.root), '--out', str(out)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(len(result.stderr.splitlines()), 1)
+        self.assertIn('already exists', result.stderr)
+        self.assertEqual(out.read_text(), 'preserve these bytes')
+
+
+if __name__ == '__main__':
+    unittest.main()

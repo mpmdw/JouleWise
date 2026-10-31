@@ -2,13 +2,14 @@
 """Non-claim MLX streaming probe; receipt contract: known-bytes reading rule §2.
 
 Counts logical uint8 payload reads, not memory-controller traffic. Capture rails
-and KM003C continuously across the eight calls. At harvest, compare_stack() must
+and KM003C continuously across the four calls. At harvest, compare_stack() must
 receive the concurrent capture's stack identity; the probe cannot attest to it.
 """
 from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -144,7 +145,7 @@ def compare_stack(stack, reference, versions, *, capture_stack=None):
             "comparison": comparison}
 
 
-# One input accessor for the read and scan paths. Schemas describe prerequisites,
+# One input accessor for the read and check paths. Schemas describe prerequisites,
 # not replacement measurements. Invalid collections are unavailable as a whole:
 # dropping a bad sample would silently change support or reduce a bound.
 ABSENT = object()
@@ -247,7 +248,7 @@ def input_value(value, schema, path):
     return (value, None) if valid else (None, reason)
 
 
-RECEIPT_INPUTS = {**{k: NONNEG for k in (
+RECEIPT_INPUTS = {**{k: COUNT for k in (
     "start_ns", "end_ns", "idle_pre_start_ns", "idle_pre_end_ns",
     "idle_post_start_ns", "idle_post_end_ns")},
     "bytes_per_read": POSCOUNT, "repeats": POSCOUNT, "bytes_read": POSCOUNT, "settle_s": NONNEG}
@@ -321,90 +322,190 @@ def clock_duration_bound_ns(receipt):
     return 2*(max(res*1e9, tick)+1)
 
 
-def knee_scan(receipts):
-    """§1 exact reciprocal intervals; preserve every call, pair and arm check."""
-    result = {"status": "knee not found", "K": None, "sizes": {}, "pairs": [],
-              "receipts": json_evidence(receipts), "candidate_K": None, "arm_checks": [],
-              "threshold": None, "threshold_uncertainty": None}
-    grouped = {}
-    try:
-        receipts, error = input_value(receipts, [{"bytes_per_read": POSCOUNT,
-            "repeats": POSCOUNT, "start_ns": NONNEG, "end_ns": NONNEG}], "receipts")
+# Rule §1: the MLX v0.31.2 small-launch boundary; eight powers down to
+# 128 threadgroups × 1024 threads × 4 bytes = 2**19 first-pass saturation.
+SCHEMA = "joulewise.bytes_stream.v3"
+GEOMETRY_BYTES = 2**26
+GEOMETRY_SOURCE = "mlx v0.31.2 mlx/backend/metal/reduce.cpp all_reduce_dispatch: in.nbytes() <= (1 << 26)"
+RING_BYTES = 2**35  # 64 × the admitted 512 MiB capacity envelope.
+CAPACITY_BYTES = RING_BYTES // 64
+PHI_U = CAPACITY_BYTES / RING_BYTES
+LADDER = tuple(GEOMETRY_BYTES >> k for k in range(8))
+ORDER = ("R", "C", "C", "R")
+CHECK_CALL_S = 2  # Admitted scan's planning duration, carried into §1 R2.
+CALL_S = 759.2  # (3573.6 - 4*(2*57.6 + 3*3 + 10))/4, §1.
+
+
+def geometry_error(receipt, b=None):
+    """Receipt-only v3 invariants; return the first named failed field."""
+    def fail(field):
+        return "geometry check failed ("+field+")"
+    if not isinstance(receipt, dict):
+        return fail("receipt")
+    if receipt.get("schema_version") != SCHEMA:
+        return fail("schema_version")
+    own_b = receipt.get("bytes_per_read")
+    if type(own_b) is not int or own_b <= 0 or own_b > GEOMETRY_BYTES or RING_BYTES % own_b:
+        return fail("bytes_per_read")
+    if b is not None and own_b != b:
+        return fail("bytes_per_read")
+    q = RING_BYTES // own_b
+    # Counts, shapes and hashes are integer/exact contracts, not tolerances.
+    expected = {"ring_bytes":RING_BYTES, "ring_shape":[q,own_b], "dtype":"uint8",
+                "view_nbytes":own_b, "geometry_branch_bytes":GEOMETRY_BYTES,
+                "geometry_source":GEOMETRY_SOURCE, "launch_side":"small"}
+    for field, value in expected.items():
+        actual = receipt.get(field)
+        if actual != value or (isinstance(value,int) and type(actual) is not int):
+            return fail(field)
+        if field == "ring_shape" and any(type(axis) is not int for axis in actual):
+            return fail(field)
+    arm = receipt.get("arm")
+    if arm not in ("R","C","check-R","check-C"):
+        return fail("arm")
+    if receipt.get("view_order") != ("rotate" if arm.endswith("R") else "repeat"):
+        return fail("view_order")
+    n = receipt.get("repeats")
+    if type(n) is not int or n <= 0 or n % q:
+        return fail("repeats")
+    for field, value in (("sweeps",n//q),("bytes_read",own_b*n),("logical_bytes",own_b*n)):
+        if type(receipt.get(field)) is not int or receipt[field] != value:
+            return fail(field)
+    for field in ("packages.mlx","packages.mlx-metal","runtime_version.version"):
+        if _field(receipt.get("stack"),field) != "0.31.2":
+            return fail("stack."+field)
+    return None
+
+
+def timing_summary(calls):
+    """§1 R3: three observed spans plus their recorded endpoint clock bound."""
+    if not isinstance(calls,list) or len(calls) != 3:
+        raise ValueError("three timing calls required")
+    values, qs = [], []
+    for c in calls:
+        c, error = input_value(c, {"start_ns":COUNT,"end_ns":COUNT,"repeats":POSCOUNT}, "receipt")
         if error:
             raise ValueError(error)
-        for receipt in receipts:
-            grouped.setdefault(receipt["bytes_per_read"], []).append(receipt)
-        sizes = sorted(grouped)
-        if len(sizes) < 2 or any(hi != 2*lo for lo, hi in zip(sizes, sizes[1:])):
-            raise ValueError("scan needs consecutive doubling sizes")
-        times = result["sizes"]
-        for size, calls in sorted(grouped.items()):
-            if len(calls) != 3:
-                raise ValueError("scan needs three calls per size")
-            if any(c["repeats"] <= 0 or c["end_ns"] <= c["start_ns"] for c in calls):
-                raise ValueError("scan counts and durations must be positive")
-            values = [(c["end_ns"]-c["start_ns"])/1e9/c["repeats"] for c in calls]
-            mean = statistics.mean(values)
-            qs = [clock_duration_bound_ns(c)/1e9/c["repeats"] for c in calls]
-            uncertainty = max(abs(v-mean) for v in values) + statistics.mean(qs)
-            times[size] = {"t_s": mean, "dt_s": uncertainty, "q_s": qs, "calls": calls}
-    except (KeyError, TypeError, ValueError) as exc:
-        result["reason"] = "scan prerequisite missing: "+str(exc)
-        return result
-    pairs = result["pairs"]
-    for lo, hi in zip(sizes, sizes[1:]):
-        d = times[hi]["t_s"]-times[lo]["t_s"]
-        dd = times[hi]["dt_s"]+times[lo]["dt_s"]
-        pair = {"size": hi, "difference_s": d, "uncertainty_s": dd,
-                "m_bytes_s": None, "dm_bytes_s": None, "above": False}
-        if d <= dd:
-            pair["description"] = not_defined("dispatch-time difference not separated from zero")
-        else:
-            m, low, high = (hi-lo)/d, (hi-lo)/(d+dd), (hi-lo)/(d-dd)
-            pair.update(m_bytes_s=m, lower=low, upper=high,
-                        lower_excursion=m-low, upper_excursion=high-m, dm_bytes_s=high-m)
-        pairs.append(pair)
-    defined = [p for p in pairs if p["m_bytes_s"] is not None]
-    if pairs[-1]["m_bytes_s"] is None:
-        result["reason"] = "top pair undefined"
-        return result
-    cache = max(defined, key=lambda p: (p["lower"], -p["size"]))
-    dram = pairs[-1]
-    def h(x, y):
-        return 1 / ((63/64)/x + (1/64)/y)
-    threshold = h(dram["m_bytes_s"], cache["m_bytes_s"])
-    low, high = h(dram["lower"],cache["lower"]), h(dram["upper"],cache["upper"])
-    result.update(threshold=threshold, threshold_lower=low, threshold_upper=high,
-                  threshold_uncertainty=max(threshold-low, high-threshold),
-                  cache_reference_size=cache["size"], dram_reference_size=dram["size"],
-                  cache_reference=dict(cache), dram_reference=dict(dram))
-    for pair in defined:
-        # L > T_U, equivalently m-T > (m-L)+(T_U-T); no epsilon.
-        pair.update(margin=pair["m_bytes_s"]-threshold,
-                    bar=pair["m_bytes_s"]-pair["lower"]+high-threshold,
-                    above=pair["lower"] > high)
-    result.update(cache_reference=dict(cache), dram_reference=dict(dram))
-    above = [p["size"] for p in pairs if p["above"]]
-    k = next((s for s in sizes[1:] if not any(a >= s for a in above)), None)
-    result["candidate_K"] = k
-    if k is not None:
-        bysize = {p["size"]: p for p in pairs}
-        for lo, hi in ((k//16,k//8),(k//8,k//4)):
-            pair = bysize.get(hi)
-            reason = ("pair not scanned" if pair is None else
-                      "pair undefined" if pair["m_bytes_s"] is None else
-                      "pair not above threshold" if not pair["above"] else None)
-            result["arm_checks"].append({"from_size":lo,"size":hi,"above":reason is None,"reason":reason})
-    if not above:
-        result["reason"] = "no resolved cache evidence"
-    elif k is None or 64*k > sizes[-1]:
-        result["reason"] = "64 K > s_max"
-    elif not all(p["above"] for p in result["arm_checks"]):
-        result["reason"] = "cache arm pairs not both resolved"
-    else:
-        result.update(status="knee found", K=k, B=max(2**32, 64*k),
-                      Bc1=k//16, Bc3=k//8, Bc2=k//4, phi=k/max(2**32, 64*k))
-    return result
+        values.append((c["end_ns"]-c["start_ns"])/1e9/c["repeats"])
+        try:
+            qs.append(clock_duration_bound_ns(c)/1e9/c["repeats"])
+        except ValueError as exc:
+            raise ValueError("clock prerequisite missing ("+str(exc)+")") from exc
+    mean = statistics.mean(values)
+    return {"t_s":mean, "dt_s":max(abs(v-mean) for v in values)+statistics.mean(qs),
+            "d_s":values,"q_s":qs,"calls":calls}
+
+
+def residency_rung(b, c, r):
+    """§1 R4 and §3 bias; also used for explicitly labelled archive timing replays."""
+    d = r["t_s"]-c["t_s"]
+    dd = r["dt_s"]+c["dt_s"]
+    row = {"b":b,"C":c,"R":r,"D_s":d,"dD_s":dd,"resolved":d > dd}
+    if row["resolved"]:
+        rho = (1-PHI_U)*(d-dd)/(r["t_s"]+r["dt_s"])
+        row.update(rho_L=rho,kappa=1/rho)
+    return row
+
+
+def check_failure(reason, receipts, rungs=None):
+    return {"status":"residency not resolved","reason":reason,"b":None,
+            "W":RING_BYTES,"Q":None,"G":GEOMETRY_BYTES,"geometry_source":GEOMETRY_SOURCE,
+            "phi_U":PHI_U,"phi_U_fraction":"1/64","receipts":json_evidence(receipts),
+            "rungs":rungs or [],"geometry_checks":check_geometry(receipts)}
+
+
+def check_geometry(receipts):
+    return [{"ok":(error := geometry_error(receipt)) is None,"reason":error}
+            for receipt in receipts] if isinstance(receipts,list) else []
+
+
+def residency_check(receipts):
+    """Strict v3, top-down C/R pilot+triplets, stopping at the first resolved rung.
+
+    A partial/malformed rung stays in evidence and cannot be silently dropped.
+    Allocation failures are authored by the stage before any receipt exists.
+    """
+    rungs = []
+    def fault(reason):
+        return check_failure(reason,receipts,rungs)
+    if not isinstance(receipts,list):
+        return fault("check-status fault (receipts must be a list)")
+    pos = 0
+    for k,b in enumerate(LADDER):
+        modes = {}
+        for arm in ("C","R"):
+            own = []
+            for phase in ("pilot","timing","timing","timing"):
+                if pos >= len(receipts):
+                    return fault("check-status fault (incomplete rung "+str(k)+")")
+                receipt = receipts[pos]
+                pos += 1
+                error = geometry_error(receipt,b)
+                if error:
+                    return fault(error)
+                if (receipt.get("arm") != "check-"+arm or receipt.get("rung_index") != k or
+                        type(receipt.get("rung_index")) is not int or receipt.get("check_phase") != phase):
+                    return fault("check-status fault (rung/mode/phase order)")
+                if receipt.get("idle_s") != 0 or receipt.get("settle_s") != 0:
+                    return fault("check-status fault (check idle/settle)")
+                try:
+                    clock_duration_bound_ns(receipt)
+                except ValueError as exc:
+                    return fault("clock prerequisite missing ("+str(exc)+")")
+                _,error = input_value(receipt,RECEIPT_INPUTS,"receipt")
+                if error:
+                    return fault("check-status fault ("+error+")")
+                if phase == "pilot":
+                    if receipt["repeats"] != RING_BYTES//b:
+                        return fault("check-status fault (pilot must be one sweep)")
+                    t = (receipt["end_ns"]-receipt["start_ns"])/1e9/receipt["repeats"]
+                    count = planned_repeats(b,t,CHECK_CALL_S,at_least_one=True)
+                elif receipt["repeats"] != count:
+                    return fault("check-status fault (pilot-derived repeats)")
+                else:
+                    own.append(receipt)
+            try:
+                modes[arm] = timing_summary(own)
+            except ValueError as exc:
+                return fault(str(exc))
+        row = residency_rung(b,modes["C"],modes["R"])
+        rungs.append(row)
+        if row["resolved"]:
+            if pos != len(receipts):
+                return fault("check-status fault (receipts after first resolved rung)")
+            return {"status":"residency resolved","b":b,"W":RING_BYTES,"Q":RING_BYTES//b,
+                    "G":GEOMETRY_BYTES,"geometry_source":GEOMETRY_SOURCE,
+                    "phi_U":PHI_U,"phi_U_fraction":"1/64","rho_L":row["rho_L"],
+                    "kappa":row["kappa"],"rungs":rungs,"receipts":json_evidence(receipts),
+                    "geometry_checks":check_geometry(receipts)}
+    if pos != len(receipts):
+        return fault("check-status fault (receipts after ladder)")
+    return fault("residency not resolved")
+
+
+def validated_check(check):
+    """Recompute success from its evidence; never trust serialized κ or timings."""
+    if not isinstance(check,dict):
+        return check_failure("check-status fault (check missing)",[])
+    if check.get("status") == "residency not resolved":
+        # A failure is never promoted by re-reading its partial receipts.
+        reason = check.get("reason")
+        if not isinstance(reason,str) or not reason:
+            reason = "check-status fault (failure reason missing)"
+        return check_failure(reason,check.get("receipts",[]),check.get("rungs",[]))
+    recomputed = residency_check(check.get("receipts"))
+    if (check.get("status") != "residency resolved" or "reason" in check or
+            recomputed["status"] != "residency resolved" or
+            any(type(check.get(f)) is not int or check[f] != recomputed[f] for f in ("b","W","Q"))):
+        reason = recomputed.get("reason","check-status fault (inconsistent success)")
+        return check_failure(reason,check.get("receipts",[]),recomputed["rungs"])
+    return recomputed
+
+
+def planned_repeats(b, t_s, target_s, *, at_least_one=False):
+    q = RING_BYTES//b
+    sweeps = math.floor(target_s/(q*t_s))
+    return q*(max(1,sweeps) if at_least_one else sweeps)
 
 
 def not_defined(reason):
@@ -540,7 +641,59 @@ def describe_share(rails, dc):
         return {key:not_defined(str(exc)) for key in ("f","df")}
 
 
-def classify(delta, halfwidth, phi, *, reason=None):
+def describe_gpu_arms(calls):
+    """Native-interval means: residency over time, frequency over active time.
+
+    The capture decoder supplies active_freq_mhz_weighted from DVFM states.
+    No GPU state is reconstructed from power, and no class reads this result.
+    """
+    result = {}
+    for arm in ("R","C"):
+        try:
+            own = [c for c in calls if c.get("arm") == arm]
+            if len(own) != 2:
+                raise ValueError("two complete GPU arm calls missing")
+            total_ns = active_ns = weighted_mhz_ns = 0
+            frequency_missing = False
+            for call in own:
+                receipt = call["receipt"]
+                start,end = receipt["start_ns"],receipt["end_ns"]
+                rows = call.get("gpu_state")
+                if not isinstance(rows,list) or not rows:
+                    raise ValueError("GPU frequency/residency missing")
+                covered = 0
+                previous = None
+                for row in rows:
+                    a,b = row["start_ns"],row["end_ns"]
+                    if type(a) is not int or type(b) is not int or b <= a or previous is not None and a < previous:
+                        raise ValueError("GPU native support invalid")
+                    previous = b
+                    length = max(0,min(b,end)-max(a,start))
+                    if not length:
+                        continue
+                    idle = row["state"].get("idle_ratio")
+                    freq = row["state"].get("active_freq_mhz_weighted")
+                    if not finite_number(idle) or not 0 <= idle <= 1:
+                        raise ValueError("GPU idle_ratio missing or invalid")
+                    active = length*(1-idle)
+                    covered += length
+                    total_ns += length
+                    active_ns += active
+                    if not finite_number(freq) or freq < 0:
+                        frequency_missing = True
+                    else:
+                        weighted_mhz_ns += active*freq
+                if covered != end-start:
+                    raise ValueError("GPU native support incomplete")
+            result[arm] = arithmetic("GPU native frequency/residency means",lambda: {"active_residency":active_ns/total_ns,
+                "active_frequency_mhz":(not_defined("GPU active frequency missing") if frequency_missing else
+                    weighted_mhz_ns/active_ns if active_ns else not_defined("GPU active time is zero"))})
+        except (KeyError,TypeError,ValueError,OverflowError,ZeroDivisionError) as exc:
+            result[arm] = {key:not_defined(str(exc)) for key in ("active_frequency_mhz","active_residency")}
+    return result
+
+
+def classify(delta, halfwidth, kappa, *, reason=None):
     """§4 ordered classes, in J/GB; undefined descriptions do not enter here."""
     if reason:
         return {"class": "UNDETERMINED", "reason": reason}
@@ -551,11 +704,11 @@ def classify(delta, halfwidth, phi, *, reason=None):
     if lower > 0:
         return {"class": "RESOLVED"}
     epsilon0 = 1e9/(512*39_852_331_520)
-    level = arithmetic("delta/halfwidth/scan.K/B attribution ratio",
-                       lambda: max(abs(lower),abs(upper))/(1-phi))
+    level = arithmetic("delta/halfwidth/check.kappa attribution ratio",
+                       lambda: kappa*max(abs(lower),abs(upper)))
     if level <= epsilon0:
         return {"class": "BELOW ATTRIBUTION LEVEL"}
-    return {"class": "NOT RESOLVED", "upper_limit": arithmetic("delta/halfwidth/scan.K/B upper_limit", lambda: upper/(1-phi))}
+    return {"class": "NOT RESOLVED", "upper_limit": arithmetic("delta/halfwidth/check.kappa upper_limit", lambda: kappa*upper)}
 
 
 # Executable dependency table: every derived reducer node is evaluated only
@@ -565,20 +718,10 @@ REDUCER_DEPENDENCIES = {
     "{arm}.x": ("{arm}.e0", "{arm}.e1", "{arm}.n0", "{arm}.n1"),
     "{arm}.rep": ("{arm}.xi", "{arm}.n0", "{arm}.n1"),
     "{arm}.dx": ("{arm}.u0", "{arm}.u1", "{arm}.n0", "{arm}.n1", "{arm}.rep"),
-    "gc": ("C1.x", "C2.x"),
-    "gamma_c": ("gc",),
-    "alpha": ("C1.x", "gc"),
-    "gd": ("S.x", "alpha"),
-    "gamma_d": ("gd",),
-    "delta": ("gd", "gc", "gamma_d", "gamma_c"),
-    "r": ("S.x", "C3.x", "alpha", "gc"),
-    "dgc": ("C1.dx", "C2.dx", "C3.dx", "r"),
-    "da": ("C1.dx", "r", "dgc"),
-    "halfwidth": ("S.dx", "da", "alpha", "dgc", "delta"),
-    "upper_limit": ("delta", "halfwidth", "phi"),
-    "epsilon_flip": ("halfwidth",),
-    "epsilon_flip_over_alpha": ("epsilon_flip", "alpha"),
-    "raw_stream_j_per_byte": ("S.x",),
+    "delta": ("R.x", "C.x"),
+    "halfwidth": ("R.dx", "C.dx"),
+    "upper_limit": ("delta", "halfwidth", "kappa"),
+    "raw_stream_j_per_byte": ("R.x",),
 }
 
 
@@ -613,7 +756,7 @@ def reduce_boundary(calls, sizes, boundary):
         except ValueError as exc:
             errors[key] = str(exc)
             nodes[key] = not_defined(str(exc))
-    for arm in ("S", "C1", "C3", "C2"):
+    for arm in ("R", "C"):
         rows = [c for c in calls if c["arm"] == arm]
         prefix = arm+"."
         for j in range(2):
@@ -634,7 +777,7 @@ def reduce_boundary(calls, sizes, boundary):
                 nodes[name] = value if finite_number(value) else not_defined(why)
                 if not finite_number(value): errors[name] = why
         e0,e1,u0,u1,n0,n1 = (prefix+k for k in ("e0","e1","u0","u1","n0","n1"))
-        # These arm dependencies are instantiated identically for all four arms.
+        # These arm dependencies are instantiated identically for both arms.
         deps = {key.split(".")[1]:tuple(d.format(arm=arm) for d in parents)
                 for key, parents in REDUCER_DEPENDENCIES.items() if "{arm}" in key}
         # xi is a pair, so register it separately from scalar graph parents.
@@ -651,29 +794,17 @@ def reduce_boundary(calls, sizes, boundary):
         node(prefix+"dx", deps["dx"], lambda: (nodes[u0]+nodes[u1])/(nodes[n0]+nodes[n1])+nodes[prefix+"rep"], arm+" bound/N")
         arms[arm] = {k:nodes[prefix+k] for k in ("x","dx","rep")}
         arms[arm]["xi"] = xi
-    b,c1,c3,c2 = (sizes[a] for a in ("S","C1","C3","C2"))
+    b = sizes["R"]
     v = nodes
     operations = {
-        "gc": lambda: (v["C2.x"]-v["C1.x"])/(c2-c1),
-        "gamma_c": lambda: v["gc"]*1e9,
-        "gamma_d": lambda: v["gd"]*1e9,
-        "alpha": lambda: v["C1.x"]-v["gc"]*c1,
-        "gd": lambda: (v["S.x"]-v["alpha"])/b,
-        "delta": lambda: (v["gd"]-v["gc"])*1e9,
-        "r": lambda: v["C3.x"]-v["alpha"]-v["gc"]*c3,
-        "dgc": lambda: (v["C1.dx"]+v["C2.dx"]+abs(v["r"]))/(c2-c1),
-        "da": lambda: v["C1.dx"]+abs(v["r"])+v["dgc"]*c1,
-        "halfwidth": lambda: ((v["S.dx"]+v["da"]+abs(v["alpha"]))/b+v["dgc"])*1e9,
-        "epsilon_flip": lambda: v["halfwidth"]/1e9*(c2-c1)/(1-arithmetic("scan.Bc1/B", lambda: c1/b)),
-        "epsilon_flip_over_alpha": lambda: v["epsilon_flip"]/v["alpha"],
-        "raw_stream_j_per_byte": lambda: v["S.x"]/b,
+        "delta": lambda: (v["R.x"]-v["C.x"])/b*1e9,
+        "halfwidth": lambda: (v["R.dx"]+v["C.dx"])/b*1e9,
+        "raw_stream_j_per_byte": lambda: v["R.x"]/b,
     }
     for key, deps in REDUCER_DEPENDENCIES.items():
         if "{arm}" in key or key == "upper_limit": continue
         node(key, deps, operations[key], boundary+" "+key+" from records receipt/harvest")
-    result = {key:v[key] for key in REDUCER_DEPENDENCIES if "{arm}" not in key and key not in ("gc","gd","dgc","da","upper_limit")}
-    if nodes.get("alpha") == 0:
-        result["epsilon_flip_over_alpha"] = not_defined("alpha is zero")
+    result = {key:v[key] for key in operations}
     result["arms"] = arms
     if "halfwidth" in errors:
         result.update(reason=errors["halfwidth"], description=not_defined(errors["halfwidth"]),
@@ -681,9 +812,9 @@ def reduce_boundary(calls, sizes, boundary):
     return result
 
 
-def read_known_bytes(records, scan):
+def read_known_bytes(records, check):
     """Print every record and all computable values, even with absent prerequisites."""
-    original_records, original_scan = records, scan
+    original_records, original_check = records, check
     validation = []
     def take(value, spec, path, betas, errors, empty=None):
         valid, reason = input_value(value, spec, path)
@@ -699,39 +830,29 @@ def read_known_bytes(records, scan):
             return empty
         return valid
     names = ("rails","gpu","dc","rest")
-    scan_errors = []
-    scan = take(scan, {}, "scan", names, scan_errors, {})
-    scan = dict(scan)
-    scan["status"] = take(scan.get("status", ABSENT), TEXT, "scan.status", names, scan_errors)
-    # knee_scan emits only these two statuses (see its initializer/update).
-    if scan["status"] not in (None, "knee found", "knee not found") or (
-            scan["status"] == "knee not found" and scan.get("K") is not None):
-        scan_errors.append((names, "scan.status missing or invalid (inconsistent or unknown scan status)"))
-    refused_scan = scan.get("status") == "knee not found" and "K" in scan and scan["K"] is None
-    for key in ("K", "B", "Bc1", "Bc3", "Bc2"):
-        # A missing knee is an ordinary scan refusal, not an invented size.
-        scan[key] = take(scan.get(key, ABSENT), POSCOUNT, "scan."+key, names, scan_errors)
-    if scan["status"] == "knee found":
-        checks = take(scan.get("arm_checks", ABSENT), [{}], "scan.arm_checks", names, scan_errors, [])
-        if "reason" in scan or any(check.get("above") is not True for check in checks):
-            scan_errors.append((names, "scan.status missing or invalid (inconsistent or unknown scan status)"))
-        if all(scan[key] is not None for key in ("K", "B", "Bc1", "Bc3", "Bc2")):
-            k = scan["K"]
-            if (scan["B"], scan["Bc1"], scan["Bc3"], scan["Bc2"]) != (
-                    max(2**32, 64*k), k//16, k//8, k//4):
-                scan_errors.append((names, "scan.status missing or invalid (scan.B/Bc1/Bc3/Bc2 inconsistent with scan.K)"))
-    if refused_scan:
-        # §4 F8: these sizes are unavailable because the scan refused; retain
-        # its established reason rather than relabeling refusal as corruption.
-        scan_errors.clear()
-    records = take(records, [{}], "records", names, scan_errors, []) if not isinstance(records,list) else records
+    check_errors = []
+    check = validated_check(check)
+    check_reason = check.get("reason")
+    if check_reason:
+        check_errors.append((names,check_reason))
+    records = take(records, [{}], "records", names, check_errors, []) if not isinstance(records,list) else records
     normalized = []
     for i, raw in enumerate(records):
-        errors = list(scan_errors)
+        errors = list(check_errors)
         path = f"records[{i}]"
         raw = take(raw, {}, path, names, errors, {})
         r = dict(take(raw.get("receipt", ABSENT), {}, path+".receipt", names, errors, {}))
         h = dict(take(raw.get("harvest", ABSENT), {}, path+".harvest", names, errors, {}))
+        geometry = geometry_error(r,check.get("b"))
+        if geometry:
+            check_errors.append((names,geometry))
+            errors.append((names,geometry))
+        try:
+            clock_duration_bound_ns(r)
+        except ValueError as exc:
+            why = "clock prerequisite missing ("+str(exc)+")"
+            check_errors.append((names,why))
+            errors.append((names,why))
         for key, spec in RECEIPT_INPUTS.items():
             r[key] = take(r.get(key, ABSENT), spec, path+".receipt."+key, names, errors)
         if all(r[key] is not None for key in ("bytes_per_read", "repeats", "bytes_read")) and (
@@ -784,23 +905,18 @@ def read_known_bytes(records, scan):
         normalized.append({"receipt":r,"harvest":h})
         validation.append(errors)
     records = normalized
-    sizes = {"S":scan.get("B"),"C1":scan.get("Bc1"),"C3":scan.get("Bc3"),"C2":scan.get("Bc2")}
-    try:
-        phi = arithmetic("scan.K/B", lambda: scan["K"]/sizes["S"]) if scan.get("K") is not None and sizes["S"] else None
-    except ValueError as exc:
-        scan_errors.append((names,str(exc)))
-        phi = None
-    output = {"scan":json_evidence(original_scan),"input_records":json_evidence(original_records),"calls":[],"boundaries":{},"stack_comparisons":[]}
-    reasons = [why for _, why in scan_errors]
+    sizes = {"R":check.get("b"),"C":check.get("b")}
+    kappa = check.get("kappa")
+    output = {"check":json_evidence(original_check),"residency":check,
+              "input_records":json_evidence(original_records),"calls":[],"boundaries":{},
+              "stack_comparisons":[],"geometry_checks":[]}
+    reasons = [why for _, why in check_errors]
     affected = {b:[] for b in names}
-    if scan.get("K") is None:
-        reasons.append("knee not found")
-    if len(records) != 8:
-        reasons.append("the test requires all eight calls")
-    if scan.get("K") is not None:
-        order = [next((a for a,size in sizes.items() if size == r.get("receipt",{}).get("bytes_per_read")),None)
-                 for r in records]
-        if order != ["S","C1","C3","C2","C2","C3","C1","S"]:
+    if len(records) != len(ORDER):
+        reasons.append("the test requires all four calls")
+    if check.get("b") is not None:
+        order = [r.get("receipt",{}).get("arm") for r in records]
+        if order != list(ORDER):
             reasons.append("records must be the complete stamped palindrome")
         stamps = [r.get("receipt",{}).get("start_ns") for r in records]
         if any(v is None for v in stamps) or any(b <= a for a,b in zip(stamps,stamps[1:])):
@@ -808,14 +924,16 @@ def read_known_bytes(records, scan):
     reference,versions = registered_stack()
     for i,record in enumerate(records,1):
         receipt,h = record.get("receipt",{}),record.get("harvest",{})
-        check = compare_stack((receipt.get("stack") or {}),reference,versions,capture_stack=h.get("capture_stack"))
-        output["stack_comparisons"].append(check)
-        fields = [f for f in check["physical_differences"] if f != "measurement_boundary_label.rails"]
+        stack_check = compare_stack((receipt.get("stack") or {}),reference,versions,capture_stack=h.get("capture_stack"))
+        output["stack_comparisons"].append(stack_check)
+        error = geometry_error(receipt,check.get("b"))
+        output["geometry_checks"].append({"ok":error is None,"reason":error})
+        fields = [f for f in stack_check["physical_differences"] if f != "measurement_boundary_label.rails"]
         if fields:
             reasons.append("stack differs in: "+", ".join(fields))
         rail_field = "measurement_boundary_label.rails"
-        if rail_field in check["physical_differences"] or rail_field in check["pending_fields"]:
-            why = "measured rails boundary differs" if rail_field in check["physical_differences"] else "measured rails boundary missing"
+        if rail_field in stack_check["physical_differences"] or rail_field in stack_check["pending_fields"]:
+            why = "measured rails boundary differs" if rail_field in stack_check["physical_differences"] else "measured rails boundary missing"
             for beta in ("rails","rest"):
                 affected[beta].append(why+" (measurement_boundary_label.rails)")
         call = {"receipt":receipt,"arm":None,"boundaries":{},"prerequisites":{b:[] for b in names}}
@@ -841,9 +959,9 @@ def read_known_bytes(records, scan):
             t = (receipt["end_ns"]-receipt["start_ns"])/1e9
             if n <= 0 or t <= 0:
                 raise ValueError("positive repeats and end_ns-start_ns required")
-            arm = next((a for a,size in sizes.items() if size == receipt["bytes_per_read"]),None)
+            arm = receipt.get("arm")
             arithmetic(f"records[{i-1}].receipt.end_ns/start_ns", lambda: t)
-            call.update(arm=arm,N=n,T=t)
+            call.update(arm=arm,N=n,T=t,t_s=t/n)
             if h.get("tau_s") is None:
                 raise ValueError("tau missing")
             trim_ns = arithmetic(f"records[{i-1}].harvest.tau_s / records[{i-1}].receipt.settle_s",
@@ -958,7 +1076,7 @@ def read_known_bytes(records, scan):
         call["gpu_state"] = h["gpu_state"]
         call["thermal"] = {"source":"hazards/monitor/thermal.jsonl","spans":h["thermal_spans"]}
     for beta in names:
-        if scan.get("K") is not None and all(sizes.values()):
+        if check.get("b") is not None and all(sizes.values()):
             output["boundaries"][beta] = reduce_boundary(output["calls"],sizes,beta)
             why = output["boundaries"][beta].get("reason", "")
             if "arithmetic unavailable" in why:
@@ -968,7 +1086,7 @@ def read_known_bytes(records, scan):
     invalid_dc_width = False
     if affected["dc"]:
         reasons.extend(affected["dc"])
-    elif dc is None or not finite_number(dc.get("halfwidth")) or dc["halfwidth"] <= 0:
+    elif dc is None or not finite_number(dc.get("halfwidth")) or dc["halfwidth"] < 0:
         reasons.append("DC contrast input missing")
         invalid_dc_width = True
     elif dc["delta"]-dc["halfwidth"] <= 0:
@@ -977,21 +1095,20 @@ def read_known_bytes(records, scan):
     output["reasons"] = list(dict.fromkeys(reasons+[r for rs in affected.values() for r in rs]))
     for beta in names:
         value = output["boundaries"].get(beta)
-        reason = next(iter([why for _, why in scan_errors]+affected[beta]+reasons),None)
+        reason = next(iter([why for _, why in check_errors]+affected[beta]+reasons),None)
         if value is None:
             reason = reason or "boundary input missing"
             value = {"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)}
-            if scan.get("K") is None:
-                value.update({key:not_defined("knee not found") for key in
-                    ("delta","halfwidth","alpha","gamma_c","gamma_d","r","epsilon_flip",
-                     "epsilon_flip_over_alpha","raw_stream_j_per_byte","arms")})
+            if check.get("b") is None:
+                value.update({key:not_defined(check_reason or "residency not resolved") for key in
+                    ("delta","halfwidth","raw_stream_j_per_byte","arms")})
             output["boundaries"][beta] = value
-        elif scan_errors or invalid_dc_width:
+        elif check_errors or invalid_dc_width:
             value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason),
                           "halfwidth":not_defined(reason),"upper_limit":not_defined(reason)})
         elif isinstance(value.get("halfwidth"),(int,float)) and (
-                not finite_number(value["halfwidth"]) or value["halfwidth"] <= 0):
-            reason = beta+" halfwidth missing or invalid (must be finite and positive)"
+                not finite_number(value["halfwidth"]) or value["halfwidth"] < 0):
+            reason = beta+" halfwidth missing or invalid (must be finite and nonnegative)"
             value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason),
                           "halfwidth":not_defined(reason),"upper_limit":not_defined(reason)})
         elif not isinstance(value.get("halfwidth"),(int,float)):
@@ -999,39 +1116,54 @@ def read_known_bytes(records, scan):
             value.update({"class":"UNDETERMINED","reason":reason,"description":not_defined(reason)})
         else:
             try:
-                arithmetic(beta+" delta/halfwidth/scan.K/B class", lambda:
+                arithmetic(beta+" delta/halfwidth/check.kappa class", lambda:
                            [value["delta"]+value["halfwidth"],value["delta"]-value["halfwidth"]])
-                upper_inputs = {**value,"phi":phi}
+                upper_inputs = {**value,"kappa":kappa}
                 if not reason and not all(finite_number(upper_inputs.get(k))
                                           for k in REDUCER_DEPENDENCIES["upper_limit"]):
-                    raise ValueError(beta+" delta/halfwidth/scan.K/B upper_limit prerequisite missing")
-                value.update(arithmetic(beta+" delta/halfwidth/scan.K/B upper_limit", lambda:
-                    classify(value["delta"],value["halfwidth"],phi,reason=reason)))
+                    raise ValueError(beta+" delta/halfwidth/check.kappa upper_limit prerequisite missing")
+                value.update(arithmetic(beta+" delta/halfwidth/check.kappa upper_limit", lambda:
+                    classify(value["delta"],value["halfwidth"],kappa,reason=reason)))
             except (ValueError, TypeError) as exc:
                 reason = str(exc)
                 value.update({"class":"UNDETERMINED","reason":reason,"upper_limit":not_defined(reason)})
             if reason:
                 value["description"] = not_defined(reason)
-    if scan.get("K") is None:
-        output["share"] = {k:not_defined("knee not found") for k in ("f","df")}
-        output["gpu_power_contrast_w"] = not_defined("knee not found")
+    if check.get("b") is None:
+        output["share"] = {k:not_defined(check_reason or "residency not resolved") for k in ("f","df")}
+        output["gpu_power_contrast_w"] = not_defined(check_reason or "residency not resolved")
     else:
         rails = output["boundaries"]["rails"]
         output["share"] = describe_share(rails if "delta" in rails else None,dc)
-        gpu = [c for c in output["calls"] if c["arm"] in ("S","C2")]
+        gpu = [c for c in output["calls"] if c["arm"] in ("R","C")]
         if len(gpu)==4 and all(finite_number(c["boundaries"].get("gpu",{}).get("excess_j")) for c in gpu):
             try:
                 power = {arm:sum(c["boundaries"]["gpu"]["excess_j"] for c in gpu if c["arm"]==arm)/
-                         sum(c["T"] for c in gpu if c["arm"]==arm) for arm in ("S","C2")}
+                         sum(c["T"] for c in gpu if c["arm"]==arm) for arm in ("R","C")}
                 output["gpu_power_contrast_w"] = arithmetic(
-                    "records.harvest.energy_j.gpu/receipt.end_ns/start_ns", lambda: power["S"]-power["C2"])
+                    "records.harvest.energy_j.gpu/receipt.end_ns/start_ns", lambda: power["R"]-power["C"])
                 arithmetic("records.harvest.energy_j.gpu/receipt.end_ns/start_ns", lambda: power)
             except (ValueError, OverflowError) as exc:
                 output["gpu_power_contrast_w"] = not_defined(str(exc))
         else:
             output["gpu_power_contrast_w"] = not_defined("GPU spans missing")
-    output["sizes"] = sizes if scan.get("K") is not None else {a:not_defined("knee not found") for a in sizes}
-    output["phi"] = phi if scan.get("K") is not None else not_defined("knee not found")
+    output["sizes"] = sizes if check.get("b") is not None else {a:not_defined(check_reason or "residency not resolved") for a in sizes}
+    output["gpu_arm_state"] = describe_gpu_arms(output["calls"])
+    for field in ("b","W","Q","G","geometry_source","phi_U","phi_U_fraction","rho_L","kappa"):
+        value = check.get(field)
+        output[field] = value if value is not None else not_defined(check_reason or "residency not resolved")
+    output["hour_timing"] = {}
+    for arm in ("R","C"):
+        own = [c for c in output["calls"] if c.get("arm") == arm and "T" in c]
+        output["hour_timing"][arm] = (sum(c["T"] for c in own)/sum(c["N"] for c in own)
+            if len(own) == 2 else not_defined("two complete arm calls missing"))
+    timing = output["hour_timing"]
+    timing["D_s"] = (timing["R"]-timing["C"] if all(finite_number(timing[a]) for a in ("R","C"))
+                      else not_defined(check_reason or "two complete arm calls missing"))
+    timing["check_D_s"] = (check["rungs"][-1]["D_s"] if check.get("b") is not None
+                              else not_defined(check_reason or "residency not resolved"))
+    output["receipt_sha256"] = [hashlib.sha256(json.dumps(json_evidence(row.get("receipt") if isinstance(row,dict) else row),sort_keys=True).encode()).hexdigest()
+                                  for row in (original_records or [])] if isinstance(original_records,list) else []
     hour, error = input_value(records[0]["harvest"].get("hour_as_run_s", ABSENT) if records else ABSENT,
                               NONNEG, "harvest.hour_as_run_s")
     output["hour_as_run_s"] = not_defined("session endpoints missing: "+error) if error else hour
@@ -1056,7 +1188,7 @@ def format_interval(value, halfwidth):
     if halfwidth == 0:
         return f"{value:.2f} ± 0.00"
     if not finite_number(halfwidth) or halfwidth < 0:
-        raise ValueError("halfwidth must be finite and positive")
+        raise ValueError("halfwidth must be finite and nonnegative")
     rounded = arithmetic("halfwidth print conversion", lambda: float(format(halfwidth, ".2g")))
     places = 1-math.floor(math.log10(rounded))
     return f"{round(value,places):.{max(0,places)}f} ± {round(halfwidth,places):.{max(0,places)}f}"
@@ -1066,13 +1198,16 @@ def printed_record(result):
     """Claim-side sentences and test-record descriptions; full numeric input stays above."""
     printed = {"claim_lines": {}, "contrasts": {}, "share": result["share"],
                "stack_comparisons": result["stack_comparisons"]}
+    printed["geometry"] = {key:result[key] for key in ("b","W","Q","G","geometry_source","phi_U_fraction")}
+    printed["bias"] = {key:(format(result[key],".4g") if finite_number(result[key]) else result[key])
+                       for key in ("rho_L","kappa")}
     for boundary,value in result["boundaries"].items():
         try:
             if isinstance(value.get("halfwidth"),(int,float)) and (
-                    not finite_number(value["halfwidth"]) or value["halfwidth"] <= 0):
-                raise ValueError("halfwidth must be finite and positive")
+                    not finite_number(value["halfwidth"]) or value["halfwidth"] < 0):
+                raise ValueError("halfwidth must be finite and nonnegative")
             interval = (format_interval(value["delta"],value["halfwidth"]) if isinstance(value.get("halfwidth"),(int,float))
-                        else ((f"{value['delta']} J/GB; " if isinstance(value.get("delta"),(int,float)) else "")+value["description"]))
+                        else value["description"])
         except (ValueError, OverflowError) as exc:
             why = boundary+" delta/halfwidth print arithmetic unavailable: "+str(exc)
             value.update({"class":"UNDETERMINED","reason":why,"description":not_defined(why),
@@ -1084,20 +1219,20 @@ def printed_record(result):
         if value["class"] == "UNDETERMINED":
             line = f"Known-bytes check: {boundary} memory-traffic attribution is undetermined ({value['reason']})."
         elif value["class"] == "BELOW ATTRIBUTION LEVEL":
-            line = (f"Known-bytes check: {boundary} energy per DRAM-sourced byte differed from cache-sourced by {interval} J/GB "
-                    f"(DRAM minus cache), within the 1 J-per-run attribution level ({1e9/(512*39_852_331_520):.4g} J/GB); "
-                    f"{boundary} lines here carry no resolvable memory-traffic energy.")
+            line = (f"Known-bytes check: the {boundary} memory-traffic energy contrast is {interval} J/GB "
+                    f"(rotate minus repeat, {result['b']}-byte matched dispatches), within the 1 J-per-run attribution level ({1e9/(512*39_852_331_520):.4g} J/GB) "
+                    f"after the contrast-fraction correction ×{result['kappa']:.4g}; {boundary} lines here carry no resolvable memory-traffic energy under the stated model and constant payload.")
         else:
             # The upper limit uses the estimate's printed decimal place.
             digits = interval_places(value["halfwidth"])
-            line = (f"Known-bytes check: the {boundary} response to DRAM-sourced bytes is not resolved ({interval} J/GB, "
-                    f"cache-bias-corrected upper limit {round(value['upper_limit'],digits):.{max(0,digits)}f} J/GB); "
+            line = (f"Known-bytes check: the {boundary} memory-traffic energy contrast is not resolved ({interval} J/GB, "
+                    f"contrast-fraction-corrected upper limit {round(value['upper_limit'],digits):.{max(0,digits)}f} J/GB under the stated model and constant payload); "
                     f"whether {boundary} lines include memory-traffic energy is not established.")
         printed["claim_lines"][boundary] = line
     if isinstance(result["share"]["f"],(float,int)):
         try:
-            if not finite_number(result["share"]["df"]) or result["share"]["df"] <= 0:
-                raise ValueError("share df must be finite and positive")
+            if not finite_number(result["share"]["df"]) or result["share"]["df"] < 0:
+                raise ValueError("share df must be finite and nonnegative")
             printed["share"] = format_interval(result["share"]["f"],result["share"]["df"])
         except (ValueError, OverflowError) as exc:
             result["share"] = {key:not_defined("rails/DC share print: "+str(exc)) for key in ("f","df")}
@@ -1111,31 +1246,77 @@ def _seconds(value):
     return value
 
 
-def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
-           mx=None, clock_ns=None, sleep=None, repo_root=ROOT):
-    if type(byte_count) is not int or byte_count <= 0 or type(repeats) is not int or repeats <= 0:
-        raise ValueError("byte count and repeats must be positive integer counts")
+# MLX array dimensions are signed 32-bit: a flat uint8 payload stops at
+# 2**31 - 1 bytes, and mx.ones raises TypeError above it (KB attempt 2 stopped
+# at its 2**31-byte scan size). A C-contiguous (rows, 2**30) payload holds the
+# same bytes and mx.sum over all axes reads each once: measured on this Mac
+# 2026-10-30, 369-400 GB/s from 2**30 to 2**33 B, sums exact mod 2**32.
+PAYLOAD_ROW_BYTES = 2 ** 30
+
+
+def payload_shape(byte_count):
+    if byte_count < 2 ** 31:
+        return (byte_count,)
+    if byte_count % PAYLOAD_ROW_BYTES:
+        raise ValueError("a payload of 2**31 bytes or more must be whole 2**30-byte rows")
+    return (byte_count // PAYLOAD_ROW_BYTES, PAYLOAD_ROW_BYTES)
+
+
+def allocate_ring(mx, b=GEOMETRY_BYTES):
+    """Rule §1: (Q,b), both axes below the signed 32-bit MLX dimension limit."""
+    try:
+        ring = mx.ones((RING_BYTES//b,b),dtype=mx.uint8)
+        mx.eval(ring)
+        mx.synchronize()
+        return ring
+    except (MemoryError,RuntimeError) as exc:
+        raise MemoryError(f"allocation failed ({RING_BYTES} B ring)") from exc
+
+
+def ring_views(mx, ring, b):
+    # reshape and row indexing share contiguous storage; no payload copy.
+    ring = mx.reshape(ring,(RING_BYTES//b,b))
+    rows = [ring[i] for i in range(RING_BYTES//b)]
+    mx.eval(*rows)
+    mx.synchronize()
+    return rows
+
+
+def stream(byte_count, repeats, *, device, arm="R", idle_s=57.6, settle_s=3,
+           mx=None, clock_ns=None, sleep=None, repo_root=ROOT,
+           prepared_views=None, warm=True, rung_index=None, check_phase=None):
+    if (type(byte_count) is not int or byte_count <= 0 or byte_count > GEOMETRY_BYTES or
+            RING_BYTES % byte_count or type(repeats) is not int or repeats <= 0 or
+            repeats % (RING_BYTES//byte_count)):
+        raise ValueError("payload must divide the ring, stay on the small launch, and repeats must be whole sweeps")
+    if arm not in ("R","C","check-R","check-C"):
+        raise ValueError("arm must be R, C, check-R or check-C")
     idle_s, settle_s = _seconds(idle_s), _seconds(settle_s)
     if not isinstance(device, str) or not device.strip():
         raise ValueError("device must be the checkout's hardware_target.id")
     if mx is None:
-        import mlx.core as mx  # Lazy: help, comparison and fake tests need no Metal.
+        import mlx.core as mx
     if clock_ns is None:
         clock_ns = lambda: time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW)
-    if sleep is None:
-        sleep = time.sleep
-    stack = collect_stack(mx, device, repo_root=repo_root)
-    reference, versions = registered_stack(repo_root)
-    check = compare_stack(stack, reference, versions)
+    sleep = sleep or time.sleep
+    stack = collect_stack(mx,device,repo_root=repo_root)
+    reference,versions = registered_stack(repo_root)
+    comparison = compare_stack(stack,reference,versions)
     reference_check = checkout_reference_check(repo_root)
-
-    data = mx.ones((byte_count,), dtype=mx.uint8)
-    mx.eval(data)
-    mx.synchronize()
-    warm = mx.sum(data)
-    mx.eval(warm)
-    mx.synchronize()
-
+    rows = prepared_views
+    if rows is None:
+        ring = allocate_ring(mx,byte_count)
+        rows = ring_views(mx,ring,byte_count)
+    q = RING_BYTES//byte_count
+    if len(rows) != q:
+        raise ValueError("prepared views must cover the ring")
+    views = list(rows) if arm.endswith("R") else [rows[0]]*q
+    # Record observed array leaves, rather than restating the requested size.
+    view_nbytes = views[0].nbytes
+    dtype = "uint8" if views[0].dtype == mx.uint8 else str(views[0].dtype)
+    if warm:
+        mx.eval(mx.sum(views[0]))
+        mx.synchronize()
     if settle_s:
         sleep(settle_s)
     pre_start = clock_ns()
@@ -1145,10 +1326,8 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
     if settle_s:
         sleep(settle_s)
     start = clock_ns()
-    for _ in range(repeats):
-        # A fresh, immediately evaluated reduction per dispatch; no reuse of
-        # the warm result or of one cached lazy result. No payload-sized output.
-        result = mx.sum(data)
+    for k in range(repeats):
+        result = mx.sum(views[k % q])
         mx.eval(result)
     mx.synchronize()
     end = clock_ns()
@@ -1156,53 +1335,56 @@ def stream(byte_count, repeats, *, device, idle_s=57.6, settle_s=3,
         sleep(settle_s)
     post_start = clock_ns()
     if idle_s:
-        sleep(idle_s)  # data stays resident through this span.
+        sleep(idle_s)
     post_end = clock_ns()
-
-    stamps = (pre_start, pre_end, start, end, post_start, post_end)
-    if any(type(stamp) is not int or stamp < 0 for stamp in stamps):
+    stamps = (pre_start,pre_end,start,end,post_start,post_end)
+    if any(type(t) is not int or t < 0 for t in stamps):
         raise ValueError("CLOCK_MONOTONIC_RAW stamps must be nonnegative integer nanoseconds")
-    if any(b < a for a, b in zip(stamps, stamps[1:])) or end <= start:
+    if any(b < a for a,b in zip(stamps,stamps[1:])) or end <= start:
         raise ValueError("stream has no positive ordered monotonic span")
     if idle_s and (pre_end <= pre_start or post_end <= post_start):
         raise ValueError("idle has no positive monotonic span")
-    return {"schema_version": "joulewise.bytes_stream.v2", "non_claim": True,
-            **clock_metadata(), "start_ns": start, "end_ns": end,
-            "idle_pre_start_ns": pre_start, "idle_pre_end_ns": pre_end,
-            "idle_post_start_ns": post_start, "idle_post_end_ns": post_end,
-            "idle_s": idle_s, "settle_s": settle_s,
-            "duration_s": (end - start) / 1_000_000_000,
-            "bytes_per_read": byte_count, "repeats": repeats, "bytes_read": byte_count * repeats,
-            "boundary": "logical uint8 payload reads; excludes initialization and reduction workspace",
-            "stack": stack, "stack_check": check, "reference_check": reference_check}
+    return {"schema_version":SCHEMA,"non_claim":True,**clock_metadata(),
+            "start_ns":start,"end_ns":end,"idle_pre_start_ns":pre_start,"idle_pre_end_ns":pre_end,
+            "idle_post_start_ns":post_start,"idle_post_end_ns":post_end,"idle_s":idle_s,"settle_s":settle_s,
+            "duration_s":(end-start)/1e9,"bytes_per_read":byte_count,"repeats":repeats,
+            "bytes_read":byte_count*repeats,"logical_bytes":byte_count*repeats,
+            "arm":arm,"ring_bytes":RING_BYTES,"ring_shape":[q,byte_count],"dtype":dtype,
+            "view_nbytes":view_nbytes,"view_order":"rotate" if arm.endswith("R") else "repeat",
+            "sweeps":repeats//q,"geometry_branch_bytes":GEOMETRY_BYTES,
+            "geometry_source":GEOMETRY_SOURCE,"launch_side":"small" if view_nbytes <= GEOMETRY_BYTES else "large",
+            "rung_index":rung_index,"check_phase":check_phase,
+            "boundary":"logical uint8 row-view reads; excludes initialization and reduction workspace",
+            "stack":stack,"stack_check":comparison,"reference_check":reference_check}
 
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "read":
         parser = argparse.ArgumentParser(description="Read §3/§4 receipts and native harvest products")
-        parser.add_argument("input", type=Path, help="JSON object with scan and records")
+        parser.add_argument("input", type=Path, help="JSON object with check and records")
         args = parser.parse_args(argv[1:])
         data = json.loads(args.input.read_text())
         data, error = input_value(data, {}, "input")
         data = data if error is None else {}
-        print(json.dumps(read_known_bytes(data.get("records"), data.get("scan")), allow_nan=False, indent=2))
+        print(json.dumps(read_known_bytes(data.get("records"), data.get("check")), allow_nan=False, indent=2))
         return 0
-    if argv and argv[0] == "scan":
-        parser = argparse.ArgumentParser(description="Read §1 scan receipts; print full timing comparisons")
-        parser.add_argument("receipts", type=Path, help="JSON list of three receipts per size")
+    if argv and argv[0] == "check":
+        parser = argparse.ArgumentParser(description="Read §1 v3 residency receipts, pilots and calls in run order")
+        parser.add_argument("receipts",type=Path)
         args = parser.parse_args(argv[1:])
-        print(json.dumps(knee_scan(json.loads(args.receipts.read_text())), allow_nan=False, indent=2))
+        print(json.dumps(residency_check(json.loads(args.receipts.read_text())),allow_nan=False,indent=2))
         return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bytes", type=int, required=True, dest="byte_count")
     parser.add_argument("--repeats", type=int, required=True)
+    parser.add_argument("--arm",choices=("R","C"),required=True)
     parser.add_argument("--device", required=True, help="hardware_target.id from the checkout's run config")
     parser.add_argument("--idle-s", type=float, default=57.6)
     parser.add_argument("--settle-s", type=float, default=3)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
-    result = stream(args.byte_count, args.repeats, device=args.device,
+    result = stream(args.byte_count, args.repeats, device=args.device, arm=args.arm,
                     idle_s=args.idle_s, settle_s=args.settle_s)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")

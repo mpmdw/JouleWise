@@ -1,6 +1,12 @@
-# BYTES known-bytes stream test: the reading rule (DRAFT, revised)
+# BYTES known-bytes stream test: the reading rule (DRAFT, matched geometry)
 
-**Status.** Reconciled revision awaiting the lead's admission, installed 2026-10-28 in magistrate activation
+**Status.** Matched-geometry revision pending cold review and the lead's admission.
+The preceding design was admitted 2026-10-30 at `559197821`; this revision replaces that design
+prospectively and must be admitted before the test runs. Source: the lead's matched-geometry rulings,
+`kb-knee-council/build/RULE-REVISION.md` Part B and its `NOTES.md` (writer seat 2026-10-30),
+against the admitted draft at `79de7be49`.
+
+**Prior-design history.** The preceding revision was installed 2026-10-28 in magistrate activation
 39206674. Originally drafted 2026-10-25 in activation f18a96e1 from two blind design seats
 (`docs/process_traces/2026-10-25-magistrate-f18a96e1/KB-SEAT-SOL.md` and `KB-SEAT-OPUS.md`, brief `KB-BRIEF.md`).
 Reconciler: Opus 5.5, JouleWise-data `claude/kb-revise-opus` at `0609bcc0caf941fd68c36fccea323f34c3951730`,
@@ -9,7 +15,7 @@ Reconciler: Opus 5.5, JouleWise-data `claude/kb-revise-opus` at `0609bcc0caf941f
 `ecd46c1124000dbfbc51b475068661ceefb62a1f`, both `kb-cold/REPORT.md` in JouleWise-data, both
 ADMIT-WITH-CORRECTIONS. These are independent executing reviews by models that did not write the draft.
 The lead has adopted CHANGES.md option (a) for Fable 1: the disclosure, ε_flip and per-arm GPU frequency and
-residency remain; neither a new kernel nor a leverage model is adopted. **Admitted 2026-10-30 by the lead (magistrate activation 4e748ac1) at `559197821`**, after nine reader rounds. The last blind delta reviews (Sol 6, Opus 5) found no defect beyond those fixed in round 9. The lead re-ran Opus 5's `p8_major_cli.py` and `p8_grid.py` at `559197821`: every shape that printed a smaller bound now ends UNDETERMINED with its reason and no interval, and the worked output is bit-identical to round 8. It binds from this commit.
+residency remain; neither a new kernel nor a leverage model is adopted. **Admitted 2026-10-30 by the lead (magistrate activation 4e748ac1) at `559197821`**, after nine reader rounds. The last blind delta reviews (Sol 6, Opus 5) found no defect beyond those fixed in round 9. The lead re-ran Opus 5's `p8_major_cli.py` and `p8_grid.py` at `559197821`: every shape that printed a smaller bound now ends UNDETERMINED with its reason and no interval, and the worked output is bit-identical to round 8. That admission applied to the preceding design.
 
 It answers registration-gate finding 4 (Opus, `docs/process_traces/2026-10-24-magistrate-7209d1b0/REGGATE-OPUS.md`):
 before the test runs, say which quantity is reported and which outcome prints a caveat. "The registration" below
@@ -32,13 +38,14 @@ adapter delivers) and **rest** (DC input minus rails: memory chips, power conver
 may show in rails (if the circuits that move bytes are on a reported rail) and part only in rest (the memory chips
 themselves). Reg. §1 registers the expectation: the chip's share appears in rails, the memory chips' share in rest.
 
-The test streams a known number of bytes through the GPU and asks whether each boundary's energy rises **because
-the bytes came from DRAM**. A stream on its own cannot answer that: reading bytes keeps the GPU busy, so the GPU
+The test streams a known number of bytes through the GPU and asks whether each boundary's energy rises with
+**memory traffic**. A stream on its own cannot answer that: reading bytes keeps the GPU busy, so the GPU
 rail rises whether or not the memory controller is on it. The test therefore compares two ways of doing the same
-GPU work, one whose bytes come from DRAM and one whose bytes come from on-chip cache (§1). The difference is
-**memory-traffic energy**: the extra energy per byte when the byte comes from DRAM. It includes everything that
-changes with the byte's source: the memory controller, the on-chip fabric, the GPU's time stalled waiting on
-memory, and the GPU clock state (DVFS, dynamic voltage and frequency scaling) a DRAM-bound kernel runs at.
+GPU work, rotating addresses intended to read DRAM and repeating addresses intended to read on-chip cache (§1).
+The difference is **memory-traffic energy** per logical byte. It can include address translation and DRAM row
+locality as well as byte source: the memory controller, the on-chip fabric, the GPU's time stalled waiting on
+memory, and the GPU clock state (DVFS, dynamic voltage and frequency scaling). The timing check resolves an
+address-reuse contrast; it does not isolate energy per DRAM-sourced byte.
 
 Both design seats agreed on the limit, and it is adopted: a positive difference on the GPU rail shows that memory
 traffic costs energy on that rail. It cannot say whether the energy is the memory controller, the fabric, or GPU
@@ -46,153 +53,210 @@ cores stalled waiting on memory. On rest it cannot separate the memory chips fro
 energy that rise with the rails' own rise. No outcome of this test establishes "the GPU rail does not include the
 memory controller". The classes below are worded accordingly.
 
-*Expected outcome on rails.* A byte from DRAM holds the GPU about 3 ps (1 / 331.6 GB/s, the H throughput of §5)
-against about 1 ps from cache (1 / 1 TB/s, assumed in §5), and the GPU draws power above idle while it waits. So
-rails RESOLVED (§4) is close to guaranteed by stall time alone, and carries little information about the
-controller. The same holds for rest through conversion loss (§4, "What responds as registered means").
+*Expected outcome on rails.* In the matched diagnostic (§5), a 32 MiB dispatch whose bytes come from DRAM took
+52.4 µs longer than the same dispatch re-reading bytes already in cache: 308.6 against 256.2 µs. That is about
+1.6 ps more per byte (52.4 µs / 33,554,432 B). The GPU draws power above idle while it waits. So rails RESOLVED (§4)
+is close to guaranteed by stall time alone, and carries little information about the memory controller. The same
+holds for rest through conversion loss (§4, "What responds as registered means").
 
-## 1. The probe, its arms and sizes
+## 1. The probe, its arms and its payload size
 
-The probe is `scripts/bytes_stream_test.py` (at the pass-1 tree `6731d5249`; usage in
-`configs/campaigns/bytes_mac_check/README.md` there, "Known-bytes companion probe"). It allocates a `uint8` payload
-of `--bytes` bytes with MLX (Apple's array library) and repeats `mx.sum(data); mx.eval(...)` `--repeats` times.
-Each repeat is one **dispatch**: one reduction sent to the GPU and waited for. The probe writes a **receipt** (a
-JSON record of the call) that counts **logical bytes** (payload bytes × repeats), not a hardware DRAM byte count.
+**Terms.** The probe is `scripts/bytes_stream_test.py`. It reduces `uint8` arrays with MLX (Apple's array library)
+by `mx.sum(view); mx.eval(...)`. One such reduction, sent to the GPU and waited for, is a **dispatch**.
+- The **ring** is one `uint8` array of W bytes, allocated as shape (Q, b) and filled before measurement.
+- A **view** is one row, `ring[i]`: b contiguous bytes starting at byte i·b. MLX's slice shares the ring's memory and
+  copies nothing.
+- A **sweep** is Q consecutive dispatches that read views 0, 1, …, Q−1 in that order.
+- The **receipt** is the JSON record of one probe call. It counts **logical bytes** (b × dispatches), not a hardware
+  DRAM byte count.
 
-Four arms use this same kernel unchanged; only the payload size differs. The **cache knee** K is the payload size
-at and above which the reduction's bytes come from DRAM rather than from on-chip cache; it is measured first,
-below.
+**The two arms.** Both arms run the identical Python loop over a list of Q view references. The k-th dispatch reduces
+`views[k mod Q]`, and every call allocates the same ring.
 
-| Arm | Payload per dispatch | Where the bytes come from |
+| Arm | List of Q references | Intended byte source |
 |---|---|---|
-| S (stream) | B, far above K | DRAM |
-| C1 (cache, small) | Bc1 = K / 16 | cache |
-| C3 (cache, middle) | Bc3 = K / 8 | cache |
-| C2 (cache, large) | Bc2 = K / 4 | cache |
+| R (rotate) | the Q distinct views 0, …, Q−1 | DRAM: each view is next read a whole ring later |
+| C (repeat) | Q references to view 0 | cache: the same b bytes are re-read every dispatch |
 
-*Why several cache sizes (Opus seat, adopted over a single cache arm).* Each dispatch costs some energy that does
-not depend on its size (launch, synchronization, CPU work). A cache arm moving the same total bytes in smaller
-payloads makes many more dispatches, so its per-byte energy would carry more of that fixed cost. With two sizes
-(C1, C2) the fixed cost per dispatch, α, and the per-byte cache cost, γ_c, are both solved for (§3). The third size
-(C3, Fable cold pass) tests the assumption that the fixed cost is the same at every cache size: its departure from
-the C1–C2 line is charged to the bound (§3). Sol's alternative, one kernel with an address-period parameter that
-holds dispatch structure fixed, would need new kernel code; the multi-size design needs none, so it is chosen, and
-§3 says what it leaves unbounded.
+The two arms have the same payload size b, dtype, shape (b,), expression and launch geometry, the same allocation, and
+the same Python indexing. Only address reuse differs.
 
-**Order.** Eight probe calls in a palindrome, **S, C1, C3, C2, C2, C3, C1, S**, the two calls of each arm with the
-same planned length. Each arm's two stream midpoints then have the same mean time, so a drift linear in
-time puts every arm at the same mean state (§5 checks these mean times). The extra settle before pre-idle
-shifts that common time 1.5 s beyond the session midpoint; this shared offset does not change the cancellation. This is
-the reasoning of the registration's null quads (A, B, B, A, reg. §5) applied to arms.
+*Why the matched design is chosen.* The admitted design compared a 4 GiB stream with cache arms of 4–16 MiB. Under
+MLX 0.31.2 those payloads run different GPU launches (G below). The cache line fitted in one launch was subtracted
+from a stream measured in the other, and nothing in §3 bounded the difference. Fable's alternative was a
+row reduction with a fixed row length, so that every payload size shares one per-row geometry. It changes the kernel
+expression for every arm, needs its own scan to choose the row length, and still compares arms of different sizes.
+The matched design changes only which addresses are read: the expression stays `mx.sum` over a contiguous view.
+And because R and C have equal size, the per-dispatch fixed cost cancels exactly (§3) rather than being estimated
+and carried across sizes. Fable's fixed-row kernel is not adopted.
 
-**Cache knee K: measure first.** The repository records no cache size for this M3 Max. Before the measured hour,
-with no energy capture and with `--idle-s 0 --settle-s 0` (§2; otherwise the idle spans would add about two hours): run the probe at `--bytes 2^k` for k = 14 to 35 (16 KiB to 32 GiB), three calls per size, repeats chosen so
-each call lasts about 2 s (planning choices: they set the observed timing spread, propagated below). If a
-size cannot be allocated as one buffer, the scan stops at the largest size that can, s_max (32 GiB if all can).
-1. Per size s and call j, let d_j(s) = (end_ns − start_ns) / (10⁹ N_j), and let t(s) be the mean of
-   the three d_j. Every receipt records CLOCK_MONOTONIC_RAW's reported `clock_getres` in seconds,
-   the measured physical tick as an exact numerator/denominator in ns with its source,
-   and the integer-nanosecond conversion convention/source (`truncation`, `nearest`, or `unknown`).
-   An integer-nanosecond return type does not imply a 1 ns physical tick or rounding to the nearest tick.
-   Let r be the larger of the reported resolution and measured tick, in seconds, and u = 10⁻⁹ s.
-   Use q_j = 2(r + u)/N_j seconds per dispatch: each endpoint can be displaced by at most one physical
-   tick plus one integer conversion unit, and a duration has two endpoints. This conservative truncation/
-   unknown-conversion bound also covers nearest-integer conversion. On the recorded Mac values,
-   r = max(42 ns,125/3 ns) = 42 ns, so q_j = 86 ns/N_j. Use
-   δt(s) = max_j |d_j − t(s)| + mean_j q_j. The first term envelopes the observed three-call spread
-   about its mean; the second bounds the mean's stamp error. This is an observed-spread bound,
-   not a confidence claim about unobserved timing excursions. Print t, δt, clock metadata and all three calls.
-2. Per adjacent pair (s/2,s), write D = t(s) − t(s/2), δD = δt(s) + δt(s/2), A = s − s/2.
-   If D ≤ δD, the marginal throughput is `not defined (dispatch-time difference not separated from zero)`;
-   this pair never counts as above threshold. Otherwise m(s) = A/D and its exact propagated interval is
-   L(s) = A/(D + δD), U(s) = A/(D − δD). Derivation: A/D decreases with positive D, whose endpoints are
-   D−δD and D+δD. Print m, L, U and their endpoint excursions, without replacing the asymmetric interval
-   by a symmetric lower endpoint. The fixed dispatch time cancels; whole-call throughput does not cancel it.
-3. The DRAM reference is the top pair's m_D with interval [L_D,U_D] (16→32 GiB if s_max=32 GiB).
-   The cache reference is the defined pair with largest L(s), carrying that pair's m_C and [L_C,U_C];
-   break an exact tie by smaller pair size. Print both reference sizes and intervals. If the top pair is
-   undefined, no threshold is defined and the knee is not found. For every defined pair D>δD ensures
-   positive exact reciprocal endpoints; do not refuse because a symmetric approximation's lower endpoint
-   would be nonpositive. Undefined pairs cannot supply either reference.
-4. Threshold, derived: a pair whose added bytes come from cache in fraction c takes
-   (1−c)/m_D + c/m_C seconds per byte. The stream-size rule caps its cached fraction at 1/64, so let
-   H(x,y)=1/[(63/64)/x+(1/64)/y], T=H(m_D,m_C). Since H increases in both positive arguments, its propagated
-   interval is [T_L,T_U]=[H(L_D,L_C),H(U_D,U_C)]. A defined pair counts as above threshold only when
-   L(s)>T_U. Equivalently print margin=m(s)−T and bar=[m(s)−L(s)]+[T_U−T], and require margin>bar.
-   This bar is derived from the receipts' observed spread and clock quantities through exact endpoints;
-   no numerical epsilon, noise multiplier or percentage band is added. Print every comparison.
-5. First form the candidate K as the smallest scanned pair size with no above-threshold pair at that
-   size or higher. Use all above pairs, including isolated late pairs; an undefined pair never counts as above.
-   Then require both actual proposed cache-arm increments (K/16→K/8) and (K/8→K/4) to be scanned,
-   defined and above threshold by step 4. These are the C1→C3 and C3→C2 increments of the existing arms,
-   so their number and locations follow from the arm geometry. Missing evidence is not repaired by
-   discarding a late pair, shrinking K or repeating the scan. Print the candidate K and each arm check.
-   Observed-spread intervals do not guarantee against a false knee or a false refusal under timing noise.
-   A false knee can spend the measured hour on DRAM-reading “cache” arms; DC validity will often then
-   read UNDETERMINED, but is not guaranteed to catch every timing misclassification.
-6. Refusal: the knee is not found if the top reference/clock prerequisite is unavailable, no pair is above,
-   no candidate K exists, either cache-arm increment fails step 5, or 64K>s_max. Print the candidate and
-   the specific reason. The measured hour then does not run; every class is UNDETERMINED (`knee not found`),
-   and the slot records the scan and reason. Preserve the one scan's calls; do not retry it into acceptance.
+**Launch geometry: an explicit, source-pinned input.** A **threadgroup** is the GPU's unit of parallel work. The
+reduction's **launch geometry** is the number of threadgroups it uses. In MLX v0.31.2,
+`mlx/backend/metal/reduce.cpp`, function `all_reduce_dispatch`, the contiguous all-reduce branches on
+`in.nbytes() <= (1 << 26)`:
+- at and below that size it uses 32 × REDUCE_N_READS = 128 first-pass threadgroups and a 32-thread second pass (the
+  **small launch**);
+- above it, 4,096 threadgroups and a 1,024-thread second pass (the **large launch**).
 
-A `knee found` result must carry no `reason`, every `arm_checks[*].above` must be
-`true`, and its integer sizes must satisfy exactly `B = max(2**32, 64*K)` and
-`(Bc1, Bc3, Bc2) = (K//16, K//8, K//4)`, as written by `knee_scan`.
-An inconsistent success is a reasoned scan-status fault: keep records and calls,
-set every class UNDETERMINED and print no interval.
+So **G = 2^26 bytes**. G is valid only for the build it was read from: `packages.mlx` = `packages.mlx-metal` =
+`runtime_version.version` = 0.31.2. A row view `ring[i]` of a row-contiguous (Q, b) array is itself contiguous
+(pinned `mlx/backend/common/slicing.cpp`), so it takes this all-reduce path with `in.nbytes()` = b.
 
-The scan reads no energy and is not BYTES data.
+**Geometry check.** It runs on every receipt, of the check and of the hour. It passes only when all of these hold:
+- the receipt's `view_nbytes` equals b;
+- `ring_shape` = [W/b, b] and `dtype` = `uint8`;
+- `launch_side` = `small`, which requires b ≤ G;
+- the receipt's MLX versions equal the build G was read from.
 
-**Sizes.**
-- *Bc2 = K / 4.* The scan directly requires separated marginal evidence on C1→C3 and C3→C2, and K's
-  definition makes the pair ending at K/2 above threshold. Under the stated cache/DRAM timing model,
-  these observations support using K/4 clear of the transition. They are timing evidence, not a hardware
-  cache-residency counter or proof against unobserved timing excursions. Bc1=K/16 and Bc3=K/8 retain
-  their existing roles and sizes.
-- *Bc1 = Bc2 / 4, Bc3 = Bc2 / 2.* δγ_c falls as Bc2 − Bc1 grows (§3); dividing Bc2 by 4 gives 3/4 of the largest
-  possible difference while keeping a power of two (Bc3) between the two ends for the linearity check. A planning
-  choice; its effect is the printed δΔ.
-- *B = max(4 GiB, the smallest power of two ≥ 64 K).* 4 GiB sits beside Qwen3-8B-4bit's bytes per pass
-  (4,597,412,096, reg. §4 table), inside the fit set's range (the fit set is the three models the registration's
-  rival lines are drawn through, reg. §2). The factor 64 caps the cached fraction of S's reads at φ = K / B ≤ 1/64
-  (§3, "Bias"). φ enters every class decision either as the exact correction 1 / (1 − φ) or by pulling Δ toward
-  zero, so no class depends on its size; 64 is a planning choice that keeps the correction at most 1.6% and B
-  within a 32 GiB scan for any K up to 512 MiB.
+Since R and C have identical b, any check that passes puts both arms on the same side of G. The check fails if they
+were not. A failure names the field.
 
-**Repeats.** Each call's repeats N = floor(T_call / t_dispatch), with t_dispatch = duration / repeats measured at
-that exact payload in the knee scan and T_call the call's planned stream length. Planned split of the hour: sixteen
-idle spans of 57.6 s (921.6 s), twenty-four settle gaps of 3 s (72 s; §2), about 10 s per call of allocation, fill,
-warm-up and exit (80 s; measured in the scan), S 2 × 500 s, C1, C3 and C2 2 × 250 s each (2,500 s): 3,573.6 s.
+**Ring size W, and the bound on R's cached fraction.** R is meant to read DRAM, but some of its bytes might still be
+in cache. Let K_c be the largest number of bytes any on-chip cache between the GPU and DRAM can hold.
+- *Cyclic-sweep bound (holds for any replacement policy).* Take any byte x read in sweep k. If that read is a cache
+  hit, x stayed resident from its read in sweep k−1 to its read in sweep k. That interval contains the first
+  dispatch of sweep k. At that instant at most K_c bytes are resident. So at most K_c of the W bytes in a sweep hit,
+  and R's cached fraction is φ ≤ K_c / W over whole sweeps. More generally, for N dispatches,
+  φ ≤ K_c ⌈N/Q⌉ / (N b).
+- *Capacity premise.* The admitted design covered caches of K ≤ 512 MiB only: it refused whenever 64K > s_max, with
+  s_max = 32 GiB, its largest scanned allocation. This revision keeps that same envelope as a stated premise,
+  **K_c ≤ K_cap = W/64**. It also keeps the admitted 1/64 cached-fraction cap, now applied to the working set:
+  **W = 64 × 512 MiB = 2^35 bytes (32 GiB)**, so φ_U = K_cap/W = 1/64 for whole sweeps. The admitted scan already
+  allocates 2^35 bytes. The premise is not tested by this rule. §3 ("Bias") and `NOTES.md` say what it supports and
+  what a breach does.
+- *Allocation.* Allocate as `mx.ones((Q, b), dtype=mx.uint8)` with Q = W/b. Both axes stay below 2^31 for every b on
+  the ladder (Q ≤ 2^16 and b ≤ 2^26), so the per-axis allocation limit fixed at `79de7be49` is not reached.
+- *Payload content.* `mx.ones` is constant data, which minimises DRAM-bus toggle energy. Relative to real model
+  weights, this biases Δ toward zero. It weakens the NOT RESOLVED upper limit and BELOW ATTRIBUTION LEVEL as
+  statements about decode traffic; the test measures this constant payload.
+
+**Residency check (replaces the knee scan).** It runs before the measured hour, with no energy capture and with
+`--idle-s 0 --settle-s 0`.
+
+R1. **Ladder.** The rungs are b_k = G / 2^k for k = 0, 1, …, 7, that is 64 MiB down to 512 KiB, run top-down.
+- *Top rung.* G is the largest payload of the small launch. The ladder stays in one launch, so the chosen b has a
+  geometry known before any measurement.
+- *Bottom rung.* 2^19 = 128 first-pass threadgroups × 1,024 threads × 4 bytes read per thread (REDUCE_N_READS) is the
+  smallest payload that fills the small launch's first pass (Sol round 2, from the same pinned source). Below it,
+  threads are idle and the precision argument of R4 only worsens.
+
+R2. **Per rung.**
+- Reshape the one ring to (W/b_k, b_k). This is a view of the same memory, so the ring is allocated once for the
+  whole check. Build and evaluate the Q views, then `mx.synchronize()`.
+- For mode C, then mode R: run one warm dispatch, then one **pilot** call of one sweep (Q dispatches), whose
+  per-dispatch time is t_pilot. Then run three calls of N = Q × max(1, floor(T_chk / (Q × t_pilot))) dispatches, with
+  T_chk = 2 s.
+- *Why whole sweeps.* They make φ ≤ K_c/W exact.
+- *Why 2 s and three calls.* These are the admitted scan's planning choices, carried over unchanged; they set the
+  observed spread propagated below.
+
+R3. **Timing per mode, unchanged from the admitted step 1.**
+- d_j = (end_ns − start_ns)/(10⁹ N_j), and t is the mean of the three d_j.
+- r is the larger of the reported clock resolution and the measured tick; u = 10⁻⁹ s; q_j = 2(r + u)/N_j. On the
+  recorded Mac, r = 42 ns, so q_j = 86 ns/N_j.
+- δt = max_j |d_j − t| + mean_j q_j.
+- Each receipt records the admitted clock fields. A missing clock prerequisite prints its reason, with no 1 ns
+  fallback.
+
+R4. **Residency contrast.** At rung b_k, let D = t_R − t_C and δD = δt_R + δt_C.
+- The contrast is **resolved** when D > δD.
+- *Derivation.* The two modes differ only in address reuse, so a C dispatch faster than an R dispatch by more than
+  both observed envelopes together resolves a repeat-versus-rotate timing contrast. Cache residency can cause it,
+  but address translation and DRAM row locality can also contribute (§3, "False residency"). At 64 MiB, repeat
+  is not resolved as faster than rotate: the diagnostic gives 705.550 versus 663.892 µs; the four rehearsals give
+  C/R means 462.2/466.5, 455.3/518.7, 450.8/468.1 and 498.3/469.5 µs, all with D ≤ δD (§5). Translation reuse
+  alone is therefore not shown to produce the 32 MiB contrast.
+- No threshold, multiplier or band is added. This is an observed-spread bound, not a confidence statement, and not
+  a hardware residency counter.
+- The ladder stops at the first resolved rung, and **b = that rung's b_k**.
+- *Why top-down.* §3's half-width is dominated by its baseline row, which per dispatch is t × (baseline power
+  bound). Per byte it scales as (t_R + t_C)/b. With t = t₀ + b × (per-byte time), the fixed time t₀ is spread over
+  more bytes as b grows, so the largest resolved b gives the smallest δΔ.
+- Print every measured rung: t, δt, all calls, D, δD, and the verdict. Rungs below the chosen b are not run.
+
+R5. **Cost** (planning, not a threshold). A rung costs per mode one pilot sweep plus three calls with counts set
+by R2's pilot, not a guaranteed 2 s duration. One sweep lasts Q × t ≈ (W/b) × t.
+- If pilot and timing-call rates agree, the archived fixed time t₀ ≈ 205 µs gives about 16 s per rung from
+  64 MiB to 4 MiB (about 32 s for two rungs).
+- 2 MiB takes about 27 s, 1 MiB about 54 s and 512 KiB about 108 s, because there one sweep exceeds 2 s.
+- If all eight rungs run, the total is about 270 s, plus one ring allocation and fill (planned at the admitted
+  "about 10 s").
+- Measured on this Mac, timing calls last about 1 s because the slow pilots set smaller counts; the first two
+  rungs together took 18–19 s in the rehearsals. These measured costs do not change the planning counts or ladder.
+
+R6. **Refusal.** The residency check fails, and **the measured hour does not run**, in any of four cases. Each
+prints its specific reason, and every class is UNDETERMINED with that reason:
+- the ring of W bytes cannot be allocated: `allocation failed (34359738368 B ring)`;
+- a clock prerequisite is missing: `clock prerequisite missing (<field>)`;
+- any check receipt fails the geometry check: `geometry check failed (<field>)`;
+- no rung is resolved: `residency not resolved`.
+
+In every case, the slot records the check's receipts, every rung's comparison, and the reason. Preserve the one
+check's calls; do not repeat, extend or retry it into acceptance. Observed-spread intervals do not guarantee against
+a false residency or a false refusal under timing noise. §3 ("Bias") explains how an R-only stall can resolve
+the check and produce a RESOLVED memory-traffic class even without a byte-source difference.
+
+A `residency resolved` result must carry no reason. Its b must equal the first resolved rung exactly, with
+Q = W/b; every check receipt must pass the geometry check. An inconsistent success is a reasoned check-status fault:
+keep records and calls, set every class UNDETERMINED and print no interval.
+
+The check reads no energy and is not BYTES data.
+
+**Order.** Four probe calls in a palindrome, **R, C, C, R**, all with the same planned length. Each arm's two stream
+midpoints then have the same mean time, so a drift linear in time puts both arms at the same mean state (§5 checks
+these mean times). With the planned 10 s allocation/fill/warm-up all before pre-idle (§2's order), that common
+time is about 6.5 s beyond the session midpoint; this shared offset does not change the cancellation. This is
+the reasoning of the registration's null quads (A, B, B,
+A, reg. §5) applied to arms.
+
+**Repeats and the hour.** Each call's dispatches are N = Q × floor(T_call / (Q × t_a)): whole sweeps. Here t_a is the
+arm's t at b from the residency check (t_R for R, t_C for C), and T_call = 759.2 s is the planned stream length.
+Logical bytes per call are N × b.
+- *Planned hour:* eight idle spans of 57.6 s (460.8 s); twelve settle gaps of 3 s (36 s; §2); about 10 s per call of
+  allocation, fill, view building, warm-up and exit (40 s); and four streams of 759.2 s (3,036.8 s). Total
+  3,573.6 s, the admitted hour.
+- *Why 759.2 s.* It keeps the admitted hour. The stream length is (3,573.6 − 4 × 134.2) / 4, where 134.2 s is one
+  call's fixed overhead (115.2 idle + 9 settle + 10 allocation).
+- *Why equal lengths.* The baseline row per dispatch does not depend on T_call; the edge rows per dispatch scale
+  as t_a/T_a. For a fixed total stream time, the sum t_R/T_R + t_C/T_C is smallest at T_R/T_C = √(t_R/t_C). At the
+  diagnostic's ratio t_R/t_C = 1.2045, equal lengths are within 0.22% of that optimum on this one row, so equal
+  lengths are used.
+
 These are planning choices, not thresholds; the arithmetic uses the actual stamped spans.
 
-## 2. The receipt change (one small code change, before the test)
+## 2. The receipt change (before the test)
 
-The receipt gains schema `joulewise.bytes_stream.v2` with:
+The receipt gains schema `joulewise.bytes_stream.v3` with:
 
-1. **Order inside a call, idle spans and settle gaps.** Allocate and fill the payload, `mx.synchronize()`, run one
-   warm reduction and synchronize (so the first measured dispatch is not a kernel compile), then: sleep one
-   settle gap before stamping `idle_pre_start_ns`, sleep the pre-idle span (`--idle-s 57.6`), sleep the settle gap (`--settle-s 3`), stream from `start_ns` to `end_ns`,
-   sleep the settle gap, sleep the post-idle span with the payload still resident, exit. Stamp
-   `idle_pre_start_ns`, `idle_pre_end_ns`, `idle_post_start_ns`, `idle_post_end_ns` on CLOCK_MONOTONIC_RAW, the
-   clock of `start_ns` and `end_ns`. Without these, the baseline cannot be computed from the receipt and traces
-   alone (the time before `start_ns` holds the fill, which is not idle).
-   - *57.6 s* is `sampling.idle_seconds` of every pass-1 BYTES run config, and it exceeds the three 10 s
-     bandwidths the idle-variance estimator requires (§3).
-   - *Settle gap 3 s,* derived: an idle span next to the stream would take in energy that a boundary reports
-     late or smears across the edge. The longest such delay is the battery's, τ = 2 × T_SMC + Δt_p (reg. §7: the
-     system controller publishes battery current once a second, T_SMC = 1.0 s, and Δt_p is the longest interval
-     between meter polls), 2.302 s on H; it exceeds one rails sample interval (100 ms at the registered 10 Hz)
-     and the meter's r_max + Δt (38 ms on H, §3). 3 s is the next whole second above τ. The same delay applies after fill/warm-up, hence the extra gap before pre-idle. If the test's own τ
-     exceeds 3 s, each idle mean is taken over its stamped span minus its first τ − 3 s. Energy inside the gaps enters
-     no quantity.
-   Every receipt, including measured arms, records `clock` = `CLOCK_MONOTONIC_RAW`,
-   `clock_resolution_s` from `time.clock_getres(time.CLOCK_MONOTONIC_RAW)`, and on macOS
-   `clock_tick_num_ns`/`clock_tick_den` from `mach_timebase_info`, with `clock_tick_source`.
-   `clock_ns_conversion` and `clock_ns_conversion_source` are `unknown` unless a source
-   establishes the convention; the observed steps alone do not. The derived
-   `clock_duration_bound_ns` = 2(max(resolution_ns, tick_ns) + 1) retains both raw inputs.
-   On non-macOS the timebase fields are null and marked not applicable; getres supplies r.
-   Missing clock prerequisites retain the receipt and print the scan reason, with no 1 ns fallback.
+1. **Order inside a call, idle spans and settle gaps.**
+   - *Sequence.* Allocate and fill the ring and `mx.synchronize()`. Build and evaluate the Q views and the arm's
+     list of Q references (§1), then synchronize. Run one warm reduction and synchronize, so the first measured
+     dispatch is not a kernel compile. Then: sleep one settle gap before stamping `idle_pre_start_ns`; sleep the
+     pre-idle span (`--idle-s 57.6`); sleep the settle gap (`--settle-s 3`); stream from `start_ns` to `end_ns`;
+     sleep the settle gap; sleep the post-idle span with the ring still resident; exit.
+   - *Stamps.* `idle_pre_start_ns`, `idle_pre_end_ns`, `idle_post_start_ns` and `idle_post_end_ns` are taken on
+     CLOCK_MONOTONIC_RAW, the clock of `start_ns` and `end_ns`. Without them the baseline cannot be computed from the
+     receipt and traces alone: the time before `start_ns` holds the fill, which is not idle.
+   - *57.6 s* is `sampling.idle_seconds` of every pass-1 BYTES run config. It exceeds the three 10 s bandwidths the
+     idle-variance estimator requires (§3).
+   - *Settle gap 3 s, derived.* An idle span next to the stream would take in energy that a boundary reports late or
+     smears across the edge. The longest such delay is the battery's: τ = 2 × T_SMC + Δt_p (reg. §7). The system
+     controller publishes battery current once a second (T_SMC = 1.0 s), and Δt_p is the longest interval between
+     meter polls. On H, τ = 2.302 s. It exceeds one rails sample interval (100 ms at the registered 10 Hz) and the
+     meter's r_max + Δt (38 ms on H, §3). 3 s is the next whole second above τ. The same delay applies after
+     fill/warm-up, hence the extra gap before pre-idle.
+   - *If τ exceeds 3 s.* If the test's own τ exceeds 3 s, each idle mean is taken over its stamped span minus its
+     first τ − 3 s. Energy inside the gaps enters no quantity.
+   - *Clock fields.* Every receipt, including measured arms and residency-check calls, records:
+     - `clock` = `CLOCK_MONOTONIC_RAW`;
+     - `clock_resolution_s` from `time.clock_getres(time.CLOCK_MONOTONIC_RAW)`;
+     - on macOS, `clock_tick_num_ns`/`clock_tick_den` from `mach_timebase_info`, with `clock_tick_source`;
+     - `clock_ns_conversion` and `clock_ns_conversion_source`, which are `unknown` unless a source establishes the
+       convention (the observed steps alone do not);
+     - the derived `clock_duration_bound_ns` = 2(max(resolution_ns, tick_ns) + 1), retaining both raw inputs.
+
+     On non-macOS the timebase fields are null and marked not applicable; getres supplies r. Missing clock
+     prerequisites retain the receipt and print the check's reason, with no 1 ns fallback.
 2. **Stack object** (the governed runtime identity, so a change of OS or library between pass 1 and the test is
    visible). The sources and comparisons are listed below (§4, "Stack check"); the device source is explicit
    because this standalone probe has no telemetry device metadata:
@@ -234,44 +298,60 @@ The receipt gains schema `joulewise.bytes_stream.v2` with:
    measured and removed by the cache arms. Each of these differences is printed as a disclosure and changes no
    class. `git_commit` and the five not-applicable model fields have the non-comparison roles in the table.
 
-Validate stack and capture containers leaf by leaf. An absent or invalid disclosure-only leaf prints
-`not recorded (<reason naming the leaf>)` and changes no class; valid siblings, including the rail set,
-remain available. Missing physical leaves charge the same classes as their physical differences.
+3. **Ring and geometry object.**
+   - `arm`: `R`, `C` or `check-R`/`check-C` with the rung index.
+   - `ring_bytes` = W, `ring_shape` = [Q, b], `dtype` = `uint8`, `view_nbytes`.
+   - `view_order`: `rotate` (k mod Q) or `repeat` (always 0).
+   - `sweeps` = N/Q (an integer).
+   - `geometry_branch_bytes` = G, with `geometry_source` =
+     `mlx v0.31.2 mlx/backend/metal/reduce.cpp all_reduce_dispatch: in.nbytes() <= (1 << 26)`.
+   - `launch_side` (`small` when view_nbytes ≤ G, else `large`).
+   - `logical_bytes` = N × b.
 
-Each receipt must satisfy `idle_pre_start_ns <= idle_pre_end_ns <= start_ns < end_ns <= idle_post_start_ns <= idle_post_end_ns`.
-Native rails/GPU rows require `start_ns < end_ns` and `row[i].start_ns >= row[i-1].end_ns` (consecutive, disjoint intervals); native rows and meter stamps must respect their
-recorded time order. A violation (including a zero stamp that breaks order) makes the affected interval
-prerequisite missing, with the row named and retained as evidence; never drop it and recompute a bound.
-Rails, GPU and adapter-meter `power_w`, and `energy_j.rails`, must be non-negative. Battery power
-and its stream integral remain signed; zero is valid. Battery edge energy `battery_edge_j` is the non-negative bound v_edge = (T/n) × Σ |P_b| (registration §7); a negative or non-finite value is a missing prerequisite, never a smaller bound.
+   Receipt integer counts must satisfy exactly `bytes_read = bytes_per_read * repeats`, with `bytes_per_read` = b
+   and `repeats` = N; a violation is a missing prerequisite naming the field. The residency-check calls use this
+   same schema with zero idle and settle.
 
-**Capture and harvest.** One continuous `powermetrics` capture and one continuous meter stream cover all eight
-calls, with one meter clock fit for the test, from the test's own non-claim checkout with the chain extension (reg. §19).
-Integrating rails, the GPU series, DC input and the battery term over the receipt's stamped spans, rather than over
-a run's own phases, is the one new piece of harvest code; it calls the pass-1 integrators unchanged.
+Validate stack, ring and capture containers leaf by leaf. An absent or invalid disclosure-only leaf prints
+`not recorded (<reason naming the leaf>)` and changes no class; valid siblings, including the rail set, remain
+available. Missing physical leaves charge the same classes as their physical differences. A missing ring/geometry
+leaf fails the geometry check, naming the leaf.
+
+**Ordering and sign checks.**
+- Each receipt must satisfy `idle_pre_start_ns <= idle_pre_end_ns <= start_ns < end_ns <= idle_post_start_ns <= idle_post_end_ns`.
+- Native rails/GPU rows require `start_ns < end_ns` and `row[i].start_ns >= row[i-1].end_ns` (consecutive, disjoint
+  intervals). Native rows and meter stamps must respect their recorded time order.
+- A violation, including a zero stamp that breaks order, makes the affected interval prerequisite missing, with the
+  row named and retained as evidence. Never drop it and recompute a bound.
+- Rails, GPU and adapter-meter `power_w`, and `energy_j.rails`, must be non-negative. Battery power and its stream
+  integral remain signed; zero is valid.
+- Battery edge energy `battery_edge_j` is the non-negative bound v_edge = (T/n) × Σ |P_b| (registration §7). A
+  negative or non-finite value is a missing prerequisite, never a smaller bound.
+
+**Capture and harvest.** One continuous `powermetrics` capture and one continuous meter stream cover all four calls,
+with one meter clock fit for the test. They run from the test's own non-claim checkout with the chain extension
+(reg. §19). The one new piece of harvest code integrates rails, the GPU series, DC input and the battery term over
+the receipt's stamped spans rather than over a run's own phases. It calls the pass-1 integrators unchanged.
 
 ## 3. The reported quantity and its bound
 
-**Knee-scan prerequisite and scope.** Use K, B and the three cache sizes only after the §1 scan
-has passed its exact-interval comparisons and both C1→C3 and C3→C2 timing-evidence checks.
-The scan's intervals are derived from clock quantization and three observed calls; they are not
-confidence intervals on future timing noise and do not prove cache residency. If the knee is not
-found, preserve and print its calls, clock metadata, comparisons, candidate K and specific reason;
-the measured hour does not run, the classes are UNDETERMINED (`knee not found`), and quantities
-requiring K print `not defined (knee not found)`. A false positive can spend the hour with cache
-arms reading DRAM; DC validity may then be UNDETERMINED, but this is a downstream check, not a
-logical guarantee that every false knee will be caught. This scan prerequisite changes no
-collected BYTES number and adds no energy-uncertainty term to the propagation below.
+**Residency-check prerequisite and scope.** Use b, W and Q only after the §1 residency check has resolved a rung and
+every receipt has passed the geometry check. The check's intervals come from clock quantization and three observed
+calls per mode. They are not confidence intervals on future timing noise and do not prove cache residency. If the
+check fails, preserve and print its calls, clock metadata, every rung's comparison and the specific reason. The
+measured hour does not run, every class is UNDETERMINED with that reason, and quantities requiring b print
+`not defined (<reason>)`. The check changes no collected BYTES number and adds no energy-uncertainty term to the
+propagation below. Its timings enter only κ ("Bias").
 
-**Boundaries.** rails (CPU + GPU + ANE), the GPU rail alone (the `gpu_power` series of the same capture), DC input,
-and rest. Each is integrated over a stamped span exactly as pass 1 integrates it (reg. §7):
-- rails and the GPU rail by **native interval support** (the trace is a sum of constant-power intervals, so a
-  span edge inside one interval needs no interpolation) under the test session's **operative timing bound** (the
-  measured bound on how far a laptop timestamp can sit from the trace's time base, evaluated as pass 1 evaluates
-  it, `joulewise/b6/calibration.py`);
-- DC input by the meter integrator (`km003c_parse.clock_fit` and `integrate`) plus the battery term E_b (reg. §7,
-  "Battery term");
-- rest = DC − rails per span, before any averaging.
+**Boundaries.** There are four: rails (CPU + GPU + ANE), the GPU rail alone (the `gpu_power` series of the same
+capture), DC input, and rest. Each is integrated over a stamped span exactly as pass 1 integrates it (reg. §7):
+- **rails and the GPU rail:** by **native interval support**. The trace is a sum of constant-power intervals, so a
+  span edge inside one interval needs no interpolation. The integration runs under the test session's **operative
+  timing bound**: the measured bound on how far a laptop timestamp can sit from the trace's time base, evaluated as
+  pass 1 evaluates it (`joulewise/b6/calibration.py`).
+- **DC input:** by the meter integrator (`km003c_parse.clock_fit` and `integrate`) plus the battery term E_b
+  (reg. §7, "Battery term").
+- **rest:** DC − rails per span, before any averaging.
 
 **Meter gap.** An exact device-counter gap of n samples gives a missing duration n × Δt, with Δt = 20 ms
 (50 samples/s). Charge n × Δt × P_max to that call's DC systematic bound, where P_max is the adapter's rated
@@ -289,17 +369,21 @@ without that prerequisite the supply/baseline and DC validity cannot be evaluate
 
 1. Idle power of call i: P_idle,i = (P_pre + P_post) / 2, each the mean power over its stamped idle span.
 2. Excess energy of call i: X_i = E_β[start_ns, end_ns) − P_idle,i × T_i, with T_i the stamped span in seconds.
-3. Excess per dispatch of arm a: x_a = Σ X_i / Σ N_i over the arm's two calls; per call, x_a,i = X_i / N_i.
-4. Cache line through C1 and C2: γ_c = (x_C2 − x_C1) / (Bc2 − Bc1) (J per cache-sourced byte) and
-   α = x_C1 − γ_c × Bc1 (J per dispatch, independent of size).
-5. Residual of the middle size: r = x_C3 − (α + γ_c × Bc3). It is zero when the fixed cost is the same at all three
-   cache sizes and the per-byte cost is linear.
-6. DRAM-sourced energy per byte: γ_d = (x_S − α) / B.
-7. **Reported quantity: Δ_β = γ_d − γ_c**, in J/GB: the extra energy on β per logical byte read from DRAM rather
-   than cache, with the kernel and per-dispatch work held fixed.
+3. Excess per dispatch of arm a ∈ {R, C}: x_a = Σ X_i / Σ N_i over the arm's two calls; per call, x_a,i = X_i / N_i.
+4. **Reported quantity: Δ_β = (x_R − x_C) / b**, in J/GB. This is the extra energy on β per logical byte when a
+   b-byte dispatch reads addresses not re-read since the previous sweep, rather than re-reading the same b bytes.
+   Shape, dtype, expression and launch geometry are identical. A resolved check establishes a repeat-versus-rotate
+   timing contrast. Δ is memory-traffic energy per logical byte, including translation and row-locality effects;
+   it is not an isolated energy per byte read from DRAM rather than cache.
+   - *Why α cancels.* Write x_a = α + b × e_a, where α is the per-dispatch fixed energy (launch, synchronization,
+     CPU work) and e_a the energy per byte. Both arms run the same dispatch at the same b with the same Python path,
+     so α is the same in both and x_R − x_C = b(e_R − e_C) exactly. Any fixed energy that does depend on address
+     reuse (for example a stall at dispatch end) is part of the measurand.
 
-**Bound, per call.** b_i is the sum (not in quadrature, as the registration sums its systematic terms in reg. §7 step 4)
-of the rows below for call i:
+**Bound, per call.** b_i (the bound for call i, not the payload b) is the sum, not in quadrature, of the
+rows (edges, counter gaps, baseline) for call i. The sum follows reg. §7 step 4, which sums its systematic terms.
+The baseline term, se_idle, the Newey–West estimator and its per-stream application, and the DC combination
+se_DC = se_meter + se_battery are as follows. Rest sums the rails and DC rows.
 
 | Term | rails and GPU rail | DC input | rest |
 |---|---|---|---|
@@ -331,48 +415,78 @@ of the rows below for call i:
   covariance estimate. Use this in the DC baseline row; retain the summed stream means for P_pre/P_post.
 - *Rest* sums the rails and DC rows, so it needs no variance of its own.
 
-**Repeatability.** Every row above is systematic; none responds to the two calls of an arm disagreeing, so energy
-present in one stream span and absent from its idle spans (a background process, a thermal step, a clock-state
-excursion) would go unbounded and could push a class toward RESOLVED. Each arm therefore adds
-rep_a = |x_a,1 − x_a,2| × max(N_1, N_2) / (N_1 + N_2). Derivation: a transient E confined to call 1 moves x_a by
-E / (N_1 + N_2) and moves x_a,1 − x_a,2 by E / N_1, so rep_a is exactly the shift it causes (with the larger N for
-either call). It costs no measurement. It does not bound an excursion present equally in both calls of an arm.
+**Repeatability.** Each arm adds rep_a = |x_a,1 − x_a,2| × max(N_1, N_2) / (N_1 + N_2). It is exactly
+the shift of x_a caused by a transient confined to one call. It does not bound an excursion present equally in
+both calls of an arm.
 
 **Propagation** (worst case, linear):
-- δx_a = Σ b_i / Σ N_i + rep_a;
-- δγ_c = (δx_C1 + δx_C2 + |r|) / (Bc2 − Bc1);
-- δα = δx_C1 + |r| + δγ_c × Bc1;
-- **δΔ = (δx_S + δα + |α|) / B + δγ_c.**
+- δx_a = Σ b_i / Σ N_i + rep_a, for a ∈ {R, C};
+- **δΔ_β = (δx_R + δx_C) / b.**
 
-The |α| / B term charges the whole per-dispatch cost as possible error, because a 4 GiB dispatch may carry a
-different fixed cost from a cache-sized one; no factor is invented for it. Treating α and γ_c as independent is
-conservative (by about 0.2% on the unrevised draft's example inputs, Opus cold pass). The |r| terms charge a fixed cost that differs
-between the cache sizes, as far as C3 shows it.
+No α, |α|/B or cross-size term remains.
 
-**What the bound does not cover.** A fixed cost ε per dispatch that differs between C1 and C2 moves Δ by
-ε (1 − Bc1/B) / (Bc2 − Bc1), about 340 times the leverage of the same ε between S and a cache arm (Fable cold
-pass). The C3 residual charges only the part of such a difference that is not linear in payload size; a part
-linear in size is indistinguishable from per-byte cache energy. On the §5 inputs, C2 dispatches 1% cheaper in
-fixed cost than C1 in a world with no memory-traffic energy on rails still reads RESOLVED (§5). Its sign is not
-controlled. Two descriptions make it visible (§4): ε_flip, the fixed-cost difference that would move Δ by its own
-half-width, and each arm's mean GPU active frequency and residency. Removing it needs a kernel that holds dispatch
-structure fixed (Sol's design), which is new code.
+**What the bound does not cover.**
+- *Address-reuse effects that are not cache residency.* R also walks Q times more pages than C, so it also takes
+  more address-translation misses and fewer DRAM row-buffer hits. Their energy is part of reading new addresses
+  from memory, and Δ includes it, as §0 includes stall time and clock state. It is not separable from the
+  controller or the fabric.
+- *The timing model behind κ* (below): a dispatch's time as a fixed part plus a sum of per-byte times by source.
+  This is the model the admitted step 4 used. Overlapped stalls and unequal cache throughput across arms (GPU
+  clock state) can depart from it, and κ is then not guaranteed. In particular, κ is not conservative when an
+  R-only fixed time, such as address translation, dominates the timing contrast.
+- *Per-call fixed energy.* Unlike per-dispatch α, a clock ramp at stream start after idle does not divide out
+  because N_R ≠ N_C. Assuming the same 10 J ramp in both calls gives
+  E_ramp(1/N_R − 1/N_C)/b ≈ 2 × 10⁻⁵ J/GB on §5's counts: about 0.065 δΔ_rails and 0.4 ε₀. R's first sweep
+  is another possible per-call term: its 32 MiB rehearsal pilots took 506–518 µs per dispatch versus about
+  311 µs steady. If that penalty returns after the hour's 60.6 s idle/settle, an R-only 0.2 s × 30 W ≈ 6 J
+  per call gives about 7 × 10⁻⁵ J/GB, about 0.23 δΔ_rails and 1.5 ε₀. These are separate estimates with
+  different assumptions, not measured hour energies. An equal penalty in both R calls is invisible to rep_R.
+- *An excursion present equally in both calls of one arm,* as before.
+- *The capacity premise K_c ≤ W/64* (§1), which this rule does not test.
 
-**Bias, printed beside Δ.** If a fraction φ of S's reads hit in cache, Δ measured = (1 − φ) Δ true. For a cyclic
-scan of B above the cache, φ ≤ K / B, printed. A cache arm that leaks to DRAM raises γ_c and lowers Δ. Both cache
-effects run toward "not resolved", never toward "resolved"; this sentence covers cache leakage only (see the
-paragraph above and "Repeatability" for errors of either sign).
+**Bias, printed beside Δ: the contrast fraction ρ and its correction κ.**
+- *Fractions.* Let φ be R's cached fraction and λ the fraction of C's bytes that leak to DRAM. If the per-byte
+  energies are e_d (DRAM) and e_c (cache), and there is no additional arm-only fixed time/energy, then
+  e_R = (1 − φ) e_d + φ e_c and e_C = λ e_d + (1 − λ) e_c. Hence, under this source-mixture model,
+  **Δ measured = ρ × (e_d − e_c)**, with ρ = 1 − φ − λ.
+- *Bounding ρ from the check's timing.* By the same mixture, t_R − t_C = ρ × Θ, where Θ = b(1/v_d − 1/v_c) and v_d,
+  v_c are the DRAM and cache throughputs. Θ ≤ b/v_d. R's time includes its DRAM-sourced bytes, t_R ≥ (1 − φ) b/v_d,
+  so Θ ≤ t_R / (1 − φ). Therefore
+  ρ ≥ (1 − φ)(t_R − t_C)/t_R ≥ **ρ_L = (1 − φ_U)(D − δD)/(t_R + δt_R)**, with D, δD, t_R and δt_R from the chosen
+  rung and φ_U = K_cap/W = 1/64.
+  - *Why this direction.* Every substitution moves toward a smaller ρ: the lower contrast endpoint, the upper R time,
+    the largest φ. ρ_L is positive exactly when the rung is resolved.
+- *Correction.* **κ = 1/ρ_L** multiplies |Δ| wherever the admitted text used 1/(1 − φ): in §4 row 3 and in the NOT
+  RESOLVED upper limit.
+- *Direction of the bias.* Both leakages pull Δ toward zero, never toward "resolved". This covers cache leakage only;
+  see "Repeatability" and the paragraph above for errors of either sign.
+- *False residency.* Both arms can read DRAM and still differ in address reuse. An R-only fixed stall, such as
+  translation, can resolve the timing check and add R-only energy, producing RESOLVED when Δ − δΔ > 0.
+  For example, a 26 µs R-only stall at 30 W gives about 0.02325 J/GB at 32 MiB even without a source contrast.
+  In that case the shared-fixed-time mixture model fails: true source contrast ρ can approach zero while ρ_L
+  remains positive, so κ is not conservative. RESOLVED identifies memory-traffic energy including translation,
+  not DRAM-source energy alone. No intercept-free residency signature is adopted in this revision.
+- *If the capacity premise fails.* Then φ may exceed 1/64, κ is understated, and only rows 3 and the upper limit
+  are affected.
 
-**Printed precision.** Every Δ, δΔ and description quantity with a half-width prints its half-width to 2
-significant figures and the estimate to the same decimal place (reg. §14's H2 rule: a 2-significant-figure half-width is
-at least 10 units of its last digit, so rounding moves a value by at most 5% of it). K, B, the cache sizes, N and
-byte counts print exactly; φ prints as its exact fraction. Classes are decided on full-precision values.
+**Printed precision.** Every Δ, δΔ and description quantity with a half-width prints its half-width to 2 significant
+figures and the estimate to the same decimal place (reg. §14's H2 rule: a 2-significant-figure half-width is at least
+10 units of its last digit, so rounding moves a value by at most 5% of it). b, W, Q, N and byte counts print
+exactly; φ_U prints as its exact fraction; ρ_L and κ print to 4 significant figures. Classes are decided on
+full-precision values.
 
-**Agreement bar** for an independent recompute, if one is made: every class identical; K, B, φ and every count
-identical; every Δ and δΔ within one bar, 1% of the smallest printed δΔ among the boundaries; any other printed
-quantity within half a unit in its last printed decimal (reg. §12). The bar must exceed 10⁶ × float noise, where float
-noise is the propagation above applied to a relative error of 2.2 × 10⁻¹⁶ (binary64's machine epsilon) on every
-gross energy, as reg. §12 uses it (worked example: 2.5 × 10⁻¹⁰ ≤ 5.7 × 10⁻⁶ J/GB).
+**Agreement bar** for an independent recompute, if one is made:
+- every class identical;
+- b, W, Q, φ_U and every count identical;
+- every Δ and δΔ within one bar, 1% of the smallest printed δΔ among the boundaries;
+- κ within 10⁻⁶ relative (it comes from the check's receipts by closed form): float noise is amplified by about
+  t_R/(D − δD) ≈ 21, so 10⁶ × noise ≈ 10⁻⁸; half a unit at 4 significant figures is at least 5 × 10⁻⁵
+  relative. The 10⁻⁶ bar lies between those scales;
+- any other printed quantity within half a unit in its last printed decimal (reg. §12).
+
+The bar must exceed 10⁶ × float noise. Float noise is the propagation above applied to a relative error of
+2.2 × 10⁻¹⁶ (binary64's machine epsilon) on every gross energy, as reg. §12 uses it. Worked example (§5):
+3.2 × 10⁻¹⁰ ≤ 3.1 × 10⁻⁶ J/GB.
 
 ## 4. Validity, classes and the printed lines
 
@@ -389,15 +503,16 @@ Other differences change no class. Invalid disclosure-only leaves are printed as
 leaf by leaf, without discarding valid physical siblings or charging a class.
 The receipt keeps `differences`, `physical_differences` and `disclosure_differences`; harvest completes the
 capture comparison and prints it even for an otherwise undetermined result.
+In addition, a difference in the MLX build fails the geometry check (§1), so the hour does not run.
 
-**Classes**, read separately on rails, on the GPU rail and on rest, with I = [Δ − δΔ, Δ + δΔ], φ = K / B and ε₀
-defined below. The rows are tested **in order** and the first that holds is the class, so exactly one holds:
+**Classes.** Read separately on rails, on the GPU rail and on rest, with I = [Δ − δΔ, Δ + δΔ] and κ from §3. The rows
+are tested **in order** and the first that holds is the class, so exactly one holds:
 
 | Order | Class | Condition | Meaning |
 |---|---|---|---|
-| 1 | UNDETERMINED | knee not found; physically relevant stack differs; a required call, integral, bound, gap source, battery reading or native-support prerequisite missing; validity fails; or Δ + δΔ < 0 on this boundary | the test cannot be read on this boundary; a wholly negative contrast is a failed control, not an immaterial one |
-| 2 | RESOLVED | Δ − δΔ > 0 | memory-traffic energy is resolved on this boundary |
-| 3 | BELOW ATTRIBUTION LEVEL | max(\|Δ − δΔ\|, \|Δ + δΔ\|) / (1 − φ) ≤ ε₀ | the interval spans 0 and every value in it, corrected for cache bias, is too small to move any registered model's run by the instrument's per-run attribution limit; this does **not** say the controller is off this rail |
+| 1 | UNDETERMINED | residency check failed (any §1 R6 reason); geometry check failed on an hour receipt; physically relevant stack differs; a required call, integral, bound, gap source, battery reading or native-support prerequisite is missing; validity fails; or Δ + δΔ < 0 on this boundary | the test cannot be read on this boundary; a wholly negative contrast is a failed control, not an immaterial one |
+| 2 | RESOLVED | Δ − δΔ > 0 | memory-traffic energy, including translation and row-locality effects, is resolved on this boundary |
+| 3 | BELOW ATTRIBUTION LEVEL | κ × max(\|Δ − δΔ\|, \|Δ + δΔ\|) ≤ ε₀ | under the stated model and constant payload, the interval spans 0 and every contrast-fraction-corrected value is below the registered per-run attribution limit; transfer to real decode traffic is limited (§1), and this does **not** say the controller is off this rail |
 | 4 | NOT RESOLVED | otherwise | neither is shown |
 
 Row 3 bounds both ends because a large negative value inside I would move runs as much as a large positive one.
@@ -407,78 +522,94 @@ Row 3 bounds both ends because a large negative value inside I would move runs a
 registered decode phase reads: 512 decode passes (reg. §3) × 39,852,331,520 bytes per pass (b_max, Llama-3.3-70B, the
 largest b of the reg. §4 table) = 20,404.4 GB. Using the largest b gives the smallest, strictest ε₀. This is the Opus
 seat's threshold; Sol argued no threshold can show exclusion, which is why the class is named for what it shows
-(immaterial at the instrument's resolution), not "excludes". It may be unreachable at the test's resolution
-(worked example: δΔ_rails is about 12 ε₀); then a near-zero Δ reads NOT RESOLVED, which is the honest reading.
+(immaterial at the instrument's resolution), not "excludes". With the rehearsed κ = 17.6–23.7 (§5),
+row 3 is reachable only when κ × (|Δ| + δΔ) ≤ ε₀. At §5's illustrative δΔ_rails, a zero true Δ_rails gives
+κ × δΔ_rails ≈ 0.0054–0.0073 J/GB, about 110–150 ε₀. With κ about 18–24, BELOW ATTRIBUTION LEVEL needs
+δΔ_rails ≤ about 2.4 × 10⁻⁶ J/GB (2.0–2.7 × 10⁻⁶ across that range), even at Δ = 0. That is unreachable
+on this hardware at the illustrated width of about 3 × 10⁻⁴ J/GB, so a null result reads NOT RESOLVED.
 
 **What "responds as registered" means (reg. §19).** Reg. §1 expects the chip's share in rails and the memory chips' share in
 rest. So rails responds as registered when its class is RESOLVED, and rest when its class is RESOLVED, in the
 mechanism-neutral sense of §0: rest RESOLVED shows that rest rises with DRAM traffic, not that the memory chips'
 share is in rest (conversion loss on the rails' own rise also shows there; on the §5 inputs, a 10% loss on Δ_rails
-is about 0.0067 J/GB, about 3 δΔ_rest). DC input needs no caveat: moving energy between the inner boundaries cannot
+is about 0.0075 J/GB, about 2.8 δΔ_rest). DC input needs no caveat: moving energy between the inner boundaries cannot
 change the enclosing one. The GPU-rail class prints nowhere beside claim lines (no claim line uses the GPU rail
 alone); it fills the reg. §1 slot.
 
 **Printed lines.** One line beside the rails claim lines and one beside the rest claim lines, whenever that
-boundary's class is not RESOLVED (values filled from the test record; Δ is signed, DRAM minus cache):
+boundary's class is not RESOLVED. Values are filled from the test record; Δ is signed, rotate minus repeat:
 
-- BELOW ATTRIBUTION LEVEL: `Known-bytes check: {boundary} energy per DRAM-sourced byte differed from cache-sourced by {Δ} ± {δΔ} J/GB (DRAM minus cache), within the 1 J-per-run attribution level ({ε₀} J/GB); {boundary} lines here carry no resolvable memory-traffic energy.`
-- NOT RESOLVED: `Known-bytes check: the {boundary} response to DRAM-sourced bytes is not resolved ({Δ} ± {δΔ} J/GB, cache-bias-corrected upper limit {(Δ+δΔ)/(1−φ)} J/GB); whether {boundary} lines include memory-traffic energy is not established.`
-- UNDETERMINED: `Known-bytes check: {boundary} memory-traffic attribution is undetermined ({reason}).` with reason one of `knee not found`, `stack differs in: <physical fields>`, `battery reading missing in call <i>`,
-  `idle variance not defined (<stream/support reason>)`, `contrast not resolved` (validity fails), `contrast negative` (Δ + δΔ < 0).
+- BELOW ATTRIBUTION LEVEL: `Known-bytes check: the {boundary} memory-traffic energy contrast is {Δ} ± {δΔ} J/GB (rotate minus repeat, {b}-byte matched dispatches), within the 1 J-per-run attribution level ({ε₀} J/GB) after the contrast-fraction correction ×{κ}; {boundary} lines here carry no resolvable memory-traffic energy under the stated model and constant payload.`
+- NOT RESOLVED: `Known-bytes check: the {boundary} memory-traffic energy contrast is not resolved ({Δ} ± {δΔ} J/GB, contrast-fraction-corrected upper limit {κ(Δ+δΔ)} J/GB under the stated model and constant payload); whether {boundary} lines include memory-traffic energy is not established.`
+- UNDETERMINED: `Known-bytes check: {boundary} memory-traffic attribution is undetermined ({reason}).` The reason is one of:
+  `residency not resolved`, `geometry check failed (<field>)`, `allocation failed (<bytes> B ring)`,
+  `clock prerequisite missing (<field>)`, `stack differs in: <physical fields>`, `battery reading missing in call <i>`,
+  `idle variance not defined (<stream/support reason>)`, `contrast not resolved` (validity fails), or
+  `contrast negative` (Δ + δΔ < 0).
 - Test not run before stage-1 unblinding: beside the rails and rest lines, `Known-bytes check: not measured; the boundary attribution of memory-read energy (§1) is not established.`
 
-When a boundary is RESOLVED, nothing prints beside its claim lines. Inside printed lines, "§1" is the
-registration's §1.
+When a boundary is RESOLVED, nothing prints beside its claim lines. Inside printed lines, "§1" is the registration's §1.
 
-**The reg. §1 slot** is filled with the three classes (rails, GPU rail, rest), Δ ± δΔ for rails, GPU rail, DC and rest,
-K and φ = K / B, the stack-check result, the receipt digests, and the sentence: "The test identifies memory-traffic
-energy on a boundary, not whether it is the memory controller, the fabric or the GPU waiting on memory; on rest it
-does not separate the memory chips from power conversion and fans."
+**The reg. §1 slot** is filled with:
+- the three classes (rails, GPU rail, rest);
+- Δ ± δΔ for rails, GPU rail, DC and rest;
+- b, W, Q, G and its source pin, the chosen rung's D ± δD, φ_U, ρ_L and κ;
+- the stack-check and geometry-check results, and the receipt digests;
+- the sentence: "The test identifies memory-traffic energy on a boundary, not whether it is the memory controller,
+  the fabric or the GPU waiting on memory; on rest it does not separate the memory chips from power conversion and
+  fans."
+
+At the rehearsed κ about 18–24, the slot's BELOW ATTRIBUTION LEVEL would need δΔ_rails ≤ about
+2.4 × 10⁻⁶ J/GB even at Δ = 0, unreachable here; a null result reads NOT RESOLVED.
 
 *Wording of reg. §1 on admission (proposed, changes no number).* Reg. §1's sentence "Whether the GPU rail includes the memory
 controller is measured by the known-bytes stream test" claims more than the slot can show; it becomes "Whether
 memory traffic costs energy on the GPU rail, on rails and on rest is measured by the known-bytes stream test".
 
-**Description only** (no class reads them), printed in the test record:
-- the stream arm's raw excess per logical byte, X_S / (Σ N_S × B), on each boundary;
-- the rails share f = Δ_rails / Δ_DC, with δf = (δΔ_rails + |f| δΔ_DC) / |Δ_DC| when DC is valid;
-- the GPU-rail excess-power contrast between S and C2, X_S / T_S − X_C2 / T_C2;
-- per boundary, the residual r and ε_flip = δΔ (Bc2 − Bc1) / (1 − Bc1 / B), the fixed-cost difference between C1
-  and C2 dispatches that would move Δ by its own half-width, also as a fraction of α;
-- per arm, each call's x_a,i and rep_a; the mean GPU active frequency and residency from the capture's
-  `gpu_power` sampler; per span, the OS thermal level from the notify-bus journal
-  `hazards/monitor/thermal.jsonl`, selected by the span's RAW stamps;
+**Description only** (no class reads these), printed in the test record:
+- R's raw excess per logical byte, X_R / (Σ N_R × b), on each boundary;
+- the rails share f = Δ_rails / Δ_DC, with δf = (δΔ_rails + |f| δΔ_DC) / |Δ_DC| when DC is valid. f is a ratio of
+  two contrasts that carry the same ρ, so ρ cancels and f needs no κ;
+- the GPU-rail excess-power contrast between R and C, X_R / T_R − X_C / T_C;
+- per arm, each call's x_a,i and rep_a, and the hour's per-dispatch time T_i/N_i. Also the hour's contrast
+  t_R,hour − t_C,hour beside the check's D, so that a reversal during the hour is visible. It changes no class:
+  κ is fixed by the check, which is the registered evidence;
+- per arm, the mean GPU active frequency and residency from the capture's `gpu_power` sampler;
+- per span, the OS thermal level from the notify-bus journal `hazards/monitor/thermal.jsonl`, selected by the span's
+  RAW stamps;
 - the test's r_max, τ and operative timing bound, and the hour as run.
 
-Every description with a zero denominator or missing prerequisite prints `not defined (<reason>)`, e.g.
-`not defined (alpha is zero)` for ε_flip/α, `not defined (DC contrast not valid)` for f and δf,
-`not defined (knee not found)` for a quantity requiring K, or `not defined (thermal journal missing)`.
-For Δ_rails = 0 and valid DC, f = 0 and δf = δΔ_rails/|Δ_DC| are defined. A missing description never
-refuses a measurement or changes a class; the validity prerequisites above retain their explicit role.
+Every description with a zero denominator or missing prerequisite prints `not defined (<reason>)`, for example
+`not defined (DC contrast not valid)` for f and δf, `not defined (residency not resolved)` for a quantity requiring
+b, or `not defined (thermal journal missing)`. For Δ_rails = 0 and valid DC, f = 0 and δf = δΔ_rails/|Δ_DC| are
+defined. A missing description never refuses a measurement or changes a class; the validity prerequisites above keep
+their explicit role.
 
-**Missing prerequisites.** Print the whole record, with each affected class UNDETERMINED
-and `not defined (<reason>)`, beside every still-computable number. This includes a missing
-call, missing stream integral, missing r_max/edge bound, missing native support or unnamed
-gap power source/missing adapter rating. A gap's power sources must be named; enforce this
-through the printed reason, never an exception that discards the record. Retain all inputs,
-per-call excesses, available bounds and central contrasts when only their bound is undefined.
-Native-support failure makes that arm’s x and δx undefined; the residual requires
-complete native support in all four arms, and every propagated width requires
-all four arm uncertainties. Coefficients using complete arms remain computable.
-A missing DC prerequisite prevents common DC validity; a rails-only prerequisite affects
-rails/rest, and a GPU-only prerequisite affects GPU. With no K, every K-dependent quantity,
-including share and GPU arm-power contrast, is `not defined (knee not found)`.
-The NOT RESOLVED upper limit uses the same decimal place as its H2 interval. A zero
-half-width uses a fixed two-decimal display (`0.00`), since zero has no significant digit.
+**Missing prerequisites.** Print the whole record, with each affected class UNDETERMINED and
+`not defined (<reason>)`, beside every still-computable number.
+- *What counts.* This includes a missing call, a missing stream integral, a missing r_max/edge bound, missing native
+  support, or an unnamed gap power source or missing adapter rating.
+- *Gap sources.* A gap's power sources must be named. Enforce this through the printed reason, never an exception
+  that discards the record.
+- *What is retained.* All inputs, per-call excesses, available bounds and central contrasts are retained when only
+  their bound is undefined.
+- *Native support.* Native-support failure makes that arm's x and δx undefined. Every propagated width requires
+  both arms' uncertainties.
+- *Scope by boundary.* A missing DC prerequisite prevents common DC validity. A rails-only prerequisite affects
+  rails and rest, and a GPU-only prerequisite affects GPU.
+- *Failed check.* With the residency check failed, every b-dependent quantity, including the share and the GPU
+  arm-power contrast, is `not defined (<check reason>)`.
+- *Display.* The NOT RESOLVED upper limit uses the same decimal place as its H2 interval. A zero half-width uses a
+  fixed two-decimal display (`0.00`), since zero has no significant digit. If a half-width is undefined, the
+  printed contrast contains only `not defined (<reason>)`; a computable central value stays in the numeric record.
 
-**Executable reader (synthetic or harvested products).** `/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py scan SCAN.json`
-prints §1 from a JSON list of the 66 probe receipts (or the completed doubling prefix).
-`/opt/homebrew/bin/python3.13 scripts/bytes_stream_test.py read INPUT.json` prints the full §3/§4 record, including the stack comparison
-in every outcome and H2-formatted claim lines. INPUT has `scan` (the scan command's result) and `records`
-(the eight entries in stamped palindrome order), each with `receipt` and `harvest`.
-Receipt integer counts must satisfy exactly `bytes_read = bytes_per_read * repeats`,
-as written by `stream()`. A violation is a missing prerequisite naming
-`records[i].receipt.repeats/bytes_read`; keep the record and its calls.
+**Executable reader (synthetic or harvested products).** The CLI shape is unchanged; its inputs change.
+- `scripts/bytes_stream_test.py check CHECK.json` prints §1 R1–R6 from a JSON list of the residency-check receipts
+  (pilots and calls, per rung and mode, in run order).
+- `scripts/bytes_stream_test.py read INPUT.json` prints the full §3/§4 record. INPUT has `check` (the check
+  command's result) and `records` (the four entries in stamped palindrome order R, C, C, R), each with `receipt`
+  and `harvest`.
+
 The harvest contract is explicit: `energy_j` holds pass-1 stream integrals `rails`, `gpu`, `meter`, `battery`;
 `idle.pre`/`idle.post` hold native `rails`/`gpu` interval rows (`start_ns`, `end_ns`, `power_w`)
 and native `meter`/`battery` polls (`stamp_ns`, `power_w`), in RAW time. Supply the untrimmed native rows;
@@ -492,94 +623,104 @@ integer `missing_samples`) supply the R5 disclosures. Optional description input
 Absent description inputs print the reasoned `not defined` convention. Native variance estimates and their
 cadences/supports, all receipts, systematic bounds and gap sources remain in the record. Full precision numeric
 fields support recomputation; `printed` carries the §14 rounded intervals and §4 claim-side sentences.
-This reader consumes the existing integrators' products; it does not claim to implement the external capture
-extension or validate a live Mac. The tests run the real probe with production-shaped fake arrays through it.
+
+- The reader recomputes the geometry check on every receipt.
+- This reader consumes the existing integrators' products. It does not claim to implement the external capture
+  extension or validate a live Mac.
+- The `knee_scan` code path is retired. The `stream`/`run_stage` code gains the ring, the views and the ordered
+  reference lists; that is code work outside this text.
 
 ## 5. Worked example (illustration, not a prediction)
 
-From JouleWise-data `claude/kb-revise-opus` at `0609bcc0caf941fd68c36fccea323f34c3951730`,
-`kb-revise/kb_worked_example.py` (output `kb-revise/kb_worked_example.out`). Inputs from H, the non-claim check
-session of 2026-10-21/22 (records at JouleWise-data `8db1b40d6`, `bytes-h-desk-20261022/export/`, and
-`docs/process_traces/2026-10-22-forward/BAT-RULING.md` §9), where a record exists:
-- S-arm rails power 31.45 W (Qwen3-8B-4bit median rails decode power, 223.22 J / 7.098 s) and DRAM throughput
-  331.6 GB/s (its b × 512 / T);
-- S-arm rest power 52.39 W (Qwen3.5-122B check-r01 rest over decode, 577.210005 J / 11.017813 s);
-- idle power: rails 0.051 W with variance of the mean 1.2037 × 10⁻⁴ W² per span (8B-4bit medians), so
-  se_idle = 0.0078 W; DC 2.386 W ((6101.072862 − 5967.417892) J / 56.018813 s, 70B check-r01);
-- rails anchor-shift bound 0.5388 J per call (8B-4bit median); r_max = 17.76 ms; Δt = 20 ms; v = 0 (84 W is below
-  the 140 W adapter).
+**Timing inputs: real.** These are the lead's matched diagnostic, run 1 (quiet Mac, MLX 0.31.2,
+`diag-matched/run-1/SUMMARY.json`, script `diag_matched.py`). It used an 8 GiB ring, one pilot and three ~2 s calls
+per mode, repeat calls then rotate calls; this rule specifies a 32 GiB ring (§1). Values below include the clock
+term q_j = 86 ns/N_j, which the diagnostic's printed ± omitted. At 32 MiB, q is 11 ps for C and 22 ps for R.
 
-Assumed, standing in for what the test measures: meter idle standard error 0.05 W and battery idle standard
-error 0.01 W per span, each from its own stream estimator. Thus se_meter = 0.05/√2 = 0.03536 W,
-se_battery = 0.01/√2 = 0.007071 W, se_DC = 0.04243 W; no covariance or alignment is assumed;
-half-differences |P_pre − P_post| / 2 of 0.002 W (rails) and 0.05 W (DC); fixed time 50 µs per dispatch; cache
-throughput 1 TB/s; 28 W (rails) and 25 W (rest) above idle during cache arms; a true cache capacity of 64 MiB; no
-transient and no fixed-cost change between sizes, so rep_a = 0 and r = 0. The baseline example has no meter
-gaps; the gap counterexample below uses the H adapter rating, 140 W, and measured battery maximum 0 W.
+| rung b | side of G | t_C (µs) | δt_C | t_R (µs) | δt_R | D = t_R − t_C | δD | verdict |
+|---|---|---|---|---|---|---|---|---|
+| 64 MiB (k = 0) | small | 705.550 | 95.749 | 663.892 | 2.404 | −41.658 | 98.153 | not resolved |
+| 32 MiB (k = 1) | small | 256.236 | 1.845 | 308.646 | 0.086 | 52.410 | 1.931 | **resolved** |
 
-*Knee.* With the stated cache/DRAM timing model, the exact-interval scan and both cache-arm
-increment checks give K=64 MiB, B=4 GiB, Bc1=4 MiB, Bc3=8 MiB, Bc2=16 MiB and φ=1/64.
-Clock bars use the receipts' recorded resolution and timebase, not the integer output unit.
-For the supplied 42 ns resolution and 125/3 ns tick, the conservative duration contribution is
-86 ns divided by repeats. In the independently recomputed quantized worked example, the
-16→32 MiB margin is about 664.90034 GB/s against a derived one-sided bar of 0.00043 GB/s;
-the threshold half-width is 0.000045 GB/s. The reviewer model's rounded DRAM reference
-331.6 GB/s gives T≈335.0997 GB/s. Random-phase tick quantization preserves K in the noiseless
-worked example. A noiseless DRAM-only model supplies no cache-arm evidence with the corrected
-clock bar. Neither statement guarantees an outcome under unobserved per-call timing noise.
+The ladder stops at k = 1: **b = 32 MiB = 33,554,432 B**, W = 2^35 B, **Q = 1,024**, launch side small on both arms.
+Then φ_U = 1/64 and ρ_L = (63/64)(52.410 − 1.931)/(308.646 + 0.086) = **0.16095**, so **κ = 6.213**.
 
-The measurement Mac was measured by the lead on 2026-10-28: timebase 125/3 ns,
-`time.clock_getres(time.CLOCK_MONOTONIC_RAW)` = 4.2e-8 s, smallest positive deltas
-41, 42, 83, 84 and 125 ns. These do not establish the integer conversion convention.
-The worked scan agreement bar is 4.5e-7 GB/s = 1% of the smallest printed uncertainty
-(0.000045 GB/s); the independent rational check finds 10⁶ × binary64 noise below it.
-Clock changes affect the scan only: K and all energy-example counts and numbers below remain unchanged.
+(The diagnostic also ran 128 MiB, which is above G and not a rung: t_C = 870.3 ± 227.4 µs, t_R = 803.5 ± 70.4 µs,
+not resolved. Run 2's receipts are not archived; its reported 32 MiB values, 257.40 ± 1.83 against 308.97 ± 0.04 µs,
+also resolve, with ρ_L = 0.1583.)
 
-*Hour.* 3,573.6 s = 921.6 idle + 72 settle + 80 allocation/exit + 2,500 stream. Every arm's paired stream
-midpoints average 1,788.3 s, 1.5 s beyond the session midpoint 1,786.8 s (the additional pre-idle gap). N per call: S 38,457 (330,343 GB over
-both calls), C1 4,613,030, C3 4,281,657, C2 3,743,791.
+**Production-order rehearsals (timing evidence, not hour energy).** The four archived
+`kb-knee-council/build/rehearsal-{1,2,3,4}/CHECK.json` files use the specified 32 GiB ring and top-down ladder:
+
+| rehearsal | 32 MiB t_C (µs) | C's three calls (µs) | κ |
+|---|---|---|---|
+| 1 | 285.1 | 273.8 → 286.2 → 295.2 | 21.43 |
+| 2 | 283.0 | 273.8 → 287.5 → 287.6 | 17.64 |
+| 3 | 286.0 | 274.0 → 290.1 → 294.0 | 23.67 |
+| 4 | 284.0 | 273.0 → 287.7 → 291.4 | 19.18 |
+
+Thus κ spans 17.6–23.7 and t_C 283.0–286.0 µs, against 256–257 µs in the bottom-up 8 GiB diagnostic.
+C rises monotonically within each 32 MiB rung. At 64 MiB it rises from 414–422 µs on the first call to
+468–610 µs on the third (small middle-to-last reversals occur in rehearsals 2 and 3); none of those rungs
+resolves (§1 R4). The top-down ladder measures C after a DRAM-heavy rung, so its state can differ from the
+hour's, which has 60.6 s idle/settle before each call. Opus reads this as weaker residency evidence in
+production order; Fable reads it as GPU clock state on the cache-bound arm, since loss of residency would
+not restart at about 274 µs each time. This rule does not choose between those readings. The hour's own
+timing contrast is printed beside the check's, as §4 requires; κ remains fixed by the check.
+
+**Hour.** One call = 10 + 9 + 115.2 + 759.2 = 893.4 s, and four calls make 3,573.6 s.
+- *Midpoints.* Assuming the planned 10 s allocation/fill/warm-up all precedes pre-idle (§2), each arm's paired
+  stream midpoints average 1,793.3 s, about 6.5 s beyond the session midpoint of 1,786.8 s. R uses calls 1
+  and 4, C uses calls 2 and 3; the shared offset leaves linear-drift cancellation unaffected.
+- *R per call.* One sweep takes 1,024 × 308.646 µs = 0.31605 s, so N_R = 1,024 × floor(759.2/0.31605) = 1,024 ×
+  2,402 = **2,459,648** dispatches (82,532 GB logical).
+- *C per call.* One sweep takes 0.26239 s, so N_C = 1,024 × 2,893 = **2,962,432** dispatches (99,403 GB logical).
+
+**Energy inputs: the admitted §5's illustration, unchanged.** These are the H session values and assumptions:
+- idle power: rails 0.051 W with se_idle 0.0078 W; DC 2.386 W with se_DC = 0.04243 W; half-differences 0.002 W
+  (rails) and 0.05 W (DC);
+- rails anchor-shift bound 0.5388 J per call; r_max = 17.76 ms; Δt = 20 ms; v = 0; no gaps; rep = 0.
+
+The new assumptions, standing in for what the test measures:
+- *C arm:* 28 W rails and 25 W rest above idle, the admitted cache-arm assumption.
+- *R arm:* the admitted S-arm powers, rails 31.45 W and rest 52.39 W, that is 31.399 W rails and 50.055 W rest
+  above idle.
+- Both draw these powers for the whole dispatch time.
 
 | | rails | DC input | rest |
 |---|---|---|---|
-| α (mJ per dispatch) | 1.4000 | 2.6500 | 1.2500 |
-| γ_c (J/GB) | 0.02800 | 0.05300 | 0.02500 |
-| γ_d (J/GB) | 0.09472 | 0.24594 | 0.15123 |
-| r (µJ) | 0.000 | 0.000 | 0.000 |
-| Δ ± δΔ (J/GB) | 0.06672 ± 0.00057 | 0.1929 ± 0.0025 | 0.1262 ± 0.0024 |
-| ε_flip (µJ; share of α) | 7.20; 0.51% | 31.79; 1.20% | 30.78; 2.46% |
+| x_R (mJ per dispatch) | 9.69117 | 25.14043 | 15.44926 |
+| x_C (mJ per dispatch) | 7.17460 | 13.58049 | 6.40589 |
+| δx_R, δx_C (µJ) | 5.6252, 4.6701 | 44.1959, 35.9660 | 49.8212, 40.6361 |
+| Δ ± δΔ (J/GB) | 0.07500 ± 0.00031 | 0.3445 ± 0.0024 | 0.2695 ± 0.0027 |
 
-Validity: 0.1929 − 0.0025 > 0. Stack assumed identical. Rails: 0.06672 − 0.00057 > 0, RESOLVED, nothing prints.
-Rest: RESOLVED, nothing prints. GPU rail: not separable in these inputs (H exports rails totals only). Description:
-f = 0.3458 ± 0.0075. Agreement bar 5.7 × 10⁻⁶ J/GB (1% of 0.00057); 10⁶ × float noise 2.5 × 10⁻¹⁰ J/GB.
-
-The full revised half-widths are 0.000571796 (rails), 0.002524213 (DC) and 0.002444084 (rest) J/GB.
-The original `0609bcc0c` script predates this round: reproduce the revision by replacing its assumed
-`V_IDLE_DC = 0.05**2` with `(0.05 + 0.01)**2`, its two settle gaps per call with three, and adding the
-extra gap before each pre-idle in the timeline. The source ratios, energy means and counts do not change.
-The synthetic arithmetic tests in `tests/test_bytes_stream_test.py` also recompute these publication digits.
+- *Validity:* 0.3445 − 0.0024 > 0. Stack assumed identical.
+- *Rails:* RESOLVED, nothing prints. Rest: RESOLVED, nothing prints. GPU rail: not separable in these inputs.
+- *Description:* f = 0.2177 ± 0.0024.
+- *Agreement bar:* 3.1 × 10⁻⁶ J/GB (1% of 0.00031); 10⁶ × float noise is at most 3.2 × 10⁻¹⁰ J/GB (rest).
+- *Full half-widths:* 0.000306823 (rails), 0.002389013 (DC) and 0.002695836 (rest) J/GB.
 
 *Other outcomes, same inputs except as stated:*
-- One missing 20 ms meter sample in the stream of call 4 (C2): P_max = 140 + 0 = 140 W (H adapter rating
-  above; assumed battery poll maximum zero), so add 2.8 J to that call's DC/rest b_i. The resulting Δ_DC
-  is 0.1929 ± 0.0026 and Δ_rest is 0.1262 ± 0.0025 J/GB; both remain valid/RESOLVED. Their ε_flip are
-  32.17 µJ (1.21% of α) and 31.16 µJ (2.49%). Rails, counts, energy point estimates and the agreement bar
-  are unchanged. A pre-idle gap in that call would instead add 2.8 × T_i/(2 × 57.6) J, by the baseline weight.
-  The gap and its power sources print as disclosures, not an UNDETERMINED reason.
-- True Δ_rails = 0.00030: the rule gives 0.00030 ± 0.00057, I = [−0.00027, 0.00087], spanning 0;
-  0.00087 / (1 − 1/64) = 0.00089 > ε₀ = 0.000049, so rails is NOT RESOLVED, upper limit 0.00089 J/GB.
-- The same world with a 5 W transient through the whole first S call (Opus cold pass): Δ_rails = 0.0079 ± 0.0081,
-  NOT RESOLVED. Without the repeatability term the half-width would be 0.00057 and rails would read RESOLVED.
-- True Δ_rails = 0, C2 dispatches 1% (14 µJ) cheaper in fixed cost than C1, C3 halfway (Fable cold pass):
-  r = −2.33 µJ, Δ_rails = 0.00111 ± 0.00076, RESOLVED. This is the case §3 does not bound; ε_flip (7.20 µJ) shows
-  that a fixed-cost difference of half a percent of α is enough.
-- Hand-set intervals: 2.5 × 10⁻⁵ ± 1.0 × 10⁻⁵ is RESOLVED only (row 2 precedes row 3); −0.0100 ± 0.0020 is
-  UNDETERMINED (`contrast negative`); 1.0 × 10⁻⁵ ± 2.0 × 10⁻⁵ is BELOW ATTRIBUTION LEVEL.
+- **Meter gap.** One missing 20 ms meter sample in the stream of call 2 (C), with P_max = 140 + 0 W, adds 2.8 J to
+  that call's DC and rest b_i. Δ_DC = 0.3445 ± 0.0024 and Δ_rest = 0.2695 ± 0.0027; both stay RESOLVED, and the gap
+  prints as a disclosure.
+- **Small true Δ.** True Δ_rails = 0.00030 gives 0.00030 ± 0.00031, so I = [−0.0000068, 0.00061] spans 0.
+  κ × (Δ + δΔ) > ε₀, so rails is NOT RESOLVED, upper limit 0.00377 J/GB at the interval's decimal place.
+- **Transient.** A 5 W transient through the whole first R call gives Δ_rails = 0.098 ± 0.023: still RESOLVED, and
+  the repeatability term carries the half-width from 0.00031 to 0.023.
+- **No cache.** If both arms read DRAM and have no address-reuse energy difference, Δ is near zero and reads
+  NOT RESOLVED if the check resolved by timing chance. But an R-only fixed stall, such as translation, can both
+  resolve the check and add R-only energy: a 26 µs stall at 30 W can give rails RESOLVED at about
+  0.02325 ± 0.00032 J/GB. That is memory-traffic energy including translation; κ's source-mixture model is
+  not conservative when such an R-only fixed time dominates.
+- **Check refusal.** If both archived rungs, and the six below them, had read like the 64 MiB rung, every class
+  would be UNDETERMINED (`residency not resolved`) and the hour would not run.
 
 ## 6. Decisions
 
 Made by the lead between the design seats:
-- Contrast design: Opus's unchanged kernel with several cache sizes and the |α|/B term, over Sol's single matched
-  cache arm (no new kernel code).
+- Contrast design (**superseded by the matched-geometry revision below**): Opus's unchanged kernel with several
+  cache sizes and the |α|/B term, over Sol's single matched cache arm (no new kernel code).
 - Classes: Opus's two thresholds (0 and ε₀), with the lower class renamed from "EXCLUDES" to "BELOW ATTRIBUTION
   LEVEL" and NOT RESOLVED printing its upper limit, per Sol's point that non-detection cannot show exclusion.
 - Idle: 57.6 s spans per call (the registered pass-1 idle length), not Sol's 300 s, because the baseline is per
@@ -591,9 +732,23 @@ Made by the lead between the design seats:
 - The "not measured" line (the Opus seat's decision 11) is adopted.
 
 Made in the revision, where the cold passes offered a choice (reasons in `kb-revise/CHANGES.md`):
-- Fixed-cost non-constancy: Fable's third cache size with its residual charged, not a new kernel; the unbounded
-  remainder is stated (§3) and ε_flip printed.
+- Fixed-cost non-constancy (**superseded by the matched-geometry revision below**): Fable's third cache size with
+  its residual charged, not a new kernel; the unbounded remainder was stated and ε_flip printed.
 - Arm repeatability: Opus's additive term, not an agreement check that would set every class UNDETERMINED.
 - Meter gap (superseded by Round 3 R5): keep every call; bound each known missing duration by supplied power (§3).
 - Agreement bar: one bar, 1% of the smallest printed δΔ, for every Δ and δΔ.
 - Settle gap of 3 s around the stream and after fill/warm-up (§2), to keep delayed energy out of idle means.
+
+Made in the matched-geometry revision (lead ruling after council rounds 1–2, writer seat 2026-10-30):
+- Rotating-buffer arm R against a repeat arm C at one payload b, same shape, dtype, expression and launch; only
+  address reuse differs. This was chosen over Fable's fixed-row kernel because it leaves the expression unchanged
+  and α cancels exactly (§1).
+- Residency rests on the matched repeat-versus-rotate contrast at b, using the admitted observed-spread construction.
+  Neither timing-knee replacement is admitted. The knee scan is replaced by an eight-rung top-down ladder within the
+  small launch (§1 R1–R6).
+- G = 2^26 B is read from the pinned MLX source and bound to the build, and the geometry check runs on every receipt.
+- W = 2^35 B carries the admitted 512 MiB cache envelope and the 1/64 cap to the working set by the cyclic-sweep
+  bound.
+- C1, C3, α, γ_c, r, ε_flip and |α|/B are deleted; Δ = (x_R − x_C)/b.
+- κ = 1/ρ_L replaces 1/(1 − φ), because the residency contrast no longer licenses neglecting cache-arm leakage.
+- Palindrome R, C, C, R with four 759.2 s streams keeps the 3,573.6 s hour.
