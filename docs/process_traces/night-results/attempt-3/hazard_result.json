@@ -1,0 +1,305 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-bytes-stream-test/attempt-3/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "672420918cc01b1aef4e95908216a4508994e104a5fac31ad77d998e81dfd55a",
+    "sidecar_sha256": "672420918cc01b1aef4e95908216a4508994e104a5fac31ad77d998e81dfd55a",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "reserve"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "pre"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "pre.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "pre.window-calibration-verdict"
+      },
+      {
+        "kind": "bytes_stream_capture",
+        "rc": 0,
+        "stage_id": "known-bytes"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "post"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "post.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 1416630026209791,
+    "monotonic_raw_ns": 1416630026209541,
+    "wall_s": 1793432293.042426
+  },
+  "faults": {
+    "bound_derivation_failed": "not_run",
+    "post_bracket_failed": false,
+    "reasons": []
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output",
+    "yield.stage_stalled"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 393,
+    "head": "53bcceeaccbda4275b10c111a370242c94a484dc",
+    "path": "/Users/edr/night-bytes-stream-test/attempt-3/custody/night/executed_inventory.json",
+    "sha256": "886009495ea01fab14f02610c26519a4054214b730ff65af541d527c0682ead1",
+    "status_clean": true
+  },
+  "keep_awake": {
+    "pid": 51048,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/code/bytes-stream-test/.venv/bin/python",
+      "-B",
+      "/Users/edr/code/bytes-stream-test/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-bytes-stream-test/attempt-3/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1416629958165541,
+        "monotonic_raw_ns": 1416629958164833,
+        "wall_s": 1793432292.9743822
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "c984b6a5a440119051370da32fcfb027791667657579e256be04fd440c544472",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/code/bytes-stream-test/.venv/bin/python",
+      "-B",
+      "/Users/edr/code/bytes-stream-test/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-bytes-stream-test/attempt-3/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1416629817637625,
+        "monotonic_raw_ns": 1416629817636958,
+        "wall_s": 1793432292.833854
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 1412224295008708,
+          "monotonic_raw_ns": 1412224295008500,
+          "wall_s": 1793427887.3112252
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.842
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 1416624807415833,
+      "monotonic_raw_ns": 1416624807415333,
+      "wall_s": 1793432287.8236318
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 1416629817637625,
+      "monotonic_raw_ns": 1416629817636958,
+      "wall_s": 1793432292.833854
+    },
+    "released": {
+      "monotonic_ns": 1416629817531416,
+      "monotonic_raw_ns": 1416629817530041,
+      "wall_s": 1793432292.8337479
+    },
+    "released_after_chain_s": 5.01
+  },
+  "neg8_corpus": {
+    "collected_manifest": null,
+    "committed_manifest": null,
+    "errors": [
+      "summary: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-bytes-stream-test/attempt-3/custody/night/transcript/neg8-settled-corpus.collected.summary.json'",
+      "collected manifest: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-bytes-stream-test/attempt-3/custody/night/transcript/neg8-settled-corpus.collected.json'"
+    ],
+    "members_kept": null,
+    "members_listed": null,
+    "pruned": null,
+    "summary": null
+  },
+  "pack_id": "bytes_stream_test",
+  "plan_id": "attempt-3",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": 0,
+    "end": {
+      "monotonic_ns": 1416624807431583,
+      "monotonic_raw_ns": 1416624807427708,
+      "read_skew_ns": 250,
+      "sleep_offset_ns": 42,
+      "uptime_raw_ns": 1416624807427666,
+      "wall_s": 1793432287.823648
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 1412225180023458,
+      "monotonic_raw_ns": 1412225180021416,
+      "read_skew_ns": 333,
+      "sleep_offset_ns": 42,
+      "uptime_raw_ns": 1412225180021374,
+      "wall_s": 1793427888.19624
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 1412002298081250,
+    "monotonic_raw_ns": 1412002298080583,
+    "wall_s": 1793427665.3142972
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 0,
+    "failed": 0,
+    "logged": 0,
+    "ok": 0,
+    "per_stage": [],
+    "planned": 0,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 0,
+    "yield_status": "UNKNOWN"
+  },
+  "yield_plan": {
+    "planned": 0,
+    "source": [],
+    "stages": 0
+  },
+  "yield_tripwire": {
+    "attempted_seen": 0,
+    "counted_in_settle": 0,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 0,
+    "stalled": true
+  }
+}

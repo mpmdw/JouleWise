@@ -1,0 +1,66 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/code/bytes-stream-test/.venv/bin/python",
+        "-B",
+        "/Users/edr/code/bytes-stream-test/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-bytes-stream-test/attempt-3/custody",
+        "--repo",
+        "/Users/edr/code/bytes-stream-test",
+        "--pack",
+        "/Users/edr/code/bytes-stream-test/configs/campaigns/bytes_stream_test",
+        "--plan-id",
+        "attempt-3",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "53bcceeaccbda4275b10c111a370242c94a484dc",
+        "--chain",
+        "/Users/edr/night-bytes-stream-test/attempt-3/custody/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-bytes-stream-test/attempt-3/custody/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-bytes-stream-test/attempt-3/runs_bytes_stream_test/calibration_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/code/bytes-stream-test/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "attempt-3",
+        "--catalog",
+        "/Users/edr/code/bytes-stream-test/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/code/bytes-stream-test/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/code/bytes-stream-test/configs/campaigns/v5_claim_25g83/identity_pins.json"
+      ],
+      "elapsed_s": 0.563241166,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 1412003385669041,
+        "monotonic_raw_ns": 1412003385668750,
+        "wall_ns": 1793427666401886000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 1412002822427875,
+        "monotonic_raw_ns": 1412002822427750,
+        "wall_ns": 1793427665838644000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "ddbaf33810bee5ea22492cf89445737327d3f7d0f04353d4c80cb52d723cf510",
+        "size": 395
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}
