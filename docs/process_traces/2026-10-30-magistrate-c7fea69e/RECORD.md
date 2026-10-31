@@ -66,3 +66,25 @@ Before re-arming, the lead ran the whole §1 scan through the real `run_stage` w
   2. Fable's step-5 text is not adopted as written: it still refuses 2 of 3 quiet scans on route (c), and its straddle signature sits on the geometry branch.
   3. Design round 2, two blind seats (Sol xhigh, Fable high). Charge: whether the geometry difference between the arms can change a printed quantity, and the smallest design that removes it; a knee rule that handles routes a-c and refuses DRAM-only nulls; the cost. Brief `kb-knee-council/round2/BRIEF.md`.
   - The seats disagreed on a science question. A cold judge was not convened, because the diagnostic changed the question both positions answered; round 2 takes it up.
+
+## Council round 2 (20:35-20:45), matched diagnostic, and the lead's ruling
+- **Sol 6.1 xhigh** (`round2/sol-report.md`).
+  - F1 BLOCKER: the cache arms are fit in MLX's small launch and S runs the large one. So the reported Δ = γ_D,large − γ_c,small + (a_large − a_small)/B. The |α|/B term covers the fixed part only if |a_large − a_small| ≤ |a_small|, which nothing shows. No term covers a per-byte geometry difference.
+  - F1 cure: a rotating-buffer arm matched to the cache arm (same payload b, Q row views of a W-byte ring); α cancels.
+  - F2: its own complete timing-knee alternative passed 3 of 3 quiet scans, but accepted 560 of 120,000 DRAM-only nulls (Gaussian witness: seed 20261130, draw 9073). Rejected.
+  - Recommendation: a matched-geometry diagnostic.
+- **Fable 5.1 high** (`round2/fable-report.md`).
+  - Same Q1 conclusion: the geometry term enters γ_c, is sign-uncontrolled, and is unbounded by §3.
+  - Cure: a fixed-row reduction kernel for all arms.
+  - Its knee text (first transition, a 12 MiB span, straddle check) finds K = 64 MiB on clean-1 and clean-2 and refuses clean-3. Nulls: 1 in 4,000, the same as the admitted rule.
+  - RECOMMEND: CHANGE, plus a kernel ruling.
+- **Matched diagnostic (lead, quiet Mac; `kb-knee-council/diag-matched/`, script `diag_matched.py`).** b = 32 MiB, one repeated row view of an 8 GiB (256, b) ring against rotating through all 256 views, with the same shape, dtype, expression and launch geometry:
+  - run 1: repeat 256.24 ± 1.84 µs, rotate 308.65 ± 0.09 µs;
+  - run 2: repeat 257.40 ± 1.83 µs, rotate 308.97 ± 0.04 µs.
+  - The difference is resolved and reproducible: cache against DRAM with geometry held fixed. At 64 MiB the two converge (705.6 ± 95.8 against 663.9 ± 2.4 µs). At 128 MiB both are noisy.
+- **Ruling (lead):**
+  1. Adopt the matched-geometry rotating-buffer design (Sol). Fable's fixed-row kernel is not adopted: it changes the reduction for every arm, while the rotating arm keeps the registered expression and cancels α.
+  2. Cache residency rests on the matched repeat-versus-rotate contrast at the chosen b. Neither timing-knee replacement is admitted.
+  3. Revision writer: Opus 5.5 seat, local `claude -p` (charge `kb-knee-council/revision/charge.md`; outputs `RULE-REVISION.md`, `NOTES.md`).
+  4. Then: Sol build, cold Fable + Opus passes (shape fix bundled), desk rehearsal with a refusal count, attempt 3.
+- Catches this session that touched a number: the desk rule-9 replay (the admitted rule would have spent attempt 3 on `knee not found`); Sol's source finding of the launch-geometry branch (a confound in the registered contrast that neither earlier cold pass found).
