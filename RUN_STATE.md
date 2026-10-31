@@ -923,6 +923,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Cold science gate: Fable and Opus both ADMIT-WITH-CORRECTIONS**, no BLOCKER; each seat's own program reproduces every number from raw. Shared MAJOR: the rule's lag-count gloss ("100 lags") contradicts its named 10 s bandwidth at the delivered cadence. The result keeps the estimator as run, and the literal reading is printed as a labelled alternative (rails ± 0.0020); no class changes. **Slot filled:** `docs/process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md`. Ed emailed (Gmail `1a191058510429fc`).
 - PR #614: CI green on `53bcceeac` (shard 10 is slow, not hung: `test_bytes_analysis` 8,973 s with no timing weight).
 
+155. **Magistrate activation 39cdeb12 (Opus 5.5, headless, 2026-10-31 from 01:22 PDT).** Record: `docs/process_traces/2026-10-31-magistrate-39cdeb12/RECORD.md`. No pending notices and no mail from Ed. Nothing armed; BYTES loop DONE.
+- **BY-THERM-LINES run on the 12 counting BYTES sessions** (item 154 (2)) from `4e29114ea`, no `--export` (the science export does not exist yet). Outputs `/Users/edr/night-archive/bytes-thermal-lines-39cd/{hull-p2,request-end-p1}/<session>/`; all rc 0 and `view verified`.
+  - s5-p2 hull line: 23 Llama-70B members gain `thermal.os_level_nonzero` (13 units).
+  - s5-p1 request-end line: 10 members lose it, which matches the registration's stated ten.
+  - Every other pack: equals the registered line.
+
+**Next activation (written 2026-10-31 by activation 39cdeb12; item 155; supersedes item 154's pointer for the thermal-lines step, the rest holds):**
+(1) Nothing is armed and no collection is scheduled. With no mail, no directive change and no stand-down, exit quietly.
+(2) Thermal lines are DONE for the BYTES pass-2 analysis (stage 1 planned 12 Nov). The analysis reads the views in item 155. If it uses a stage-1 export CSV, re-run the line with `--export` into a new directory first (record 39cdeb12).
+(3) Item 154 (1)-(2) otherwise stand: the KB slot fill joins `bytes_pack_v1.md` §1 when the BYTES lineage lands. The KB lineage's next change carries the rule-text and reader corrections. Still owed: BYTES-lineage CI timing weights, and `prepare` publishing `custody/night_plan.json`, needed only if another KB window runs. Directive #587's standing items (L9, block-6 driver, block-5 blind dry run, 3 Nov) stay with the laptop lead.
+
 **Next activation (written 2026-10-31 by activation 5cbfbcfc; item 154; supersedes item 153's step (1)):**
 (1) **KB test done.** The slot fill goes into `bytes_pack_v1.md` §1 by PR when the BYTES lineage lands. The KB lineage's next change carries the rule-text corrections (lag gloss, GPU edge row) and the two reader description fixes (thermal null leaf, ρ_L precision); see the slot fill's 'Corrections'. No further KB window is needed.
 (2) Follow-ups: the BYTES-lineage timing weights (record, 'PR #614 CI'); `prepare` publishing `custody/night_plan.json` and deriving the one-copy disk figure itself; BY-THERM-LINES on the real pass-1/pass-2 archives before the BYTES pass-2 analysis (stage 1 planned 12 Nov), local only, from a checkout at `4e29114ea` (`origin/codex/2026-10-28-by-therm-lines`): `scripts/bytes_thermal_lines.py hull-p2 ARCHIVE NEW_OUTPUT` per pass-2 sub-pack and `request-end-p1 ARCHIVE NEW_OUTPUT` per pass-1 pack (new output directory each; `verify OUTPUT` before analysis; usage and refusal list in `.codex-report/BY-THERM-LINES.md` there); directive #587's standing items (block-5 blind dry run 3 Nov).
