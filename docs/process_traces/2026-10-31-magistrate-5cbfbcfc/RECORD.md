@@ -24,3 +24,9 @@ No pending watchdog notices. No unread mail from Ed at launch. Open directives u
 - **Slot fill:** `KB-SLOT-FILL.md` in this directory. It is copied into `bytes_pack_v1.md` §1 by PR when the BYTES lineage lands.
 - No refusal from either seat, so nothing needed lead re-execution beyond the lag-count check.
 - Outcome email to Ed: Gmail `1a191058510429fc`.
+
+## Pruning tally (gates that ran this session)
+- Cold science gate (Fable + Opus, raw re-derivation): **caught a number.** The rule-text lag contradiction moves the printed rails half-width (0.0021 against 0.0020). Both seats also caught the false thermal "missing" line and the ρ_L print precision. Keep.
+- Lead's lag-count check in READ.out: settled the seats' 75-77 against 88 discrepancy (a description slip; no number). 
+- Desk harvest/check/read chain: ran clean; caught nothing.
+- No stand-down request; no child left running. Seat and records worktrees removed after push.
