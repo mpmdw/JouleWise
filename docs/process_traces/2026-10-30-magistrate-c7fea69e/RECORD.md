@@ -111,3 +111,20 @@ Before re-arming, the lead ran the whole §1 scan through the real `run_stage` w
   - Open for the cold passes: C at 32 MiB reads about 284 µs in the stage, against 256 µs in the 8 GiB diagnostic.
 - Branch pushed. Draft PR **#614** (base `codex/2026-10-30-kb-capture`, bundle `9d45a2ea6..c9e218c8e`) for CI.
 - **Cold final passes** (blind, executing, local `claude -p`, fresh worktrees `/Users/edr/code/jw-wt/kb-cold-{fable,opus}` at `c9e218c8e`): Fable 5.1 high and Opus 5.5 high. Charge `kb-knee-council/cold/CHARGE.md`; reports `cold/{fable,opus}-report.md`.
+
+## Cold final passes (21:31-21:53) and dispositions
+- **Opus 5.5 (`cold/opus-report.md`): ADMIT-WITH-CORRECTIONS**, no BLOCKER. Every number the reader prints reproduces, and every refusal clause prints its reason with no interval.
+  - MAJOR-1: in a DRAM-only world with an R-only 26 µs translation stall, the check resolves and rails prints RESOLVED 0.02325 ± 0.00032. So §3/§5's "false residency produces no class" and "per DRAM-sourced byte" claim too much, and κ is not conservative when an R-only fixed time dominates.
+  - MAJOR-2: in the production order (top-down ladder), C at 32 MiB rises 273→286→295 µs within each rung and its byte rate overlaps the DRAM ceiling. The rehearsed κ of 17.6-23.7 is not represented by §5's 6.2.
+  - Minors m1-m12, among them the R first-sweep penalty (about 7e-5 J/GB), the constant-payload bias, and four numbers whose derivations are missing.
+- **Fable 5.1 (`cold/fable-report.md`): ADMIT-WITH-CORRECTIONS**, no BLOCKER, no MAJOR, MINOR 1-8.
+  - On isolation: at 64 MiB the repeat arm is not faster than rotate, so translation reuse alone does not produce the 32 MiB contrast.
+  - C's monotone rise restarts at 274 µs in every rehearsal; Fable reads that as GPU clock state on the cache-bound arm, not loss of residency.
+  - κ is derived correctly and conservatively, but loose (true ρ is about 4× ρ_L).
+- **Dispositions (lead):**
+  - MAJOR-1 fixed in the text: RESOLVED means memory-traffic energy, translation and row locality included. The false-residency passages are corrected, with Fable's 64 MiB evidence beside them. The intercept-free signature is not adopted (proportion).
+  - MAJOR-2 fixed by disclosure: rehearsed κ and t_C, the top-down history dependence, and both readings. Ladder order unchanged: it changes which rung is chosen, and it resolved 4 of 4.
+  - Per-call ramp and first-sweep energy, constant payload, κ's common-throughput assumption: disclosed with magnitudes.
+  - All MINORs fixed.
+  - Every correction is to text, display or tests, so the lead re-executes after the fix; no second cold round (doctrine: delta re-audits only for fixes to number-bearing code).
+- Fix round 1: Sol 6.1 high, brief `kb-knee-council/fix1/BRIEF.md`, report `fix1/sol-fix1.md`.
