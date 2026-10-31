@@ -1104,5 +1104,24 @@
    "paper": "/Users/edr/night-archive/seats-7209/cold416f/opus-REPORT.md"
   }
  ]
+},
+{
+ "commit": "75383a8a1728a023f6c8b92dccf30cd034744464",
+ "number_bearing_paths": [
+  "joulewise/b5/chain.py"
+ ],
+ "change": "KB-CAP-1: known-bytes capture stage kind joins the chain's stage dispatch (non-claim test)",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, cold executing pass, blind (non-author), 2026-10-30",
+   "covered": "aa101880c..c2b850860",
+   "paper": "/Users/edr/night-archive/seats-4e748ac1/kb-cap-cold/opus-REPORT.md"
+  },
+  {
+   "reviewer": "Fable 5.1, cold executing pass, blind (non-author), 2026-10-30",
+   "covered": "aa101880c..c2b850860",
+   "paper": "/Users/edr/night-archive/seats-4e748ac1/kb-cap-cold/fable-REPORT.md"
+  }
+ ]
 }
 ]
