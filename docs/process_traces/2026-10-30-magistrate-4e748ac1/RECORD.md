@@ -159,3 +159,19 @@ Neither Mac run has an executable recipe today.
   - Sol `session_path.py`: `not defined (unsafe export session_id)`, and the sibling file is preserved. TMPDIR was set to a resolved path, because on macOS `/tmp` resolves to `/private/tmp`.
   - Sol `large_level.py`: exit 0 with a record written. The baseline still raises.
 - **Admitted by the lead.** No probe changes which members count. The three reported instances of the class are closed by the consult's rule as implemented. Next: run it on the real pass-1 and pass-2 archives locally (blinded data stays local) before the pass-2 analysis.
+
+## BY-THERM and KB-CAP CI
+- PR #613 run `41132715134` (head `e91946490`):
+  - Shard 7 failed in `tests.b6.test_audit_record_fixes` `test_review_rows_are_append_only_and_load_in_the_code_check`. Commit `75383a8a1` touches the registered number-bearing path `joulewise/b5/chain.py` (the new stage kind) and had no row in `configs/b6/executing_reviews.json`. The lead appended one row, keeping the existing bytes unchanged and citing the Opus and Fable cold passes, copied to `~/night-archive/seats-4e748ac1/kb-cap-cold/{opus,fable}-REPORT.md`. Commit `9d45a2ea6`; the test passes locally.
+  - Shard 10 was still in `tests.test_bytes_analysis` after about 2 h 20 min, and the lead cancelled the run. On PR #593 the same module passed in 5,461 s. KB-CAP does not touch it, so this is read as slowness on a concurrent runner, not a deadlock. A fresh run on `9d45a2ea6` is pending.
+
+## KB night ARMED (non-claim known-bytes stream test)
+- Checkout `/Users/edr/code/bytes-stream-test`, an ordinary clone of `codex/2026-10-30-kb-capture` at `9d45a2ea6edd5ceadba23f1200c69b15a0337a31`. Venv per `env/mac-measurement-lock.txt` (mlx 0.31.2, mlx-lm 0.31.3); clean tree.
+- Preconditions read at 17:15 PDT:
+  - kernel frequency word `raw_word 0`, `ppm 0.0`, on boot `EA2D3EC8-…`;
+  - 181,459,656,704 B free, against 56,628,644,275 B planned;
+  - AC 140 W connected (`system_profiler SPPowerDataType`).
+- Prepare: session `/Users/edr/night-bytes-stream-test/attempt-1`, plan sha256 `d699bd7243bc0a823ec06a614186ec389012b91fd6151ac08d336430fc5c9cda`, t0 1793407500 (17:45:00 PDT), `window_max_s` 13860 (ends by 21:36 PDT), install close 17:40, deadman 22:41. SPAN 10510 s.
+- **Tooling defect found at install:** `prepare` writes the plan to `$SESSION/night_plan.json`, but the installer requires the published copy at `custody_root/night_plan.json` (`night_agent_install.py:613-616`, `plan_outside_custody_root`). The synthetic end-to-end run faked the installer, so it never reached this check. The lead copied the plan bytes unchanged (same sha256) to `custody/night_plan.json` and installed from there. Rendered plists: night `30226559…`, probe `af8cef4e…`, deadman `98a59841…`. Fix after the window: `prepare` writes `custody/night_plan.json`, and the README install line uses it.
+- Arm notice Gmail `1a18f464d3978e8d` (thread `1a174cad9022cac9`), sent before install, with Ed's NO and the manual uninstall command. No pending watchdog notices, so no acknowledgement was written.
+- This activation exits by about 17:41, before install close. The watchdog reads the installed plan and holds launches through the window.
