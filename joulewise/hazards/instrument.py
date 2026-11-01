@@ -307,8 +307,9 @@ def group_absent(pgid: int, timeout_s: float = 2.0) -> tuple[bool, list[str]]:
         time.sleep(0.05)
 
 
-# Inventory rows (configs/gates/physics_rows.json) whose physical check this
-# module performs.  tests/hazards/test_physics_coverage.py keeps the two in step.
+# Inventory rows whose physical check this module performs, from the gate-prune
+# coverage map (configs/gates/physics_rows.json, retired by pruning-list row
+# MG-11 on 2026-11-01; it is in git history).  A record only.
 PROTECTS: tuple[tuple[str, str, str, int], ...] = (
     # base line 1933: Instrument: `sudo -n powermetrics -i 200 -n 1` did not exit 0 (the instrument can...
     row("joulewise/arm_readiness_evidence_t0.py", "_derive_powermetrics",
@@ -316,7 +317,7 @@ PROTECTS: tuple[tuple[str, str, str, int], ...] = (
 )
 
 # Proxy rows on paths block 5 no longer runs that this module's direct
-# measurement replaces (configs/gates/physics_rows.json, "retired_proxy").
+# measurement replaces (the retired coverage map's "retired_proxy" rows).
 SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 1132: The exact reviewed 'sudo -n powermetrics' command exits 0.
     row("joulewise/arm_readiness.py", "<module>",

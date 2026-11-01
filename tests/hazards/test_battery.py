@@ -752,21 +752,6 @@ class FrozenGrammarRegistrationTests(unittest.TestCase):
     writes no primitive name as a string."""
 
     SITE = ("joulewise/hazards/battery.py", "_grammar", "battery_float.parse(raw, wall_time_s)")
-    # The coverage map's battery rows for the frozen module, pinned here because
-    # battery.py reads them from the map (it may not write the parser's name).
-    FROZEN_ROWS = {
-        ("joulewise/battery_float.py", "_unsigned", "ProbeError malformed unsigned integer", 1),
-        ("joulewise/battery_float.py", "_unsigned", "ProbeError integer exceeds 64 bits", 1),
-        ("joulewise/battery_float.py", "_recorded_values", "ProbeError required <key>", 1),
-        ("joulewise/battery_float.py", "_recorded_values", "ProbeError boolean <key>", 1),
-        ("joulewise/battery_float.py", "_recorded_values", "ProbeError uint64 <key>", 1),
-        ("joulewise/battery_float.py", "parse", "ProbeError UpdateTime stale: N s", 1),
-        ("joulewise/battery_float.py", "parse", "reason 'ExternalConnected is not Yes'", 1),
-        ("joulewise/battery_float.py", "parse", "reason 'IsCharging is not No'", 1),
-        ("joulewise/battery_float.py", "parse", "reason 'InstantAmperage exceeds 200 mA'", 1),
-        ("joulewise/battery_float.py", "require_pass", "require_pass ProbeError (probe_error)", 1),
-        ("joulewise/battery_float.py", "require_pass", "require_pass ValueError (predicate failed)", 1),
-    }
 
     def lane_files(self):
         return sorted((ROOT / "joulewise" / "hazards").glob("*.py")) + [ROOT / "scripts" / "hazard_monitor.py"]
@@ -790,12 +775,6 @@ class FrozenGrammarRegistrationTests(unittest.TestCase):
                  and isinstance(node.func.value, ast.Name) and node.func.value.id == "battery_float"
                  and node.func.attr == "parse"]
         self.assertEqual(calls, [self.SITE[1:]])
-
-    def test_protects_carries_the_frozen_grammar_rows(self):
-        loaded = {key for key in battery.PROTECTS if key[0] == "joulewise/battery_float.py"}
-        self.assertEqual(loaded, self.FROZEN_ROWS)
-        self.assertEqual(set(battery.frozen_grammar_rows()), self.FROZEN_ROWS)
-        self.assertEqual(len(battery.PROTECTS), len(set(battery.PROTECTS)))
 
     def test_parse_reading_keeps_its_contract(self):
         raw = battery_bytes("float-20261005-desk.ioreg")

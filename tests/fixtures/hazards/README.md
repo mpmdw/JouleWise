@@ -28,8 +28,8 @@ Built by `tools/build_cadence_fixtures.py`.
 
 ## tools/
 
-Provenance scripts, not tests: `build_battery_publications.py`,
-`build_cadence_fixtures.py`, `build_physics_rows.py` (writes
-`configs/gates/physics_rows.json` from the gate-prune inventory) and
-`write_protects.py` (writes each module's `PROTECTS` and `SUPERSEDES` from
-that file).
+Provenance scripts, not tests: `build_battery_publications.py` and
+`build_cadence_fixtures.py`. `build_physics_rows.py` and `write_protects.py`,
+which built `configs/gates/physics_rows.json` and wrote each module's
+`PROTECTS` and `SUPERSEDES` from it, were removed with that map (pruning-list
+row MG-11, 2026-11-01); they are in git history.

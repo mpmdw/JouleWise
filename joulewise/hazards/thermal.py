@@ -169,8 +169,9 @@ def span_findings(samples: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
     return found
 
 
-# Inventory rows (configs/gates/physics_rows.json) whose physical check this
-# module performs.  tests/hazards/test_physics_coverage.py keeps the two in step.
+# Inventory rows whose physical check this module performs, from the gate-prune
+# coverage map (configs/gates/physics_rows.json, retired by pruning-list row
+# MG-11 on 2026-11-01; it is in git history).  A record only.
 PROTECTS: tuple[tuple[str, str, str, int], ...] = (
     # base line 1482: `pmset -g therm` exited nonzero.
     row("joulewise/arm_readiness_evidence_t0.py", "_thermal_probe",
@@ -181,7 +182,7 @@ PROTECTS: tuple[tuple[str, str, str, int], ...] = (
 )
 
 # Proxy rows on paths block 5 no longer runs that this module's direct
-# measurement replaces (configs/gates/physics_rows.json, "retired_proxy").
+# measurement replaces (the retired coverage map's "retired_proxy" rows).
 SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 1094: Display, idle, screensaver and thermal predicates are true, and the quiet_mac_pre...
     row("joulewise/arm_readiness.py", "<module>",
