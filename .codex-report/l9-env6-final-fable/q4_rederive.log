@@ -1,0 +1,40 @@
+== A constant power, short window: edge=0.2 2*edge=0.4 windows=[(5.0, 5.3)]
+   reduce : None
+   clamp  : {"point_j": 2.9999999999999982, "lower_j": 0.0, "upper_j": 7.000000000000002}
+   exact  : point=2.9999999999999982 min=0.0 max=7.000000000000002
+   containment of 20000 random interior points: True (worst excursion 0.000e+00)
+   hand-derived expectation {'point_j': 3.0, 'lower_j': 0.0, 'upper_j': 7.0}: matches
+   RESULT: PASS
+== B two intervals, one inverts: edge=0.08 2*edge=0.16 windows=[(2.0, 3.0), (6.0, 6.1)]
+   reduce : None
+   clamp  : {"point_j": 6.234018784320604, "lower_j": 4.562595892656736, "upper_j": 8.386908191356447}
+   exact  : point=6.234018784320603 min=4.562595892656735 max=8.386908191356449
+   containment of 20000 random interior points: True (worst excursion 0.000e+00)
+   RESULT: PASS
+== C non-inverting control: edge=0.08 2*edge=0.16 windows=[(5.0, 6.0)]
+   reduce : {"point_j": 6.831450752050671, "lower_j": 5.982711267303312, "upper_j": 8.063462418537195}
+   clamp  : {"point_j": 6.831450752050671, "lower_j": 5.982711267303312, "upper_j": 8.063462418537195}
+   exact  : point=6.831450752050672 min=5.982711267303312 max=8.063462418537195
+   containment of 20000 random interior points: True (worst excursion 0.000e+00)
+   reduce defined -> clamp == reduce (dict equality): True
+   RESULT: PASS
+== D window exactly 2*edge: edge=0.08 2*edge=0.16 windows=[(5.0, 5.16)]
+   reduce : {"point_j": 0.7158252315360023, "lower_j": 0.0, "upper_j": 2.0426645528657077}
+   clamp  : {"point_j": 0.7158252315360023, "lower_j": 0.0, "upper_j": 2.0426645528657077}
+   exact  : point=0.7158252315360023 min=0.0 max=2.042664552865708
+   containment of 20000 random interior points: True (worst excursion 0.000e+00)
+   reduce defined -> clamp == reduce (dict equality): True
+   RESULT: PASS
+== E window just under 2*edge: edge=0.08 2*edge=0.16 windows=[(5.0, 5.159999)]
+   reduce : None
+   clamp  : {"point_j": 0.7158199732315133, "lower_j": 0.0, "upper_j": 2.042655091234138}
+   exact  : point=0.7158199732315133 min=0.0 max=2.042655091234138
+   containment of 20000 random interior points: True (worst excursion 0.000e+00)
+   RESULT: PASS
+== F already-inverted input window [5.1, 5.0]: reduce=None clamp=None
+   RESULT: PASS
+== G negative power sample, short window: reduce=None clamp=None
+   RESULT: PASS
+
+ALL PASS (7/7)
+exit=0

@@ -1,0 +1,7 @@
+HEAD=555661945984cd7548e7d1eb4b5b9f33206919cc module=tests/test_whole_window_inverted_corner_clamp.py started=2026-11-01T00:59:12Z
+.................................
+----------------------------------------------------------------------
+Ran 33 tests in 107.550s
+
+OK
+exit=0 finished=2026-11-01T01:01:00Z

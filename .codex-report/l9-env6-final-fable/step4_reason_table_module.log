@@ -1,0 +1,7 @@
+HEAD=555661945984cd7548e7d1eb4b5b9f33206919cc module=tests.b5_analysis.test_step4_reason_table started=2026-11-01T01:11:52Z
+........
+----------------------------------------------------------------------
+Ran 8 tests in 5.813s
+
+OK
+exit=0 finished=2026-11-01T01:11:58Z
