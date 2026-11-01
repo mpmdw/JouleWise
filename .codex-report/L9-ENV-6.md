@@ -17,10 +17,10 @@ origin/main (#609, #611, #612). Synthetic data only.
    - The two tests that pinned the old call shape are updated:
      - the fake session in `test_analysis_integration` now *requires* the keyword;
      - the exact-kwargs assertion in `test_floor_mint_estimator` expects it.
-   - `CallSiteTests` drops its signature-gated special case, so all 12 sites must pass a literal
-     `True`.
+   - `CallSiteTests` drops its signature-gated special case, so all 13 constructor calls in the 10 analysis
+     consumer files must pass a literal `True`. (Corrected from "12 sites" per L9-ENV6-FINAL-FABLE F4.)
    - The registered table is NOT regenerated. Its generator output is unchanged.
-2. **Omitted-pointer disagreement fails closed (L9-ENV-FINAL-FABLE F1).**
+2. **Omitted-pointer disagreement fails closed (L9-ENV-FINAL-FABLE F2 at `0f5c3f546`; F1 in the interim `a3a85a6e9`).**
    - In `_clamp_inverted_operative_envelopes`, the clamp now runs on a pointer that reduce omitted
      only if reduce's own mint also refuses the mirror's contributions. If it doesn't, the summary is
      returned unchanged.
@@ -47,14 +47,20 @@ origin/main (#609, #611, #612). Synthetic data only.
 
 ## Review notes for the record
 
-- L9-ENV-FINAL-FABLE (`a3a85a6e9`) returned ACCEPT, but its VERIFICATION section still holds
-  `TAILS_PLACEHOLDER`, and its statement that `tests/b5_analysis` passes on the merge with
-  `12ce1241d` was not backed by a recorded run. It was also wrong: R1 failed on that merge, as the
-  Opus review and the lead's sweep both showed. Its Q5 is therefore unverified, and gate 4 is re-run
-  on this head.
+- The interim L9-ENV-FINAL-FABLE report (`a3a85a6e9`) returned ACCEPT with `TAILS_PLACEHOLDER` in
+  its VERIFICATION section and an unbacked claim that `tests/b5_analysis` passed. The review of record
+  is its final report, `0f5c3f546` (ACCEPT_WITH_FIXES). It corrected its own Q5 with recorded tails
+  (`Ran 1035 tests … FAILED (failures=1, skipped=13)`, the step-4 R1 merge failure fixed here as
+  change 1). Its F2 is change 2. (Corrected per L9-ENV-6-OPUS-REV F3; this section earlier cited
+  only the interim report.) Gate 4 was re-run cold on this head as L9-ENV6-FINAL-FABLE.
 
 ## Verification
 
 Targeted, at this head (macOS, Python 3.13, `JOULEWISE_CUSTODY_PARENT` set to a temp dir): step4_reason_table 8 OK;
 clamp_flag 12 OK; analysis_integration 116 OK; floor_mint_estimator 38 OK; authentication_io 22 OK;
-single_count_discipline_census 6 OK. The whole-suite sweep on this head is recorded in the PR.
+single_count_discipline_census 6 OK.
+
+Added per L9-ENV-6-OPUS-REV F4: the whole suite at `555661945` (one process per module, 8 parallel)
+gave 466 of 466 modules exit 0, recorded in PR #615. Exact tails for the whole `tests/b5_analysis`
+directory (`Ran 1035 tests … OK (skipped=13)`) and `tests/test_whole_window_inverted_corner_clamp.py`
+(`Ran 33 tests … OK`) on this head are in L9-ENV6-FINAL-FABLE's VERIFICATION (`0e7530876`).
