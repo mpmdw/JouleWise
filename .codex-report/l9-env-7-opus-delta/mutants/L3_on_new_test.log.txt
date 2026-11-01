@@ -1,0 +1,20 @@
+### L3 @ 97ba14d2e (guard removed): python3.13 -m unittest tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_mirror_disagreement_with_a_zero_lower_bound_also_fails_closed
+diff --git a/joulewise/whole_window.py b/joulewise/whole_window.py
+index 2495abcad..8ef97c8f1 100644
+--- a/joulewise/whole_window.py
++++ b/joulewise/whole_window.py
+@@ -1271,10 +1271,6 @@ def _clamp_inverted_operative_envelopes(
+             # L9-ENV-6 (final-pass F1): reduce omits a pointer only when its
+             # mint function refuses, so a mirror that mints this pointer
+             # unclamped disagrees with reduce; fail closed.
+-            if _corner_composed_anchor_shift_envelope(
+-                contributions, *bounds
+-            ) is not None:
+-                return summary
+             envelope = _clamped_corner_composed_anchor_shift_envelope(
+                 contributions, *bounds
+             )
+FAIL: test_mirror_disagreement_with_a_zero_lower_bound_also_fails_closed (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_mirror_disagreement_with_a_zero_lower_bound_also_fails_closed)
+AssertionError: {'status': 'succeeded', 'energy_request_j': 7.63113168366416, 'energy_token_j': 0.039745477519084166, 'energy_output_token_j': 0.1192364325572525, 'gross_energy_j': 7.664158853340149, 'idle_subtracted_energy_j': 7.63113168366416, 'ttft_s': 0.13335895538330078, 'decode_latency_s': 0.2
+Ran 1 test in 24.384s
+FAILED (failures=1)

@@ -1,0 +1,19 @@
+mutated R6
+### R6 @ 97ba14d2e: python3.13 -m unittest tests.test_whole_window_analysis_clamp_flag
+diff --git a/joulewise/whole_window.py b/joulewise/whole_window.py
+index 2495abcad..70716c511 100644
+--- a/joulewise/whole_window.py
++++ b/joulewise/whole_window.py
+@@ -1874,7 +1874,8 @@ class AuthenticatedConsumptionSession:
+             if dominated:
+                 try:
+                     operative_summary = (
+-                        rederive(
++                        (rederive if self.mode != "read_replay"
++                         else _rederive_summary_for_authenticated_fiducial_bound)(
+                             path,
+                             authenticated_fiducial_bound_s=operative_bound,
+                             _instrument_calibration_physics_cache=physics_cache_for(
+ERROR: test_clamp_runs_in_read_replay_mode (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_clamp_runs_in_read_replay_mode)
+Ran 14 tests in 69.017s
+FAILED (errors=1)

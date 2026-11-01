@@ -1,0 +1,5 @@
+# python3.13 pin_check.py joulewise/whole_window.py, in a worktree at 97ba14d2e, unmutated then after each mutant (stdout verbatim)
+joulewise/whole_window.py reduce_refs 1 rederive_loads 1 direct_calls 1 PIN PASS
+R2: joulewise/whole_window.py reduce_refs 2 rederive_loads 1 direct_calls 1 PIN FAIL
+R4: joulewise/whole_window.py reduce_refs 2 rederive_loads 1 direct_calls 0 PIN FAIL
+R6: joulewise/whole_window.py reduce_refs 2 rederive_loads 1 direct_calls 0 PIN FAIL
