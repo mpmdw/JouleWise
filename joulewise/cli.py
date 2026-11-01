@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import json
 import shlex
 import signal
@@ -491,7 +492,10 @@ def _strict_problems(
     ``physics_cache``: see :func:`validate_bundle` (J2).  An explicit dict is
     used as given and never replaced by a V2 authentication session's cache.
     """
-    from joulewise.whole_window import physics_cache_for
+    # The run-scoped variant also sees the analysis run's store from an
+    # isolated replay context (a fresh contextvars.Context); outside a run it
+    # is whole_window.physics_cache_for unchanged.
+    from joulewise.analysis_run_cache import physics_cache_for_call as physics_cache_for
 
     raw_config = reader.raw_config()
     metadata = reader.raw_metadata()
@@ -1297,6 +1301,39 @@ def _strict_required_object_keys(
 RawToTraceVerifier = Callable[[BundleReader], list[str]]
 
 
+_STRICT_CLOCK_EVIDENCE_MEMO = "cli.strict_clock_evidence"
+
+
+class _StrictClockEvidenceMemoHit(Exception):
+    """Internal control flow: a run-memo hit replaces the derivation."""
+
+
+def _strict_clock_evidence_memo_key(
+    raw_bytes: bytes, anchor_method: Any, stamp_rows: Any
+) -> tuple[dict[str, Any] | None, str | None]:
+    """The run memo and the derivation's content key, or (None, None) outside a run.
+
+    The key binds the sha256 of the raw powermetrics bytes, the recorded
+    anchor method and the recorded clock-stamp rows: every input of the
+    derivation (and of its structural fallback). A value with no exact
+    canonical form disables the memo for the call.
+    """
+    from joulewise import analysis_run_cache
+
+    table = analysis_run_cache.memo(_STRICT_CLOCK_EVIDENCE_MEMO)
+    if table is None:
+        return None, None
+    try:
+        key = analysis_run_cache.canonical_key(
+            [analysis_run_cache.sha256(raw_bytes), anchor_method, stamp_rows]
+        )
+    except (TypeError, ValueError):
+        return table, None
+    if key in table:
+        analysis_run_cache.note(_STRICT_CLOCK_EVIDENCE_MEMO, True)
+    return table, key
+
+
 def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
     """Re-derive P2-038 evidence for current-era successful powermetrics runs."""
 
@@ -1341,19 +1378,31 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         return problems + [
             "strict: uncertainty evidence: clock_anchor.clock_stamps is missing"
         ]
+    memo_table: dict[str, Any] | None = None
+    memo_key: str | None = None
+    cached: Any = None
     try:
         stamps = {
             name: stamp_from_mapping(value)
             for name, value in stamp_rows.items()
             if isinstance(value, dict)
         }
-        raw_records = parse_powermetrics_records(
-            read_authentication_input(
-                raw_path,
-                grammar="raw",
-                label=f"strict bundle {reader.path.name} powermetrics evidence",
-            )
+        raw_bytes = read_authentication_input(
+            raw_path,
+            grammar="raw",
+            label=f"strict bundle {reader.path.name} powermetrics evidence",
         )
+        # Inside a block-5 analysis run the derivation below is a pure
+        # function of the authenticated raw bytes, the anchor method and the
+        # recorded stamps (L9-SPEEDUP-R1); outside one this is a no-op.
+        memo_table, memo_key = _strict_clock_evidence_memo_key(
+            raw_bytes, anchor_method, stamp_rows
+        )
+        if memo_key is not None:
+            cached = memo_table.get(memo_key)
+        if cached is not None:
+            raise _StrictClockEvidenceMemoHit()
+        raw_records = parse_powermetrics_records(raw_bytes)
         if anchor_method == CLOCK_METHOD:
             # Exact dispatch for stored p2-038.1 evidence (D-078): the frozen
             # spawn-bracket derivation is replayed, never re-derived as v2/v3.
@@ -1372,22 +1421,30 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
                 stamps=stamps,
                 records=anchor_records_from_powermetrics(raw_records),
             )
+    except _StrictClockEvidenceMemoHit:
+        expected = copy.deepcopy(cached)
     except (KeyError, OSError, TypeError, ValueError) as exc:
         return problems + [
             f"strict: uncertainty evidence: cannot re-derive clock evidence: {exc}"
         ]
-    expected_anchor = expected["clock_anchor"]
-    if (
-        anchor_method in {CLOCK_METHOD_V2, CLOCK_METHOD_V3}
-        and isinstance(expected_anchor, dict)
-        and expected_anchor.get("status") != "bounded"
-        and raw_records
-    ):
-        # Replay the adapter's deterministic structural fallback so stored
-        # unresolved evidence remains byte-verifiable.
-        endpoint_s, method = trace_fallback_endpoint(stamps, raw_records)
-        expected_anchor["trace_fallback_endpoint_epoch_s"] = endpoint_s
-        expected_anchor["trace_fallback_method"] = method
+    else:
+        expected_anchor = expected["clock_anchor"]
+        if (
+            anchor_method in {CLOCK_METHOD_V2, CLOCK_METHOD_V3}
+            and isinstance(expected_anchor, dict)
+            and expected_anchor.get("status") != "bounded"
+            and raw_records
+        ):
+            # Replay the adapter's deterministic structural fallback so stored
+            # unresolved evidence remains byte-verifiable.
+            endpoint_s, method = trace_fallback_endpoint(stamps, raw_records)
+            expected_anchor["trace_fallback_endpoint_epoch_s"] = endpoint_s
+            expected_anchor["trace_fallback_method"] = method
+        if memo_key is not None:
+            from joulewise import analysis_run_cache
+
+            analysis_run_cache.note(_STRICT_CLOCK_EVIDENCE_MEMO, False)
+            memo_table[memo_key] = copy.deepcopy(expected)
     if clock_anchor != expected["clock_anchor"]:
         problems.append(
             "strict: uncertainty evidence: clock_anchor does not match paired-clock/raw-plist derivation"
@@ -1913,6 +1970,23 @@ def _cmd_validate_bundle(args: argparse.Namespace) -> int:
 # stored summaries are immutable and prospective reductions are new artifacts.
 
 
+def _run_reduce_physics_cache(bundle_path: Path) -> dict[str, float] | None:
+    """The analysis run's physics cache view for one ``reduce`` call, if any.
+
+    Outside an analysis run (no shared store) this is ``None`` and ``reduce``
+    behaves exactly as before, with no extra read. Inside one, the partition
+    is chosen from the bundle's metadata exactly as validate-bundle chooses it
+    (``_strict_problems``); the reducer still consults an entry only after its
+    own calibration artifact, plist and events hash checks.
+    """
+    from joulewise.analysis_run_cache import physics_cache_for_call, run_physics_store
+    from joulewise.whole_window import shared_physics_cache
+
+    if run_physics_store() is None and shared_physics_cache() is None:
+        return None
+    return physics_cache_for_call(None, BundleReader(bundle_path).raw_metadata())
+
+
 def _cmd_reduce(args: argparse.Namespace) -> int:
     """Write a prospective reduction without mutating stored summary bytes."""
     bundle_path = Path(args.path)
@@ -1950,7 +2024,16 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     requested_version = args.reducer_version
     if requested_version is None and stored_path.is_file():
         requested_version = recorded_version
-    summary = reduce_bundle(bundle_path, reducer_version=requested_version)
+    run_physics_cache = _run_reduce_physics_cache(bundle_path)
+    summary = reduce_bundle(
+        bundle_path,
+        reducer_version=requested_version,
+        **(
+            {"_instrument_calibration_physics_cache": run_physics_cache}
+            if run_physics_cache is not None
+            else {}
+        ),
+    )
     try:
         payload = summary.to_dict()
     except SchemaError as exc:

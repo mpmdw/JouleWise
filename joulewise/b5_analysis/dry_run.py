@@ -1256,13 +1256,18 @@ def run(mode,index,custody,*,_test_pack_table=None,_test_seal_pins=None,_test_re
     s=RunState(mode,index,restricted,commit,pack_table=_test_pack_table,seal_pins=_test_seal_pins,repo_root=repo_root)
     stopped=False;difference=None;previous=None
     from joulewise.whole_window import shared_instrument_calibration_physics_cache
+    from joulewise.analysis_run_cache import analysis_run_caches
     from .deadline_observer import CALIBRATION_WALL_DEADLINE, OBSERVER_UNAVAILABLE, observe_wall_deadline
     # One instrument-calibration physics cache per driver run, as the harvest
     # shares one per window: a verified fit of the same calibration bytes is not
     # refitted per member. Failed fits are never cached. A wall-deadline firing
     # in any refit is a tooling refusal of the step it happened in.
-    with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache({}), \
-            observe_wall_deadline() as deadline:
+    # The run caches (L9-SPEEDUP-R1) make the same store visible to the
+    # strict-validation and reduce sites of isolated replay contexts, and hold
+    # the run's content-addressed memos.
+    physics_store={}
+    with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache(physics_store), \
+            analysis_run_caches(physics_store), observe_wall_deadline() as deadline:
         s.ignored_backup=ignored
         if mode=='release':
             from .windows import load_window_index

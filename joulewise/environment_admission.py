@@ -357,6 +357,8 @@ def _window_thermal_pressure_refusals(
         or admission_end_s > measured_window_start_s
     ):
         return ("environment_admission_missing",)
+    memo_table: dict | None = None
+    memo_key: str | None = None
     try:
         from joulewise.adapters.powermetrics import (  # noqa: PLC0415
             anchor_records_from_powermetrics,
@@ -375,12 +377,13 @@ def _window_thermal_pressure_refusals(
             if attempt_number == 1
             else f"powermetrics_idle_attempt_{attempt_number}.plist"
         )
+        idle_raw = read_authentication_input(
+            bundle_path / "raw" / idle_name,
+            grammar="raw",
+            label=f"bundle {bundle_path.name} idle powermetrics evidence",
+        )
         idle_records = parse_powermetrics_records(
-            read_authentication_input(
-                bundle_path / "raw" / idle_name,
-                grammar="raw",
-                label=f"bundle {bundle_path.name} idle powermetrics evidence",
-            ),
+            idle_raw,
             timestamp_anchor_s=admission_start_s,
         )
         raw = read_authentication_input(
@@ -388,6 +391,23 @@ def _window_thermal_pressure_refusals(
             grammar="raw",
             label=f"bundle {bundle_path.name} powermetrics evidence",
         )
+        # Inside a block-5 analysis run the scan below is a pure function of
+        # these two authenticated byte strings and the scalars it reads; a
+        # repeated member returns the first result (L9-SPEEDUP-R1).
+        memo_table, memo_key = _thermal_scan_memo_key(
+            idle_raw,
+            raw,
+            metadata,
+            admission_start_s=admission_start_s,
+            admission_end_s=admission_end_s,
+            measured_window_start_s=measured_window_start_s,
+            measured_window_end_s=measured_window_end_s,
+        )
+        if memo_key is not None and memo_key in memo_table:
+            from joulewise import analysis_run_cache  # noqa: PLC0415
+
+            analysis_run_cache.note(_THERMAL_SCAN_MEMO, True)
+            return memo_table[memo_key]
         native = parse_powermetrics_records(raw)
         uncertainty = metadata.get("uncertainty_evidence")
         clock_anchor = (
@@ -418,8 +438,86 @@ def _window_thermal_pressure_refusals(
             first_record_endpoint_s=float(anchor["first_sample_end_point_epoch_s"]),
         )
     except (OSError, KeyError, TypeError, ValueError):
-        return ("environment_admission_missing",)
+        return _thermal_scan_memoized(memo_table, memo_key, ("environment_admission_missing",))
+    return _thermal_scan_memoized(
+        memo_table,
+        memo_key,
+        _thermal_pressure_intervals_refusals(
+            idle_records,
+            measured_records,
+            admission_end_s=admission_end_s,
+            measured_window_end_s=measured_window_end_s,
+        ),
+    )
 
+
+_THERMAL_SCAN_MEMO = "environment_admission.window_thermal_pressure"
+
+
+def _thermal_scan_memo_key(
+    idle_raw: bytes,
+    raw: bytes,
+    metadata: Any,
+    *,
+    admission_start_s: float,
+    admission_end_s: float,
+    measured_window_start_s: float,
+    measured_window_end_s: float,
+) -> tuple[dict | None, str | None]:
+    """The run memo and this scan's content key, or (None, None) outside a run.
+
+    The key binds the sha256 of both raw byte strings and every other value
+    the scan reads: the admission span, the measured window and the recorded
+    clock-anchor method and stamps (the only metadata the scan consults after
+    the reads). A value with no exact canonical form disables the memo for
+    the call.
+    """
+
+    from joulewise import analysis_run_cache  # noqa: PLC0415
+
+    table = analysis_run_cache.memo(_THERMAL_SCAN_MEMO)
+    if table is None:
+        return None, None
+    uncertainty = metadata.get("uncertainty_evidence") if isinstance(metadata, Mapping) else None
+    clock_anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
+    try:
+        key = analysis_run_cache.canonical_key(
+            [
+                analysis_run_cache.sha256(idle_raw),
+                analysis_run_cache.sha256(raw),
+                admission_start_s,
+                admission_end_s,
+                measured_window_start_s,
+                measured_window_end_s,
+                isinstance(uncertainty, Mapping),
+                isinstance(clock_anchor, Mapping),
+                clock_anchor.get("method") if isinstance(clock_anchor, Mapping) else None,
+                clock_anchor.get("clock_stamps") if isinstance(clock_anchor, Mapping) else None,
+            ]
+        )
+    except (TypeError, ValueError):
+        return table, None
+    return table, key
+
+
+def _thermal_scan_memoized(
+    table: dict | None, key: str | None, value: tuple[str, ...]
+) -> tuple[str, ...]:
+    if table is not None and key is not None:
+        from joulewise import analysis_run_cache  # noqa: PLC0415
+
+        analysis_run_cache.note(_THERMAL_SCAN_MEMO, False)
+        table[key] = value
+    return value
+
+
+def _thermal_pressure_intervals_refusals(
+    idle_records: Any,
+    measured_records: Any,
+    *,
+    admission_end_s: float,
+    measured_window_end_s: float,
+) -> tuple[str, ...]:
     intervals = sorted(
         (
             (
