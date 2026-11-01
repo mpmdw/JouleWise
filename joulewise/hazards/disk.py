@@ -125,8 +125,9 @@ def planned_target(path: str | Path, copies: int = 1) -> dict[str, Any]:
     return {"path": str(path), "copies": int(copies)}
 
 
-# Inventory rows (configs/gates/physics_rows.json) whose physical check this
-# module performs.  tests/hazards/test_physics_coverage.py keeps the two in step.
+# Inventory rows whose physical check this module performs, from the gate-prune
+# coverage map (configs/gates/physics_rows.json, retired by pruning-list row
+# MG-11 on 2026-11-01; it is in git history).  A record only.
 PROTECTS: tuple[tuple[str, str, str, int], ...] = (
     # base line 94: shutil.disk_usage free >= 20 GiB.
     row("joulewise/prewindow.py", "t0_check",
@@ -140,7 +141,7 @@ PROTECTS: tuple[tuple[str, str, str, int], ...] = (
 )
 
 # Proxy rows on paths block 5 no longer runs that this module's direct
-# measurement replaces (configs/gates/physics_rows.json, "retired_proxy").
+# measurement replaces (the retired coverage map's "retired_proxy" rows).
 SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 1148: The claim and bound backup destinations exist, are distinct and writable, and eac...
     row("joulewise/arm_readiness.py", "<module>",

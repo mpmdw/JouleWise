@@ -472,7 +472,7 @@ PROTECTS: tuple[tuple[str, str, str, int], ...] = (
 )
 
 # Proxy rows on paths block 5 no longer runs that this module's direct
-# measurement replaces (configs/gates/physics_rows.json, "retired_proxy").
+# measurement replaces (the retired coverage map's "retired_proxy" rows).
 SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 1123: A fresh process census finds no agent, browser, keep_awake or monitor process cla...
     row("joulewise/arm_readiness.py", "<module>",

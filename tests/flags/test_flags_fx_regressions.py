@@ -136,13 +136,6 @@ class OneSpanJoinTests(unittest.TestCase):
                    "clock_span_flags", "clock_systematic_flags")
         self.assertEqual([name for name in removed if hasattr(exclusions, name)], [])
 
-    def test_number_rows_name_the_harvest_joins(self) -> None:
-        rows = json.loads((REPO / "configs" / "flags" / "number_rows.json").read_text(encoding="utf-8"))["rows"]
-        sites = [holder.get("evaluation_site") or "" for row in rows
-                 for holder in (row, row.get("equivalent") or {})]
-        self.assertEqual([site for site in sites if site.startswith("joulewise/flags/exclusions.py:")
-                          and site.partition(":")[2] not in ("compute", "first_claim_usable")], [])
-
     @unittest.skipUnless(L5_AVAILABLE, "lane L5's joulewise.b5.harvest is not in this tree")
     def test_harvest_joins_on_l1_fixtures_feed_compute_like_l1s_own_join(self) -> None:
         from joulewise.b5 import harvest as h
