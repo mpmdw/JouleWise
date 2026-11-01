@@ -1,0 +1,32 @@
+# Magistrate activation 5cbfbcfc (Opus 5.5, headless, 2026-10-31 from 00:42 PDT)
+
+No pending watchdog notices. No unread mail from Ed at launch. Open directives unchanged (#587 and the standing older ones).
+
+## KB night attempt 3: collected, residency resolved, all four boundaries RESOLVED (pending the cold science gate)
+- `/Users/edr/night-bytes-stream-test/attempt-3/custody/night/result.json`: verdict GO, chain exit 0, 23:21:05 PDT 10-30 to 00:38:13 PDT 10-31, 147 censuses, no census hits; arm `go: true`, `not_pass` empty.
+- Stages: pre screen rc 0, calibration verdict rc 0, **known-bytes rc 0** (23:29:36 to 00:34:12 PDT; 3,876 s), post calibration rc 0, session status rc 0. `STAGE.json`: `completed`, `residency resolved`, 4 calls (R, C, C, R), planned repeats R 2,394,112 and C 2,672,640.
+- Desk steps (README; item 153 pointer): session copied once to `/Users/edr/night-archive/bytes-stream-test/attempt-3` (then made read-only); harvest wrote `/Users/edr/night-bytes-stream-test/attempt-3-INPUT.json` (sha256 `4e0863e0…0c60`, 4 records, no diagnostics beyond the completed stage); `check` on the archived receipts reproduces `residency resolved`; `read` output saved to `/Users/edr/night-archive/bytes-stream-test/attempt-3-READ.out` (sha256 `f33c58cc…942f`).
+- Reader outcome (J/GB, rotate minus repeat, b = 33,554,432 B, W = 32 GiB, Q = 1024, G = 2**26 B, φ_U = 1/64, ρ_L = 0.0714025, κ = 14.0051): rails 0.0092 ± 0.0021 RESOLVED; GPU 0.00879 ± 0.00010 RESOLVED; DC 0.0389 ± 0.0072 RESOLVED; rest 0.0296 ± 0.0084 RESOLVED; no reasons. Description: f = 0.238 ± 0.098; GPU excess-power contrast 0.144 W; GPU active frequency 1379.6 / 1379.6 MHz (R / C); hour as run 3,558.8 s.
+- Night agents uninstalled (`install_night_agent.sh --plan .../attempt-3/custody/night_plan.json --uninstall`, rc 0); no `com.joulewise.night*` in launchctl or LaunchAgents. Canonical root fast-forwarded to `998974808`.
+
+## Cold science gate (raw re-derivation), launched 00:58 PDT
+- Fable 5.1 high and Opus 5.5 high, blind, local `claude -p` from fresh worktrees `/Users/edr/code/jw-wt/kb3-gate-{fable,opus}` at `53bcceeac`. Charge `~/night-archive/seats-5cbfbcfc/kb3-science-gate/CHARGE.md`: independent program from the rule text (no import of the reader/harvest/stage), recompute from raw powermetrics/meter/receipts; bars set by the lead: Δ and δΔ to 1% of each boundary's printed half-width (rails 2.07e-5, GPU 1.05e-6, DC 7.24e-5, rest 8.44e-5 J/GB), κ/ρ_L/f to 1e-6 relative, integers and classes exact. Reports `{fable,opus}-report.md`.
+
+## PR #614 CI
+- PR #614 was merged into `codex/2026-10-30-kb-capture` at 06:04Z (base branch, not main). Shard 10 looked hung, but it was not: run 41171097423 on `53bcceeac` finished green at 07:58Z (40 modules, 1,437 tests). `tests.test_bytes_analysis` alone took 8,973 s (`test_a4_01_unusable_member_all_stages_and_nonsynthetic`, tests/test_bytes_analysis.py:1147, about 5 min of CPU per stage-defect subTest). **CI is green on the final head.** Sonnet investigation.
+- Cause of the slow shard: `scripts/test_timings.json` has no weight for the BYTES lineage's modules, so each gets the unknown weight of 27 s. Real costs: `test_bytes_analysis` 7,200-9,000 s, `test_bytes_coverage_map` 2,200-2,800 s, `tests.b6.test_cold_pass_fixes` about 2,000 s, `test_bytes_h_session` about 1,850 s, `test_bytes_agreement` 1,200-1,900 s. Follow-up (scheduling hint only): add their hosted weights and list `test_bytes_analysis` in `split_modules` on the BYTES/KB lineage. Main does not carry these tests.
+
+## Cold science gate: both ADMIT-WITH-CORRECTIONS; slot filled
+- **Opus 5.5** (`opus-report.md`, 01:08): ADMIT-WITH-CORRECTIONS, no BLOCKER. Its program (own plist regex parse, own KM003C decode and clock fit) reproduces every Δ and δΔ within 5e-12 J/GB, κ and ρ_L bit-identical, integers and all four classes exact. Reader re-run byte-identical; `check` byte-identical to CHECK.json. Session validity clean on census, thermal (712 readings, all level 0), battery (term 0), meter (0 gaps), clock (word 0, wall−RAW spread 8.4 µs), stack and geometry (20/20).
+- **Fable 5.1** (`fable-report.md`): ADMIT-WITH-CORRECTIONS, no BLOCKER. Its program (plistlib parse, own set-membership anchor, own meter decode) agrees on every quantity within 5.3e-10 J/GB. Same session findings.
+- **Shared MAJOR:** rule §3 names a 10 s Bartlett bandwidth and glosses it "(10 Hz, 100 lags)". At the delivered ~130 ms idle cadence these differ: the reader's 75-77 lags (lead verified in READ.out, `scripts/bytes_stream_test.py:551`) against a literal 100. δΔ_rails moves 3.26e-5 (1.6 bars), printing 0.0021 against 0.0020; no class changes. Fable's report says "88 lags"; that is the whole-capture median, a description slip only, since its variant-C numbers match the reader.
+- **Dispositions** (lead): the named 10 s estimator stands as run. The literal 100-lag reading is printed beside it as a labelled alternative (doctrine: a choice settled after the data prints both). The rule-text corrections (lag gloss, GPU edge row) go to the KB lineage's next change. Reader defects (thermal null leaf, ρ_L precision) are deferred with them, description only. Contamination (call 3 pre-idle photoanalysisd, in-window daemons), the stall-time decomposition, the hour-vs-check contrast and the latency-bound regime are disclosed in the slot. Inherited constants without a derivation are flagged for the rule's next revision.
+- **Slot fill:** `KB-SLOT-FILL.md` in this directory. It is copied into `bytes_pack_v1.md` §1 by PR when the BYTES lineage lands.
+- No refusal from either seat, so nothing needed lead re-execution beyond the lag-count check.
+- Outcome email to Ed: Gmail `1a191058510429fc`.
+
+## Pruning tally (gates that ran this session)
+- Cold science gate (Fable + Opus, raw re-derivation): **caught a number.** The rule-text lag contradiction moves the printed rails half-width (0.0021 against 0.0020). Both seats also caught the false thermal "missing" line and the ρ_L print precision. Keep.
+- Lead's lag-count check in READ.out: settled the seats' 75-77 against 88 discrepancy (a description slip; no number). 
+- Desk harvest/check/read chain: ran clean; caught nothing.
+- No stand-down request; no child left running. Seat and records worktrees removed after push.
