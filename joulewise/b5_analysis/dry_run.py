@@ -457,6 +457,11 @@ class RunState:
         self.flags = []
         self.ignored_backup = False
         self.classes = refusal_classes()
+        # L9-SPEEDUP-R1: worker processes for independent child programs (1 is
+        # the serial path), the run's deadline observer and physics store.
+        self.workers = 1
+        self.deadline = None
+        self.physics_store = {}
 
     def path(self, relative):
         if (type(relative) is not str or not relative or '\\' in relative or '\x00' in relative
@@ -721,11 +726,86 @@ def step_0(s,r):
     return result
 
 
+def _parallel(s, r, count):
+    """Whether this step's independent children may run in a worker pool.
+
+    Only with more than one worker and task, and only with the plain
+    StepRunner: a runner that overrides run() (a test double or a profiler)
+    keeps the serial path, so it still sees every call.
+    """
+    return getattr(s,'workers',1)>1 and count>1 and type(r).run is StepRunner.run
+
+
+def _dispatch(s, r, tasks):
+    """Run (program, argv, step, window) tasks in the pool; serial log counters.
+
+    The runner's counter is advanced before dispatch, so a driver-side failure
+    log never collides with a worker's log name.
+    """
+    from .parallel import dispatch
+    base=r._counter
+    r._counter=base+len(tasks)
+    results,state=dispatch(tasks,restricted=s.restricted,first_counter=base+1,workers=s.workers,
+                           physics_store=s.physics_store)
+    return base,results,state
+
+
+def _account_deadlines(s, state):
+    """Report worker wall-deadline observations to the run's observer (fail closed)."""
+    from .deadline_observer import OBSERVER_UNAVAILABLE
+    if state.firings and s.deadline is not None:
+        s.deadline.firings+=state.firings
+    if state.unavailable:
+        raise AnalysisRefusal(OBSERVER_UNAVAILABLE)
+
+
+def _stop_at(r, base, results, stop, outputs=(), created_dirs=(), needed_dirs=()):
+    """Leave custody and the log counter as a serial run stopping at task ``stop`` would."""
+    from .parallel import discard_after
+    needed={Path(d) for d in needed_dirs}
+    discard_after(results,stop,outputs,[d for d in created_dirs if Path(d) not in needed])
+    r._counter=base+stop+1
+
+
+def _parents(path, restricted):
+    """Every directory s.path() creates for ``path`` under ``restricted``."""
+    result=[];parent=Path(path).parent
+    while parent!=Path(restricted) and parent.is_relative_to(restricted):
+        result.append(parent);parent=parent.parent
+    return result
+
+
+def _step_1_parallel(s,r,jobs):
+    require_primary_context(s.contexts)
+    s.rehash()
+    tasks=[('joulewise.cli:main',['validate-bundle','--strict',bundle],'1',pack) for pack,_,bundle in jobs]
+    base,results,state=_dispatch(s,r,tasks)
+    try:
+        for i,((pack,_,_),res) in enumerate(zip(jobs,results)):
+            if i:
+                # The serial driver re-authenticates before every child.
+                try:
+                    require_primary_context(s.contexts)
+                    s.rehash()
+                except AnalysisRefusal:
+                    _stop_at(r,base,results,i-1);raise
+            exit_status=2 if res.exception else res.exit_status
+            if exit_status:
+                _stop_at(r,base,results,i)
+                return [s.record('1',window=pack,exit_status=2,code='kept_bundle_strict_validation_failed')]
+        return [s.record('1')]
+    finally:
+        _account_deadlines(s,state)
+
+
 def step_1(s,r):
     from joulewise.cli import main
     prepared=_internal_step(s,r,'1',s.prepare_kept)
     if prepared[0].status!='ok': return prepared
-    for pack,run_id,bundle in s.kept_bundles():
+    jobs=list(s.kept_bundles())
+    if _parallel(s,r,len(jobs)):
+        return _step_1_parallel(s,r,jobs)
+    for pack,run_id,bundle in jobs:
         result,_,_,exit_status=s.invoke(r,main,['validate-bundle','--strict',bundle],step='1',window=pack)
         if exit_status:
             return [s.record('1',window=pack,exit_status=2,code='kept_bundle_strict_validation_failed')]
@@ -755,10 +835,65 @@ def require_rereduction_matches_stored(bundle, output):
         raise AnalysisRefusal(REREDUCTION_REFIT_DIFFERS)
 
 
+def _step_2_parallel(s,r,jobs):
+    require_primary_context(s.contexts)
+    s.rehash()
+    created,paths=[],[]
+    for pack,run_id,_ in jobs:
+        name='rereduced/'+pack+'/'+run_id+'.rereduced.json'
+        new=[d for d in reversed(_parents(s.restricted/name,s.restricted)) if not d.exists()]
+        try:
+            paths.append(s.path(name))
+        except AnalysisRefusal:
+            # An inadmissible output path refuses at its own bundle: the serial
+            # loop reproduces exactly which earlier bundles ran first.
+            return None
+        created.extend(new)
+    tasks=[('joulewise.cli:main',['reduce',bundle,'--output',output],'2',pack)
+           for (pack,_,bundle),output in zip(jobs,paths)]
+    base,results,state=_dispatch(s,r,tasks)
+    outputs=[]
+    try:
+        for i,((pack,run_id,bundle),output,res) in enumerate(zip(jobs,paths,results)):
+            def stop(record,last=i):
+                _stop_at(r,base,results,last,paths,created,[d for p in paths[:last+1] for d in _parents(p,s.restricted)])
+                return [record]
+            if i:
+                try:
+                    require_primary_context(s.contexts)
+                    s.rehash()
+                except AnalysisRefusal:
+                    stop(None,i-1);raise
+            result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception)
+            code=result.token() if result.exit_status or result.exception else None
+            exit_status=result.exit_status
+            if result.exception:
+                code,exit_status=None,2
+            if exit_status and Path(output).is_file():
+                Path(output).unlink()
+            if exit_status==0 and not Path(output).is_file():
+                code,exit_status=None,2
+            elif exit_status==0:
+                try:
+                    require_rereduction_matches_stored(bundle,output)
+                except AnalysisRefusal as exc:
+                    Path(output).unlink()
+                    return stop(s.record('2',window=pack,exit_status=2,code=exc.code,outputs=outputs))
+                outputs.append(s.register('rereduced_'+pack+'_'+run_id,output))
+            if exit_status: return stop(s.record('2',window=pack,exit_status=exit_status,code=code,outputs=outputs))
+        return [s.record('2',outputs=outputs)]
+    finally:
+        _account_deadlines(s,state)
+
+
 def step_2(s,r):
     from joulewise.cli import main
     outputs=[]
-    for pack,run_id,bundle in s.kept_bundles():
+    jobs=list(s.kept_bundles())
+    if _parallel(s,r,len(jobs)):
+        records=_step_2_parallel(s,r,jobs)
+        if records is not None:return records
+    for pack,run_id,bundle in jobs:
         output=s.path('rereduced/'+pack+'/'+run_id+'.rereduced.json')
         result,_,code,exit_status=s.invoke(r,main,['reduce',bundle,'--output',output],step='2',window=pack)
         if exit_status and Path(output).is_file():
@@ -784,9 +919,54 @@ def step_3(s,r): return _internal_step(s,r,'3',s.prepare_tripwires)
 def step_3b(s,r): return _internal_step(s,r,'3b',s.prepare_brackets)
 
 
+def _step_4_classify(s,pack,result,outputs,code,exit_status):
+    registered=None
+    if outputs and not result.exception:
+        classification=classify_step4_exit(exit_status,s.read('extraction_'+pack),s.specs[pack])
+        if classification=='p42_floor_cells_only': code,registered=None,classification
+        elif classification=='refused' and exit_status==0: exit_status=2
+        # Every other exit-1 branch is a registered tooling or outcome code.
+        elif exit_status==1 and classification!='refused': code=classification
+    return s.record('4',window=pack,exit_status=exit_status,code=code,outputs=outputs,registered_exit=registered)
+
+
+def _step_4_parallel(s,r,packs):
+    require_primary_context(s.contexts)
+    s.rehash()
+    paths=[s.path('mint/extraction-'+pack+'.json') for pack in packs]
+    tasks=[('scripts.extract_detection_floors:main',['--window-index',s.index_path,'--pack',pack,'--out',output,
+            '--hash-bundles'],'4',pack) for pack,output in zip(packs,paths)]
+    base,results,state=_dispatch(s,r,tasks)
+    records=[]
+    try:
+        for i,(pack,output,res) in enumerate(zip(packs,paths,results)):
+            if i:
+                try:
+                    require_primary_context(s.contexts)
+                    s.rehash()
+                except AnalysisRefusal:
+                    _stop_at(r,base,results,i-1,paths);raise
+            # As StepState.invoke: register the output when present, then classify.
+            result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception)
+            outputs=[s.register('extraction_'+pack,output)] if Path(output).is_file() else []
+            code=result.token() if result.exit_status or result.exception else None
+            exit_status=result.exit_status
+            if result.exception or (not outputs and exit_status==0):
+                code,exit_status=None,2
+            records.append(_step_4_classify(s,pack,result,outputs,code,exit_status))
+            if records[-1].status!='ok':
+                _stop_at(r,base,results,i,paths)
+                break
+        return records
+    finally:
+        _account_deadlines(s,state)
+
+
 def step_4(s,r):
     from scripts.extract_detection_floors import main
     records=[]
+    if _parallel(s,r,2):
+        return _step_4_parallel(s,r,('alpha','beta'))
     for pack in ('alpha','beta'):
         output=s.path('mint/extraction-'+pack+'.json')
         result,outputs,code,exit_status=s.invoke(r,main,['--window-index',s.index_path,'--pack',pack,'--out',output,
@@ -1222,12 +1402,21 @@ def _index_digest(path):
     except OSError:return '0'*64
 
 
-def run(mode,index,custody,*,_test_pack_table=None,_test_seal_pins=None,_test_repo_root=None,_runner=None,_git=None):
+def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=None,_test_repo_root=None,_runner=None,_git=None):
     """Run all registered steps. Return 0, 3 (registered outcome), or 2.
 
     The only public outputs are the closed record and two structure streams.
-    The Python-only seams never appear as command-line options.
+    The Python-only seams never appear as command-line options. ``workers``
+    (L9-SPEEDUP-R1) is the number of spawned worker processes for independent
+    child programs; None means JOULEWISE_B5_ANALYSIS_WORKERS or
+    min(8, cpu_count - 2), and 1 is the serial path. It changes no output.
     """
+    from .parallel import resolve_workers
+    try:
+        workers=resolve_workers(workers)
+    except ValueError:
+        print('step 0 - tooling_refusal',file=sys.stderr)
+        return 2
     repo_root=Path(_test_repo_root) if _test_repo_root is not None else ROOT
     try:
         directory=custody_preflight(mode,custody,repo_root)
@@ -1269,6 +1458,7 @@ def run(mode,index,custody,*,_test_pack_table=None,_test_seal_pins=None,_test_re
     with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache(physics_store), \
             analysis_run_caches(physics_store), observe_wall_deadline() as deadline:
         s.ignored_backup=ignored
+        s.workers,s.deadline,s.physics_store=workers,deadline,physics_store
         if mode=='release':
             from .windows import load_window_index
             try:
