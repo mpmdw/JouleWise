@@ -195,6 +195,50 @@ class LoadTransitionAlignmentTests(unittest.TestCase):
         self.assertEqual(artifact["claim_disposition"], "PROVISIONAL_PHYSICAL_BOUND_REVIEW_REQUIRED")
         self.assertEqual(validate_alignment_artifact(artifact), [])
 
+    # Strings int(value, 16) parses but that are not 64 lowercase hex digits (TRIM_REPORT 8.1).
+    NOT_DIGESTS = (
+        "0x" + "a" * 62,
+        " " + "a" * 63,
+        "a" * 63 + "\n",
+        "a" * 31 + "_" + "a" * 32,
+        "A" * 64,
+        "g" * 64,
+        "a" * 63,
+        "a" * 65,
+    )
+
+    def test_is_sha256_accepts_only_64_lowercase_hex_digits(self) -> None:
+        from joulewise.load_transition_alignment import _is_sha256
+
+        self.assertTrue(_is_sha256(hashlib.sha256(b"x").hexdigest()))
+        self.assertTrue(_is_sha256("0" * 64))
+        for value in self.NOT_DIGESTS + (None, 0, b"a" * 64):
+            with self.subTest(value=value):
+                self.assertFalse(_is_sha256(value))
+        for value in self.NOT_DIGESTS[:4]:
+            int(value, 16)  # the old check accepted each of these
+
+    def test_part_b_source_hash_must_be_a_strict_digest(self) -> None:
+        for value in self.NOT_DIGESTS:
+            observations = copy.deepcopy(self.observations)
+            observations["evidence_status"] = "PROVISIONAL_REAL_MAC_UNADJUDICATED"
+            observations["source"] = {
+                "capture_class": "real_mac_capture",
+                "raw_samples_sha256": value,
+                "markers_sha256": "1" * 64,
+            }
+            with self.subTest(value=value), self.assertRaises(AlignmentRefusal):
+                build_alignment_artifact(self.manifest, observations)
+
+    def test_artifact_id_must_be_lta_plus_a_strict_digest(self) -> None:
+        artifact = build_alignment_artifact(self.manifest, self.observations)
+        for value in self.NOT_DIGESTS:
+            broken = copy.deepcopy(artifact)
+            broken["artifact_id"] = "lta-" + value
+            with self.subTest(value=value):
+                self.assertIn("artifact_id must be lta- plus 64 lowercase hex digits",
+                              validate_alignment_artifact(broken))
+
 
 if __name__ == "__main__":
     unittest.main()
