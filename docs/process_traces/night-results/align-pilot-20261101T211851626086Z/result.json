@@ -1,0 +1,41 @@
+{
+  "aborted_reason": "night_refused_agent_present",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "8a3d9c5daacd54c81ca029de98465c38c8808b3cf04a0878c5b509de2f9155c9"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "0cda3408bfb8bc4437f1fb558beba85da106693b5eee1bf3953c1d406d197e45"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "5a549d2fb64d19f1b3e69fcbc5abfe3ca15553db280e9c7a2b04b08e0e3a07c9"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "dd33c5b96b2f562b4343558fae79a36fd007b6db413744e78ff0d40f1b4c2e13"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 0,
+  "census_hits": [],
+  "chain_exit_code": null,
+  "chain_sha256": null,
+  "ended_epoch_s": 1793568360.232844,
+  "ended_monotonic_ns": 1552697216627625,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "align-pilot-20261101T211851626086Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1793568360.202883,
+  "started_monotonic_ns": 1552697186666791,
+  "verdict": "REFUSED"
+}
