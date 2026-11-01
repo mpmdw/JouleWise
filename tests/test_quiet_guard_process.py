@@ -110,6 +110,36 @@ class IdentitySchemaTests(unittest.TestCase):
             )
 
 
+    def test_digest_accepts_only_sha256_and_64_lowercase_hex(self) -> None:
+        good = argv_digest(("a",))
+        raw = identity().to_mapping()
+        raw["argv_digest"] = good
+        self.assertEqual(validate_identity_mapping(raw).argv_digest, good)
+        body = good[7:]
+        malformed = (
+            "sha256:0x" + body[2:],
+            "sha256:-" + body[1:],
+            "sha256:+" + body[1:],
+            "sha256: " + body[1:],
+            "sha256:" + body[:-1] + " ",
+            "sha256:" + body[:-1] + "\n",
+            "sha256:" + body[:31] + "_" + body[32:],
+            "sha256:" + body[:-1] + "g",
+            "sha256:" + body.upper(),
+            "sha256:" + body[:-1],
+            "sha256:" + body + "0",
+            "SHA256:" + body,
+        )
+        for value in malformed:
+            with self.subTest(value=value):
+                raw = identity().to_mapping()
+                raw["argv_digest"] = value
+                with self.assertRaises(ProcessIdentityError):
+                    validate_identity_mapping(raw)
+                with self.assertRaises(ProcessIdentityError):
+                    AncestorIdentity(7, "older", "/bin/a", value)
+
+
 class SnapshotRevalidationTests(unittest.TestCase):
     def test_exact_match_absence_and_pid_reuse_use_one_snapshot(self) -> None:
         expected = identity()
