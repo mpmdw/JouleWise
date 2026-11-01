@@ -1,0 +1,7 @@
+tests.test_b5_chain | Ran 25 tests in 5.522s | FAILED (errors=21)
+tests.test_b5_chain_prune2 | Ran 44 tests in 21.198s | FAILED (failures=1, errors=10)
+tests.test_magistrate_watchdog | Ran 155 tests in 5.027s | FAILED (errors=3)
+tests.test_neg8_survivors | Ran 89 tests in 226.166s | FAILED (errors=4)
+tests.test_v5_block4_replay | Ran 14 tests in 21.655s | FAILED (errors=1, skipped=6)
+tests.test_v5_block4_x12b | Ran 11 tests in 23.715s | FAILED (errors=1)
+tests.test_v5_s1_desk_closeout | Ran 7 tests in 6.425s | FAILED (errors=2)

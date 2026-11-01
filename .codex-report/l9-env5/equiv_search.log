@@ -1,0 +1,7 @@
+# Run at 9641561fb's whole_window.py (before commit, same clamp body), cwd /tmp:
+# python3.13 equiv_search.py /home/user/JouleWise 300 1 ; ... 300 2
+{"seed": 1, "trials": 300, "distinguishing": {"M01_start": 1, "M02_end": 1, "M03_le": 0}}
+{"seed": 2, "trials": 300, "distinguishing": {"M01_start": 1, "M02_end": 1, "M03_le": 0}}
+# Example (seed 2, trial 8): lower_j midpoint 0.9744890726049293 vs start/end 0.9744890726049295 (1 ulp-scale)
+# find_small.py /home/user/JouleWise 3000 (40-point traces; also asserts midpoint == e1b3a0510 oracle on all 3000):
+{'M01_start': [1618, 1760, 2353], 'M02_end': [2352]} {'M01_start': 3, 'M02_end': 1}

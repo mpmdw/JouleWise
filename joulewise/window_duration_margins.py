@@ -799,6 +799,7 @@ def _authenticate_b_operative(
             mode="read_replay",
             evaluation_basis_sha256=evaluation_basis_sha256,
             consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            analysis_clamp=True,
         )
         reasons = whole_window_refusal_reasons(
             runs_root,

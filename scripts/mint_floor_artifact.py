@@ -554,6 +554,7 @@ def _authenticated_consumption_summaries(
         calibration_ledger_snapshot=calibration_ledger_snapshot,
         calibration_bracket_binding=calibration_bracket_binding,
         **({"archive_context": entry.archive_context} if entry is not None else {}),
+        analysis_clamp=True,
     )
     if entry is not None:
         from joulewise.b5_analysis.steps import require_primary_context
@@ -1257,6 +1258,7 @@ def _authenticate_component(
             ),
             calibration_ledger_snapshot=calibration_ledger_snapshot,
             **({"archive_context": entry.archive_context} if entry is not None else {}),
+            analysis_clamp=True,
         )
         if entry is not None:
             from joulewise.b5_analysis.steps import require_primary_context

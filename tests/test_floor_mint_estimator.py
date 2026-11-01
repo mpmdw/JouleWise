@@ -408,6 +408,7 @@ class RecomputationTests(unittest.TestCase):
             consumption_semantics_id=component.consumption_semantics_id,
             calibration_ledger_snapshot=ledger,
             calibration_bracket_binding=binding,
+            analysis_clamp=True,
         )
         self.assertEqual(refusal_reasons.call_args.args[1], expected_ids)
 

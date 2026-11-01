@@ -1,0 +1,455 @@
+.FFF.........F.......F.EEF.FEF......EE.FFFFFFFFFF..EFFEEFF
+======================================================================
+ERROR: test_genuinely_missing_operative_envelope_still_refuses (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_genuinely_missing_operative_envelope_still_refuses) (pointer='/phase_energy_j/prefill')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 821, in test_genuinely_missing_operative_envelope_still_refuses
+    session = self._session("missing" + pointer.replace("/", "_"), self.minted, just_under,
+                            lambda _path, **_kwargs: summary, analysis_clamp=True)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 637, in _session
+    return run_session(self, self.root / name, bundle=self.bundle, minted=minted,
+                       minted_bound=self.minted_bound, operative_bound=operative_bound,
+                       rederive=rederive, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 584, in run_session
+    session = module.AuthenticatedConsumptionSession(
+        root, {"member"}, **({} if analysis_clamp is None else {"analysis_clamp": analysis_clamp}))
+TypeError: AuthenticatedConsumptionSession.__init__() got an unexpected keyword argument 'analysis_clamp'
+
+======================================================================
+ERROR: test_genuinely_missing_operative_envelope_still_refuses (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_genuinely_missing_operative_envelope_still_refuses) (pointer='/gross_energy_j')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 821, in test_genuinely_missing_operative_envelope_still_refuses
+    session = self._session("missing" + pointer.replace("/", "_"), self.minted, just_under,
+                            lambda _path, **_kwargs: summary, analysis_clamp=True)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 637, in _session
+    return run_session(self, self.root / name, bundle=self.bundle, minted=minted,
+                       minted_bound=self.minted_bound, operative_bound=operative_bound,
+                       rederive=rederive, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 584, in run_session
+    session = module.AuthenticatedConsumptionSession(
+        root, {"member"}, **({} if analysis_clamp is None else {"analysis_clamp": analysis_clamp}))
+TypeError: AuthenticatedConsumptionSession.__init__() got an unexpected keyword argument 'analysis_clamp'
+
+======================================================================
+ERROR: test_prefill_just_over_twice_edge_bound_is_unchanged (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_prefill_just_over_twice_edge_bound_is_unchanged) (case='over-new')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 690, in test_prefill_just_over_twice_edge_bound_is_unchanged
+    session = self._session(name, self.minted, just_over, rederive, analysis_clamp=flag)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 637, in _session
+    return run_session(self, self.root / name, bundle=self.bundle, minted=minted,
+                       minted_bound=self.minted_bound, operative_bound=operative_bound,
+                       rederive=rederive, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 584, in run_session
+    session = module.AuthenticatedConsumptionSession(
+        root, {"member"}, **({} if analysis_clamp is None else {"analysis_clamp": analysis_clamp}))
+TypeError: AuthenticatedConsumptionSession.__init__() got an unexpected keyword argument 'analysis_clamp'
+
+======================================================================
+ERROR: test_dry_run_step_results_session_opts_in (tests.test_whole_window_analysis_clamp_flag.BlockFiveDryRunPathTests.test_dry_run_step_results_session_opts_in)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 287, in test_dry_run_step_results_session_opts_in
+    self.assertIs(record[0]["analysis_clamp"], True)
+                  ~~~~~~~~~^^^^^^^^^^^^^^^^^^
+KeyError: 'analysis_clamp'
+
+======================================================================
+ERROR: test_floor_extraction_with_kept_units_opts_in (tests.test_whole_window_analysis_clamp_flag.BlockFiveDryRunPathTests.test_floor_extraction_with_kept_units_opts_in)
+The extract_indexed_pack shape: kept units, block-5 semantics.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 259, in test_floor_extraction_with_kept_units_opts_in
+    self.assertIs(record[0]["analysis_clamp"], True)
+                  ~~~~~~~~~^^^^^^^^^^^^^^^^^^
+KeyError: 'analysis_clamp'
+
+======================================================================
+ERROR: test_default_is_off (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_default_is_off)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 108, in test_default_is_off
+    parameter = inspect.signature(whole_window.AuthenticatedConsumptionSession).parameters["analysis_clamp"]
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+KeyError: 'analysis_clamp'
+
+======================================================================
+ERROR: test_flag_off_refuses_permanent_widening_like_origin_main (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_flag_off_refuses_permanent_widening_like_origin_main) (case='explicit-false')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 127, in test_flag_off_refuses_permanent_widening_like_origin_main
+    session = self._run("under-" + name, self.just_under, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 87, in _run
+    return run_session(
+        self, self.root / name, bundle=self.bundle, minted=self.minted, minted_bound=self.minted_bound,
+        operative_bound=bound_s, rederive=reduce_module._rederive_summary_for_authenticated_fiducial_bound,
+        **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 584, in run_session
+    session = module.AuthenticatedConsumptionSession(
+        root, {"member"}, **({} if analysis_clamp is None else {"analysis_clamp": analysis_clamp}))
+TypeError: AuthenticatedConsumptionSession.__init__() got an unexpected keyword argument 'analysis_clamp'
+
+======================================================================
+ERROR: test_flag_off_refuses_permanent_widening_like_origin_main (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_flag_off_refuses_permanent_widening_like_origin_main)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 131, in test_flag_off_refuses_permanent_widening_like_origin_main
+    self.assertEqual(states["default"], states["origin-main"])
+                     ~~~~~~^^^^^^^^^^^
+KeyError: 'default'
+
+======================================================================
+FAIL: test_input_window_inverted_at_zero_shift_is_refused (tests.test_whole_window_inverted_corner_clamp.AnalysisClampFunctionTests.test_input_window_inverted_at_zero_shift_is_refused) (windows=[[(5.1, 5.0)]])
+L9-ENV-5 O-F5: outside the ruling, so None as at origin/main.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 476, in test_input_window_inverted_at_zero_shift_is_refused
+    self.assertIsNone(_clamped_corner_composed_anchor_shift_envelope(contributions, 0.0, 0.1, 0.0))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.1, 'point_j': 0.0, 'lower_j': 0.0, 'upper_j': 1.000000000000003, 'max_abs_delta_j': 1.000000000000003, 'wall_minus_monotonic_independent_edge_span_s': 0.0, 'independent_edge_shift_bound_j': 1.000000000000003} is not None
+
+======================================================================
+FAIL: test_input_window_inverted_at_zero_shift_is_refused (tests.test_whole_window_inverted_corner_clamp.AnalysisClampFunctionTests.test_input_window_inverted_at_zero_shift_is_refused) (windows=[[(0.5, 0.6), (0.81, 0.8)]])
+L9-ENV-5 O-F5: outside the ruling, so None as at origin/main.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 476, in test_input_window_inverted_at_zero_shift_is_refused
+    self.assertIsNone(_clamped_corner_composed_anchor_shift_envelope(contributions, 0.0, 0.1, 0.0))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.1, 'point_j': 1.0000000000000009, 'lower_j': 0.0, 'upper_j': 4.899999999999998, 'max_abs_delta_j': 3.899999999999997, 'wall_minus_monotonic_independent_edge_span_s': 0.0, 'independent_edge_shift_bound_j': 3.899999999999997} is not None
+
+======================================================================
+FAIL: test_input_window_inverted_at_zero_shift_is_refused (tests.test_whole_window_inverted_corner_clamp.AnalysisClampFunctionTests.test_input_window_inverted_at_zero_shift_is_refused) (windows=[[(0.5, 0.6)], [(2.0, 1.999999999)]])
+L9-ENV-5 O-F5: outside the ruling, so None as at origin/main.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 476, in test_input_window_inverted_at_zero_shift_is_refused
+    self.assertIsNone(_clamped_corner_composed_anchor_shift_envelope(contributions, 0.0, 0.1, 0.0))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'method': 'common_trace_shift_plus_independent_edge_corners_v3', 'anchor_bound_s': 0.1, 'point_j': 1.0000000000000009, 'lower_j': 0.0, 'upper_j': 4.999999989999999, 'max_abs_delta_j': 3.9999999899999983, 'wall_minus_monotonic_independent_edge_span_s': 0.0, 'independent_edge_shift_bound_j': 3.9999999899999983} is not None
+
+======================================================================
+FAIL: test_short_prefill_clamps_and_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.AxiV062ClampTests.test_short_prefill_clamps_and_bounds_sweep_equals_oracle) (bound=0.13633954524993896)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 1095, in test_short_prefill_clamps_and_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(expected))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[3111 chars]8354}, "/phase_energy_j/decode": {"method": "c[5325 chars]2}]}' != '{"st[3111 chars]8354}}, "window_evidence_precheck": {"gross_re[4537 chars]2}]}'
+Diff is 28225 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_bounds_sweep_equals_oracle (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_bounds_sweep_equals_oracle) (bound=0.19926095008850098)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 704, in test_bounds_sweep_equals_oracle
+    self.assertEqual(json.dumps(new), json.dumps(expected))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[3294 chars]l}, "energy_anchor_shift_envelopes": {"/phase_[7221 chars]ull}' != '{"st[3294 chars]l}, "window_evidence_precheck": {"gross_reques[6793 chars]ull}'
+Diff is 31653 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_no_reproduced_member_envelope_is_not_clamped (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_no_reproduced_member_envelope_is_not_clamped)
+L9-ENV-5 O-F3: with no recorded member envelope reproduced, no clamp.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 719, in test_no_reproduced_member_envelope_is_not_clamped
+    self.assertEqual(json.dumps(new), json.dumps(old))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '{"st[3294 chars]l}, "energy_anchor_shift_envelopes": {"/phase_[7221 chars]ull}' != '{"st[3294 chars]l}, "window_evidence_precheck": {"gross_reques[6793 chars]ull}'
+Diff is 31653 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_prefill_just_over_twice_edge_bound_is_unchanged (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_prefill_just_over_twice_edge_bound_is_unchanged) (case='over-old')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 690, in test_prefill_just_over_twice_edge_bound_is_unchanged
+    session = self._session(name, self.minted, just_over, rederive, analysis_clamp=flag)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 637, in _session
+    return run_session(self, self.root / name, bundle=self.bundle, minted=minted,
+                       minted_bound=self.minted_bound, operative_bound=operative_bound,
+                       rederive=rederive, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 586, in run_session
+    session._prepare(bundle_paths={"member": member},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     policy=SimpleNamespace(calibration_bracketing=object()))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/lnine-env5/wt1/joulewise/whole_window.py", line 1864, in _prepare
+    _rederive_operative_summary(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        path,
+        ^^^^^
+    ...<3 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1240, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 558, in unexpected
+    raise AssertionError("the session reached the wrong re-derivation")
+AssertionError: the session reached the wrong re-derivation
+
+======================================================================
+FAIL: test_short_prefill_under_dominating_bound (tests.test_whole_window_inverted_corner_clamp.PermanentWideningCaseTests.test_short_prefill_under_dominating_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 653, in test_short_prefill_under_dominating_bound
+    refused = self._session("old", self.minted, just_under,
+                            reduce_module._rederive_summary_for_authenticated_fiducial_bound)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 637, in _session
+    return run_session(self, self.root / name, bundle=self.bundle, minted=minted,
+                       minted_bound=self.minted_bound, operative_bound=operative_bound,
+                       rederive=rederive, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 586, in run_session
+    session._prepare(bundle_paths={"member": member},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     policy=SimpleNamespace(calibration_bracketing=object()))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/lnine-env5/wt1/joulewise/whole_window.py", line 1864, in _prepare
+    _rederive_operative_summary(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        path,
+        ^^^^^
+    ...<3 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1240, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 558, in unexpected
+    raise AssertionError("the session reached the wrong re-derivation")
+AssertionError: the session reached the wrong re-derivation
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='joulewise/floor_extraction.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : joulewise/floor_extraction.py:3171
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='joulewise/analysis_engine/inputs.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : joulewise/analysis_engine/inputs.py:3799
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='joulewise/b5_analysis/dry_run.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : joulewise/b5_analysis/dry_run.py:1078
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='joulewise/paper_reported_energy_issuer.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : joulewise/paper_reported_energy_issuer.py:146
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='joulewise/window_duration_margins.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : joulewise/window_duration_margins.py:796
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='joulewise/floor_mint_estimator.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : joulewise/floor_mint_estimator.py:480
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='joulewise/analysis_manifest_v3.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : joulewise/analysis_manifest_v3.py:3771
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='scripts/mint_floor_artifact.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : scripts/mint_floor_artifact.py:547
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='scripts/check_window_provenance.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : scripts/check_window_provenance.py:1048
+
+======================================================================
+FAIL: test_every_analysis_consumer_passes_true (tests.test_whole_window_analysis_clamp_flag.CallSiteTests.test_every_analysis_consumer_passes_true) (path='scripts/produce_b5_disclosures.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 190, in test_every_analysis_consumer_passes_true
+    self.assertIsNotNone(keyword, f"{relative}:{call.lineno}")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : scripts/produce_b5_disclosures.py:115
+
+======================================================================
+FAIL: test_flag_off_ready_session_is_origin_main_bytes (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_flag_off_ready_session_is_origin_main_bytes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 142, in test_flag_off_ready_session_is_origin_main_bytes
+    current = self._run("over-default", self.just_over)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 87, in _run
+    return run_session(
+        self, self.root / name, bundle=self.bundle, minted=self.minted, minted_bound=self.minted_bound,
+        operative_bound=bound_s, rederive=reduce_module._rederive_summary_for_authenticated_fiducial_bound,
+        **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 586, in run_session
+    session._prepare(bundle_paths={"member": member},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     policy=SimpleNamespace(calibration_bracketing=object()))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/lnine-env5/wt1/joulewise/whole_window.py", line 1864, in _prepare
+    _rederive_operative_summary(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        path,
+        ^^^^^
+    ...<3 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1240, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 558, in unexpected
+    raise AssertionError("the session reached the wrong re-derivation")
+AssertionError: the session reached the wrong re-derivation
+
+======================================================================
+FAIL: test_flag_off_refuses_permanent_widening_like_origin_main (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_flag_off_refuses_permanent_widening_like_origin_main) (case='default')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 127, in test_flag_off_refuses_permanent_widening_like_origin_main
+    session = self._run("under-" + name, self.just_under, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 87, in _run
+    return run_session(
+        self, self.root / name, bundle=self.bundle, minted=self.minted, minted_bound=self.minted_bound,
+        operative_bound=bound_s, rederive=reduce_module._rederive_summary_for_authenticated_fiducial_bound,
+        **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 586, in run_session
+    session._prepare(bundle_paths={"member": member},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     policy=SimpleNamespace(calibration_bracketing=object()))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/lnine-env5/wt1/joulewise/whole_window.py", line 1864, in _prepare
+    _rederive_operative_summary(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        path,
+        ^^^^^
+    ...<3 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1240, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 558, in unexpected
+    raise AssertionError("the session reached the wrong re-derivation")
+AssertionError: the session reached the wrong re-derivation
+
+======================================================================
+FAIL: test_flag_off_session_never_calls_the_clamp (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_flag_off_session_never_calls_the_clamp)
+Unpatched re-derivation entry: the default session calls reduce's
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 157, in test_flag_off_session_never_calls_the_clamp
+    session = self._run("direct-default", self.just_under)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 87, in _run
+    return run_session(
+        self, self.root / name, bundle=self.bundle, minted=self.minted, minted_bound=self.minted_bound,
+        operative_bound=bound_s, rederive=reduce_module._rederive_summary_for_authenticated_fiducial_bound,
+        **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 586, in run_session
+    session._prepare(bundle_paths={"member": member},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     policy=SimpleNamespace(calibration_bracketing=object()))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/lnine-env5/wt1/joulewise/whole_window.py", line 1864, in _prepare
+    _rederive_operative_summary(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        path,
+        ^^^^^
+    ...<3 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1240, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_inverted_corner_clamp.py", line 558, in unexpected
+    raise AssertionError("the session reached the wrong re-derivation")
+AssertionError: the session reached the wrong re-derivation
+
+======================================================================
+FAIL: test_removed_member_audit_sessions_inherit_the_flag (tests.test_whole_window_analysis_clamp_flag.FlagOffIsOriginMainTests.test_removed_member_audit_sessions_inherit_the_flag)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/lnine-env5/wt1/tests/test_whole_window_analysis_clamp_flag.py", line 167, in test_removed_member_audit_sessions_inherit_the_flag
+    self.assertIsNotNone(keyword)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 43 tests in 136.064s
+
+FAILED (failures=22, errors=8)
