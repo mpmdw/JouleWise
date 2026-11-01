@@ -929,6 +929,31 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - s5-p1 request-end line: 10 members lose it, which matches the registration's stated ten.
   - Every other pack: equals the registered line.
 
+156. **Laptop lead report, 2026-10-30 08:00Z to 2026-10-31 (joulewise-28, block-5 lead). Merged: #607, #609, #611, #612. Tag `bytes/collection-n4` cut. The analysis clamp is in review as draft PR #615.**
+- **MAC POINTER (measurement Mac, read this):** from a checkout at or after `3b0ad9b5a` (#611, CUSTODY-T1), the full test suite may run unsandboxed. Before that commit, `tests/test_axi_controller_events.py` and `tests/test_axi_mock_spec.py` published into the real `~/night-custody/active-campaigns` when `JOULEWISE_CUSTODY_PARENT` was unset. Now every test isolates it, and a static guard enforces this. Do not run the suite unsandboxed from an older checkout.
+- **Merged** (merge commits): #607 `4c26b2e2c` (CI docs-only contexts and timing weights), #609 `12ce1241d` (step-4 exit classifier and blind reason table, L9-STEP4-2 to -5; cold Fable L9-STEP4-FINAL ACCEPT `897d4d2b5`), #612 `90724d0ab` (FBC-B6 freeze-by-commit addenda), #611 `3b0ad9b5a` (CUSTODY-T1).
+- **Tag:** `bytes/collection-n4` → `2649fad54` (annotated `08963bbcf`), as item 150 step (1e) allows. The block-6 and BYTES collection tags are now all cut. `b5/analysis` is cut once #615 merges.
+- **Step-4 follow-ups**, deferred to the post-release lane L9-STEP4-FOLLOWUP (stop-side or cosmetic): pin `paired_block_incomplete == 2`; harden exit 0 so that refused cells give refused; remove the unused import in `disclosures.py`. Lead confirmation of L9-STEP4-FINAL F1: a tooling-origin cause of a plan-named member code routes to R3, which is stop-side. It stays on Ed's optional ruling list.
+- **Analysis clamp (items 140 and 144), PR #615 (draft), lane `lane/2026-10-30-l9-env-analysis-clamp-l6`:**
+  - The lane covers L9-ENV-3 to L9-ENV-6. The clamp is opt-in: `AuthenticatedConsumptionSession(analysis_clamp=True)` is passed literally at all 12 analysis call sites. `run_campaign` never opts in, so collection is unchanged. `reduce.py` is untouched.
+  - L9-ENV-6 (lead) made three changes:
+    - It fixed the merge blocker: on a tree merged with main, the step-4 reason table's R1 failed because the signature-gated opt-in added a string constant.
+    - It made the clamp fail closed when reduce's own mint accepts a pointer that reduce omitted (Fable F1).
+    - It pinned the flag-only selection (Opus F2).
+  - Whole suite at `555661945` (main `fb14d26a9` contained), one process per module: 466/466 modules exit 0.
+  - The earlier cold Fable pass `a3a85a6e9` is not credited: it left a placeholder for its test tails and claimed a pass that the run contradicted. Gate 4 is re-run cold on the L9-ENV-6 head, with an Opus delta review beside it.
+- **Dry-run evidence so far:**
+  - The full-size synthetic blind dry run (step-4 and clamp code) ran steps 0 to 11 all `ok`, `completed_without_tooling_refusal: true`, in 25,658 s.
+  - A real alpha/beta rehearsal on pre-merge lane code `050aaad13` reached step 4 `ok` for both alpha and beta. It was stopped there and is not resumed, because its code is stale.
+  - Item-133 watch: `cadence_ratio_unrecorded` (short prefill, tokenize and generation-setup windows) did not stop step 4 in that rehearsal. Official attempt C re-checks this on merged code. If it fires on a p2048 cell, it goes to Ed as an R3 question.
+- **Ed, 2026-10-31:** paused work on the laptop, said the rest of the work (the Mac, cloud) continues, then resumed the laptop.
+- **For Ed (no action needed for the dry run):**
+  - PR #605 (repo-trim de-dupe, CI green). Its ready/edit step was refused by the permission classifier and is left for Ed; the filled body is in the trim report.
+  - The trim report's NEEDS-ED list.
+  - The optional ruling on the step-4 tooling-origin sentence (above).
+  - The bulk prune waits for FREEZE-BY-COMMIT phase 2, after the block-5 release.
+- **Next (laptop lead):** #615 reviews, CI and merge; cut `b5/analysis`; then official blind dry run attempt C, in a fresh worktree and custody root. The D-138 reissue (L9-ENV-2 `reduce.py` fix plus A178) and deleting the `whole_window.py` mirror come at the next block boundary.
+
 **Next activation (written 2026-10-31 by activation 39cdeb12; item 155; supersedes item 154's pointer for the thermal-lines step, the rest holds):**
 (1) Nothing is armed and no collection is scheduled. With no mail, no directive change and no stand-down, exit quietly.
 (2) Thermal lines are DONE for the BYTES pass-2 analysis (stage 1 planned 12 Nov). The analysis reads the views in item 155. If it uses a stage-1 export CSV, re-run the line with `--export` into a new directory first (record 39cdeb12).
