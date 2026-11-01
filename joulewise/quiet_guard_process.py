@@ -79,10 +79,9 @@ def _digest(value: Any) -> str:
     value = _plain_nonempty(value, "argv_digest")
     if not value.startswith(ARGV_DIGEST_PREFIX) or len(value) != 71:
         raise ProcessIdentityError("argv_digest must be sha256:<64 lowercase hex>")
-    try:
-        int(value[7:], 16)
-    except ValueError as exc:
-        raise ProcessIdentityError("argv_digest contains non-hex characters") from exc
+    # int(..., 16) also accepts "0x", signs, "_" separators and whitespace.
+    if any(ch not in "0123456789abcdefABCDEF" for ch in value[7:]):
+        raise ProcessIdentityError("argv_digest contains non-hex characters")
     if value[7:] != value[7:].lower():
         raise ProcessIdentityError("argv_digest must use lowercase hex")
     return value
