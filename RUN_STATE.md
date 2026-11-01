@@ -954,6 +954,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - The bulk prune waits for FREEZE-BY-COMMIT phase 2, after the block-5 release.
 - **Next (laptop lead):** #615 reviews, CI and merge; cut `b5/analysis`; then official blind dry run attempt C, in a fresh worktree and custody root. The D-138 reissue (L9-ENV-2 `reduce.py` fix plus A178) and deleting the `whole_window.py` mirror come at the next block boundary.
 
+157. **Interactive session 26be5929 (Opus 5.5, Ed present, measurement MacBook Pro, 2026-11-01 from 12:28 PST).** Record: `docs/process_traces/2026-11-01-interactive-26be5929/RECORD.md`. Ed: "the analysis machine is working on analysis, see what you can do"; the Air is the analysis machine, the Pro collects.
+- **ALIGN pilot v0 ARMED** (Ed's order: agent-monitoring pilots first after BYTES). Checkout `/Users/edr/night-custody/measurement/JouleWise-measurement-20261101-align-pilot` at `cbfb9b0a5` (`desk/2026-11-01-align-pilot-v0` = lane `aa1f8d579` merged onto BYTES head `1aca17e27`, plus Mac-derived identity pins). Venv stack identical to BYTES (`runtime_versions` sha256 `9033a699...`); SHADE packages installed without moving any pin; SHADE cache verified.
+- Desk rehearsal: one real episode (real MLX, SHADE, powermetrics) succeeded: 7 turns, 6 tool calls, energy present and tiled on every channel.
+- Session root `/Users/edr/night-align/pilot-v0-20261101T211851Z`, plan sha256 `01107faf...ef0f`, t0 13:26:00 PST (1793568360), latest end 02:53 PST 11-02. Notice Gmail `1a198fafa8fc12ba`.
+
+**Next activation (written 2026-11-01 by interactive 26be5929; item 157; supersedes item 155's step (1), the rest holds):**
+(1) **ALIGN pilot v0 ARMED.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-align/pilot-v0-20261101T211851Z/custody/night_plan.json` and `.../custody/night/result.json` does not exist, exit at once, quietly.
+  - After the terminal record: `M=/Users/edr/night-custody/measurement/JouleWise-measurement-20261101-align-pilot; $M/.venv/bin/python -B $M/scripts/align_pilot_session.py desk --session-root /Users/edr/night-align/pilot-v0-20261101T211851Z`. Read `PILOT.json` `checks` (I1-I4) and the lead-read numbers (protocol `docs/align/pilot_protocol_v0.md` on the desk branch).
+  - Uninstall: `$M/scripts/install_night_agent.sh --plan /Users/edr/night-align/pilot-v0-20261101T211851Z/custody/night_plan.json --uninstall`.
+  - Email Ed the checks (reply on Gmail thread `1a198fafa8fc12ba`). A t0 refusal on the agent census (Ed's interactive session not killed in time) is not a fault: uninstall, then re-prepare in a new empty root and re-arm with a fresh notice.
+  - Follow-ups: the kit generator should keep Mac-derived identity pins (its equality test fails on the armed checkout, expected); re-run `tests/align` on the desk branch and capture its summary; size the next pilot from the measured episode times.
+
 **Next activation (written 2026-10-31 by activation 39cdeb12; item 155; supersedes item 154's pointer for the thermal-lines step, the rest holds):**
 (1) Nothing is armed and no collection is scheduled. With no mail, no directive change and no stand-down, exit quietly.
 (2) Thermal lines are DONE for the BYTES pass-2 analysis (stage 1 planned 12 Nov). The analysis reads the views in item 155. If it uses a stage-1 export CSV, re-run the line with `--export` into a new directory first (record 39cdeb12).
