@@ -533,7 +533,7 @@ def _phase_durations(summary: dict) -> dict[str, float]:
 
 def run_session(test: unittest.TestCase, root: Path, *, bundle: Path, minted: dict, minted_bound: float,
                 operative_bound: float, rederive, analysis_clamp: bool | None = None,
-                module=whole_window):
+                module=whole_window, session_kwargs: dict | None = None):
     """Prepare a one-member max-bracket session whose re-derivation runs on ``bundle``.
 
     ``analysis_clamp=None`` constructs the session without the keyword (the
@@ -584,7 +584,8 @@ def run_session(test: unittest.TestCase, root: Path, *, bundle: Path, minted: di
         patch.object(module, reached, side_effect=on_real_bundle) as call,
     ):
         session = module.AuthenticatedConsumptionSession(
-            root, {"member"}, **({} if analysis_clamp is None else {"analysis_clamp": analysis_clamp}))
+            root, {"member"}, **({} if analysis_clamp is None else {"analysis_clamp": analysis_clamp}),
+            **(session_kwargs or {}))
         session._prepare(bundle_paths={"member": member},
                          policy=SimpleNamespace(calibration_bracketing=object()))
     test.assertEqual(call.call_args.kwargs["authenticated_fiducial_bound_s"], operative_bound)
@@ -730,7 +731,9 @@ class PermanentWideningCaseTests(unittest.TestCase):
         self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, empty, **kwargs), empty)
 
     def test_mirror_disagreeing_with_reduce_on_an_omitted_pointer_fails_closed(self) -> None:
-        """L9-ENV-6 (final-pass F1): reduce omits a pointer only when its mint refuses.
+        """L9-ENV-6: reduce omits a pointer only when its mint refuses.
+
+        L9-ENV-FINAL-FABLE F2 (``0f5c3f546``; F1 in the interim ``a3a85a6e9``).
 
         The mirror's prefill row is stretched to 0.14 s (just over 2*edge)
         while every recorded row is untouched, so the O-F3 proof still holds.
@@ -781,6 +784,52 @@ class PermanentWideningCaseTests(unittest.TestCase):
                           side_effect=skewed(env5._group_envelope_contributions)):
             before = env5._clamp_inverted_operative_envelopes(self.bundle, old, **kwargs)
         self.assertEqual(before["energy_anchor_shift_envelopes"][PREFILL], minted)
+
+    def test_mirror_disagreement_with_a_zero_lower_bound_also_fails_closed(self) -> None:
+        """L9-ENV-7 (L9-ENV-6-OPUS-REV F2): any defined mint trips the guard.
+
+        The stretched prefill row of the test above, with reduce's mint
+        returning its envelope at ``lower_j == 0.0`` for that row only: the
+        guard tests ``is not None``, so the summary is still returned unchanged.
+        """
+
+        just_under, _over = self._bounds()
+        old, _new, _oracle = self._rederive(just_under)
+        self.assertNotIn(PREFILL, old["energy_anchor_shift_envelopes"])
+        kwargs = dict(authenticated_fiducial_bound_s=just_under,
+                      instrument_calibration_physics_cache=self._cache)
+        stretched = []
+
+        def rows(reader, version, anchor_curve):
+            out = []
+            for pointer, contributions in real_rows(reader, version, anchor_curve):
+                if pointer == PREFILL:
+                    contributions = [(curve, [Window(window.start_s, window.start_s + 0.14)
+                                              for window in windows])
+                                     for curve, windows in contributions]
+                    stretched.append(contributions)
+                out.append((pointer, contributions))
+            return out
+
+        zero_lower = []
+
+        def mint(contributions, *bounds):
+            envelope = real_mint(contributions, *bounds)
+            if envelope is not None and any(contributions is row for row in stretched):
+                envelope = dict(envelope, lower_j=0.0)
+                zero_lower.append(envelope)
+            return envelope
+
+        real_rows = whole_window._group_envelope_contributions
+        real_mint = whole_window._corner_composed_anchor_shift_envelope
+        with (
+            patch.object(whole_window, "_group_envelope_contributions", side_effect=rows),
+            patch.object(whole_window, "_corner_composed_anchor_shift_envelope", side_effect=mint),
+        ):
+            result = _clamp_inverted_operative_envelopes(self.bundle, old, **kwargs)
+        self.assertTrue(zero_lower)
+        self.assertEqual({envelope["lower_j"] for envelope in zero_lower}, {0.0})
+        self.assertIs(result, old)
 
     def _with_long_prefill(self, module, bound_s: float):
         """Mirror whose prefill row is the reviewer's [short, long] phase.

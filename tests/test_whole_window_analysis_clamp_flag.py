@@ -184,6 +184,51 @@ class FlagOffIsOriginMainTests(unittest.TestCase):
         names = [node.id for node in ast.walk(tree)
                  if isinstance(node, ast.Name) and node.id == "_rederive_operative_summary"]
         self.assertEqual(len(names), 1)
+        # L9-ENV-7 (L9-ENV-6-OPUS-REV F1): nothing rebinds the selection after
+        # the IfExp, and the flag is the constructor argument alone.
+        prepare = next(node for node in ast.walk(tree)
+                       if isinstance(node, ast.FunctionDef) and node.name == "_prepare")
+        rebinds = [node for node in ast.walk(prepare)
+                   if isinstance(node, ast.Name) and node.id == "rederive" and isinstance(node.ctx, ast.Store)]
+        self.assertEqual(len(rebinds), 1)
+        self.assertNotIn("rederive", [arg.arg for arg in ast.walk(prepare) if isinstance(arg, ast.arg)])
+        flag_stores = [node for node in ast.walk(tree)
+                       if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+                       and any(ast.unparse(target) == "self.analysis_clamp"
+                               for target in (node.targets if isinstance(node, ast.Assign) else [node.target]))]
+        self.assertEqual(len(flag_stores), 1)
+        self.assertIsInstance(flag_stores[0], ast.Assign)
+        self.assertEqual(ast.unparse(flag_stores[0].value), "analysis_clamp is True")
+
+    def test_flag_holds_in_every_mode_and_archive_context(self) -> None:
+        """L9-ENV-7 (L9-ENV-6-OPUS-REV F1): the dry run builds read_replay
+        sessions with an archive context; the flag survives construction."""
+
+        context = whole_window.ArchiveContext(neg8_harvest_archive=self.root / "unused-archive")
+        for mode in ("issuing", "read_replay"):
+            for archive_context in (None, context):
+                for flag, expected in ((True, True), (False, False)):
+                    with self.subTest(mode=mode, archive=archive_context is not None, flag=flag):
+                        session = whole_window.AuthenticatedConsumptionSession(
+                            self.root / "unused", set(), mode=mode, archive_context=archive_context,
+                            analysis_clamp=flag, calibration_ledger_snapshot=object())
+                        self.assertIs(session.analysis_clamp, expected)
+
+    def test_clamp_runs_in_read_replay_mode(self) -> None:
+        """L9-ENV-7 (L9-ENV-6-OPUS-REV F1): the dry run's session mode reaches
+        the clamp at run time, once for the one re-derived bundle."""
+
+        with mock.patch.object(whole_window, "_clamp_inverted_operative_envelopes",
+                               wraps=whole_window._clamp_inverted_operative_envelopes) as clamp:
+            session = run_session(
+                self, self.root / "under-read-replay", bundle=self.bundle, minted=self.minted,
+                minted_bound=self.minted_bound, operative_bound=self.just_under,
+                rederive=whole_window._rederive_operative_summary, analysis_clamp=True,
+                session_kwargs={"mode": "read_replay"})
+        self.assertEqual(session.mode, "read_replay")
+        self.assertEqual(clamp.call_count, 1)
+        self.assertTrue(session.ready, session.refusal_reasons)
+        self.assertEqual(session.provenance_for("member")["operative_envelopes"][PREFILL]["lower_j"], 0.0)
 
 
 class CallSiteTests(unittest.TestCase):
