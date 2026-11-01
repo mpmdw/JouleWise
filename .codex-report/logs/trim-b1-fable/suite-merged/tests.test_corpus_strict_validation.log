@@ -1,0 +1,6 @@
+..ACCEPTANCE GATE SKIP: six frozen legacy corpus bundles require the retained runs/ corpus
+s
+----------------------------------------------------------------------
+Ran 3 tests in 0.324s
+
+OK (skipped=1)

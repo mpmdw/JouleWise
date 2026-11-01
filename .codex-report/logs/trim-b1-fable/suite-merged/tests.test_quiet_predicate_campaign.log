@@ -1,0 +1,2148 @@
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpfy6is335/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmprr7jadle/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpya4252s_/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpbltfw5gq/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpl0p1hxcg/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+..evidence_network_time off record=/private/tmp/jwrev-tmp/tmpfm110y6x/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+...........................s.........evidence_network_time off record=/private/tmp/jwrev-tmp/tmpaygicbe1/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+...evidence_network_time off record=/private/tmp/jwrev-tmp/tmp055g666a/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpcq7jo4nr/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+custody_failure: session.json unreadable: missing
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpyxaj946m/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+..evidence_network_time off record=/private/tmp/jwrev-tmp/tmpf_luin3j/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmprb0ra5r7/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpv89jjsjm/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+....evidence_network_time off record=/private/tmp/jwrev-tmp/tmpubcaaake/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.{
+  "admitting_direction_slots": [],
+  "bar_s": 0.5,
+  "bounded_interior_floor_met": true,
+  "bounded_interior_slots": [
+    2,
+    5,
+    6,
+    8,
+    9,
+    11,
+    12
+  ],
+  "escalate_chain_pass_session_fail": true,
+  "fidelity": {
+    "admitting": [],
+    "archived_bounded": [
+      2,
+      5,
+      6,
+      8,
+      9,
+      11,
+      12
+    ],
+    "matched": 12,
+    "refusing": [],
+    "slots": 12,
+    "table": [
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 1,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 2,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 3,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 4,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 5,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 6,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 7,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 8,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 9,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 10,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 11,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 12,
+        "replay_class": "bounded"
+      }
+    ],
+    "tally": "12/12 match; admitting-direction 0; refusing-direction 0"
+  },
+  "fidelity_applied": true,
+  "max_chain_start_drift_s": 0.4,
+  "max_session_start_drift_s": 2.4,
+  "refusing_direction_slots": [],
+  "ruled_admissibility": "Admissibility (cold ruling 21, 2026-09-22). This artifact meets ruling 10 \u00a7Q7 / P7.1 when ALL hold: (1) 12 of 12 slots recorded at the merged head; (2) every slot `collector_exit == 0`, `cleanup_proven == True`, `attestation_state \u2208 {authenticated, slew_attested}`; (3) every chain-level `start_drift_s` \u2264 0.5 s, and `max \u2264 0.5 s` is stated; (4) the fidelity table against the archived v3.1 class {02,05,06,08,09,11,12} is printed with its tally; no slot resolves (`bounded`) where the archive did not \u2014 one such slot VOIDS the run; slots refusing where the archive resolved are admissible; (5) at least one slot is `bounded` with `interior_complete_support == True`; (6) max `tail_s` + 2.3 s (F8 worst skipped tail) < the 20 s gap, stated with the figures. Session-level `start_drift_s` is reported per slot and assessed only against the night's 2 s rule (A269 A1); the driver's 0.5 s session bar and its `bounded`-on-every-slot requirement are lead conventions, not ruled bars.",
+  "session_bar_exceeded": true,
+  "session_bar_s": 2.0,
+  "session_slots_over_bar": [
+    1,
+    3
+  ],
+  "slot_defects": [],
+  "slots_expected": 12,
+  "slots_missing_chain_drift": [],
+  "slots_over_bar": [],
+  "slots_recorded": 12,
+  "smoke_exempt_fields": [],
+  "statement": "the chain-level bar is met (0.400 s <= 0.5 s) but the night's session-level rule is not (max 2.400 s > 2.0 s on slots [1, 3]): a split verdict is ESCALATED to the magistrate, never passed",
+  "status": "ESCALATE",
+  "tail_budget": {
+    "budget_s": 3.3,
+    "fits": true,
+    "gap_s": 20,
+    "max_tail_s": 1.0,
+    "statement": "max tail_s 1.000 s + 2.3 s worst skipped tail = 3.300 s < the 20 s inter-slot gap",
+    "worst_skipped_tail_s": 2.3
+  }
+}
+raw=/tmp/tmpx3rwjs1y/raw.json
+artifact=/tmp/tmpx3rwjs1y/a.md
+{
+  "admitting_direction_slots": [],
+  "bar_s": 0.5,
+  "bounded_interior_floor_met": true,
+  "bounded_interior_slots": [
+    2,
+    5,
+    6,
+    8,
+    9,
+    11,
+    12
+  ],
+  "escalate_chain_pass_session_fail": false,
+  "fidelity": {
+    "admitting": [],
+    "archived_bounded": [
+      2,
+      5,
+      6,
+      8,
+      9,
+      11,
+      12
+    ],
+    "matched": 12,
+    "refusing": [],
+    "slots": 12,
+    "table": [
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 1,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 2,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 3,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 4,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 5,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 6,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 7,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 8,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 9,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 10,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 11,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 12,
+        "replay_class": "bounded"
+      }
+    ],
+    "tally": "12/12 match; admitting-direction 0; refusing-direction 0"
+  },
+  "fidelity_applied": true,
+  "max_chain_start_drift_s": 0.4,
+  "max_session_start_drift_s": 0.3,
+  "refusing_direction_slots": [],
+  "ruled_admissibility": "Admissibility (cold ruling 21, 2026-09-22). This artifact meets ruling 10 \u00a7Q7 / P7.1 when ALL hold: (1) 12 of 12 slots recorded at the merged head; (2) every slot `collector_exit == 0`, `cleanup_proven == True`, `attestation_state \u2208 {authenticated, slew_attested}`; (3) every chain-level `start_drift_s` \u2264 0.5 s, and `max \u2264 0.5 s` is stated; (4) the fidelity table against the archived v3.1 class {02,05,06,08,09,11,12} is printed with its tally; no slot resolves (`bounded`) where the archive did not \u2014 one such slot VOIDS the run; slots refusing where the archive resolved are admissible; (5) at least one slot is `bounded` with `interior_complete_support == True`; (6) max `tail_s` + 2.3 s (F8 worst skipped tail) < the 20 s gap, stated with the figures. Session-level `start_drift_s` is reported per slot and assessed only against the night's 2 s rule (A269 A1); the driver's 0.5 s session bar and its `bounded`-on-every-slot requirement are lead conventions, not ruled bars.",
+  "session_bar_exceeded": false,
+  "session_bar_s": 2.0,
+  "session_slots_over_bar": [],
+  "slot_defects": [],
+  "slots_expected": 12,
+  "slots_missing_chain_drift": [],
+  "slots_over_bar": [],
+  "slots_recorded": 12,
+  "smoke_exempt_fields": [],
+  "statement": "max(chain start_drift_s) = 0.400 s <= 0.5 s over 12/12 slots; anchor-class fidelity 12/12 match; admitting-direction 0; refusing-direction 0; bounded with complete interior support on slots [2, 5, 6, 8, 9, 11, 12]; max tail_s 1.000 s + 2.3 s worst skipped tail = 3.300 s < the 20 s inter-slot gap; max(session start_drift_s) = 0.300 s <= 2.0 s, the night's rule",
+  "status": "PASS",
+  "tail_budget": {
+    "budget_s": 3.3,
+    "fits": true,
+    "gap_s": 20,
+    "max_tail_s": 1.0,
+    "statement": "max tail_s 1.000 s + 2.3 s worst skipped tail = 3.300 s < the 20 s inter-slot gap",
+    "worst_skipped_tail_s": 2.3
+  }
+}..
+raw=/tmp/tmpx3rwjs1y/raw.json
+artifact=/tmp/tmpx3rwjs1y/a.md
+{
+  "admitting_direction_slots": [],
+  "bar_s": 0.5,
+  "bounded_interior_floor_met": true,
+  "bounded_interior_slots": [
+    2,
+    5,
+    6,
+    8,
+    9,
+    11,
+    12
+  ],
+  "escalate_chain_pass_session_fail": false,
+  "fidelity": {
+    "admitting": [],
+    "archived_bounded": [
+      2,
+      5,
+      6,
+      8,
+      9,
+      11,
+      12
+    ],
+    "matched": 12,
+    "refusing": [],
+    "slots": 12,
+    "table": [
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 1,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 2,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 3,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 4,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 5,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 6,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 7,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 8,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 9,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": "affine_clock_fit_empty",
+        "anchor_status": "unknown",
+        "archived_class": "unresolved",
+        "direction": "match",
+        "index": 10,
+        "replay_class": "unresolved"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 11,
+        "replay_class": "bounded"
+      },
+      {
+        "anchor_detail": null,
+        "anchor_status": "bounded",
+        "archived_class": "bounded",
+        "direction": "match",
+        "index": 12,
+        "replay_class": "bounded"
+      }
+    ],
+    "tally": "12/12 match; admitting-direction 0; refusing-direction 0"
+  },
+  "fidelity_applied": true,
+  "max_chain_start_drift_s": 0.9,
+  "max_session_start_drift_s": 0.3,
+  "refusing_direction_slots": [],
+  "ruled_admissibility": "Admissibility (cold ruling 21, 2026-09-22). This artifact meets ruling 10 \u00a7Q7 / P7.1 when ALL hold: (1) 12 of 12 slots recorded at the merged head; (2) every slot `collector_exit == 0`, `cleanup_proven == True`, `attestation_state \u2208 {authenticated, slew_attested}`; (3) every chain-level `start_drift_s` \u2264 0.5 s, and `max \u2264 0.5 s` is stated; (4) the fidelity table against the archived v3.1 class {02,05,06,08,09,11,12} is printed with its tally; no slot resolves (`bounded`) where the archive did not \u2014 one such slot VOIDS the run; slots refusing where the archive resolved are admissible; (5) at least one slot is `bounded` with `interior_complete_support == True`; (6) max `tail_s` + 2.3 s (F8 worst skipped tail) < the 20 s gap, stated with the figures. Session-level `start_drift_s` is reported per slot and assessed only against the night's 2 s rule (A269 A1); the driver's 0.5 s session bar and its `bounded`-on-every-slot requirement are lead conventions, not ruled bars.",
+  "session_bar_exceeded": false,
+  "session_bar_s": 2.0,
+  "session_slots_over_bar": [],
+  "slot_defects": [],
+  "slots_expected": 12,
+  "slots_missing_chain_drift": [],
+  "slots_over_bar": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "slots_recorded": 12,
+  "smoke_exempt_fields": [],
+  "statement": "max <= 0.5 s NOT shown: over=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] missing=[] recorded=12/12",
+  "status": "FAIL",
+  "tail_budget": {
+    "budget_s": 3.3,
+    "fits": true,
+    "gap_s": 20,
+    "max_tail_s": 1.0,
+    "statement": "max tail_s 1.000 s + 2.3 s worst skipped tail = 3.300 s < the 20 s inter-slot gap",
+    "worst_skipped_tail_s": 2.3
+  }
+}
+raw=/tmp/tmpx3rwjs1y/raw.json
+artifact=/tmp/tmpx3rwjs1y/a.md
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmp8b2fugur/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+custody_failure: round journal missing
+..evidence_network_time off record=/private/tmp/jwrev-tmp/tmpb8e_43mw/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+......................VERIFY_ONLY_OK manifest=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmptn0_rrmv/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpq4ut1b59/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpc04oxm69/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpfv1thybw/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpjqddft1e/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpn_2xqcm6/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+..evidence_network_time off record=/private/tmp/jwrev-tmp/tmpibhpufud/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpxun0bdfu/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpbcptiiic/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpgh0oz1mu/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpju3z4t_0/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpwg6ad1fm/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpt325k06k/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+evidence_end outcome=refused cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpgagnxjrv/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp1zwjx_oa/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp86d6hsli/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpn1n5f49j/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpt14vuurj/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpigtpfxq3/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpqtr9zb2u/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpbjed_71b/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp4du3jzzb/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmphn8tq_ep/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpfkzux1ry/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+....evidence_network_time off record=/private/tmp/jwrev-tmp/tmp785izswv/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+......ss.....s.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp1qmib37x/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpdq3g1ccf/network_time_off.json
+evidence_settle seconds=600
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp9jwz9i6q/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpcot19v8q/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpnkwycvo5/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmprbjt71vc/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmplh_0_x3k/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpimmqtf1x/missing-off.json
+evidence_settle seconds=600
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpjuyppm3w/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp2eps6eh_/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpbcbfbak0/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpcckc1782/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmph0aem9uy/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmp6a_8mlsg/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp5rhcidzx/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+......evidence_network_time off record=/private/tmp/jwrev-tmp/tmp1pas0cbv/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp97ynh267/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp8m0kwxxr/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpditzp5s0/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmp60wsc4ip/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpfk3xmezh/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpyvs5pnk2/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmppnxksmv_/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp1i7g2udr/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmptskemd24/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmps25jnp1h/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpaw5lt29c/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpr6d2n52e/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+...evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpi7s42o5g/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpdv74pyez/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+..evidence_network_time off record=/private/tmp/jwrev-tmp/tmpy8dpqcas/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpot4mso2p/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+........evidence_network_time off record=/private/tmp/jwrev-tmp/tmpa9l29qat/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp9ayg8fc4/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp3rgb5s2s/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpxnqov4a7/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmpxa3xnlgk/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpzhnkh_ep/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.....evidence_network_time off record=/private/tmp/jwrev-tmp/tmprsybud4d/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmpa1nsz4db/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=1 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp96imk4ha/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmp3lsutsyx/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=False
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=partial cleanup_proven=True
+evidence_network_time off record=/private/tmp/jwrev-tmp/tmp6mrlxkqi/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=False
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=False
+evidence_end outcome=refused cleanup_proven=True
+.evidence_network_time off record=/private/tmp/jwrev-tmp/tmp8jq4srj0/network_time_off.json
+evidence_settle seconds=600
+envelope_start index=1 collector_pgid=8000001 recorder_pgid=8000000
+envelope_end index=1 rc=0 cleanup_proven=True
+envelope_start index=2 collector_pgid=8000002 recorder_pgid=8000000
+envelope_end index=2 rc=0 cleanup_proven=True
+envelope_start index=3 collector_pgid=8000003 recorder_pgid=8000000
+envelope_end index=3 rc=0 cleanup_proven=True
+envelope_start index=4 collector_pgid=8000004 recorder_pgid=8000000
+envelope_end index=4 rc=0 cleanup_proven=True
+envelope_start index=5 collector_pgid=8000005 recorder_pgid=8000000
+envelope_end index=5 rc=0 cleanup_proven=True
+envelope_start index=6 collector_pgid=8000006 recorder_pgid=8000000
+envelope_end index=6 rc=0 cleanup_proven=True
+envelope_start index=7 collector_pgid=8000007 recorder_pgid=8000000
+envelope_end index=7 rc=0 cleanup_proven=True
+envelope_start index=8 collector_pgid=8000008 recorder_pgid=8000000
+envelope_end index=8 rc=0 cleanup_proven=True
+envelope_start index=9 collector_pgid=8000009 recorder_pgid=8000000
+envelope_end index=9 rc=0 cleanup_proven=True
+envelope_start index=10 collector_pgid=8000010 recorder_pgid=8000000
+envelope_end index=10 rc=0 cleanup_proven=True
+envelope_start index=11 collector_pgid=8000011 recorder_pgid=8000000
+envelope_end index=11 rc=0 cleanup_proven=True
+envelope_start index=12 collector_pgid=8000012 recorder_pgid=8000000
+envelope_end index=12 rc=0 cleanup_proven=True
+evidence_end outcome=complete cleanup_proven=True
+.
+----------------------------------------------------------------------
+Ran 167 tests in 18.657s
+
+OK (skipped=4)

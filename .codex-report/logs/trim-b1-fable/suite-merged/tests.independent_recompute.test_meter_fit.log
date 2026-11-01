@@ -1,0 +1,8 @@
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 59.795s
+
+OK
+meter_fit_long_origin_counterfactual={"failing": 240, "failing_near_ties": 211, "streams": 1041}
+meter_fit_counterfactual={"failing_patterns": 239, "failing_within_cap": 80, "patterns": 240}
+meter_fit_property={"fallback_patterns": 80, "max_host_difference_ns": 0, "patterns": 240}

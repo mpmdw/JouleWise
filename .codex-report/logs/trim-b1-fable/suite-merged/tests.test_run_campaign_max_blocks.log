@@ -1,0 +1,7 @@
+....failed block1-member4: exit=0 but strict campaign validation did not pass: block1-member4: status='succeeded', strict_valid=False, collection_integrity_flags=[], claim_evidence_flags=[], validation_problems=[]
+.........WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+.........
+----------------------------------------------------------------------
+Ran 22 tests in 4.725s
+
+OK

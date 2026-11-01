@@ -1,0 +1,8 @@
+....Enabling network time once; polling RAW anchor for at most 30 s.
+Drift-corrected anchor movement: 5000001.000 ns (must exceed 5000000 ns).
+Finishing with network time OFF.
+.........
+----------------------------------------------------------------------
+Ran 13 tests in 11.769s
+
+OK

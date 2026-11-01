@@ -1,0 +1,7 @@
+.................................
+----------------------------------------------------------------------
+Ran 33 tests in 74.230s
+
+OK
+KILLED 147 owner-source mutations and 5 grant-policy mutations: stale receipts refused
+KILLED 4 refusal AST mutations: dead literal, undeclared call, variable argument, declared-only code

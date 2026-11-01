@@ -1,0 +1,10 @@
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 7.492s
+
+OK
+W4 IDENTITY=PASS 25G83=fresh 25F84=stale explicit_P8=valid
+W4 RED corrupt_one_byte: copy_refused=True; RESTORED=PASS
+W4 DEFAULT=PASS issued_rev6=True valid=True generation_row_equal=True
+W4 RED member_lexeme_both_seals: structural_and_copy_refused=True; RESTORED=PASS
+W4 RED missing_generation_row: default_refused=True; RESTORED=PASS

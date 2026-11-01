@@ -1,0 +1,54 @@
+.....................................................{"arm_blocked": true, "code": "calibration_frozen_protocol_invalid", "exit_id": "correct-preflight", "next_command": "recover_calibration_ledger.py readiness --phase pre-reserve --session-id SESSION --plan PLAN", "status": "refused"}
+..................{"event": "calibration_custody_complete", "elapsed_s": 0.08352595800533891, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.09243349998723716, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.1753624170087278, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.278668041981291, "locator": "/private/tmp/jwrev-tmp/tmp0dd19q70/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93377, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.2873080419958569, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"arm_blocked": true, "code": "calibration_ledger_malformed", "context": {"detail": "stop after custody-path regression observation"}, "exit_id": "hard-stop-preserved", "next_command": "recover_calibration_ledger.py explain calibration_ledger_malformed", "status": "refused", "terminal_result": "night_stopped_preserved"}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.08202375000109896, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.16937829199014232, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.27021462499396876, "locator": "/private/tmp/jwrev-tmp/tmp6xttfkqa/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93551, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.2802397499908693, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.07976900000358, "observations": 0}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.08488874998874962, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.17696133302524686, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.2735414169728756, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93638, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.28126379201421514, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.06980570801533759, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93659, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.06991008302429691, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93659, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.0702146670082584, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93659, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.07028325001010671, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93659, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.07030937500530854, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93659, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.07033950003096834, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93659, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.07755995803745463, "observations": 1}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.08132270898204297, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93788, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.08142529200995341, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93788, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.08145458396757022, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93788, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.0816272500087507, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93788, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.08167141699232161, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93788, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.08172625000588596, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93788, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.09030479198554531, "observations": 1}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.17809883400332183, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93804, "stage": "metadata_probe"}
+{"event": "calibration_custody_progress", "artifact": "events.jsonl", "elapsed_s": 0.17818804195849225, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93804, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "instrument_evidence.json", "elapsed_s": 0.17821595899295062, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93804, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "manifest.json", "elapsed_s": 0.17824645899236202, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93804, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "power_trace.csv", "elapsed_s": 0.17826491699088365, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93804, "stage": "artifact_read"}
+{"event": "calibration_custody_progress", "artifact": "raw/powermetrics.plist", "elapsed_s": 0.17828691698377952, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-pre", "observation_id": "session-writer-pre", "pid": 93804, "stage": "artifact_read"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.18535370897734538, "observations": 1}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.2819733750075102, "locator": "/private/tmp/jwrev-tmp/tmpu32g77zc/instrument_validation/session-writer-post", "observation_id": null, "pid": 93827, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.28927099995780736, "observations": 1}
+{"attempt_id": "session-writer-post", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "post"}
+.{"event": "calibration_custody_complete", "elapsed_s": 0.08961775002535433, "observations": 0}
+{"event": "calibration_custody_complete", "elapsed_s": 0.1838208750123158, "observations": 0}
+{"event": "calibration_custody_progress", "artifact": null, "elapsed_s": 0.28040391602553427, "locator": "/private/tmp/jwrev-tmp/tmp1wiz_vpf/instrument_validation/session-writer-pre", "observation_id": null, "pid": 93902, "stage": "metadata_probe"}
+{"event": "calibration_custody_complete", "elapsed_s": 0.2868613330065273, "observations": 1}
+{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.
+----------------------------------------------------------------------
+Ran 76 tests in 128.402s
+
+OK
+CAP-RULE-25G83-1 R6(iii) elapsed seconds: 11.088337

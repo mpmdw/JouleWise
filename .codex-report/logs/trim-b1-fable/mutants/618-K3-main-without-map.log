@@ -1,0 +1,14 @@
+FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/jwrevmainm/configs/gates/physics_rows.json'
+ERROR: test_protects_carries_the_frozen_grammar_rows (tests.hazards.test_battery.FrozenGrammarRegistrationTests.test_protects_carries_the_frozen_grammar_rows)
+Ran 65 tests in 1.744s
+FAILED (errors=1, skipped=1)
+Ran 23 tests in 8.601s
+OK
+Ran 6 tests in 0.026s
+OK
+Ran 6 tests in 0.920s
+OK
+ERROR: setUpClass (tests.hazards.test_physics_coverage.PhysicsCoverageTests)
+Ran 0 tests in 0.001s
+FAILED (errors=1)
+imports of all hazard modules and scripts/hazard_monitor.py OK without the map

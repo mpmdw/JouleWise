@@ -1,0 +1,35 @@
+custody_locator_unreachable reason=timeout locator=/mock/custody budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/mock/custody budget_s=0.05
+.custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup
+custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/runs/member
+custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup
+custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/runs/member
+.............custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/runs/member
+custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/runs/member
+custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/runs/member
+custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/runs/member
+custody_backup_roots_disabled: /Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/runs/member
+...custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp4j41cfz5/missing budget_s=0.05
+.custody_locator_unreachable reason=exception locator=/mock/custody budget_s=2.0
+custody_locator_unreachable reason=exception locator=/mock/custody budget_s=2.0
+custody_locator_unreachable reason=exception locator=/mock/custody budget_s=2.0
+custody_locator_unreachable reason=exception locator=/mock/custody budget_s=2.0
+custody_locator_unreachable reason=exception locator=/mock/custody budget_s=2.0
+custody_locator_unreachable reason=exception locator=/mock/custody budget_s=2.0
+.custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp7lpjdk1w/blocked budget_s=0.05
+...........................................
+----------------------------------------------------------------------
+Ran 62 tests in 82.056s
+
+OK

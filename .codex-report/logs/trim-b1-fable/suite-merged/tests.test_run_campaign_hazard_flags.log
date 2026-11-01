@@ -1,0 +1,6 @@
+........................................warning: cleared stale campaign lock /private/tmp/jwrev-tmp/tmpf_wrp4hb/runs_claim/campaign.lock (pid=53408 nonce=abababababababababababababababababababababababababababababababab created_at=2026-10-05T00:00:00Z start_time="Mon Oct 5 00:00:00 2026")
+......
+----------------------------------------------------------------------
+Ran 46 tests in 19.854s
+
+OK

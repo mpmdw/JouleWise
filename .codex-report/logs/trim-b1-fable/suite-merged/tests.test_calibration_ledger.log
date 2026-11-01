@@ -1,0 +1,14 @@
+....{"event": "calibration_custody_complete", "elapsed_s": 0.09903854195727035, "observations": 0}
+{"event": "calibration_pre_reserve_authorized", "session_id": "session-cli"}
+.........s.....................................{"event": "calibration_custody_complete", "elapsed_s": 0.08494708401849493, "observations": 0}
+...usage: python3.13 -m unittest [-h] [--ledger LEDGER] [--head-pin HEAD_PIN]
+                              {inspect,audit,audit-observations,repair,abandon-tail,explain,readiness,session-status,session-refusal,validate-slot,terminal-pin,resume-finalize,abort-session,advance-head-pin} ...
+python3.13 -m unittest: error: unrecognized arguments: --payload foreign.json
+usage: python3.13 -m unittest [-h] [--ledger LEDGER] [--head-pin HEAD_PIN]
+                              {inspect,audit,audit-observations,repair,abandon-tail,explain,readiness,session-status,session-refusal,validate-slot,terminal-pin,resume-finalize,abort-session,advance-head-pin} ...
+python3.13 -m unittest: error: unrecognized arguments: --allow-uncommitted-head-pin
+.........................................
+----------------------------------------------------------------------
+Ran 95 tests in 12.115s
+
+OK (skipped=1)

@@ -1,0 +1,9 @@
+FAIL: test_every_refusal_site_is_listed_with_its_exact_count (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count)
+    self.assertEqual(result, {"unlisted": [], "stale": [], "miscounted": [], "guard_changed": []},
++ {'guard_changed': [], 'miscounted': [], 'stale': [], 'unlisted': []}
+-  'stale': [{'detail': 'AttributeError|module has no',
+-             'function': '__getattr__',
+ "stale": [
+   "function": "__getattr__",
+Ran 23 tests in 30.588s
+FAILED (failures=1, skipped=1)

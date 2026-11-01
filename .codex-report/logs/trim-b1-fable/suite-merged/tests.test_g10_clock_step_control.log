@@ -1,0 +1,22 @@
+....g10: /private/tmp/jwrev-tmp/g10-test-u2o2tt0i/g10.json already exists; G10 runs once per night
+g10: /private/tmp/jwrev-tmp/g10-test-u2o2tt0i/other/g10.json already exists; G10 runs once per night
+...........usage: python3.13 -m unittest [-h] --night-dir NIGHT_DIR
+                              [--t-stream-max-s T_STREAM_MAX_S]
+                              [--poll-timeout-s POLL_TIMEOUT_S]
+                              [--settle-max-s SETTLE_MAX_S]
+                              [--settle-target-ppm SETTLE_TARGET_PPM]
+                              [--settle-min-s SETTLE_MIN_S]
+python3.13 -m unittest: error: the following arguments are required: --night-dir
+g10: settle_max_s must be a positive finite number
+...g10: night directory /private/tmp/jwrev-tmp/g10-test-nxgvqscg/nope does not exist
+..................s.................
+----------------------------------------------------------------------
+Ran 54 tests in 0.650s
+
+OK (skipped=1)
+g10: DISCHARGED off_ok=True record=/private/tmp/jwrev-tmp/g10-test-0dbx528_/g10.json
+g10: NOT_DISCHARGED off_ok=True record=/private/tmp/jwrev-tmp/g10-test-0dbx528_/flat/g10.json
+g10: DISCHARGED off_ok=True record=/private/tmp/jwrev-tmp/g10-test-dnrhio57/g10.json
+g10: DISCHARGED off_ok=True record=/private/tmp/jwrev-tmp/g10-test-vrx8nu7f/g10.json
+g10: DISCHARGED off_ok=True record=/private/tmp/jwrev-tmp/g10-test-kp6pf7jm/g10.json
+g10: NOT_DISCHARGED off_ok=True record=/private/tmp/jwrev-tmp/g10-test-kp6pf7jm/flat/g10.json

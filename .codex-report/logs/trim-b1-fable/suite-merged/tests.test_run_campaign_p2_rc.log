@@ -1,0 +1,12 @@
+.....loading 3 shards
+error: idle admission refused member 7 at 0.25 W
+   
+.............warning: member stderr /private/tmp/jwrev-tmp/tmpnad921bz/absent.stderr unreadable: FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/jwrev-tmp/tmpnad921bz/absent.stderr'
+..--- child stderr m-1 (s--m.stderr) ---
+done
+--- end child stderr m-1 ---
+...............
+----------------------------------------------------------------------
+Ran 35 tests in 34.520s
+
+OK

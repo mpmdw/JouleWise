@@ -1,0 +1,6 @@
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 15.086s
+
+OK
+synthetic_fit_agreement={"agreement_bar_J": 0.000124000131874, "energy_difference_J": 0.0, "old_sample_time_difference_ns": 1249, "sample_time_difference_ns": 0}

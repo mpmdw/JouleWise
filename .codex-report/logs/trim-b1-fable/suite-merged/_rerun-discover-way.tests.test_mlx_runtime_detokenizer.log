@@ -1,0 +1,47 @@
+...s..................................................................................................................s....................................................................................................................................................................................................................................s......ss......................................................................................................................................................................s...........................................s..............................................................................................s..s.................................................s..................................................................................................................................................................................................................................................................................................................................................s..............................................................................................EEE.............................................................................................................................................................................s.............................................................s......................................s....ss........................................................................................s......................s..........s.....s..s.......................................................................................................................................................................................................................................................................................................ss.........sssssss..............................................................sssssssss.....................................
+======================================================================
+ERROR: test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest (tests.flags.test_flags_collect.RealPackTests.test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest) (pack='configs/campaigns/d117_floor_qwen3-1p7b_v5')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/jwrevmerged/tests/flags/test_flags_collect.py", line 238, in test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest
+    digest = arm_readiness.committed_pack_tree_sha256(pack)
+  File "/private/tmp/jwrevmerged/joulewise/arm_readiness.py", line 3162, in committed_pack_tree_sha256
+    raise ArmReadinessError(
+    ...<2 lines>...
+    )
+joulewise.arm_readiness.ArmReadinessError: untracked pack directory: b'__pycache__'
+
+======================================================================
+ERROR: test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest (tests.flags.test_flags_collect.RealPackTests.test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest) (pack='configs/campaigns/d117_floor_qwen3-8b_v5')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/jwrevmerged/tests/flags/test_flags_collect.py", line 238, in test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest
+    digest = arm_readiness.committed_pack_tree_sha256(pack)
+  File "/private/tmp/jwrevmerged/joulewise/arm_readiness.py", line 3162, in committed_pack_tree_sha256
+    raise ArmReadinessError(
+    ...<2 lines>...
+    )
+joulewise.arm_readiness.ArmReadinessError: untracked pack directory: b'__pycache__'
+
+======================================================================
+ERROR: test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest (tests.flags.test_flags_collect.RealPackTests.test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest) (pack='configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/jwrevmerged/tests/flags/test_flags_collect.py", line 238, in test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest
+    digest = arm_readiness.committed_pack_tree_sha256(pack)
+  File "/private/tmp/jwrevmerged/joulewise/arm_readiness.py", line 3162, in committed_pack_tree_sha256
+    raise ArmReadinessError(
+    ...<2 lines>...
+    )
+joulewise.arm_readiness.ArmReadinessError: untracked pack directory: b'__pycache__'
+
+----------------------------------------------------------------------
+Ran 1972 tests in 3097.085s
+
+FAILED (errors=3, skipped=39)
+S3_PARITY_ROWS 12 PASS
+S3_PIN4_NEUTRALITY 3 PASS
+synthetic_fit_agreement={"agreement_bar_J": 0.000124000131874, "energy_difference_J": 0.0, "old_sample_time_difference_ns": 1249, "sample_time_difference_ns": 0}
+meter_fit_long_origin_counterfactual={"failing": 240, "failing_near_ties": 211, "streams": 1041}
+meter_fit_counterfactual={"failing_patterns": 239, "failing_within_cap": 80, "patterns": 240}
+meter_fit_property={"fallback_patterns": 80, "max_host_difference_ns": 0, "patterns": 240}

@@ -1,0 +1,13 @@
+...G2-a prompt pin refused: selection_record_does_not_match_summary_and_rule
+G2-a prompt pin refused: selection_record_does_not_match_summary_and_rule
+..............G2-a prompt pin refused: output_already_exists
+.G2-a prompt pin refused: input_inventory_prompt_ladder_sha256_mismatch
+.........G2-a prompt pin refused: runtime_prompt_token_ids_mismatch:2048
+.G2-a prompt pin refused: selection_record_does_not_match_summary_and_rule
+G2-a prompt pin refused: selection_record_does_not_match_summary_and_rule
+G2-a prompt pin refused: selection_record_does_not_match_summary_and_rule
+...
+----------------------------------------------------------------------
+Ran 31 tests in 12.164s
+
+OK

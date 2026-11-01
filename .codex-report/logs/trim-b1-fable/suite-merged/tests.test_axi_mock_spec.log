@@ -1,0 +1,24 @@
+.........bundle: /private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+.bundle: /private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+.
+----------------------------------------------------------------------
+Ran 11 tests in 9.590s
+
+OK
+ok draft-off-000 attempt=0: bundle=/private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /private/tmp/jwrev-tmp/tmpiy8nsmqy/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+ok draft-off-000 attempt=0: bundle=/private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+AXI attempt ledger: /private/tmp/jwrev-tmp/tmp1km_xmk4/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af

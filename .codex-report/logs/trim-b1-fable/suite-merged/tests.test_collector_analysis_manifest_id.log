@@ -1,0 +1,29 @@
+.........WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+bundle: /private/tmp/jwrev-tmp/tmpvun_tuew/runs/production-null-bundle status=succeeded
+.......
+----------------------------------------------------------------------
+Ran 16 tests in 73.491s
+
+OK
+Config files to execute:
+  /private/tmp/jwrev-tmp/tmpvun_tuew/production-null-bound/member.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+ok production-null-bundle: exit=0 duration_s=0.595
+Summary:
+  ok: 1
+COLLECTION VERDICT:
+  verdict: usable
+  usable: production-null-bundle
+  waived: <none>
+  failed: <none>
+  missing: <none>
+CLAIM-INPUT READINESS:
+  verdict: not_assessed
+  note: This verdict checks analysis inputs only; P2-037 decides claim outcomes.
+IDLE-ADMISSION CORE:
+  condition: adapter_wattage_unknown
+  condition: cpu_baseline_telemetry_missing
+  condition: gpu_idle_admission_unknown
+  condition: idle_admission_attempt_ledger_invalid
+  condition: neg8_bracket_not_evaluated

@@ -1,0 +1,11 @@
+.....dry-arm refused: plan unreadable or malformed: plan keys are not exact (missing=["'authored_epoch_s'", "'chain_path'", "'chain_sha256_path'", "'custody_root'", "'measurement_head'", "'measurement_root'", "'plan_id'", "'registration_path'", "'repo_head'", "'schema'", "'schema_version'", "'t0_epoch_s'", "'window_max_s'"], extra=[])
+................./opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py:1141: ResourceWarning: subprocess 96742 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...................
+----------------------------------------------------------------------
+Ran 41 tests in 57.704s
+
+OK
+{"record": "/private/tmp/jwrev-tmp/b5-driver-alpha-j666b_t7/custody/dry-arm/dry-arm-01/dry-arm.json", "stage": "census", "verdict": "REFUSED"}
+{"record": "/private/tmp/jwrev-tmp/b5-driver-alpha-_yd__h5h/custody/dry-arm/dry-arm-01/dry-arm.json", "stage": "arm", "verdict": "GO"}

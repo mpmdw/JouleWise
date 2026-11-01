@@ -1,0 +1,269 @@
+..P1_RETRY_ATTEMPTS=5 BACKOFF_REQUESTS=(0.01, 0.05, 0.25, 1.0) ELAPSED_S=0.004375 DIAGNOSTIC_FATAL=1
+.P4_UNPARSEABLE_EVENT_LINE=FAILS_LOUDLY
+.P1_DELAYED_WRITERS=1 EVENT_GATED_FINAL_WRITES=1 BOUNDED_RETRIES=0 THREAD_REGISTRY_EMPTY=1 ESCAPED=0
+..P3_SIGSTOP_RUNS=3 IDENTITY=PASS WALL_MUTATION=FAILS_IDENTITY
+.RAW_CLEANUP_ERRNO=0 FATAL_RETRY_DIAGNOSTIC=0 CONTROLS_MUTATION=RACE_EXERCISED
+RACE_EXERCISED=1 NO_RACE_PRE_WRITE=0 TRACE_INCOMPLETE=0 NO_PACK_CHILD=0
+.P1_CYCLES=4 RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 MAX_CLEANUP_S=0.007136
+............P2_OWNERSHIP_CYCLES=4 TIMEOUTS=2 EXCEPTIONS=2 DIRECT_REAPED=4 REGISTRY_EMPTY=1
+P4_TORN_EVENT_LINE=ACKNOWLEDGED
+.....CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 114 event-pulse_command_on-14
+CASE STAGE calibration_quiet_mac_auth_required 149 event-pulse_command_off-49
+CASE STAGE calibration_quiet_mac_auth_required 178 event-pulse_command_on-78
+CASE STAGE calibration_quiet_mac_auth_required 209 event-pulse_command_off-109
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 1001 manifest-written
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 108 event-pulse_command_on-8
+CASE STAGE calibration_quiet_mac_auth_required 109 event-pulse_command_off-9
+CASE STAGE calibration_quiet_mac_auth_required 141 event-pulse_command_off-41
+CASE STAGE calibration_quiet_mac_auth_required 171 event-pulse_command_off-71
+CASE STAGE calibration_quiet_mac_auth_required 205 event-pulse_command_off-105
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 1001 manifest-written
+.CASE START calibration_ledger_custody_timeout
+CASE PASS calibration_ledger_custody_timeout
+CASE START calibration_ledger_missing
+CASE PASS calibration_ledger_missing
+CASE START calibration_ledger_malformed
+CASE PASS calibration_ledger_malformed
+CASE START calibration_ledger_chain_conflict
+CASE PASS calibration_ledger_chain_conflict
+CASE START calibration_ledger_attempt_conflict
+CASE PASS calibration_ledger_attempt_conflict
+CASE START calibration_ledger_bracket_session_conflict
+CASE PASS calibration_ledger_bracket_session_conflict
+CASE START calibration_ledger_content_conflict
+CASE PASS calibration_ledger_content_conflict
+CASE START calibration_ledger_rollback
+CASE PASS calibration_ledger_rollback
+CASE START calibration_ledger_operation_conflict
+CASE PASS calibration_ledger_operation_conflict
+CASE START calibration_ledger_ungoverned_business
+CASE PASS calibration_ledger_ungoverned_business
+CASE START calibration_ledger_custody_invalid
+CASE PASS calibration_ledger_custody_invalid
+CASE START calibration_unsafe_lock_inode
+CASE PASS calibration_unsafe_lock_inode
+CASE START calibration_physical_ledger_unreadable
+CASE PASS calibration_physical_ledger_unreadable
+CASE START calibration_legacy_journal_unreadable
+CASE PASS calibration_legacy_journal_unreadable
+CASE START calibration_legacy_journal_archive_conflict
+CASE PASS calibration_legacy_journal_archive_conflict
+CASE START calibration_legacy_journal_archive_failed
+CASE PASS calibration_legacy_journal_archive_failed
+CASE START calibration_intent_target_malformed
+CASE PASS calibration_intent_target_malformed
+CASE START calibration_recovery_nonconvergent
+CASE PASS calibration_recovery_nonconvergent
+CASE START calibration_abandon_not_clean
+CASE PASS calibration_abandon_not_clean
+CASE START calibration_abandon_pin_mismatch
+CASE PASS calibration_abandon_pin_mismatch
+CASE START calibration_head_pin_unreadable
+CASE PASS calibration_head_pin_unreadable
+CASE START calibration_head_pin_malformed
+CASE PASS calibration_head_pin_malformed
+CASE START calibration_custody_unreadable
+CASE PASS calibration_custody_unreadable
+CASE START calibration_tail_requires_abandon
+CASE PASS calibration_tail_requires_abandon
+CASE START calibration_custody_complete_use_resume
+CASE PASS calibration_custody_complete_use_resume
+CASE START calibration_custody_partial
+CASE PASS calibration_custody_partial
+CASE START calibration_live_writer_contention
+CASE PASS calibration_live_writer_contention
+CASE START calibration_ledger_bracket_session_open
+CASE PASS calibration_ledger_bracket_session_open
+CASE START calibration_ledger_pending
+CASE PASS calibration_ledger_pending
+CASE START calibration_ledger_head_uncommitted
+CASE PASS calibration_ledger_head_uncommitted
+CASE START calibration_ledger_head_mismatch
+CASE PASS calibration_ledger_head_mismatch
+CASE START calibration_ledger_recovery_required
+CASE PASS calibration_ledger_recovery_required
+CASE START calibration_ledger_baseline_missing
+CASE PASS calibration_ledger_baseline_missing
+CASE START calibration_observation_unclassifiable
+CASE PASS calibration_observation_unclassifiable
+CASE START calibration_recovery_credentials_invalid
+CASE PASS calibration_recovery_credentials_invalid
+CASE START calibration_abandon_credentials_invalid
+CASE PASS calibration_abandon_credentials_invalid
+CASE START calibration_abandon_active_intent
+CASE PASS calibration_abandon_active_intent
+CASE START calibration_head_pin_not_committed
+CASE PASS calibration_head_pin_not_committed
+CASE START calibration_reservation_input_invalid
+CASE PASS calibration_reservation_input_invalid
+CASE START calibration_reservation_head_mismatch
+CASE PASS calibration_reservation_head_mismatch
+CASE START calibration_reservation_identity_conflict
+CASE PASS calibration_reservation_identity_conflict
+CASE START calibration_session_not_found
+CASE PASS calibration_session_not_found
+CASE START calibration_session_not_open
+CASE PASS calibration_session_not_open
+CASE START calibration_slot_order_conflict
+CASE PASS calibration_slot_order_conflict
+CASE START calibration_claim_id_invalid
+CASE PASS calibration_claim_id_invalid
+CASE START calibration_finalization_binding_conflict
+CASE PASS calibration_finalization_binding_conflict
+CASE START calibration_session_not_terminal
+CASE PASS calibration_session_not_terminal
+CASE START calibration_session_terminal_not_head
+CASE PASS calibration_session_terminal_not_head
+CASE START calibration_plan_unreadable
+CASE PASS calibration_plan_unreadable
+CASE START calibration_plan_hash_mismatch
+CASE PASS calibration_plan_hash_mismatch
+CASE START calibration_pre_reserve_not_ready
+CASE PASS calibration_pre_reserve_not_ready
+CASE START calibration_pre_slot_not_ready
+CASE STAGE calibration_pre_slot_not_ready 0 writer-launched
+CASE STAGE calibration_pre_slot_not_ready 1 custody-created
+CASE STAGE calibration_pre_slot_not_ready 101 event-sampling_started-1
+CASE STAGE calibration_pre_slot_not_ready 134 event-pulse_command_on-34
+CASE STAGE calibration_pre_slot_not_ready 164 event-pulse_command_on-64
+CASE STAGE calibration_pre_slot_not_ready 200 event-pulse_command_on-100
+CASE STAGE calibration_pre_slot_not_ready 226 event-sampling_stopped-126
+CASE STAGE calibration_pre_slot_not_ready 1001 manifest-written
+CASE PASS calibration_pre_slot_not_ready
+CASE START calibration_terminal_not_ready
+CASE PASS calibration_terminal_not_ready
+CASE START calibration_pin_advancement_not_needed
+CASE PASS calibration_pin_advancement_not_needed
+CASE START calibration_pin_advancement_unsafe
+CASE PASS calibration_pin_advancement_unsafe
+CASE START calibration_pin_candidate_mismatch
+CASE PASS calibration_pin_candidate_mismatch
+CASE START calibration_reservation_json_invalid
+CASE PASS calibration_reservation_json_invalid
+CASE START calibration_writer_bracket_arguments
+CASE STAGE calibration_writer_bracket_arguments 0 writer-launched
+CASE STAGE calibration_writer_bracket_arguments 1 custody-created
+CASE STAGE calibration_writer_bracket_arguments 124 event-pulse_command_on-24
+CASE STAGE calibration_writer_bracket_arguments 154 event-pulse_command_on-54
+CASE STAGE calibration_writer_bracket_arguments 177 event-pulse_command_off-77
+CASE STAGE calibration_writer_bracket_arguments 205 event-pulse_command_off-105
+CASE STAGE calibration_writer_bracket_arguments 226 event-sampling_stopped-126
+CASE STAGE calibration_writer_bracket_arguments 1001 manifest-written
+CASE PASS calibration_writer_bracket_arguments
+CASE START calibration_writer_bracket_rederive_conflict
+CASE STAGE calibration_writer_bracket_rederive_conflict 0 writer-launched
+CASE STAGE calibration_writer_bracket_rederive_conflict 1 custody-created
+CASE STAGE calibration_writer_bracket_rederive_conflict 102 event-warmup_command_on-2
+CASE STAGE calibration_writer_bracket_rederive_conflict 131 event-pulse_command_off-31
+CASE STAGE calibration_writer_bracket_rederive_conflict 164 event-pulse_command_on-64
+CASE STAGE calibration_writer_bracket_rederive_conflict 196 event-pulse_command_on-96
+CASE STAGE calibration_writer_bracket_rederive_conflict 225 event-pulse_command_off-125
+CASE STAGE calibration_writer_bracket_rederive_conflict 226 event-sampling_stopped-126
+CASE STAGE calibration_writer_bracket_rederive_conflict 1001 manifest-written
+CASE PASS calibration_writer_bracket_rederive_conflict
+CASE START calibration_frozen_protocol_invalid
+CASE STAGE calibration_frozen_protocol_invalid 0 writer-launched
+CASE STAGE calibration_frozen_protocol_invalid 1 custody-created
+CASE STAGE calibration_frozen_protocol_invalid 119 event-pulse_command_off-19
+CASE STAGE calibration_frozen_protocol_invalid 153 event-pulse_command_off-53
+CASE STAGE calibration_frozen_protocol_invalid 185 event-pulse_command_off-85
+CASE STAGE calibration_frozen_protocol_invalid 218 event-pulse_command_on-118
+CASE STAGE calibration_frozen_protocol_invalid 226 event-sampling_stopped-126
+CASE STAGE calibration_frozen_protocol_invalid 1001 manifest-written
+CASE PASS calibration_frozen_protocol_invalid
+CASE START calibration_rederive_output_required
+CASE STAGE calibration_rederive_output_required 0 writer-launched
+CASE STAGE calibration_rederive_output_required 1 custody-created
+CASE STAGE calibration_rederive_output_required 128 event-pulse_command_on-28
+CASE STAGE calibration_rederive_output_required 159 event-pulse_command_off-59
+CASE STAGE calibration_rederive_output_required 193 event-pulse_command_off-93
+CASE STAGE calibration_rederive_output_required 224 event-pulse_command_on-124
+CASE STAGE calibration_rederive_output_required 226 event-sampling_stopped-126
+CASE STAGE calibration_rederive_output_required 1001 manifest-written
+CASE PASS calibration_rederive_output_required
+CASE START calibration_rederive_failed
+CASE STAGE calibration_rederive_failed 0 writer-launched
+CASE STAGE calibration_rederive_failed 1 custody-created
+CASE STAGE calibration_rederive_failed 116 event-pulse_command_on-16
+CASE STAGE calibration_rederive_failed 149 event-pulse_command_off-49
+CASE STAGE calibration_rederive_failed 186 event-pulse_command_on-86
+CASE STAGE calibration_rederive_failed 217 event-pulse_command_off-117
+CASE STAGE calibration_rederive_failed 226 event-sampling_stopped-126
+CASE STAGE calibration_rederive_failed 1001 manifest-written
+CASE PASS calibration_rederive_failed
+CASE START calibration_output_requires_rederive
+CASE STAGE calibration_output_requires_rederive 0 writer-launched
+CASE STAGE calibration_output_requires_rederive 1 custody-created
+CASE STAGE calibration_output_requires_rederive 125 event-pulse_command_off-25
+CASE STAGE calibration_output_requires_rederive 156 event-pulse_command_on-56
+CASE STAGE calibration_output_requires_rederive 191 event-pulse_command_off-91
+CASE STAGE calibration_output_requires_rederive 220 event-pulse_command_on-120
+CASE STAGE calibration_output_requires_rederive 226 event-sampling_stopped-126
+CASE STAGE calibration_output_requires_rederive 1001 manifest-written
+CASE PASS calibration_output_requires_rederive
+CASE START calibration_quiet_mac_auth_required
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 114 event-pulse_command_on-14
+CASE STAGE calibration_quiet_mac_auth_required 145 event-pulse_command_off-45
+CASE STAGE calibration_quiet_mac_auth_required 178 event-pulse_command_on-78
+CASE STAGE calibration_quiet_mac_auth_required 212 event-pulse_command_on-112
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 1001 manifest-written
+CASE PASS calibration_quiet_mac_auth_required
+CASE START calibration_power_policy_required
+CASE STAGE calibration_power_policy_required 0 writer-launched
+CASE STAGE calibration_power_policy_required 1 custody-created
+CASE STAGE calibration_power_policy_required 112 event-pulse_command_on-12
+CASE STAGE calibration_power_policy_required 143 event-pulse_command_off-43
+CASE STAGE calibration_power_policy_required 175 event-pulse_command_off-75
+CASE STAGE calibration_power_policy_required 203 event-pulse_command_off-103
+CASE STAGE calibration_power_policy_required 226 event-sampling_stopped-126
+CASE STAGE calibration_power_policy_required 1001 manifest-written
+CASE PASS calibration_power_policy_required
+CASE START calibration_derivation_only_epoch_unchanged
+CASE STAGE calibration_derivation_only_epoch_unchanged 0 writer-launched
+CASE STAGE calibration_derivation_only_epoch_unchanged 1 custody-created
+CASE STAGE calibration_derivation_only_epoch_unchanged 115 event-pulse_command_off-15
+CASE STAGE calibration_derivation_only_epoch_unchanged 147 event-pulse_command_off-47
+CASE STAGE calibration_derivation_only_epoch_unchanged 180 event-pulse_command_on-80
+CASE STAGE calibration_derivation_only_epoch_unchanged 214 event-pulse_command_on-114
+CASE STAGE calibration_derivation_only_epoch_unchanged 226 event-sampling_stopped-126
+CASE STAGE calibration_derivation_only_epoch_unchanged 1001 manifest-written
+CASE PASS calibration_derivation_only_epoch_unchanged
+CASE START calibration_derivation_only_session_kind_required
+CASE STAGE calibration_derivation_only_session_kind_required 0 writer-launched
+CASE STAGE calibration_derivation_only_session_kind_required 1 custody-created
+CASE STAGE calibration_derivation_only_session_kind_required 125 event-pulse_command_off-25
+CASE STAGE calibration_derivation_only_session_kind_required 153 event-pulse_command_off-53
+CASE STAGE calibration_derivation_only_session_kind_required 178 event-pulse_command_on-78
+CASE STAGE calibration_derivation_only_session_kind_required 207 event-pulse_command_off-107
+CASE STAGE calibration_derivation_only_session_kind_required 226 event-sampling_stopped-126
+CASE STAGE calibration_derivation_only_session_kind_required 1001 manifest-written
+CASE PASS calibration_derivation_only_session_kind_required
+CASE START calibration_derivation_session_requires_derivation_only
+CASE PASS calibration_derivation_session_requires_derivation_only
+CASE START calibration_reserved_slot_mismatch
+CASE PASS calibration_reserved_slot_mismatch
+CASE START calibration_display_arm_failed
+CASE PASS calibration_display_arm_failed
+CASE START calibration_sampler_never_ready
+CASE PASS calibration_sampler_never_ready
+CASE START pulse_calibration_rollover_gate_timeout
+CASE PASS pulse_calibration_rollover_gate_timeout
+CASE START calibration_window_exhausted
+CASE PASS calibration_window_exhausted
+...................F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 DETACHED_GRANDCHILD_CENSUS_REPORTED=1 IDENTITY_GONE=1
+.F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3
+.F4_SUCCESS_CAPTURE_BYTES=214524 SHA256=6aa3b1ea3b07ac9230d7c920eccf5d467edc194efceb7d1d1ae3e97041ec315f BYTE_IDENTICAL=1
+.
+----------------------------------------------------------------------
+Ran 48 tests in 882.019s
+
+OK

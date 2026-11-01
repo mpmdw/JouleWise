@@ -1,0 +1,7 @@
+....../opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/lib/python3.13/tempfile.py:1021: ResourceWarning: Implicitly cleaning up <TemporaryDirectory '/private/tmp/jwrev-tmp/tmpk0hwycl3'>
+  _warnings.warn(warn_message, ResourceWarning)
+.........
+----------------------------------------------------------------------
+Ran 15 tests in 16.584s
+
+OK

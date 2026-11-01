@@ -1,0 +1,6 @@
+   1 FAIL: test_is_sha256_accepts_only_64_lowercase_hex_digits (tests.test_load_transition_alignment.LoadTransitionAlignmentTests.test_is_sha256_accepts_only_64_lowercase_hex_digits) (value='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+   1 FAIL: test_is_sha256_accepts_only_64_lowercase_hex_digits (tests.test_load_transition_alignment.LoadTransitionAlignmentTests.test_is_sha256_accepts_only_64_lowercase_hex_digits) (value='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+   1 FAIL: test_part_b_source_hash_must_be_a_strict_digest (tests.test_load_transition_alignment.LoadTransitionAlignmentTests.test_part_b_source_hash_must_be_a_strict_digest) (value='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+   1 FAIL: test_part_b_source_hash_must_be_a_strict_digest (tests.test_load_transition_alignment.LoadTransitionAlignmentTests.test_part_b_source_hash_must_be_a_strict_digest) (value='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+   1 FAILED (failures=4)
+   1 Ran 13 tests in 0.317s

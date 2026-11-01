@@ -1,0 +1,9 @@
+G2-a probe summary refused: config_sha256_mismatch:g2a-large-p4096-r01
+.s..G2-a probe summary refused: stage_config_cover_mismatch:small-p4096
+.........G2-a probe summary refused: run_provenance_mismatch: g2a-small-p0512-r01: config_sha256
+.....G2-a probe summary refused: run_provenance_mismatch: g2a-small-p0512-r01: run_id
+.
+----------------------------------------------------------------------
+Ran 19 tests in 1.740s
+
+OK (skipped=1)

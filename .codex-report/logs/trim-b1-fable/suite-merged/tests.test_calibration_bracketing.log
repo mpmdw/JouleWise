@@ -1,0 +1,7 @@
+..........................................s...........custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp8y1q2_5j budget_s=0.05
+custody_locator_unreachable reason=timeout locator=/private/tmp/jwrev-tmp/tmp8y1q2_5j budget_s=0.05
+.........................................
+----------------------------------------------------------------------
+Ran 95 tests in 12.330s
+
+OK (skipped=1)

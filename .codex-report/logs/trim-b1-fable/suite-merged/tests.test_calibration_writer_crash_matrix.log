@@ -1,0 +1,6 @@
+........{"event":"joulewise_test_writer_crash_hook_inert","reason":"missing_or_invalid_harness_authorization","requested_stage":"before-writer-lease"}
+............
+----------------------------------------------------------------------
+Ran 20 tests in 504.585s
+
+OK

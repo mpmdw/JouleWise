@@ -1,0 +1,22 @@
+135c135
+<         "count": 795,
+---
+>         "count": 793,
+169c169
+<       "P": 23741
+---
+>       "P": 23739
+171,172c171,172
+<     "files": 2648,
+<     "literals": 27311,
+---
+>     "files": 2646,
+>     "literals": 27309,
+28401,28403d28400
+<     ]},
+<     {"owner_lane": "L4", "path": "configs/flags/number_rows.json", "regenerators": ["issued_config"], "rows": [
+<       ["/inventory/sha256", "issued_config", null]
+30410,30412d30406
+<     {"path": "configs/gates/physics_rows.json", "regenerators": ["issued_config"], "rows": [
+<       ["/source/inventory_sha256", "issued_config", null]
+<     ]},

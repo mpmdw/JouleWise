@@ -1,0 +1,9 @@
+.......................................s...........................................error: network time provenance not established: network time OFF admission failed: ValueError: network time OFF receipt not admitted
+error: network time provenance not established: network time OFF admission failed: ValueError: network time OFF receipt not admitted
+error: network time provenance not established: network time OFF admission failed: ValueError: network time OFF receipt not admitted
+....error: network time provenance not established: EVIDENCE_NETWORK_TIME_RECORD is not set by the evidence chain
+.........
+----------------------------------------------------------------------
+Ran 96 tests in 37.701s
+
+OK (skipped=1)

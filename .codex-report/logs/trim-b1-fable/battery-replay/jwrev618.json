@@ -1,0 +1,1104 @@
+{
+ "c1-d01-pre-20261001.ioreg|{'age_s': 240}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1790836881000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1790836881000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 240.00000047683716,
+    "voltage_mv": 12199
+   },
+   "reasons": [
+    "UpdateTime stale: 240 s > 180 s"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c1-d01-pre-20261001.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c1-d01-pre-20261001.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c1-d01-pre-20261001.ioreg|{}": {
+  "status": "PASS",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1790836663000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1790836663000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 22.000000476837158,
+    "voltage_mv": 12199
+   },
+   "reasons": [],
+   "status": "PASS",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-post-20261001.ioreg|{'age_s': 240}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1790899761000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1790899761000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 240.00000047683716,
+    "voltage_mv": 12196
+   },
+   "reasons": [
+    "UpdateTime stale: 240 s > 180 s"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-post-20261001.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-post-20261001.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-post-20261001.ioreg|{}": {
+  "status": "PASS",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1790899543000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1790899543000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 22.000000476837158,
+    "voltage_mv": 12196
+   },
+   "reasons": [],
+   "status": "PASS",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-pre-20261001.ioreg|{'age_s': 240}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1790899581000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1790899581000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 240.00000047683716,
+    "voltage_mv": 12196
+   },
+   "reasons": [
+    "UpdateTime stale: 240 s > 180 s"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-pre-20261001.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-pre-20261001.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "c2-d06-pre-20261001.ioreg|{}": {
+  "status": "PASS",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1790899363000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1790899363000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 22.000000476837158,
+    "voltage_mv": 12196
+   },
+   "reasons": [],
+   "status": "PASS",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "charging-1716ma-synthetic-from-real.ioreg|{'age_s': 240}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 1716,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 1716,
+    "is_charging": true,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249681000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249681000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 240.00000047683716,
+    "voltage_mv": 12952
+   },
+   "reasons": [
+    "IsCharging is not No (charging)",
+    "|InstantAmperage| 1716 mA > 200 mA",
+    "UpdateTime stale: 240 s > 180 s"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "charging-1716ma-synthetic-from-real.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "charging-1716ma-synthetic-from-real.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "charging-1716ma-synthetic-from-real.ioreg|{}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 1716,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 1716,
+    "is_charging": true,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249463000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249463000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 22.000000476837158,
+    "voltage_mv": 12952
+   },
+   "reasons": [
+    "IsCharging is not No (charging)",
+    "|InstantAmperage| 1716 mA > 200 mA"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "discharge-minus447ma-synthetic-from-real.ioreg|{'age_s': 240}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": -447,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": -447,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249681000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249681000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 240.00000047683716,
+    "voltage_mv": 12180
+   },
+   "reasons": [
+    "|InstantAmperage| 447 mA > 200 mA",
+    "UpdateTime stale: 240 s > 180 s"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "discharge-minus447ma-synthetic-from-real.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "discharge-minus447ma-synthetic-from-real.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "discharge-minus447ma-synthetic-from-real.ioreg|{}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": -447,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": -447,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249463000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249463000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 22.000000476837158,
+    "voltage_mv": 12180
+   },
+   "reasons": [
+    "|InstantAmperage| 447 mA > 200 mA"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "float-20261005-desk.ioreg|{'age_s': 240}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249681000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249681000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 240.00000047683716,
+    "voltage_mv": 12180
+   },
+   "reasons": [
+    "UpdateTime stale: 240 s > 180 s"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "float-20261005-desk.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "float-20261005-desk.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "float-20261005-desk.ioreg|{}": {
+  "status": "PASS",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": true,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249463000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249463000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 22.000000476837158,
+    "voltage_mv": 12180
+   },
+   "reasons": [],
+   "status": "PASS",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "malformed-synthetic-from-real.ioreg|{'age_s': 240}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg bytes refused by the BFG grammar: line 45: token"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "malformed-synthetic-from-real.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "malformed-synthetic-from-real.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "malformed-synthetic-from-real.ioreg|{}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg bytes refused by the BFG grammar: line 45: token"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "on-battery-synthetic-from-real.ioreg|{'age_s': 240}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": false,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249681000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249681000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 240.00000047683716,
+    "voltage_mv": 12180
+   },
+   "reasons": [
+    "ExternalConnected is not Yes (on battery)",
+    "UpdateTime stale: 240 s > 180 s"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "on-battery-synthetic-from-real.ioreg|{'returncode': 1}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg exit code 1"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "on-battery-synthetic-from-real.ioreg|{'timed_out': True}": {
+  "status": "UNMEASURED",
+  "verdict": {
+   "module": "battery",
+   "observed": {},
+   "reasons": [
+    "ioreg timed out after 10 s"
+   ],
+   "status": "UNMEASURED",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "on-battery-synthetic-from-real.ioreg|{}": {
+  "status": "REFUSE",
+  "verdict": {
+   "module": "battery",
+   "observed": {
+    "adapter_watts": 140,
+    "amperage_ma": 0,
+    "current_source": "registry",
+    "external_connected": false,
+    "flags": [
+     {
+      "code": "battery.smc_unavailable",
+      "detail": "SMC B0AC not read (no SMC reader); the registry InstantAmperage was judged instead"
+     }
+    ],
+    "instant_amperage_ma": 0,
+    "is_charging": false,
+    "smc": {
+     "errors": {
+      "B0AC": "no SMC reader",
+      "B0AV": "no SMC reader",
+      "PDTR": "no SMC reader",
+      "PPBR": "no SMC reader",
+      "PSTR": "no SMC reader"
+     },
+     "finished": {
+      "monotonic_ns": 999600000001600,
+      "monotonic_raw_ns": 1000000000001400,
+      "wall_ns": 1791249463000001799
+     },
+     "started": {
+      "monotonic_ns": 999600000001000,
+      "monotonic_raw_ns": 1000000000000800,
+      "wall_ns": 1791249463000001199
+     },
+     "values": {
+      "B0AC": null,
+      "B0AV": null,
+      "PDTR": null,
+      "PPBR": null,
+      "PSTR": null
+     }
+    },
+    "smc_current_ma": null,
+    "update_age_s": 22.000000476837158,
+    "voltage_mv": 12180
+   },
+   "reasons": [
+    "ExternalConnected is not Yes (on battery)"
+   ],
+   "status": "REFUSE",
+   "thresholds": {
+    "limit_ma": 200,
+    "max_unobserved_s": 120,
+    "max_update_age_s": 180
+   }
+  }
+ },
+ "publications_keys": [
+  "note",
+  "publications",
+  "schema"
+ ]
+}

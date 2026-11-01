@@ -1,0 +1,65 @@
+............
+----------------------------------------------------------------------
+Ran 12 tests in 2.589s
+
+OK
+W1 RED rev6_input_seal: STOP: derivation input seal differs from ruled digest; RESTORED=PASS
+W1 RED top_missing_reason: issuance text fields incomplete; RESTORED=PASS
+W1 RED top_missing_required_verification: issuance text fields incomplete; RESTORED=PASS
+W1 RED top_missing_issuance_record: issuance text fields incomplete; RESTORED=PASS
+W1 RED top_missing_network_time_provenance: issuance text fields incomplete; RESTORED=PASS
+W1 RED top_extra: issuance text fields incomplete; RESTORED=PASS
+W1 RED reason_empty: issuance reason missing; RESTORED=PASS
+W1 RED verification_prefix: required_verification must begin 'complete: '; RESTORED=PASS
+W1 RED record_missing_source_candidate: rev6 issuance record fields incomplete or forbidden; RESTORED=PASS
+W1 RED record_missing_rulings: rev6 issuance record fields incomplete or forbidden; RESTORED=PASS
+W1 RED record_missing_disclosures: rev6 issuance record fields incomplete or forbidden; RESTORED=PASS
+W1 RED record_missing_claim_eligible_meaning: rev6 issuance record fields incomplete or forbidden; RESTORED=PASS
+W1 RED source_path_missing: issuance record source candidate mismatch; RESTORED=PASS
+W1 RED source_file_digest: issuance record source candidate mismatch; RESTORED=PASS
+W1 RED source_derivation_digest: issuance record source candidate mismatch; RESTORED=PASS
+W1 RED ruling_order: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_id: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_count: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED holds_present: rev6 issuance record fields incomplete or forbidden; RESTORED=PASS
+W1 RED hold_enforcement_present: rev6 issuance record fields incomplete or forbidden; RESTORED=PASS
+W1 RED disclosures_empty: issuance disclosures D1..Dn missing or unordered; RESTORED=PASS
+W1 RED disclosure_order: issuance disclosures D1..Dn missing or unordered; RESTORED=PASS
+W1 RED disclosure_text_empty: issuance disclosures D1..Dn missing or unordered; RESTORED=PASS
+W1 RED disclosure_last_missing: issuance disclosures D1..Dn missing or unordered; RESTORED=PASS
+W1 RED disclosure_extra: issuance disclosures D1..Dn missing or unordered; RESTORED=PASS
+W1 RED claim_meaning: claim_eligible_meaning mismatch; RESTORED=PASS
+W1 RED provenance_disclosure_id: network time provenance differs from its disclosure; RESTORED=PASS
+W1 RED provenance_text: network time provenance differs from its disclosure; RESTORED=PASS
+W1 RED provenance_extra: rev6 network time provenance fields incomplete; RESTORED=PASS
+W1 RED receipt_count: network time receipts must cite both counting sessions; RESTORED=PASS
+W1 RED receipt_session_missing: network time receipts must cite both counting sessions; RESTORED=PASS
+W1 RED receipt_session_unknown: network time receipts must cite both counting sessions; RESTORED=PASS
+W1 RED receipt_session_duplicate: network time receipts must cite both counting sessions; RESTORED=PASS
+W1 RED receipt_digest_wrong: cited file digest mismatch: citation.txt; RESTORED=PASS
+W1 RED erratum_digest_wrong: cited file digest mismatch: citation.txt; RESTORED=PASS
+W1 RED provenance_missing_disclosure_id: rev6 network time provenance fields incomplete; RESTORED=PASS
+W1 RED provenance_missing_text: rev6 network time provenance fields incomplete; RESTORED=PASS
+W1 RED provenance_missing_erratum: rev6 network time provenance fields incomplete; RESTORED=PASS
+W1 RED provenance_missing_receipts: rev6 network time provenance fields incomplete; RESTORED=PASS
+W1 RED ruling_0_missing_relative_path: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_0_missing_file_sha256: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_0_digest_malformed: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_0_digest_wrong: cited file digest mismatch: citation.txt; RESTORED=PASS
+W1 RED ruling_1_missing_relative_path: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_1_missing_file_sha256: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_1_digest_malformed: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_1_digest_wrong: cited file digest mismatch: citation.txt; RESTORED=PASS
+W1 RED ruling_2_missing_relative_path: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_2_missing_file_sha256: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_2_digest_malformed: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_2_digest_wrong: cited file digest mismatch: citation.txt; RESTORED=PASS
+W1 RED ruling_3_missing_relative_path: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_3_missing_file_sha256: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_3_digest_malformed: rev6 ruling digests missing or unordered; RESTORED=PASS
+W1 RED ruling_3_digest_wrong: cited file digest mismatch: citation.txt; RESTORED=PASS
+W1 RED erratum_missing_relative_path: network time erratum citation incomplete; RESTORED=PASS
+W1 RED erratum_missing_file_sha256: network time erratum citation incomplete; RESTORED=PASS
+W1 RED receipts_missing_relative_path: network time receipts must cite both counting sessions; RESTORED=PASS
+W1 RED receipts_missing_file_sha256: network time receipts must cite both counting sessions; RESTORED=PASS
+W1 RED unknown_candidate_sha: candidate digest mismatch; RESTORED=PASS
