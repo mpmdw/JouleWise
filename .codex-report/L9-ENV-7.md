@@ -45,3 +45,29 @@ Synthetic data only. `joulewise/` and `scripts/` are byte-identical to `55566194
 At `a1f63a137` (macOS, Python 3.13, `JOULEWISE_CUSTODY_PARENT` and `TMPDIR` set to temp dirs):
 `tests.test_whole_window_analysis_clamp_flag tests.test_whole_window_inverted_corner_clamp`:
 `Ran 48 tests in 96.494s` / `OK`.
+
+## L9-ENV-8: L9-ENV-7-OPUS-DELTA (`7b0df1fe8`, ACCEPT_WITH_FIXES)
+
+The delta re-check confirmed the earlier fixes:
+- R1, R2 and R3 are killed;
+- its new R5 and R6 are killed;
+- F3 and F4 are accurate;
+- there is no production change.
+
+One new low-severity survivor remained:
+- **R4:** the call site bypasses `rederive` when an archive context is set.
+
+**F1 (fixed with the reviewer's validated pin):**
+- `test_rederive_selection_reads_the_flag_alone` now also requires, inside `_prepare`, one
+  reference to `_rederive_summary_for_authenticated_fiducial_bound`;
+- one `Load` of `rederive`;
+- that `Load` to be the `func` of the only direct `rederive(...)` call.
+
+Results at the L9-ENV-8 head (macOS):
+- `tests.test_whole_window_analysis_clamp_flag`: `Ran 14 tests in 120.785s` / `OK`.
+- With R4 applied: `Ran 14 tests in 120.730s` / `FAILED (failures=1)`.
+
+The reviewer's own `pin_check.py` gave PIN FAIL on R2, R4 and R6 and PIN PASS on head.
+
+**O1:** the tails cited in L9-ENV-6.md are at `555661945`, the L9-ENV-6 head. The delta is
+tests-only, so no change is needed.

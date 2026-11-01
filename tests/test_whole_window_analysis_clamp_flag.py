@@ -192,6 +192,19 @@ class FlagOffIsOriginMainTests(unittest.TestCase):
                    if isinstance(node, ast.Name) and node.id == "rederive" and isinstance(node.ctx, ast.Store)]
         self.assertEqual(len(rebinds), 1)
         self.assertNotIn("rederive", [arg.arg for arg in ast.walk(prepare) if isinstance(arg, ast.arg)])
+        # L9-ENV-8 (L9-ENV-7-OPUS-DELTA F1): the call site cannot bypass the
+        # selection either; reduce's function appears once (the IfExp orelse)
+        # and rederive is loaded once, as the func of its only direct call.
+        reduce_refs = [node for node in ast.walk(prepare) if isinstance(node, ast.Name)
+                       and node.id == "_rederive_summary_for_authenticated_fiducial_bound"]
+        self.assertEqual(len(reduce_refs), 1)
+        loads = [node for node in ast.walk(prepare)
+                 if isinstance(node, ast.Name) and node.id == "rederive" and isinstance(node.ctx, ast.Load)]
+        calls = [node for node in ast.walk(prepare) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name) and node.func.id == "rederive"]
+        self.assertEqual(len(loads), 1)
+        self.assertEqual(len(calls), 1)
+        self.assertIs(calls[0].func, loads[0])
         flag_stores = [node for node in ast.walk(tree)
                        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign))
                        and any(ast.unparse(target) == "self.analysis_clamp"
