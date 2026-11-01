@@ -1,0 +1,8 @@
+### L1: python3.13 -m unittest tests.test_whole_window_analysis_clamp_flag.CallSiteTests tests.test_analysis_integration
+ 1 file changed, 1 deletion(-)
+AssertionError: unexpectedly None : joulewise/analysis_engine/inputs.py:3801
+
+----------------------------------------------------------------------
+Ran 119 tests in 179.850s
+
+FAILED (failures=1, errors=1)

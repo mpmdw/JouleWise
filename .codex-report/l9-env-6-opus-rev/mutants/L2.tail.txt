@@ -1,0 +1,8 @@
+### L2: python3.13 -m unittest tests.test_whole_window_analysis_clamp_flag.CallSiteTests tests.test_floor_mint_estimator
+ 1 file changed, 1 deletion(-)
+  Actual: AuthenticatedConsumptionSession(PosixPath('/authenticated/root'), {'sw7bfloor-df-cmp-abba-ph-decode-b06-b2', 'sw7bfloor-df-cmp-abba-ph-decode-b06-a1', 'sw7bfloor-df-cmp-abba-ph-decode-b10-b2', 'sw7bfloor-df-cmp-abba-ph-decode-b05-b1', 'sw7bfloor-df-cmp-abba-ph-decode-b05-a2', 'sw7bfloor-df-cmp-abba-ph-decode-b04-a2', 'sw7bfloor-df-cmp-abba-ph-decode-b08-a1', 'sw7bfloor-df-cmp-abba-ph-dec
+
+----------------------------------------------------------------------
+Ran 41 tests in 51.248s
+
+FAILED (failures=2)

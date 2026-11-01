@@ -1,0 +1,13 @@
+diff --git a/joulewise/whole_window.py b/joulewise/whole_window.py
+index 2495abcad..fed63ae95 100644
+--- a/joulewise/whole_window.py
++++ b/joulewise/whole_window.py
+@@ -1859,7 +1859,7 @@ class AuthenticatedConsumptionSession:
+         ] = {}
+         rederive = (
+             _rederive_operative_summary
+-            if self.analysis_clamp
++            if self.analysis_clamp and self.mode != "read_replay"
+             else _rederive_summary_for_authenticated_fiducial_bound
+         )
+         for (

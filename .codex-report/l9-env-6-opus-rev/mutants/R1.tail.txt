@@ -1,0 +1,7 @@
+### R1: python3.13 -m unittest tests.test_whole_window_inverted_corner_clamp
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+.................................
+----------------------------------------------------------------------
+Ran 33 tests in 118.544s
+
+OK

@@ -1,0 +1,13 @@
+diff --git a/joulewise/whole_window.py b/joulewise/whole_window.py
+index 2495abcad..d86d1c4e9 100644
+--- a/joulewise/whole_window.py
++++ b/joulewise/whole_window.py
+@@ -1430,7 +1430,7 @@ class AuthenticatedConsumptionSession:
+         self.mode = mode
+         # L9-ENV-5 (O-F1): the inverted-corner clamp is opt-in for analysis
+         # consumers; the default is origin/main's unclamped re-derivation.
+-        self.analysis_clamp = analysis_clamp is True
++        self.analysis_clamp = analysis_clamp is True and archive_context is None
+         self._archive_context = archive_context
+         self.sensitivity_bound_s = archive_context.sensitivity_bound_s if archive_context is not None else None
+         self._archive_context_changed = False

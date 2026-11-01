@@ -1,0 +1,12 @@
+diff --git a/joulewise/floor_mint_estimator.py b/joulewise/floor_mint_estimator.py
+index 1ce4fccb0..1347e5ab6 100644
+--- a/joulewise/floor_mint_estimator.py
++++ b/joulewise/floor_mint_estimator.py
+@@ -487,7 +487,6 @@ def _authenticated_common_mode_session(
+         calibration_ledger_snapshot=calibration_ledger_snapshot,
+         calibration_bracket_binding=calibration_bracket_binding,
+         **({"archive_context": producer_entry.archive_context} if producer_entry is not None else {}),
+-        analysis_clamp=True,
+     )
+     reasons = whole_window_refusal_reasons(
+         Path(runs_root),
