@@ -232,7 +232,7 @@ class LoadTransitionAlignmentTests(unittest.TestCase):
 
     def test_artifact_id_must_be_lta_plus_a_strict_digest(self) -> None:
         artifact = build_alignment_artifact(self.manifest, self.observations)
-        for value in self.NOT_DIGESTS[:4]:
+        for value in self.NOT_DIGESTS:
             broken = copy.deepcopy(artifact)
             broken["artifact_id"] = "lta-" + value
             with self.subTest(value=value):
