@@ -12,7 +12,6 @@ from __future__ import annotations
 import io
 import json
 import re
-import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -44,6 +43,7 @@ from joulewise.schemas import (
     SummaryMetrics,
     TelemetryBackend,
 )
+from tests.test_controller import fake_environment_run
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -272,72 +272,6 @@ class DeterministicClock:
 
     def info(self) -> dict[str, Any]:
         return {"kind": "deterministic-test", "start_s": self._start}
-
-
-def fake_environment_run(command, **kwargs):
-    if tuple(command) == ("git", "rev-parse", "HEAD"):
-        return subprocess.CompletedProcess(command, 0, "0" * 40 + "\n", "")
-    outputs = {
-        ("pmset", "-g", "batt"): "Now drawing from 'AC Power'\n -InternalBattery-0 100%; charged; 0:00 remaining\n",
-        ("pmset", "-g"): " lowpowermode 0\n",
-        ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
-        ("pmset", "-g", "systemstate"): (
-            "Current System Capabilities: Audio Network\n"
-        ),
-        ("pmset", "-g", "therm"): "No thermal warning level has been recorded\n",
-        ("defaults", "-currentHost", "read", "com.apple.screensaver"): (
-            "{ moduleDict = { moduleName = Ventura; }; idleTime = 1200; }\n"
-        ),
-        ("ioreg", "-c", "IOHIDSystem"): '"HIDIdleTime" = 5000000000\n',
-        ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
-        ("vm_stat",): (
-            "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
-            "Pages free: 1000.\n"
-            "Pageins: 2000.\n"
-            "Pageouts: 30.\n"
-            "Pages occupied by compressor: 400.\n"
-            "Pages stored in compressor: 500.\n"
-        ),
-        ("sysctl", "vm.swapusage"): "vm.swapusage: total = 1.00G used = 0.00M free = 1.00G\n",
-        ("system_profiler", "SPDisplaysDataType", "-json"): """{
-          "SPDisplaysDataType": [
-            {
-              "_name": "Apple GPU",
-              "spdisplays_ndrvs": [
-                {
-                  "_name": "Built-in Display",
-                  "spdisplays_online": "spdisplays_yes",
-                  "spdisplays_connection_type": "spdisplays_internal"
-                }
-              ]
-            }
-          ]
-        }""",
-        ("ioreg", "-r", "-c", "IOMobileFramebuffer"): (
-            "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x1, registered>\n"
-            '  |   "IONameMatched" = "disp0,t603x"\n'
-        ),
-        ("ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"): (
-            '"ExternalConnected" = Yes\n'
-            '"IsCharging" = No\n'
-            '"AdapterDetails" = {"Watts"=96,"Description"="USB-C"}\n'
-        ),
-        ("sysctl", "-n", "kern.boottime"): "{ sec = 1700000000, usec = 0 }\n",
-        ("pgrep", "-x", "timed"): "123\n",
-        ("uptime",): "12:00 up 1 day, load averages: 1.00 2.00 3.00\n",
-        ("sw_vers",): "ProductName:\t\tmacOS\nProductVersion:\t\t14.0\nBuildVersion:\t\t23A344\n",
-        (
-            "sysctl",
-            "-n",
-            "hw.model",
-            "hw.ncpu",
-            "machdep.cpu.brand_string",
-        ): "MacTest1,1\n8\nTest CPU\n",
-    }
-    key = tuple(command)
-    if key not in outputs:
-        return subprocess.CompletedProcess(command, 1, "", "unexpected command")
-    return subprocess.CompletedProcess(command, 0, outputs[key], "")
 
 
 # ---------------------------------------------------------------------------
