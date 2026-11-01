@@ -377,8 +377,9 @@ def _jsonable(value: Any) -> Any:
 
 
 def row(file: str, function: str, code: str, occurrence: int = 1) -> tuple[str, str, str, int]:
-    """One inventory row key (file, function, code, occurrence); see
-    ``configs/gates/physics_rows.json``."""
+    """One inventory row key (file, function, code, occurrence), as in the
+    retired gate-prune coverage map ``configs/gates/physics_rows.json`` (MG-11,
+    2026-11-01; in git history)."""
 
     return (file, function, code, occurrence)
 

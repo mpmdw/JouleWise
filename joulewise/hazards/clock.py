@@ -517,8 +517,9 @@ def coverage_gap(samples: Sequence[Mapping[str, Any]], start: int, stop: int,
         start, stop, max_gap_ns)
 
 
-# Inventory rows (configs/gates/physics_rows.json) whose physical check this
-# module performs.  tests/hazards/test_physics_coverage.py keeps the two in step.
+# Inventory rows whose physical check this module performs, from the gate-prune
+# coverage map (configs/gates/physics_rows.json, retired by pruning-list row
+# MG-11 on 2026-11-01; it is in git history).  A record only.
 PROTECTS: tuple[tuple[str, str, str, int], ...] = (
     # base line 6827: The live clock anchor cannot be sampled (clock_gettime REALTIME/MONOTONIC_RAW, or...
     row("joulewise/arm_readiness.py", "_sample_live_clock_anchor",
@@ -655,7 +656,7 @@ PROTECTS: tuple[tuple[str, str, str, int], ...] = (
 )
 
 # Proxy rows on paths block 5 no longer runs that this module's direct
-# measurement replaces (configs/gates/physics_rows.json, "retired_proxy").
+# measurement replaces (the retired coverage map's "retired_proxy" rows).
 SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 108: Re-exports the exact systemsetup 'Network Time: Off' stdout wording that comparat...
     row("joulewise/arm_readiness.py", "<module>",

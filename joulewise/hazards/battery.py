@@ -108,11 +108,9 @@ charge sign and is disclosed as ``battery.assist`` for the discharge sign.
 from __future__ import annotations
 
 import ctypes
-import json
 import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
 from typing import Any
 
 from joulewise import battery_float
@@ -1027,19 +1025,14 @@ def _observed(pub: Mapping[str, Any]) -> dict[str, Any]:
                                              "amperage_ma", "voltage_mv")}
 
 
-# Inventory rows (configs/gates/physics_rows.json) whose physical check this
-# module performs.  tests/hazards/test_physics_coverage.py keeps the two in step.
-#
-# PROTECTS is _PROTECTS_WRITTEN plus the rows of the frozen BFG module
-# (joulewise/battery_float.py) that this module now evaluates through it.  Those
-# rows are read from the coverage map on first use, not written here: the
-# consumer guard (tests/test_battery_float_consumers.py) reserves the names of
-# the grammar's primitives as strings in any production file that names its
-# module, and two of those keys name one.  tests/hazards/test_battery.py pins
-# the loaded rows literally, so the coverage check stays two-sided.
-COVERAGE_MAP = Path(__file__).resolve().parents[2] / "configs" / "gates" / "physics_rows.json"
-FROZEN_GRAMMAR_FILE = "joulewise/battery_float.py"
-_PROTECTS_WRITTEN: tuple[tuple[str, str, str, int], ...] = (
+# Inventory rows whose physical check this module performs, from the gate-prune
+# coverage map (configs/gates/physics_rows.json, retired by pruning-list row
+# MG-11 on 2026-11-01; it is in git history).  A record only: nothing reads it
+# at runtime.  The rows of the frozen BFG module (joulewise/battery_float.py)
+# that this module evaluates through it are not listed here: the consumer guard
+# (tests/test_battery_float_consumers.py) reserves the names of the grammar's
+# primitives as strings in any production file that names its module.
+PROTECTS: tuple[tuple[str, str, str, int], ...] = (
     # base line 1136: AC state, supply, negotiation and power policy match the frozen policy. The produ...
     row("joulewise/arm_readiness.py", "<module>",
         "predicate t0.power_path.v1", 1),
@@ -1085,7 +1078,7 @@ _PROTECTS_WRITTEN: tuple[tuple[str, str, str, int], ...] = (
 )
 
 # Proxy rows on paths block 5 no longer runs that this module's direct
-# measurement replaces (configs/gates/physics_rows.json, "retired_proxy").
+# measurement replaces (the retired coverage map's "retired_proxy" rows; see PROTECTS).
 SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     # base line 7168: The POWER_PREFLIGHT receipt says AC state, negotiation, supply and power policy m...
     row("joulewise/arm_readiness.py", "_evaluate_rows",
@@ -1106,24 +1099,3 @@ SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
     row("scripts/prewindow_check.sh", "check_once",
         "BLOCK not on AC power", 1),
 )
-
-
-def frozen_grammar_rows(path: Path = COVERAGE_MAP) -> tuple[tuple[str, str, str, int], ...]:
-    """The coverage map's ``protects`` rows of the frozen BFG module assigned to battery."""
-
-    document = json.loads(Path(path).read_text())
-    return tuple(row(entry["key"]["file"], entry["key"]["function"], entry["key"]["code"],
-                     entry["key"]["occurrence"])
-                 for entry in document["rows"]
-                 if entry["key"]["file"] == FROZEN_GRAMMAR_FILE
-                 and entry.get("disposition") == "protects" and entry.get("module") == MODULE)
-
-
-def __getattr__(name: str) -> Any:
-    # PEP 562: PROTECTS is built on first use, so importing this module (the arm,
-    # the monitor) never depends on reading the coverage map.
-    if name == "PROTECTS":
-        value = _PROTECTS_WRITTEN + frozen_grammar_rows()
-        globals()["PROTECTS"] = value
-        return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
