@@ -101,14 +101,13 @@ def _positive_int(value: Any, label: str, reason: str) -> int:
     return value
 
 
+_LOWER_HEX = frozenset("0123456789abcdef")
+
+
 def _is_sha256(value: Any) -> bool:
-    if not isinstance(value, str) or len(value) != 64:
-        return False
-    try:
-        int(value, 16)
-    except ValueError:
-        return False
-    return value == value.lower()
+    # Exactly 64 lowercase hex characters. int(value, 16) is not a hex test:
+    # it accepts a "0x" prefix, surrounding whitespace and "_" separators.
+    return isinstance(value, str) and len(value) == 64 and set(value) <= _LOWER_HEX
 
 
 def _validate_manifest(manifest: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -638,13 +637,8 @@ def validate_alignment_artifact(value: Mapping[str, Any]) -> list[str]:
         ):
             errors.append("real-Mac artifact source provenance is invalid")
     artifact_id = value["artifact_id"]
-    if not isinstance(artifact_id, str) or not artifact_id.startswith("lta-") or len(artifact_id) != 68:
+    if not isinstance(artifact_id, str) or not artifact_id.startswith("lta-") or not _is_sha256(artifact_id[4:]):
         errors.append("artifact_id must be lta- plus 64 lowercase hex digits")
-    else:
-        try:
-            int(artifact_id[4:], 16)
-        except ValueError:
-            errors.append("artifact_id must be lta- plus 64 lowercase hex digits")
     transitions = value["transitions"]
     if not isinstance(transitions, list) or not transitions:
         errors.append("transitions must be a non-empty array")
