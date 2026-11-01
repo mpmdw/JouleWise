@@ -167,6 +167,24 @@ class FlagOffIsOriginMainTests(unittest.TestCase):
         self.assertIsNotNone(keyword)
         self.assertEqual(ast.unparse(keyword.value), "self.analysis_clamp")
 
+    def test_rederive_selection_reads_the_flag_alone(self) -> None:
+        """L9-ENV-6 (Opus F2): no mode or archive condition can disable the clamp.
+
+        The runtime tests build sessions in the default issuing mode without
+        an archive context, while the block-5 dry run uses read_replay with
+        one; pinning the selection's test to the flag alone covers both.
+        """
+
+        tree = ast.parse((ROOT / "joulewise/whole_window.py").read_text(encoding="utf-8"))
+        selections = [node for node in ast.walk(tree) if isinstance(node, ast.IfExp)
+                      and isinstance(node.body, ast.Name) and node.body.id == "_rederive_operative_summary"]
+        self.assertEqual(len(selections), 1)
+        self.assertEqual(ast.unparse(selections[0].test), "self.analysis_clamp")
+        self.assertEqual(ast.unparse(selections[0].orelse), "_rederive_summary_for_authenticated_fiducial_bound")
+        names = [node.id for node in ast.walk(tree)
+                 if isinstance(node, ast.Name) and node.id == "_rederive_operative_summary"]
+        self.assertEqual(len(names), 1)
+
 
 class CallSiteTests(unittest.TestCase):
     """(ii) Static: run_campaign never opts in; every analysis consumer does."""

@@ -158,6 +158,8 @@ def seat_base_whole_window():
 _SHADOW_WHOLE_WINDOW: dict[str, object] = {}
 # L9-ENV-4's head, for L9-ENV-5 counterfactuals (O-F3, O-F5).
 ENV4_COMMIT = "0a799146c"
+# L9-ENV-5 code head, before the L9-ENV-6 omitted-pointer guard.
+ENV5_COMMIT = "d8050fca6"
 # The ruling's base; origin/main's whole_window.py is byte-identical to it
 # (checked at 4c26b2e2c), so this is "origin/main behaviour" for O-F1.
 ORIGIN_MAIN_COMMIT = "7ebb7db2a"
@@ -726,6 +728,59 @@ class PermanentWideningCaseTests(unittest.TestCase):
         empty = json.loads(json.dumps(old))
         empty["energy_anchor_shift_envelopes"] = {}
         self.assertIs(_clamp_inverted_operative_envelopes(self.bundle, empty, **kwargs), empty)
+
+    def test_mirror_disagreeing_with_reduce_on_an_omitted_pointer_fails_closed(self) -> None:
+        """L9-ENV-6 (final-pass F1): reduce omits a pointer only when its mint refuses.
+
+        The mirror's prefill row is stretched to 0.14 s (just over 2*edge)
+        while every recorded row is untouched, so the O-F3 proof still holds.
+        Reduce's mint then defines prefill on the mirror's contributions,
+        which can only mean the mirror disagrees with reduce: the summary
+        is returned unchanged.
+        """
+
+        just_under, _over = self._bounds()
+        old, _new, _oracle = self._rederive(just_under)
+        self.assertNotIn(PREFILL, old["energy_anchor_shift_envelopes"])
+        kwargs = dict(authenticated_fiducial_bound_s=just_under,
+                      instrument_calibration_physics_cache=self._cache)
+        stretched = []
+
+        def skewed(real):
+            def rows(reader, version, anchor_curve):
+                out = []
+                for pointer, contributions in real(reader, version, anchor_curve):
+                    if pointer == PREFILL:
+                        contributions = [(curve, [Window(window.start_s, window.start_s + 0.14)
+                                                  for window in windows])
+                                         for curve, windows in contributions]
+                        stretched[:] = contributions
+                    out.append((pointer, contributions))
+                return out
+            return rows
+
+        real = whole_window._group_envelope_contributions
+        with patch.object(whole_window, "_group_envelope_contributions", side_effect=skewed(real)):
+            result = _clamp_inverted_operative_envelopes(self.bundle, old, **kwargs)
+        self.assertIs(result, old)
+
+        # The disagreement is real: reduce mints the stretched row unclamped.
+        anchor = reduce_module._derive_anchor_context(
+            reduce_module.BundleReader(self.bundle), reduce_module.BundleReader(self.bundle).metadata(),
+            strict_calibration=True, reducer_version=reduce_module.REDUCER_VERSION,
+            authenticated_fiducial_bound_override_s=just_under,
+            instrument_calibration_physics_cache=self._cache)
+        bounds = (anchor.bundle_bound_s, anchor.fiducial_bound_s or 0.0, anchor.edge_span_s)
+        minted = reduce_module._corner_composed_anchor_shift_envelope(stretched, *bounds)
+        self.assertIsNotNone(minted)
+        self.assertGreater(minted["lower_j"], 0.0)
+
+        # Counterfactual at L9-ENV-5: the unclamped envelope was added.
+        env5 = whole_window_at(ENV5_COMMIT)
+        with patch.object(env5, "_group_envelope_contributions",
+                          side_effect=skewed(env5._group_envelope_contributions)):
+            before = env5._clamp_inverted_operative_envelopes(self.bundle, old, **kwargs)
+        self.assertEqual(before["energy_anchor_shift_envelopes"][PREFILL], minted)
 
     def _with_long_prefill(self, module, bound_s: float):
         """Mirror whose prefill row is the reviewer's [short, long] phase.
