@@ -164,6 +164,7 @@
    "joulewise/desk_restore.py"
   ],
   "not_scanned_reasons": {
+   "alignment_workload": "prospective align_episode branch only; absent from currently registered HAZARD packs; census required before D1 registration",
    "retired": "retired ARM/T0 path: block 5 does not run it (the HAZARD branch dispatches away)",
    "analysis": "desk analysis after the harvest; it decides no collection and no window exclusion",
    "data": "constants and data shapes only",
@@ -174,6 +175,7 @@
    "legacy_key": "named only as a legacy refusal key (PROTECTS/SUPERSEDES or a runbook reference); the retired ARM/T0 path runs it, block 5 does not"
   },
   "not_scanned": {
+   "joulewise/align/apple/workload.py": "alignment_workload",
    "joulewise/b6/analysis_lane.py": "data",
    "joulewise/b6/desk_identity.py": "desk",
    "joulewise/b6/plan_inputs.py": "desk",

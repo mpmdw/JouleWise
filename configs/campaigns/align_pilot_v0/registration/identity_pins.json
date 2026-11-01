@@ -1,0 +1,248 @@
+{
+  "derivation": {
+    "config_count": "number of dispatched planned members for this source, including reference members",
+    "copied_from": "configs/campaigns/bytes_mac_check/registration/identity_pins.json",
+    "model_artifact_sha256": "joulewise.provenance.model_artifact_identity, read-only local weight hashing",
+    "runtime_versions": "joulewise.flags.collect.runtime_versions of the explicitly named interpreter",
+    "stack_identity": "empty: no model was executed; runtime stack is unobserved, never inferred",
+    "tree_path": "configs/campaigns/align_pilot_v0/plan_tree.json",
+    "tree_sha256": "copied before the tree was final; re-derive at the Mac"
+  },
+  "non_claim": true,
+  "runtime_python_observed": "/Users/edr/code/JouleWise/.venv/bin/python",
+  "runtime_versions": {
+    "packages": {
+      "mlx": "0.31.2",
+      "mlx-lm": "0.31.3",
+      "mlx-metal": "0.31.2",
+      "numpy": "2.5.1",
+      "safetensors": "0.8.0",
+      "tokenizers": "0.22.2",
+      "transformers": "5.12.1"
+    },
+    "python": "3.13.1"
+  },
+  "schema": "joulewise.b5_identity_pins.v1",
+  "status": "NON_CLAIM_FILE_IDENTITIES_ONLY",
+  "units": {
+    "neg8_reference": {
+      "config_count": 25,
+      "config_paths": [
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r13.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r14.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r15.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r16.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r17.json",
+        "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r18.json",
+        "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
+        "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
+        "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
+        "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
+        "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
+        "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
+        "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e01": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e01.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e02": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e02.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e03": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e03.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e04": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e04.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e05": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e05.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-a-e06": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-a/align-pilot-v0-episodes-a-e06.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e07": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e07.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e08": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e08.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e09": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e09.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e10": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e10.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e11": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e11.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    },
+    "qwen3-8b-align-pilot-v0-episodes-b-e12": {
+      "config_count": 1,
+      "config_paths": [
+        "configs/campaigns/align_pilot_v0/stages/episodes-b/align-pilot-v0-episodes-b-e12.json"
+      ],
+      "flags": [
+        "file_identity_copied_from_bytes_mac_check",
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "3e0fb77e7ce1ecb7ec844be3ef8856a23643e05317a55054a63d6af62252be31",
+      "model_name": "Qwen3-8B-4bit",
+      "model_revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "model_source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-8B-4bit/snapshots/545dc4251c05440727734bcd94334791f6ab0192",
+      "stack_identity": {}
+    }
+  }
+}

@@ -118,6 +118,19 @@ def resolve_runtime(
     config: BenchmarkConfig, clock: Clock
 ) -> tuple[RuntimeAdapter | None, AdapterResult | None]:
     """Resolve the configured runtime backend to an adapter or a failure."""
+    if config.workload_profile.name == "align_episode":
+        from dataclasses import replace
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+
+        turn_config = replace(config, workload_profile=replace(
+            config.workload_profile, name="align_turn"
+        ))
+        # Unsupported episode backends fail at prepare without constructing
+        # a remote client or entering the MLX endpoint path.
+        if config.hardware_target.runtime_backend not in (RuntimeBackend.MOCK, RuntimeBackend.MLX):
+            return EpisodeRuntimeAdapter(None, clock), None
+        runtime, failure = resolve_runtime(turn_config, clock)
+        return (EpisodeRuntimeAdapter(runtime, clock), None) if runtime is not None else (None, failure)
     backend = config.hardware_target.runtime_backend
     if backend == RuntimeBackend.MOCK:
         return MockRuntimeAdapter(clock), None

@@ -72,7 +72,9 @@
       "_attribution_note": "Local /opt/homebrew/bin/python3.13 synthetic-only desk observations, five isolated unittest processes scheduled by three concurrent workers. Per-method seconds include fixture setup, real harvest, acceptance, structure, compression and loop control; the reharvest method covers both exits 4 and 6. The nine short regressions took 0.232 s. Module weight 1800 s conservatively exceeds the sum of the isolated observations. Scheduling hints, not hosted medians or hardware evidence. No count, catalog threshold, validator or reducer is lowered."
     }
   },
+  "_hosted_observation_2026_10_22_align_moe": "ADDED for tests.align.test_moe_calibration: single hosted observation from CI run 39715696032, shard 9, MODULE PASS seconds=1451.183. This is a scheduling hint, not evidence; replace with hosted medians at the next timing harvest.",
   "seconds_by_module": {
+    "tests.align.test_moe_calibration": 1451.183,
     "tests.b6.test_cold_pass_fixes": 1800.0,
     "tests.b6.test_loop_round_desk": 160.727,
     "tests.flags.test_flags_catalog": 0.005,

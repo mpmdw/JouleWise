@@ -1,0 +1,21 @@
+thermal reads 3797, malformed 0, largest poll gap 5.3 s
+bytes-llama-70b-abs-r07 ['after_end']
+bytes-llama-70b-null-b02-a1 ['after_end', 'tail']
+bytes-llama-70b-null-b03-b1 ['after_end', 'tail']
+bytes-llama-70b-null-b04-b2 ['after_end', 'tail']
+bytes-llama-70b-null-b05-a1 ['after_end', 'tail']
+bytes-llama-70b-null-b05-a2 ['after_end', 'tail']
+bytes-llama-70b-null-b06-a2 ['after_end', 'tail']
+bytes-llama-70b-null-b07-a2 ['after_end', 'tail']
+bytes-llama-70b-null-b09-a1 ['after_end', 'tail']
+bytes-llama-70b-null-b10-b1 ['after_end', 'tail']
+episode: length ~10 s, onset 25 s after latest request end, onset in gap
+episode: length ~20 s, onset 20 s after latest request end, onset in bytes-llama-70b-null-b02-a1
+episode: length ~25 s, onset 15 s after latest request end, onset in bytes-llama-70b-null-b03-b1
+episode: length ~25 s, onset 15 s after latest request end, onset in bytes-llama-70b-null-b04-b2
+episode: length ~15 s, onset 20 s after latest request end, onset in bytes-llama-70b-null-b05-a1
+episode: length ~35 s, onset 10 s after latest request end, onset in bytes-llama-70b-null-b05-a2
+episode: length ~25 s, onset 15 s after latest request end, onset in bytes-llama-70b-null-b06-a2
+episode: length ~25 s, onset 20 s after latest request end, onset in bytes-llama-70b-null-b07-a2
+episode: length ~35 s, onset 10 s after latest request end, onset in bytes-llama-70b-null-b09-a1
+episode: length ~30 s, onset 15 s after latest request end, onset in bytes-llama-70b-null-b10-b1

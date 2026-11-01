@@ -49,6 +49,14 @@ MIN_LEAD_S = 300
 HARVEST_TIMEOUT_S = 4 * 3600
 
 
+# joulewise.align.apple.workload.WORKLOAD_KIND, named here without importing align.
+ALIGN_EPISODE = 'align_episode'
+
+
+def align_unit_id(model_id, run_id):
+    return model_id + '-' + run_id
+
+
 class PhysicalHazard(ValueError):
     """Missing model payload or insufficient physical storage for this window."""
 
@@ -102,7 +110,7 @@ def disk_bytes(root, *, excluded=(), seen=None):
     return total
 
 
-def measurement_view(source, session):
+def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     """Disposable launch attachment over the measurement checkout.
 
     Mirrors the sparse measurement setup used for B6's one-off non-claim
@@ -131,12 +139,12 @@ def measurement_view(source, session):
             if p.name not in omitted:
                 (directory / p.name).symlink_to(p, target_is_directory=p.is_dir())
     shutil.copyfile(source / plan.HEAD_PIN_RELATIVE, view / plan.HEAD_PIN_RELATIVE)
-    pack = view / 'configs/campaigns' / PACK_ID
+    pack = view / 'configs/campaigns' / pack_id
     pack.mkdir()
-    for p in (source / KIT).iterdir():
+    for p in (source / kit).iterdir():
         if p.name != 'plan_tree.json':
             (pack / p.name).symlink_to(p, target_is_directory=p.is_dir())
-    tree = read(source / KIT / 'plan_tree.json')
+    tree = read(source / kit / 'plan_tree.json')
     template = read(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json')
     launch = template['arm_attachments']['launch']
     for row in launch.get('bindings', []):
@@ -182,6 +190,9 @@ def measurement_view(source, session):
             typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
             model, hardware = typed['model'], typed['hardware_target']
             unit_id = model_ids.get(model['source'], 'neg8_reference')
+            if typed['workload_profile']['name'] == ALIGN_EPISODE:
+                # Each episode spec is its own declared workload, so its own unit.
+                unit_id = align_unit_id(unit_id, row['run_id'])
             declared = {
                 'hardware_target': hardware['id'], 'runtime_backend': hardware['runtime_backend'],
                 'telemetry_backend': hardware['telemetry_backend'], 'model_name': model['name'],
@@ -244,7 +255,7 @@ def measurement_view(source, session):
     (pack / 'plan_tree.sha256').write_text(locator(pack / 'plan_tree.json')['sha256'] + '  plan_tree.json\n')
     write(session / 'staging/measurement-view.json', {
         'source_measurement_root': str(source), 'measurement_root': str(view),
-        'source_tree': locator(source / KIT / 'plan_tree.json'), 'launch_template':
+        'source_tree': locator(source / kit / 'plan_tree.json'), 'launch_template':
             locator(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json'),
         'staged_tree': locator(pack / 'plan_tree.json'),
         'changes': ['arm_attachments.launch: existing fourteen-binding interface; kit root leaves',
@@ -284,10 +295,11 @@ def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
 
 
 def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time,
-            statvfs=os.statvfs, capacity=important_capacity):
+            statvfs=os.statvfs, capacity=important_capacity, kit=KIT, pack_id=PACK_ID,
+            session_prefix='bytes-h-'):
     measurement, session = Path(measurement_root).resolve(), Path(session_root).resolve()
-    reg = measurement / KIT / 'registration'
-    sized = registration.load_sizing(reg)['packs'][PACK_ID]
+    reg = measurement / kit / 'registration'
+    sized = registration.load_sizing(reg)['packs'][pack_id]
     pins = registration.load_identity_pins(reg)
     inventory = read(reg / 'model_artifact_inventory.json')['artifacts']
     for name, unit in pins['units'].items():
@@ -298,7 +310,7 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         raise ValueError('session root must be empty; preserve the existing session')
     session.mkdir(parents=True, exist_ok=True)
     clock = now()
-    session_id = 'bytes-h-' + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    session_id = session_prefix + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     config = read(measurement / 'configs/b6/loop.json')
     lead = config.get('launch_lead_s', DEFAULT_LEAD_S)
     if not finite(lead) or lead < MIN_LEAD_S:
@@ -336,10 +348,10 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     identities, notes = desk_identity.collect(measurement, session / 'staging/inputs', run=run)
     # Existing builder already exposes registration_dir. Only this caller's
     # kit path, bytes and registration locator differ from DriverLane inputs.
-    inputs = plan_inputs.build(measurement, reg, PACK_ID, session_id, identities,
+    inputs = plan_inputs.build(measurement, reg, pack_id, session_id, identities,
         custody_root=session / 'custody', runs_parent=session / 'runs-parent',
         claim_backup=session / 'backup-claim', bound_backup=session / 'backup-bound', run=run)
-    view, pack = measurement_view(measurement, session)
+    view, pack = measurement_view(measurement, session, kit=kit, pack_id=pack_id)
     inputs.update(measurement_root=str(view), pack_root=str(pack),
                   bytes_per_member=per_member)
     inputs['thresholds']['disk']['headroom_bytes'] = native_budget['headroom_bytes']
@@ -359,10 +371,12 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     if status.returncode or status.stdout.strip():
         notes.append({'kind': 'measurement_checkout_dirty_or_unobserved', 'status': status.stdout.strip()})
     notes.extend({'kind': 'runtime_stack_unobserved', 'model_id': name} for name in pins['units'])
-    notes.append({'kind': 'sizing.planning_bound_interpolated', 'model_id': 'qwen3-8b-8bit'})
+    if kit == KIT:
+        notes.append({'kind': 'sizing.planning_bound_interpolated', 'model_id': 'qwen3-8b-8bit'})
+    notes.extend({'kind': flag, 'pack_id': pack_id} for flag in sized.get('flags', []))
     state = {'schema_version': 'joulewise.bytes_h_session.v1', 'non_claim': True,
         'session_id': session_id, 'source_measurement_root': str(measurement),
-        'measurement_root': str(view), 'registration_dir': str(view / KIT / 'registration'),
+        'measurement_root': str(view), 'registration_dir': str(view / kit / 'registration'),
         'session_root': str(session), 'preparation_status': 'STAGED' if record else 'INPUTS_ONLY',
         'plan_path': record['plan']['path'] if record else str(session / 'custody/night_plan.json'),
         'plan_sha256': record['plan']['sha256'] if record else None, 'inputs': inputs, 'disk': disk, 'flags': notes,
