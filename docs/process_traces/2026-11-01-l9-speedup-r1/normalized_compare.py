@@ -129,7 +129,7 @@ def identity_normalized_bytes(name: str, data: bytes) -> bytes:
     return text.encode('utf-8')
 
 
-def normalize(files: dict[str, bytes]) -> dict[str, bytes]:
+def normalize(files: dict[str, bytes], names: dict[str, str] | None = None) -> dict[str, bytes]:
     base = {name: identity_normalized_bytes(name, data) for name, data in files.items()}
     original = {name: sha(data) for name, data in files.items()}
     mapping = {digest: digest for digest in original.values()}
@@ -142,6 +142,8 @@ def normalize(files: dict[str, bytes]) -> dict[str, bytes]:
             current[new_name] = (name, text.encode('utf-8', errors='surrogateescape'))
         updated = {original[name]: sha(data) for _new, (name, data) in current.items()}
         if updated == mapping:
+            if names is not None:
+                names.update({name: new for new, (name, _data) in current.items()})
             return {new: data for new, (_name, data) in current.items()}
         mapping = updated
     raise SystemExit('digest normalization did not reach a fixpoint')
@@ -182,7 +184,19 @@ def main(argv):
         for field in field_diffs(a, b):
             print('     field', field)
 
-    nl, nr = normalize(left), normalize(right)
+    names_l: dict[str, str] = {}
+    names_r: dict[str, str] = {}
+    nl, nr = normalize(left, names_l), normalize(right, names_r)
+    by_normalized_r = {new: old for old, new in names_r.items()}
+    print('\n== content-addressed files present on both sides under different names (paired after normalization)')
+    for name in only_left:
+        partner = by_normalized_r.get(names_l[name])
+        if partner is None:
+            continue
+        print(f'  {name}\n    <-> {partner}')
+        a, b = parse(left[name]), parse(right[partner])
+        for field in (field_diffs(a, b) if a is not None and b is not None else ['(non-JSON)']):
+            print('     field', field)
     print('\n== after normalization')
     if set(nl) != set(nr):
         failures.append('file names differ after normalization')
