@@ -8,7 +8,7 @@ block-5 driver's patterns: the bracket selection is recomputed (step 3b, then
 again by a later step), a floor extraction validates members of two cells
 (one bundle in both), and the bracket's candidate discovery loads the same
 calibration candidate once per pack. If a run-scoped cache stops being shared
-(the run physics store, the candidate-physics memo) or a loop starts validating
+(the run physics store) or a loop starts validating
 or re-reducing a bundle more often, a bound fails.
 """
 import collections
@@ -32,8 +32,10 @@ from tests.b5_analysis.test_shared_physics_cache import ARCHIVE
 # so neither the selection nor the extraction may strict-validate it.
 MAX_STRICT_VALIDATIONS = {GOOD[0]: 4, GOOD[1]: 3, GOOD[2]: 3, REFUSED: 0}
 MAX_REDUCTIONS_PER_STRICT_VALIDATION = 1
-# One shared fit for the members' reductions, one for the candidate's physics.
-MAX_PHYSICS_REFITS = 2
+# One shared fit for all the members' reductions (the run physics store), plus
+# one refit per candidate load: the frozen candidate loader has no run memo
+# (a candidate-physics memo is deferred to L9-SPEEDUP-FOLLOWUP; with it this is 2).
+MAX_PHYSICS_REFITS = 4
 
 
 class AnalysisWorkCountTests(unittest.TestCase):
