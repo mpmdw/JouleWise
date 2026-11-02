@@ -62,6 +62,11 @@ READERS = {
         "acceptance members and ledger lexemes without opening historical capture evidence"),
     "joulewise/reduce.py": ("issued acceptance (pinned)", "measurement reduction"),
     "joulewise/whole_window.py": ("issued acceptance and bracket rows", "outside the derivation scope"),
+    "joulewise/analysis_member_pool.py": (
+        "bracket rows (scheduling only)", "outside the derivation scope: single_bound_per_calibration "
+        "compares members' metadata bounds for equality through whole_window._effective_bound_partition "
+        "only to choose serial or pooled validation, whose outputs are identical; prints, writes and "
+        "stores no B (L9-SPEEDUP-R2)"),
     "joulewise/detection_floor.py": ("bracket rows", "outside the derivation scope"),
     "joulewise/analysis_engine/inputs.py": (
         "bracket rows (block-5 archive context)", "outside the derivation scope: the claim gate reads the "

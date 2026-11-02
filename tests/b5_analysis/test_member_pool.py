@@ -7,6 +7,7 @@ wall-deadline firings reach the run's observer; a worker without an observer mar
 the run (the driver refuses the step).
 """
 import dataclasses
+import json
 import os
 import sys
 import tempfile
@@ -137,6 +138,63 @@ class MemberPoolTests(unittest.TestCase):
     def test_a_worker_without_an_observer_marks_the_run(self):
         _, _, unavailable = self.pooled(self.names, worker=blind_worker, deadline=DeadlineObserver())
         self.assertTrue(unavailable)
+
+    def test_deferred_accounting_reports_only_consumed_outcomes(self):
+        # L9-SPEEDUP-R2: a caller whose serial loop stops reports only what it consumed.
+        observer = DeadlineObserver()
+        with arc.analysis_run_caches({}, workers=3) as caches:
+            caches.deadline = observer
+            outcomes = pool.member_map(read_member, [((str(self.root), n), {}) for n in self.names],
+                                       worker=firing_worker, account=False)
+            self.assertEqual(observer.firings, 0, 'nothing is reported at the map')
+            first = pool.consume(outcomes[0], lambda: read_member(self.root, self.names[0]), account=True)
+            self.assertEqual(first, read_member(self.root, self.names[0]))
+            self.assertEqual(observer.firings, 2, 'the consumed outcome only')
+            pool.account_outcomes([None, outcomes[1]])
+            self.assertEqual(observer.firings, 4)
+        with arc.analysis_run_caches({}, workers=3) as caches:
+            caches.deadline = DeadlineObserver()
+            outcomes = pool.member_map(read_member, [((str(self.root), n), {}) for n in self.names],
+                                       worker=blind_worker, account=False)
+            self.assertFalse(caches.worker_observer_unavailable)
+            pool.consume(outcomes[2], lambda: None, account=True)
+            self.assertTrue(caches.worker_observer_unavailable)
+
+    def test_deferred_accounting_merges_fits_of_consumed_outcomes_only(self):
+        store = {}
+        outcome = pool.MemberOutcome(True, 1, (), 0, {'p': {'k': 0.5}})
+        late = pool.MemberOutcome(True, 1, (), 0, {'p': {'later': 0.25}})
+        with arc.analysis_run_caches(store, workers=3):
+            pool.account_outcomes([outcome])
+        self.assertEqual(store, {'p': {'k': 0.5}})
+        self.assertNotIn('later', store['p'])
+        pool.account_outcomes([late])  # outside a run: inert
+        self.assertEqual(store, {'p': {'k': 0.5}})
+
+    def test_genuine_and_active_gates(self):
+        self.assertTrue(pool.is_genuine(read_member, f'{__name__}:read_member'))
+        self.assertFalse(pool.is_genuine(lambda *a: None, f'{__name__}:read_member'))
+        self.assertFalse(pool.is_genuine(mock.Mock(side_effect=read_member), f'{__name__}:read_member'))
+        with mock.patch(f'{__name__}.read_member', side_effect=read_member) as double:
+            self.assertFalse(pool.is_genuine(double, f'{__name__}:read_member'))
+        self.assertFalse(pool.pool_active())
+        with arc.analysis_run_caches({}, workers=1):
+            self.assertFalse(pool.pool_active())
+        with arc.analysis_run_caches({}, workers=2):
+            self.assertTrue(pool.pool_active())
+
+    def test_single_bound_per_calibration(self):
+        def bundle(name, digest, bound):
+            directory = self.root / name
+            directory.mkdir()
+            (directory / 'metadata.json').write_text(json.dumps(
+                {'instrument_calibration': {'artifact_sha256': digest, 'b_fiducial_s': bound}}))
+            return directory
+        a, b = bundle('a', 'x' * 64, 0.5), bundle('b', 'x' * 64, 0.5)
+        c, d = bundle('c', 'y' * 64, 0.25), bundle('d', 'x' * 64, 0.5 + 5e-13)
+        self.assertTrue(pool.single_bound_per_calibration([a, b, c]))
+        self.assertFalse(pool.single_bound_per_calibration([a, b, d]), 'one artifact under two bounds')
+        self.assertFalse(pool.single_bound_per_calibration([a, self.root / 'missing']))
 
 
 def jumping_worker(task):

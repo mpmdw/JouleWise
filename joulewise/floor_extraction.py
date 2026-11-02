@@ -60,6 +60,73 @@ def _default_strict_validator(path: Path, strict: bool) -> Sequence[str]:
 
     return validate_bundle(path, strict=strict)
 
+
+def _scheduled_strict_bundle_ids(
+    cells: Sequence[Any], bindings: Mapping[str, Mapping[str, Any]]
+) -> list[str]:
+    """Scheduling only: the bundles the cell loop will strict-validate, in first-use order.
+
+    It decides nothing (L9-SPEEDUP-R2): the loop still validates each member at
+    its own position; a bundle missing here is validated serially there, and a
+    result the loop never asks for is discarded unobserved.
+    """
+
+    ordered: dict[str, None] = {}
+    try:
+        for cell in cells:
+            removed = set((bindings.get(cell["cell_id"]) or {}).get("removed_unit_ids", ()))
+            if cell.get("kind") == "absolute":
+                ids = [row["bundle_id"] for row in cell["members"] if row["bundle_id"] not in removed]
+            else:
+                ids = [block["members"][position] for block in cell["blocks"]
+                       if block["block_id"] not in removed for position in _ABBA_POSITIONS]
+            ordered.update((bundle_id, None) for bundle_id in ids if isinstance(bundle_id, str) and bundle_id)
+    except (KeyError, TypeError, AttributeError):
+        return []
+    return list(ordered)
+
+
+def _served_strict_validator(runs_root: Path, bundle_ids: Sequence[str]) -> StrictValidator | None:
+    """The default validator, served from the ordered member pool (L9-SPEEDUP-R2).
+
+    Inside an analysis run with workers (a step-4 child), the strict validations
+    of the scheduled bundles run in the pool up front; each member's call then
+    consumes its bundle's outcome at that member's own serial position (a task
+    that raised is recomputed there; a member the schedule missed is validated
+    serially). Only outcomes the loop consumed are reported to the run, so a
+    loop that stops (a kept-unit member code) counts no later bundle's
+    observations. Returns None when the pool is not in use.
+    """
+
+    from joulewise.analysis_member_pool import (
+        consume, is_genuine, member_map, pool_active, single_bound_per_calibration,
+    )
+    from joulewise.cli import validate_bundle
+
+    if (not pool_active() or not is_genuine(validate_bundle, "joulewise.cli:validate_bundle")
+            or not is_genuine(_default_strict_validator, "joulewise.floor_extraction:_default_strict_validator")):
+        return None
+    paths = [Path(runs_root) / bundle_id for bundle_id in bundle_ids]
+    if not single_bound_per_calibration(paths):
+        return None
+    outcomes = member_map(_default_strict_validator, [((path, True), {}) for path in paths], account=False)
+    if outcomes is None:
+        return None
+    prepared = dict(zip(paths, outcomes))
+    accounted: set[Path] = set()
+
+    def served(path: Path, strict: bool) -> Sequence[str]:
+        key = Path(path)
+        outcome = prepared.get(key) if strict is True else None
+        if outcome is None:
+            return _default_strict_validator(path, strict)
+        first = key not in accounted
+        accounted.add(key)
+        value = consume(outcome, lambda: _default_strict_validator(path, strict), account=first)
+        return list(value)
+
+    return served
+
 from joulewise.analysis_engine.inputs import (
     ANCHOR_FALLBACK_MEMBER_REFUSAL,
     BundleEvidence,
@@ -3194,6 +3261,10 @@ def extract_cells(
         if consumption_session is not None and (consumption_session.ready or consumption_session.refusal_reasons)
         else None
     )
+    if strict_validator is None and not kept_required:
+        validator = _served_strict_validator(
+            runs_root, _scheduled_strict_bundle_ids(cells, bindings)
+        ) or validator
     reports: list[CellReport] = []
     seen_cell_ids: set[str] = set()
     for cell in cells:

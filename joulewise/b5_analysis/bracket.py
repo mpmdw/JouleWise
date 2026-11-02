@@ -132,13 +132,53 @@ def _copy(inputs: _Inputs):
     return raw, ledger_prefix(raw, pin), pin
 
 
+def _strict_problems(path_text: str) -> list[str]:
+    """Member-pool entry point (L9-SPEEDUP-R2): one copied-out bundle's strict problems.
+
+    The selection loop's own call, with a fresh call-local physics cache (the
+    run store is shared by the worker, as in the driver).
+    """
+    from joulewise.cli import validate_bundle
+
+    return list(validate_bundle(Path(path_text), strict=True, physics_cache={}))
+
+
+def _scheduled_candidate(target: Path) -> bool:
+    """Scheduling only: whether the selection will strict-validate this copy.
+
+    It authenticates nothing and decides nothing: the serial loop re-reads both
+    documents through the bundle reader at the member's own position, and a
+    wrong guess only costs a serial validation or an unused worker result.
+    """
+    try:
+        metadata = json.loads((target / "metadata.json").read_bytes())
+        summary = json.loads((target / "summary_metrics.json").read_bytes())
+        uncertainty = metadata.get("uncertainty_evidence")
+        anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
+        return (summary.get("status") == "succeeded" and isinstance(anchor, Mapping)
+                and anchor.get("status") == "bounded")
+    except (OSError, ValueError, AttributeError, TypeError):
+        return False
+
+
 def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
     """Recompute the harvest's selection from authenticated complete bundles.
 
     Neither pin always records a digest for member-assessments.json. Its
     selection is therefore checked against bundle bytes, never trusted as the
     authority for which members determine the window span.
+
+    L9-SPEEDUP-R2: every rostered bundle is first copied out, serially and in
+    roster order; inside an analysis run with workers the strict validations of
+    the copies then run in the ordered member pool. The selection itself stays
+    serial: at each bundle's roster position its documents are read, its
+    candidacy is decided and its validation is consumed (a task that raised is
+    recomputed there). A loop that stops at a bundle leaves the archive census
+    as the serial loop left it (later copy-outs are rolled back), and a copy-out
+    that failed is raised after the bundles before it.
     """
+    from joulewise.analysis_member_pool import (consume, is_genuine, member_map, pool_active,
+                                                single_bound_per_calibration)
     from joulewise.cli import validate_bundle
 
     assessments = _json(archive.withheld_bytes("withheld/member-assessments.json"),
@@ -147,6 +187,7 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
     source_root = "sources/claim-runs"
     if claim.is_relative_to(archive.window.custody_root):
         source_root = "sources/night-custody/" + claim.relative_to(archive.window.custody_root).as_posix()
+    census = archive._census
     try:
         recorded = set()
         for member in assessments["members"].values():
@@ -166,36 +207,59 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
         bundles = sorted({str(Path(name).parent) for name in inventory
                           if name.endswith("/metadata.json")
                           and str(Path(name).parent) in registered_ids})
-        selected, selected_paths, cache = set(), [], {}
+        copies, failed = [], None
         for relative in bundles:
-            target = directory / relative
-            target.mkdir()
-            for name in sorted(inventory):
-                if not name.startswith(relative + "/"):
-                    continue
-                output = target / Path(name).relative_to(relative)
-                output.parent.mkdir(parents=True, exist_ok=True)
-                output.write_bytes(inputs.source(f"{source_root}/{name}"))
-            reader = BundleReader(target)
             try:
-                metadata, summary = reader.raw_metadata() or {}, reader.raw_summary() or {}
-            except BundleReadError:
-                # The frozen harvest excludes an unreadable member from this
-                # selection. Its authenticated bytes still remain inventoried;
-                # the complete selected set is checked against that harvest.
-                continue
-            except V2AuthenticationInputError as exc:
-                if exc.reason != "v2_authentication_invalid_json":
-                    raise
-                # The enclosing v2 reader rejects malformed JSON before the
-                # tolerant bundle reader can classify this archived member.
-                continue
-            uncertainty = metadata.get("uncertainty_evidence")
-            anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
-            if (summary.get("status") == "succeeded" and isinstance(anchor, Mapping) and anchor.get("status") == "bounded"
-                    and not validate_bundle(target, strict=True, physics_cache=cache)):
-                selected.add(relative)
-                selected_paths.append(target)
+                target = directory / relative
+                target.mkdir()
+                for name in sorted(inventory):
+                    if not name.startswith(relative + "/"):
+                        continue
+                    output = target / Path(name).relative_to(relative)
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_bytes(inputs.source(f"{source_root}/{name}"))
+            except Exception as exc:  # noqa: BLE001 - raised after the bundles before it
+                failed = exc
+                break
+            copies.append((relative, target, len(census)))
+        pooled = pool_active() and is_genuine(validate_bundle, "joulewise.cli:validate_bundle")
+        scheduled = [target for _, target, _ in copies if pooled and _scheduled_candidate(target)]
+        if not single_bound_per_calibration(scheduled):
+            scheduled = []
+        outcomes = member_map(_strict_problems, [((str(target),), {}) for target in scheduled], account=False)
+        prepared = dict(zip(scheduled, outcomes or ()))
+        selected, selected_paths, cache = set(), [], {}
+        for relative, target, mark in copies:
+            try:
+                reader = BundleReader(target)
+                try:
+                    metadata, summary = reader.raw_metadata() or {}, reader.raw_summary() or {}
+                except BundleReadError:
+                    # The frozen harvest excludes an unreadable member from this
+                    # selection. Its authenticated bytes still remain inventoried;
+                    # the complete selected set is checked against that harvest.
+                    continue
+                except V2AuthenticationInputError as exc:
+                    if exc.reason != "v2_authentication_invalid_json":
+                        raise
+                    # The enclosing v2 reader rejects malformed JSON before the
+                    # tolerant bundle reader can classify this archived member.
+                    continue
+                uncertainty = metadata.get("uncertainty_evidence")
+                anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
+                if (summary.get("status") == "succeeded" and isinstance(anchor, Mapping) and anchor.get("status") == "bounded"
+                        and not consume(prepared.pop(target, None),
+                                        lambda target=target: validate_bundle(target, strict=True, physics_cache=cache),
+                                        account=True)):
+                    selected.add(relative)
+                    selected_paths.append(target)
+            except BaseException:
+                # The serial loop stopped here, before copying out any later bundle.
+                for key in list(census)[mark:]:
+                    del census[key]
+                raise
+        if failed is not None:
+            raise failed
         if not selected_paths or selected != recorded:
             raise ValueError()
     except AnalysisRefusal:
