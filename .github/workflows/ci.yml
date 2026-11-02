@@ -405,7 +405,3 @@ jobs:
               e.startswith("cannot infer the JouleWise repository root") for e in errors
           ), errors
           PY
-
-  # The site observatory's publication chain and all site-lane tests
-  # live in .github/workflows/site.yml — a separate failure domain that
-  # never gates project CI (Ed directive 2026-08-03, D-101 addendum II).
