@@ -26,6 +26,10 @@ The arguments, each the only thing of its kind the run takes:
                        runs roots, ledger copies, sealed pack files, the project commit) is derived
                        from this file, the archives it names and the checkout; nothing else is a
                        command-line argument.
+--workers N            Optional (L9-SPEEDUP-R1). Worker processes for the independent child programs of
+                       steps 1, 2 and 4 (spawned; every record decision stays serial in this
+                       process). Default: JOULEWISE_B5_ANALYSIS_WORKERS, else min(8, CPU count - 2);
+                       1 is the serial path. The record and every output are the same for every N.
 --custody DIR          The analysis custody root: a directory outside the repository, given as a
                        path with no symbolic link in it (on macOS write /private/tmp, not /tmp)
                        and no whitespace. It is created if absent. A mode refuses to start when its
@@ -61,12 +65,21 @@ def main(argv=None):
     parser.add_argument('--mode',choices=('blind-dry-run','release'),required=True)
     parser.add_argument('--index',type=Path,required=True)
     parser.add_argument('--custody',type=Path,required=True)
+    parser.add_argument('--workers',type=_positive_int,default=None)
     try:
         args=parser.parse_args(argv)
     except AnalysisRefusal:
         print('step 0 - tooling_refusal',file=sys.stderr)
         return 2
-    return run(args.mode,args.index,args.custody)
+    if args.workers is None:
+        return run(args.mode,args.index,args.custody)
+    return run(args.mode,args.index,args.custody,workers=args.workers)
+
+
+def _positive_int(text):
+    if not text.isdigit() or int(text)<1:
+        raise ValueError('workers must be a positive integer')
+    return int(text)
 
 
 if __name__=='__main__':raise SystemExit(main())

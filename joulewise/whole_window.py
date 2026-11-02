@@ -1390,6 +1390,30 @@ def _rederive_operative_summary(
     )
 
 
+def _member_operative_summary(
+    rederive: Any,
+    path: Path,
+    authenticated_fiducial_bound_s: float,
+    metadata: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """One dominated member's operative re-derivation, as the session's serial loop runs it.
+
+    The pool entry point of ``AuthenticatedConsumptionSession._prepare`` (stage
+    4b): ``rederive`` is the session's own selection, shipped by reference. The
+    physics cache is this worker's view of the run store for the member's exact
+    metadata bound (the serial loop's call-local dict holds only entries that
+    are also in the run store).
+    """
+
+    from joulewise.analysis_run_cache import physics_cache_for_call
+
+    return rederive(
+        path,
+        authenticated_fiducial_bound_s=authenticated_fiducial_bound_s,
+        _instrument_calibration_physics_cache=physics_cache_for_call({}, metadata),
+    )
+
+
 class AuthenticatedConsumptionSession:
     """One collection-scoped authenticated max-bracket consumption session.
 
@@ -1862,6 +1886,22 @@ class AuthenticatedConsumptionSession:
             if self.analysis_clamp
             else _rederive_summary_for_authenticated_fiducial_bound
         )
+        # L9-SPEEDUP-R1 stage 4b: inside a block-5 analysis run with workers,
+        # the dominated members' re-derivations run in an ordered spawn pool;
+        # each is consumed below at its own serial position (its read census
+        # merged into the active read session there; a task that raised is
+        # recomputed here). Outside such a run this is None: serial as before.
+        from joulewise.analysis_member_pool import consume, member_map
+
+        prepared = member_map(
+            _member_operative_summary,
+            [
+                ((rederive, path, operative_bound, _metadata), {})
+                for _bundle_id, path, _stored, _metadata, _minted, dominated in pending
+                if dominated
+            ],
+        )
+        prepared_outcomes = iter(prepared or ())
         for (
             bundle_id,
             path,
@@ -1872,15 +1912,17 @@ class AuthenticatedConsumptionSession:
         ) in pending:
             operative_summary: Mapping[str, Any] = stored_summary
             if dominated:
+                outcome = next(prepared_outcomes, None)
                 try:
-                    operative_summary = (
-                        rederive(
+                    operative_summary = consume(
+                        outcome,
+                        lambda path=path, _metadata=_metadata: rederive(
                             path,
                             authenticated_fiducial_bound_s=operative_bound,
                             _instrument_calibration_physics_cache=physics_cache_for(
                                 physics_cache, _metadata
                             ),
-                        )
+                        ),
                     )
                 except (
                     BundleReadError,
@@ -5141,9 +5183,18 @@ def _reference_energy_evidence_detail(
         # Deliberately output-free: reduce_bundle is pure over the bundle and
         # returns an in-memory summary.  Minutes-scale claim verification cost
         # is accepted for primary-evidence NEG-8 re-derivation.
+        from joulewise.analysis_run_cache import run_reduce_physics_kwargs
         from joulewise.reduce import reduce_bundle
 
-        reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
+        # Inside an analysis run the refit shares the run's verified-fit store
+        # (keyed by the calibration artifact's sha256 and the exact metadata
+        # bound; read only after the reducer's own hash checks). Outside one
+        # the call is unchanged and does no extra read (L9-SPEEDUP-R1 stage 4).
+        reduced = reduce_bundle(
+            bundle_path,
+            reducer_version=reducer_version,
+            **run_reduce_physics_kwargs(bundle_path),
+        ).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)

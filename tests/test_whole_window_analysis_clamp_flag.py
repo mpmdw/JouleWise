@@ -202,9 +202,24 @@ class FlagOffIsOriginMainTests(unittest.TestCase):
                  if isinstance(node, ast.Name) and node.id == "rederive" and isinstance(node.ctx, ast.Load)]
         calls = [node for node in ast.walk(prepare) if isinstance(node, ast.Call)
                  and isinstance(node.func, ast.Name) and node.func.id == "rederive"]
-        self.assertEqual(len(loads), 1)
+        # L9-SPEEDUP-R1 stage 4b: the one selection is also shipped, unchanged,
+        # as the first argument of each member task to the ordered pool, whose
+        # entry point only calls the function it is given.
+        self.assertEqual(len(loads), 2)
         self.assertEqual(len(calls), 1)
-        self.assertIs(calls[0].func, loads[0])
+        self.assertIn(calls[0].func, loads)
+        shipped = [node for node in loads if node is not calls[0].func]
+        pool_calls = [node for node in ast.walk(prepare) if isinstance(node, ast.Call)
+                      and getattr(node.func, "id", None) == "member_map"]
+        self.assertEqual(len(pool_calls), 1)
+        self.assertEqual(ast.unparse(pool_calls[0].args[0]), "_member_operative_summary")
+        self.assertTrue(any(node is shipped[0] for node in ast.walk(pool_calls[0])))
+        entry = next(node for node in ast.walk(tree)
+                     if isinstance(node, ast.FunctionDef) and node.name == "_member_operative_summary")
+        self.assertEqual(entry.args.args[0].arg, "rederive")
+        entry_calls = [node for node in ast.walk(entry) if isinstance(node, ast.Call)
+                       and getattr(node.func, "id", None) == "rederive"]
+        self.assertEqual(len(entry_calls), 1)
         flag_stores = [node for node in ast.walk(tree)
                        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign))
                        and any(ast.unparse(target) == "self.analysis_clamp"

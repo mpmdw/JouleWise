@@ -111,9 +111,10 @@ class ObserverSitesTests(unittest.TestCase):
 class SharedCacheSiteTests(unittest.TestCase):
     """MINOR-3: the NEG-8 energy re-derivation site inside a run."""
 
-    def test_reference_energy_evidence_keeps_its_uncached_refit(self):
-        # BASE_HEAD reduced here with no cache. With no metadata in hand, the site
-        # takes no extra read to choose a run partition, so it still refits.
+    def test_reference_energy_evidence_shares_the_run_cache(self):
+        # BASE_HEAD reduced here with no cache. Since L9-SPEEDUP-R1 stage 4a (lead
+        # ruling 2026-11-01) the site reads the bundle metadata, as validate-bundle
+        # does, and shares the run partition: one verified fit, the same result.
         with tempfile.TemporaryDirectory(prefix='energy-cache-') as tmp:
             with tarfile.open(ARCHIVE) as blob:
                 blob.extractall(tmp, members=[m for m in blob.getmembers() if m.name.startswith(MEMBER)],
@@ -131,7 +132,7 @@ class SharedCacheSiteTests(unittest.TestCase):
                 calls.clear()
                 with ww.shared_instrument_calibration_physics_cache({}):
                     shared = [ww._reference_energy_evidence_detail(member) for _ in range(2)]
-                self.assertEqual(len(calls), 2)
+                self.assertEqual(len(calls), 1)
             self.assertEqual(plain, shared)
 
 
