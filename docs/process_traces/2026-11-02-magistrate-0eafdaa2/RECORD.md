@@ -72,7 +72,12 @@ Running at the first commit (`~/night-archive/seats-0eafdaa2/tests-align.log`); 
 - Ed, Gmail `1a19cb5d758daac7` (reply on thread `1a198fafa8fc12ba`): pilot 1 outcome, findings, the pilot-2 ruling; no question; a NO stops pilot 2. No pending watchdog notice existed, so no `notice.ack` was written.
 
 ## Harvest and tests
-- (filled at the next commit)
+- **Desk re-run** finished 06:59: `desk.json` `harvest_exit 0`, `harvest_status ok`; the second `PILOT.json` is byte-identical in content to the first pass. Non-claim acceptance verdict **EXCLUDE** (archive `archive/derived/`; export under `export/align-pilot-v0/`).
+  - Exclusions (`exclusions.json`): only `thermal.os_level_nonzero` (PHYSICS_IN_SPAN), dropping e01, e05, e09 and also e12 (5 readings at level 1). No episode cell reaches its minimum (`cell.below_minimum`).
+  - `model.identity_mismatch` on all 37 members: the model file hash matches the pin; the pin carries no `runtime_identity_sha256` and the members record one. So this is a pin-recording gap: item 157's "kit generator keeps Mac-derived pins" follow-up. The v1 build's pins must carry the runtime identity.
+  - `battery.assist` (DIAGNOSTIC) on e01/e05/e09: SMC minimum −23 to −25 mA during the request, 0 reads beyond the −200 mA limit, 0 s below it. Not an exclusion; the same small negative currents Sol reported.
+  - Other flags are as in item 157's rehearsal: `calibration.bracket_acceptance_failed` (1), `idle.busy_fraction_exceeded` (5), `code.*` lineage flags. Non-claim, recorded only.
+- **tests/align on the desk branch** (`cbfb9b0a5`, local, TMPDIR under `/tmp`): 940 tests, 3 failing, all in the Jetson INA3221 reader tests (`test_power_ina3221`, `test_power_ina3221_review1`). Two are KeyErrors on `/tmp/...` against `/private/tmp/...` paths; one is a PermissionError test. Re-run with TMPDIR under `/private/tmp`, those two modules give 15/15 OK. So the failures come from the macOS `/tmp` symlink, not from the code; 21 skipped. Log `~/night-archive/seats-0eafdaa2/tests-align.log`.
 
 ## Pilot-2 build lane
 - Launched 06:5x PST: Sol 6.1 xhigh, local `codex-run-v3`, worktree `/Users/edr/code/jw-wt/align-pilot2`, branch `lane/2026-11-02-align-pilot2` from `cbfb9b0a5` (unpushed). Brief `~/night-archive/seats-0eafdaa2/align-pilot2/build/BRIEF.md` (11 items = the ruling's build list, plus the v1 roster, sizing and protocol doc). Report `build/sol-build.md`, log `build/sol-build.log`, status `build/sol-build.status`.
