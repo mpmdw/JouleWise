@@ -120,3 +120,16 @@ Running at the first commit (`~/night-archive/seats-0eafdaa2/tests-align.log`); 
 ## CI on #622 (run 41476089955, head `aac67a575`)
 - 4 shards failed, all in `tests/b6` (`test_audit_record_fixes`, `test_desk_resume_finalize`, `test_loop_round_desk`, `test_capture_screen_reachability`, `test_cold_pass_fixes`), none in `tests/align`. `test_review_rows_are_append_only...` fails identically on the parent `cbfb9b0a5`: an unreviewed commit `1bf706fc` on the desk branch. The desk branch has never had a CI run. The rest is being replayed on parent and head (`~/night-archive/seats-0eafdaa2/ci-repro/`).
 - **Repro (local, own TMPDIR under `/private/tmp`):** `tests.b6.test_desk_resume_finalize`, `test_capture_screen_reachability`, `test_cold_pass_fixes`, `test_loop_round_desk`. Parent `cbfb9b0a5`: 35 ran, 33 failures. Head `aac67a575`: 35 ran, 33 failures. The same 18 test names fail in both; logs in `~/night-archive/seats-0eafdaa2/ci-repro/`. Example: `test_completed_full_alpha` stops at loop state `DONE` instead of `SESSION_RUN`, consistent with the BYTES loop's dated end on the desk base. **Disposition: pre-existing on the desk base (never CI-run, not merged to main), not caused by this lane.** Pilot 1 ran GO on that base. Row 3 of #622's ledger will cite the head's `tests/align` shards and this comparison, not a fully green run.
+
+## Fix round 1 (08:31-09:23) and lead check
+- Sol 6.1 xhigh: status OK, clean, complete, no NEEDS_RULING (`fix1/sol-fix1.md`, `.codex-report/FIX1.md` in the tree). Lead commits `5780cf66e` (code, configs, tests) and `2f4aaef13` (verification evidence); pushed.
+- Seat results: `tests/align` 968 OK (71 skips); session 15 OK; refusal checks 23 OK; all 17 round-1 regressions reject `aac67a575`.
+  - Pilot-1 hidden replay: e01 t6 658, e02 t0 1,535, e03/e12 t1 1,535, e01 t0 864.
+  - The legacy identity projection and `prompt_text` round-trip match pilot 1.
+  - Energy is identical on all 36 member-channel results.
+- Member bounds including the 300 s idle: A 2,337.5 s, B 2,432.7 s, C 3,119.1 s. All fit the 3,300 s unspent cap, so no turn cut was needed. All exceed the 1,800 s spent-budget cap, the corner the lead accepted.
+- Hashing the SHADE environment costs 20.8 ms per call (spam) and 12.1 ms per call (bank), from 100 observations each. It falls inside the tool phase, in both conditions. Recorded; not removed.
+- **Lead re-execution on `2f4aaef13`:** `test_pilot2*.py` 28 OK; `test_realsmoke_regressions`, `test_apple_endpoint`, `test_apple_campaign`, `tests.test_align_pilot_session` 62 OK. The pilot-1 desk replay prints e01/e05 (and e09/e12) `excluded: true`, `exclusion_codes ["thermal.os_level_nonzero"]`, and e02-e04, e06-e08 `chain_eligible: true`. State-changing calls are 0 everywhere, with `classification: name_rule_v0` for pilot-1 bundles. Read-only names are listed per member.
+
+## Hardware rehearsal, attempt 2 (from 09:28, quiet Mac: no seat alive)
+- Measurement checkout fast-forwarded to `2f4aaef13`. The same three members (a-e02, b-e05, b-e10), regenerated from the fixed stage files with only `launch_lineage_required` removed, and the 300 s idle kept. Bundles `~/night-archive/seats-0eafdaa2/align-pilot2/rehearsal2/`, status file `STATUS`.
