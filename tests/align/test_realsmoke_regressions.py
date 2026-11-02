@@ -659,9 +659,10 @@ class RealSmokeRegressions(unittest.TestCase):
                 flags = result.raw_usage['joulewise']['flags']
                 self.assertIn('unclosed_reasoning_span', flags)
                 if finish == 'stop':
-                    self.assertEqual(result.content, '<think>unfinished')
-                    self.assertEqual(result.reasoning_text, '')
-                    self.assertEqual(result.reasoning_tokens, 0)
+                    self.assertEqual(result.content, '')
+                    self.assertEqual(result.reasoning_text, 'unfinished')
+                    self.assertEqual(result.reasoning_tokens, 1)  # Entire one-ID unfinished completion is hidden.
+                    self.assertIn('reasoning_tokens_full_unclosed_completion', flags)
                     self.assertNotIn('reasoning_censored_at_token_limit', flags)
                 else:
                     # An earlier closed span in the same turn stays reasoning.
@@ -670,7 +671,10 @@ class RealSmokeRegressions(unittest.TestCase):
                     self.assertEqual(result.content, '' if prefix == closed else prefix)
                     self.assertGreater(result.reasoning_tokens, 0)
                     self.assertEqual(result.reasoning_tokens, 1)  # min(1 emitted, 3 retokenized), integer.
-                    self.assertIn('reasoning_tokens_retokenized', flags)
+                    if prefix == tool:
+                        self.assertIn('reasoning_tokens_retokenized', flags)
+                    else:
+                        self.assertIn('reasoning_tokens_full_unclosed_completion', flags)
                     self.assertIn('reasoning_censored_at_token_limit', flags)
                     self.assertEqual([c.name for c in result.tool_calls], ['read_page'] if prefix == tool else [])
 

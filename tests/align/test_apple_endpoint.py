@@ -113,6 +113,7 @@ class AppleEndpointTests(unittest.TestCase):
             mirror = root / "model"
             mirror.mkdir()
             (mirror / "weights.safetensors").write_bytes(b"synthetic-local-weight")
+            (mirror / "config.json").write_text(json.dumps({"max_position_embeddings": 40960}))
             native = SimpleNamespace(
                 __version__="synthetic-native", load=lambda *args, **kwargs: (object(), Tokenizer(), {}),
                 stream_generate=stream_generate, make_sampler=lambda temp: object(),
@@ -293,7 +294,7 @@ def run_native_review(root: Path, scenario: str, clock: Clock):
     mirror = root / "model"
     mirror.mkdir(parents=True)
     (mirror / "weights.safetensors").write_bytes(b"synthetic-local-weight")
-    (mirror / "config.json").write_text("{}")
+    (mirror / "config.json").write_text(json.dumps({"max_position_embeddings": 40960}))
     native = SimpleNamespace(
         __version__="0.0-synthetic",
         load=lambda *args, **kwargs: (object(), ReviewTokenizer(), {}),

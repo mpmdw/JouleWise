@@ -1,0 +1,117 @@
+{
+  "derivation": "OLS(member_s ~ 1 + episode_s), measured scaffold + sum(4*(intercept+slope*turns*(40960/prefill_bound+budget/decode_bound+1))) + 12*(300-pilot1_idle). Bound rates = BYTES short rates * pilot1 late/early factors. Tool second, transferred factors, new-model overhead and disk are planning, not measurements.",
+  "non_claim": true,
+  "packs": {
+    "align-pilot-v1": {
+      "T_stream_max_s": 3444.7706160680564,
+      "align_members": 12,
+      "blocks": [
+        {
+          "block": "A",
+          "block_upper_s": 8715.385954755448,
+          "bound_rates_tok_s": {
+            "decode": 42.83449968527229,
+            "prefill": 797.2058758630977
+          },
+          "context_tokens": 40960,
+          "count": 4,
+          "enable_thinking": true,
+          "episode_upper_s": 1776.0396721196728,
+          "flags": [
+            "sizing.planning_bound_unmeasured"
+          ],
+          "max_tokens": 4096,
+          "max_turns": 12,
+          "member_upper_s": 2178.846488688862,
+          "model_id": "qwen3-30b-a3b",
+          "short_context_rates_tok_s": {
+            "decode": 97.0286337706892,
+            "prefill": 1362.5056434859039
+          },
+          "tool_s_per_turn": 1,
+          "turn_upper_s": 148.00330600997273
+        },
+        {
+          "block": "B",
+          "block_upper_s": 9766.065373510603,
+          "bound_rates_tok_s": {
+            "decode": 42.83449968527229,
+            "prefill": 797.2058758630977
+          },
+          "context_tokens": 40960,
+          "count": 4,
+          "enable_thinking": false,
+          "episode_upper_s": 2003.8275671416443,
+          "flags": [
+            "sizing.planning_bound_unmeasured"
+          ],
+          "max_tokens": 2048,
+          "max_turns": 20,
+          "member_upper_s": 2441.5163433776506,
+          "model_id": "qwen3-30b-a3b",
+          "short_context_rates_tok_s": {
+            "decode": 97.0286337706892,
+            "prefill": 1362.5056434859039
+          },
+          "tool_s_per_turn": 1,
+          "turn_upper_s": 100.19137835708221
+        },
+        {
+          "block": "C",
+          "block_upper_s": 12809.482464272225,
+          "bound_rates_tok_s": {
+            "decode": 32.583073003461216,
+            "prefill": 590.819928062214
+          },
+          "context_tokens": 40960,
+          "count": 4,
+          "enable_thinking": null,
+          "episode_upper_s": 2663.642121803664,
+          "flags": [
+            "sizing.planning_bound_unmeasured"
+          ],
+          "max_tokens": 2048,
+          "max_turns": 20,
+          "member_upper_s": 3202.3706160680563,
+          "model_id": "qwen3-next-80b",
+          "short_context_rates_tok_s": {
+            "decode": 73.8071199805207,
+            "prefill": 1009.7711402304594
+          },
+          "tool_s_per_turn": 1,
+          "turn_upper_s": 133.1821060901832
+        }
+      ],
+      "disk_derivation": {
+        "B_bytes": 7400000000,
+        "extra_wait_peak_bytes": 0,
+        "fixed_retained_bytes": 0,
+        "peak_copies": 2
+      },
+      "dwell_increase_s": 2908.8,
+      "estimated_footprint_bytes": 14800000000,
+      "flags": [
+        "sizing.planning_bound_unmeasured"
+      ],
+      "long_context_factors": {
+        "decode": 0.4414624634054356,
+        "prefill": 0.5851028064907574
+      },
+      "member_count": 37,
+      "member_law": {
+        "flags": [],
+        "intercept_s": 130.8356294981195,
+        "largest_abs_residual_s": 2.6472330596263305,
+        "n": 12,
+        "residual_sd_s": 1.3827308020844882,
+        "slope": 1.153133508975324
+      },
+      "pack_id": "align-pilot-v1",
+      "programmed_span_s": 39172.733792538274,
+      "scaffold_flags": [],
+      "scaffold_members": 25,
+      "scaffold_s": 4973
+    }
+  },
+  "schema_version": "joulewise.b5_sizing.v1"
+}

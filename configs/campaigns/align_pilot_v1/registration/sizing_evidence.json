@@ -1,0 +1,840 @@
+{
+  "bytes_rate_derivation": "mean of all succeeded absolute records, tokens / recorded prefill or decode phase duration",
+  "bytes_rates": {
+    "qwen3-30b-a3b": [
+      {
+        "decode_s": 5.289684772491455,
+        "decode_tok_s": 96.79215719292223,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r01/events.jsonl",
+          "sha256": "675e30b5dce6a4fe1d0d9cffc16370bc2bfffd4d108d30a1df0ea6552c3e9937"
+        },
+        "prefill_s": 1.5107269287109375,
+        "prefill_tok_s": 1355.6387730160493,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r01",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r01/summary_metrics.json",
+          "sha256": "7dca5c3283e8fce00d7d3989a97db45f89afe8f2e024c2617514e0990d3d07e4"
+        }
+      },
+      {
+        "decode_s": 5.248839855194092,
+        "decode_tok_s": 97.54536509498197,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r02/events.jsonl",
+          "sha256": "eccf06fa1b80169e65e73b8689e0d977f974eec58106aa49fe0df9a056abe859"
+        },
+        "prefill_s": 1.5126760005950928,
+        "prefill_tok_s": 1353.8920424428686,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r02",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r02/summary_metrics.json",
+          "sha256": "df9d931d71b3e190e40d461751e3d64d43bc7bc52462435c90bc2fc554659746"
+        }
+      },
+      {
+        "decode_s": 5.289087772369385,
+        "decode_tok_s": 96.80308250408109,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r03/events.jsonl",
+          "sha256": "af63b9fbb7906ea6b559bff94d8f48f366cc551503b4d663aaa86040459c8cde"
+        },
+        "prefill_s": 1.5101020336151123,
+        "prefill_tok_s": 1356.199749693195,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r03",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r03/summary_metrics.json",
+          "sha256": "3e67c5ee6ce1350373009ce0660eb4ce5fc39ca59e97258d59f2325b47db8b91"
+        }
+      },
+      {
+        "decode_s": 5.261280059814453,
+        "decode_tok_s": 97.3147207864195,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r04/events.jsonl",
+          "sha256": "657b5ce36da71ebab00c64f0860226bd2b290ad6f10c20bc577bb6f6cae1032c"
+        },
+        "prefill_s": 1.5043120384216309,
+        "prefill_tok_s": 1361.4196707146098,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r04",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r04/summary_metrics.json",
+          "sha256": "dafccbe48b2c184ac475a502f445b702cbe833317c8fa2a97c433c480ca8c466"
+        }
+      },
+      {
+        "decode_s": 5.261293888092041,
+        "decode_tok_s": 97.31446501378998,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r05/events.jsonl",
+          "sha256": "e4b22a56e70cab056fc9724ebf4c8d36313d4bfbb640ccc521a67594cfa719e4"
+        },
+        "prefill_s": 1.4947309494018555,
+        "prefill_tok_s": 1370.1462466001292,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r05",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r05/summary_metrics.json",
+          "sha256": "9a2ad7e2b9edced3e900f8623476abc39ada67868b0f32f5c51fa40c2e6177ff"
+        }
+      },
+      {
+        "decode_s": 5.277584075927734,
+        "decode_tok_s": 97.01408686890444,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r06/events.jsonl",
+          "sha256": "4f4d68d7f427cd50f4a7d34ebaf9efcea5be8b506b5f75ec6ed13a2ef8868621"
+        },
+        "prefill_s": 1.5031118392944336,
+        "prefill_tok_s": 1362.506732008271,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r06",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r06/summary_metrics.json",
+          "sha256": "72db629038419500e029e261fe63f76343f1f8bb410f67bc0a44952cc7dac242"
+        }
+      },
+      {
+        "decode_s": 5.280991792678833,
+        "decode_tok_s": 96.95148564892641,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r07/events.jsonl",
+          "sha256": "7bb165fd871c57e66f017bea6a4279cca75a23159874f85be579d7fc2e9af800"
+        },
+        "prefill_s": 1.5120441913604736,
+        "prefill_tok_s": 1354.4577676379258,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r07",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r07/summary_metrics.json",
+          "sha256": "b2673916ea5e5175f4f8fca4024b07ad0c0225f716bd2bc9906cd8e6c4df5a51"
+        }
+      },
+      {
+        "decode_s": 5.286989212036133,
+        "decode_tok_s": 96.84150647298519,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r08/events.jsonl",
+          "sha256": "77d78d802f89b09854673b60ccdf418dd0c273b5c15baadd3f76bb637f4cd4b3"
+        },
+        "prefill_s": 1.4966909885406494,
+        "prefill_tok_s": 1368.3519281404274,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r08",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r08/summary_metrics.json",
+          "sha256": "8e4f7811fee793e6ac56b6b53b05dd19f38836e815bafc751bfb292eaf0c732c"
+        }
+      },
+      {
+        "decode_s": 5.326305627822876,
+        "decode_tok_s": 96.1266656057962,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r09/events.jsonl",
+          "sha256": "f474d79816bdb7acc13af290dd9c27540e885c8c498ec8358d469843d537d3c6"
+        },
+        "prefill_s": 1.5109810829162598,
+        "prefill_tok_s": 1355.410748126158,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r09",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r09/summary_metrics.json",
+          "sha256": "74751e69c9b3202cc5af719a85928576767c9771ff0251b542f7b6f1cb7f31b6"
+        }
+      },
+      {
+        "decode_s": 5.294366836547852,
+        "decode_tok_s": 96.70655921791875,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r10/events.jsonl",
+          "sha256": "93972f59bf789c6740ed371ed4b298865d35726f068a4247ff6c442e0eac8222"
+        },
+        "prefill_s": 1.5115289688110352,
+        "prefill_tok_s": 1354.9194506083145,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r10",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s2-p1/runs-parent/runs_bytes-s2-p1/bytes-qwen3-30b-a3b-abs-r10/summary_metrics.json",
+          "sha256": "6fba64bcc1b20c72ee1f946bfe4acf55cbd42e0c0af7e54761a9efff31294956"
+        }
+      },
+      {
+        "decode_s": 5.281501770019531,
+        "decode_tok_s": 96.942124095531,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r01/events.jsonl",
+          "sha256": "e306cd4343153cde12fff4a4ff42f58c82836391a9ec9d641d9c4e99d90d26eb"
+        },
+        "prefill_s": 1.4997260570526123,
+        "prefill_tok_s": 1365.5827278382437,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r01",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r01/summary_metrics.json",
+          "sha256": "9875a80be014589473ab72c3d4215de1495944c58cba8eda3bd7967e5e37aa8f"
+        }
+      },
+      {
+        "decode_s": 5.280949115753174,
+        "decode_tok_s": 96.95226914281261,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r02/events.jsonl",
+          "sha256": "97d2643de2c28faf18fd5b573f8261c682ed3d065d6bc9408e39722243596d12"
+        },
+        "prefill_s": 1.4857087135314941,
+        "prefill_tok_s": 1378.466708411471,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r02",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r02/summary_metrics.json",
+          "sha256": "a8a609f8f593bdfa1edff317ced144060099106566ab93f3b84ff5b37b6c41f0"
+        }
+      },
+      {
+        "decode_s": 5.283344745635986,
+        "decode_tok_s": 96.90830802266106,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r03/events.jsonl",
+          "sha256": "5d6e80ef1e48fdf5953b2b8d3d7f6d92a073dbfa64d8b1633633bfe90e883693"
+        },
+        "prefill_s": 1.5034170150756836,
+        "prefill_tok_s": 1362.2301593393245,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r03",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r03/summary_metrics.json",
+          "sha256": "ba0a95c898d89e5fe5047952057a38a0233b96dcd4320baff7d2ab2455d37331"
+        }
+      },
+      {
+        "decode_s": 5.2604899406433105,
+        "decode_tok_s": 97.329337338755,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r04/events.jsonl",
+          "sha256": "5e7548ae38867eb758ac7ab250983aa91f2678d249093fa9472b4f4c98473f47"
+        },
+        "prefill_s": 1.5022048950195312,
+        "prefill_tok_s": 1363.3293346267337,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r04",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r04/summary_metrics.json",
+          "sha256": "c85efdfd8f3f05da3de0e0d8adb235f147d0a3c83291562e4ca1b29f7ab6f198"
+        }
+      },
+      {
+        "decode_s": 5.283669948577881,
+        "decode_tok_s": 96.90234344365258,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r05/events.jsonl",
+          "sha256": "47dc3adbec7d5ad3f75fee1da77982acc10c7418173d9a957a1c4c86cb8a0ab3"
+        },
+        "prefill_s": 1.5038528442382812,
+        "prefill_tok_s": 1361.8353736181784,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r05",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r05/summary_metrics.json",
+          "sha256": "c1829608ba33ac9ecf9cf29406d75ac9b08bda9170da7dd84e5e4b708d943dc7"
+        }
+      },
+      {
+        "decode_s": 5.282325029373169,
+        "decode_tok_s": 96.92701550036138,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r06/events.jsonl",
+          "sha256": "9981837e017b72d8e7149f506c0bb759becdaf25e8880d3051288a9b7c965358"
+        },
+        "prefill_s": 1.5026590824127197,
+        "prefill_tok_s": 1362.9172604551543,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r06",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r06/summary_metrics.json",
+          "sha256": "ebef9b9fbc3a4e58463549b1271f99f50a4f01c2d2d06b6fbb297982b456b189"
+        }
+      },
+      {
+        "decode_s": 5.267320871353149,
+        "decode_tok_s": 97.20311568345174,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r07/events.jsonl",
+          "sha256": "96c936adc459be3a9188dbad57ec484ad1d09db91e780d5a8364d9cc122b0c5d"
+        },
+        "prefill_s": 1.504539966583252,
+        "prefill_tok_s": 1361.2134243604862,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r07",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r07/summary_metrics.json",
+          "sha256": "27df6534bd6f8db57934764f33ac953d150ade29c3f0179a15d128f92c86912f"
+        }
+      },
+      {
+        "decode_s": 5.257483720779419,
+        "decode_tok_s": 97.38499008116688,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r08/events.jsonl",
+          "sha256": "70185e541c79f6a4a0a20f3687cc5e367547f9275fe860116d74aaa82bc9a190"
+        },
+        "prefill_s": 1.4943537712097168,
+        "prefill_tok_s": 1370.4920745387437,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r08",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r08/summary_metrics.json",
+          "sha256": "5e04bed8af40e171a476f23439114ead8f7799164b870af4bfe8630967ba6f2a"
+        }
+      },
+      {
+        "decode_s": 5.2413330078125,
+        "decode_tok_s": 97.6850734797494,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r09/events.jsonl",
+          "sha256": "266db02f8baddbe170d2abca58fc66b6f59e6ffd218543f7d81225b13419f5d4"
+        },
+        "prefill_s": 1.5039560794830322,
+        "prefill_tok_s": 1361.7418938882688,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r09",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r09/summary_metrics.json",
+          "sha256": "9c570bc200eb011754b7cf5efd3709cf7780a9c9999164d6ec34667cf79c07f9"
+        }
+      },
+      {
+        "decode_s": 5.282271146774292,
+        "decode_tok_s": 96.9280042189166,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r10/events.jsonl",
+          "sha256": "1beb1170d2b11f76b6814284abd1c2318d24e5c72666f9d9010c4fde15a0489e"
+        },
+        "prefill_s": 1.4955883026123047,
+        "prefill_tok_s": 1369.360803653527,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-30b-a3b-abs-r10",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s2-p2/runs-parent/runs_bytes-s2-p2/bytes-qwen3-30b-a3b-abs-r10/summary_metrics.json",
+          "sha256": "c2ef2f77ac058be541ce1660862d27c4473b7b1e5d77c22aa81aa4e5ded1f715"
+        }
+      }
+    ],
+    "qwen3-next-80b": [
+      {
+        "decode_s": 7.051708936691284,
+        "decode_tok_s": 72.60651348440855,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r01/events.jsonl",
+          "sha256": "f163ea0f19af8718d5f6e62e52cf25217bdbaf2812d2c88bd50c111d87c7fa12"
+        },
+        "prefill_s": 2.023728847503662,
+        "prefill_tok_s": 1011.9932828581641,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r01",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r01/summary_metrics.json",
+          "sha256": "eab2f3a77d96e8cc98f27af152f6d54ec6b63de38ecb4fed525e837e04ed0bec"
+        }
+      },
+      {
+        "decode_s": 6.9295220375061035,
+        "decode_tok_s": 73.88676985639056,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r02/events.jsonl",
+          "sha256": "9e9f63cabbfd6bea200b892d7b82d60fa0a73a8ae349da94bcb6e6e674c9eaa1"
+        },
+        "prefill_s": 2.0387001037597656,
+        "prefill_tok_s": 1004.5616793873132,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r02",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r02/summary_metrics.json",
+          "sha256": "95d4dc7c7b737fb5f2f763c9070e5726e0b00c3cba14197096453a088410dffb"
+        }
+      },
+      {
+        "decode_s": 6.946013927459717,
+        "decode_tok_s": 73.7113408275655,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r03/events.jsonl",
+          "sha256": "95e21d570ea44efe9fbed8c4e893da0dafac3516a8227c5e0950aa4c7c2a24d1"
+        },
+        "prefill_s": 2.017206907272339,
+        "prefill_tok_s": 1015.2652128131464,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r03",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r03/summary_metrics.json",
+          "sha256": "7b391dc92df81124861900cc8299bd667918799ac1dd29c79cb60fb00a65c936"
+        }
+      },
+      {
+        "decode_s": 6.990346908569336,
+        "decode_tok_s": 73.24386138438261,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r04/events.jsonl",
+          "sha256": "3e3d3c64d1194f090fdbeed46f48b2d2638f599c043ef96c3da9d27515b79247"
+        },
+        "prefill_s": 2.0387370586395264,
+        "prefill_tok_s": 1004.54347034171,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r04",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r04/summary_metrics.json",
+          "sha256": "ab6cb73dafd9d24c4f8029dd70a3d60492d346bceec281986e8bcd3294cb53a6"
+        }
+      },
+      {
+        "decode_s": 6.94254994392395,
+        "decode_tok_s": 73.74811908239813,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r05/events.jsonl",
+          "sha256": "523b1cb2ae86a664cfe8c717410ddd2694ddace0113521defb140685404d3b5c"
+        },
+        "prefill_s": 2.0403459072113037,
+        "prefill_tok_s": 1003.7513701777939,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r05",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r05/summary_metrics.json",
+          "sha256": "104a3a945e84912cba8ef7a941f3462b0fc8ca6e8f09ec8bd415ff384e443eda"
+        }
+      },
+      {
+        "decode_s": 6.955889940261841,
+        "decode_tok_s": 73.60668503917225,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r06/events.jsonl",
+          "sha256": "17b9ff518e295b3217d908621ef254b35aa5b9c9f17ad9cc7bb50c3af442ed97"
+        },
+        "prefill_s": 2.0229501724243164,
+        "prefill_tok_s": 1012.3828198623714,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r06",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r06/summary_metrics.json",
+          "sha256": "2aa7138418b3488d66dd4e65231590ece5bac88d4c3195ef2034481c02e3e4be"
+        }
+      },
+      {
+        "decode_s": 7.001991033554077,
+        "decode_tok_s": 73.12205878962952,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r07/events.jsonl",
+          "sha256": "1dc7ebff985b2405613d2a586af58ae8cc37772da8a7630082e9de3308c64a4c"
+        },
+        "prefill_s": 2.039712905883789,
+        "prefill_tok_s": 1004.0628728152408,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r07",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r07/summary_metrics.json",
+          "sha256": "1cfb93b02df06e16532e32041822024a4934831ff8cd15dd10b818912dec98c8"
+        }
+      },
+      {
+        "decode_s": 6.922037124633789,
+        "decode_tok_s": 73.96666483886959,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r08/events.jsonl",
+          "sha256": "8e1cba4b994e9f18f0cd15856b6af188eea2f8d8ae92e614b9ba0ad2101fd8d6"
+        },
+        "prefill_s": 2.0238258838653564,
+        "prefill_tok_s": 1011.9447608252113,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r08",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r08/summary_metrics.json",
+          "sha256": "9f88cd89d63cc7d6f8c2fe8e49cb746f3edce23e48d998f9fee00ce17e0d458f"
+        }
+      },
+      {
+        "decode_s": 6.9408278465271,
+        "decode_tok_s": 73.76641681959933,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r09/events.jsonl",
+          "sha256": "3dbb0d8e911883c8d835f45e9fa5d067ddc778005904d6ad3096a6c5da0e4851"
+        },
+        "prefill_s": 2.0178420543670654,
+        "prefill_tok_s": 1014.9456423349221,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r09",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r09/summary_metrics.json",
+          "sha256": "9bb821324b5dfebf48a4264d3e721b7868b4348fb1a012055ad1d3dc646005a0"
+        }
+      },
+      {
+        "decode_s": 6.986793041229248,
+        "decode_tok_s": 73.28111724201284,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r10/events.jsonl",
+          "sha256": "1702d0b12e7dc922e8f1bf7c22d24f0065a86484fcb305ce681ea034ef4af5f9"
+        },
+        "prefill_s": 2.0248329639434814,
+        "prefill_tok_s": 1011.4414554035111,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r10",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r1-bytes-s3-p1/runs-parent/runs_bytes-s3-p1/bytes-qwen3-next-80b-abs-r10/summary_metrics.json",
+          "sha256": "584d55054e2d15391d40c8235b0c36aa6416798179fcb42a9a623390e462824d"
+        }
+      },
+      {
+        "decode_s": 6.904479026794434,
+        "decode_tok_s": 74.15476214976759,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r01/events.jsonl",
+          "sha256": "c5e7659070d0856259d72d2f700ed9c97a867fc02c92b4f9110477bbcdc7bc1f"
+        },
+        "prefill_s": 2.0146780014038086,
+        "prefill_tok_s": 1016.5396150516226,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r01",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r01/summary_metrics.json",
+          "sha256": "e6b0c88f7e054395df2524113defa42d61928f40a2af267745f5058321780040"
+        }
+      },
+      {
+        "decode_s": 6.899604082107544,
+        "decode_tok_s": 74.20715651319013,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r02/events.jsonl",
+          "sha256": "897a1d944933cbf15d04bb6ed26e70e2726c3a942808854a46376c2e98ffd4af"
+        },
+        "prefill_s": 2.029388904571533,
+        "prefill_tok_s": 1009.1707880074352,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r02",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r02/summary_metrics.json",
+          "sha256": "c404b1c7463c8fa19e9837e0c92d41af2408318fced29e12fff992709085d50e"
+        }
+      },
+      {
+        "decode_s": 6.900943994522095,
+        "decode_tok_s": 74.19274818146921,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r03/events.jsonl",
+          "sha256": "b80d6ef933fe4cae02da6f9220c0b5b58eaf2dba5bb8de8dd8e5ce18053d30bd"
+        },
+        "prefill_s": 2.0341429710388184,
+        "prefill_tok_s": 1006.8122197694418,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r03",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r03/summary_metrics.json",
+          "sha256": "2d828177f57aa66711d7c6c524789f6a221d117f208494a9751cf5cbd16cf668"
+        }
+      },
+      {
+        "decode_s": 6.902631998062134,
+        "decode_tok_s": 74.17460472233496,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r04/events.jsonl",
+          "sha256": "308a51697ad7c9582d718d3333df0e05fd9ec48814de5e24851174ca71b9ebb5"
+        },
+        "prefill_s": 2.0158731937408447,
+        "prefill_tok_s": 1015.9369182341959,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r04",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r04/summary_metrics.json",
+          "sha256": "67924d97978390c3ad181f4ac9bd822da357325a30e5273a0937fbe5489d1af5"
+        }
+      },
+      {
+        "decode_s": 6.910386800765991,
+        "decode_tok_s": 74.09136633903715,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r05/events.jsonl",
+          "sha256": "37e7d78ba6572510ac415c838b4b8eed16d2d3ac83cd6f1db96dd0cca8160466"
+        },
+        "prefill_s": 2.0342280864715576,
+        "prefill_tok_s": 1006.7700930982279,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r05",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r05/summary_metrics.json",
+          "sha256": "6affd07db4b8eb13ae13b636b7bef8e88690203521603be3172257b0bbc17a98"
+        }
+      },
+      {
+        "decode_s": 6.893672943115234,
+        "decode_tok_s": 74.27100244309362,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r06/events.jsonl",
+          "sha256": "f38411b40107e74e906a0e6115ab300daca64ee52cffc3228c14ff06a1ad74c8"
+        },
+        "prefill_s": 2.024013042449951,
+        "prefill_tok_s": 1011.8511872438401,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r06",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r06/summary_metrics.json",
+          "sha256": "53d9d15936c3c6d0388f35d6c764f44165653cddd88fe308376dbb3e657c8fb4"
+        }
+      },
+      {
+        "decode_s": 6.916275978088379,
+        "decode_tok_s": 74.02827787989946,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r07/events.jsonl",
+          "sha256": "4e1700ec497465052dddb4a61d5a6e4ab2bb91eb52af10d4081ec0c7a5c1aca9"
+        },
+        "prefill_s": 2.031780958175659,
+        "prefill_tok_s": 1007.9826724229682,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r07",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r07/summary_metrics.json",
+          "sha256": "54bc12148c416c53a18000087232ab61ba3ec6a4cabb687af57e0e192d28c578"
+        }
+      },
+      {
+        "decode_s": 6.913701772689819,
+        "decode_tok_s": 74.05584111575052,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r08/events.jsonl",
+          "sha256": "05157ef5a80059be09d1147740a71a03f40131a3f202da6a875515db62c64e71"
+        },
+        "prefill_s": 2.0334930419921875,
+        "prefill_tok_s": 1007.1340091695619,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r08",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r08/summary_metrics.json",
+          "sha256": "c1bc2e8397561abad2bbf6de0f2b7296dc696d44f5a6b7d407adb8bf7101abe3"
+        }
+      },
+      {
+        "decode_s": 6.929453134536743,
+        "decode_tok_s": 73.88750454897605,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r09/events.jsonl",
+          "sha256": "37100535fd890bd0c9500c67c8f2f89569d461083de5dd47c91447a2a22bfc38"
+        },
+        "prefill_s": 2.025550127029419,
+        "prefill_tok_s": 1011.0833460357286,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r09",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r09/summary_metrics.json",
+          "sha256": "2ae4ed43148d04a637cdeae106cefc1ecbedc69ef42b5a5e389d5e999a20aaba"
+        }
+      },
+      {
+        "decode_s": 6.9058921337127686,
+        "decode_tok_s": 74.13958835246632,
+        "decode_tokens": 512,
+        "events": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r10/events.jsonl",
+          "sha256": "de2d82f22db3716dc7f826f0b4d5fb6bd15f19014b68cef13b727a5ebab5980a"
+        },
+        "prefill_s": 2.0332601070404053,
+        "prefill_tok_s": 1007.2493887567833,
+        "prefill_tokens": 2048,
+        "run_id": "bytes-qwen3-next-80b-abs-r10",
+        "summary": {
+          "path": "/Users/edr/night-b6/sessions/r2-bytes-s3-p2/runs-parent/runs_bytes-s3-p2/bytes-qwen3-next-80b-abs-r10/summary_metrics.json",
+          "sha256": "2f24a78232bb227df5eada3b7a90496960b09092013910e05613a9fe915e2639"
+        }
+      }
+    ]
+  },
+  "campaign_log": {
+    "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/campaign_log.jsonl",
+    "sha256": "57f6c08c5d47034822014bf7523bc43bb810000951909b410c033990c6276905"
+  },
+  "factor_derivation": "last long-cell repeat final turn / first long-cell repeat initial turn; includes thermal slowdown",
+  "long_context_end": {
+    "decode_s": 23.638972252,
+    "decode_tok_s": 27.91999554651366,
+    "decode_tokens": 660,
+    "episode_id": "align-pilot-v0-episodes-b-e09",
+    "prefill_s": 82.526253915,
+    "prefill_tok_s": 422.41103099027055,
+    "prefill_tokens": 34860,
+    "turn": 6
+  },
+  "long_context_start": {
+    "decode_s": 13.961726983,
+    "decode_tok_s": 63.244325080640344,
+    "decode_tokens": 883,
+    "episode_id": "align-pilot-v0-episodes-a-e01",
+    "prefill_s": 8.791549558,
+    "prefill_tok_s": 721.9432658744959,
+    "prefill_tokens": 6347,
+    "turn": 0
+  },
+  "member_observations": [
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/outputs/align_episode.json",
+        "sha256": "5d1798dec71b650a5b22032501c69864423f1a00f303f4a65f639a6ff5db7807"
+      },
+      "episode_s": 424.977110876,
+      "member_s": 623.2146095409989,
+      "run_id": "align-pilot-v0-episodes-a-e01"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e02/outputs/align_episode.json",
+        "sha256": "25f9ffd1d5ac726066033c95b916fc354217d308b31681326b7ed469f77238c0"
+      },
+      "episode_s": 35.263816895,
+      "member_s": 172.1786248330027,
+      "run_id": "align-pilot-v0-episodes-a-e02"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e03/outputs/align_episode.json",
+        "sha256": "65a7eeccd5c74d707890e40350ddb279fb92a07269cc2aa1811f0e869f0a1f54"
+      },
+      "episode_s": 79.661163625,
+      "member_s": 223.53343012486584,
+      "run_id": "align-pilot-v0-episodes-a-e03"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e04/outputs/align_episode.json",
+        "sha256": "e64aacc4cf9521a1fc083f0f8094322188d60984a27029e24a999d639800f898"
+      },
+      "episode_s": 105.04220702,
+      "member_s": 250.43398245819844,
+      "run_id": "align-pilot-v0-episodes-a-e04"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/outputs/align_episode.json",
+        "sha256": "7bf5d1a849d5efad3e4a304257e6a928135e967791d47158098d986fa335ad6d"
+      },
+      "episode_s": 434.401500126,
+      "member_s": 629.1113225829322,
+      "run_id": "align-pilot-v0-episodes-a-e05"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e06/outputs/align_episode.json",
+        "sha256": "c2ea3c9fc1e990701049f1a6bdcca299423610e4d36aa8c7509c190b37425e63"
+      },
+      "episode_s": 35.256799772,
+      "member_s": 170.6242958328221,
+      "run_id": "align-pilot-v0-episodes-a-e06"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e07/outputs/align_episode.json",
+        "sha256": "e799df1898e52b048e0a787b65a27450a6aa8e35a49e11f74e7ba2340f9a7abb"
+      },
+      "episode_s": 80.076776229,
+      "member_s": 224.18454762501642,
+      "run_id": "align-pilot-v0-episodes-b-e07"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e08/outputs/align_episode.json",
+        "sha256": "dd503384be36242d4f9c24753e2c1356414da88ab6dd55b84432f3679aa2e3b0"
+      },
+      "episode_s": 105.120648124,
+      "member_s": 251.0747279159259,
+      "run_id": "align-pilot-v0-episodes-b-e08"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/outputs/align_episode.json",
+        "sha256": "7fbe1378a406cee209b13b953760ca4d154453dadbab29bc4c9aa0415bcfec6a"
+      },
+      "episode_s": 447.357833354,
+      "member_s": 647.2336222908925,
+      "run_id": "align-pilot-v0-episodes-b-e09"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e10/outputs/align_episode.json",
+        "sha256": "2551756699282bd6ad36824caa825c2642e38152aa3527771a483a20ae1cff38"
+      },
+      "episode_s": 35.237779292,
+      "member_s": 171.62542820814997,
+      "run_id": "align-pilot-v0-episodes-b-e10"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e11/outputs/align_episode.json",
+        "sha256": "749a46020ecd5f34ec3674d2000c09738778f6e0db14ebd7c4e0d266f9d3cb3c"
+      },
+      "episode_s": 79.747538063,
+      "member_s": 223.20052245887928,
+      "run_id": "align-pilot-v0-episodes-b-e11"
+    },
+    {
+      "episode": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e12/outputs/align_episode.json",
+        "sha256": "af72c13f602ec1b737288d6ace35ce9c652281301b28f3babe7b04b7adea5329"
+      },
+      "episode_s": 105.173640104,
+      "member_s": 252.19138050009497,
+      "run_id": "align-pilot-v0-episodes-b-e12"
+    }
+  ],
+  "non_claim": true,
+  "pilot1_idle_s": 57.6,
+  "scaffold_derivation": {
+    "end_s": 1793627334,
+    "episode_stage_s": [
+      2112,
+      1813
+    ],
+    "formula": "last_end-first_start-sum(episode_stage_wall); includes actual stage settles",
+    "journal": {
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/custody/night/chain-stages.jsonl",
+      "sha256": "581d12829739a327b6c72ca2ac33277943cb360f5fdbaab99f225e7dc81554e2"
+    },
+    "start_s": 1793618436
+  },
+  "scaffold_s": 4973
+}

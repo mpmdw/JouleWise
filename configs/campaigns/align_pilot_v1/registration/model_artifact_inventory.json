@@ -1,0 +1,700 @@
+{
+  "artifacts": {
+    "neg8_reference": {
+      "algorithm": "sha256",
+      "files": {
+        "model.safetensors": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717"
+      },
+      "folded_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+      "inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/model.safetensors",
+          "sha256": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717",
+          "size_bytes": 868628559,
+          "symlink": false
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-a-e01": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-a-e02": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-a-e03": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-a-e04": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-b-e05": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-b-e06": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-b-e07": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-30b-a3b-align-pilot-v1-episodes-b-e08": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00004.safetensors": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+        "model-00002-of-00004.safetensors": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+        "model-00003-of-00004.safetensors": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+        "model-00004-of-00004.safetensors": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956"
+      },
+      "folded_sha256": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+      "inventory": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "sha256": "18e9a14cae093ba31a9033f065a9815d048dd46ee5b3550a4804f0c11edc5d40",
+          "size_bytes": 5319507366,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "sha256": "b4d2137faf0903ab2bdaeebda18e8ce201af08c6a07bc732ed2d437cf327e321",
+          "size_bytes": 5364678660,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "sha256": "345483f1cd9ba445a764330cccf3f5545c59bbc02f4ec38eac842f200e445ddc",
+          "size_bytes": 5274790383,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/blobs/2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "sha256": "2d41885ffa0a1f4edd67def6208573d92afdbbf6f49eee39a13a16fb89bad956",
+          "size_bytes": 1215804259,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "status": "ok"
+    },
+    "qwen3-next-80b-align-pilot-v1-episodes-b-e09": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00009.safetensors": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+        "model-00002-of-00009.safetensors": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+        "model-00003-of-00009.safetensors": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+        "model-00004-of-00009.safetensors": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+        "model-00005-of-00009.safetensors": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+        "model-00006-of-00009.safetensors": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+        "model-00007-of-00009.safetensors": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+        "model-00008-of-00009.safetensors": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+        "model-00009-of-00009.safetensors": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da"
+      },
+      "folded_sha256": "5cc91648a8fe6268c370da36efc941d895f8833db4f0cae25e1a447b4477fa7a",
+      "inventory": [
+        {
+          "path": "model-00001-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "sha256": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "size_bytes": 5132893190,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "sha256": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "size_bytes": 5257948500,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "sha256": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "size_bytes": 5239714716,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "sha256": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "size_bytes": 5261626153,
+          "symlink": true
+        },
+        {
+          "path": "model-00005-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "sha256": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "size_bytes": 5257948651,
+          "symlink": true
+        },
+        {
+          "path": "model-00006-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "sha256": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "size_bytes": 5239714662,
+          "symlink": true
+        },
+        {
+          "path": "model-00007-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "sha256": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "size_bytes": 5257948739,
+          "symlink": true
+        },
+        {
+          "path": "model-00008-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "sha256": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "size_bytes": 5261626157,
+          "symlink": true
+        },
+        {
+          "path": "model-00009-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "sha256": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "size_bytes": 2934865732,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b",
+      "status": "ok"
+    },
+    "qwen3-next-80b-align-pilot-v1-episodes-b-e10": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00009.safetensors": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+        "model-00002-of-00009.safetensors": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+        "model-00003-of-00009.safetensors": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+        "model-00004-of-00009.safetensors": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+        "model-00005-of-00009.safetensors": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+        "model-00006-of-00009.safetensors": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+        "model-00007-of-00009.safetensors": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+        "model-00008-of-00009.safetensors": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+        "model-00009-of-00009.safetensors": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da"
+      },
+      "folded_sha256": "5cc91648a8fe6268c370da36efc941d895f8833db4f0cae25e1a447b4477fa7a",
+      "inventory": [
+        {
+          "path": "model-00001-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "sha256": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "size_bytes": 5132893190,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "sha256": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "size_bytes": 5257948500,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "sha256": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "size_bytes": 5239714716,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "sha256": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "size_bytes": 5261626153,
+          "symlink": true
+        },
+        {
+          "path": "model-00005-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "sha256": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "size_bytes": 5257948651,
+          "symlink": true
+        },
+        {
+          "path": "model-00006-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "sha256": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "size_bytes": 5239714662,
+          "symlink": true
+        },
+        {
+          "path": "model-00007-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "sha256": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "size_bytes": 5257948739,
+          "symlink": true
+        },
+        {
+          "path": "model-00008-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "sha256": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "size_bytes": 5261626157,
+          "symlink": true
+        },
+        {
+          "path": "model-00009-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "sha256": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "size_bytes": 2934865732,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b",
+      "status": "ok"
+    },
+    "qwen3-next-80b-align-pilot-v1-episodes-b-e11": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00009.safetensors": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+        "model-00002-of-00009.safetensors": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+        "model-00003-of-00009.safetensors": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+        "model-00004-of-00009.safetensors": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+        "model-00005-of-00009.safetensors": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+        "model-00006-of-00009.safetensors": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+        "model-00007-of-00009.safetensors": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+        "model-00008-of-00009.safetensors": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+        "model-00009-of-00009.safetensors": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da"
+      },
+      "folded_sha256": "5cc91648a8fe6268c370da36efc941d895f8833db4f0cae25e1a447b4477fa7a",
+      "inventory": [
+        {
+          "path": "model-00001-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "sha256": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "size_bytes": 5132893190,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "sha256": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "size_bytes": 5257948500,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "sha256": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "size_bytes": 5239714716,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "sha256": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "size_bytes": 5261626153,
+          "symlink": true
+        },
+        {
+          "path": "model-00005-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "sha256": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "size_bytes": 5257948651,
+          "symlink": true
+        },
+        {
+          "path": "model-00006-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "sha256": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "size_bytes": 5239714662,
+          "symlink": true
+        },
+        {
+          "path": "model-00007-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "sha256": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "size_bytes": 5257948739,
+          "symlink": true
+        },
+        {
+          "path": "model-00008-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "sha256": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "size_bytes": 5261626157,
+          "symlink": true
+        },
+        {
+          "path": "model-00009-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "sha256": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "size_bytes": 2934865732,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b",
+      "status": "ok"
+    },
+    "qwen3-next-80b-align-pilot-v1-episodes-b-e12": {
+      "algorithm": "sha256",
+      "files": {
+        "model-00001-of-00009.safetensors": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+        "model-00002-of-00009.safetensors": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+        "model-00003-of-00009.safetensors": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+        "model-00004-of-00009.safetensors": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+        "model-00005-of-00009.safetensors": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+        "model-00006-of-00009.safetensors": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+        "model-00007-of-00009.safetensors": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+        "model-00008-of-00009.safetensors": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+        "model-00009-of-00009.safetensors": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da"
+      },
+      "folded_sha256": "5cc91648a8fe6268c370da36efc941d895f8833db4f0cae25e1a447b4477fa7a",
+      "inventory": [
+        {
+          "path": "model-00001-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "sha256": "ef7ba9ab575d24457373e9e5eb40a17b3b8ce6ab6eb51675210eb85420975537",
+          "size_bytes": 5132893190,
+          "symlink": true
+        },
+        {
+          "path": "model-00002-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "sha256": "ed73c8c486cdd4ad57586b7d3fa7ae94b57cb4d6562cbe52c68c160f0826d00f",
+          "size_bytes": 5257948500,
+          "symlink": true
+        },
+        {
+          "path": "model-00003-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "sha256": "74719bcec1f6d406e8366db1678e80be19f498b6a9ad5f6baf8b53045c786ff5",
+          "size_bytes": 5239714716,
+          "symlink": true
+        },
+        {
+          "path": "model-00004-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "sha256": "8a84d99b2a9c5e5b7dc4ee0ecc91e5fda586c3451ace8f7c270e254db11886cf",
+          "size_bytes": 5261626153,
+          "symlink": true
+        },
+        {
+          "path": "model-00005-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "sha256": "0e71e87fb893d1ab8063869ec8543e0e9a2b246fb98fe4b438f4a2eb24f64ed7",
+          "size_bytes": 5257948651,
+          "symlink": true
+        },
+        {
+          "path": "model-00006-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "sha256": "926c18e5a60da87ed84f52504812f8ad79dfac3cb19204e7cfdf93a02c74ff4e",
+          "size_bytes": 5239714662,
+          "symlink": true
+        },
+        {
+          "path": "model-00007-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "sha256": "076d9b53b2fc2b50da9781925271ad5fdc68bab4c68f5e91ed2e885cc3d05e36",
+          "size_bytes": 5257948739,
+          "symlink": true
+        },
+        {
+          "path": "model-00008-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "sha256": "fd5eeb1c11dde328ae55ac2c201d6b17c8c8b6f8a18f33507288adb5576ebf71",
+          "size_bytes": 5261626157,
+          "symlink": true
+        },
+        {
+          "path": "model-00009-of-00009.safetensors",
+          "resolved_path": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/blobs/40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "sha256": "40dcae0e685a99f32e51fbd235708f98b0576886dfffd7dd12390222311854da",
+          "size_bytes": 2934865732,
+          "symlink": true
+        }
+      ],
+      "kind": "file_set",
+      "root": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b",
+      "status": "ok"
+    }
+  },
+  "non_claim": true
+}

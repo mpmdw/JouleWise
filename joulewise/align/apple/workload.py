@@ -53,6 +53,8 @@ class EpisodeSpec:
     task_kwargs: Mapping[str, Any] = field(default_factory=dict)
     mock_turns: tuple[Mapping[str, Any], ...] = ()
     schema: str = SPEC_SCHEMA
+    enable_thinking: bool | None = None
+    max_context_tokens: int | None = None
 
     def to_text(self) -> str:
         return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -80,6 +82,12 @@ class EpisodeSpec:
                 raise ValueError("turn and token budgets must be positive integers")
         if type(spec.seed) is not int:
             raise ValueError("seed must be an integer")
+        if spec.enable_thinking is not None and type(spec.enable_thinking) is not bool:
+            raise ValueError("enable_thinking must be boolean or null")
+        if spec.max_context_tokens is not None and (
+            type(spec.max_context_tokens) is not int or spec.max_context_tokens <= 0
+        ):
+            raise ValueError("max_context_tokens must be a positive integer or null")
         if type(spec.temperature) not in (int, float) or not math.isfinite(spec.temperature):
             raise ValueError("temperature must be numeric and finite")
         return spec
@@ -139,10 +147,19 @@ class EpisodeRuntimeAdapter:
                 source = Path(config.model.source or "").expanduser()
                 if not config.model.source or not source.is_dir():
                     raise ValueError("local_model_mirror_required")
+                native_limit = json.loads((source / "config.json").read_text())["max_position_embeddings"]
+                if type(native_limit) is not int or native_limit <= 0:
+                    raise ValueError("max_position_embeddings must be a positive integer")
+            else:
+                native_limit = None  # Mock has no model config; its spec can exercise the guard.
             result = self.runtime.prepare(config, context)
             self._runtime_ready = result.ok
             self.prepared = dict(result.metadata)
-            return result
+            self.prepared["max_position_embeddings"] = native_limit
+            self.prepared["max_context_tokens"] = min(
+                x for x in (native_limit, self.spec.max_context_tokens) if x is not None
+            ) if native_limit is not None or self.spec.max_context_tokens is not None else None
+            return replace(result, metadata=self.prepared)
         except Exception as exc:
             self.flags.append(f"runtime_unavailable:{type(exc).__name__}:{exc}")
             return AdapterResult(
@@ -178,12 +195,14 @@ class EpisodeRuntimeAdapter:
             # have a distinct identity and retain the endpoint's mismatch flag.
             "requested_temperature": spec.temperature,
             "max_tokens": spec.max_tokens,
+            "enable_thinking": spec.enable_thinking,
         }
         metadata["output_policy"] = {
             "name": "agent_episode",
             "requested_tokens": spec.max_turns * spec.max_tokens,
             "max_turns": spec.max_turns,
             "max_tokens_per_turn": spec.max_tokens,
+            "max_context_tokens": spec.max_context_tokens,
             "stop_condition": "episode_returns_or_turn_budget_reached",
         }
         return metadata
@@ -227,6 +246,7 @@ class EpisodeRuntimeAdapter:
         endpoint = MlxEndpoint(
             self.runtime, config, self.clock, episode_domain=domain,
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
+            enable_thinking=spec.enable_thinking,
         )
         task = self.task
         model_returned_tokens = False
@@ -238,9 +258,14 @@ class EpisodeRuntimeAdapter:
                     ChatMessage("user", task.user_prompt()),
                 ]
                 for index in range(spec.max_turns):
+                    tools = task.tool_schemas()
+                    limit = self.prepared.get("max_context_tokens")
+                    if limit is not None and endpoint.rendered_prompt_length(transcript, tools=tools) + spec.max_tokens > limit:
+                        flags.append(f"episode.context_limit:{index}")
+                        break
                     event_start = len(endpoint.events)
                     result = endpoint.chat(
-                        transcript, tools=task.tool_schemas(), max_tokens=spec.max_tokens,
+                        transcript, tools=tools, max_tokens=spec.max_tokens,
                         temperature=spec.temperature, seed=spec.seed,
                     )
                     # Integer token counts establish that a model call returned work.
@@ -292,13 +317,15 @@ class EpisodeRuntimeAdapter:
                         tool_calls=tuple(calls),
                     ))
                     if not result.tool_calls:
+                        if "unclosed_reasoning_span" in result.raw_usage.get("joulewise", {}).get("flags", ()):
+                            flags.append("ended_in_unclosed_reasoning")
                         break
                 else:
                     flags.append("turn_budget_reached")
             except Exception as exc:
                 flags.append(f"episode_error:{type(exc).__name__}:{exc}")
         flags.extend(endpoint.flags)
-        if not model_returned_tokens:
+        if not model_returned_tokens and not any(f.startswith("episode.context_limit:") for f in flags):
             # UNKNOWN_ERROR maps to failed; RUNTIME_UNAVAILABLE maps to unsupported
             # and is reserved here for configurations rejected during prepare.
             raise AdapterFailure(
@@ -316,9 +343,24 @@ class EpisodeRuntimeAdapter:
                 ):
                     flags.append("task_scoring_error:main_score_not_finite_numeric")
                     main_score = None
-                side_success = task.score_side(transcript)
             except Exception as exc:
-                flags.append(f"task_scoring_error:{type(exc).__name__}:{exc}")
+                flags.append(f"task_scoring_error:main:{type(exc).__name__}:{exc}")
+            try:
+                side_success = task.score_side(transcript)
+                if side_success is not None and type(side_success) is not bool:
+                    flags.append("task_scoring_error:side_not_boolean")
+                    side_success = None
+            except Exception as exc:
+                flags.append(f"task_scoring_error:side:{type(exc).__name__}:{exc}")
+        flags.extend("task." + f for f in getattr(task, "flags", ()) if isinstance(f, str))
+        from joulewise.align.runner import _finite_json
+        diagnostics = _finite_json({
+            "give_hint": getattr(task, "give_hint", None),
+            "main_task_score": main_score,
+            "evaluation_outputs": getattr(task, "evaluation_outputs", {}),
+            "flags": list(getattr(task, "flags", ())),
+            "tool_schemas": list(task.tool_schemas()),
+        }, flags, "task_diagnostics.nonfinite")
         flags.append("single_request_summary_fields_not_episode_metrics:ttft_s,decode_latency_s,energy_token_j")
         flags.append("power_trace_join_in_run_bundle")
         flags.append("episode_interval_excludes_scoring_and_serialization_tail")
@@ -341,6 +383,8 @@ class EpisodeRuntimeAdapter:
                     )
                 },
                 "power_scope": "existing controller rail manifest",
+                "context_limits": {k: self.prepared.get(k) for k in ("max_position_embeddings", "max_context_tokens")},
+                "task_diagnostics": diagnostics,
             },
             flags=tuple(dict.fromkeys(flags)),
         )
@@ -356,6 +400,8 @@ class EpisodeRuntimeAdapter:
             stop = "turn_token_budget_reached"
         if "turn_budget_reached" in flags:
             stop = "turn_budget_reached"
+        if any(flag.startswith("episode.context_limit:") for flag in flags):
+            stop = "episode.context_limit"
         if any(flag.startswith("episode_error:") for flag in flags):
             stop = "episode_error"
         if any(flag.startswith("endpoint_error:") for flag in flags):

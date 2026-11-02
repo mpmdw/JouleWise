@@ -1,0 +1,23 @@
+{
+  "identity_pins_sha256": "4a59cffdc9bd0a70bce95770475895f5e10913471ae83993b5bb150d7df2640f",
+  "non_claim": true,
+  "runtime_python_observed": "/opt/homebrew/bin/python3.13",
+  "runtime_versions": {
+    "packages": {
+      "mlx": null,
+      "mlx-lm": null,
+      "mlx-metal": null,
+      "numpy": null,
+      "safetensors": null,
+      "tokenizers": null,
+      "transformers": null
+    },
+    "python": "3.13.1"
+  },
+  "scope": "Local files match BYTES; package metadata only, no C4 stack identity",
+  "sources": {
+    "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+    "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b": "5cc91648a8fe6268c370da36efc941d895f8833db4f0cae25e1a447b4477fa7a",
+    "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+  }
+}

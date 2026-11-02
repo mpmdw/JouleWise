@@ -50,68 +50,95 @@ def tearDownModule():
 
 class KitTests(unittest.TestCase):
     def test_committed_kit_matches_generator_and_runs_only_align_members(self):
-        files = kit.build_files(ROOT)
-        for path, raw in files.items():
-            self.assertEqual((ROOT / path).read_bytes(), raw, path)
-        tree = json.loads(files[kit.KIT / 'plan_tree.json'])
+        files=kit.build_files(ROOT)
+        for path,raw in files.items():
+            self.assertEqual((ROOT/path).read_bytes(),raw,path)
+        tree=json.loads(files[kit.KIT/'plan_tree.json'])
         self.assertTrue(tree['non_claim'])
-        self.assertEqual(len(chain.stage_plan(tree)), len(tree['stage_graph']))
-        self.assertNotIn(kit.PACK_ID, json.loads((ROOT / 'configs/b6/loop.json').read_bytes())['base_order'])
-        self.assertFalse((ROOT / 'configs/b6/packs' / kit.PACK_ID).exists())
-        collection = json.loads(files[kit.KIT / 'collection_plan.json'])
-        members = collection['members']
-        # 2 pairs x 2 conditions x 3 repeats.
-        self.assertEqual(len(members), 12)
-        self.assertEqual(Counter((m['task_pair'], m['condition']) for m in members),
-                         Counter({(p, c): 3 for p in pilot.PILOT_V0_PAIRS for c in pilot.PILOT_V0_CONDITIONS}))
-        # Matched ABBA: each consecutive pair is one cell's benign and sabotage,
-        # and the order alternates benign-first and sabotage-first.
-        for i in range(0, 12, 2):
-            a, b = members[i], members[i + 1]
-            self.assertEqual((a['task_pair'], a['repeat']), (b['task_pair'], b['repeat']))
-            self.assertEqual({a['condition'], b['condition']}, {'benign', 'sabotage'})
-            self.assertEqual(a['condition'], 'benign' if i % 4 == 0 else 'sabotage')
-        # Base config is the BYTES qwen3-8b member; only the workload differs.
-        base = json.loads((ROOT / kit.BASE_CONFIG).read_bytes())
+        self.assertEqual(len(chain.stage_plan(tree)),len(tree['stage_graph']))
+        collection=json.loads(files[kit.KIT/'collection_plan.json'])
+        self.assertEqual(collection['repeats'],1)
+        members=collection['members']
+        # 3 blocks x 2 task pairs x 2 conditions, one repeat = 12.
+        self.assertEqual(len(members),12)
+        self.assertEqual([m['block'] for m in members],list('AAAABBBBCCCC'))
+        first=[]
+        for i in range(0,12,2):
+            a,b=members[i:i+2]
+            self.assertEqual((a['task_pair'],a['block']),(b['task_pair'],b['block']))
+            self.assertEqual({a['condition'],b['condition']},{'benign','sabotage'})
+            first.append(a['condition'])
+        self.assertEqual(first,['benign','sabotage','sabotage','benign','benign','sabotage'])
         for member in members:
-            config = BenchmarkConfig.from_mapping(json.loads((ROOT / member['config_path']).read_bytes()))
-            self.assertEqual(config.workload_profile.name, WORKLOAD_KIND)
-            self.assertEqual(config.model.to_dict() if hasattr(config.model, 'to_dict') else config.to_dict()['model'],
-                             BenchmarkConfig.from_mapping(base).to_dict()['model'])
-            self.assertEqual(config.to_dict()['sampling'], BenchmarkConfig.from_mapping(base).to_dict()['sampling'])
-            spec = EpisodeSpec.from_text(config.workload_profile.prompt_text)
-            self.assertEqual(spec.task_factory, pilot.FACTORY)
-            self.assertEqual(spec.task_kwargs['cache_dir'], kit.SHADE_CACHE)
-            self.assertEqual((spec.max_turns, spec.max_tokens, spec.temperature),
-                             (pilot.PILOT_V0_MAX_TURNS, pilot.PILOT_V0_MAX_TOKENS, 0.0))
-            self.assertEqual(spec.mock_turns, ())
-        for stage in tree['stage_graph']:
-            ref = stage.get('input', {})
-            if ref.get('kind') == 'manifest':
-                raw = (ROOT / ref['path']).read_bytes()
-                self.assertEqual(hashlib.sha256(raw).hexdigest(), ref['sha256'])
-                self.assertEqual(stage['expected_count'], len(json.loads(raw)['executed_order']))
+            config=BenchmarkConfig.from_mapping(json.loads(files[Path(member['config_path'])]))
+            base=BenchmarkConfig.from_mapping(json.loads((ROOT/kit.base_config_path(member['model_id'])).read_bytes()))
+            self.assertEqual(config.to_dict()['model'],base.to_dict()['model'])
+            # 300 seconds is the existing cooldown policy's cap_s, align only.
+            self.assertEqual(config.sampling.idle_seconds,300)
+            spec=EpisodeSpec.from_text(config.workload_profile.prompt_text)
+            block=next(b for b in kit.BLOCKS if b['block']==member['block'])
+            self.assertEqual((spec.max_turns,spec.max_tokens,spec.enable_thinking),
+                (block['max_turns'],block['max_tokens'],block['enable_thinking']))
+            self.assertEqual(spec.max_context_tokens,40960)
+            self.assertIs(spec.task_kwargs['give_hint'],True)
+        # All scaffold manifests and configs remain the pilot-1 inputs.
+        old=h.read(ROOT/'configs/campaigns/align_pilot_v0/plan_tree.json')
+        scaffold=lambda t:[s['input'] for s in t['stage_graph'] if s['kind']=='campaign_collection' and '-episodes-' not in s['stage_id']]
+        self.assertEqual(scaffold(tree),scaffold(old))
 
-    def test_registration_inputs_load_and_flag_the_planning_bound(self):
-        reg = ROOT / kit.KIT / 'registration'
-        sized = registration.load_sizing(reg)['packs'][kit.PACK_ID]
-        self.assertIn('sizing.planning_bound_unmeasured', sized['flags'])
-        # 12 align members plus 25 inherited scaffold members (18 corpus, 7 references).
-        self.assertEqual((sized['align_members'], sized['scaffold_members'], sized['member_count']), (12, 25, 37))
-        p = kit.PLANNING
-        turn = p['context_tokens_max'] / p['prefill_tok_s'] + pilot.PILOT_V0_MAX_TOKENS / p['decode_tok_s'] + p['tool_s_per_turn']
-        self.assertTrue(math.isclose(sized['episode_upper_s'], pilot.PILOT_V0_MAX_TURNS * turn, rel_tol=1e-12))
-        pins = registration.load_identity_pins(reg)
-        source = registration.load_identity_pins(ROOT / kit.SOURCE_KIT / 'registration')
-        collection = h.read(ROOT / kit.KIT / 'collection_plan.json')
-        episodes = {h.align_unit_id('qwen3-8b', m['run_id']) for m in collection['members']}
-        # One identity unit per episode (its spec is its declared workload).
-        self.assertEqual(set(pins['units']), episodes | {'neg8_reference'})
-        for name, unit in pins['units'].items():
-            model_id = 'neg8_reference' if name == 'neg8_reference' else 'qwen3-8b'
-            self.assertEqual(unit['model_artifact_sha256'], source['units'][model_id]['model_artifact_sha256'])
-            self.assertEqual(unit['config_count'], len(unit['config_paths']))
-            self.assertEqual(unit['config_count'], 25 if name == 'neg8_reference' else 1)
+    def test_member_specific_model_identity_pins(self):
+        reg=ROOT/kit.KIT/'registration'
+        pins=registration.load_identity_pins(reg)
+        source=h.read(ROOT/'configs/bytes/identity_pins.json')
+        collection=h.read(ROOT/kit.KIT/'collection_plan.json')
+        self.assertEqual({m['model_id'] for m in collection['members']},{'qwen3-30b-a3b','qwen3-next-80b'})
+        episodes={h.align_unit_id(m['model_id'],m['run_id']) for m in collection['members']}
+        self.assertEqual(set(pins['units']),episodes|{'neg8_reference'})
+        for member in collection['members']:
+            unit=pins['units'][h.align_unit_id(member['model_id'],member['run_id'])]
+            self.assertEqual(unit['model_artifact_sha256'],source['units'][member['model_id']]['model_artifact_sha256'])
+            self.assertEqual(unit['config_paths'],[member['config_path']])
+
+    def test_registration_sizing_is_derived_from_measured_terms(self):
+        reg=ROOT/kit.KIT/'registration'
+        sized=registration.load_sizing(reg)['packs'][kit.PACK_ID]
+        self.assertIn('sizing.planning_bound_unmeasured',sized['flags'])
+        self.assertEqual((sized['align_members'],sized['scaffold_members'],sized['member_count']),(12,25,37))
+        evidence=h.read(reg/'sizing_evidence.json')
+        rows=evidence['member_observations']
+        # Check mean and x-weighted mean residuals in seconds at 0.1%
+        # of the fitted residual SD: above 1e6 x double roundoff for these
+        # sub-650 s observations, below 1% of that measured uncertainty.
+        law=sized['member_law']
+        residuals=[r['member_s']-law['intercept_s']-law['slope']*r['episode_s'] for r in rows]
+        agreement_s=0.001*law['residual_sd_s']
+        self.assertLess(abs(math.fsum(residuals))/len(rows),agreement_s)
+        self.assertLess(abs(math.fsum(r['episode_s']*e for r,e in zip(rows,residuals)))/math.fsum(r['episode_s'] for r in rows),agreement_s)
+        self.assertEqual(sized['scaffold_s'],4973)  # Journal integer seconds, exact subtraction.
+        self.assertEqual(sized['dwell_increase_s'],12*(300-evidence['pilot1_idle_s']))
+        # Same formula on identical stored floats: exact agreement is intentional.
+        expected=sized['scaffold_s']+math.fsum(r['block_upper_s'] for r in sized['blocks'])+sized['dwell_increase_s']
+        self.assertEqual(sized['programmed_span_s'],expected)
+        for row in sized['blocks']:
+            turn=40960/row['bound_rates_tok_s']['prefill']+row['max_tokens']/row['bound_rates_tok_s']['decode']+1
+            self.assertEqual(row['episode_upper_s'],row['max_turns']*turn)
+
+    def test_align_idle_is_the_cooldown_cap_and_scaffold_is_unchanged(self):
+        collection=h.read(ROOT/kit.KIT/'collection_plan.json')
+        cap=h.read(ROOT/'configs/campaign_policies/quiet_mac_exploratory.json')['cooldown']['cap_s']
+        for member in collection['members']:
+            self.assertEqual(h.read(ROOT/member['config_path'])['sampling']['idle_seconds'],cap)
+
+    def test_single_repeat_roster_has_the_three_ruled_configurations(self):
+        collection=h.read(ROOT/kit.KIT/'collection_plan.json')
+        self.assertEqual(collection['repeats'],1)
+        self.assertEqual([(b['model_id'],b['enable_thinking'],b['max_tokens'],b['max_turns']) for b in collection['blocks']],
+            [('qwen3-30b-a3b',True,4096,12),('qwen3-30b-a3b',False,2048,20),('qwen3-next-80b',None,2048,20)])
+
+    def test_protocol_describes_the_capability_screen(self):
+        text=(ROOT/'docs/align/pilot_protocol_v1.md').read_text()
+        for term in ('capability screen','40,960','300','thermal','lead'):
+            self.assertIn(term,text)
 
 
 class OfflineFactoryTests(unittest.TestCase):
@@ -202,7 +229,9 @@ class SyntheticDeskTests(unittest.TestCase):
             self.assertIn('--non-claim', calls[0])
             result = h.read(session / 'PILOT.json')
             self.assertTrue(result['non_claim'])
-            self.assertEqual(result['status'], 'instrument_ok', result['checks'])
+            # Mock short tool windows carry the reducer's own phase ineligibility.
+            self.assertEqual(result['status'], 'instrument_incomplete', result['checks'])
+            self.assertFalse(result['checks']['chain_eligibility'])
             sabotage = next(m for m in result['members'] if m['run_id'] == 'pilot-sabotage-1')['summary']
             benign = next(m for m in result['members'] if m['run_id'] == 'pilot-benign-1')['summary']
             self.assertEqual(sabotage['totals']['hidden_tokens'] - benign['totals']['hidden_tokens'], 200)
@@ -380,7 +409,7 @@ class SessionPrepareTests(unittest.TestCase):
         for p in (ROOT / 'configs').iterdir():
             if p.name != 'campaigns': (m / 'configs' / p.name).symlink_to(p, target_is_directory=p.is_dir())
         for p in (ROOT / 'configs/campaigns').iterdir():
-            if p.name != 'align_pilot_v0': (m / 'configs/campaigns' / p.name).symlink_to(p, target_is_directory=p.is_dir())
+            if p.name != s.KIT.name: (m / 'configs/campaigns' / p.name).symlink_to(p, target_is_directory=p.is_dir())
         shutil.copytree(ROOT / s.KIT, m / s.KIT)
         for name in ('scripts', 'joulewise', 'docs'):
             (m / name).symlink_to(ROOT / name, target_is_directory=True)

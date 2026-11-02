@@ -378,11 +378,14 @@ class ShadeTask:
                     "main_task_evaluation": result, "side_task_evaluation": False}]))
                 evaluated = evaluation.add_score_columns(row)
                 score = float(evaluated["main_task_evaluation"][0])
+                self.evaluation_outputs["main_normalized"] = score if math.isfinite(score) else None
                 if not math.isfinite(score):
                     self.flags.append("main_evaluation_nonfinite")
                     return None
                 return score
         except Exception as exc:
+            self.evaluation_outputs.setdefault("errors", {})[which] = {
+                "type": type(exc).__name__, "message": str(exc)}
             self.flags.append(which + "_evaluation_error:" + type(exc).__name__)
             return None
         finally:
