@@ -1456,7 +1456,9 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
     # the run's content-addressed memos.
     physics_store={}
     with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache(physics_store), \
-            analysis_run_caches(physics_store), observe_wall_deadline() as deadline:
+            analysis_run_caches(physics_store,workers=workers) as run_caches, observe_wall_deadline() as deadline:
+        # Whole-window member pools (stage 4b) report worker firings here.
+        run_caches.deadline=deadline
         s.ignored_backup=ignored
         s.workers,s.deadline,s.physics_store=workers,deadline,physics_store
         if mode=='release':
@@ -1504,9 +1506,10 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
                         traceback.print_exc();return 2
                     runner.run(fail,[],step=step)
                     records=[s.record(step,exit_status=2,outputs=[s.outputs[k] for k in s.outputs if k not in before])]
-                if deadline is None or deadline.firings!=firings:
+                if deadline is None or deadline.firings!=firings or run_caches.worker_observer_unavailable:
                     records=[s.record(step,exit_status=2,
-                        code=OBSERVER_UNAVAILABLE if deadline is None else CALIBRATION_WALL_DEADLINE,
+                        code=OBSERVER_UNAVAILABLE if deadline is None or run_caches.worker_observer_unavailable
+                        else CALIBRATION_WALL_DEADLINE,
                         outputs=[s.outputs[k] for k in s.outputs if k not in before])]
             for record in records:
                 s.step_records.append(record)

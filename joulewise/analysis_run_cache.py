@@ -30,21 +30,29 @@ _ACTIVE: "_RunCaches | None" = None
 
 
 class _RunCaches:
-    def __init__(self, physics_store: dict | None, memos: dict | None = None):
+    def __init__(self, physics_store: dict | None, memos: dict | None = None, workers: int = 1):
         self.physics_store = physics_store
         self.memos: dict[str, dict[Any, Any]] = {} if memos is None else memos
         self.hits: dict[str, int] = {}
         self.misses: dict[str, int] = {}
+        # Member-level worker pool (joulewise.analysis_member_pool): only the
+        # driver process of a run with workers > 1 has one; the run's deadline
+        # observer receives worker firings.
+        self.workers = workers
+        self.deadline: Any = None
+        self.worker_observer_unavailable = False
+        self.pool: Any = None
 
 
 @contextmanager
 def analysis_run_caches(
-    physics_store: dict | None = None, *, memos: dict | None = None
+    physics_store: dict | None = None, *, memos: dict | None = None, workers: int = 1
 ) -> Iterator[_RunCaches]:
     """Activate the run caches in this process for the duration of the block.
 
     ``memos`` lets a long-lived worker process keep its memo tables across the
-    tasks it runs for one analysis run.
+    tasks it runs for one analysis run. ``workers`` > 1 lets whole-window
+    member work use a spawned pool (created on first use, shut down here).
     """
 
     global _ACTIVE
@@ -52,13 +60,22 @@ def analysis_run_caches(
         raise TypeError("run physics store must be a dict")
     if memos is not None and not isinstance(memos, dict):
         raise TypeError("run memos must be a dict")
+    if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
+        raise TypeError("run workers must be a positive int")
     previous = _ACTIVE
-    caches = _RunCaches(physics_store, memos)
+    caches = _RunCaches(physics_store, memos, workers)
     _ACTIVE = caches
     try:
         yield caches
     finally:
         _ACTIVE = previous
+        if caches.pool is not None:
+            caches.pool.shutdown(wait=True, cancel_futures=True)
+            caches.pool = None
+
+
+def current() -> "_RunCaches | None":
+    return _ACTIVE
 
 
 def active() -> bool:
