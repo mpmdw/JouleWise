@@ -16,26 +16,6 @@ SEAL = ROOT / "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
 # analysis commit's bytes, not main's working tree.
 B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
 EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py"})
-# L9-SPEEDUP-R2 (lead brief, 2026-11-02, scope item 3): the harvest's frozen bracket
-# evaluator carries exactly one analysis-run seam, the calibration-candidate physics
-# memo (joulewise.analysis_run_cache.candidate_physics), which is compute() outside an
-# analysis run. The freeze binds the pinned bytes with exactly this hunk reverted
-# (it must occur once); any other change to the file still fails.
-ANALYSIS_RUN_SEAMS = {
-    "joulewise/calibration_bracketing.py": ((
-        b"""        from joulewise.analysis_run_cache import candidate_physics  # L9-SPEEDUP-R2 run memo
-
-        effective_bound = candidate_physics(
-            evidence_raw, powermetrics_raw, events_raw,
-            lambda: verify_stored_evidence_physics(evidence, powermetrics_raw, events_raw),
-        )
-""",
-        b"""        effective_bound = verify_stored_evidence_physics(
-            evidence, powermetrics_raw, events_raw
-        )
-""",
-    ),),
-}
 PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
                  "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/")
 
@@ -58,11 +38,7 @@ def frozen_digests():
 
 def _bytes(root, path):
     if path not in EVOLVED_ON_MAIN:
-        data = (root / path).read_bytes()
-        for seam, pinned in ANALYSIS_RUN_SEAMS.get(path, ()):
-            if data.count(seam) == 1:
-                data = data.replace(seam, pinned)
-        return data
+        return (root / path).read_bytes()
     return subprocess.run(["git", "-C", str(root), "show", f"{B5_ANALYSIS_COMMIT}:{path}"],
                           check=True, capture_output=True).stdout
 
@@ -82,23 +58,6 @@ def frozen_mismatches(root=ROOT):
 class FrozenFilesTests(unittest.TestCase):
     def test_frozen_files(self):
         self.assertEqual(frozen_mismatches(), [])
-
-    def test_analysis_run_seam_is_the_only_change(self):
-        # The seam is present, and a byte changed anywhere else still breaks the freeze.
-        import shutil
-        import tempfile
-        for path, seams in ANALYSIS_RUN_SEAMS.items():
-            data = (ROOT / path).read_bytes()
-            for seam, _ in seams:
-                self.assertEqual(data.count(seam), 1, path)
-            with tempfile.TemporaryDirectory(prefix="frozen-seam-") as tmp:
-                for name in frozen_digests():
-                    if name not in EVOLVED_ON_MAIN:
-                        (Path(tmp) / name).parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copyfile(ROOT / name, Path(tmp) / name)
-                self.assertNotIn(path, frozen_mismatches(Path(tmp)))
-                (Path(tmp) / path).write_bytes(data.replace(b"return None", b"return  None", 1))
-                self.assertIn(path, frozen_mismatches(Path(tmp)))
 
     def test_seal_pins_match_every_printed_value(self):
         value = json.loads((ROOT / "configs/analysis/b5/seal_pins.json").read_bytes())

@@ -17,15 +17,14 @@ Two kinds of state live here:
   physics entry only after its own artifact, plist and events hash checks, and
   stores only a verified fit (a wall-deadline firing yields no fit and is never
   stored).
-* Named memos of pure, deterministic derivations (see ``memo``), including the
-  calibration-candidate physics memo (``candidate_physics``, L9-SPEEDUP-R2).
+* Named memos of pure, deterministic derivations (see ``memo``).
 """
 from __future__ import annotations
 
 from contextlib import contextmanager
 import hashlib
 import json
-from typing import Any, Callable, Iterator
+from typing import Any, Iterator
 
 _ACTIVE: "_RunCaches | None" = None
 
@@ -150,46 +149,6 @@ def stats() -> dict[str, dict[str, int]]:
     if _ACTIVE is None:
         return {}
     return {"hits": dict(_ACTIVE.hits), "misses": dict(_ACTIVE.misses)}
-
-
-CANDIDATE_PHYSICS_MEMO = "calibration_bracketing.candidate_physics"
-
-
-def candidate_physics(
-    evidence_raw: bytes, powermetrics_raw: bytes, events_raw: bytes, compute: Callable[[], Any]
-) -> Any:
-    """A calibration candidate's verified physics bound, memoized for the run (L9-SPEEDUP-R2).
-
-    ``compute`` is ``powermetrics_fiducial.verify_stored_evidence_physics`` of
-    the evidence parsed from ``evidence_raw`` and the two primary byte strings:
-    a pure function of exactly those three authenticated byte strings, which
-    the caller has already read and hash-checked. Every pack's bracket
-    evaluation (steps 3b, 4, 5, 9, 10, 11) refits the same candidates; inside a
-    run a candidate is refitted once per process. Outside a run this is
-    ``compute()``.
-
-    Never stored: an exception (it propagates; the caller decides), a value
-    that is not a finite float, and any value computed while the run's
-    wall-deadline observer counted a firing or while no observer is wired.
-    """
-
-    import math  # noqa: PLC0415
-
-    table = memo(CANDIDATE_PHYSICS_MEMO)
-    if table is None:
-        return compute()
-    key = canonical_key([sha256(evidence_raw), sha256(powermetrics_raw), sha256(events_raw)])
-    if key in table:
-        note(CANDIDATE_PHYSICS_MEMO, True)
-        return table[key]
-    note(CANDIDATE_PHYSICS_MEMO, False)
-    deadline = _ACTIVE.deadline if _ACTIVE is not None else None
-    before = None if deadline is None else deadline.firings
-    value = compute()
-    if (deadline is not None and deadline.firings == before
-            and type(value) is float and math.isfinite(value)):
-        table[key] = value
-    return value
 
 
 def sha256(data: bytes) -> str:

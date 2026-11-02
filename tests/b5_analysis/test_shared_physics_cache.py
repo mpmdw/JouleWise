@@ -152,38 +152,6 @@ class SharedPhysicsCacheTests(unittest.TestCase):
             ww.strict_validate_bundles([self.member], workers=1)
         self.assertEqual(self.refits, 1)
 
-    def candidate(self):
-        from joulewise import calibration_bracketing as calibration
-        return calibration._load_calibration_candidate_unbounded(
-            self.member / 'instrument_calibration', runs_root=self.member.parent)
-
-    def test_candidate_physics_is_refitted_once_per_run(self):
-        # L9-SPEEDUP-R2: every pack's bracket evaluation refits the same calibration
-        # candidates; inside a run each is refitted once, with an identical result.
-        from joulewise import analysis_run_cache as arc
-        from joulewise.b5_analysis.deadline_observer import DeadlineObserver
-        plain = [self.candidate(), self.candidate()]
-        self.assertEqual(self.refits, 2, 'outside a run every load refits')
-        self.assertIsNotNone(plain[0])
-        self.refits = 0
-        with arc.analysis_run_caches({}) as caches:
-            caches.deadline = DeadlineObserver()
-            memoized = [self.candidate() for _ in range(3)]
-        self.assertEqual(self.refits, 1)
-        self.assertEqual(memoized, [plain[0]] * 3)
-
-    def test_a_deadline_hit_candidate_refit_is_never_memoized(self):
-        from joulewise import analysis_run_cache as arc
-        from joulewise.b5_analysis.deadline_observer import observe_wall_deadline
-        with arc.analysis_run_caches({}) as caches, observe_wall_deadline() as deadline, \
-                mock.patch.object(pf, 'time', JumpingClock()):
-            caches.deadline = deadline
-            self.assertIsNone(self.candidate(), 'a firing refit is not a candidate')
-            self.assertGreater(deadline.firings, 0)
-            self.assertEqual(arc.memo(arc.CANDIDATE_PHYSICS_MEMO), {})
-            self.assertIsNone(self.candidate())
-        self.assertEqual(self.refits, 2)
-
     def test_cache_scope_is_reset_and_type_checked(self):
         self.assertIsNone(ww.shared_physics_cache())
         with ww.shared_instrument_calibration_physics_cache({}) as cache:
