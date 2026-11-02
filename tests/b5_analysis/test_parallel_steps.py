@@ -369,8 +369,8 @@ class StepThreeBSelectionTests(unittest.TestCase):
                 result = (type(exc).__name__, getattr(exc, 'code', None) or exc.reason)
             pooled = caches.pool is not None
             unavailable = caches.worker_observer_unavailable
-        return dict(result=result, census=list(archive._census.items()), firings=observer.firings,
-                    unavailable=unavailable, store=store, pooled=pooled)
+        return {'result': result, 'census': list(archive._census.items()), 'firings': observer.firings,
+                'unavailable': unavailable, 'store': store, 'pooled': pooled}
 
     def assertSameSelection(self, serial, pooled):
         for key in ('result', 'census', 'firings', 'unavailable'):
@@ -467,7 +467,7 @@ class StepFourMemberTests(unittest.TestCase):
             pooled = caches.pool is not None
         report['runs_root'] = '<runs-root>'
         text = json.dumps(report, sort_keys=True).replace(str(runs_root), '<runs-root>')
-        return dict(report=text, firings=observer.firings, store=store, pooled=pooled)
+        return {'report': text, 'firings': observer.firings, 'store': store, 'pooled': pooled}
 
     def test_extract_cells_workers_1_and_n_are_identical(self):
         serial = self.extract(1)
@@ -522,8 +522,8 @@ class StepFourMemberTests(unittest.TestCase):
         paths = [str(self.bundles[name] / 'metadata.json') for name in GOOD]
         tasks = [('tests.b5_analysis.test_parallel_steps:nested_child_program',
                   [str(root / f'probe-{pack}.json'), mode, *paths], '4', pack) for pack in ('alpha', 'beta')]
-        results, state = parallel.dispatch(tasks, restricted=restricted, first_counter=1, workers=workers,
-                                           physics_store={})
+        results, _ = parallel.dispatch(tasks, restricted=restricted, first_counter=1, workers=workers,
+                                       physics_store={})
         probes = [json.loads((root / f'probe-{pack}.json').read_bytes()) for pack in ('alpha', 'beta')]
         logs = [Path(r.stdout_path).read_text() for r in results]
         return results, probes, logs
