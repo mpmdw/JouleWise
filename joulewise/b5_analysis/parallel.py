@@ -8,6 +8,14 @@ had serially, so restricted logs keep their names. When a serial run would
 have stopped at task k, the driver removes every later task's files and resets
 the counter, leaving custody as the serial run would have.
 
+Member pools (L9-SPEEDUP-R2): each child enters the run caches with
+``workers // len(tasks)`` workers of its own (at least 1, the serial path), so a
+child with several workers (step 4's two packs) runs its whole-window
+re-derivations and strict validations in a nested ordered member pool
+(``joulewise.analysis_member_pool``). Its pool reports firings to the child's
+observer; a member worker that could not observe makes the child report
+``firings=None``, which fails the step closed in the driver.
+
 Physics: the driver's run store is shipped to every task (seeded first with one
 task per distinct calibration so workers rarely fit), and each worker keeps its
 own store and memos for the step. A worker reports its wall-deadline firings
@@ -65,6 +73,8 @@ class ChildTask:
     program: str
     argv: tuple[str, ...]
     physics: dict
+    # L9-SPEEDUP-R2: the child's own member-pool workers (1 is the serial path).
+    member_workers: int = 1
 
 
 @dataclass(frozen=True)
@@ -117,9 +127,14 @@ def run_child(task: ChildTask) -> ChildResult:
     runner._counter = task.counter - 1
     main = _program(task.program)
     with shared_instrument_calibration_physics_cache(_WORKER_PHYSICS), \
-            analysis_run_caches(_WORKER_PHYSICS, memos=_WORKER_MEMOS), observe_wall_deadline() as deadline:
+            analysis_run_caches(_WORKER_PHYSICS, memos=_WORKER_MEMOS, workers=task.member_workers) as caches, \
+            observe_wall_deadline() as deadline:
+        # As in the driver: the child's member pool reports its workers' firings
+        # to this observer, and a member worker that could not observe makes the
+        # child unobservable (the driver then refuses the step).
+        caches.deadline = deadline
         result = runner.run(main, list(task.argv), step=task.step, window=task.window)
-        firings = None if deadline is None else deadline.firings
+        firings = None if deadline is None or caches.worker_observer_unavailable else deadline.firings
     return ChildResult(result.exit_status, str(result.stdout_path), str(result.stderr_path),
                        result.exception, firings, _snapshot(_WORKER_PHYSICS))
 
@@ -184,10 +199,14 @@ def dispatch(tasks: Sequence[tuple[str, Sequence[str], str, str | None]], *, res
         seeds.append(index)
     results: list[ChildResult | None] = [None] * len(specs)
 
+    # L9-SPEEDUP-R2: each child gets its share of the workers for its own
+    # member pool (steps 1 and 2 have more tasks than workers: 1, serial).
+    member_workers = max(1, workers // len(specs))
+
     def make(index):
         program, argv, step, window = specs[index]
         return ChildTask(str(restricted), first_counter + index, step, window, program, argv,
-                         _snapshot(physics_store))
+                         _snapshot(physics_store), member_workers)
 
     def collect(index, result):
         results[index] = result
