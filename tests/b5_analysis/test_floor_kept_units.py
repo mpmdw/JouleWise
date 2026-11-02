@@ -70,7 +70,9 @@ def family(cell, cid):
 
 
 def arithmetic():
-    if "arithmetic" not in _CACHE:
+    # Rebuilt if its directory is gone: a module earlier in the same shard process
+    # can remove it, and the shard layout decides which modules share a process.
+    if "arithmetic" not in _CACHE or not _CACHE["arithmetic"][0].is_dir():
         tmp = tempfile.TemporaryDirectory(prefix="s4-arithmetic-")
         atexit.register(tmp.cleanup)
         root = Path(tmp.name)
