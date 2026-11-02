@@ -67,8 +67,10 @@ class RunPhysicsStoreTests(_Member):
         local = {}
         self.assertIs(arc.physics_cache_for_call(local, {'instrument_calibration': {'b_fiducial_s': 0.5}}), local)
         self.assertIsNone(arc.physics_cache_for_call(None, {'instrument_calibration': {'b_fiducial_s': 0.5}}))
-        with mock.patch.object(cli, 'BundleReader') as reader:
+        from joulewise import bundle_read
+        with mock.patch.object(bundle_read, 'BundleReader') as reader:
             self.assertIsNone(cli._run_reduce_physics_cache(self.member))
+            self.assertEqual(arc.run_reduce_physics_kwargs(self.member), {})
         reader.assert_not_called()
 
     def test_scope_is_reset_and_type_checked(self):
@@ -117,6 +119,31 @@ class RunPhysicsStoreTests(_Member):
             code = contextvars.Context().run(lambda: _cli('validate-bundle', '--strict', self.member))[0]
             contextvars.Context().run(lambda: _cli('reduce', self.member, '--output', self.target()))
         self.assertEqual(code, 2)
+        self.assertEqual(store, {})
+
+
+class ReferenceEnergyRefitTests(_Member):
+    """Stage 4a: whole_window's NEG-8 reference-energy re-derivation shares the run store."""
+
+    def test_reference_energy_evidence_shares_one_fit_and_is_unchanged(self):
+        refits = self.count_refits()
+        plain = [ww._reference_energy_evidence_detail(self.member) for _ in range(2)]
+        self.assertEqual(len(refits), 2, 'without a run store each call refits')
+        refits.clear()
+        store = {}
+        with ww.shared_instrument_calibration_physics_cache(store), arc.analysis_run_caches(store):
+            shared = [ww._reference_energy_evidence_detail(self.member) for _ in range(2)]
+            isolated = contextvars.Context().run(lambda: ww._reference_energy_evidence_detail(self.member))
+        self.assertEqual(len(refits), 1, 'one verified fit serves every call, including an isolated context')
+        self.assertEqual(shared, plain)
+        self.assertEqual(isolated, plain[0])
+        self.assertEqual(plain[0][2], None, plain[0])
+
+    def test_a_deadline_hit_reference_refit_is_never_stored(self):
+        store = {}
+        with ww.shared_instrument_calibration_physics_cache(store), arc.analysis_run_caches(store), \
+                mock.patch.object(pf, 'time', JumpingClock()):
+            ww._reference_energy_evidence_detail(self.member)
         self.assertEqual(store, {})
 
 

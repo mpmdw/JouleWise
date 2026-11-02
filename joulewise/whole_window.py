@@ -5141,9 +5141,18 @@ def _reference_energy_evidence_detail(
         # Deliberately output-free: reduce_bundle is pure over the bundle and
         # returns an in-memory summary.  Minutes-scale claim verification cost
         # is accepted for primary-evidence NEG-8 re-derivation.
+        from joulewise.analysis_run_cache import run_reduce_physics_kwargs
         from joulewise.reduce import reduce_bundle
 
-        reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
+        # Inside an analysis run the refit shares the run's verified-fit store
+        # (keyed by the calibration artifact's sha256 and the exact metadata
+        # bound; read only after the reducer's own hash checks). Outside one
+        # the call is unchanged and does no extra read (L9-SPEEDUP-R1 stage 4).
+        reduced = reduce_bundle(
+            bundle_path,
+            reducer_version=reducer_version,
+            **run_reduce_physics_kwargs(bundle_path),
+        ).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)

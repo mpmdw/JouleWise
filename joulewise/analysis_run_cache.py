@@ -92,6 +92,27 @@ def physics_cache_for_call(local: dict | None, metadata: Any) -> dict | None:
     return physics_cache_for(local, metadata)
 
 
+def run_reduce_physics_kwargs(bundle_path: Any) -> dict[str, Any]:
+    """``reduce_bundle`` keyword arguments sharing the run's physics store, or {}.
+
+    Outside an analysis run (no run store and no shared store in the calling
+    context) this is ``{}`` and performs no read. Inside one, the partition is
+    chosen from the bundle's metadata exactly as validate-bundle chooses it
+    (``cli._strict_problems``: ``BundleReader.raw_metadata()``, the same
+    authenticated json read the reducer itself performs).
+    """
+
+    from pathlib import Path  # noqa: PLC0415
+
+    from joulewise.bundle_read import BundleReader  # noqa: PLC0415
+    from joulewise.whole_window import shared_physics_cache  # noqa: PLC0415
+
+    if run_physics_store() is None and shared_physics_cache() is None:
+        return {}
+    cache = physics_cache_for_call(None, BundleReader(Path(bundle_path)).raw_metadata())
+    return {} if cache is None else {"_instrument_calibration_physics_cache": cache}
+
+
 def memo(name: str) -> dict | None:
     """The named memo of the active run, or ``None`` outside a run."""
 

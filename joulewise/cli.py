@@ -1979,12 +1979,9 @@ def _run_reduce_physics_cache(bundle_path: Path) -> dict[str, float] | None:
     (``_strict_problems``); the reducer still consults an entry only after its
     own calibration artifact, plist and events hash checks.
     """
-    from joulewise.analysis_run_cache import physics_cache_for_call, run_physics_store
-    from joulewise.whole_window import shared_physics_cache
+    from joulewise.analysis_run_cache import run_reduce_physics_kwargs
 
-    if run_physics_store() is None and shared_physics_cache() is None:
-        return None
-    return physics_cache_for_call(None, BundleReader(bundle_path).raw_metadata())
+    return run_reduce_physics_kwargs(bundle_path).get("_instrument_calibration_physics_cache")
 
 
 def _cmd_reduce(args: argparse.Namespace) -> int:
