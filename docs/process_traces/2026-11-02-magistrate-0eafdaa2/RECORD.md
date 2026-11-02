@@ -98,3 +98,24 @@ Running at the first commit (`~/night-archive/seats-0eafdaa2/tests-align.log`); 
 - **Replay of the 300 s idle over every known-good idle capture** (doctrine rule 9): 4,912 `rich_telemetry_idle*.jsonl` captures (pilot 1 plus every `night-b6` session). Cadence 122.7-134.0 ms per sample, median 129.2, p99 130.9. At the slowest, 3,000 samples take 402 s, under 460 s. **Refusal count 0 of 4,912.** The 300 s idle stays; the rehearsal must run on a quiet Mac.
 - **Pre-existing adapter defect found:** on that timeout, `subprocess.run` killed `sudo` but not the root `powermetrics` under it (pid 39056, parent 1, still sampling 11 min later). The next member then ran with two powermetrics instances. The lead stopped the rehearsal chain and killed the orphan (`sudo -n kill`). Deferred to a named fix: `joulewise/adapters/powermetrics.py` `_run_bounded_capture` must kill the process group on timeout. It is shared BYTES/ALIGN measurement code, so it gets its own lane with the full gate shape. In a quiet window the timeout has not fired once in 4,912 captures.
 - Next: re-run the three rehearsal episodes once the cold passes have exited and no seat is running.
+
+## Cold passes (07:58-08:20) and dispositions
+- **Fable 5.1: ADMIT-WITH-CORRECTIONS. Opus 5.5: ADMIT-WITH-CORRECTIONS.** No BLOCKER from either. Both ran pilot 1 through the new desk: energy, half-widths, segment sums and counts are identical on every channel of all 12 bundles (0 differences). Reports `~/night-archive/seats-0eafdaa2/align-pilot2/cold/{fable,opus}-report.md`.
+- Findings both seats made independently, each by execution:
+  - (a) "state-changing calls" is a hand-written name-prefix rule that counts `end_task` and read-only tools such as `preview_rule` and `simulate_multiple_rules` (the builder's own test asserts 2 for `read_ledger`, `end_task`).
+  - (b) Desk eligibility reads every sub-window, so all 12 real members fail on the millisecond `phase/tokenize`/`generation_setup` windows. The harvest admitted 8. e12, which the harvest excluded (`thermal.os_level_nonzero`, two hazard-monitor level-1 readings after its episode ended), prints clean.
+  - (c) Block C's member bound exceeds the runner's per-member kill (`HAZARD_MEMBER_CAP_S` 1,800 s plus the idle-wait cap, at most 1,500 s); two consecutive kills drain the window. The lead's earlier ruling had answered only the 620 s horizon allowance; this cap was missed.
+- One seat:
+  - Opus M3 (Fable MINOR-3): the new hidden count includes `<think>` and EOS (660, 1,536). The convention on every other turn excludes them (658, 1,535). Opus checked its harness: the parent replay reproduces every recorded `hidden_tokens` exactly, 26 turns.
+  - Opus M5: `end_task` does not end an episode (pre-existing). Fable MAJOR-5: a turn-0 context-limit stop becomes a failed member (cannot fire in pilot 2; turn-0 prompts are 6-11 k tokens).
+  - Minors: `None` changes pilot 1's identity projection (two null keys); a missing `max_position_embeddings` refuses at prepare; `bytes_per_member` 200 MB has no derivation (pilot 1 measured 173-404 MB); `local_file_verification.json` was made with a python that has no packages.
+- **Dispositions (lead):** all fixed in fix round 1 (brief `~/night-archive/seats-0eafdaa2/align-pilot2/fix1/BRIEF.md`), except:
+  - the 4|8 midpoint split: accepted, keeps model blocks whole;
+  - the orphaned powermetrics: its own lane;
+  - file-only pins: a recorded flag.
+  - For (a), state change is recorded by observation: a hash of the SHADE environment before and after each call. For (c), the bound is re-derived from the guard's arithmetic and compared with the cap at an unspent (3,300 s) and a spent (1,800 s) wait budget. A block over 3,300 s loses turns. The spent-budget corner is accepted, since it needs repeated failed idle admissions, which are already physics flags.
+- Fix round 1 launched: Sol 6.1 xhigh, local `codex-run-v3`, same worktree. Report `fix1/sol-fix1.md`, log `fix1/sol-fix1.log`. The lead commits; the seat cannot write the git index.
+- After it: one delta cold pass, because the hidden-token count is number-bearing; CI; the hardware rehearsal on a quiet Mac.
+
+## CI on #622 (run 41476089955, head `aac67a575`)
+- 4 shards failed, all in `tests/b6` (`test_audit_record_fixes`, `test_desk_resume_finalize`, `test_loop_round_desk`, `test_capture_screen_reachability`, `test_cold_pass_fixes`), none in `tests/align`. `test_review_rows_are_append_only...` fails identically on the parent `cbfb9b0a5`: an unreviewed commit `1bf706fc` on the desk branch. The desk branch has never had a CI run. The rest is being replayed on parent and head (`~/night-archive/seats-0eafdaa2/ci-repro/`).
