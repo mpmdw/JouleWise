@@ -1,0 +1,35 @@
+...........EE.........................
+======================================================================
+ERROR: test_arbitrary_member_exception_keeps_later_member_readable (tests.align.test_pilot2_round1.DeskRound1Tests.test_arbitrary_member_exception_keeps_later_member_readable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/jw-wt/align-pilot2/tests/align/test_pilot2_round1.py", line 215, in test_arbitrary_member_exception_keeps_later_member_readable
+    result,pilot,output=self.run_desk(Path(d),[RuntimeError('bad member telemetry'),self.summary()],[])
+                        ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/edr/code/jw-wt/align-pilot2/tests/align/test_pilot2_round1.py", line 189, in run_desk
+    result=desk.desk(session,run=harvest)
+  File "/Users/edr/code/jw-wt/align-pilot2/scripts/align_pilot_session.py", line 207, in desk
+    '--registration-dir', state['registration_dir'], '--pack-records-root', str(session / 'private'),
+                          ~~~~~^^^^^^^^^^^^^^^^^^^^
+KeyError: 'registration_dir'
+
+======================================================================
+ERROR: test_harvest_exclusions_are_read_after_harvest_and_status_never_ok (tests.align.test_pilot2_round1.DeskRound1Tests.test_harvest_exclusions_are_read_after_harvest_and_status_never_ok)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/jw-wt/align-pilot2/tests/align/test_pilot2_round1.py", line 202, in test_harvest_exclusions_are_read_after_harvest_and_status_never_ok
+    result,pilot,output=self.run_desk(Path(d),[self.summary(),self.summary()],
+                        ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        [{'run_id':'e02','codes':['thermal.os_level_nonzero']}])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/edr/code/jw-wt/align-pilot2/tests/align/test_pilot2_round1.py", line 189, in run_desk
+    result=desk.desk(session,run=harvest)
+  File "/Users/edr/code/jw-wt/align-pilot2/scripts/align_pilot_session.py", line 207, in desk
+    '--registration-dir', state['registration_dir'], '--pack-records-root', str(session / 'private'),
+                          ~~~~~^^^^^^^^^^^^^^^^^^^^
+KeyError: 'registration_dir'
+
+----------------------------------------------------------------------
+Ran 38 tests in 97.221s
+
+FAILED (errors=2)

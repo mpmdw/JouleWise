@@ -1,0 +1,20 @@
+test_align_idle_is_the_cooldown_cap_and_scaffold_is_unchanged (tests.test_align_pilot_session.KitTests.test_align_idle_is_the_cooldown_cap_and_scaffold_is_unchanged) ... ok
+test_committed_kit_matches_generator_and_runs_only_align_members (tests.test_align_pilot_session.KitTests.test_committed_kit_matches_generator_and_runs_only_align_members) ... ok
+test_member_specific_model_identity_pins (tests.test_align_pilot_session.KitTests.test_member_specific_model_identity_pins) ... ok
+test_protocol_describes_the_capability_screen (tests.test_align_pilot_session.KitTests.test_protocol_describes_the_capability_screen) ... ok
+test_registration_sizing_is_derived_from_measured_terms (tests.test_align_pilot_session.KitTests.test_registration_sizing_is_derived_from_measured_terms) ... ok
+test_single_repeat_roster_has_the_three_ruled_configurations (tests.test_align_pilot_session.KitTests.test_single_repeat_roster_has_the_three_ruled_configurations) ... ok
+test_missing_cache_never_fetches (tests.test_align_pilot_session.OfflineFactoryTests.test_missing_cache_never_fetches) ... ok
+test_specs_are_repeats_of_identical_work (tests.test_align_pilot_session.OfflineFactoryTests.test_specs_are_repeats_of_identical_work) ... ok
+test_staged_kit_projects_identity_and_authenticates_every_dispatched_config (tests.test_align_pilot_session.RealKitStagingTests.test_staged_kit_projects_identity_and_authenticates_every_dispatched_config) ... ok
+test_prepare_stages_the_align_kit_without_install_or_loop_registration (tests.test_align_pilot_session.SessionPrepareTests.test_prepare_stages_the_align_kit_without_install_or_loop_registration) ... ok
+test_prepared_session_desk_reads_episodes_then_runs_the_real_harvest (tests.test_align_pilot_session.SessionPrepareTests.test_prepared_session_desk_reads_episodes_then_runs_the_real_harvest) ... ok
+test_checks_fail_for_missing_bundle_and_nondeterministic_repeat (tests.test_align_pilot_session.SyntheticDeskTests.test_checks_fail_for_missing_bundle_and_nondeterministic_repeat) ... ok
+test_factory_bundles_desk_checks_and_harvest_handoff (tests.test_align_pilot_session.SyntheticDeskTests.test_factory_bundles_desk_checks_and_harvest_handoff) ... ok
+test_repeats_with_different_prefill_work_fail_i4_and_report_no_spread (tests.test_align_pilot_session.SyntheticDeskTests.test_repeats_with_different_prefill_work_fail_i4_and_report_no_spread) ... ok
+test_unresolved_anchor_still_writes_the_fault_report_and_runs_the_harvest (tests.test_align_pilot_session.SyntheticDeskTests.test_unresolved_anchor_still_writes_the_fault_report_and_runs_the_harvest) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 85.773s
+
+OK

@@ -1,0 +1,21 @@
+test_arbitrary_member_exception_keeps_later_member_readable (tests.align.test_pilot2_round1.DeskRound1Tests.test_arbitrary_member_exception_keeps_later_member_readable) ... ok
+test_harvest_exclusions_are_read_after_harvest_and_status_never_ok (tests.align.test_pilot2_round1.DeskRound1Tests.test_harvest_exclusions_are_read_after_harvest_and_status_never_ok) ... ok
+test_disk_fit_uses_observed_bundle_sizes_at_each_member_bound (tests.align.test_pilot2_round1.Round1Tests.test_disk_fit_uses_observed_bundle_sizes_at_each_member_bound) ... ok
+test_end_task_executes_all_calls_in_turn_and_no_later_turn (tests.align.test_pilot2_round1.Round1Tests.test_end_task_executes_all_calls_in_turn_and_no_later_turn) ... ok
+test_guard_at_turn_zero_is_succeeded_through_controller (tests.align.test_pilot2_round1.Round1Tests.test_guard_at_turn_zero_is_succeeded_through_controller) ... ok
+test_legacy_name_rule_is_labelled_and_never_counts_end_task (tests.align.test_pilot2_round1.Round1Tests.test_legacy_name_rule_is_labelled_and_never_counts_end_task) ... ok
+test_measurement_venv_package_versions_are_recorded (tests.align.test_pilot2_round1.Round1Tests.test_measurement_venv_package_versions_are_recorded) ... ok
+test_member_thermal_uses_member_interval_including_after_episode (tests.align.test_pilot2_round1.Round1Tests.test_member_thermal_uses_member_interval_including_after_episode) ... ok
+test_native_shaped_turn_zero_guard_is_succeeded_through_controller (tests.align.test_pilot2_round1.Round1Tests.test_native_shaped_turn_zero_guard_is_succeeded_through_controller) ... ok
+test_none_preserves_legacy_text_and_identity_keys (tests.align.test_pilot2_round1.Round1Tests.test_none_preserves_legacy_text_and_identity_keys) ... ok
+test_observation_counts_a_mutation_and_not_an_idempotent_mutator (tests.align.test_pilot2_round1.Round1Tests.test_observation_counts_a_mutation_and_not_an_idempotent_mutator) ... ok
+test_sizing_uses_guard_decode_envelope_member_idle_and_measured_disk_tools (tests.align.test_pilot2_round1.Round1Tests.test_sizing_uses_guard_decode_envelope_member_idle_and_measured_disk_tools) ... ok
+test_stream_id_content_convention (tests.align.test_pilot2_round1.Round1Tests.test_stream_id_content_convention) ... ok
+test_target_paths_ignore_other_phases_and_missing_precheck_is_ineligible (tests.align.test_pilot2_round1.Round1Tests.test_target_paths_ignore_other_phases_and_missing_precheck_is_ineligible) ... ok
+test_tool_allowance_comes_from_pilot1_phase_windows (tests.align.test_pilot2_round1.Round1Tests.test_tool_allowance_comes_from_pilot1_phase_windows) ... ok
+test_unread_native_position_limit_flags_and_uses_spec (tests.align.test_pilot2_round1.Round1Tests.test_unread_native_position_limit_flags_and_uses_spec) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 1.857s
+
+OK
