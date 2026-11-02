@@ -1762,8 +1762,11 @@ def _load_calibration_candidate_unbounded(
         return None
     try:
         authenticated_capture = capture_wall_time_from_events(events_raw)
-        effective_bound = verify_stored_evidence_physics(
-            evidence, powermetrics_raw, events_raw
+        from joulewise.analysis_run_cache import candidate_physics  # L9-SPEEDUP-R2 run memo
+
+        effective_bound = candidate_physics(
+            evidence_raw, powermetrics_raw, events_raw,
+            lambda: verify_stored_evidence_physics(evidence, powermetrics_raw, events_raw),
         )
     except (KeyError, TypeError, ValueError):
         return None
