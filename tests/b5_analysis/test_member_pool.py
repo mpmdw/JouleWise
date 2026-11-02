@@ -7,6 +7,8 @@ wall-deadline firings reach the run's observer; a worker without an observer mar
 the run (the driver refuses the step).
 """
 import dataclasses
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +18,17 @@ from joulewise import analysis_member_pool as pool, analysis_run_cache as arc
 from joulewise.authentication_io import (V2AuthenticationInputError, V2AuthenticationReadSession,
                                          read_authentication_input)
 from joulewise.b5_analysis.deadline_observer import DeadlineObserver
+
+def setUpModule():
+    # "spawn" re-imports __main__ from its file; the hosted shard runner feeds the
+    # test program on stdin (main path "<stdin>"), which kills every pool worker at
+    # startup on Linux CI (as in PR #371). The analysis runner's __main__ is
+    # scripts/run_b5_analysis.py, a real file, so only the test harness needs this.
+    main = sys.modules['__main__']
+    path = getattr(main, '__file__', None)
+    if path is not None and not os.path.isfile(path):
+        del main.__file__
+        unittest.addModuleCleanup(setattr, main, '__file__', path)
 
 
 def read_member(directory, name):

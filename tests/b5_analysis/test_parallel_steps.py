@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import os
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -28,6 +29,18 @@ from tests.b5_analysis.test_shared_physics_cache import ARCHIVE, JumpingClock
 RUNS = 'archive/sources/night-custody/runs_claim/'
 GOOD = ('d117fq31p7-df-cmp-abba-ph-decode-b01-a2', 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1', 'neg8-window-end-r1')
 REFUSED = 'd117fq31p7-df-cmp-abba-ph-decode-b01-a1'
+
+
+def setUpModule():
+    # "spawn" re-imports __main__ from its file; the hosted shard runner feeds the
+    # test program on stdin (main path "<stdin>"), which kills every pool worker at
+    # startup on Linux CI (as in PR #371). The analysis runner's __main__ is
+    # scripts/run_b5_analysis.py, a real file, so only the test harness needs this.
+    main = sys.modules['__main__']
+    path = getattr(main, '__file__', None)
+    if path is not None and not os.path.isfile(path):
+        del main.__file__
+        unittest.addModuleCleanup(setattr, main, '__file__', path)
 
 
 def firing_worker(task):
