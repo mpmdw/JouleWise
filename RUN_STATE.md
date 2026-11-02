@@ -968,6 +968,14 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - Findings: sigma_pair for identical short unthrottled work 8.5 J (6 df). The three 7-minute episodes ran at thermal pressure Heavy for 3-5 min; the reducer already excludes them, but `desk` did not print it. No episode changed environment state: the 8B model never acted.
 - Built (`aac67a575`, Sol), cold Fable + Opus ADMIT-WITH-CORRECTIONS, fix round (`5780cf66e`), hardware rehearsal of 3 configs OK (run under an Interactive LaunchAgent), ledger pin advanced to 550 (`626cb48b5`). **ALIGN pilot 2 ARMED, t0 10:44 PST**, root `/Users/edr/night-align/pilot-v1-20261102T183609Z`.
 - Pilot-2 consult (Sol 6.1 xhigh + Fable 5.1, blind; `~/night-archive/seats-0eafdaa2/align-pilot2/`). Ruling in the record: a single-repeat capability screen of Qwen3-30B-A3B (thinking on/off) and Qwen3-Next-80B-A3B-Instruct, after a small measurement-path build.
+160. **Laptop lead report (joulewise-28, block-5 lead, 2026-11-02). D-188 and two corpus rulings by Ed; a request for the measurement-Mac orchestrator.**
+- **Attempt D** is the block-5 blind dry run on `b5/analysis-r1` (081875292). It started 2026-11-02 08:34Z with 7 workers. Steps 0–4 passed in 3.6 h (attempt C took 5.6 h). Step 5 has run more than 8 h, with the driver serial and the pool idle. Attempt C, the pre-R1 code, is still in step 5 after more than 32 h.
+- **Merged:** #620 (L9-SPEEDUP-R1, tag `b5/analysis-r1`) and #624 (CI comment trim). In review: #623 (L9-SPEEDUP-R2, pooled strict validation in steps 3b/4) and #625 (this item and D-188).
+- **D-188 (Ed, 2026-11-02).** A restructured block-5 analysis is accepted on *result equivalence* with r1: equal registered numbers and identical decisions, including refusal identity and position. It replaces byte identity. Independent programs may authenticate by content hash. A blinded comparator that reports matches or field names only may run on block 5. The analysis restarts fresh on the rewrite, and attempt D is the fallback and the reference output. A design workflow (profile, analysts, four architects including Sol, judges, plan, critics) is running on the laptop on synthetic data. The engineering window D-188 allows is deferred: it is needed only if the comparator reports a mismatch that cannot be explained.
+- **Corpus rulings (Ed, 2026-11-02, "yes to both your recs").** Seats may open, with values visible, two sets of already-published real data as a real-cost kernel benchmark:
+  - (a) the 25G83 acceptance-derivation captures (n1, n2, w1, w2, c1, c2 `runs/instrument_validation`). These are now APFS-cloned read-only to `/private/tmp/jwcorpus/accept-25g83` on the laptop.
+  - (b) the quiet-machine kit of 2026-10-16/17 (M1 and M13 captures, M2 Qwen2.5-1.5B reference runs; commit `1c1bc3204`). It is at `/Users/edr/night-archive/threshold-validation/` on the measurement Mac.
+- **Request to the measurement-Mac orchestrator:** see step (4) of the next-activation block below.
 
 **Next activation (written 2026-11-02 by activation 0eafdaa2; item 159; supersedes item 158's pointer):**
 (1) **ALIGN pilot 2 ARMED.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-align/pilot-v1-20261102T183609Z/custody/night_plan.json` and `.../custody/night/result.json` does not exist, exit at once, quietly. t0 10:44:00 PST 11-02 (1793644640), window maximum 54,240 s (latest end 01:48 PST 11-03). Measurement checkout `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2` at `626cb48b5`. Arm notice Gmail `1a19d8c59cda84f2`.
@@ -981,6 +989,11 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Pilot-3 design: sampling against greedy, Next native context, a repetition guard, prompt-cache reuse (Fable consult section 8).
   - Desk rehearsals from a headless magistrate run under an Interactive LaunchAgent.
 (3) Item 155 (2)-(3) and directive #587's standing items (laptop lead) hold.
+(4) **Laptop lead request (item 160): package the quiet-machine kit for the laptop.** Do this only at a desk boundary, after pilot 2's harvest and uninstall and before the next arm; never upload during a session.
+  - Tar `/Users/edr/night-archive/threshold-validation/` (the M1, M13 and M2 bundles and captures; commit `1c1bc3204`).
+  - Follow the `docs/process_traces/2026-10-27-l9-restart/BLOCK5-TRANSFER.md` method: tars in iCloud `JouleWise-transfer/quiet-kit/`, with a manifest of tar SHA-256 values committed on main as `docs/process_traces/2026-10-27-l9-restart/b5-transfer/quiet-kit.manifest.json`.
+  - Record the size in the activation record. Report the reducer version stored in one M2 bundle (0.5.2 is needed).
+  - It holds no arm. If it would delay an arm, defer it to the next boundary.
 
 **Next activation (written 2026-11-02 by activation ad74819b; item 158; supersedes item 157's step (1) for the plan path, the rest of item 157's pointer holds):**
 (1) **ALIGN pilot v0 ARMED.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-align/pilot-v0-20261102T110643Z/custody/night_plan.json` and `.../custody/night/result.json` does not exist, exit at once, quietly.
