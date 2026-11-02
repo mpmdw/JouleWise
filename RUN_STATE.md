@@ -966,11 +966,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 159. **Magistrate activation 0eafdaa2 (Opus 5.5, headless, 2026-11-02 from 05:53 PST).** Record: `docs/process_traces/2026-11-02-magistrate-0eafdaa2/RECORD.md`. No pending notices and no mail from Ed.
 - **ALIGN pilot v0 done, verdict GO, I1-I4 pass** (`PILOT.json` `instrument_ok`). Uninstalled; canonical fast-forwarded to `219f3dc1e`. Ed emailed (Gmail `1a19cb5d758daac7`).
 - Findings: sigma_pair for identical short unthrottled work 8.5 J (6 df). The three 7-minute episodes ran at thermal pressure Heavy for 3-5 min; the reducer already excludes them, but `desk` did not print it. No episode changed environment state: the 8B model never acted.
+- Built (`aac67a575`, Sol), cold Fable + Opus ADMIT-WITH-CORRECTIONS, fix round (`5780cf66e`), hardware rehearsal of 3 configs OK (run under an Interactive LaunchAgent), ledger pin advanced to 550 (`626cb48b5`). **ALIGN pilot 2 ARMED, t0 10:44 PST**, root `/Users/edr/night-align/pilot-v1-20261102T183609Z`.
 - Pilot-2 consult (Sol 6.1 xhigh + Fable 5.1, blind; `~/night-archive/seats-0eafdaa2/align-pilot2/`). Ruling in the record: a single-repeat capability screen of Qwen3-30B-A3B (thinking on/off) and Qwen3-Next-80B-A3B-Instruct, after a small measurement-path build.
 
-**Next activation (written 2026-11-02 by activation 0eafdaa2; item 159; supersedes item 158's pointer, whose steps are done):**
-(1) Nothing is armed. **Pilot-2 build** per the record's "Pilot 2 build list". State of the build lane: see the record's last section. Gates: executing review by a non-author, cold Fable + Opus (blind, executing), CI on a draft PR, then a real-hardware desk rehearsal of one episode per new configuration. Then prepare, notice, arm.
-(2) Prompt-cache reuse across turns (Fable report section 8) is pilot-3 work; start it as a separate lane once the pilot-2 build is under review.
+**Next activation (written 2026-11-02 by activation 0eafdaa2; item 159; supersedes item 158's pointer):**
+(1) **ALIGN pilot 2 ARMED.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-align/pilot-v1-20261102T183609Z/custody/night_plan.json` and `.../custody/night/result.json` does not exist, exit at once, quietly. t0 10:44:00 PST 11-02 (1793644640), window maximum 54,240 s (latest end 01:48 PST 11-03). Measurement checkout `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2` at `626cb48b5`. Arm notice Gmail `1a19d8c59cda84f2`.
+  - After the terminal record (`custody/night/result.json`): `M=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2; $M/.venv/bin/python -B $M/scripts/align_pilot_session.py desk --session-root /Users/edr/night-align/pilot-v1-20261102T183609Z`. Run it with `run_in_background` and a 2 h timeout (the harvest takes about 25 min). Read per configuration: `state_changing_calls`, `end_state`, thermal seconds, exclusions, per-turn tokens; protocol `docs/align/pilot_protocol_v1.md` on the lane.
+  - Uninstall: `$M/scripts/install_night_agent.sh --plan /Users/edr/night-align/pilot-v1-20261102T183609Z/custody/night_plan.json --uninstall`. Then advance the ledger pin for this window before any later prepare: `advance_b5_ledger_pin.py --plan ... --harvest-archive /Users/edr/night-align/pilot-v1-20261102T183609Z/archive --operator-identity magistrate-<id>`, and carry the pin-only commit to the lane.
+  - Email Ed the outcome (reply on Gmail thread `1a198fafa8fc12ba`).
+  - A t0 census refusal: read `night/refusal.json`, clear the processes it names, re-prepare in a new empty root, re-arm with a fresh notice.
+(2) Follow-ups:
+  - PR #622's gate ledger (rows 1/4: cold Fable + Opus, ADMIT-WITH-CORRECTIONS, fixed in `5780cf66e`; row 3: CI on head `626cb48b5`, with the pre-existing `tests/b6` failures shown identical on the parent).
+  - The orphaned-powermetrics fix lane (`joulewise/adapters/powermetrics.py` `_run_bounded_capture` must kill the process group on timeout).
+  - Pilot-3 design: sampling against greedy, Next native context, a repetition guard, prompt-cache reuse (Fable consult section 8).
+  - Desk rehearsals from a headless magistrate run under an Interactive LaunchAgent.
 (3) Item 155 (2)-(3) and directive #587's standing items (laptop lead) hold.
 
 **Next activation (written 2026-11-02 by activation ad74819b; item 158; supersedes item 157's step (1) for the plan path, the rest of item 157's pointer holds):**
