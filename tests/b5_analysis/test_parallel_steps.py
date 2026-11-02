@@ -41,6 +41,20 @@ def blind_worker(task):
     return dataclasses.replace(parallel.run_child(task), firings=None)
 
 
+def late_firing_worker(task):
+    """Spawned-worker wrapper: only the task after the refusal stop hits the wall deadline."""
+    if any(GOOD[2] in arg for arg in task.argv):
+        return firing_worker(task)
+    return parallel.run_child(task)
+
+
+def late_blind_worker(task):
+    """Spawned-worker wrapper: only the task after the refusal stop could not observe."""
+    if any(GOOD[2] in arg for arg in task.argv):
+        return blind_worker(task)
+    return parallel.run_child(task)
+
+
 def tree(root):
     return sorted(p.relative_to(root).as_posix() + ('/' if p.is_dir() else '') for p in Path(root).rglob('*'))
 
@@ -175,6 +189,18 @@ class ParallelStepTests(unittest.TestCase):
         with mock.patch.object(parallel, 'run_child', blind_worker):
             pooled = self.execute(d.step_2, 2, GOOD[:2])
         self.assertEqual(pooled['records'], OBSERVER_UNAVAILABLE)
+
+    def test_observations_after_the_stop_do_not_count(self):
+        # A serial run never starts the task after the stop, so its firing (or
+        # missing observer) must not turn the refusal into a tooling refusal.
+        names = (GOOD[0], REFUSED, GOOD[2])
+        serial = self.execute(d.step_2, 1, names)
+        self.assertNotEqual(serial['records'][0]['status'], 'ok')
+        for worker in (late_firing_worker, late_blind_worker):
+            with self.subTest(worker=worker.__name__), mock.patch.object(parallel, 'run_child', worker):
+                pooled = self.execute(d.step_2, 3, names)
+                self.assertSameRun(serial, pooled)
+                self.assertEqual(pooled['firings'], 0)
 
     def test_driver_records_a_worker_firing_as_calibration_wall_deadline(self):
         bundles = [('alpha', name, self.bundles[name]) for name in GOOD[:2]]

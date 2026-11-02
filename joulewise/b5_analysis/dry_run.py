@@ -750,12 +750,18 @@ def _dispatch(s, r, tasks):
     return base,results,state
 
 
-def _account_deadlines(s, state):
-    """Report worker wall-deadline observations to the run's observer (fail closed)."""
+def _account_deadlines(s, consumed):
+    """Report the consumed tasks' wall-deadline observations to the run's observer (fail closed).
+
+    ``consumed`` is the tasks a serial run would have started (through the stop):
+    a task after the stop ran only because of the pool, so its observations count
+    no more than its outputs do.
+    """
     from .deadline_observer import OBSERVER_UNAVAILABLE
-    if state.firings and s.deadline is not None:
-        s.deadline.firings+=state.firings
-    if state.unavailable:
+    firings=sum(res.firings or 0 for res in consumed)
+    if firings and s.deadline is not None:
+        s.deadline.firings+=firings
+    if any(res.firings is None for res in consumed):
         raise AnalysisRefusal(OBSERVER_UNAVAILABLE)
 
 
@@ -779,7 +785,8 @@ def _step_1_parallel(s,r,jobs):
     require_primary_context(s.contexts)
     s.rehash()
     tasks=[('joulewise.cli:main',['validate-bundle','--strict',bundle],'1',pack) for pack,_,bundle in jobs]
-    base,results,state=_dispatch(s,r,tasks)
+    base,results,_=_dispatch(s,r,tasks)
+    consumed=0
     try:
         for i,((pack,_,_),res) in enumerate(zip(jobs,results)):
             if i:
@@ -789,13 +796,14 @@ def _step_1_parallel(s,r,jobs):
                     s.rehash()
                 except AnalysisRefusal:
                     _stop_at(r,base,results,i-1);raise
+            consumed=i+1
             exit_status=2 if res.exception else res.exit_status
             if exit_status:
                 _stop_at(r,base,results,i)
                 return [s.record('1',window=pack,exit_status=2,code='kept_bundle_strict_validation_failed')]
         return [s.record('1')]
     finally:
-        _account_deadlines(s,state)
+        _account_deadlines(s,results[:consumed])
 
 
 def step_1(s,r):
@@ -851,8 +859,9 @@ def _step_2_parallel(s,r,jobs):
         created.extend(new)
     tasks=[('joulewise.cli:main',['reduce',bundle,'--output',output],'2',pack)
            for (pack,_,bundle),output in zip(jobs,paths)]
-    base,results,state=_dispatch(s,r,tasks)
+    base,results,_=_dispatch(s,r,tasks)
     outputs=[]
+    consumed=0
     try:
         for i,((pack,run_id,bundle),output,res) in enumerate(zip(jobs,paths,results)):
             def stop(record,last=i):
@@ -864,6 +873,7 @@ def _step_2_parallel(s,r,jobs):
                     s.rehash()
                 except AnalysisRefusal:
                     stop(None,i-1);raise
+            consumed=i+1
             result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception)
             code=result.token() if result.exit_status or result.exception else None
             exit_status=result.exit_status
@@ -883,7 +893,7 @@ def _step_2_parallel(s,r,jobs):
             if exit_status: return stop(s.record('2',window=pack,exit_status=exit_status,code=code,outputs=outputs))
         return [s.record('2',outputs=outputs)]
     finally:
-        _account_deadlines(s,state)
+        _account_deadlines(s,results[:consumed])
 
 
 def step_2(s,r):
@@ -936,8 +946,9 @@ def _step_4_parallel(s,r,packs):
     paths=[s.path('mint/extraction-'+pack+'.json') for pack in packs]
     tasks=[('scripts.extract_detection_floors:main',['--window-index',s.index_path,'--pack',pack,'--out',output,
             '--hash-bundles'],'4',pack) for pack,output in zip(packs,paths)]
-    base,results,state=_dispatch(s,r,tasks)
+    base,results,_=_dispatch(s,r,tasks)
     records=[]
+    consumed=0
     try:
         for i,(pack,output,res) in enumerate(zip(packs,paths,results)):
             if i:
@@ -946,6 +957,7 @@ def _step_4_parallel(s,r,packs):
                     s.rehash()
                 except AnalysisRefusal:
                     _stop_at(r,base,results,i-1,paths);raise
+            consumed=i+1
             # As StepState.invoke: register the output when present, then classify.
             result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception)
             outputs=[s.register('extraction_'+pack,output)] if Path(output).is_file() else []
@@ -959,7 +971,7 @@ def _step_4_parallel(s,r,packs):
                 break
         return records
     finally:
-        _account_deadlines(s,state)
+        _account_deadlines(s,results[:consumed])
 
 
 def step_4(s,r):
