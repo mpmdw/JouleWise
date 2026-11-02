@@ -963,6 +963,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - Old plan uninstalled (root kept). Orphans cleared: a `claude daemon` left by 26be5929 with Codex app-server children, and three self-matching `pgrep` wait loops; Claude.app quit. Canonical fast-forwarded to `5e0618ea1`.
 - **ALIGN pilot v0 RE-ARMED:** root `/Users/edr/night-align/pilot-v0-20261102T110643Z`, plan sha256 `88c576c5...1241`, checkout `cbfb9b0a5`, t0 03:14:00 PST (1793618040), latest end 16:41 PST. Notice Gmail `1a19bf0f810fe8d4` (acknowledged).
 
+159. **Magistrate activation 0eafdaa2 (Opus 5.5, headless, 2026-11-02 from 05:53 PST).** Record: `docs/process_traces/2026-11-02-magistrate-0eafdaa2/RECORD.md`. No pending notices and no mail from Ed.
+- **ALIGN pilot v0 done, verdict GO, I1-I4 pass** (`PILOT.json` `instrument_ok`). Uninstalled; canonical fast-forwarded to `219f3dc1e`. Ed emailed (Gmail `1a19cb5d758daac7`).
+- Findings: sigma_pair for identical short unthrottled work 8.5 J (6 df). The three 7-minute episodes ran at thermal pressure Heavy for 3-5 min; the reducer already excludes them, but `desk` did not print it. No episode changed environment state: the 8B model never acted.
+- Pilot-2 consult (Sol 6.1 xhigh + Fable 5.1, blind; `~/night-archive/seats-0eafdaa2/align-pilot2/`). Ruling in the record: a single-repeat capability screen of Qwen3-30B-A3B (thinking on/off) and Qwen3-Next-80B-A3B-Instruct, after a small measurement-path build.
+
+**Next activation (written 2026-11-02 by activation 0eafdaa2; item 159; supersedes item 158's pointer, whose steps are done):**
+(1) Nothing is armed. **Pilot-2 build** per the record's "Pilot 2 build list". State of the build lane: see the record's last section. Gates: executing review by a non-author, cold Fable + Opus (blind, executing), CI on a draft PR, then a real-hardware desk rehearsal of one episode per new configuration. Then prepare, notice, arm.
+(2) Prompt-cache reuse across turns (Fable report section 8) is pilot-3 work; start it as a separate lane once the pilot-2 build is under review.
+(3) Item 155 (2)-(3) and directive #587's standing items (laptop lead) hold.
+
 **Next activation (written 2026-11-02 by activation ad74819b; item 158; supersedes item 157's step (1) for the plan path, the rest of item 157's pointer holds):**
 (1) **ALIGN pilot v0 ARMED.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-align/pilot-v0-20261102T110643Z/custody/night_plan.json` and `.../custody/night/result.json` does not exist, exit at once, quietly.
   - After the terminal record: item 157 (1)'s desk, uninstall and email steps with `--session-root /Users/edr/night-align/pilot-v0-20261102T110643Z` and `--plan /Users/edr/night-align/pilot-v0-20261102T110643Z/custody/night_plan.json`.
