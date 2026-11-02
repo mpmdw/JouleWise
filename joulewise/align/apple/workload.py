@@ -57,7 +57,11 @@ class EpisodeSpec:
     max_context_tokens: int | None = None
 
     def to_text(self) -> str:
-        return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        value = asdict(self)
+        for key in ("enable_thinking", "max_context_tokens"):
+            if value[key] is None:
+                del value[key]
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
     @classmethod
     def from_text(cls, text: str) -> "EpisodeSpec":
@@ -147,9 +151,13 @@ class EpisodeRuntimeAdapter:
                 source = Path(config.model.source or "").expanduser()
                 if not config.model.source or not source.is_dir():
                     raise ValueError("local_model_mirror_required")
-                native_limit = json.loads((source / "config.json").read_text())["max_position_embeddings"]
-                if type(native_limit) is not int or native_limit <= 0:
-                    raise ValueError("max_position_embeddings must be a positive integer")
+                try:
+                    native_limit = json.loads((source / "config.json").read_text()).get("max_position_embeddings")
+                    if type(native_limit) is not int or native_limit <= 0:
+                        raise ValueError("max_position_embeddings must be a positive integer")
+                except (OSError, ValueError, AttributeError):
+                    native_limit = None
+                    self.flags.append("model.position_limit_unread")
             else:
                 native_limit = None  # Mock has no model config; its spec can exercise the guard.
             result = self.runtime.prepare(config, context)
@@ -195,14 +203,14 @@ class EpisodeRuntimeAdapter:
             # have a distinct identity and retain the endpoint's mismatch flag.
             "requested_temperature": spec.temperature,
             "max_tokens": spec.max_tokens,
-            "enable_thinking": spec.enable_thinking,
+            **({"enable_thinking": spec.enable_thinking} if spec.enable_thinking is not None else {}),
         }
         metadata["output_policy"] = {
             "name": "agent_episode",
             "requested_tokens": spec.max_turns * spec.max_tokens,
             "max_turns": spec.max_turns,
             "max_tokens_per_turn": spec.max_tokens,
-            "max_context_tokens": spec.max_context_tokens,
+            **({"max_context_tokens": spec.max_context_tokens} if spec.max_context_tokens is not None else {}),
             "stop_condition": "episode_returns_or_turn_budget_reached",
         }
         return metadata
@@ -260,9 +268,31 @@ class EpisodeRuntimeAdapter:
                 for index in range(spec.max_turns):
                     tools = task.tool_schemas()
                     limit = self.prepared.get("max_context_tokens")
-                    if limit is not None and endpoint.rendered_prompt_length(transcript, tools=tools) + spec.max_tokens > limit:
-                        flags.append(f"episode.context_limit:{index}")
-                        break
+                    if limit is not None:
+                        guard_start = self.clock.stamp()
+                        prompt_length = endpoint.rendered_prompt_length(transcript, tools=tools)
+                        guard_end = self.clock.stamp()
+                        events.extend((
+                            RuntimeEvent(guard_start.epoch_s, "phase_start", "align_context_check", "render prompt"),
+                            RuntimeEvent(guard_end.epoch_s, "phase_end", "align_context_check", "render prompt"),
+                        ))
+                        if prompt_length + spec.max_tokens > limit:
+                            flags.append(f"episode.context_limit:{index}")
+                            if not turns:
+                                # reduce.py requires two in-window samples.
+                                # Retain two requested sampler periods even if
+                                # rendering is faster (or the fake clock did
+                                # not advance). This is observation, no decode.
+                                required_s = 2 / config.sampling.power_hz
+                                elapsed_s = guard_end.epoch_s - start.epoch_s
+                                if elapsed_s < required_s:
+                                    self.clock.sleep(required_s - elapsed_s)
+                                    observed = self.clock.stamp()
+                                    events.extend((
+                                        RuntimeEvent(guard_end.epoch_s, "phase_start", "align_context_stop_observation", "zero-generation sampler observation"),
+                                        RuntimeEvent(observed.epoch_s, "phase_end", "align_context_stop_observation", "zero-generation sampler observation"),
+                                    ))
+                            break
                     event_start = len(endpoint.events)
                     result = endpoint.chat(
                         transcript, tools=tools, max_tokens=spec.max_tokens,
@@ -282,6 +312,8 @@ class EpisodeRuntimeAdapter:
                             tool_start.epoch_s, "phase_start", phase, call.name,
                             {"align_turn_index": index, "tool_call_id": call.call_id},
                         ))
+                        from joulewise.align.runner import tool_state_digest
+                        state_before = tool_state_digest(task, flags)
                         try:
                             output = task.call_tool(call.name, call.arguments_json)
                             if not isinstance(output, str):
@@ -290,6 +322,7 @@ class EpisodeRuntimeAdapter:
                         except Exception as exc:
                             output = json.dumps({"error": f"{type(exc).__name__}:{exc}"})
                             flags.append(f"tool_error:{index}:{call_index}")
+                        state_after = tool_state_digest(task, flags)
                         tool_end = self.clock.stamp()
                         events.append(RuntimeEvent(
                             tool_end.epoch_s, "phase_end", phase, call.name,
@@ -300,6 +333,9 @@ class EpisodeRuntimeAdapter:
                             end_ns=monotonic_ns(tool_end),
                             args_bytes=len(call.arguments_json.encode("utf-8")),
                             result_bytes=len(output.encode("utf-8")),
+                            state_changed=(state_before != state_after)
+                            if state_before is not None and state_after is not None else None,
+                            state_before_sha256=state_before, state_after_sha256=state_after,
                         ))
                         transcript.append(ChatMessage(
                             "tool", output, name=call.name, tool_call_id=call.call_id
@@ -316,6 +352,9 @@ class EpisodeRuntimeAdapter:
                         first_token_ns=result.first_token_ns,
                         tool_calls=tuple(calls),
                     ))
+                    if any(c.name == "end_task" for c in calls):
+                        flags.append(f"episode.end_task:{index}")
+                        break
                     if not result.tool_calls:
                         if "unclosed_reasoning_span" in result.raw_usage.get("joulewise", {}).get("flags", ()):
                             flags.append("ended_in_unclosed_reasoning")
@@ -402,6 +441,8 @@ class EpisodeRuntimeAdapter:
             stop = "turn_budget_reached"
         if any(flag.startswith("episode.context_limit:") for flag in flags):
             stop = "episode.context_limit"
+        if any(flag.startswith("episode.end_task:") for flag in flags):
+            stop = "episode.end_task"
         if any(flag.startswith("episode_error:") for flag in flags):
             stop = "episode_error"
         if any(flag.startswith("endpoint_error:") for flag in flags):

@@ -15,5 +15,7 @@ implement one persistent load per block. That requires separate authority.
 
 `registration/derive_identity_pins.py --runtime-python <measurement python>`
 reads local model files without loading MLX. `derive_sizing.py` records the
-pilot-1 member law/scaffold and BYTES rate evidence; long-context transfer,
-tool allowance, model overhead transfer and disk remain planning flags.
+pilot-1 timing, tool-window and bundle-byte observations plus BYTES rates.
+Sizing uses cap-minus-budget prompts, aggregate B/C decode bounds, and the
+300 s idle inside each member bound, beside the 3300/1800 s runner caps.
+Long-context, tool, model-overhead and disk transfers remain planning flags.

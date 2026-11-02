@@ -69,7 +69,7 @@ def turn_counts(summary):
     return tuple(zip(*(summary['per_turn_' + name] for name in TURN_COUNTS), strict=True))
 
 
-def episode_summary(bundle):
+def episode_summary(bundle, *, target_precheck_paths=None):
     """One member's episode, energy per recorded power channel, and flags."""
     from joulewise.align.apple.workload import read_episode_bundle
     from joulewise.align.attribution import attribute_episode
@@ -86,7 +86,7 @@ def episode_summary(bundle):
                            for t in episode.turns],
             'per_turn_segments': [{'turn': s.turn, 'kind': s.kind, **_estimate({'joules': s.energy.joules})}
                                   for s in result.segments]}
-    from joulewise.align.apple.diagnostics import tool_inventory, end_state, evidence_precheck, telemetry_diagnostics, READ_ONLY_PREFIXES
+    from joulewise.align.apple.diagnostics import tool_inventory, end_state, evidence_precheck, telemetry_diagnostics, action_diagnostics
     from joulewise.desk_compress import read_bytes
     inventory = tool_inventory(episode, bundle)
     try:
@@ -94,8 +94,6 @@ def episode_summary(bundle):
     except FileNotFoundError:
         turn_rows = []
     calls = [[c.name for c in t.tool_calls] for t in episode.turns]
-    mutations = set(inventory['state_changing'])
-    known = set(inventory['names'])
     totals = episode.totals()
     logged = episode.totals(logged_only=True)
     return {'episode_id': episode.episode_id, 'task_pair': episode.task_pair,
@@ -105,14 +103,13 @@ def episode_summary(bundle):
             'main_task_score': episode.main_task_score, 'side_task_success': episode.side_task_success,
             'energy': energy, 'flags': list(episode.flags),
             'tool_inventory': inventory, 'tool_names_per_turn': calls,
-            'state_changing_calls': sum(name in mutations or (name not in known and not name.startswith(READ_ONLY_PREFIXES))
-                                        for turn in calls for name in turn),
+            **action_diagnostics(episode),
             'unknown_tool_names': sorted({n for turn in calls for n in turn} - set(inventory['names'])),
             'end_state': end_state(episode, turn_rows),
             'ended_in_unclosed_reasoning': bool(episode.turns and not episode.turns[-1].tool_calls and turn_rows
                 and 'unclosed_reasoning_span' in turn_rows[-1].get('flags', ())),
             'task_diagnostics': episode.hardware.get('task_diagnostics', {}),
-            'window_evidence_precheck': evidence_precheck(bundle),
+            'window_evidence_precheck': evidence_precheck(bundle, target_precheck_paths),
             **telemetry_diagnostics(bundle, episode)}
 
 
@@ -158,15 +155,17 @@ def instrument_checks(members):
                 sd = math.sqrt(math.fsum((v - mean) ** 2 for v in values) / (len(values) - 1))
                 spreads.setdefault(key, {})[channel] = {'n': len(values), 'mean_j': mean, 'sd_j': sd,
                                                         'range_j': max(values) - min(values),
-                    'thermal_ineligible': any('thermal_pressure_elevated_in_window' in
-                        r.get('window_evidence_precheck', {}).get('reasons', []) for r in rows),
+                    'thermal_ineligible': any(any(code.startswith('thermal.') for code in r.get('exclusion_codes', []))
+                        or 'thermal_pressure_elevated_in_window' in r.get('window_evidence_precheck', {}).get('reasons', [])
+                        for r in rows),
                     'per_turn_j': [r['energy'][channel].get('per_turn_j', []) for r in rows if channel in r['energy']]}
     checks = {'I1_all_bundles_readable': len(readable) == len(members),
               'I2_energy_on_every_episode': len(usable) == len(members),
               'I3_attribution_tiles_episode': bool(usable) and tiled,
               'I4_greedy_repeats_identical_tokens': bool(deterministic) and all(deterministic.values())}
     prechecks = [m['summary'].get('window_evidence_precheck', {}) for m in readable]
-    checks['chain_eligibility'] = bool(prechecks) and all(p.get('eligible') is not False for p in prechecks)
+    checks['chain_eligibility'] = len(readable) == len(members) and bool(prechecks) and all(p.get('eligible') is True for p in prechecks)
+    checks['no_member_exclusions'] = not any(m.get('excluded') for m in members)
     return checks, deterministic, spreads
 
 
@@ -178,6 +177,15 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
     if not (custody / 'night/result.json').is_file():
         raise ValueError('terminal record is required before desk')
     runs_root = Path(state['runs_roots'].get('claim') or Path(state['inputs']['runs_parent']) / 'runs_align_pilot_v0')
+    from joulewise.align.apple.diagnostics import member_thermal_readings
+    thermal = member_thermal_readings(custody)
+    targets = {}
+    pack_root = state.get('inputs', {}).get('pack_root')
+    if pack_root:
+        from joulewise.b5.harvest import build_roster
+        for member in build_roster(Path(pack_root), Path(state['measurement_root']))['members']:
+            targets[member['run_id']] = [c['target_precheck_path'] for c in member.get('cells', [])
+                if c.get('target') is not False and isinstance(c.get('target_precheck_path'), list) and c['target_precheck_path']]
     members = []
     for row in _member_rows(state):
         bundle = runs_root / row['run_id']
@@ -186,18 +194,13 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
             if key in row:
                 entry[key] = row[key]
         try:
-            entry['summary'] = episode_summary(bundle)
-        except (OSError, ValueError, KeyError, TypeError) as exc:
+            entry['summary'] = episode_summary(bundle, target_precheck_paths=targets.get(row['run_id']))
+            entry['summary']['os_thermal'] = thermal.get(row['run_id'], {})
+        except Exception as exc:
             entry['summary'] = None
             entry['unreadable'] = f'{type(exc).__name__}: {exc}'
         members.append(entry)
-    checks, deterministic, spreads = instrument_checks(members)
     # Read-only extraction first; the harvest may compress the runs afterwards.
-    pilot = {'schema_version': SCHEMA, 'non_claim': True, 'session_id': state['session_id'],
-             'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
-             'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
-             'status': 'instrument_ok' if all(checks.values()) else 'instrument_incomplete'}
-    h.write(session / 'PILOT.json', pilot)
     measurement = Path(state['measurement_root'])
     argv = [str(measurement / '.venv/bin/python'), str(measurement / 'scripts/harvest_b6_session.py'),
             '--plan', state['plan_path'], '--archive-root', str(session / 'archive'),
@@ -210,10 +213,32 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
         result = SimpleNamespace(returncode=None, stdout='', stderr='')
     (session / 'staging/harvest.stdout').write_text(result.stdout or '')
     (session / 'staging/harvest.stderr').write_text(result.stderr or '')
+    exclusion_path = session / 'archive/derived/exclusions.json'
+    exclusions = h.read(exclusion_path) if exclusion_path.is_file() else None
+    excluded = {m['run_id']: m.get('codes', []) for m in (exclusions or {}).get('members_excluded', [])}
+    for member in members:
+        codes = excluded.get(member['run_id'], [])
+        member.update(excluded=member['run_id'] in excluded, exclusion_codes=codes)
+        if member['summary'] is not None:
+            summary = member['summary']
+            summary.update(excluded=member['excluded'], exclusion_codes=codes)
+            pre = summary['window_evidence_precheck']
+            summary['chain_eligible'] = pre['eligible'] is True and not member['excluded']
+    checks, deterministic, spreads = instrument_checks(members)
+    checks['chain_eligibility'] = checks['chain_eligibility'] and not excluded
+    checks['harvest_exclusions_recorded'] = exclusions is not None
+    pilot = {'schema_version': SCHEMA, 'non_claim': True, 'session_id': state['session_id'],
+             'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
+             'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
+             'exclusions_path': str(exclusion_path), 'members_excluded': (exclusions or {}).get('members_excluded', []),
+             'status': 'instrument_ok' if all(checks.values()) else 'instrument_incomplete'}
+    h.write(session / 'PILOT.json', pilot)
     status = {'schema_version': SCHEMA, 'non_claim': True, 'plan_id': state['session_id'],
               'pilot': str(session / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
               'harvest_argv': argv, 'harvest_exit': result.returncode,
-              'harvest_status': ('not_run' if not harvest else 'ok' if result.returncode in (0, 6) else 'program_fault')}
+              'members_excluded': pilot['members_excluded'],
+              'harvest_status': ('not_run' if not harvest else 'program_fault' if result.returncode not in (0, 6)
+                                 else 'members_excluded' if excluded else 'exclusions_unavailable' if exclusions is None else 'ok')}
     h.write(session / 'desk.json', status)
     print('pilot_status: ' + pilot['status'])
     for name, ok in checks.items():
@@ -221,19 +246,25 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
     for member in members:
         summary = member.get('summary')
         if summary is None:
-            print(member['run_id'] + ': unreadable ' + member['unreadable'])
+            print(member['run_id'] + ': unreadable ' + member['unreadable'] + ' ' + json.dumps({
+                'excluded': member['excluded'], 'exclusion_codes': member['exclusion_codes']}, sort_keys=True))
             continue
         pre = summary['window_evidence_precheck']
         print(member['run_id'] + ': ' + json.dumps({
             'end_state': summary['end_state'], 'state_changing_calls': summary['state_changing_calls'],
+            **{k: summary[k] for k in ('classification', 'counted_tool_names', 'read_only_tool_names', 'unobserved_tool_names', 'exclusion_codes', 'excluded', 'os_thermal')},
             'tool_names_per_turn': summary['tool_names_per_turn'], 'unknown_tool_names': summary['unknown_tool_names'],
             'thermal_pressure_seconds': summary['thermal_pressure_seconds'],
             'active_gpu_clock_mhz': summary['active_gpu_clock_mhz'],
-            'chain_eligible': pre['eligible'], 'chain_reasons': pre['reasons'],
+            'chain_eligible': summary['chain_eligible'], 'chain_reasons': pre['reasons'] + summary['exclusion_codes'],
+            'target_precheck_eligible': pre['eligible'],
+            'phase_window_diagnostics': pre['phase_windows'],
+            'request_window_diagnostics': pre['request_windows'],
             'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
             'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}, sort_keys=True))
     print('repeat_energy_spread: ' + json.dumps(spreads, sort_keys=True))
     print('harvest_exit: ' + str(result.returncode))
+    print('harvest_status: ' + status['harvest_status'])
     return status
 
 

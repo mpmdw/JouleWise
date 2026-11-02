@@ -92,51 +92,95 @@ def episode_config(base, spec, run_id, label, model_id):
 
 
 def planning_sizing(tree, members, evidence):
-    """Measured member law/scaffold; transferred context factors remain planning."""
+    """Guard arithmetic plus pilot-1 timing/disk observations; all transfers flagged."""
     import math
+
+    def fit(x, y):
+        mx, my = math.fsum(x) / len(x), math.fsum(y) / len(y)
+        slope = math.fsum((a-mx)*(b-my) for a,b in zip(x,y)) / math.fsum((a-mx)**2 for a in x)
+        intercept = my - slope * mx
+        residuals = [b - intercept - slope*a for a,b in zip(x,y)]
+        return {"intercept": intercept, "slope": slope, "n": len(x),
+                "residual_sd": math.sqrt(math.fsum(r*r for r in residuals)/(len(x)-2)),
+                "largest_abs_residual": max(map(abs, residuals)),
+                "largest_positive_residual": max(residuals)}
+
     observations = evidence["member_observations"]
-    x = [r["episode_s"] for r in observations]
-    y = [r["member_s"] for r in observations]
-    mx, my = math.fsum(x) / len(x), math.fsum(y) / len(y)
-    slope = math.fsum((a-mx)*(b-my) for a,b in zip(x,y)) / math.fsum((a-mx)**2 for a in x)
-    intercept = my - slope * mx
-    residuals = [b - intercept - slope * a for a,b in zip(x,y)]
+    law = fit([r["episode_s"] for r in observations], [r["member_s"] for r in observations])
+    disk = fit([r["member_s"] for r in observations], [r["bundle_bytes"] for r in observations])
     factors = {phase: evidence["long_context_end"][phase + "_tok_s"] / evidence["long_context_start"][phase + "_tok_s"]
                for phase in ("prefill", "decode")}
+    tool_turns = {}
+    for window in evidence["tool_phase_windows"]:
+        tool_turns.setdefault((window["run_id"], window["turn"]), []).append(window["duration_s"])
+    tool_s = max(math.fsum(v) for v in tool_turns.values())
+    calls_per_turn = max(len(v) for v in tool_turns.values())
+    observation_s = max(r["hash_pair_max_ms"] for r in evidence["state_observation_cost"]["results"]) / 1000
+    tool_allowance = tool_s + calls_per_turn * observation_s
+    first_prompt = evidence["smallest_first_prompt_tokens"]
+    dwell_per_member = ALIGN_IDLE_S - evidence["pilot1_idle_s"]
+    # scripts/run_campaign.py: HAZARD_MEMBER_CAP_S + min(WAIT_CAP_S,
+    # remaining session wait budget); no runner change.
+    cap_unspent, cap_spent = 1800 + 1500, 1800
     rows = []
     for block in BLOCKS:
         model = block["model_id"]
         rates = {phase: math.fsum(r[phase + "_tok_s"] for r in evidence["bytes_rates"][model]) / len(evidence["bytes_rates"][model])
                  for phase in ("prefill", "decode")}
         bound_rates = {phase: rates[phase] * factors[phase] for phase in rates}
-        # Planning envelope inherited from the consult: full cap every turn,
-        # full output budget, one second for local environment tool work.
-        turn_s = CONTEXT_CAP / bound_rates["prefill"] + block["max_tokens"] / bound_rates["decode"] + 1
-        episode_s = block["max_turns"] * turn_s
-        member_s = intercept + slope * episode_s
+        prompt_bound = CONTEXT_CAP - block["max_tokens"]
+
+        def bound(turns):
+            # B/C retain decoded text: total decode <= cap - first prompt.
+            # A uses the conservative per-turn bound even if reasoning is
+            # dropped. If retained, the same aggregate bound as B/C holds.
+            decode = turns * block["max_tokens"]
+            if block["block"] != "A":
+                decode = min(decode, CONTEXT_CAP - first_prompt)
+            prefill = turns * prompt_bound
+            episode = prefill / bound_rates["prefill"] + decode / bound_rates["decode"] + turns * tool_allowance
+            return prefill, decode, episode, law["intercept"] + law["slope"] * episode + dwell_per_member
+
+        turns = block["max_turns"]
+        while turns and bound(turns)[3] > cap_unspent:
+            turns -= 1
+        if turns != block["max_turns"]:
+            raise ValueError(f"block {block['block']} needs max_turns={turns}; update BLOCKS and regenerate")
+        prefill, decode, episode_s, member_s = bound(turns)
+        member_bytes = math.ceil(disk["intercept"] + disk["slope"] * member_s + disk["largest_positive_residual"])
         rows.append({**block, "short_context_rates_tok_s": rates, "bound_rates_tok_s": bound_rates,
-                     "context_tokens": CONTEXT_CAP, "tool_s_per_turn": 1, "turn_upper_s": turn_s,
-                     "episode_upper_s": episode_s, "member_upper_s": member_s,
+                     "prompt_tokens_per_turn_upper": prompt_bound, "first_prompt_lower_tokens": first_prompt,
+                     "episode_prefill_tokens_upper": prefill, "episode_decode_tokens_upper": decode,
+                     "decode_if_reasoning_retained_upper": min(turns * block["max_tokens"], CONTEXT_CAP - first_prompt),
+                     "tool_s_per_turn": tool_s, "tool_calls_per_turn_observed_max": calls_per_turn,
+                     "state_observation_s_per_call": observation_s, "tool_allowance_s_per_turn": tool_allowance,
+                     "episode_upper_s": episode_s, "idle_increase_s": dwell_per_member, "member_upper_s": member_s,
+                     "member_cap_unspent_s": cap_unspent, "member_cap_spent_s": cap_spent,
+                     "fits_unspent_cap": member_s <= cap_unspent, "fits_spent_cap": member_s <= cap_spent,
                      "count": 4, "block_upper_s": 4 * member_s,
+                     "member_upper_bytes": member_bytes, "block_upper_bytes": 4 * member_bytes,
                      "flags": ["sizing.planning_bound_unmeasured"]})
     scaffold = sum(s["expected_count"] for s in tree["stage_graph"] if s["kind"] == "campaign_collection") - len(members)
-    dwell = len(members) * (ALIGN_IDLE_S - evidence["pilot1_idle_s"])
-    span = evidence["scaffold_s"] + math.fsum(r["block_upper_s"] for r in rows) + dwell
+    dwell = len(members) * dwell_per_member
+    span = evidence["scaffold_s"] + math.fsum(r["block_upper_s"] for r in rows)
     count = len(members) + scaffold
-    # Inherited v0 disk planning envelope; unmeasured for the larger models.
-    bytes_per_member = 200_000_000
+    scaffold_bytes = sum(r["bytes"] for r in evidence["scaffold_bundle_bytes"])
+    B = sum(r["block_upper_bytes"] for r in rows) + scaffold_bytes
     return {"schema_version": "joulewise.b5_sizing.v1", "non_claim": True,
-        "derivation": "OLS(member_s ~ 1 + episode_s), measured scaffold + sum(4*(intercept+slope*turns*(40960/prefill_bound+budget/decode_bound+1))) + 12*(300-pilot1_idle). Bound rates = BYTES short rates * pilot1 late/early factors. Tool second, transferred factors, new-model overhead and disk are planning, not measurements.",
+        "derivation": "Every prompt <= cap-budget. Episode prefill <= turns*(cap-budget). B/C decode <= min(turns*budget,cap-smallest_first_prompt=40960-6347); A uses turns*budget conservatively (same aggregate bound holds if reasoning stays). Episode seconds = prefill/prefill_bound + decode/decode_bound + turns*(pilot1 max tool seconds per turn + observed max calls per turn * max measured hash-pair seconds). Member = OLS intercept+slope*episode+(300-57.6). Scaffold + sum(4*member) includes idle increase exactly once. Rates/factors/overhead/tool/disk transfers are planning, not hardware validation.",
         "packs": {PACK_ID: {"pack_id": PACK_ID, "flags": ["sizing.planning_bound_unmeasured"],
-            "member_law": {"intercept_s": intercept, "slope": slope, "n": len(x),
-                           "residual_sd_s": math.sqrt(math.fsum(r*r for r in residuals)/(len(x)-2)),
-                           "largest_abs_residual_s": max(map(abs, residuals)), "flags": []},
+            "member_law": {"intercept_s": law["intercept"], "slope": law["slope"], "n": law["n"],
+                           "residual_sd_s": law["residual_sd"], "largest_abs_residual_s": law["largest_abs_residual"], "flags": []},
             "long_context_factors": factors, "blocks": rows, "scaffold_s": evidence["scaffold_s"],
             "scaffold_flags": [], "dwell_increase_s": dwell,
+            "member_cap": {"unspent_s": cap_unspent, "spent_s": cap_spent, "session_wait_budget_s": 7200,
+                           "spent_corner": "Only repeated failed idle admissions spend the budget: a nonquiet Mac, already physics-flagged; lead accepts this corner."},
             "member_count": count, "align_members": len(members), "scaffold_members": scaffold,
-            "programmed_span_s": span, "T_stream_max_s": max(r["member_upper_s"] for r in rows) + ALIGN_IDLE_S-evidence["pilot1_idle_s"],
-            "estimated_footprint_bytes": 2*count*bytes_per_member,
-            "disk_derivation": {"peak_copies": 2, "B_bytes": count*bytes_per_member,
+            "programmed_span_s": span, "T_stream_max_s": max(r["member_upper_s"] for r in rows),
+            "estimated_footprint_bytes": 2 * B,
+            "disk_member_law": disk,
+            "disk_derivation": {"formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot1 residual) per block member; sum + measured scaffold bytes; peak copies=2 (capture plus backup)",
+                                "peak_copies": 2, "B_bytes": B, "scaffold_bytes": scaffold_bytes,
                                 "extra_wait_peak_bytes": 0, "fixed_retained_bytes": 0}}}}
 
 
@@ -348,8 +392,10 @@ implement one persistent load per block. That requires separate authority.
 
 `registration/derive_identity_pins.py --runtime-python <measurement python>`
 reads local model files without loading MLX. `derive_sizing.py` records the
-pilot-1 member law/scaffold and BYTES rate evidence; long-context transfer,
-tool allowance, model overhead transfer and disk remain planning flags.
+pilot-1 timing, tool-window and bundle-byte observations plus BYTES rates.
+Sizing uses cap-minus-budget prompts, aggregate B/C decode bounds, and the
+300 s idle inside each member bound, beside the 3300/1800 s runner caps.
+Long-context, tool, model-overhead and disk transfers remain planning flags.
 """
 
 

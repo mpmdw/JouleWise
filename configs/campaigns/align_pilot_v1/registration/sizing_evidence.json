@@ -690,7 +690,58 @@
     "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/campaign_log.jsonl",
     "sha256": "57f6c08c5d47034822014bf7523bc43bb810000951909b410c033990c6276905"
   },
+  "disk_derivation": "sum stat.st_size of every regular file in each uncompressed pilot-1 bundle (inventory recorded); OLS bytes ~ 1 + member_s",
   "factor_derivation": "last long-cell repeat final turn / first long-cell repeat initial turn; includes thermal slowdown",
+  "first_prompt_observations": [
+    {
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "tokens": 6347
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-a-e02",
+      "tokens": 7102
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-a-e03",
+      "tokens": 11024
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-a-e04",
+      "tokens": 9822
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "tokens": 6347
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-a-e06",
+      "tokens": 7102
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-b-e07",
+      "tokens": 11024
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-b-e08",
+      "tokens": 9822
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "tokens": 6347
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-b-e10",
+      "tokens": 7102
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-b-e11",
+      "tokens": 11024
+    },
+    {
+      "run_id": "align-pilot-v0-episodes-b-e12",
+      "tokens": 9822
+    }
+  ],
   "long_context_end": {
     "decode_s": 23.638972252,
     "decode_tok_s": 27.91999554651366,
@@ -713,6 +764,125 @@
   },
   "member_observations": [
     {
+      "bundle_bytes": 391743077,
+      "bundle_inventory": [
+        {
+          "bytes": 1939,
+          "path": "config.json"
+        },
+        {
+          "bytes": 783309,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 218,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 44814,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 5435,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 85723,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 838191,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 1188941,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17367,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17362,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 237263182,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30147559,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2616877,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 30539543,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3821404,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331756,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 36587,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/outputs/align_episode.json",
         "sha256": "5d1798dec71b650a5b22032501c69864423f1a00f303f4a65f639a6ff5db7807"
@@ -722,6 +892,125 @@
       "run_id": "align-pilot-v0-episodes-a-e01"
     },
     {
+      "bundle_bytes": 181094127,
+      "bundle_inventory": [
+        {
+          "bytes": 1943,
+          "path": "config.json"
+        },
+        {
+          "bytes": 246155,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 218,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45010,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3465,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 15538,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 49705,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 261579,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17354,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 52776002,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30149001,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2617303,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 6726243,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3821604,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331734,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 11054,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e02/outputs/align_episode.json",
         "sha256": "25f9ffd1d5ac726066033c95b916fc354217d308b31681326b7ed469f77238c0"
@@ -731,6 +1020,125 @@
       "run_id": "align-pilot-v0-episodes-a-e02"
     },
     {
+      "bundle_bytes": 205214907,
+      "bundle_inventory": [
+        {
+          "bytes": 1937,
+          "path": "config.json"
+        },
+        {
+          "bytes": 365643,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 218,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45025,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3788,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 21439,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 147104,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 367430,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17354,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 73845218,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30153795,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2615649,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 9441837,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3822139,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331320,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 14792,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e03/outputs/align_episode.json",
         "sha256": "65a7eeccd5c74d707890e40350ddb279fb92a07269cc2aa1811f0e869f0a1f54"
@@ -740,6 +1148,125 @@
       "run_id": "align-pilot-v0-episodes-a-e03"
     },
     {
+      "bundle_bytes": 218297249,
+      "bundle_inventory": [
+        {
+          "bytes": 1933,
+          "path": "config.json"
+        },
+        {
+          "bytes": 411004,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 217,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45015,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3791,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 47122,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 182879,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 424687,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17356,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 85290081,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30147160,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2617484,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 10919844,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3821327,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 332311,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 14819,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e04/outputs/align_episode.json",
         "sha256": "e64aacc4cf9521a1fc083f0f8094322188d60984a27029e24a999d639800f898"
@@ -749,6 +1276,125 @@
       "run_id": "align-pilot-v0-episodes-a-e04"
     },
     {
+      "bundle_bytes": 397006925,
+      "bundle_inventory": [
+        {
+          "bytes": 1939,
+          "path": "config.json"
+        },
+        {
+          "bytes": 783339,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 218,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 44823,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 5435,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 85723,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 838186,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 1212564,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17367,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 241899398,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30146468,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2617670,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 31143659,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3821568,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331756,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 36593,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/outputs/align_episode.json",
         "sha256": "7bf5d1a849d5efad3e4a304257e6a928135e967791d47158098d986fa335ad6d"
@@ -758,6 +1404,125 @@
       "run_id": "align-pilot-v0-episodes-a-e05"
     },
     {
+      "bundle_bytes": 180787918,
+      "bundle_inventory": [
+        {
+          "bytes": 1943,
+          "path": "config.json"
+        },
+        {
+          "bytes": 246149,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 223,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45036,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3465,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 15538,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 49709,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 260643,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 52508465,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30146879,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2616673,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 6691360,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3821425,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331782,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 11060,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e06/outputs/align_episode.json",
         "sha256": "c2ea3c9fc1e990701049f1a6bdcca299423610e4d36aa8c7509c190b37425e63"
@@ -767,6 +1532,125 @@
       "run_id": "align-pilot-v0-episodes-a-e06"
     },
     {
+      "bundle_bytes": 205507224,
+      "bundle_inventory": [
+        {
+          "bytes": 1937,
+          "path": "config.json"
+        },
+        {
+          "bytes": 365653,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 218,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45002,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3788,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 21439,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 147106,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 368589,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17354,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17362,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 74106567,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30150083,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2616831,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 9473506,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3822361,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331738,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 14820,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e07/outputs/align_episode.json",
         "sha256": "e799df1898e52b048e0a787b65a27450a6aa8e35a49e11f74e7ba2340f9a7abb"
@@ -776,6 +1660,125 @@
       "run_id": "align-pilot-v0-episodes-b-e07"
     },
     {
+      "bundle_bytes": 218316958,
+      "bundle_inventory": [
+        {
+          "bytes": 1933,
+          "path": "config.json"
+        },
+        {
+          "bytes": 411026,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 219,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45014,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3791,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 47122,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 182878,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 425286,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 85301869,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30149939,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2615559,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 10925352,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3823172,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331403,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 14827,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e08/outputs/align_episode.json",
         "sha256": "dd503384be36242d4f9c24753e2c1356414da88ab6dd55b84432f3679aa2e3b0"
@@ -785,6 +1788,125 @@
       "run_id": "align-pilot-v0-episodes-b-e08"
     },
     {
+      "bundle_bytes": 403867395,
+      "bundle_inventory": [
+        {
+          "bytes": 1939,
+          "path": "config.json"
+        },
+        {
+          "bytes": 783357,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 219,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 44854,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 5435,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 85723,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 838191,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 1242261,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 247942100,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30146797,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2617241,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 31932189,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3821101,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331770,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 36650,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/outputs/align_episode.json",
         "sha256": "7fbe1378a406cee209b13b953760ca4d154453dadbab29bc4c9aa0415bcfec6a"
@@ -794,6 +1916,125 @@
       "run_id": "align-pilot-v0-episodes-b-e09"
     },
     {
+      "bundle_bytes": 181089153,
+      "bundle_inventory": [
+        {
+          "bytes": 1943,
+          "path": "config.json"
+        },
+        {
+          "bytes": 246199,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 219,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45014,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3465,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 15538,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 49711,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 261777,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17367,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17349,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 52772446,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30148603,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2617072,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 6724944,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3821768,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331825,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 11043,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e10/outputs/align_episode.json",
         "sha256": "2551756699282bd6ad36824caa825c2642e38152aa3527771a483a20ae1cff38"
@@ -803,6 +2044,125 @@
       "run_id": "align-pilot-v0-episodes-b-e10"
     },
     {
+      "bundle_bytes": 205105723,
+      "bundle_inventory": [
+        {
+          "bytes": 1937,
+          "path": "config.json"
+        },
+        {
+          "bytes": 365613,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 218,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45112,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3788,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 21439,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 147107,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 366952,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17364,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17367,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 73746693,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30150458,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2617262,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 9432616,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3822388,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331730,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 14809,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e11/outputs/align_episode.json",
         "sha256": "749a46020ecd5f34ec3674d2000c09738778f6e0db14ebd7c4e0d266f9d3cb3c"
@@ -812,6 +2172,125 @@
       "run_id": "align-pilot-v0-episodes-b-e11"
     },
     {
+      "bundle_bytes": 218363412,
+      "bundle_inventory": [
+        {
+          "bytes": 1933,
+          "path": "config.json"
+        },
+        {
+          "bytes": 410993,
+          "path": "events.jsonl"
+        },
+        {
+          "bytes": 54986,
+          "path": "instrument_calibration/events.jsonl"
+        },
+        {
+          "bytes": 34968,
+          "path": "instrument_calibration/instrument_evidence.json"
+        },
+        {
+          "bytes": 1292,
+          "path": "instrument_calibration/manifest.json"
+        },
+        {
+          "bytes": 415258,
+          "path": "instrument_calibration/power_trace.csv"
+        },
+        {
+          "bytes": 17365,
+          "path": "instrument_calibration/raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "instrument_calibration/raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 83460890,
+          "path": "instrument_calibration/raw/powermetrics.plist"
+        },
+        {
+          "bytes": 122,
+          "path": "logs/controller.log"
+        },
+        {
+          "bytes": 141,
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json"
+        },
+        {
+          "bytes": 151,
+          "path": "logs/custody/powermetrics-powermetrics_idle_post_plist.json"
+        },
+        {
+          "bytes": 131,
+          "path": "logs/custody/powermetrics-powermetrics_plist.json"
+        },
+        {
+          "bytes": 202,
+          "path": "logs/runtime.log"
+        },
+        {
+          "bytes": 217,
+          "path": "logs/telemetry.log"
+        },
+        {
+          "bytes": 45008,
+          "path": "metadata.json"
+        },
+        {
+          "bytes": 3791,
+          "path": "outputs/align_episode.json"
+        },
+        {
+          "bytes": 47122,
+          "path": "outputs/align_transcript.jsonl"
+        },
+        {
+          "bytes": 182878,
+          "path": "outputs/align_turns.jsonl"
+        },
+        {
+          "bytes": 425005,
+          "path": "power_trace.csv"
+        },
+        {
+          "bytes": 17351,
+          "path": "raw/battery_float.post.ioreg"
+        },
+        {
+          "bytes": 17364,
+          "path": "raw/battery_float.pre.ioreg"
+        },
+        {
+          "bytes": 85349283,
+          "path": "raw/powermetrics.plist"
+        },
+        {
+          "bytes": 30147398,
+          "path": "raw/powermetrics_idle.plist"
+        },
+        {
+          "bytes": 2616708,
+          "path": "raw/powermetrics_idle_post.plist"
+        },
+        {
+          "bytes": 10927928,
+          "path": "rich_telemetry.jsonl"
+        },
+        {
+          "bytes": 3820965,
+          "path": "rich_telemetry_idle.jsonl"
+        },
+        {
+          "bytes": 331750,
+          "path": "rich_telemetry_idle_post.jsonl"
+        },
+        {
+          "bytes": 14848,
+          "path": "summary_metrics.json"
+        }
+      ],
       "episode": {
         "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e12/outputs/align_episode.json",
         "sha256": "af72c13f602ec1b737288d6ace35ce9c652281301b28f3babe7b04b7adea5329"
@@ -823,6 +2302,108 @@
   ],
   "non_claim": true,
   "pilot1_idle_s": 57.6,
+  "scaffold_bundle_bytes": [
+    {
+      "bytes": 161567094,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/neg8-window-end-r1"
+    },
+    {
+      "bytes": 161190585,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/neg8-window-end-r2"
+    },
+    {
+      "bytes": 161358794,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/neg8-window-end-r3"
+    },
+    {
+      "bytes": 161247176,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/neg8-window-midpoint"
+    },
+    {
+      "bytes": 161320657,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/neg8-window-start-r1"
+    },
+    {
+      "bytes": 161421676,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/neg8-window-start-r2"
+    },
+    {
+      "bytes": 161612042,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/neg8-window-start-r3"
+    },
+    {
+      "bytes": 161278179,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r01"
+    },
+    {
+      "bytes": 161362887,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r02"
+    },
+    {
+      "bytes": 161129257,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r03"
+    },
+    {
+      "bytes": 161451218,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r04"
+    },
+    {
+      "bytes": 161547054,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r05"
+    },
+    {
+      "bytes": 161488464,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r06"
+    },
+    {
+      "bytes": 161136796,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r07"
+    },
+    {
+      "bytes": 161252450,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r08"
+    },
+    {
+      "bytes": 161125886,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r09"
+    },
+    {
+      "bytes": 161070402,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r10"
+    },
+    {
+      "bytes": 161481661,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r11"
+    },
+    {
+      "bytes": 161484127,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r12"
+    },
+    {
+      "bytes": 161421673,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r13"
+    },
+    {
+      "bytes": 161536277,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r14"
+    },
+    {
+      "bytes": 161551580,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r15"
+    },
+    {
+      "bytes": 161540241,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r16"
+    },
+    {
+      "bytes": 161379995,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r17"
+    },
+    {
+      "bytes": 161303829,
+      "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0_bound/neg8-refcorpus-r18"
+    }
+  ],
   "scaffold_derivation": {
     "end_s": 1793627334,
     "episode_stage_s": [
@@ -836,5 +2417,359 @@
     },
     "start_s": 1793618436
   },
-  "scaffold_s": 4973
+  "scaffold_s": 4973,
+  "smallest_first_prompt_tokens": 6347,
+  "state_observation_cost": {
+    "derivation": "100 paired hash observations per environment, sum of perf_counter_ns time around before/after hashes only; call excluded",
+    "results": [
+      {
+        "checks": [
+          {
+            "name": "list_files",
+            "state_changed": false
+          },
+          {
+            "name": "create_file",
+            "state_changed": true
+          },
+          {
+            "name": "list_files",
+            "state_changed": false
+          },
+          {
+            "name": "end_task",
+            "state_changed": false
+          }
+        ],
+        "hash_pair_max_ms": 61.627458,
+        "hash_pair_mean_ms": 20.77691557,
+        "hash_pair_median_ms": 17.818770999999998,
+        "hash_pair_sd_ms": 10.132083173745366,
+        "initial_state_sha256": "7c5c79298f71f7edb10ff4aefafbb99e1f7f02f6479a3a63c8c7ea4d98180258",
+        "private_attributes": [
+          "_tools"
+        ],
+        "public_model_fields": [
+          "email_manager",
+          "cloud_drive"
+        ],
+        "samples": 100,
+        "task_pair": "spam_filter_update"
+      },
+      {
+        "checks": [
+          {
+            "name": "list_files",
+            "state_changed": false
+          },
+          {
+            "name": "create_file",
+            "state_changed": true
+          },
+          {
+            "name": "list_files",
+            "state_changed": false
+          },
+          {
+            "name": "end_task",
+            "state_changed": false
+          }
+        ],
+        "hash_pair_max_ms": 52.439833,
+        "hash_pair_mean_ms": 12.12345507,
+        "hash_pair_median_ms": 11.337750499999999,
+        "hash_pair_sd_ms": 5.3347295811318745,
+        "initial_state_sha256": "e789683305a09009e62b428e829ff29d57e3fc544091525ba6f07a12aa471f81",
+        "private_attributes": [
+          "_tools"
+        ],
+        "public_model_fields": [
+          "bank_account",
+          "inbox",
+          "spam_email",
+          "calendar",
+          "cloud_drive",
+          "venmo",
+          "zelle",
+          "phone",
+          "web"
+        ],
+        "samples": 100,
+        "task_pair": "bank_transfer_2"
+      }
+    ],
+    "scope": "offline real SHADE environments; agent-active timings, no MLX model or hardware capture",
+    "source_sha256": "017aa04f375f8e17bcc519d7100333051fdb6a1ede93805c8d63acf3df122354"
+  },
+  "state_observation_cost_source": {
+    "path": "/Users/edr/code/jw-wt/align-pilot2/.codex-report/verification/fix1-state-cost.json",
+    "sha256": "ff306abc45dee5fced43fd7c758e641e4cb716cff94685257f0441a5d210176a"
+  },
+  "tool_derivation": "sum phase/align_tool_* durations per recorded turn; maximum observed turn, transferred as planning",
+  "tool_phase_windows": [
+    {
+      "duration_s": 0.0013799667358398438,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/events.jsonl",
+        "sha256": "256fa2021f4295a454a89b8a6f0c91de0333e69c81da1977d6d4b2a04a145315"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "tool": "list_users",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.0027751922607421875,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/events.jsonl",
+        "sha256": "256fa2021f4295a454a89b8a6f0c91de0333e69c81da1977d6d4b2a04a145315"
+      },
+      "phase": "align_tool_1_0",
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "tool": "view_all_inboxes",
+      "turn": 1
+    },
+    {
+      "duration_s": 0.0015058517456054688,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/events.jsonl",
+        "sha256": "256fa2021f4295a454a89b8a6f0c91de0333e69c81da1977d6d4b2a04a145315"
+      },
+      "phase": "align_tool_2_0",
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "tool": "view_all_spam",
+      "turn": 2
+    },
+    {
+      "duration_s": 0.0013561248779296875,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/events.jsonl",
+        "sha256": "256fa2021f4295a454a89b8a6f0c91de0333e69c81da1977d6d4b2a04a145315"
+      },
+      "phase": "align_tool_3_0",
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "tool": "list_global_rules",
+      "turn": 3
+    },
+    {
+      "duration_s": 0.001386880874633789,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/events.jsonl",
+        "sha256": "256fa2021f4295a454a89b8a6f0c91de0333e69c81da1977d6d4b2a04a145315"
+      },
+      "phase": "align_tool_4_0",
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "tool": "list_user_rules",
+      "turn": 4
+    },
+    {
+      "duration_s": 0.0013477802276611328,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e01/events.jsonl",
+        "sha256": "256fa2021f4295a454a89b8a6f0c91de0333e69c81da1977d6d4b2a04a145315"
+      },
+      "phase": "align_tool_5_0",
+      "run_id": "align-pilot-v0-episodes-a-e01",
+      "tool": "list_user_rules",
+      "turn": 5
+    },
+    {
+      "duration_s": 0.005342006683349609,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e03/events.jsonl",
+        "sha256": "47339624a6cb7cae777430efc9cdbef5ffac2a21f702cf8417392a92cc1f88ca"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-a-e03",
+      "tool": "search_emails",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.014567136764526367,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e04/events.jsonl",
+        "sha256": "12e2a2efd66f32ff7e19f4500017285a63cc71d5493b2bdab8b6f0fe24550f50"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-a-e04",
+      "tool": "get_unread_emails",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.0031180381774902344,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/events.jsonl",
+        "sha256": "da7012b79e48fbd29ce39cbc095c51e7821c88c1c785a2af3ecc8d6124bac719"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "tool": "list_users",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.002834320068359375,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/events.jsonl",
+        "sha256": "da7012b79e48fbd29ce39cbc095c51e7821c88c1c785a2af3ecc8d6124bac719"
+      },
+      "phase": "align_tool_1_0",
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "tool": "view_all_inboxes",
+      "turn": 1
+    },
+    {
+      "duration_s": 0.0015110969543457031,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/events.jsonl",
+        "sha256": "da7012b79e48fbd29ce39cbc095c51e7821c88c1c785a2af3ecc8d6124bac719"
+      },
+      "phase": "align_tool_2_0",
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "tool": "view_all_spam",
+      "turn": 2
+    },
+    {
+      "duration_s": 0.0013718605041503906,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/events.jsonl",
+        "sha256": "da7012b79e48fbd29ce39cbc095c51e7821c88c1c785a2af3ecc8d6124bac719"
+      },
+      "phase": "align_tool_3_0",
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "tool": "list_global_rules",
+      "turn": 3
+    },
+    {
+      "duration_s": 0.0013818740844726562,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/events.jsonl",
+        "sha256": "da7012b79e48fbd29ce39cbc095c51e7821c88c1c785a2af3ecc8d6124bac719"
+      },
+      "phase": "align_tool_4_0",
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "tool": "list_user_rules",
+      "turn": 4
+    },
+    {
+      "duration_s": 0.0013909339904785156,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-a-e05/events.jsonl",
+        "sha256": "da7012b79e48fbd29ce39cbc095c51e7821c88c1c785a2af3ecc8d6124bac719"
+      },
+      "phase": "align_tool_5_0",
+      "run_id": "align-pilot-v0-episodes-a-e05",
+      "tool": "list_user_rules",
+      "turn": 5
+    },
+    {
+      "duration_s": 0.002995014190673828,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e07/events.jsonl",
+        "sha256": "94b12f363369ba45a8640fd221f25acf923840c994884e78031a38502227c41b"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-b-e07",
+      "tool": "search_emails",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.014541149139404297,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e08/events.jsonl",
+        "sha256": "463212024e797dbbe2aa8f63bd5eed25d6260aa1049f25c55487b34ca1d4ebfa"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-b-e08",
+      "tool": "get_unread_emails",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.0013551712036132812,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/events.jsonl",
+        "sha256": "4d20651566344a4acb6adfcbecf9a69b1eae8269d89469815e9562f92f528507"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "tool": "list_users",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.003275156021118164,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/events.jsonl",
+        "sha256": "4d20651566344a4acb6adfcbecf9a69b1eae8269d89469815e9562f92f528507"
+      },
+      "phase": "align_tool_1_0",
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "tool": "view_all_inboxes",
+      "turn": 1
+    },
+    {
+      "duration_s": 0.0014901161193847656,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/events.jsonl",
+        "sha256": "4d20651566344a4acb6adfcbecf9a69b1eae8269d89469815e9562f92f528507"
+      },
+      "phase": "align_tool_2_0",
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "tool": "view_all_spam",
+      "turn": 2
+    },
+    {
+      "duration_s": 0.001360177993774414,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/events.jsonl",
+        "sha256": "4d20651566344a4acb6adfcbecf9a69b1eae8269d89469815e9562f92f528507"
+      },
+      "phase": "align_tool_3_0",
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "tool": "list_global_rules",
+      "turn": 3
+    },
+    {
+      "duration_s": 0.0013532638549804688,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/events.jsonl",
+        "sha256": "4d20651566344a4acb6adfcbecf9a69b1eae8269d89469815e9562f92f528507"
+      },
+      "phase": "align_tool_4_0",
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "tool": "list_user_rules",
+      "turn": 4
+    },
+    {
+      "duration_s": 0.0013556480407714844,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e09/events.jsonl",
+        "sha256": "4d20651566344a4acb6adfcbecf9a69b1eae8269d89469815e9562f92f528507"
+      },
+      "phase": "align_tool_5_0",
+      "run_id": "align-pilot-v0-episodes-b-e09",
+      "tool": "list_user_rules",
+      "turn": 5
+    },
+    {
+      "duration_s": 0.003083944320678711,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e11/events.jsonl",
+        "sha256": "c07a8a1062713f86c247f79d424a940961bc91da008b3118a14316f67c08b798"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-b-e11",
+      "tool": "search_emails",
+      "turn": 0
+    },
+    {
+      "duration_s": 0.02154684066772461,
+      "events": {
+        "path": "/Users/edr/night-align/pilot-v0-20261102T110643Z/runs-parent/runs_align_pilot_v0/align-pilot-v0-episodes-b-e12/events.jsonl",
+        "sha256": "3864b7c9f64e4e47eb9d1671b4cf8b46dcca4f89d993cae455c4cb9d2242a677"
+      },
+      "phase": "align_tool_0_0",
+      "run_id": "align-pilot-v0-episodes-b-e12",
+      "tool": "get_unread_emails",
+      "turn": 0
+    }
+  ]
 }

@@ -1,101 +1,156 @@
 {
-  "derivation": "OLS(member_s ~ 1 + episode_s), measured scaffold + sum(4*(intercept+slope*turns*(40960/prefill_bound+budget/decode_bound+1))) + 12*(300-pilot1_idle). Bound rates = BYTES short rates * pilot1 late/early factors. Tool second, transferred factors, new-model overhead and disk are planning, not measurements.",
+  "derivation": "Every prompt <= cap-budget. Episode prefill <= turns*(cap-budget). B/C decode <= min(turns*budget,cap-smallest_first_prompt=40960-6347); A uses turns*budget conservatively (same aggregate bound holds if reasoning stays). Episode seconds = prefill/prefill_bound + decode/decode_bound + turns*(pilot1 max tool seconds per turn + observed max calls per turn * max measured hash-pair seconds). Member = OLS intercept+slope*episode+(300-57.6). Scaffold + sum(4*member) includes idle increase exactly once. Rates/factors/overhead/tool/disk transfers are planning, not hardware validation.",
   "non_claim": true,
   "packs": {
     "align-pilot-v1": {
-      "T_stream_max_s": 3444.7706160680564,
+      "T_stream_max_s": 3119.058493295469,
       "align_members": 12,
       "blocks": [
         {
           "block": "A",
-          "block_upper_s": 8715.385954755448,
+          "block_upper_bytes": 4794138620,
+          "block_upper_s": 9349.85191958404,
           "bound_rates_tok_s": {
             "decode": 42.83449968527229,
             "prefill": 797.2058758630977
           },
-          "context_tokens": 40960,
           "count": 4,
+          "decode_if_reasoning_retained_upper": 34613,
           "enable_thinking": true,
-          "episode_upper_s": 1776.0396721196728,
+          "episode_decode_tokens_upper": 49152,
+          "episode_prefill_tokens_upper": 442368,
+          "episode_upper_s": 1703.3824228586552,
+          "first_prompt_lower_tokens": 6347,
+          "fits_spent_cap": false,
+          "fits_unspent_cap": true,
           "flags": [
             "sizing.planning_bound_unmeasured"
           ],
+          "idle_increase_s": 242.4,
           "max_tokens": 4096,
           "max_turns": 12,
-          "member_upper_s": 2178.846488688862,
+          "member_cap_spent_s": 1800,
+          "member_cap_unspent_s": 3300,
+          "member_upper_bytes": 1198534655,
+          "member_upper_s": 2337.46297989601,
           "model_id": "qwen3-30b-a3b",
+          "prompt_tokens_per_turn_upper": 36864,
           "short_context_rates_tok_s": {
             "decode": 97.0286337706892,
             "prefill": 1362.5056434859039
           },
-          "tool_s_per_turn": 1,
-          "turn_upper_s": 148.00330600997273
+          "state_observation_s_per_call": 0.061627457999999996,
+          "tool_allowance_s_per_turn": 0.0831742986677246,
+          "tool_calls_per_turn_observed_max": 1,
+          "tool_s_per_turn": 0.02154684066772461
         },
         {
           "block": "B",
-          "block_upper_s": 9766.065373510603,
+          "block_upper_bytes": 4972795676,
+          "block_upper_s": 9730.636096955963,
           "bound_rates_tok_s": {
             "decode": 42.83449968527229,
             "prefill": 797.2058758630977
           },
-          "context_tokens": 40960,
           "count": 4,
+          "decode_if_reasoning_retained_upper": 34613,
           "enable_thinking": false,
-          "episode_upper_s": 2003.8275671416443,
+          "episode_decode_tokens_upper": 34613,
+          "episode_prefill_tokens_upper": 778240,
+          "episode_upper_s": 1785.936648888885,
+          "first_prompt_lower_tokens": 6347,
+          "fits_spent_cap": false,
+          "fits_unspent_cap": true,
           "flags": [
             "sizing.planning_bound_unmeasured"
           ],
+          "idle_increase_s": 242.4,
           "max_tokens": 2048,
           "max_turns": 20,
-          "member_upper_s": 2441.5163433776506,
+          "member_cap_spent_s": 1800,
+          "member_cap_unspent_s": 3300,
+          "member_upper_bytes": 1243198919,
+          "member_upper_s": 2432.6590242389907,
           "model_id": "qwen3-30b-a3b",
+          "prompt_tokens_per_turn_upper": 38912,
           "short_context_rates_tok_s": {
             "decode": 97.0286337706892,
             "prefill": 1362.5056434859039
           },
-          "tool_s_per_turn": 1,
-          "turn_upper_s": 100.19137835708221
+          "state_observation_s_per_call": 0.061627457999999996,
+          "tool_allowance_s_per_turn": 0.0831742986677246,
+          "tool_calls_per_turn_observed_max": 1,
+          "tool_s_per_turn": 0.02154684066772461
         },
         {
           "block": "C",
-          "block_upper_s": 12809.482464272225,
+          "block_upper_bytes": 6260980588,
+          "block_upper_s": 12476.233973181876,
           "bound_rates_tok_s": {
             "decode": 32.583073003461216,
             "prefill": 590.819928062214
           },
-          "context_tokens": 40960,
           "count": 4,
+          "decode_if_reasoning_retained_upper": 34613,
           "enable_thinking": null,
-          "episode_upper_s": 2663.642121803664,
+          "episode_decode_tokens_upper": 34613,
+          "episode_prefill_tokens_upper": 778240,
+          "episode_upper_s": 2381.183828607401,
+          "first_prompt_lower_tokens": 6347,
+          "fits_spent_cap": false,
+          "fits_unspent_cap": true,
           "flags": [
             "sizing.planning_bound_unmeasured"
           ],
+          "idle_increase_s": 242.4,
           "max_tokens": 2048,
           "max_turns": 20,
-          "member_upper_s": 3202.3706160680563,
+          "member_cap_spent_s": 1800,
+          "member_cap_unspent_s": 3300,
+          "member_upper_bytes": 1565245147,
+          "member_upper_s": 3119.058493295469,
           "model_id": "qwen3-next-80b",
+          "prompt_tokens_per_turn_upper": 38912,
           "short_context_rates_tok_s": {
             "decode": 73.8071199805207,
             "prefill": 1009.7711402304594
           },
-          "tool_s_per_turn": 1,
-          "turn_upper_s": 133.1821060901832
+          "state_observation_s_per_call": 0.061627457999999996,
+          "tool_allowance_s_per_turn": 0.0831742986677246,
+          "tool_calls_per_turn_observed_max": 1,
+          "tool_s_per_turn": 0.02154684066772461
         }
       ],
       "disk_derivation": {
-        "B_bytes": 7400000000,
+        "B_bytes": 20062174884,
         "extra_wait_peak_bytes": 0,
         "fixed_retained_bytes": 0,
-        "peak_copies": 2
+        "formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot1 residual) per block member; sum + measured scaffold bytes; peak copies=2 (capture plus backup)",
+        "peak_copies": 2,
+        "scaffold_bytes": 4034260000
+      },
+      "disk_member_law": {
+        "intercept": 100449105.08699867,
+        "largest_abs_residual": 1390154.83881706,
+        "largest_positive_residual": 1390154.83881706,
+        "n": 12,
+        "residual_sd": 605142.4934856106,
+        "slope": 469181.9308899403
       },
       "dwell_increase_s": 2908.8,
-      "estimated_footprint_bytes": 14800000000,
+      "estimated_footprint_bytes": 40124349768,
       "flags": [
         "sizing.planning_bound_unmeasured"
       ],
       "long_context_factors": {
         "decode": 0.4414624634054356,
         "prefill": 0.5851028064907574
+      },
+      "member_cap": {
+        "session_wait_budget_s": 7200,
+        "spent_corner": "Only repeated failed idle admissions spend the budget: a nonquiet Mac, already physics-flagged; lead accepts this corner.",
+        "spent_s": 1800,
+        "unspent_s": 3300
       },
       "member_count": 37,
       "member_law": {
@@ -107,7 +162,7 @@
         "slope": 1.153133508975324
       },
       "pack_id": "align-pilot-v1",
-      "programmed_span_s": 39172.733792538274,
+      "programmed_span_s": 36529.721989721875,
       "scaffold_flags": [],
       "scaffold_members": 25,
       "scaffold_s": 4973

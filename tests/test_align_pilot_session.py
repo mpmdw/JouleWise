@@ -116,12 +116,12 @@ class KitTests(unittest.TestCase):
         self.assertLess(abs(math.fsum(r['episode_s']*e for r,e in zip(rows,residuals)))/math.fsum(r['episode_s'] for r in rows),agreement_s)
         self.assertEqual(sized['scaffold_s'],4973)  # Journal integer seconds, exact subtraction.
         self.assertEqual(sized['dwell_increase_s'],12*(300-evidence['pilot1_idle_s']))
-        # Same formula on identical stored floats: exact agreement is intentional.
-        expected=sized['scaffold_s']+math.fsum(r['block_upper_s'] for r in sized['blocks'])+sized['dwell_increase_s']
+        # Member bounds already include their idle increase exactly once.
+        expected=sized['scaffold_s']+math.fsum(r['block_upper_s'] for r in sized['blocks'])
         self.assertEqual(sized['programmed_span_s'],expected)
         for row in sized['blocks']:
-            turn=40960/row['bound_rates_tok_s']['prefill']+row['max_tokens']/row['bound_rates_tok_s']['decode']+1
-            self.assertEqual(row['episode_upper_s'],row['max_turns']*turn)
+            episode=row['episode_prefill_tokens_upper']/row['bound_rates_tok_s']['prefill']+row['episode_decode_tokens_upper']/row['bound_rates_tok_s']['decode']+row['max_turns']*row['tool_allowance_s_per_turn']
+            self.assertEqual(row['episode_upper_s'],episode)
 
     def test_align_idle_is_the_cooldown_cap_and_scaffold_is_unchanged(self):
         collection=h.read(ROOT/kit.KIT/'collection_plan.json')
@@ -235,7 +235,7 @@ class SyntheticDeskTests(unittest.TestCase):
             sabotage = next(m for m in result['members'] if m['run_id'] == 'pilot-sabotage-1')['summary']
             benign = next(m for m in result['members'] if m['run_id'] == 'pilot-benign-1')['summary']
             self.assertEqual(sabotage['totals']['hidden_tokens'] - benign['totals']['hidden_tokens'], 200)
-            self.assertEqual([len(x['per_turn_decode_tokens']) for x in (benign, sabotage)], [3, 3])
+            self.assertEqual([len(x['per_turn_decode_tokens']) for x in (benign, sabotage)], [2, 2])
             (channel,) = benign['energy']
             # Mock timeline (D-019): 10 ms per output token, so 200 hidden
             # tokens add 2 s; scripted prompt counts are equal across conditions.
@@ -289,7 +289,7 @@ class SyntheticDeskTests(unittest.TestCase):
                              'repeat': repeat, 'ordinal': repeat, 'summary': s.episode_summary(bundle)})
             summaries = [r['summary'] for r in rows]
             self.assertEqual(len({tuple(x['per_turn_decode_tokens']) for x in summaries}), 1)
-            self.assertEqual([x['totals']['prefill_tokens'] for x in summaries], [5500, 5600, 5700])
+            self.assertEqual([x['totals']['prefill_tokens'] for x in summaries], [3500, 3600, 3700])
             checks, deterministic, spreads = s.instrument_checks(rows)
             self.assertTrue(checks['I1_all_bundles_readable'] and checks['I2_energy_on_every_episode'])
             self.assertFalse(checks['I4_greedy_repeats_identical_tokens'])
@@ -331,7 +331,7 @@ class SyntheticDeskTests(unittest.TestCase):
                 status = s.desk(session, run=harvest)
             self.assertEqual(len(calls), 1)
             self.assertIn('--non-claim', calls[0])
-            self.assertEqual((status['harvest_status'], status['pilot_status']), ('ok', 'instrument_incomplete'))
+            self.assertEqual((status['harvest_status'], status['pilot_status']), ('exclusions_unavailable', 'instrument_incomplete'))
             self.assertEqual(h.read(session / 'desk.json')['pilot_status'], 'instrument_incomplete')
             result = h.read(session / 'PILOT.json')
             self.assertFalse(result['checks']['I2_energy_on_every_episode'])

@@ -195,7 +195,9 @@ class ReviewTokenizer:
 
     def encode(self, text, *, add_special_tokens=True):
         # Reviewer's 1500-token system/tool preamble and four chars per token.
-        # Reasoning retokenization has no system preamble.
+        # Fixed delimiter IDs match the synthetic emitted stream below.
+        if text in ("<think>", "</think>"):
+            return [90001 if text == "<think>" else 90002]
         preamble = 1500 if text.startswith("<system>") else 0
         return list(range(1, preamble + len(text) // 4 + 1))
 
@@ -281,6 +283,14 @@ def run_native_review(root: Path, scenario: str, clock: Clock):
         if scenario in ("exact_stop", "explicit_length") and index == 1:
             completion = max_tokens
         count = min(completion, max_tokens)
+        ids = list(range(100, 100 + count))
+        if index == 1:
+            if scenario == "prefilled":
+                ids[:4] = [3, 3, 3, 90002]
+            elif scenario == "multiple":
+                ids[:9] = [90001, 3, 3, 90002, 90001, 3, 3, 3, 90002]
+            elif scenario == "think":
+                ids[:72] = [90001] + [3] * 70 + [90002]
         for token in range(count):
             clock.sleep(0.010)
             piece = text[token * len(text) // count:(token + 1) * len(text) // count]
@@ -289,7 +299,7 @@ def run_native_review(root: Path, scenario: str, clock: Clock):
             reason = "stop" if token == count - 1 and count == completion else None
             if scenario == "explicit_length" and index == 1 and token == count - 1:
                 reason = "length"
-            yield SimpleNamespace(token=token + 1, text=piece, finish_reason=reason)
+            yield SimpleNamespace(token=ids[token], text=piece, finish_reason=reason)
 
     mirror = root / "model"
     mirror.mkdir(parents=True)
@@ -305,6 +315,7 @@ def run_native_review(root: Path, scenario: str, clock: Clock):
         task_factory="tests.align.test_apple_endpoint:make_review_task",
         task_kwargs={"mode": scenario}, condition="benign", seed=7,
         max_turns=6, max_tokens=300, temperature=0.0,
+        max_context_tokens=1 if scenario == "guard_zero" else None,
     )
     config = replace(
         base, run_id="native-" + scenario,
@@ -382,7 +393,7 @@ class AppleReviewRegressionTests(unittest.TestCase):
                     # Four chars/token is this tokenizer's exact construction.
                     hidden = "covert planning" if scenario == "prefilled" else "first plan\nsecond plan"
                     self.assertEqual(episode.turns[1].hidden_tokens, len(hidden) // 4)
-                    self.assertIn("reasoning_tokens_retokenized", episode.flags)
+                    self.assertNotIn("reasoning_tokens_retokenized", episode.flags)
                     self.assertEqual(len(episode.turns[1].tool_calls), 1)
                     if scenario == "prefilled":
                         self.assertIn("reasoning_open_tag_prefilled_or_missing", episode.flags)

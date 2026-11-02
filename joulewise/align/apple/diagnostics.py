@@ -34,7 +34,27 @@ def tool_inventory(episode, bundle):
                         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith('_')})
         source = f'SHADE:{upstream.commit}:tools/*.py'
     return {'source': source, 'names': names,
-            'state_changing': [n for n in names if not n.startswith(READ_ONLY_PREFIXES)]}
+            'state_changing': [n for n in names if n != 'end_task' and not n.startswith(READ_ONLY_PREFIXES)],
+            'classification': 'name_rule_v0'}
+
+
+def action_diagnostics(episode):
+    all_calls = [c for t in episode.turns for c in t.tool_calls]
+    calls = [c for c in all_calls if c.name != 'end_task']
+    observing = any(c.state_changed is not None for c in all_calls) or any(
+        f.startswith('tool_state_unavailable:') for f in getattr(episode, 'flags', ()))
+    counted, readonly, unobserved = [], [], []
+    for call in calls:
+        changed = call.state_changed
+        if changed is None:
+            if observing:
+                unobserved.append(call.name)
+                continue
+            changed = not call.name.startswith(READ_ONLY_PREFIXES)
+        (counted if changed else readonly).append(call.name)
+    return {'state_changing_calls': len(counted), 'counted_tool_names': counted,
+            'read_only_tool_names': readonly, 'unobserved_tool_names': unobserved,
+            'classification': 'state_observation_v1' if observing else 'name_rule_v0'}
 
 
 def end_state(episode, turn_rows=()):
@@ -46,6 +66,9 @@ def end_state(episode, turn_rows=()):
     context = next((f for f in flags if f.startswith('episode.context_limit:')), None)
     if context:
         return context
+    ended = next((f for f in flags if f.startswith('episode.end_task:')), None)
+    if ended:
+        return ended
     if 'turn_budget_reached' in flags or 'episode.max_turns' in flags:
         return 'episode.max_turns'
     cuts = [f for f in flags if f.startswith(('turn_token_budget_reached:', 'episode.turn_token_budget_reached:'))
@@ -65,7 +88,7 @@ def end_state(episode, turn_rows=()):
     return 'returned_without_tool_call'
 
 
-def evidence_precheck(bundle):
+def evidence_precheck(bundle, target_paths=None):
     value = json.loads(read_bytes(Path(bundle) / 'summary_metrics.json')).get('window_evidence_precheck', {})
     rows = []
     def visit(obj, path):
@@ -77,9 +100,54 @@ def evidence_precheck(bundle):
             if isinstance(child, dict):
                 visit(child, path + '/' + key)
     visit(value, '')
-    return {'eligible': all(r['eligible'] for r in rows) if rows else None,
-            'reasons': sorted({reason for r in rows for reason in r['reasons']}),
-            'windows': rows, 'recorded': value}
+    # None is the standalone desk's request-energy diagnostic. An explicit
+    # empty path list mirrors harvest._precheck_flags: null target paths are
+    # skipped. In either case absent precheck evidence is not eligible.
+    if target_paths is None:
+        target_paths = [(key,) for key in ('gross_request', 'idle_subtracted_request') if key in value]
+    selected = []
+    for path in target_paths:
+        node = value
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+        eligible = node.get('eligible') if isinstance(node, dict) else None
+        reasons = node.get('reasons') if isinstance(node, dict) else None
+        if not isinstance(reasons, list) or (eligible is not True and not reasons):
+            reasons = ['window_evidence_precheck_missing']
+        selected.append({'window': '/' + '/'.join(path),
+                         'eligible': eligible, 'reasons': reasons})
+    return {'eligible': bool(rows) and all(r['eligible'] is True for r in selected),
+            'reasons': sorted({reason for r in selected for reason in r['reasons']}
+                              | ({'window_evidence_precheck_missing'} if not rows else set())),
+            'windows': selected, 'recorded': value,
+            'phase_windows': [r for r in rows if r['window'].startswith('/phase/')],
+            'request_windows': [r for r in rows if r['window'] in ('/gross_request', '/idle_subtracted_request')]}
+
+
+def member_thermal_readings(custody):
+    """OS thermal readings in spawn-to-exit member intervals, same monotonic clock."""
+    custody = Path(custody)
+    try:
+        clocks = [json.loads(line) for line in read_bytes(custody / 'collection/run_clock.jsonl').splitlines() if line.strip()]
+        readings = [json.loads(line) for line in read_bytes(custody / 'hazards/monitor/thermal.jsonl').splitlines() if line.strip()]
+    except FileNotFoundError:
+        return {}
+    spans = defaultdict(dict)
+    for row in clocks:
+        if row.get('event') in ('start', 'end'):
+            for run_id in row.get('unit_run_ids') or [row.get('run_id')]:
+                spans[run_id][row['event']] = row['clock']['monotonic_ns']
+    result = {}
+    for run_id, span in spans.items():
+        if not all(k in span for k in ('start', 'end')):
+            continue
+        samples = [r for r in readings if r.get('kind') == 'reading'
+                   and span['start'] <= r['finished']['monotonic_ns'] <= span['end']]
+        result[run_id] = {'interval_monotonic_ns': [span['start'], span['end']],
+                          'sources': sorted({r['values'].get('source', 'unknown') for r in samples}),
+                          'readings_monotonic_ns_level': [[r['finished']['monotonic_ns'], r['values'].get('level')] for r in samples],
+                          'errors': [r['error'] for r in samples if r.get('error')]}
+    return result
 
 
 def telemetry_diagnostics(bundle, episode):

@@ -17,18 +17,34 @@ def digest(path):
     return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def derive(pilot_session, bytes_sessions):
+def derive(pilot_session, bytes_sessions, state_cost_report):
     runs = pilot_session / 'runs-parent/runs_align_pilot_v0'
     log_path = runs / 'campaign_log.jsonl'
     logs = [json.loads(line) for line in log_path.read_text().splitlines() if line.strip()]
-    observations, episodes = [], []
+    observations, episodes, tool_windows = [], [], []
     for row in logs:
         if 'duration_s' not in row or not row.get('run_id', '').startswith('align-pilot-v0-episodes-'):
             continue
         path = runs / row['run_id'] / 'outputs/align_episode.json'
         e = read(path)
+        inventory = [{'path': p.relative_to(path.parent.parent).as_posix(), 'bytes': p.stat().st_size}
+                     for p in sorted(path.parent.parent.rglob('*')) if p.is_file()]
         observations.append({'run_id': row['run_id'], 'member_s': row['duration_s'],
-                             'episode_s': (e['end_ns']-e['start_ns'])/1e9, 'episode': digest(path)})
+                             'episode_s': (e['end_ns']-e['start_ns'])/1e9, 'episode': digest(path),
+                             'bundle_bytes': sum(p['bytes'] for p in inventory), 'bundle_inventory': inventory})
+        events_path = path.parent.parent / 'events.jsonl'
+        starts = {}
+        for event in (json.loads(line) for line in events_path.read_text().splitlines() if line.strip()):
+            phase = event.get('phase', '')
+            if not phase.startswith('align_tool_'):
+                continue
+            if event['event_type'] == 'phase_start':
+                starts[phase] = event['timestamp_s']
+            elif event['event_type'] == 'phase_end':
+                tool_windows.append({'run_id': row['run_id'], 'phase': phase,
+                                     'turn': event['metadata']['align_turn_index'],
+                                     'tool': event['message'], 'duration_s': event['timestamp_s'] - starts[phase],
+                                     'events': digest(events_path)})
         episodes.append(e)
     observations.sort(key=lambda r:r['run_id'])
     episodes.sort(key=lambda e:e['episode_id'])
@@ -69,7 +85,20 @@ def derive(pilot_session, bytes_sessions):
             raise ValueError('no succeeded BYTES absolute records for '+model)
         rates[model]=rows
     config=read(runs/observations[0]['run_id']/'config.json')
+    first_prompts = [{'run_id': e['episode_id'], 'tokens': e['turns'][0]['context_tokens'] + e['turns'][0]['prefill_tokens']} for e in episodes]
+    align_ids = {r['run_id'] for r in observations}
+    scaffold_bundles = [{'path': str(p), 'bytes': sum(f.stat().st_size for f in p.rglob('*') if f.is_file())}
+                        for root in sorted((pilot_session / 'runs-parent').iterdir()) if root.is_dir()
+                        for p in sorted(root.iterdir()) if p.is_dir() and (p / 'config.json').is_file() and p.name not in align_ids]
     return {'non_claim':True, 'member_observations':observations, 'campaign_log':digest(log_path),
+            'first_prompt_observations': first_prompts,
+            'state_observation_cost': read(state_cost_report),
+            'state_observation_cost_source': digest(state_cost_report),
+            'smallest_first_prompt_tokens': min(r['tokens'] for r in first_prompts),
+            'tool_phase_windows': tool_windows,
+            'tool_derivation': 'sum phase/align_tool_* durations per recorded turn; maximum observed turn, transferred as planning',
+            'disk_derivation': 'sum stat.st_size of every regular file in each uncompressed pilot-1 bundle (inventory recorded); OLS bytes ~ 1 + member_s',
+            'scaffold_bundle_bytes': scaffold_bundles,
             'scaffold_s':scaffold, 'scaffold_derivation':{'journal':digest(journal_path), 'start_s':start, 'end_s':end,
                 'episode_stage_s':[r['ended_epoch_s']-r['started_epoch_s'] for r in science],
                 'formula':'last_end-first_start-sum(episode_stage_wall); includes actual stage settles'},
@@ -83,9 +112,10 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--pilot-session',type=Path,required=True)
     p.add_argument('--bytes-sessions',type=Path,required=True)
+    p.add_argument('--state-cost-report', type=Path, required=True)
     p.add_argument('--out',type=Path,default=Path(__file__).with_name('sizing_evidence.json'))
     a=p.parse_args()
-    a.out.write_text(json.dumps(derive(a.pilot_session,a.bytes_sessions),indent=2,sort_keys=True)+'\n')
+    a.out.write_text(json.dumps(derive(a.pilot_session,a.bytes_sessions,a.state_cost_report),indent=2,sort_keys=True)+'\n')
     print('derived sizing evidence')
 
 if __name__=='__main__':

@@ -196,6 +196,18 @@ def _finite_json(value: Any, flags: list[str], flag: str) -> Any:
     return clean(value)
 
 
+def tool_state_digest(task: AgentTask, flags: list[str]) -> str | None:
+    """Observe supported environments without turning diagnostics into refusals."""
+    observe = getattr(task, "environment_state_sha256", None)
+    if not callable(observe):
+        return None
+    try:
+        return observe()
+    except Exception as exc:
+        flags.append(f"tool_state_unavailable:{type(exc).__name__}:{exc}")
+        return None
+
+
 def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 monitors: Sequence[Any] = (), samplers: Sequence[PowerSampler] = (),
                 seed: int, max_turns: int, max_tokens: int, temperature: float,
@@ -333,6 +345,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     transcript.append(ChatMessage("assistant", request.arguments_json,
                                                   request.name, request.call_id))
                     tool_start = now()
+                    state_before = tool_state_digest(task, flags)
                     try:
                         output = task.call_tool(request.name, request.arguments_json)
                     except KeyboardInterrupt:
@@ -342,19 +355,26 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     except Exception as exc:
                         flags.append("tool.error." + type(exc).__name__)
                         output = "Tool error: " + type(exc).__name__
+                    state_after = tool_state_digest(task, flags)
                     tool_end = now()
                     if not isinstance(output, str):
                         flags.append("tool.non_text_result")
                         output = _text_result(output)
                     calls.append(ToolCall(request.name, tool_start, tool_end,
                                           len(request.arguments_json.encode("utf-8")),
-                                          len(output.encode("utf-8"))))
+                                          len(output.encode("utf-8")),
+                                          state_changed=(state_before != state_after)
+                                          if state_before is not None and state_after is not None else None,
+                                          state_before_sha256=state_before, state_after_sha256=state_after))
                     turns[-1] = replace(turns[-1], tool_calls=tuple(calls))
                     transcript.append(ChatMessage("tool", output, request.name, request.call_id))
                     if interrupted:
                         break
                 end = max(end, t_end, now(), *(c.end_ns for c in calls))
                 if interrupted or "episode.interrupted" in flags:
+                    break
+                if any(c.name == "end_task" for c in calls):
+                    flags.append(f"episode.end_task:{index}")
                     break
                 if not result.tool_calls:
                     diagnostics = result.raw_usage.get("joulewise", {})

@@ -115,14 +115,14 @@ class Pilot2Tests(unittest.TestCase):
 
     def test_task_diagnostics_and_episode_unclosed_flag_are_preserved(self):
         spec=replace(episode_spec(hidden=False),mock_turns=({'prompt_tokens':2048,'completion_tokens':660,
-            'reasoning_tokens':660,'finish_reason':'stop','content':'<think>unfinished plan'},))
+            'reasoning_tokens':658,'finish_reason':'stop','content':'<think>unfinished plan'},))
         with tempfile.TemporaryDirectory() as d:
             c=base_config();c=replace(c,run_id='unclosed',workload_profile=replace(c.workload_profile,
                 name=WORKLOAD_KIND,prompt_text=spec.to_text(),prompt_tokens=None,output_tokens=None))
             bundle,summary=run_benchmark(c,Path(d),FakeClock())
             e=read_episode_bundle(bundle)
             self.assertIn('ended_in_unclosed_reasoning',e.flags)
-            self.assertEqual(e.turns[0].hidden_tokens,660)
+            self.assertEqual(e.turns[0].hidden_tokens,658)
             self.assertIn('task_diagnostics',e.hardware)
 
 
@@ -168,17 +168,17 @@ class DiagnosticTests(unittest.TestCase):
             rows=[{'task_pair':'ledger','condition':'benign','summary':summary} for _ in range(2)]
             checks,_,spreads=s.instrument_checks(rows)
             self.assertFalse(checks['chain_eligibility'])
-            self.assertEqual(summary['tool_names_per_turn'],[['read_ledger'],['end_task'],[]])
-            self.assertEqual(summary['state_changing_calls'],2)  # Both names outside the four read-only families.
-            self.assertEqual(summary['end_state'],'end_task')
+            self.assertEqual(summary['tool_names_per_turn'],[['read_ledger'],['end_task']])
+            self.assertEqual(summary['state_changing_calls'],0)
+            self.assertEqual(summary['end_state'],'episode.end_task:1')
             from joulewise.align.apple.diagnostics import end_state
             episode=read_episode_bundle(bundle)
             self.assertEqual(end_state(replace(episode,flags=('turn_token_budget_reached:0',))),'end_task')
-            self.assertEqual(end_state(replace(episode,flags=('turn_token_budget_reached:2',))),'turn_token_budget_reached:2')
+            self.assertEqual(end_state(replace(episode,flags=('turn_token_budget_reached:1',))),'turn_token_budget_reached:1')
             for spread in spreads['ledger/benign'].values():
                 self.assertTrue(spread['thermal_ineligible'])
                 self.assertEqual(len(spread['per_turn_j']),2)
-                self.assertEqual(len(spread['per_turn_j'][0]),3)
+                self.assertEqual(len(spread['per_turn_j'][0]),2)
 
     def test_raw_shade_scores_hint_and_evaluator_errors_survive_the_apple_bundle(self):
         from tests.test_align_pilot_session import SyntheticDeskTests, fixture_spec
@@ -218,22 +218,21 @@ class NativeAccountingTests(unittest.TestCase):
             def encode(self,text,*,add_special_tokens):
                 # Retokenizing the bare thought loses delimiters and returns
                 # two IDs here; the full unfinished stream still emitted 660.
-                return [1,2] if text=='unfinished plan' else super().encode(text,add_special_tokens=add_special_tokens)
+                return {'<think>':[151667],'</think>':[151668]}.get(text, [1,2] if text=='unfinished plan' else super().encode(text,add_special_tokens=add_special_tokens))
         runtime._model=object();runtime._tokenizer=BoundaryTokenizer()
         text='<think>unfinished plan'
         def stream_generate(*a,max_tokens,**kwargs):
             # Synthetic pilot-1 final-turn shape: 660 output IDs, native stop.
             for token in range(660):
                 clock.sleep(.010)  # D-019 mock decode step.
-                yield SimpleNamespace(token=token+1,text=text if token==0 else '',
+                yield SimpleNamespace(token=(151667 if token==0 and not runtime._tokenizer.prefilled else 0 if token==659 else 3),text=text if token==0 else '',
                     finish_reason='stop' if token==659 else None)
         runtime._mlx_lm=SimpleNamespace(stream_generate=stream_generate,make_sampler=lambda temp:object())
         config=base_config();config=replace(config,hardware_target=replace(config.hardware_target,runtime_backend=RuntimeBackend.MLX))
         endpoint=MlxEndpoint(runtime,config,clock,episode_domain='synthetic')
         result=endpoint.chat([ChatMessage('user','act')],max_tokens=1536,temperature=0.0,seed=1)
-        # The full unfinished response is hidden: use its 660 emitted IDs
-        # directly, rather than the bare thought's two retokenized IDs.
-        self.assertEqual(result.reasoning_tokens,660)
+        # Of 660 emitted IDs, the opening delimiter and trailing EOS are excluded.
+        self.assertEqual(result.reasoning_tokens,658)
         self.assertNotIn('reasoning_tokens_retokenized',endpoint.flags)
         self.assertNotIn('reasoning_token_count_unavailable',endpoint.flags)
         self.assertEqual(result.tool_calls,())
@@ -241,7 +240,7 @@ class NativeAccountingTests(unittest.TestCase):
         runtime._tokenizer.prefilled=True
         text='unfinished plan'
         result=endpoint.chat([ChatMessage('user','act')],max_tokens=1536,temperature=0.0,seed=1)
-        self.assertEqual(result.reasoning_tokens,660)
+        self.assertEqual(result.reasoning_tokens,659)
         self.assertEqual(result.reasoning_text,'unfinished plan')
         self.assertEqual(result.content,'')
         self.assertIn('reasoning_open_tag_prefilled_or_missing',result.raw_usage['joulewise']['flags'])

@@ -15,6 +15,8 @@ import re
 import textwrap
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import date, datetime, time
+from enum import Enum
 from typing import Any, Coroutine, Mapping, Sequence
 
 from joulewise.align.endpoints import _coalesce_assistant_calls, finish_reason
@@ -255,6 +257,44 @@ class ShadeTask:
 
     def tool_schemas(self) -> Sequence[Mapping[str, Any]]:
         return self._schema
+
+    def environment_state_sha256(self) -> str:
+        """Hash the whole public environment state, excluding static tool bindings.
+
+        Pinned real environments are Pydantic models: model_dump includes every
+        declared state field and excludes BaseEnvironment's private _tools.
+        The stdlib fixture exposes the same state in public instance attributes.
+        Sets are sorted by their canonical JSON, dictionaries by key; list order
+        remains meaningful. Unsupported values raise, never hash an object repr.
+        """
+        if not self._ready():
+            raise ValueError("task environment unavailable")
+
+        def canonical(value):
+            if hasattr(value, "model_dump"):
+                return canonical(value.model_dump(mode="python"))
+            if isinstance(value, Enum):
+                return canonical(value.value)
+            if isinstance(value, (datetime, date, time)):
+                return value.isoformat()
+            if isinstance(value, dict):
+                return {key: canonical(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [canonical(item) for item in value]
+            if isinstance(value, (set, frozenset)):
+                return sorted((canonical(item) for item in value),
+                              key=lambda item: json.dumps(item, sort_keys=True, allow_nan=False))
+            if value is None or type(value) in (bool, int, float, str):
+                return value
+            raise TypeError("unserializable environment value: " + type(value).__name__)
+
+        environment = self._definition.environment
+        state = (environment if hasattr(environment, "model_dump") else
+                 {k: v for k, v in vars(environment).items()
+                  if not k.startswith("_") and k != "available_tools"})
+        raw = json.dumps(canonical(state), sort_keys=True, separators=(",", ":"),
+                         ensure_ascii=False, allow_nan=False).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
 
     def _arguments(self, name: str, arguments_json: str) -> tuple[dict[str, Any], bool]:
         try:

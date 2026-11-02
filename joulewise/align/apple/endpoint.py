@@ -19,6 +19,41 @@ from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mappin
 from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
+
+def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False):
+    """Count reasoning content in the emitted IDs; delimiters/EOS are not content.
+
+    Only the fixed delimiters are encoded to locate their ID sequences. The
+    generated text is never retokenized, including at native stop or length cut.
+    """
+    from joulewise.adapters.mlx_runtime import _encode
+    opening = _encode(tokenizer, "<think>", add_special_tokens=False)
+    closing = _encode(tokenizer, "</think>", add_special_tokens=False)
+    ids = list(output_ids)
+    eos = getattr(tokenizer, "eos_token_ids", None)
+    if eos is None:
+        eos = getattr(tokenizer, "eos_token_id", ())
+    eos = {eos} if isinstance(eos, int) else set(eos or ())
+    if ids and ids[-1] in eos:
+        ids.pop()
+    def first(sequence):
+        return next((i for i in range(len(ids)) if ids[i:i+len(sequence)] == list(sequence)), len(ids)) if sequence else len(ids)
+    # Some templates prefill the opening tag; a leading close in the emitted
+    # IDs is also exact evidence that the initial content was reasoning.
+    active = reasoning_open or first(closing) < first(opening)
+    count, index = 0, 0
+    while index < len(ids):
+        if opening and ids[index:index + len(opening)] == list(opening):
+            active = True
+            index += len(opening)
+        elif closing and ids[index:index + len(closing)] == list(closing):
+            active = False
+            index += len(closing)
+        else:
+            count += int(active)
+            index += 1
+    return count
+
 _TOOL_CALL = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
 
@@ -208,8 +243,10 @@ class MlxEndpoint:
         if self.config.hardware_target.runtime_backend == RuntimeBackend.MOCK:
             script = self.mock_turns[self._turn] if self._turn < len(self.mock_turns) else {}
             if "prompt_tokens" in script:
-                return int(script["prompt_tokens"])
-            return len(json.dumps([m.__dict__ for m in messages], sort_keys=True).split())
+                count = int(script["prompt_tokens"])
+            else:
+                count = len(json.dumps([m.__dict__ for m in messages], sort_keys=True).split())
+            return count
         from joulewise.adapters.mlx_runtime import _encode
         return len(_encode(self.runtime._tokenizer, self._render_prompt(messages, tools), add_special_tokens=False))
 
@@ -344,14 +381,9 @@ class MlxEndpoint:
                     "stop_condition": finish_reason or record.stop_condition,
                     "runtime_stop_condition": record.stop_condition,
                 }
-                _, hidden, _, _ = parse_completion(text, reasoning_open=reasoning_open_from_template)
-                if hidden:
-                    # Retokenization is labelled because token boundaries at
-                    # the reasoning delimiters need not match the stream.
-                    reasoning_tokens = min(
-                        completion_tokens, len(_encode(tokenizer, hidden, add_special_tokens=False))
-                    )
-                    flags.append("reasoning_tokens_retokenized")
+                reasoning_tokens = reasoning_tokens_from_ids(
+                    tokenizer, record.output_token_ids, reasoning_open=reasoning_open_from_template)
+                provenance["reasoning_token_accounting"] = "output_ids_between_think_delimiters_excluding_trailing_eos"
             else:
                 raise ValueError("align_episode supports only mock and mlx backends")
             for event in new_events:
@@ -408,21 +440,7 @@ class MlxEndpoint:
             )
             reasoning = "\n".join(part for part in (prior, tail) if part)
             flags.extend(prefix_flags)
-            if self.config.hardware_target.runtime_backend == RuntimeBackend.MLX:
-                reasoning_tokens = min(completion_tokens, sum(
-                    len(_encode(tokenizer, part, add_special_tokens=False))
-                    for part in (prior, tail) if part))
-                flags.append("reasoning_tokens_retokenized")
             flags.append("reasoning_censored_at_token_limit")
-        if "unclosed_reasoning_span" in parse_flags and not visible:
-            # Every emitted ID belongs to the unfinished reasoning response,
-            # including its delimiters. Use the stream count, not a retokenized
-            # tail that can lose delimiter/boundary tokens (pilot 1: all 660).
-            reasoning_tokens = completion_tokens
-            flags = [f for f in flags if f not in (
-                "reasoning_tokens_retokenized", "reasoning_token_count_unavailable")]
-            provenance["reasoning_token_accounting"] = "entire_completion_unclosed_reasoning"
-            flags.append("reasoning_tokens_full_unclosed_completion")
         calls = tuple(replace(call, call_id=f"{turn_index}-{call.call_id}") for call in calls)
         self.flags.extend(flags)
         self.turn_provenance.append({

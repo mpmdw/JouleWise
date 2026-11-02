@@ -1,16 +1,16 @@
 {
-  "identity_pins_sha256": "4a59cffdc9bd0a70bce95770475895f5e10913471ae83993b5bb150d7df2640f",
+  "identity_pins_sha256": "72430a7e3415519d90fd798b9ecd4848177638523bf848611fc4411fb48183e6",
   "non_claim": true,
-  "runtime_python_observed": "/opt/homebrew/bin/python3.13",
+  "runtime_python_observed": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
   "runtime_versions": {
     "packages": {
-      "mlx": null,
-      "mlx-lm": null,
-      "mlx-metal": null,
-      "numpy": null,
-      "safetensors": null,
-      "tokenizers": null,
-      "transformers": null
+      "mlx": "0.31.2",
+      "mlx-lm": "0.31.3",
+      "mlx-metal": "0.31.2",
+      "numpy": "2.5.1",
+      "safetensors": "0.8.0",
+      "tokenizers": "0.22.2",
+      "transformers": "5.12.1"
     },
     "python": "3.13.1"
   },

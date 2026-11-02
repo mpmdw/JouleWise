@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/align_pilot_kit.py",
-    "sha256": "6b69f885d373de9b30ccda60a90b56116fa85df71bf7f6b792c38f0985925337"
+    "sha256": "9935626595d2394b1525629fccb4d8420b478e1fa1845f9fcef901de3eeb6e9c"
   },
   "module_order": [
     "bytes-qwen3-1p7b",
@@ -77,8 +77,8 @@
   ],
   "non_claim": true,
   "plan": {
-    "actual_sha256": "fff831d63016ef2151b9b959ffdf8c9e73f284c0cb423ecdee44f51a4d18b2a5",
-    "declared_sha256": "fff831d63016ef2151b9b959ffdf8c9e73f284c0cb423ecdee44f51a4d18b2a5",
+    "actual_sha256": "832147e16b5738f3a7a44cca1b0c05164d8d9ad6c03c6b340da7702685c2c294",
+    "declared_sha256": "832147e16b5738f3a7a44cca1b0c05164d8d9ad6c03c6b340da7702685c2c294",
     "path": "collection_plan.json",
     "plan_id": "align-pilot-v1"
   },
@@ -246,7 +246,7 @@
       "block_index": 5,
       "config": "align-pilot-v1-episodes-b-e09.json",
       "config_path": "configs/campaigns/align_pilot_v1/stages/episodes-b/align-pilot-v1-episodes-b-e09.json",
-      "config_sha256": "77ec987f3254a22be7d6b2daa2eea765983bd3543a3214791af7d32ad536e068",
+      "config_sha256": "a36ecbaeadc9f3befb189e7e0b2ef7ce3579be48d2b73e0b8b67384db566bbe6",
       "index": 5,
       "model_tag": "qwen3-next-80b-mlx",
       "module_id": "align-pilot-v1-qwen3-next-80b",
@@ -265,7 +265,7 @@
       "block_index": 6,
       "config": "align-pilot-v1-episodes-b-e10.json",
       "config_path": "configs/campaigns/align_pilot_v1/stages/episodes-b/align-pilot-v1-episodes-b-e10.json",
-      "config_sha256": "30cf0f840a9c9e687dbb392c0b0fcfb1409f2287fc10a52e1bb332e2d8a02d3f",
+      "config_sha256": "15faa3b14e85a186267ff2648b4eb8b15007ba5535e9c2ccdf7d2b6b40fdd796",
       "index": 6,
       "model_tag": "qwen3-next-80b-mlx",
       "module_id": "align-pilot-v1-qwen3-next-80b",
@@ -284,7 +284,7 @@
       "block_index": 7,
       "config": "align-pilot-v1-episodes-b-e11.json",
       "config_path": "configs/campaigns/align_pilot_v1/stages/episodes-b/align-pilot-v1-episodes-b-e11.json",
-      "config_sha256": "4aad08b13d7cb81445e20ed2cefb2ae5fd6d34ab813d26bb6873c827a9786566",
+      "config_sha256": "061afc576e4299f98c1de6f70562e02a0f48183d18ed77f7c3baef92ccc09ce7",
       "index": 7,
       "model_tag": "qwen3-next-80b-mlx",
       "module_id": "align-pilot-v1-qwen3-next-80b",
@@ -303,7 +303,7 @@
       "block_index": 8,
       "config": "align-pilot-v1-episodes-b-e12.json",
       "config_path": "configs/campaigns/align_pilot_v1/stages/episodes-b/align-pilot-v1-episodes-b-e12.json",
-      "config_sha256": "1e9277a38cadc0c81db0ede3cd8c4229a71f5b25b416912b2a34d1050b43b35a",
+      "config_sha256": "5f2f9a12b126d79f22b8df5a47e33f3577fde3b264a5d57b4635df83ac47c19b",
       "index": 8,
       "model_tag": "qwen3-next-80b-mlx",
       "module_id": "align-pilot-v1-qwen3-next-80b",
@@ -1028,7 +1028,7 @@
         "kind": "manifest",
         "manifest_id": "align-pilot-v1-episodes-b",
         "path": "configs/campaigns/align_pilot_v1/stages/episodes-b/order_manifest.json",
-        "sha256": "b2d03e0b99bc5a940ac474ca83a071724d22ed627ff4f0a346965de5eba7c7dc"
+        "sha256": "4bde828b56f77b54fe1c2980779e2e5e1e64412a52dd7f37e1033adb2269189c"
       },
       "kind": "campaign_collection",
       "launch": {

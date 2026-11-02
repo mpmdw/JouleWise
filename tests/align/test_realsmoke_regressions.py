@@ -606,7 +606,7 @@ class RealSmokeRegressions(unittest.TestCase):
             def apply_chat_template(self, messages, **kwargs):
                 self.messages, self.kwargs = messages, kwargs
                 return 'synthetic rendered prompt'
-            def encode(self, text, **kwargs): return [1, 2, 3]
+            def encode(self, text, **kwargs): return {'<think>':[10],'</think>':[11]}.get(text,[1,2,3])
         runtime._tokenizer = Tokenizer()
         def stream_generate(*args, **kwargs):
             clock.sleep(.1)
@@ -646,23 +646,25 @@ class RealSmokeRegressions(unittest.TestCase):
                 class Tokenizer:
                     eos_token_ids = {0}
                     def apply_chat_template(self, *args, **kwargs): return 'prompt'
-                    def encode(self, text, **kwargs): return [1, 2, 3]
+                    def encode(self, text, **kwargs): return {'<think>':[10],'</think>':[11]}.get(text,[1,2,3])
                 runtime._tokenizer = Tokenizer()
                 def stream_generate(*args, **kwargs):
-                    clock.sleep(.1)
-                    yield SimpleNamespace(token=1, text=prefix+'<think>unfinished', finish_reason=finish)
+                    ids=([4] if prefix==tool else [10,3,11] if prefix==closed else [])+[10,3]
+                    for index,token in enumerate(ids):
+                        clock.sleep(.1/len(ids))  # Same synthetic 100 ms call.
+                        yield SimpleNamespace(token=token,text=prefix+'<think>unfinished' if index==0 else '',finish_reason=finish if index==len(ids)-1 else None)
                 runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: None)
                 cfg = config()
                 cfg = replace(cfg, hardware_target=replace(cfg.hardware_target, runtime_backend=RuntimeBackend.MLX))
                 endpoint = MlxEndpoint(runtime, cfg, clock, episode_domain='host')
-                result = endpoint.chat([ChatMessage('user', 'review')], max_tokens=1, temperature=0., seed=0)
+                result = endpoint.chat([ChatMessage('user', 'review')], max_tokens=8, temperature=0., seed=0)
                 flags = result.raw_usage['joulewise']['flags']
                 self.assertIn('unclosed_reasoning_span', flags)
                 if finish == 'stop':
                     self.assertEqual(result.content, '')
                     self.assertEqual(result.reasoning_text, 'unfinished')
                     self.assertEqual(result.reasoning_tokens, 1)  # Entire one-ID unfinished completion is hidden.
-                    self.assertIn('reasoning_tokens_full_unclosed_completion', flags)
+                    self.assertNotIn('reasoning_tokens_retokenized', flags)
                     self.assertNotIn('reasoning_censored_at_token_limit', flags)
                 else:
                     # An earlier closed span in the same turn stays reasoning.
@@ -670,11 +672,11 @@ class RealSmokeRegressions(unittest.TestCase):
                                      'plan\nunfinished' if prefix == closed else 'unfinished')
                     self.assertEqual(result.content, '' if prefix == closed else prefix)
                     self.assertGreater(result.reasoning_tokens, 0)
-                    self.assertEqual(result.reasoning_tokens, 1)  # min(1 emitted, 3 retokenized), integer.
+                    self.assertEqual(result.reasoning_tokens, 2 if prefix==closed else 1)  # Exact content IDs.
                     if prefix == tool:
-                        self.assertIn('reasoning_tokens_retokenized', flags)
+                        self.assertNotIn('reasoning_tokens_retokenized', flags)
                     else:
-                        self.assertIn('reasoning_tokens_full_unclosed_completion', flags)
+                        self.assertNotIn('reasoning_tokens_retokenized', flags)
                     self.assertIn('reasoning_censored_at_token_limit', flags)
                     self.assertEqual([c.name for c in result.tool_calls], ['read_page'] if prefix == tool else [])
 
