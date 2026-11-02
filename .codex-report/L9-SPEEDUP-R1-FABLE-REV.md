@@ -391,3 +391,226 @@ S3_PIN4_NEUTRALITY 3 PASS
 
 No High or Medium findings. Findings 1-3 are Low and do not change any output of the shipped
 head; 4-7 are Info. Recommend ACCEPT, with findings 1-3 dispositioned to a named follow-up lane.
+
+---
+
+# Delta review: `1f96b8bd9` and `5f9f6cb749c538d3c4e0ce20dc5cdd576c6a45d0` (on top of fd7d91b1f)
+
+DELTA VERDICT: ACCEPT
+
+Reviewed cold in a third detached worktree `/private/tmp/jwr1rev-fable-delta` at `5f9f6cb74`
+(`git log fd7d91b1f..origin/lane/2026-11-01-l9-speedup-r1` lists exactly these two commits).
+Synthetic only; no full rerun (the synthetic chain never stops at a refusal, so the fix cannot change
+its outputs; the proof above already covers the no-stop path).
+
+## `1f96b8bd9` — `configs/gates/hazard_refusals.json` only
+
+- `joulewise/analysis_member_pool.py` and `joulewise/analysis_run_cache.py` added to
+  `scan.not_scanned` with reason `analysis` (the same reason as `analysis_engine/*`,
+  `analysis_manifest*.py`). Checked against the code: both modules are inert outside
+  `analysis_run_caches()`; their only raises are `TypeError`s on constructor arguments reachable
+  solely from the block-5 driver and its workers. Appropriate.
+- One `INTERNAL` site for `cli._strict_uncertainty_evidence_problems` raising
+  `_StrictClockEvidenceMemoHit`. Checked: the raise is caught by `except _StrictClockEvidenceMemoHit`
+  in the same function, which then runs the same `clock_anchor != expected` comparison on the
+  memoized (deep-copied) evidence; the memo table is `None` outside a run, so the raise is
+  unreachable during collection. The `protects` text is accurate. Guard digest is verified by the
+  test itself.
+
+```
+$ python3.13 -m unittest tests.hazards.test_refusal_allowlist tests.b5_analysis.test_parallel_steps   (at 5f9f6cb74)
+Ran 34 tests in 152.927s
+OK (skipped=1)
+$ python3.13 -m tests.hazards.refusal_census | tail -5
+ "stale": [],
+ "miscounted": [],
+ "guard_changed": [],
+ "scope_gaps": []
+```
+
+## `5f9f6cb74` — count worker deadline observations only for consumed tasks
+
+The bug (merged-tree finding, MEDIUM) is real in fd7d91b1f: `_account_deadlines(s, state)` used
+`dispatch`'s `WorkerDeadlineState`, which `collect()` aggregates over **every** pooled task. A task
+after the refusal stop, which a serial run never starts, could add firings (step record replaced by
+`calibration_wall_deadline_fired`, exit 2 instead of the serial exit 3 outcome) or an `unavailable`
+flag (`calibration_deadline_observer_unavailable`). Confirmed by running the path check below against
+fd7d91b1f: 13 subtests fail there, including step 4 (`22 != 4`, `21 != 3`, post-stop `None`
+refusing).
+
+### `consumed` on every path
+
+Serial semantics to match: task i's firings reach the driver observer iff the serial loop
+*started* task i, i.e. every earlier task passed and the `require_primary_context`/`rehash` before
+task i passed; the stopping task itself counts (it ran), and the run loop's deadline check then
+overrides its record, so the stopping task's own firing must be included.
+
+`consumed` is set to `i+1` after the re-authentication block and before any decision on task i, in
+all three functions, and the `finally` passes `results[:consumed]`:
+
+| path | serial tasks started | `consumed` | correct |
+|---|---|---|---|
+| normal completion of n tasks | 0..n-1 | n (last iteration) | yes |
+| refusal / exception / missing output / rereduction mismatch / step-4 non-ok record at task i | 0..i | i+1 (set before the decision) | yes |
+| `require_primary_context`/`rehash` refuses before task i (i>=1) | 0..i-1 | i (left from iteration i-1; the `raise` happens before `consumed=i+1`) | yes |
+| `require_primary_context`/`rehash` refuses before the pool (top of function) | none | `_dispatch` not reached, `finally` not entered | yes (serial raises at its first `invoke`) |
+| `_dispatch` raises (worker process lost) | n/a | `finally` not entered; `_account_deadlines` never runs | acceptable: the run loop records the step exit 2 (tooling), fail closed, same as pre-fix |
+| step 2 `s.path` refusal before the pool | n/a | returns `None`, serial fallback | yes |
+| an `AnalysisRefusal` from `s.register` / `s.record` inside iteration i | 0..i | i+1 | yes (serial ran task i before registering) |
+
+`_account_deadlines` itself: `sum(res.firings or 0 ...)` then `any(res.firings is None ...)` over the
+consumed slice; a `None` among consumed still refuses `OBSERVER_UNAVAILABLE`, a `None` after the stop
+no longer does. The `state` returned by `dispatch` is now ignored by all three callers (`_`).
+
+Path check (`/private/tmp/jwr1rev-fable-tmp/delta/delta_paths.py`, mocked `_dispatch` returning
+canned `ChildResult`s, `_stop_at`, `require_primary_context`, `require_rereduction_matches_stored`,
+`_step_4_classify`; real `_step_{1,2,4}_parallel` and `_account_deadlines`), 9 subtests per function:
+normal completion; refusal at 0; refusal at 1; rehash failure before task 1; before task 2; post-stop
+`None` does not refuse; `None` at the stop task refuses; `None` before a rehash failure refuses;
+exception before the loop counts nothing. Results: fd7d91b1f `FAILED (failures=3)` (13 failing
+subtests across all three functions); 5f9f6cb74 `Ran 3 tests … OK`.
+
+### Other post-stop effects
+
+Checked everything a post-stop task can touch:
+
+- Its logs, its output file and the empty output directories are removed by `_stop_at`/`discard_after`
+  (tested at the PR level, mutant D7). `dispatch` returns only after `pool.shutdown(wait=True)`, so no
+  child is still writing when `_stop_at` runs.
+- It is never registered (`s.register` happens only in the consumed loop) and never recorded.
+- `r._counter` is reset to the serial value.
+- Its worker-process memos and physics are process-local and gone with the step pool.
+- **Physics merge in `dispatch.collect()`**: a post-stop task with `firings == 0` still has its
+  worker store merged into `s.physics_store`. Assessment: this cannot change a record or an exit
+  code. The merged entries are verified fits (the frozen reducer stores an entry only after its
+  artifact/plist/events hash checks and a successful fit), deterministic in the calibration bytes
+  and the metadata partition, so they are what any later refit would compute; and after a stopping
+  step the run loop sets `stopped=True` and every later step is `not_run`, so the store is never
+  consulted again in that run (nothing after the step loop reads it). The only residue is state a
+  serial run would not hold, for a run that is already refused. Info; a one-line comment in
+  `collect()` or merging only `results[:consumed]` from the callers (keeping the seed merge, which
+  the scheduling relies on) would make the equivalence explicit.
+- The regression test uses `late_firing_worker`/`late_blind_worker` keyed on `GOOD[2]`'s path in
+  `task.argv`, so the firing/blind task is exactly the post-stop one; `assertSameRun` compares
+  records, registered digests, tree, files and counter with serial, and `firings == 0`.
+
+### Mutants of the fix (applied in the delta worktree, run against the author's regression test
+and my path check, reverted with `git checkout`)
+
+| id | mutant | author's suite | path check |
+|---|---|---|---|
+| MU1 | step 2 `consumed=len(results)` (revert) | KILLED (`test_observations_after_the_stop_do_not_count`) | KILLED |
+| MU2 | step 2 `consumed=i` (stop task excluded) | KILLED | KILLED (normal completion, refusal at 0/1) |
+| MU3 | step 1 `consumed=len(results)` (fix absent in step 1) | **SURVIVED** | KILLED |
+| MU4 | step 4 `consumed=len(results)` (fix absent in step 4) | **SURVIVED** | KILLED |
+| MU5 | `_account_deadlines` ignores a `None` observer | KILLED (`test_a_worker_without_an_observer_refuses`) | KILLED |
+| MU6 | `_account_deadlines` drops firings | KILLED (`test_a_wall_deadline_in_a_worker_fails_the_step_closed`) | KILLED |
+
+### Delta findings
+
+D1. **Low – test gap: the regression test covers step 2 only.** MU3 and MU4 (the fix missing in
+    `_step_1_parallel` / `_step_4_parallel`) pass the whole `test_parallel_steps` module. Failure
+    scenario: a later refactor of step 4's loop drops `consumed=i+1` and the original MEDIUM bug
+    returns for exactly the step (4, alpha exit 3 with beta firing) the finding was about, with a
+    green suite. The shipped fix is present and correct in all three functions (table above).
+    Suggested fix for L9-SPEEDUP-FOLLOWUP: adopt the mocked-dispatch path check (9 paths × 3
+    functions, 0.05 s) as `tests/b5_analysis/test_parallel_deadline_accounting.py`, or extend the
+    regression test to steps 1 and 4.
+D2. **Info – post-stop physics merge** (see above): harmless to records and exit codes because the
+    run stops; document or restrict to consumed tasks.
+D3. **Info – `WorkerDeadlineState`/`state` is now dead for the callers**; `dispatch` still builds and
+    returns it. Harmless; could be removed or kept for the member pool's symmetry.
+
+Both delta commits: ACCEPT. The PR-level verdict stands.
+
+### Appendix: the path check used above
+
+```python
+"""Path-by-path check of `consumed` in _step_{1,2,4}_parallel with a mocked pool (synthetic, no bundles)."""
+import sys, tempfile, unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+sys.path.insert(0, sys.argv.pop(1) if len(sys.argv) > 1 else '.')
+from joulewise.b5_analysis import dry_run as d
+from joulewise.b5_analysis.parallel import ChildResult, WorkerDeadlineState
+from joulewise.b5_analysis.deadline_observer import DeadlineObserver, OBSERVER_UNAVAILABLE
+from joulewise.b5_analysis.windows import AnalysisRefusal
+
+class Fake:
+    def __init__(self, root, exits, firings, rehash_fail_at=None):
+        self.restricted = root; self.contexts = None; self.deadline = DeadlineObserver()
+        self.exits, self.firings, self.rehash_fail_at = exits, firings, rehash_fail_at
+        self.rehash_calls = 0; self.index_path = 'idx'; self.specs = {'alpha': {}, 'beta': {}}; self.stops = []
+    def rehash(self):
+        self.rehash_calls += 1           # call 1 is the pre-dispatch rehash; call k+1 precedes task k
+        if self.rehash_fail_at is not None and self.rehash_calls - 1 == self.rehash_fail_at:
+            raise AnalysisRefusal('step_input_digest_mismatch')
+    def path(self, rel):
+        p = self.restricted / rel; p.parent.mkdir(parents=True, exist_ok=True); return p
+    def register(self, role, path): return {'name': role, 'sha256': '0' * 64}
+    def read(self, role): return {}
+    def record(self, step, window=None, exit_status=0, code=None, outputs=(), **kw):
+        return SimpleNamespace(step=step, window=window, status='ok' if exit_status == 0 else 'refused', exit_status=exit_status)
+    def dispatch(self, s, r, tasks):
+        logs = self.restricted / 'logs'; logs.mkdir(exist_ok=True); results = []
+        for i, (prog, argv, step, window) in enumerate(tasks):
+            out, err = logs / f'{i}.out', logs / f'{i}.err'; out.write_text(''); err.write_text('')
+            if self.exits[i] == 0 and '--output' in argv: Path(argv[argv.index('--output') + 1]).write_text('{}')
+            if self.exits[i] == 0 and '--out' in argv: Path(argv[argv.index('--out') + 1]).write_text('{}')
+            results.append(ChildResult(self.exits[i], str(out), str(err), False, self.firings[i], {}))
+        r._counter = len(tasks)
+        state = WorkerDeadlineState()   # as dispatch.collect() aggregates over ALL tasks (pre-fix interface)
+        for res in results:
+            if res.firings is None: state.unavailable = True
+            elif res.firings: state.firings += res.firings
+        return 0, results, state
+
+def run(fn, exits, firings, rehash_fail_at=None):
+    with tempfile.TemporaryDirectory(prefix='delta-paths-') as tmp:
+        s = Fake(Path(tmp), exits, firings, rehash_fail_at); r = SimpleNamespace(_counter=0)
+        jobs = [('alpha', f'run{i}', f'/nonexistent/bundle{i}') for i in range(len(exits))]
+        with mock.patch.object(d, '_dispatch', s.dispatch), mock.patch.object(d, 'require_primary_context', lambda c: None), \
+             mock.patch.object(d, '_stop_at', lambda *a, **k: s.stops.append(a[3])), \
+             mock.patch.object(d, 'require_rereduction_matches_stored', lambda b, o: None), \
+             mock.patch.object(d, '_step_4_classify', lambda s_, pack, result, outputs, code, exit_status: s_.record('4', window=pack, exit_status=exit_status)):
+            try:
+                out = fn(s, r, ('alpha', 'beta')) if fn is d._step_4_parallel else fn(s, r, jobs)
+            except AnalysisRefusal as exc: out = exc.code
+        return out, s.deadline.firings
+
+class Paths(unittest.TestCase):
+    def check(self, fn, n):
+        name = fn.__name__
+        with self.subTest(fn=name, path='normal completion'):
+            out, f = run(fn, [0]*n, [1, 0, 2][:n]); self.assertEqual(f, sum([1, 0, 2][:n])); self.assertNotIsInstance(out, str)
+        with self.subTest(fn=name, path='refusal at 0: only task 0 counts'):
+            out, f = run(fn, [2] + [0]*(n-1), [4, 9, 9][:n]); self.assertEqual(f, 4)
+        with self.subTest(fn=name, path='refusal at 1: tasks 0..1 count'):
+            out, f = run(fn, [0, 2, 0][:n], [1, 5, 7][:n]); self.assertEqual(f, 6 if n > 1 else 1)
+        with self.subTest(fn=name, path='rehash fails before task 1: only task 0 counts, refusal propagates'):
+            out, f = run(fn, [0]*n, [3, 9, 9][:n], rehash_fail_at=1); self.assertEqual(out, 'step_input_digest_mismatch'); self.assertEqual(f, 3)
+        if n > 2:
+            with self.subTest(fn=name, path='rehash fails before task 2: tasks 0..1 count'):
+                out, f = run(fn, [0]*n, [1, 1, 9], rehash_fail_at=2); self.assertEqual(out, 'step_input_digest_mismatch'); self.assertEqual(f, 2)
+        with self.subTest(fn=name, path='post-stop observer None does not refuse'):
+            out, f = run(fn, [2] + [0]*(n-1), [0] + [None]*(n-1)); self.assertNotEqual(out, OBSERVER_UNAVAILABLE); self.assertEqual(f, 0)
+        with self.subTest(fn=name, path='observer None at the stop task refuses'):
+            out, f = run(fn, [2] + [0]*(n-1), [None] + [0]*(n-1)); self.assertEqual(out, OBSERVER_UNAVAILABLE)
+        with self.subTest(fn=name, path='observer None before a rehash failure refuses'):
+            out, f = run(fn, [0]*n, [None] + [0]*(n-1), rehash_fail_at=1); self.assertEqual(out, OBSERVER_UNAVAILABLE)
+        with self.subTest(fn=name, path='exception before the loop: nothing counted, propagates'):
+            with tempfile.TemporaryDirectory() as tmp:
+                s = Fake(Path(tmp), [0]*n, [5]*n); r = SimpleNamespace(_counter=0)
+                def boom(*a): raise RuntimeError('pool failed')
+                with mock.patch.object(d, '_dispatch', boom), mock.patch.object(d, 'require_primary_context', lambda c: None):
+                    with self.assertRaises(RuntimeError):
+                        fn(s, r, ('alpha', 'beta') if fn is d._step_4_parallel else [('alpha', 'x', '/nonexistent')]*n)
+                self.assertEqual(s.deadline.firings, 0)
+    def test_step_1(self): self.check(d._step_1_parallel, 3)
+    def test_step_2(self): self.check(d._step_2_parallel, 3)
+    def test_step_4(self): self.check(d._step_4_parallel, 2)
+
+if __name__ == '__main__':
+    unittest.main(argv=sys.argv[:1])
+```
