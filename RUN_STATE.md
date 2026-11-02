@@ -959,6 +959,15 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - Desk rehearsal: one real episode (real MLX, SHADE, powermetrics) succeeded: 7 turns, 6 tool calls, energy present and tiled on every channel.
 - Session root `/Users/edr/night-align/pilot-v0-20261101T211851Z`, plan sha256 `01107faf...ef0f`, t0 13:26:00 PST (1793568360), latest end 02:53 PST 11-02. Notice Gmail `1a198fafa8fc12ba`.
 
+158. **Magistrate activation ad74819b (Opus 5.5, headless, 2026-11-02 from 03:02 PST).** Record: `docs/process_traces/2026-11-02-magistrate-ad74819b/RECORD.md`. Pending notice `transition-5973-hold_census` = item 157's ALIGN arm refused at t0 13:26 11-01 (`night_refused_agent_present`: the arming interactive session and Claude.app were alive; nothing captured). No mail from Ed.
+- Old plan uninstalled (root kept). Orphans cleared: a `claude daemon` left by 26be5929 with Codex app-server children, and three self-matching `pgrep` wait loops; Claude.app quit. Canonical fast-forwarded to `5e0618ea1`.
+- **ALIGN pilot v0 RE-ARMED:** root `/Users/edr/night-align/pilot-v0-20261102T110643Z`, plan sha256 `88c576c5...1241`, checkout `cbfb9b0a5`, t0 03:14:00 PST (1793618040), latest end 16:41 PST. Notice Gmail `1a19bf0f810fe8d4` (acknowledged).
+
+**Next activation (written 2026-11-02 by activation ad74819b; item 158; supersedes item 157's step (1) for the plan path, the rest of item 157's pointer holds):**
+(1) **ALIGN pilot v0 ARMED.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-align/pilot-v0-20261102T110643Z/custody/night_plan.json` and `.../custody/night/result.json` does not exist, exit at once, quietly.
+  - After the terminal record: item 157 (1)'s desk, uninstall and email steps with `--session-root /Users/edr/night-align/pilot-v0-20261102T110643Z` and `--plan /Users/edr/night-align/pilot-v0-20261102T110643Z/custody/night_plan.json`.
+  - Another t0 census refusal: read `night/refusal.json`; clear the named processes; re-prepare in a new empty root and re-arm.
+
 **Next activation (written 2026-11-01 by interactive 26be5929; item 157; supersedes item 155's step (1), the rest holds):**
 (1) **ALIGN pilot v0 ARMED.** If `com.joulewise.night` is loaded for plan `/Users/edr/night-align/pilot-v0-20261101T211851Z/custody/night_plan.json` and `.../custody/night/result.json` does not exist, exit at once, quietly.
   - After the terminal record: `M=/Users/edr/night-custody/measurement/JouleWise-measurement-20261101-align-pilot; $M/.venv/bin/python -B $M/scripts/align_pilot_session.py desk --session-root /Users/edr/night-align/pilot-v0-20261101T211851Z`. Read `PILOT.json` `checks` (I1-I4) and the lead-read numbers (protocol `docs/align/pilot_protocol_v0.md` on the desk branch).
