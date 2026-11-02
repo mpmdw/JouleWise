@@ -75,4 +75,5 @@ Running at the first commit (`~/night-archive/seats-0eafdaa2/tests-align.log`); 
 - (filled at the next commit)
 
 ## Pilot-2 build lane
-- (filled at the next commit)
+- Launched 06:5x PST: Sol 6.1 xhigh, local `codex-run-v3`, worktree `/Users/edr/code/jw-wt/align-pilot2`, branch `lane/2026-11-02-align-pilot2` from `cbfb9b0a5` (unpushed). Brief `~/night-archive/seats-0eafdaa2/align-pilot2/build/BRIEF.md` (11 items = the ruling's build list, plus the v1 roster, sizing and protocol doc). Report `build/sol-build.md`, log `build/sol-build.log`, status `build/sol-build.status`.
+- If this session is gone and the status is not OK: inspect the branch's commits and resume (`codex-run-v3 resume`) or relaunch from the brief. With a clean report: the lead re-runs the pilot-1 desk replay and the touched tests, pushes the branch, opens a draft PR for CI, launches an executing review by a non-author and cold Fable + Opus passes (blind, executing), then runs the hardware rehearsal (one real episode per new configuration), then prepares pilot 2.
