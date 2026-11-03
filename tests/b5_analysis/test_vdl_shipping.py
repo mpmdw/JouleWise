@@ -15,8 +15,11 @@ What is checked:
   driver's serial stop; an unobservable child still refuses and merges nothing;
 * step codes (Sol #12): restricted/decisions/step-codes.jsonl rows carry exactly
   the comparator's keys, the raw code before redaction and the caught exception
-  class, and are bound in the record (the comparator authenticates them); the
-  resolved store mode is bound as a fixed token.
+  class, and are bound in the record (the comparator authenticates them) under
+  a random salt line, so the bound digest hides the redacted codes; the
+  resolved store mode is a fixed token in the bound file's name;
+* a blind store that stopped serving after a defect applies no pre-filtered
+  hit and ships no store to a worker or child.
 """
 from __future__ import annotations
 
@@ -309,6 +312,52 @@ class DefectChannelTests(_Trees):
             self.assertEqual(caches.vdl.restricted_counters().get('defect:shadow_mismatch'), 1)
             self.assertTrue(caches.vdl._serving_disabled)
 
+    def test_a_blind_defect_in_the_batch_stops_its_prefiltered_hits(self):
+        # Review of PR #636, finding 2a: m1 and m2 are pre-filtered hits; the
+        # worker for m3 reports a blind defect, merged before any consumption.
+        expected_values, expected_records = self.serial(self.trees)
+        with run_caches(mode=vdl.BLIND_ON) as caches:
+            self.pooled(limit=2)
+            self.assertEqual(len(self.entries(caches)), 2)
+            outcomes, values, census = self.pooled(blind_defect_on_last_worker)
+            self.assertEqual([outcome.hit is not None for outcome in outcomes], [True, True, False])
+            self.assertTrue(caches.vdl._serving_disabled)
+            self.assertEqual(caches.vdl._served, {}, 'no hit is applied once the store stopped serving')
+            self.assertEqual(caches.vdl.restricted_counters().get('ship:prefilter_hit_discarded'), 2)
+        self.assertEqual((values, census), (expected_values, expected_records), 'computed at each position')
+
+    def test_a_store_that_stopped_serving_ships_nothing(self):
+        # Review of PR #636, finding 2b: no entries (and no store) reach a
+        # member worker or a step child once a blind store stopped serving.
+        with run_caches(mode=vdl.BLIND_ON) as caches:
+            self.pooled()
+            s = _State(caches.vdl)
+            s.windows = {'alpha': type('W', (), {'claim_runs_root': self.tmp, 'archive_root': None})()}
+            with mock.patch.object(d, 'STEP_4_LEAVES', frozenset({'T_ship'})):
+                self.assertEqual(len(d._store_for(s, '4', 'alpha')['entries']['entries']), 3, 'serving: shipped')
+                caches.vdl._defect('shadow_mismatch')
+                self.assertTrue(pool.serving_stopped(caches.vdl))
+                self.assertEqual(d._store_for(s, '4', 'alpha'), {}, 'stopped: the child runs with no store')
+            with mock.patch.object(d, 'STEP_2_LEAVES', frozenset({'T_ship'})):
+                self.assertEqual(d._store_for(s, '2', 'alpha', self.trees[0]), {})
+            self.assertEqual(d._store_for(s, '1', 'alpha', self.trees[0]), {})
+            self.assertEqual(pool.vdl_context(caches), {})
+            self.assertEqual(pool.vdl_context(caches, caches.vdl.export_entries()), {})
+            seen = []
+
+            def spy(task):
+                seen.append(task)
+                return pool.MemberOutcome(True, task.args[0], (), 0, {})
+            with mock.patch.object(pool, '_pool') as fake:
+                fake.return_value.submit.side_effect = lambda fn, task: _Done(spy(task))
+                outcomes = pool.member_map(ship_leaf, self.calls)
+            self.assertEqual([task.vdl for task in seen], [{}, {}, {}], 'every member dispatched, no store')
+            self.assertTrue(all(outcome.hit is None for outcome in outcomes))
+            # A child built from what it was shipped has no store, so it serves nothing.
+            with arc.analysis_run_caches({}, vdl_mode=None) as child:
+                self.assertIsNone(child.vdl)
+            self.assertEqual(caches.vdl._served, {})
+
     def test_a_discarded_childs_defect_reaches_the_store(self):
         tasks = [('m:main', [], '4', pack) for pack in ('alpha', 'beta')]
         with run_caches() as caches:
@@ -505,13 +554,17 @@ class StepCodesTests(unittest.TestCase):
                          _git=lambda repo: 'b' * 40)
         run = custody / 'dry-run'
         record = json.loads((run / 'B5-BLIND-DRY-RUN-RECORD.json').read_bytes())
-        rows = [json.loads(line) for line in (run / 'restricted' / d.STEP_CODES_NAME).read_text().splitlines()]
+        lines = (run / 'restricted' / d.STEP_CODES_NAME).read_text().splitlines()
+        rows = [json.loads(line) for line in lines if line.strip()]
+        self.assertEqual(lines[:-1], [line for line in lines if line.strip()], 'only the last line is blank')
+        self.assertRegex(lines[-1], '^[ \t]{%d}$' % d.STEP_CODES_SALT_BITS, 'the salt line')
         return code, custody, record, rows
 
     def assertBound(self, custody, record, rows):
         ran = [row for row in record['steps'] if row['status'] != 'not_run']
         names = [output['name'] for output in ran[-1]['outputs']]
-        self.assertEqual(names[-2:], [d.STEP_CODES_NAME, d.VDL_MODE_NAME], 'bound in the last step that ran')
+        self.assertEqual(names[-2], d.STEP_CODES_NAME, 'bound in the last step that ran')
+        self.assertTrue(names[-1].startswith(d.VDL_MODE_PREFIX) and d.is_sidecar_name(names[-1]))
         self.assertFalse(any(d.STEP_CODES_NAME in [o['name'] for o in row['outputs']] for row in ran[:-1]))
         self.assertEqual(len(rows), len(record['steps']))
         for position, (row, step) in enumerate(zip(rows, record['steps'])):
@@ -537,7 +590,9 @@ class StepCodesTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertBound(custody, record, rows)
         self.assertTrue(all(row['raw_code'] is None for row in rows))
-        mode = json.loads((custody / 'dry-run/restricted' / d.VDL_MODE_NAME).read_bytes())
+        self.assertIn(d.vdl_mode_name('off'), [o['name'] for o in record['steps'][-1]['outputs']],
+                      'the mode token is readable in the record')
+        mode = json.loads((custody / 'dry-run/restricted' / d.vdl_mode_name('off')).read_bytes())
         self.assertEqual(mode, {'schema_version': d.VDL_MODE_SCHEMA, 'vdl_mode': 'off'})
         self.assertFalse((custody / 'dry-run/restricted' / d.VDL_COUNTERS_NAME).exists(), 'no store, no counters')
 
@@ -546,7 +601,8 @@ class StepCodesTests(unittest.TestCase):
         with mock.patch.dict(os.environ, environ, clear=True):
             code, custody, record, rows = self.execute({})
         self.assertEqual(code, 0)
-        mode = json.loads((custody / 'dry-run/restricted' / d.VDL_MODE_NAME).read_bytes())
+        self.assertIn('logs/run-vdl-mode-shadow_1000.json', [o['name'] for o in record['steps'][-1]['outputs']])
+        mode = json.loads((custody / 'dry-run/restricted' / d.vdl_mode_name('shadow_1000')).read_bytes())
         self.assertEqual(mode['vdl_mode'], 'shadow_1000')
         self.assertTrue((custody / 'dry-run/restricted' / d.VDL_COUNTERS_NAME).is_file())
         self.assertNotIn('counters', json.dumps(record))
@@ -593,15 +649,42 @@ class StepCodesTests(unittest.TestCase):
         code, custody, record, rows = self.execute({'4': defective}, environ={vdl.ENV_VARIABLE: 'on'})
         self.assertEqual(code, 2)
         four = [row for row in record['steps'] if row['step'] == '4']
-        self.assertEqual([(row['window'], row['status']) for row in four], [(None, 'unclassified_refusal')])
+        # A defect is never a study refusal: a registered tooling refusal (review of PR #636, finding 3).
+        self.assertEqual([(row['window'], row['status'], row['refusal']) for row in four],
+                         [(None, 'tooling_refusal', d.VDL_DEFECT)])
         position = record['steps'].index(four[0])
         self.assertEqual((rows[position]['raw_code'], rows[position]['exception_class']),
                          (d.VDL_DEFECT, 'VerifiedStoreDefect'))
         self.assertTrue(all(row['status'] == 'not_run' for row in record['steps'][position + 1:]))
 
+    def test_step_codes_digest_hides_the_redacted_code(self):
+        # Review of PR #636, finding 1: an attacker holding only the blind record
+        # who guesses the redacted raw code and exception class exactly still
+        # cannot confirm the guess against the bound sha256.
+        secret = 'abandon_calibration_ledger_tail'
+        bound = []
+        for _ in range(2):
+            code, custody, record, rows = self.execute(
+                {'8': lambda s, r: [s.record('8', exit_status=2, code=secret)]}, environ={vdl.ENV_VARIABLE: 'off'})
+            self.assertEqual(code, 2)
+            self.assertNotIn(secret, json.dumps(record))
+            self.assertBound(custody, record, rows)
+            digest = {o['name']: o['sha256'] for row in record['steps'] for o in row['outputs']}[d.STEP_CODES_NAME]
+            failing = {i for i, row in enumerate(record['steps']) if row['status'] not in ('ok', 'not_run')}
+            guess = [{'pos': i, 'step': row['step'], 'window': row['window'],
+                      'raw_code': secret if i in failing else None, 'exit_status': row['exit_status'],
+                      'exception_class': rows[i]['exception_class'] if i in failing else None}
+                     for i, row in enumerate(record['steps'])]
+            self.assertEqual(guess, rows, 'the guess is exactly the restricted rows')
+            plain = b''.join(json.dumps(row, sort_keys=True, separators=(',', ':')).encode() + b'\n' for row in guess)
+            self.assertNotEqual(hashlib.sha256(plain).hexdigest(), digest)
+            bound.append(digest)
+        self.assertNotEqual(bound[0], bound[1], 'identical runs bind unlinkable digests')
+
     def test_release_comparison_ignores_the_sidecars(self):
         before = {'input_census': [], 'steps': [{'step': '0', 'outputs': [
-            {'name': 'outputs/a.json', 'sha256': '1' * 64}, {'name': d.STEP_CODES_NAME, 'sha256': '2' * 64}]}]}
+            {'name': 'outputs/a.json', 'sha256': '1' * 64}, {'name': d.STEP_CODES_NAME, 'sha256': '2' * 64},
+            {'name': d.vdl_mode_name('blind_on'), 'sha256': '3' * 64}]}]}
         after = {'input_census': [], 'steps': [{'step': '0', 'outputs': [
             {'name': 'outputs/a.json', 'sha256': '1' * 64}]}]}
         self.assertIsNone(d.release_difference(before, after))

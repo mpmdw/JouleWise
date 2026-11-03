@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import subprocess
 import sys
 import traceback
@@ -189,8 +190,8 @@ def release_difference(dry_run, release) -> dict | None:
         right = after[i] if i < len(after) else None
         # D-188 sidecars (restricted step codes, the store mode) are committed
         # after the comparison; they decide nothing here.
-        rows_a = [o for o in (left['outputs'] if left else []) if o.get('name') not in SIDECAR_NAMES]
-        rows_b = [o for o in (right['outputs'] if right else []) if o.get('name') not in SIDECAR_NAMES]
+        rows_a = [o for o in (left['outputs'] if left else []) if not is_sidecar_name(o.get('name'))]
+        rows_b = [o for o in (right['outputs'] if right else []) if not is_sidecar_name(o.get('name'))]
         for j in range(max(len(rows_a), len(rows_b))):
             a = rows_a[j] if j < len(rows_a) else None
             b = rows_b[j] if j < len(rows_b) else None
@@ -241,13 +242,39 @@ _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE]
 # (a fixed token). Neither is a step's own output.
 STEP_CODES_NAME = 'decisions/step-codes.jsonl'
 STEP_CODES_KEYS = ('pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class')
-VDL_MODE_NAME = 'logs/run-vdl-mode.json'
+# The step-codes file ends with one whitespace-only salt line (STEP_CODES_SALT_BITS
+# random bits, space = 0, tab = 1). The comparator skips blank lines, so the rows
+# are unchanged; the salt makes the record's sha256 of the file a hiding
+# commitment, so the redacted raw codes cannot be recovered from the blind record
+# by hashing guessed rows (review of PR #636, finding 1).
+STEP_CODES_SALT_BITS = 256
+# The store-mode file is named by its token, so the record itself shows the
+# resolved mode as structure (the comparator's logs/* outputs are audit).
+VDL_MODE_PREFIX = 'logs/run-vdl-mode-'
+VDL_MODE_TOKEN = re.compile(r'off|on|blind_on|shadow_[0-9]{1,4}')
 VDL_MODE_SCHEMA = 'joulewise.b5_vdl_mode.v1'
 VDL_COUNTERS_NAME = 'logs/runtime-vdl-counters.json'
-SIDECAR_NAMES = (STEP_CODES_NAME, VDL_MODE_NAME)
+
+
+def vdl_mode_name(token):
+    """restricted/logs/run-vdl-mode-<token>.json: the resolved store mode, readable in the record."""
+    if VDL_MODE_TOKEN.fullmatch(token) is None:
+        raise ValueError('vdl mode token')
+    return VDL_MODE_PREFIX + token + '.json'
+
+
+def is_sidecar_name(name):
+    """Whether a record output name is a D-188 sidecar (step codes or the store-mode token)."""
+    if name == STEP_CODES_NAME:
+        return True
+    if not (isinstance(name, str) and name.startswith(VDL_MODE_PREFIX) and name.endswith('.json')):
+        return False
+    return VDL_MODE_TOKEN.fullmatch(name[len(VDL_MODE_PREFIX):-len('.json')]) is not None
+
+
 # A store defect at a step boundary (synthetic runs only; a blind run never
-# raises one). Not in the closed tooling list, so the record says
-# 'unclassified refusal at step N'; the raw code is in restricted step codes.
+# raises one). A tooling refusal (configs/analysis/b5/dry_run_refusal_classes.json):
+# a defect is never a study refusal (lead ruling).
 VDL_DEFECT = 'verified_store_defect'
 
 
@@ -434,7 +461,7 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
             keys(output, ('name','sha256')); path(output['name']); digest(output['sha256'])
             need(output['name'].split('/')[0] in ('outputs','rereduced','attempts','supply-census',
                 'kept-units','tripwires','brackets','mint','finalized','inputs','disclosures','custody') or
-                output['name'] in SIDECAR_NAMES or
+                is_sidecar_name(output['name']) or
                 re.fullmatch(r'analysed-attempt-exclusions-[0-9a-f]{64}\.json',output['name']) is not None or
                 re.fullmatch(r'am-[0-9a-f]{64}\.finalized\.json',output['name']) is not None)
         expected = (None if row['status'] in ('ok','not_run') else
@@ -804,13 +831,17 @@ def _store_for(s, step, pack=None, bundle=None):
     Step 1: no entries (nothing is stored before it). Step 2: the bundle's own
     L3 entry. Step 4: the pack's L1, L2, L3, L5 and L6 entries (trees under its
     claim runs root or archive), every path-free entry (L1 copies, the window's
-    L4) and the shipped memos. Other steps run no child.
+    L4) and the shipped memos. Other steps run no child. A blind run's store
+    that stopped serving after a defect ships nothing: the child runs with no
+    store (lead ruling: a defect there stops all serving).
     """
     store = getattr(s, 'vdl_store', None)
     if store is None:
         return {}
     from joulewise import analysis_run_cache
-    from joulewise.analysis_member_pool import vdl_context
+    from joulewise.analysis_member_pool import serving_stopped, vdl_context
+    if serving_stopped(store):
+        return {}
     from joulewise import analysis_verified_store as vdl
     caches = analysis_run_cache.current()
     if step == '2' and bundle is not None:
@@ -1585,6 +1616,12 @@ def step_code_rows(s, record):
     return rows
 
 
+def step_codes_salt():
+    """The step-codes file's last line: STEP_CODES_SALT_BITS fresh random bits as spaces and tabs."""
+    value = int.from_bytes(secrets.token_bytes(STEP_CODES_SALT_BITS // 8), 'big')
+    return ''.join(' \t'[(value >> bit) & 1] for bit in range(STEP_CODES_SALT_BITS)).encode('ascii') + b'\n'
+
+
 def _commit_sidecars(s, record, token):
     """Write the step codes and the store-mode token and bind both in the last step that ran.
 
@@ -1596,15 +1633,15 @@ def _commit_sidecars(s, record, token):
     if not ran:
         return
     codes = b''.join(json.dumps(row, sort_keys=True, separators=(',', ':')).encode('utf-8') + b'\n'
-                     for row in step_code_rows(s, record))
+                     for row in step_code_rows(s, record)) + step_codes_salt()
     mode = _canonical({'schema_version': VDL_MODE_SCHEMA, 'vdl_mode': token})
     items = []
     try:
-        for name, raw in ((STEP_CODES_NAME, codes), (VDL_MODE_NAME, mode)):
+        for name, raw in ((STEP_CODES_NAME, codes), (vdl_mode_name(token), mode)):
             with s.path(name).open('xb') as out:
                 out.write(raw)
             items.append({'name': name, 'sha256': hashlib.sha256(raw).hexdigest()})
-    except (OSError, AnalysisRefusal):
+    except (OSError, AnalysisRefusal, ValueError):
         # Never a new way for a run to fail: the record then binds no sidecar
         # (the comparator falls back to restricted logs, labelled unauthenticated).
         return

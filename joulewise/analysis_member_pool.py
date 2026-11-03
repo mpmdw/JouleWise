@@ -273,14 +273,25 @@ def shipped_memos(caches) -> dict:
     return {name: dict(tables[name]) for name in SHIPPED_MEMOS if tables.get(name)}
 
 
+def serving_stopped(store) -> bool:
+    """Whether a blind run's store stopped serving after a defect (lead ruling).
+
+    From then on nothing it holds is served anywhere: no pre-filtered hit is
+    applied and no worker or child is shipped a store (it runs with none).
+    """
+    return bool(getattr(store, '_serving_disabled', False))
+
+
 def vdl_context(caches, entries: dict | None = None) -> dict:
     """The store context a worker task is shipped ({} when the run has no store).
 
     ``entries`` is an ``export_entries`` payload (its defects are never shipped
-    down: they stay with the process that recorded them).
+    down: they stay with the process that recorded them). A store that stopped
+    serving ships {}: the worker then runs with no store, so it neither serves
+    a shipped entry nor one of its own fills.
     """
     store = vdl_store(caches)
-    if store is None:
+    if store is None or serving_stopped(store):
         return {}
     if entries is not None:
         entries = {**entries, 'defects': []}
@@ -544,6 +555,11 @@ def consume(outcome: MemberOutcome | None, compute: Callable[[], Any], *, accoun
         # D-188: a pre-filtered store hit, applied here (its rows registered
         # through the consumer session's own checks); any anomaly computes.
         from joulewise.b5_analysis import phase_timing
+        if serving_stopped(outcome.hit.store):
+            # A defect merged after the pre-filter (e.g. a worker's in this
+            # batch): the store serves nothing more, so the leaf runs here.
+            _count(outcome.hit.store, 'ship:prefilter_hit_discarded')
+            return compute()
         try:
             with phase_timing.span('k.vdl.hit'):
                 value = outcome.hit.apply()

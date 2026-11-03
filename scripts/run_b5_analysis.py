@@ -49,9 +49,10 @@ Environment (D-188, not an argument): JOULEWISE_B5_VDL selects the verified deri
 shadow request all run the store serving with no new refusal path (a store defect is only counted in
 restricted/logs/runtime-vdl-counters.json and the store stops serving); "off" or a malformed value
 runs without it, exactly as before. The resolved mode is a fixed token (off, on, blind_on,
-shadow_<permille>) in restricted/logs/run-vdl-mode.json, which the record binds beside
-restricted/decisions/step-codes.jsonl (one row per record step with its raw refusal code, for the
-D-188 result-equivalence comparator) in the outputs of the last step that ran.
+shadow_<permille>) that names restricted/logs/run-vdl-mode-<token>.json, which the record binds
+beside restricted/decisions/step-codes.jsonl (one row per record step with its raw refusal code,
+for the D-188 result-equivalence comparator, then one random whitespace-only salt line so the
+record's digest of it reveals no redacted code) in the outputs of the last step that ran.
 
 What the run prints: on standard error one line per step as it ends, "step <id> <pack or -> <status>",
 where the status is one of ok, tooling_refusal, outcome_class, unclassified_refusal, not_run; on
