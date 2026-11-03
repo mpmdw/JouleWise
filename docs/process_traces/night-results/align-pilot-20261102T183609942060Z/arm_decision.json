@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1793648340.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-align/pilot-v1-20261102T183609Z/custody/hazards/arm.json",
+    "sha256": "a6f8a73571fb4caf11224ef99039dbbefbfe3ffd4da6b8005bf5ae6cdfeda898"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 1629379253759875,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 1629656248096375,
+    "monotonic_raw_ns": 1629656248095875,
+    "wall_s": 1793645319.264313
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "align-pilot-20261102T183609942060Z",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 1629379292631291,
+    "monotonic_raw_ns": 1629379292631083,
+    "wall_s": 1793645042.3088481
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}
