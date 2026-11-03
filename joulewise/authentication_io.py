@@ -100,7 +100,10 @@ class AuthenticationReadRow:
 # A passive recorder: a tuple of row sinks (one per nested recording scope),
 # or None.  Recording never changes what a read returns or raises.
 _READ_RECORDER: ContextVar[tuple[list[AuthenticationReadRow], ...] | None] = (
-    ContextVar("joulewise_authentication_read_recorder", default=None)
+    # The ContextVar name is dotted on purpose: the blind step-4 reason table
+    # (tests/b5_analysis/step4_reasons/make_table.py) scrapes every snake_case
+    # string literal in this module as a reason code.
+    ContextVar("joulewise.authentication_io.read_recorder", default=None)
 )
 
 # The run-scoped success-only memo of the strict grammar verdict (L7), keyed
@@ -1314,6 +1317,11 @@ def paper_supplier_signature_violations(
     return tuple(sorted(set(violations)))
 
 
+# The D-188 additions (recording_authentication_reads,
+# authentication_read_recording_active, ensure_grammar_verdict,
+# forced_grammar) are public by name but deliberately not listed here: a
+# snake_case string literal in this module would enter the registered blind
+# step-4 reason table (configs/analysis/b5/step4_reason_classes.json).
 __all__ = [
     "AuthenticationInputRecord",
     "AuthenticationReadRow",
@@ -1324,17 +1332,13 @@ __all__ = [
     "V2_AUTHENTICATION_INPUT_CHANGED",
     "V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH",
     "active_v2_authentication_session",
-    "authentication_read_recording_active",
     "direct_read_violations",
-    "ensure_grammar_verdict",
-    "forced_grammar",
     "ingest_git_authentication_input",
     "open_authentication_input",
     "paper_supplier_signature_violations",
     "read_authentication_input",
     "read_authentication_input_nofollow",
     "read_authentication_text",
-    "recording_authentication_reads",
     "sha256_authentication_input",
     "v2_authentication_path",
 ]
