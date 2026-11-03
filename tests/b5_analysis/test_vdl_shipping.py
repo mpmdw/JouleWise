@@ -122,6 +122,15 @@ def context_child(task):
                                 False, 0, {})
 
 
+def filling_child(task):
+    """Child stand-in: one real fill of the synthetic leaf on its argv tree, exported as a child would."""
+    with vdl._registered(SPEC), arc.analysis_run_caches({}, vdl_mode=task.vdl['mode']) as caches:
+        caches.deadline = FakeDeadline()
+        caches.vdl.call('T_ship', ship_leaf, task.argv[0], 3)
+        payload = pool.export_new(caches, task.vdl, {})
+    return parallel.ChildResult(0, '', '', False, 0, {}, vdl_new=payload)
+
+
 class FakeDeadline:
     def __init__(self):
         self.firings = 0
@@ -359,6 +368,17 @@ class ChildMergeTests(_Trees):
                 d._account_deadlines(s, self.results(exports, firings=(0, None, 0)))
             self.assertEqual(self.entries(caches), {})
 
+    def test_dispatch_merges_no_entry_before_the_serial_stop(self):
+        tasks = [('m:main', [str(tree)], '2', 'alpha') for tree in self.trees]
+        with run_caches() as caches:
+            results, _ = parallel.dispatch(tasks, restricted=self.tmp, first_counter=1, workers=2,
+                                           physics_store={}, worker=filling_child,
+                                           vdl=[pool.vdl_context(caches)] * 3)
+            self.assertTrue(all(len(r.vdl_new['entries']) == 1 for r in results))
+            self.assertEqual(self.entries(caches), {}, 'dispatch itself merges no entry')
+            d._account_deadlines(_State(caches.vdl), results[:1])
+            self.assertEqual(set(self.entries(caches)), set(results[0].vdl_new['entries']))
+
     def test_step_contexts_select_the_bundle_and_pack(self):
         exports = self.payloads()
         with run_caches() as caches:
@@ -388,6 +408,55 @@ class ChildMergeTests(_Trees):
             results, _ = parallel.dispatch(tasks, restricted=self.tmp, first_counter=1, workers=2,
                                            physics_store={}, worker=context_child, vdl=contexts)
         self.assertEqual([r.stdout_path for r in results], ['"on"', 'null'])
+
+
+def timed_child(task):
+    """Child stand-in: returns a child timer table when asked for one."""
+    table = {'wall_ns': 7, 'cpu_ns': 5, 'phases': {}, 'member': {}, 'programs': [], 'pool': {}} if task.timing else None
+    return parallel.ChildResult(0, '', '', False, 0, {}, timing=table)
+
+
+def scope_probe(argv):
+    """A program: whether it runs inside a D-188 program verification scope."""
+    print('scoped' if vdl._PROGRAM_SCOPE.get() is not None else 'unscoped')
+    return 0
+
+
+class ProgramScopeAndTimerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix='vdl-ship-scope-'))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_step_runner_enters_a_program_scope_only_with_a_store(self):
+        runner = d.StepRunner(self.tmp / 'restricted')
+        self.assertIs(type(runner).run, d.StepRunner.run)
+        with arc.analysis_run_caches({}, vdl_mode=vdl.ON):
+            result = runner.run(scope_probe, [], step='4', window='alpha')
+        self.assertEqual(result.stdout_path.read_text().strip(), 'scoped')
+        with arc.analysis_run_caches({}):
+            result = runner.run(scope_probe, [], step='4', window='beta')
+        self.assertEqual(result.stdout_path.read_text().strip(), 'unscoped')
+        self.assertIsNone(vdl._PROGRAM_SCOPE.get())
+
+    def test_escaped_exception_class_is_kept_at_the_catch_site(self):
+        runner = d.StepRunner(self.tmp / 'restricted')
+        result = runner.run(lambda argv: (_ for _ in ()).throw(KeyError('detail')), [], step='4', window='alpha')
+        self.assertEqual((result.exception, result.exception_class, runner.last_exception_class),
+                         (True, 'KeyError', 'KeyError'))
+        result = runner.run(lambda argv: 0, [], step='4', window='beta')
+        self.assertEqual((result.exception_class, runner.last_exception_class), (None, None))
+
+    def test_child_timer_tables_merge_into_the_driver_timer(self):
+        from joulewise.b5_analysis import phase_timing
+        tasks = [('m:main', [], '4', pack) for pack in ('alpha', 'beta')]
+        with phase_timing.session(start_sampler=False) as timer:
+            self.assertTrue(phase_timing.enabled())
+            parallel.dispatch(tasks, restricted=self.tmp, first_counter=1, workers=2, physics_store={},
+                              worker=timed_child, timing=True)
+            self.assertEqual(timer.acc.children[:2], [2, 14])
+        results, _ = parallel.dispatch(tasks, restricted=self.tmp, first_counter=1, workers=2, physics_store={},
+                                       worker=timed_child)
+        self.assertEqual([r.timing for r in results], [None, None], 'no timer: no table requested')
 
 
 class _Done:
