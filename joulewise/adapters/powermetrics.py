@@ -58,6 +58,7 @@ RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
 READINESS_TIMEOUT_S = 15.0
 READINESS_POLL_S = 0.05
+STOP_PROCESS_GRACE_S = 10.0
 STREAM_READ_CHUNK_BYTES = 64 * 1024
 # D-078: start_sampling refuses to return before the native whole-second
 # stamps roll over at least once, guaranteeing a bounded censored-intersection
@@ -1674,10 +1675,16 @@ class PowermetricsTelemetryAdapter:
         if process.poll() is None:
             process.terminate()
         try:
-            process.communicate(timeout=10.0)
+            process.communicate(timeout=STOP_PROCESS_GRACE_S)
         except subprocess.TimeoutExpired:
             process.kill()
-            process.communicate()
+            # Reap sudo without waiting for EOF on pipes its sampler inherited.
+            # A root sampler that ignored TERM remains an orphan: removing it
+            # requires a sudoers kill entry, which Python cannot substitute for.
+            process.wait()
+            for pipe in (process.stdout, process.stderr):
+                if pipe is not None:
+                    pipe.close()
 
 
 def trace_fallback_endpoint(

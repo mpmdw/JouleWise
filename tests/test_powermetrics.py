@@ -157,6 +157,8 @@ def capture_popen(capture, streaming=None):
             return self.returncode
 
         def terminate(self):
+            # POSIX Popen returncodes use minus the terminating signal:
+            # -15 is -SIGTERM.
             self.returncode = -15
 
         def communicate(self, timeout=None):

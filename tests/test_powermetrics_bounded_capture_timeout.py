@@ -10,7 +10,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+from joulewise.adapters.powermetrics import (
+    STOP_PROCESS_GRACE_S,
+    PowermetricsTelemetryAdapter,
+)
 from joulewise.clock import FakeClock
 from joulewise.schemas import FailureReason
 from tests.test_powermetrics import make_config
@@ -25,14 +28,10 @@ class BoundedCaptureTimeoutTests(unittest.TestCase):
         self.pid_path = self.root / "sampler.pid"
         self.signals_path = self.root / "relay.signals"
         self.sampler_dead = False
-        # Read the grace from the helper's actual communicate call rather than
-        # maintaining another copy of its 10 s constant in this test.
-        stopped = Mock()
-        stopped.poll.return_value = 0
-        PowermetricsTelemetryAdapter._stop_process(stopped)
-        self.grace_s = stopped.communicate.call_args.kwargs["timeout"]
-        # Once the pid handshake completes, 10 ms allows a scheduler turn and
-        # triggers the timeout without depending on interpreter startup speed.
+        self.grace_s = STOP_PROCESS_GRACE_S
+        # Any positive timeout below the sampler's lifetime gives the same
+        # outcome once the pid handshake has completed; 10 ms keeps tests fast
+        # without depending on interpreter startup speed.
         self.timeout_s = 0.01
         self.relay = self.root / "pm-orphan-test-sudo-relay.py"
         self.relay.write_text(
@@ -85,13 +84,14 @@ sys.exit(status if status >= 0 else 128 - status)
                 pass
 
     def _wait_for(self, predicate):
-        # Startup and pid-disappearance polls use only _stop_process's grace.
+        # Reuse the stop grace as a generous fixture startup/disappearance
+        # budget, not a measured startup limit or an acceptance threshold.
         deadline = time.monotonic() + self.grace_s
         while not predicate():
             if time.monotonic() >= deadline:
                 self.fail("fixture condition not met within _stop_process grace")
-            # Poll ten times per forced-timeout interval so the handshake does
-            # not consume an additional capture timeout or a long fixed sleep.
+            # This spacing affects observation latency only, not the result:
+            # the capture timeout starts after the explicit pid handshake.
             time.sleep(self.timeout_s / 10)
 
     def _assert_sampler_dead(self):
@@ -164,6 +164,60 @@ sys.exit(status if status >= 0 else 128 - status)
         self.assertTrue(self.signals_path.exists(), "relay never received SIGTERM")
         self.assertEqual(self.signals_path.read_text().splitlines(), ["SIGTERM"])
         self._assert_sampler_dead()
+
+    def test_stop_escalation_reaps_relay_without_waiting_for_sampler_pipes(self):
+        # One grace is the helper's only timed wait. Allow one more grace for
+        # scheduling, reaping the SIGKILLed relay, and closing pipes: wait() is
+        # not a second wait for the sampler. Give the sampler twice that total
+        # budget so an EOF wait cannot pass by reaching its natural exit.
+        return_bound_s = 2 * self.grace_s
+        sampler_lifetime_s = 2 * return_bound_s
+        self.sampler.write_text(
+            "import os, signal, time\nfrom pathlib import Path\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            f"Path({str(self.pid_path)!r}).write_text(str(os.getpid()))\n"
+            f"time.sleep({sampler_lifetime_s!r})\n",
+            encoding="utf-8",
+        )
+        process = subprocess.Popen(
+            [sys.executable, str(self.relay), str(self.signals_path), str(self.sampler)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            self._wait_for(self.pid_path.exists)
+            started = time.monotonic()
+            self.adapter._stop_process(process)
+            elapsed_s = time.monotonic() - started
+            self.assertGreaterEqual(elapsed_s, self.grace_s)
+            self.assertLess(elapsed_s, return_bound_s)
+            self.assertEqual(process.returncode, -signal.SIGKILL)
+            self.assertTrue(process.stdout.closed)
+            self.assertTrue(process.stderr.closed)
+            self.assertEqual(self.signals_path.read_text().splitlines(), ["SIGTERM"])
+            # The sampler is still alive well before its natural exit. A root
+            # orphan on this double-failure path cannot be removed by Python
+            # without a sudoers kill entry; this fixture is our unprivileged
+            # process, so the finally block can safely SIGKILL it by known pid.
+            os.kill(int(self.pid_path.read_text()), 0)
+        finally:
+            self._cleanup_capture()
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            for pipe in (process.stdout, process.stderr):
+                if pipe is not None:
+                    pipe.close()
+
+    def test_stop_escalation_with_devnull_has_no_pipes_to_close(self):
+        process = Mock(stdout=None, stderr=None)
+        process.poll.return_value = None
+        process.communicate.side_effect = subprocess.TimeoutExpired("sampler", self.grace_s)
+        self.adapter._stop_process(process)
+        process.terminate.assert_called_once_with()
+        process.communicate.assert_called_once_with(timeout=self.grace_s)
+        process.kill.assert_called_once_with()
+        process.wait.assert_called_once_with()
 
     def test_keyboard_interrupt_also_stops_grandchild_and_releases_capture(self):
         interrupt = KeyboardInterrupt("interrupted wait")

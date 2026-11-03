@@ -1,6 +1,8 @@
 ```json
-{"schema":"claude-codex-report/v1","genre":"implementation","status":"findings","completion":"complete","summary":"Fixed bounded-capture and capability-probe orphan cleanup; focused checks pass; live census denied by sandbox.","workspace":{"base_requested":"4c98bbff5","base_mode":"exact","head_start":"4c98bbff59ea4f30d6a85001d7e3a87128ec01b1","head_end":"4c98bbff59ea4f30d6a85001d7e3a87128ec01b1","upstream_end":"4c98bbff59ea4f30d6a85001d7e3a87128ec01b1","branch":"fix/2026-11-02-powermetrics-orphan"},"pathspec":["joulewise/adapters/powermetrics.py","tests/test_powermetrics_bounded_capture_timeout.py","tests/test_powermetrics.py","tests/test_idle_admission.py","tests/fixture_signatures.json","tests/test_fixture_orphan_census.py",".codex-report/PM-ORPHAN.md",".codex-report/round2-callsite-scan.log",".codex-report/round2-final-tests.log",".codex-report/round2-fixture-census.log",".codex-report/round2-focused-tests.log",".codex-report/round2-mutation-tests.log",".codex-report/round2-probe-control.log",".codex-report/round2-probe-control.py",".codex-report/round2-scan-timeout-calls.py",".codex-report/round2-seam-diagnostic.log",".codex-report/round2-seam-fixed.log",".codex-report/round2-test-seam.diff",".codex-report/round2-timeout-candidates.log"],"unowned_dirty":[".codex-report/baseline-powermetrics-tests.log",".codex-report/baseline-tests.log",".codex-report/callsite-scan.log",".codex-report/fixture-census.log",".codex-report/focused-tests.log",".codex-report/git-stage.log",".codex-report/mutation-tests.log",".codex-report/regression-tests.log",".codex-report/replay-original.py"],"verdict":{"implementation":"implemented","acceptance":"ready"},"verification":[{"id":"V1","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-round2.XXXXXX)\nTMPDIR=\"$task_tmp\" PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest -v tests.test_powermetrics_bounded_capture_timeout tests.test_powermetrics tests.test_idle_admission tests.test_controller tests.test_fixture_orphan_census > /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-focused-tests.log 2>&1","cwd":".","observed":{"result":"fail","exit_code":1,"tail":["Ran 188 tests in 96.605s","","FAILED (errors=2, skipped=2)"]},"expected":{"exit_code":0,"tail_regex":"(?s)Ran 188 tests.*OK"}},{"id":"V2","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-seam.XXXXXX)\nTMPDIR=\"$task_tmp\" PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.test_powermetrics.PowermetricsAdapterTests.test_run_fails_at_idle_without_fabricated_baseline_or_warmup > /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-seam-diagnostic.log 2>&1","cwd":".","observed":{"result":"fail","exit_code":1,"tail":["Ran 1 test in 0.320s","","FAILED (errors=1)"]},"expected":{"exit_code":0,"tail_regex":"(?s)Ran 1 test.*OK"}},{"id":"V3","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-seam-fixed.XXXXXX)\nTMPDIR=\"$task_tmp\" PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.test_powermetrics.PowermetricsAdapterTests.test_run_fails_at_idle_without_fabricated_baseline_or_warmup tests.test_powermetrics.PowermetricsAdapterTests.test_run_bundle_metadata_records_dropped_powermetrics_tail_diagnostic > /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-seam-fixed.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 2 tests in 2.917s","","OK"]},"expected":{"exit_code":0,"tail_regex":"(?s)Ran 2 tests.*OK"}},{"id":"V4","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-round2-final.XXXXXX)\nTMPDIR=\"$task_tmp\" PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest -v tests.test_powermetrics_bounded_capture_timeout tests.test_powermetrics tests.test_idle_admission tests.test_controller tests.test_fixture_orphan_census > /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-final-tests.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 188 tests in 97.419s","","OK (skipped=2)"]},"expected":{"exit_code":0,"tail_regex":"(?s)Ran 188 tests.*OK \\(skipped=2\\)"}},{"id":"V5","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-round2-mutation.XXXXXX)\nTMPDIR=\"$task_tmp\" PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/pm-orphan/.codex-report/replay-original.py > /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-mutation-tests.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["FAILED (failures=1)","ORIGINAL_GRANDCHILD_ALIVE_WITHOUT_SIGTERM=True","ORIGINAL_IMPLEMENTATION_REJECTED=True"]},"expected":{"exit_code":0,"tail_regex":"(?s)ORIGINAL_GRANDCHILD_ALIVE_WITHOUT_SIGTERM=True.*ORIGINAL_IMPLEMENTATION_REJECTED=True"}},{"id":"V6","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-round2-probe-control.XXXXXX)\nTMPDIR=\"$task_tmp\" PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-probe-control.py > /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-probe-control.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["FAILED (failures=1)","ORIGINAL_PROBE_GRANDCHILD_ALIVE_WITHOUT_SIGTERM=True","ORIGINAL_PROBE_IMPLEMENTATION_REJECTED=True"]},"expected":{"exit_code":0,"tail_regex":"(?s)ORIGINAL_PROBE_GRANDCHILD_ALIVE_WITHOUT_SIGTERM=True.*ORIGINAL_PROBE_IMPLEMENTATION_REJECTED=True"}},{"id":"V7","kind":"inspection","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-round2-census.XXXXXX)\nTMPDIR=\"$task_tmp\" PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/pm-orphan/scripts/fixture_orphan_census.py --fail-on-orphans > /Users/edr/code/jw-wt/pm-orphan/.codex-report/round2-fixture-census.log 2>&1","cwd":".","observed":{"result":"fail","exit_code":2,"tail":["{\"error\": \"PermissionError: [Errno 1] Operation not permitted: 'ps'\"}"]},"expected":{"exit_code":0,"tail_regex":"^\\[\\]$"}},{"id":"V8","kind":"inspection","cmd":"git -C /Users/edr/code/jw-wt/pm-orphan diff --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":[]},"expected":{"exit_code":0,"tail_regex":"^$"}}],"flags":[{"id":"F1","kind":"environment","level":"nonblocking","text":"Sandbox denies ps: live census exits 2 (count unknown), and two existing live census tests skip.","needs":"Lead runs the live census and its two tests in a permitted terminal."},{"id":"F2","kind":"residual_risk","level":"nonblocking","text":"Signal relay verified with unprivileged fixtures; no sudo, hardware capture, or quiet-machine measurement performed.","needs":"Lead owns live verification, final diff review, and commits; CI owns the full suite."}]}
+{"schema":"claude-codex-report/v1","genre":"implementation","status":"findings","completion":"complete","summary":"Fixed kill-escalation pipe hang with reap-and-close cleanup; added escalation regression and DEVNULL coverage.","workspace":{"base_requested":"ebf76c086","base_mode":"exact","head_start":"ebf76c08684a1ae44a7f97960ddab881f9f84b0b","head_end":"ebf76c08684a1ae44a7f97960ddab881f9f84b0b","upstream_end":"ebf76c08684a1ae44a7f97960ddab881f9f84b0b","branch":"fix/2026-11-02-powermetrics-orphan"},"pathspec":["joulewise/adapters/powermetrics.py","tests/test_powermetrics_bounded_capture_timeout.py","tests/test_powermetrics.py",".codex-report/PM-ORPHAN.md",".codex-report/fix1-baseline-tests.log",".codex-report/fix1-focused-tests.log",".codex-report/fix1-escalation-control.py",".codex-report/fix1-escalation-control.log",".codex-report/fix1-final-tests.log"],"unowned_dirty":[".codex-report/baseline-powermetrics-tests.log",".codex-report/baseline-tests.log",".codex-report/callsite-scan.log",".codex-report/fixture-census.log",".codex-report/focused-tests.log",".codex-report/git-stage.log",".codex-report/mutation-tests.log",".codex-report/regression-tests.log",".codex-report/replay-original.py",".codex-report/round2-callsite-scan.log",".codex-report/round2-final-tests.log",".codex-report/round2-fixture-census.log",".codex-report/round2-focused-tests.log",".codex-report/round2-mutation-tests.log",".codex-report/round2-probe-control.log",".codex-report/round2-probe-control.py",".codex-report/round2-scan-timeout-calls.py",".codex-report/round2-seam-diagnostic.log",".codex-report/round2-seam-fixed.log",".codex-report/round2-test-seam.diff",".codex-report/round2-timeout-candidates.log"],"verdict":{"implementation":"implemented","acceptance":"ready"},"verification":[{"id":"V1","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-baseline.XXXXXX)\nTMPDIR=\"$task_tmp\" /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_powermetrics_bounded_capture_timeout > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-baseline-tests.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 7 tests in 0.430s","","OK"]},"expected":{"exit_code":0,"tail_regex":"(?s)Ran 7 tests.*OK"}},{"id":"V2","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-focused.XXXXXX)\nTMPDIR=\"$task_tmp\" /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_powermetrics_bounded_capture_timeout > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-focused-tests.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 9 tests in 10.421s","","OK"]},"expected":{"exit_code":0,"tail_regex":"(?s)Ran 9 tests.*OK"}},{"id":"V3","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-control.XXXXXX)\nTMPDIR=\"$task_tmp\" /opt/homebrew/bin/python3.13 -B /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-escalation-control.py > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-escalation-control.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["FAILED (failures=1)","COMMITTED_UNBOUNDED_HELPER_REJECTED=True"]},"expected":{"exit_code":0,"tail_regex":"(?s)FAILED \\(failures=1\\).*COMMITTED_UNBOUNDED_HELPER_REJECTED=True"}},{"id":"V4","kind":"test","cmd":"task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-final.XXXXXX)\nTMPDIR=\"$task_tmp\" /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_powermetrics_bounded_capture_timeout tests.test_powermetrics tests.test_controller tests.test_fixture_orphan_census > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-final-tests.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 158 tests in 104.126s","","OK (skipped=2)"]},"expected":{"exit_code":0,"tail_regex":"(?s)Ran 158 tests.*OK"}},{"id":"V5","kind":"inspection","cmd":"git -C /Users/edr/code/jw-wt/pm-orphan diff --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":[]},"expected":{"exit_code":0,"tail_regex":"^$"}}],"flags":[{"id":"F1","kind":"residual_risk","level":"nonblocking","text":"A root sampler that ignores SIGTERM beyond the 10 s grace survives the sudo SIGKILL fallback. Python cannot remove it without a sudoers kill entry. Fixture evidence is not live hardware validation.","needs":"Lead owns residual acceptance, final review, live gates, and commits."},{"id":"F2","kind":"environment","level":"nonblocking","text":"Two existing live fixture-census tests skipped because the sandbox denies ps; system-wide orphan count is unknown.","needs":"Lead reruns the two live census tests in a permitted terminal."}]}
 ```
+
+The following pre-round prose is retained as history through ebf76c086; the Fix round 1 section below supersedes its cleanup and timing statements.
 
 ## Change
 
@@ -38,3 +40,94 @@ HEAD and upstream remain 4c98bbff59ea4f30d6a85001d7e3a87128ec01b1. RUN_STATE.md,
 ## Residual risk
 
 Fixture evidence is not live sudo/hardware validation. The sandbox prevents an authoritative system-wide orphan census. Lead-owned live gates and final review remain pending.
+
+## Fix round 1
+
+This section supersedes the earlier cleanup/timing statements above. Intake: both cold reports were read (Fable section 4a/findings 1–4; Opus sections 4–6/F1–F6). Mission M0 found no active stop card or global work-selection gate; this is the lead-assigned [AGENT] correction at exact HEAD `ebf76c086`. The exhaustive allowlist leaves state/queue/run-report bookkeeping with the lead.
+
+### Diff summary
+
+After the unchanged SIGTERM-first step and 10 s grace, `_stop_process` now uses `kill()`, `wait()`, then closes each non-None stdout/stderr pipe. Reaping the SIGKILLed sudo process does not read the pipe ends inherited by its sampler. The grace is named `STOP_PROCESS_GRACE_S = 10.0`; this is a refactor of the existing value. Capture exception identity, structured results, capture bytes and measurement policy remain unchanged.
+
+The process-backed escalation regression uses the existing SIGTERM-forwarding relay and installs SIG_IGN in its sampler before publishing the sampler pid. It exercises the real grace, checks relay SIGKILL/reaping and closed pipes, and verifies the sampler is still alive when cleanup returns. Its finally block SIGKILLs only the known unprivileged fixture sampler and reaps the relay. A separate escalation test covers DEVNULL's None pipes. The comments now state the real timeout constraint, latency-only poll spacing, generous startup/disappearance budget and POSIX -SIGTERM returncode.
+
+### Decisions I made
+
+- Read the grace from the named constant instead of extracting a mocked communicate call. The production value and TERM-first order stay unchanged.
+- Derive the regression's return bound from the sole timed wait: one grace (10 s), plus one grace-sized scheduling/reap/close allowance (10 s), for a test bound of 20 s. The additional interval is generous test slack, not a new production wait or an OS scheduling guarantee. The sampler lifetime is twice that bound (40 s), so a regression waiting for inherited-pipe EOF cannot pass by reaching natural sampler exit.
+- Assert the helper also spends at least the real grace on the ignoring sampler, preserving escalation timing. Assert the sampler remains live and both pipes are closed on return.
+- For the existing 0.01 s timeout, any positive value below the sampler lifetime gives the same outcome after the pid handshake. The /10 poll spacing changes observation latency only. Reusing the 10 s grace for startup/disappearance is a generous fixture budget, not a measured startup requirement.
+- Keep test_idle_admission unchanged and run only the two touched test modules plus test_controller and test_fixture_orphan_census. No full suite, sudo, real sampler, quiet-window capture, staging, commit or push was run.
+- Leave arm_readiness_evidence_t0._execute_probe (Opus F4 / Fable finding 2) and the _probe_cadence KeyboardInterrupt gap (F5) untouched for the lead's follow-up.
+
+### Test commands and output tails
+
+
+**V1 — test; exit 0.**
+
+```sh
+task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-baseline.XXXXXX)
+TMPDIR="$task_tmp" /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_powermetrics_bounded_capture_timeout > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-baseline-tests.log 2>&1
+```
+
+```text
+Ran 7 tests in 0.430s
+
+OK
+```
+
+**V2 — test; exit 0.**
+
+```sh
+task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-focused.XXXXXX)
+TMPDIR="$task_tmp" /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_powermetrics_bounded_capture_timeout > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-focused-tests.log 2>&1
+```
+
+```text
+Ran 9 tests in 10.421s
+
+OK
+```
+
+**V3 — test; exit 0.**
+
+```sh
+task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-control.XXXXXX)
+TMPDIR="$task_tmp" /opt/homebrew/bin/python3.13 -B /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-escalation-control.py > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-escalation-control.log 2>&1
+```
+
+```text
+FAILED (failures=1)
+COMMITTED_UNBOUNDED_HELPER_REJECTED=True
+```
+
+**V4 — test; exit 0.**
+
+```sh
+task_tmp=$(mktemp -d /tmp/pm-orphan-fix1-final.XXXXXX)
+TMPDIR="$task_tmp" /opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_powermetrics_bounded_capture_timeout tests.test_powermetrics tests.test_controller tests.test_fixture_orphan_census > /Users/edr/code/jw-wt/pm-orphan/.codex-report/fix1-final-tests.log 2>&1
+```
+
+```text
+Ran 158 tests in 104.126s
+
+OK (skipped=2)
+```
+
+**V5 — inspection; exit 0.**
+
+```sh
+git -C /Users/edr/code/jw-wt/pm-orphan diff --check
+```
+
+No output (clean whitespace check).
+
+The control runner intentionally reports one unittest failure and exits 0 only when the committed helper is rejected by the elapsed-time assertion. It extracts just that helper from the exact committed adapter, substitutes it in memory and runs only the new escalation regression. Its measured old-helper duration was 40.146264584036544 s against the 20 s test bound; the production files are never swapped. The fixed nine-test module, including the real 10 s escalation, passed in 10.421 s. The final four-module run passed 158 tests with two existing live census skips because ps is denied; the orphan census remains unknown. Test commands use /opt/homebrew/bin/python3.13, -B and fresh TMPDIR directories under /tmp. No out-of-scope files were modified.
+
+### Residual risk and next exact step
+
+If the root sampler ignores SIGTERM for the full 10 s grace, SIGKILL kills sudo without relaying to that sampler. The root sampler remains an orphan. Python cannot remove it without a sudoers kill entry. This fix bounds the pipe-related cleanup delay; it does not eliminate that residual orphan. These are unprivileged process fixtures, not live sudo/hardware validation.
+
+Timing disclosure (Opus F2): the earlier TERM-first implementation still adds up to the 10 s grace plus reaping/closing overhead after a capture timeout or interruption. A capability probe can therefore spend its existing 15 s request plus the 10 s stop grace before returning its existing result. The previous unbounded EOF tail after SIGKILL is removed in this round; no production timeout or acceptance number changed.
+
+HEAD and upstream remain ebf76c08684a1ae44a7f97960ddab881f9f84b0b. Existing untracked reports/logs were preserved. Next: the lead reviews this diff, reruns the two skipped live census tests where ps is permitted, owns final/live verification and residual acceptance, then commits. The two excluded launcher follow-ups stay lead-owned.
