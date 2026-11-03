@@ -17,16 +17,24 @@ Two kinds of state live here:
   physics entry only after its own artifact, plist and events hash checks, and
   stores only a verified fit (a wall-deadline firing yields no fit and is never
   stored).
-* Named memos of pure, deterministic derivations (see ``memo``).
+* Named memos of pure, deterministic derivations (see ``memo``). The V2
+  strict-grammar success set (D-188 L7) is ``memo(GRAMMAR_VERDICT_MEMO)``.
+* D-188 VDL-CORE: the run's verified derivation store
+  (``joulewise.analysis_verified_store``), created only here and only when the
+  activation names a VDL mode other than ``off``; and a slot for the phase
+  timers (``timing``, set by their owner).
 """
 from __future__ import annotations
 
 from contextlib import contextmanager
 import hashlib
+import itertools
 import json
 from typing import Any, Iterator
 
 _ACTIVE: "_RunCaches | None" = None
+_SERIALS = itertools.count(1)
+GRAMMAR_VERDICT_MEMO = "authentication_io.grammar_ok"
 
 
 class _RunCaches:
@@ -42,17 +50,27 @@ class _RunCaches:
         self.deadline: Any = None
         self.worker_observer_unavailable = False
         self.pool: Any = None
+        # D-188: a process-unique activation serial (verification scopes that
+        # outlive an activation are discarded), the verified derivation store
+        # (None unless this activation enabled it) and the phase-timer slot.
+        self.serial = next(_SERIALS)
+        self.vdl: Any = None
+        self.timing: Any = None
 
 
 @contextmanager
 def analysis_run_caches(
-    physics_store: dict | None = None, *, memos: dict | None = None, workers: int = 1
+    physics_store: dict | None = None, *, memos: dict | None = None, workers: int = 1,
+    vdl_mode: Any = None, vdl_commit: str | None = None, vdl_entries: Any = None,
 ) -> Iterator[_RunCaches]:
     """Activate the run caches in this process for the duration of the block.
 
     ``memos`` lets a long-lived worker process keep its memo tables across the
     tasks it runs for one analysis run. ``workers`` > 1 lets whole-window
     member work use a spawned pool (created on first use, shut down here).
+    ``vdl_mode`` (an ``analysis_verified_store.Mode``; ``None`` or ``off``: no
+    store) creates the run's verified derivation store, seeded from
+    ``vdl_entries`` (an ``export_entries`` payload) when given.
     """
 
     global _ACTIVE
@@ -62,8 +80,19 @@ def analysis_run_caches(
         raise TypeError("run memos must be a dict")
     if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
         raise TypeError("run workers must be a positive int")
+    store = None
+    if vdl_mode is not None:
+        from joulewise.analysis_verified_store import Mode, VerifiedStore  # noqa: PLC0415
+
+        if not isinstance(vdl_mode, Mode):
+            raise TypeError("run vdl_mode must be an analysis_verified_store.Mode")
+        if vdl_mode.active:
+            store = VerifiedStore(vdl_mode, commit=vdl_commit)
+            if vdl_entries is not None:
+                store.merge_entries(vdl_entries)
     previous = _ACTIVE
     caches = _RunCaches(physics_store, memos, workers)
+    caches.vdl = store
     _ACTIVE = caches
     try:
         yield caches
