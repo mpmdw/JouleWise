@@ -70,7 +70,7 @@ def end_state(episode, turn_rows=()):
         flags.extend(row.get('flags', ()))
     if any(f.startswith(('episode_error:', 'endpoint_error:', 'runner.error')) for f in flags):
         return 'runner.error'
-    context = next((f for f in flags if f.startswith('episode.context_limit:')), None)
+    context = next((f for f in flags if f.startswith(('episode.context_limit:', 'episode.time_guard:'))), None)
     if context:
         return context
     ended = next((f for f in flags if f.startswith('episode.end_task:')), None)
@@ -176,6 +176,12 @@ def telemetry_diagnostics(bundle, episode):
         flags.append('diagnostic.rich_telemetry_unavailable')
     def overlap(t, elapsed):
         return max(0.0, min(end, t) - max(start, t - elapsed))
+    # Turn stamps share the episode monotonic domain; map with its paired
+    # start stamp, exactly as the episode window above.
+    turn_windows = [(start + (t.start_ns - episode.start_ns) / 1e9,
+                     start + (t.end_ns - episode.start_ns) / 1e9) for t in episode.turns]
+    turn_numerators = [0.0] * len(turn_windows)
+    turn_denominators = [0.0] * len(turn_windows)
     numerator = denominator = 0.0
     for row in rich:
         elapsed = row['elapsed_ns'] / 1e9
@@ -184,6 +190,11 @@ def telemetry_diagnostics(bundle, episode):
             active = state.get('used_ns', 0) * fraction
             numerator += state['freq'] * active
             denominator += active
+            for i, (a, b) in enumerate(turn_windows):
+                support = max(0.0, min(b, row['timestamp_s']) - max(a, row['timestamp_s'] - elapsed))
+                turn_active = state.get('used_ns', 0) * support / elapsed if elapsed > 0 else 0
+                turn_numerators[i] += state['freq'] * turn_active
+                turn_denominators[i] += turn_active
     thermal = defaultdict(float)
     try:
         raw = read_bytes(bundle / 'raw/powermetrics.plist')
@@ -197,6 +208,7 @@ def telemetry_diagnostics(bundle, episode):
         flags.append('diagnostic.thermal_pressure_unavailable')
     return {'thermal_pressure_seconds': dict(thermal),
             'active_gpu_clock_mhz': numerator / denominator if denominator else None,
+            'per_turn_active_gpu_clock_mhz': [n / d if d else None for n, d in zip(turn_numerators, turn_denominators)],
             'active_gpu_seconds': denominator / 1e9, 'diagnostic_flags': flags}
 
 
@@ -215,7 +227,18 @@ def thermal_onset(episode_start_ns, episode_end_ns, turn_starts_ns, readings):
         starts.append({'turn_start_ns': stamp, 'level': prior[-1][1] if prior else None,
                        'sample_ns': prior[-1][0] if prior else None,
                        'sample_age_s': (stamp - prior[-1][0]) / 1e9 if prior else None})
+    in_episode = [t for t in elevated if episode_start_ns <= t <= episode_end_ns]
+    def bracket(stamp):
+        return {'at_or_before': next(([t, level] for t, level in reversed(samples) if t <= stamp), None),
+                'at_or_after': next(([t, level] for t, level in samples if t >= stamp), None)}
     return {**readings, 'first_nonzero_ns': onset,
+            'os_level_nonzero_in_episode': bool(in_episode),
+            'first_in_episode_nonzero_ns': in_episode[0] if in_episode else None,
+            'episode_bracketing_samples': {'start': bracket(episode_start_ns), 'end': bracket(episode_end_ns),
+                                          'onset': {'previous_sample': next(([t, level] for t, level in reversed(samples) if t < in_episode[0]), None),
+                                                    'first_nonzero_sample': next(([t, level] for t, level in samples if t == in_episode[0]), None)} if in_episode else None},
+            'throttled_fraction': ((episode_end_ns - in_episode[0]) / (episode_end_ns - episode_start_ns)
+                                   if in_episode and episode_end_ns > episode_start_ns else 0),
             'onset_from_episode_start_s': (onset - episode_start_ns) / 1e9 if onset is not None else None,
             'onset_from_episode_end_s': (onset - episode_end_ns) / 1e9 if onset is not None else None,
             'turn_start_os_levels': starts, 'onset_method': 'first_observed_nonzero_member_sample'}

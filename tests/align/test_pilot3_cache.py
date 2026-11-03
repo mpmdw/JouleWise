@@ -263,7 +263,7 @@ class CacheTests(unittest.TestCase):
     def test_spec_legacy_bytes_and_governed_policy_digest(self):
         spec = episode_spec(hidden=False)
         legacy = asdict(spec)
-        for key in ('prompt_cache', 'enable_thinking', 'max_context_tokens'):
+        for key in ('prompt_cache', 'enable_thinking', 'max_context_tokens', 'sampler', 'max_episode_seconds'):
             if legacy[key] is None:
                 del legacy[key]
         self.assertEqual(spec.to_text(), json.dumps(legacy, sort_keys=True, separators=(',', ':'), allow_nan=False))
@@ -285,6 +285,15 @@ class CacheTests(unittest.TestCase):
                                                 'requested_temperature': spec.temperature, 'max_tokens': spec.max_tokens})
         self.assertEqual(identity(spec), identity(replace(spec, prompt_cache=None)))
         self.assertNotEqual(identity(spec), identity(replace(spec, prompt_cache='episode_prefix')))
+        native = MlxRuntimeAdapter(FakeClock())
+        native._mlx_lm = SimpleNamespace(make_sampler=lambda **kwargs: kwargs,
+                                         stream_generate=lambda *args, **kwargs: iter(()))
+        adapter.runtime = SimpleNamespace(_sampler_for_generation=native._sampler_for_generation)
+        policy = {"temperature": .6, "top_p": .95, "top_k": 20, "min_p": 0}
+        sampled = replace(spec, temperature=.6, sampler=policy)
+        self.assertNotEqual(identity(spec), identity(sampled))
+        self.assertNotEqual(identity(spec), identity(replace(spec,max_episode_seconds=120)))
+        self.assertEqual(identity(spec), identity(replace(spec,sampler=None,max_episode_seconds=None)))
         with self.assertRaisesRegex(ValueError, 'prompt_cache'):
             EpisodeSpec.from_text(replace(spec, prompt_cache='wrong').to_text())
 

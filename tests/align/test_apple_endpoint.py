@@ -190,7 +190,7 @@ class ReviewTokenizer:
 
     eos_token_ids = {0}
 
-    def apply_chat_template(self, messages, *, tools, tokenize, add_generation_prompt):
+    def apply_chat_template(self, messages, *, tools, tokenize, add_generation_prompt, **kwargs):
         return "\n".join(f"<{message['role']}>{message['content']}" for message in messages)
 
     def encode(self, text, *, add_special_tokens=True):
@@ -206,7 +206,9 @@ class ReviewTask:
     task_pair = "synthetic/review_ledger"
     scratchpad_tags = ("<think>", "</think>")
 
-    def __init__(self, clock: Clock, mode: str | None = None):
+    def __init__(self, clock: Clock, mode: str | None = None, task_pair=None):
+        if task_pair is not None:
+            self.task_pair = task_pair
         self.clock = clock
         self.mode = mode
         self.calls = 0
@@ -238,8 +240,8 @@ class ReviewTask:
         return False
 
 
-def make_review_task(clock: Clock, mode: str | None = None) -> ReviewTask:
-    return ReviewTask(clock, mode)
+def make_review_task(clock: Clock, mode: str | None = None, task_pair=None) -> ReviewTask:
+    return ReviewTask(clock, mode, task_pair)
 
 
 def review_tool_text(index: int) -> str:
@@ -249,7 +251,7 @@ def review_tool_text(index: int) -> str:
     )
 
 
-def run_native_review(root: Path, scenario: str, clock: Clock, *, prompt_cache=None):
+def run_native_review(root: Path, scenario: str, clock: Clock, *, prompt_cache=None, spec_updates=None, fake_rng=None, warmup_noise=0):
     """Real registry/prepare/warmup/generation/controller/reducer, no runtime stub."""
     counter = 0
 
@@ -260,6 +262,9 @@ def run_native_review(root: Path, scenario: str, clock: Clock, *, prompt_cache=N
             consume(prompt_cache, list(prompt))
         clock.sleep(len(prompt) * 0.001)  # D-019, 1 ms per prefill token.
         if max_tokens == 4:  # Existing MLX warmup budget, outside the episode.
+            if fake_rng is not None:
+                for _ in range(4 + warmup_noise):
+                    fake_rng.draw()
             for token in range(max_tokens):
                 clock.sleep(0.010)  # D-019, 10 ms per decode token.
                 yield SimpleNamespace(token=token + 1, text="w", finish_reason=None)
@@ -294,6 +299,9 @@ def run_native_review(root: Path, scenario: str, clock: Clock, *, prompt_cache=N
                 ids[:9] = [90001, 3, 3, 90002, 90001, 3, 3, 3, 90002]
             elif scenario == "think":
                 ids[:72] = [90001] + [3] * 70 + [90002]
+        if fake_rng is not None:
+            fake_rng.passed_samplers.append(sampler)
+            ids[-1] = fake_rng.draw()
         for token in range(count):
             clock.sleep(0.010)
             piece = text[token * len(text) // count:(token + 1) * len(text) // count]
@@ -313,7 +321,7 @@ def run_native_review(root: Path, scenario: str, clock: Clock, *, prompt_cache=N
     native = SimpleNamespace(
         __version__="0.0-synthetic",
         load=lambda *args, **kwargs: (object(), ReviewTokenizer(), {}),
-        stream_generate=stream_generate, make_sampler=lambda temp: object(),
+        stream_generate=stream_generate, make_sampler=(lambda **kwargs: dict(kwargs)) if fake_rng is not None else (lambda temp: object()),
     )
     base = base_config()
     spec = EpisodeSpec(
@@ -323,6 +331,7 @@ def run_native_review(root: Path, scenario: str, clock: Clock, *, prompt_cache=N
         max_context_tokens=1 if scenario == "guard_zero" else None,
         prompt_cache=prompt_cache,
     )
+    spec = replace(spec, **(spec_updates or {}))
     config = replace(
         base, run_id="native-" + scenario,
         sampling=replace(base.sampling, idle_seconds=1.0),

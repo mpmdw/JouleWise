@@ -1,0 +1,98 @@
+{
+  "derivation": "Pilot3 A OLS member_s = intercept + slope*episode_s (300 s idle already included); pooled pilot3 OLS bundle_bytes(member_s). Expected: mean spam100/bank120 =110 s. Observed-turn case:120+41.9 s. Planning:120+4096/41.96+11 s. The guard admits a whole turn; these are transfers, not physical or thermal guarantees. Scaffold added once; harvest+desk 5400 s separately. Disk upper adds largest positive source residual.",
+  "non_claim": true,
+  "packs": {
+    "align-pilot-v3": {
+      "T_stream_max_s": 776.1567608876289,
+      "align_members": 28,
+      "blocks": [
+        {
+          "block": "A",
+          "block_upper_bytes": 16484753460,
+          "block_upper_s": 21732.389304853612,
+          "count": 28,
+          "enable_thinking": true,
+          "episode_upper_s": 228.61677788369877,
+          "fits_spent_cap": true,
+          "fits_unspent_cap": true,
+          "flags": [
+            "sizing.planning_bound_unmeasured"
+          ],
+          "max_tokens": 4096,
+          "max_turns": 12,
+          "member_cap_spent_s": 1800,
+          "member_cap_unspent_s": 3300,
+          "member_upper_bytes": 588741195,
+          "member_upper_s": 776.1567608876289,
+          "model_id": "qwen3-30b-a3b"
+        }
+      ],
+      "disk_derivation": {
+        "B_bytes": 20520294359,
+        "extra_wait_peak_bytes": 0,
+        "fixed_retained_bytes": 0,
+        "formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot3 residual) per member; plus measured scaffold; two copies",
+        "peak_copies": 2,
+        "scaffold_bytes": 4035540899
+      },
+      "disk_member_law": {
+        "intercept": 186751297.4892578,
+        "largest_abs_residual": 4286133.76241523,
+        "largest_positive_residual": 4286133.76241523,
+        "n": 24,
+        "residual_sd": 2124434.6016148976,
+        "slope": 512401.3389438561
+      },
+      "dwell_increase_s": 0,
+      "estimated_footprint_bytes": 41040588718,
+      "expected_cached": {
+        "align_s": 17961.272229884555,
+        "capture_bytes": 18467957169,
+        "collection_span_s": 22956.272229884555,
+        "episode_s": 110,
+        "member_s": 641.4740082101627,
+        "peak_bytes": 36935914338
+      },
+      "flags": [
+        "sizing.planning_bound_unmeasured"
+      ],
+      "harvest_and_desk_planned_s": 5400,
+      "member_cap": {
+        "session_wait_budget_s": 7200,
+        "spent_s": 1800,
+        "unspent_s": 3300
+      },
+      "member_count": 53,
+      "member_law": {
+        "flags": [],
+        "intercept_s": 516.5751274713251,
+        "largest_abs_residual_s": 3.728199676483726,
+        "n": 12,
+        "residual_sd_s": 2.317951867858194,
+        "slope": 1.1354443703530688
+      },
+      "observed_worst_turn": {
+        "align_s": 19611.299988881634,
+        "capture_bytes": 19313433602,
+        "collection_span_s": 24606.299988881634,
+        "episode_s": 161.9,
+        "member_s": 700.403571031487,
+        "peak_bytes": 38626867204
+      },
+      "pack_id": "align-pilot-v3",
+      "planning_case": {
+        "align_s": 21732.389304853612,
+        "capture_bytes": 20400282607,
+        "collection_span_s": 26727.389304853612,
+        "episode_s": 228.61677788369877,
+        "member_s": 776.1567608876289,
+        "peak_bytes": 40800565214
+      },
+      "programmed_span_s": 26727.389304853612,
+      "scaffold_flags": [],
+      "scaffold_members": 25,
+      "scaffold_s": 4995
+    }
+  },
+  "schema_version": "joulewise.b5_sizing.v1"
+}
