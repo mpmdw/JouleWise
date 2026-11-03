@@ -1,8 +1,8 @@
 """Outcome-blind block-5 dispatch, restricted custody and byte commitments."""
 from __future__ import annotations
 
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
-from dataclasses import dataclass, replace
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
+from dataclasses import dataclass, field, replace
 import hashlib
 import json
 import os
@@ -12,6 +12,7 @@ import subprocess
 import sys
 import traceback
 
+from . import phase_timing as _phase_timing
 from .steps import require_primary_context, StepRecord, step_record, classify_step4_exit
 from .windows import AnalysisRefusal
 
@@ -69,6 +70,8 @@ class RunnerResult:
     stdout_path: Path
     stderr_path: Path
     exception: bool = False
+    # D-188 SHIP (Sol #12): the escaped exception's class, for restricted step codes.
+    exception_class: str | None = field(default=None, compare=False)
 
     def token(self) -> str | None:
         if self.exception:
@@ -78,6 +81,24 @@ class RunnerResult:
         if any(line.startswith('error: ') for line in error.splitlines()):
             return refusal_token(error)
         return refusal_token(output)
+
+
+def _active_store():
+    """The run's verified derivation store in this process, or None (D-188)."""
+    from joulewise import analysis_run_cache
+    caches = analysis_run_cache.current()
+    return None if caches is None else getattr(caches, 'vdl', None)
+
+
+@contextmanager
+def _program_context(main, argv):
+    """D-188: one verification scope per program (only with a store) and the program's timer span."""
+    with ExitStack() as stack:
+        if _active_store() is not None:
+            from joulewise.analysis_verified_store import enter_program_scope
+            stack.enter_context(enter_program_scope())
+        stack.enter_context(_phase_timing.program_span(main, argv))
+        yield
 
 
 class StepRunner:
@@ -91,6 +112,8 @@ class StepRunner:
         self.logs = self.restricted / 'logs'
         self.logs.mkdir(parents=True, exist_ok=True)
         self._counter = 0
+        # D-188 SHIP: the class of the exception that escaped the last program.
+        self.last_exception_class = None
 
     def run(self, main, argv, *, step: str, window: str | None = None,
             stdout_path: Path | None = None) -> RunnerResult:
@@ -104,21 +127,24 @@ class StepRunner:
             raise AnalysisRefusal('custody_path_invalid')
         stderr_path = self.logs/(stem+'.stderr.log')
         stdout_path.parent.mkdir(parents=True, exist_ok=True)
-        exit_status, escaped = 2, False
+        exit_status, escaped, exception_class = 2, False, None
+        self.last_exception_class = None
         with stdout_path.open('x', encoding='utf-8', errors='backslashreplace') as out, \
              stderr_path.open('x', encoding='utf-8', errors='backslashreplace') as err:
             sys.stdout.flush(); sys.stderr.flush()
             saved_out, saved_err = os.dup(1), os.dup(2)
             try:
                 os.dup2(out.fileno(), 1); os.dup2(err.fileno(), 2)
-                with redirect_stdout(out), redirect_stderr(err):
+                # D-188: inside this body (type(r).run is StepRunner.run still holds),
+                # a verification scope per program and the program's timer span.
+                with redirect_stdout(out), redirect_stderr(err), _program_context(main, argv):
                     try:
                         value = main(list(argv))
                         exit_status = value if type(value) is int else 0 if value is None else 2
                     except SystemExit as exc:
                         exit_status = exc.code if type(exc.code) is int else 0 if exc.code is None else 2
-                    except BaseException:
-                        escaped = True
+                    except BaseException as exc:
+                        escaped, exception_class = True, type(exc).__qualname__
                         traceback.print_exc()
                     finally:
                         out.flush(); err.flush()
@@ -127,7 +153,8 @@ class StepRunner:
                     os.dup2(saved_out, 1); os.dup2(saved_err, 2)
                 finally:
                     os.close(saved_out); os.close(saved_err)
-        return RunnerResult(exit_status, stdout_path, stderr_path, escaped)
+        self.last_exception_class = exception_class
+        return RunnerResult(exit_status, stdout_path, stderr_path, escaped, exception_class)
 
 
 def require_step_inputs(restricted: Path, outputs) -> None:
@@ -160,7 +187,10 @@ def release_difference(dry_run, release) -> dict | None:
     for i in range(max(len(before), len(after))):
         left = before[i] if i < len(before) else None
         right = after[i] if i < len(after) else None
-        rows_a, rows_b = left['outputs'] if left else [], right['outputs'] if right else []
+        # D-188 sidecars (restricted step codes, the store mode) are committed
+        # after the comparison; they decide nothing here.
+        rows_a = [o for o in (left['outputs'] if left else []) if o.get('name') not in SIDECAR_NAMES]
+        rows_b = [o for o in (right['outputs'] if right else []) if o.get('name') not in SIDECAR_NAMES]
         for j in range(max(len(rows_a), len(rows_b))):
             a = rows_a[j] if j < len(rows_a) else None
             b = rows_b[j] if j < len(rows_b) else None
@@ -205,6 +235,20 @@ FLAGS = ('backup_roots_env_ignored', 'runs_root_has_unlisted_file', 'harvest_che
 CHECKS = ('input_census', 'window_index', 'harvest_outputs', 'sources_sha256sums', 'withheld_no_harvest_digest', 'withheld',
           'plan_tree_binding:sealed', 'plan_tree_binding:synthetic', 'ledger_prefix_of_live')
 _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])')
+# D-188 SHIP sidecars, committed as outputs of the last step that ran:
+# restricted/decisions/step-codes.jsonl (one row per record step, the raw code
+# captured before step_record redacts it; Sol #12) and the resolved store mode
+# (a fixed token). Neither is a step's own output.
+STEP_CODES_NAME = 'decisions/step-codes.jsonl'
+STEP_CODES_KEYS = ('pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class')
+VDL_MODE_NAME = 'logs/run-vdl-mode.json'
+VDL_MODE_SCHEMA = 'joulewise.b5_vdl_mode.v1'
+VDL_COUNTERS_NAME = 'logs/runtime-vdl-counters.json'
+SIDECAR_NAMES = (STEP_CODES_NAME, VDL_MODE_NAME)
+# A store defect at a step boundary (synthetic runs only; a blind run never
+# raises one). Not in the closed tooling list, so the record says
+# 'unclassified refusal at step N'; the raw code is in restricted step codes.
+VDL_DEFECT = 'verified_store_defect'
 
 
 def archive_inventory(archive_root, harvest_record_sha256, sources_sha256sums, *, claim_runs_root, custody_root):
@@ -390,6 +434,7 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
             keys(output, ('name','sha256')); path(output['name']); digest(output['sha256'])
             need(output['name'].split('/')[0] in ('outputs','rereduced','attempts','supply-census',
                 'kept-units','tripwires','brackets','mint','finalized','inputs','disclosures','custody') or
+                output['name'] in SIDECAR_NAMES or
                 re.fullmatch(r'analysed-attempt-exclusions-[0-9a-f]{64}\.json',output['name']) is not None or
                 re.fullmatch(r'am-[0-9a-f]{64}\.finalized\.json',output['name']) is not None)
         expected = (None if row['status'] in ('ok','not_run') else
@@ -462,6 +507,12 @@ class RunState:
         self.workers = 1
         self.deadline = None
         self.physics_store = {}
+        # D-188 SHIP: the run's verified store (None: off), the runner whose
+        # last escaped exception class a refusing record carries, and every
+        # record's raw (unredacted) code for restricted step codes.
+        self.vdl_store = None
+        self._runner = None
+        self._raw_codes = []
 
     def path(self, relative):
         if (type(relative) is not str or not relative or '\\' in relative or '\x00' in relative
@@ -545,9 +596,15 @@ class RunState:
         return result, found, code, exit_status
 
     def record(self, step, *, window=None, exit_status=0, code=None, outputs=(), flags=(), registered_exit=None):
-        return step_record(step, window=window, exit_status=exit_status, refusal_code=code,
+        result = step_record(step, window=window, exit_status=exit_status, refusal_code=code,
             classes=self.classes, outputs=tuple(outputs), flags=flags,
             schema_valid=True if outputs else None, registered_exit=registered_exit)
+        # Sol #12: the code before step_record redacts it, and the class of the
+        # exception (if any) that decided this refusing record.
+        failed = result.status not in ('ok', 'not_run')
+        self._raw_codes.append((result, code if failed else None,
+                                getattr(self._runner, 'last_exception_class', None) if failed else None))
+        return result
 
     def guarded(self, method):
         """Structure-only helper errors, including step-0/3 restricted logs."""
@@ -736,18 +793,69 @@ def _parallel(s, r, count):
     return getattr(s,'workers',1)>1 and count>1 and type(r).run is StepRunner.run
 
 
-def _dispatch(s, r, tasks):
+STEP_2_LEAVES = frozenset({'L3_reduce_dict'})
+STEP_4_LEAVES = frozenset({'L1_strict_validation', 'L2_operative_summary', 'L3_reduce_dict', 'L4_calibration_bracket',
+                           'L5_environment_refusals', 'L6_verify_instrument_calibration'})
+
+
+def _store_for(s, step, pack=None, bundle=None):
+    """The store context shipped to one child of ``step`` ({} when the run has no store).
+
+    Step 1: no entries (nothing is stored before it). Step 2: the bundle's own
+    L3 entry. Step 4: the pack's L1, L2, L3, L5 and L6 entries (trees under its
+    claim runs root or archive), every path-free entry (L1 copies, the window's
+    L4) and the shipped memos. Other steps run no child.
+    """
+    store = getattr(s, 'vdl_store', None)
+    if store is None:
+        return {}
+    from joulewise import analysis_run_cache
+    from joulewise.analysis_member_pool import vdl_context
+    from joulewise import analysis_verified_store as vdl
+    caches = analysis_run_cache.current()
+    if step == '2' and bundle is not None:
+        leaves, roots, path_free = STEP_2_LEAVES, [Path(bundle)], False
+    elif step == '4' and pack is not None and pack in getattr(s, 'windows', {}):
+        window = s.windows[pack]
+        leaves = STEP_4_LEAVES
+        roots = [root for root in (getattr(window, 'claim_runs_root', None), getattr(window, 'archive_root', None))
+                 if root is not None]
+        path_free = True
+    else:
+        return vdl_context(caches)
+    roots = [Path(os.path.realpath(root)) for root in roots]
+    specs = getattr(vdl, '_LEAVES_BY_ID', None) or {spec.leaf_id: spec for spec in vdl.LEAVES}
+
+    def selected(_key, entry):
+        if entry.leaf_id not in leaves or entry.leaf_id not in specs:
+            return False
+        if specs[entry.leaf_id].path_free:
+            return path_free
+        return bool(entry.trees) and all(
+            any(Path(identity.rsplit('\0', 1)[-1]).is_relative_to(root) for root in roots)
+            for identity, _ in entry.trees)
+
+    return vdl_context(caches, store.export_entries(selected))
+
+
+def _dispatch(s, r, tasks, contexts=None):
     """Run (program, argv, step, window) tasks in the pool; serial log counters.
 
     The runner's counter is advanced before dispatch, so a driver-side failure
-    log never collides with a worker's log name.
+    log never collides with a worker's log name. ``contexts`` are the tasks'
+    store contexts (``_store_for``).
     """
     from .parallel import dispatch
     base=r._counter
     r._counter=base+len(tasks)
     results,state=dispatch(tasks,restricted=s.restricted,first_counter=base+1,workers=s.workers,
-                           physics_store=s.physics_store)
+                           physics_store=s.physics_store,vdl=contexts,timing=_phase_timing.enabled())
     return base,results,state
+
+
+def _consumed_result(r, res):
+    """The driver's view of a child's run: its escaped exception class (Sol #12)."""
+    r.last_exception_class = res.exception_class if res.exception else None
 
 
 def _account_deadlines(s, consumed):
@@ -755,7 +863,9 @@ def _account_deadlines(s, consumed):
 
     ``consumed`` is the tasks a serial run would have started (through the stop):
     a task after the stop ran only because of the pool, so its observations count
-    no more than its outputs do.
+    no more than its outputs do. D-188: only then, and only when no consumed task
+    fired and every one could observe, their store entries and memos merge into
+    the run's store (the consumed, firing-free prefix; never a discarded task).
     """
     from .deadline_observer import OBSERVER_UNAVAILABLE
     firings=sum(res.firings or 0 for res in consumed)
@@ -763,6 +873,13 @@ def _account_deadlines(s, consumed):
         s.deadline.firings+=firings
     if any(res.firings is None for res in consumed):
         raise AnalysisRefusal(OBSERVER_UNAVAILABLE)
+    if not firings and getattr(s, 'vdl_store', None) is not None:
+        from joulewise import analysis_run_cache
+        from joulewise.analysis_member_pool import merge_consumed
+        caches=analysis_run_cache.current()
+        for res in consumed:
+            if not res.exception and res.firings==0:
+                merge_consumed(caches,res.vdl_new)
 
 
 def _stop_at(r, base, results, stop, outputs=(), created_dirs=(), needed_dirs=()):
@@ -785,7 +902,7 @@ def _step_1_parallel(s,r,jobs):
     require_primary_context(s.contexts)
     s.rehash()
     tasks=[('joulewise.cli:main',['validate-bundle','--strict',bundle],'1',pack) for pack,_,bundle in jobs]
-    base,results,_=_dispatch(s,r,tasks)
+    base,results,_=_dispatch(s,r,tasks,[_store_for(s,'1',pack,bundle) for pack,_,bundle in jobs])
     consumed=0
     try:
         for i,((pack,_,_),res) in enumerate(zip(jobs,results)):
@@ -797,6 +914,7 @@ def _step_1_parallel(s,r,jobs):
                 except AnalysisRefusal:
                     _stop_at(r,base,results,i-1);raise
             consumed=i+1
+            _consumed_result(r,res)
             exit_status=2 if res.exception else res.exit_status
             if exit_status:
                 _stop_at(r,base,results,i)
@@ -859,7 +977,7 @@ def _step_2_parallel(s,r,jobs):
         created.extend(new)
     tasks=[('joulewise.cli:main',['reduce',bundle,'--output',output],'2',pack)
            for (pack,_,bundle),output in zip(jobs,paths)]
-    base,results,_=_dispatch(s,r,tasks)
+    base,results,_=_dispatch(s,r,tasks,[_store_for(s,'2',pack,bundle) for pack,_,bundle in jobs])
     outputs=[]
     consumed=0
     try:
@@ -874,7 +992,9 @@ def _step_2_parallel(s,r,jobs):
                 except AnalysisRefusal:
                     stop(None,i-1);raise
             consumed=i+1
-            result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception)
+            _consumed_result(r,res)
+            result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception,
+                                res.exception_class)
             code=result.token() if result.exit_status or result.exception else None
             exit_status=result.exit_status
             if result.exception:
@@ -946,7 +1066,7 @@ def _step_4_parallel(s,r,packs):
     paths=[s.path('mint/extraction-'+pack+'.json') for pack in packs]
     tasks=[('scripts.extract_detection_floors:main',['--window-index',s.index_path,'--pack',pack,'--out',output,
             '--hash-bundles'],'4',pack) for pack,output in zip(packs,paths)]
-    base,results,_=_dispatch(s,r,tasks)
+    base,results,_=_dispatch(s,r,tasks,[_store_for(s,'4',pack) for pack in packs])
     records=[]
     consumed=0
     try:
@@ -958,8 +1078,10 @@ def _step_4_parallel(s,r,packs):
                 except AnalysisRefusal:
                     _stop_at(r,base,results,i-1,paths);raise
             consumed=i+1
+            _consumed_result(r,res)
             # As StepState.invoke: register the output when present, then classify.
-            result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception)
+            result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception,
+                                res.exception_class)
             outputs=[s.register('extraction_'+pack,output)] if Path(output).is_file() else []
             code=result.token() if result.exit_status or result.exception else None
             exit_status=result.exit_status
@@ -1414,6 +1536,95 @@ def _index_digest(path):
     except OSError:return '0'*64
 
 
+def vdl_mode_token(mode):
+    """The resolved store mode as a fixed structure token: off, on, blind_on or shadow_<permille>."""
+    if not mode.active:
+        return 'off'
+    if mode.name == 'shadow':
+        return 'shadow_'+str(int(mode.permille))
+    return 'blind_on' if mode.blind else 'on'
+
+
+def _step_boundary(s, runner, step, records, before):
+    """D-188: a store defect recorded during this step stops the run here (synthetic runs only).
+
+    ``check_defects`` never raises on a blind (real) run: there a defect is only
+    counted in the restricted tier and the store stops serving.
+    """
+    store = s.vdl_store
+    if store is None:
+        return records
+    from joulewise.analysis_verified_store import VerifiedStoreDefect
+    try:
+        store.check_defects()
+    except VerifiedStoreDefect:
+        runner.last_exception_class = VerifiedStoreDefect.__qualname__
+        return [s.record(step, exit_status=2, code=VDL_DEFECT,
+                         outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+    return records
+
+
+def _raw_code(s, row):
+    """(raw code, exception class) of a final record row (Sol #12: captured before redaction)."""
+    if row['status'] in ('ok', 'not_run'):
+        return None, None
+    key = (row['step'], row['window'], row['status'], row['exit_status'], row['refusal'])
+    for record, code, exception_class in reversed(s._raw_codes):
+        if (record.step, record.window, record.status, record.exit_status, record.refusal) == key:
+            return code, exception_class
+    return (row['refusal'] if row['status'] == 'tooling_refusal' else None), None
+
+
+def step_code_rows(s, record):
+    """decisions/step-codes.jsonl rows: exactly STEP_CODES_KEYS, one per record step, in order."""
+    rows = []
+    for position, row in enumerate(record['steps']):
+        code, exception_class = _raw_code(s, row)
+        rows.append({'pos': position, 'step': row['step'], 'window': row['window'], 'raw_code': code,
+                     'exit_status': row['exit_status'], 'exception_class': exception_class})
+    return rows
+
+
+def _commit_sidecars(s, record, token):
+    """Write the step codes and the store-mode token and bind both in the last step that ran.
+
+    Called after every step decision (including a release-equality rewrite), so
+    the rows are the record's final ones. The comparator authenticates them
+    through these committed digests.
+    """
+    ran = [row for row in record['steps'] if row['status'] != 'not_run']
+    if not ran:
+        return
+    codes = b''.join(json.dumps(row, sort_keys=True, separators=(',', ':')).encode('utf-8') + b'\n'
+                     for row in step_code_rows(s, record))
+    mode = _canonical({'schema_version': VDL_MODE_SCHEMA, 'vdl_mode': token})
+    items = []
+    try:
+        for name, raw in ((STEP_CODES_NAME, codes), (VDL_MODE_NAME, mode)):
+            with s.path(name).open('xb') as out:
+                out.write(raw)
+            items.append({'name': name, 'sha256': hashlib.sha256(raw).hexdigest()})
+    except (OSError, AnalysisRefusal):
+        # Never a new way for a run to fail: the record then binds no sidecar
+        # (the comparator falls back to restricted logs, labelled unauthenticated).
+        return
+    ran[-1]['outputs'] = list(ran[-1]['outputs']) + items
+
+
+def _write_vdl_counters(s):
+    """Restricted tier only: the run store's hit/miss/fill/poison/defect counts (never in the record)."""
+    store = s.vdl_store
+    if store is None:
+        return
+    try:
+        raw = _canonical({'schema_version': 'joulewise.b5_vdl_counters.v1',
+                          'counters': dict(sorted(store.restricted_counters().items()))})
+        with s.path(VDL_COUNTERS_NAME).open('xb') as out:
+            out.write(raw)
+    except (OSError, AnalysisRefusal, ValueError, TypeError):
+        pass
+
+
 def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=None,_test_repo_root=None,_runner=None,_git=None):
     """Run all registered steps. Return 0, 3 (registered outcome), or 2.
 
@@ -1424,8 +1635,14 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
     min(8, cpu_count - 2), and 1 is the serial path. It changes no output.
     """
     from .parallel import resolve_workers
+    from joulewise.analysis_verified_store import ENV_VARIABLE as VDL_ENV, resolve_mode
     try:
         workers=resolve_workers(workers)
+        # D-188: the verified store's mode. A run through any Python-only test
+        # seam is synthetic (shadow:1000 by default); the command line's real
+        # run never raises here (a malformed value runs off, lead ruling).
+        synthetic=any(seam is not None for seam in (_test_pack_table,_test_seal_pins,_test_repo_root,_runner,_git))
+        vdl_mode=resolve_mode(os.environ.get(VDL_ENV),synthetic=synthetic)
     except ValueError:
         print('step 0 - tooling_refusal',file=sys.stderr)
         return 2
@@ -1437,16 +1654,16 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
         # exposed only as the same structure step line; no exception text leaks.
         print('step 0 - tooling_refusal',file=sys.stderr)
         return 2
-    checkout_code=None;checkout_failed=False
+    checkout_code=None;checkout_failed=False;checkout_exception=None
     try:
         commit=(_git or analysis_checkout)(repo_root)
     except AnalysisRefusal as exc:
-        checkout_code=refusal_token(exc.code);checkout_failed=True
+        checkout_code=refusal_token(exc.code);checkout_failed=True;checkout_exception=type(exc).__qualname__
         # Retain a readable HEAD even when its tracked checkout was dirty.
         # A zero pin marks an unavailable HEAD on a refused preflight only.
         commit=getattr(exc,'analysis_commit','0'*40)
-    except Exception:
-        checkout_failed=True;commit='0'*40
+    except Exception as exc:
+        checkout_failed=True;commit='0'*40;checkout_exception=type(exc).__qualname__
     try:
         directory.mkdir(parents=True)
         restricted=directory/'restricted';restricted.mkdir()
@@ -1467,12 +1684,19 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
     # strict-validation and reduce sites of isolated replay contexts, and hold
     # the run's content-addressed memos.
     physics_store={}
+    # D-188: the run's verified derivation store lives in the run caches (None
+    # when off); the phase timer is entered last (restricted tier always on, the
+    # structure tier only with scripts/run_b5_analysis.py --phase-log).
     with without_backup_roots() as ignored, shared_instrument_calibration_physics_cache(physics_store), \
-            analysis_run_caches(physics_store,workers=workers) as run_caches, observe_wall_deadline() as deadline:
+            analysis_run_caches(physics_store,workers=workers,vdl_mode=vdl_mode,vdl_commit=commit) as run_caches, \
+            observe_wall_deadline() as deadline, _phase_timing.session(mode=mode) as timer:
         # Whole-window member pools (stage 4b) report worker firings here.
         run_caches.deadline=deadline
+        run_caches.timing=timer
+        _phase_timing.attach_restricted(restricted)
         s.ignored_backup=ignored
         s.workers,s.deadline,s.physics_store=workers,deadline,physics_store
+        s.vdl_store,s._runner=run_caches.vdl,runner
         if mode=='release':
             from .windows import load_window_index
             try:
@@ -1500,29 +1724,38 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
             if stopped:
                 records=[StepRecord(step,None,'not_run')]
             elif step=='0' and checkout_failed:
+                runner.last_exception_class=checkout_exception
                 records=[s.record('0',exit_status=2,code=checkout_code)]
             elif mode=='release' and step=='0' and (previous is None or difference is not None):
+                runner.last_exception_class=None
                 records=[s.record('0',exit_status=2,code='release_digest_differs_from_dry_run' if difference else 'dry_run_record_missing_or_incomplete')]
             else:
                 before=set(s.outputs)
                 firings=deadline.firings if deadline is not None else None
+                _phase_timing.step_begin(step)
+                runner.last_exception_class=None
                 try:
                     s.rehash()
                     records=function(s,runner)
                 except AnalysisRefusal as exc:
+                    runner.last_exception_class=type(exc).__qualname__
                     records=[s.record(step,exit_status=2,code=refusal_token(exc.code),
                         outputs=[s.outputs[k] for k in s.outputs if k not in before])]
-                except Exception:
+                except Exception as exc:
                     # Exception diagnostics belong only to restricted custody.
                     def fail(argv):
                         traceback.print_exc();return 2
                     runner.run(fail,[],step=step)
+                    runner.last_exception_class=type(exc).__qualname__
                     records=[s.record(step,exit_status=2,outputs=[s.outputs[k] for k in s.outputs if k not in before])]
                 if deadline is None or deadline.firings!=firings or run_caches.worker_observer_unavailable:
+                    runner.last_exception_class=None
                     records=[s.record(step,exit_status=2,
                         code=OBSERVER_UNAVAILABLE if deadline is None or run_caches.worker_observer_unavailable
                         else CALIBRATION_WALL_DEADLINE,
                         outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+                records=_step_boundary(s,runner,step,records,before)
+                _phase_timing.step_end(step)
             for record in records:
                 s.step_records.append(record)
                 if record.step!='11':
@@ -1540,12 +1773,18 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
                 record['release_difference']=difference
                 # Comparison is a step-11 tooling refusal, including a prior
                 # registered outcome; no extra unregistered step id is emitted.
+                runner.last_exception_class=None
                 record['steps'][-1]=s.record('11',exit_status=2,code='release_digest_differs_from_dry_run',
                     outputs=record['steps'][-1]['outputs']).as_dict()
                 record['completed_without_tooling_refusal']=False
+        # D-188 SHIP: restricted step codes and the store-mode token, bound in
+        # the record (after every decision above, so the rows are final).
+        _commit_sidecars(s,record,vdl_mode_token(vdl_mode))
         validate_dry_run_record(record,index=s.index,kept_units=s.kept)
         output=directory/('B5-BLIND-DRY-RUN-RECORD.json' if mode=='blind-dry-run' else 'B5-RELEASE-RECORD.json')
         with output.open('xb') as out:out.write(_canonical(record))
+        _write_vdl_counters(s)
+        _phase_timing.run_end()
         last=record['steps'][-1]
         print('step 11 '+(last['window'] or '-')+' '+last['status'],file=sys.stderr)
     print(str(output)+' '+_sha(output))
