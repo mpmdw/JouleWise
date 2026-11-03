@@ -636,6 +636,214 @@ class RecorderSessionlessSemantics(_Tmp):
         self.assertEqual(recorded, plain)
 
 
+def _at_extra_depth(frames: int, call):
+    if frames <= 0:
+        return call()
+    return _at_extra_depth(frames - 1, call)
+
+
+def _nested(depth: int) -> bytes:
+    return b'{"a":' * depth + b"1" + b"}" * depth
+
+
+class StackDepthDependentFailures(_Tmp):
+    """Review LOW 1: a RecursionError depends on stack depth, so a memo hit must not mask one."""
+
+    def _reads(self, path, memo_on: bool, grammar: str, extras):
+        outcomes = []
+        calls = []
+        real = aio._parse_strict
+
+        def counting(raw, grammar, label, **kwargs):
+            calls.append(grammar)
+            return real(raw, grammar, label, **kwargs)
+
+        def body():
+            with V2AuthenticationReadSession():
+                for extra in extras:
+                    try:
+                        _at_extra_depth(extra, lambda: aio.read_authentication_input(
+                            path, grammar=grammar, label="deep"))
+                    except RecursionError:
+                        outcomes.append("RecursionError")
+                    else:
+                        outcomes.append("ok")
+
+        with mock.patch.object(aio, "_parse_strict", counting):
+            if memo_on:
+                with arc.analysis_run_caches():
+                    body()
+                    table = dict(arc.memo(aio.GRAMMAR_VERDICT_MEMO))
+            else:
+                body()
+                table = None
+        return outcomes, calls, table
+
+    def _deepest_parsing_nesting(self) -> int:
+        """The deepest nesting a plain read parses from this test's own stack depth."""
+
+        deepest = 0
+        for depth in range(100, __import__("sys").getrecursionlimit() + 10, 10):
+            path = self.write(f"probe{depth}.json", _nested(depth))
+            outcomes, _, _ = self._reads(path, memo_on=False, grammar="json", extras=(0,))
+            if outcomes != ["ok"]:
+                break
+            deepest = depth
+        self.assertGreater(deepest, 600)
+        return deepest
+
+    ENCODERS = ((".json", _nested), (".jsonl", lambda d: b"{}\n" + _nested(d) + b"\n"))
+
+    def test_deep_nesting_is_never_memoized_and_fails_at_the_same_read(self):
+        # Parses with ~150 frames to spare shallow, fails by ~150 frames 300 frames deeper.
+        depth = self._deepest_parsing_nesting() - 150
+        for suffix, encode in self.ENCODERS:
+            with self.subTest(grammar=suffix):
+                path = self.write(f"deep{suffix}", encode(depth))
+                extras = (0, 300, 0)
+                off, off_calls, _ = self._reads(path, memo_on=False, grammar=suffix[1:], extras=extras)
+                on, on_calls, table = self._reads(path, memo_on=True, grammar=suffix[1:], extras=extras)
+                self.assertEqual(off, ["ok", "RecursionError", "ok"])
+                self.assertEqual(on, off)
+                self.assertEqual(len(off_calls), 3)
+                # Read 1: the pushed-down parse hits the limit, then the caller-depth parse decides;
+                # reads 2 and 3 parse at the caller's depth.  Nothing is remembered as a success.
+                self.assertEqual(len(on_calls), 4)
+                self.assertEqual(table, {(sha(encode(depth)), suffix[1:], False): False})
+
+    def test_a_memoized_success_never_masks_a_deep_stack_recursion_error(self):
+        # Nesting 200 parses within the reserve, so it is memoized; read 2 runs with less
+        # headroom than the nesting needs, so it must parse (and fail) with the memo on too.
+        for suffix, encode in self.ENCODERS:
+            with self.subTest(grammar=suffix):
+                raw = encode(200)
+                path = self.write(f"mid{suffix}", raw)
+                extra = aio._python_stack_headroom() - 150
+                extras = (0, extra, 0, 100)
+                off, off_calls, _ = self._reads(path, memo_on=False, grammar=suffix[1:], extras=extras)
+                on, on_calls, table = self._reads(path, memo_on=True, grammar=suffix[1:], extras=extras)
+                self.assertEqual(off, ["ok", "RecursionError", "ok", "ok"])
+                self.assertEqual(on, off)
+                self.assertEqual(len(off_calls), 4)
+                self.assertEqual(len(on_calls), 2)  # reads 3 and 4 are hits
+                self.assertEqual(table, {(sha(raw), suffix[1:], False): True})
+
+    def test_a_grammar_refusal_from_the_pushed_down_parse_is_the_plain_refusal(self):
+        path = self.write("dup.json", b'{"a": {"b": 1, "b": 2}}')
+        signatures = []
+        for memo_on in (False, True):
+            def body():
+                with V2AuthenticationReadSession() as session:
+                    with self.assertRaises(V2AuthenticationInputError) as caught:
+                        session.read(path, grammar="json", label="dup")
+                    signatures.append(_signature(caught.exception))
+
+            if memo_on:
+                with arc.analysis_run_caches():
+                    body()
+                    self.assertEqual(arc.memo(aio.GRAMMAR_VERDICT_MEMO), {})
+            else:
+                body()
+        self.assertEqual(signatures[0], signatures[1])
+        self.assertEqual(signatures[0][1], "v2_authentication_duplicate_json_key")
+
+    def test_hits_do_not_depend_on_which_stack_depth_warmed_the_memo(self):
+        path = self.write("shallow.json", GOOD_JSON)
+        with arc.analysis_run_caches():
+            with V2AuthenticationReadSession() as session:
+                _at_extra_depth(200, lambda: session.read(path, grammar="json", label="warm"))
+                with mock.patch.object(aio, "_parse_strict", side_effect=AssertionError("parsed on a hit")):
+                    session.read(path, grammar="json", label="shallower")
+                    _at_extra_depth(300, lambda: session.read(path, grammar="json", label="deeper"))
+            self.assertEqual(arc.memo(aio.GRAMMAR_VERDICT_MEMO), {(sha(GOOD_JSON), "json", False): True})
+
+
+class GovernedVocabularyOnNofollowReads(_Tmp):
+    """Review LOW 2: the vocabulary flag of the no-follow paths is part of the memo key."""
+
+    GOVERNED = b'{"spec": {"estimator_registration": {"name": "x"}}}'
+
+    def _run(self, memo_on: bool, pinned: bool):
+        self.write("g/spec.json", self.GOVERNED)
+        self.write("g/plain.json", self.GOVERNED)
+        outcomes = []
+
+        def read(session, relative, label):
+            if pinned:
+                return session.read_nofollow_pinned(self.root / "g", relative, expected_sha256=sha(self.GOVERNED),
+                                                    grammar="raw", label=label)
+            return session.read_nofollow(self.root / "g", relative, grammar="raw", label=label)
+
+        def body():
+            with V2AuthenticationReadSession() as session:
+                session.allow_governed_extraction_spec(self.root / "g/spec.json")
+                for index, relative in enumerate(("spec.json", "plain.json", "spec.json", "plain.json")):
+                    try:
+                        raw = read(session, relative, f"read {index}")
+                    except V2AuthenticationInputError as exc:
+                        outcomes.append((index, "raise", _signature(exc)))
+                    else:
+                        outcomes.append((index, "ok", sha(raw)))
+                return dict(session.records)
+
+        if memo_on:
+            with arc.analysis_run_caches():
+                records = body()
+                keys = set(arc.memo(aio.GRAMMAR_VERDICT_MEMO))
+        else:
+            records = body()
+            keys = None
+        return outcomes, records, keys
+
+    def test_governed_and_ungoverned_nofollow_reads_keep_their_verdicts(self):
+        for pinned in (False, True):
+            with self.subTest(pinned=pinned):
+                off = self._run(False, pinned)
+                on = self._run(True, pinned)
+                self.assertEqual(on[:2], off[:2])
+                outcomes = on[0]
+                self.assertEqual([o[1] for o in outcomes], ["ok", "raise", "ok", "raise"])
+                for index in (1, 3):
+                    self.assertEqual(outcomes[index][2][1], "v2_authentication_forbidden_json_key")
+                    self.assertIn(f"read {index}", outcomes[index][2][2])
+                self.assertEqual(on[2], {(sha(self.GOVERNED), "json", True)})
+
+
+class RecordedPathPlainPathParity(_Tmp):
+    """Review LOW 3: read_text(newline=...) and repr() match a plain Path."""
+
+    def test_repr_matches_plain_path(self):
+        target = self.root / "r.txt"
+        with aio.recording_authentication_reads():
+            recorded = aio.v2_authentication_path(target)
+            child = aio.v2_authentication_path(self.root) / "r.txt"
+        self.assertIsNot(type(recorded), type(Path()))
+        self.assertEqual(repr(recorded), repr(Path(target)))
+        self.assertEqual(repr(child), repr(Path(target)))
+        self.assertEqual(str(recorded), str(Path(target)))
+
+    def test_read_text_newline_matches_plain_path(self):
+        target = self.write("n.txt", b"a\r\nb\rc\n")
+
+        def outcome(path, **kwargs):
+            try:
+                return ("ok", path.read_text(**kwargs))
+            except TypeError as exc:
+                return ("raise", type(exc), str(exc))
+
+        for kwargs in ({}, {"newline": ""}, {"newline": "\n"}, {"newline": None}, {"encoding": "utf-8", "newline": ""}):
+            with self.subTest(kwargs=kwargs):
+                plain = outcome(Path(target), **kwargs)
+                with aio.recording_authentication_reads() as rows:
+                    recorded = outcome(aio.v2_authentication_path(target), **kwargs)
+                self.assertEqual(recorded, plain)
+                if plain[0] == "ok":
+                    self.assertEqual([(row.api, row.sha256) for row in rows],
+                                     [("v2_path.read_text", sha(target.read_bytes()))])
+                else:
+                    self.assertEqual(rows, [])
+
+
 class HazardRefusalSites(unittest.TestCase):
     def test_raise_site_counts_and_guards_match_the_allowlist(self):
         file = "joulewise/authentication_io.py"
@@ -653,7 +861,8 @@ class HazardRefusalSites(unittest.TestCase):
         for function in ("ensure_grammar_verdict", "forced_grammar", "_parse_strict_memoized",
                          "recording_authentication_reads", "_record_read", "_record_sessionless",
                          "_absolute_identity", "V2AuthenticationReadSession.ensure_grammar_verdict",
-                         "V2AuthenticationReadSession.vocabulary_flag"):
+                         "V2AuthenticationReadSession.vocabulary_flag", "_python_stack_headroom", "_parse_strict_below",
+                         "_RecordedAuthenticationPath.read_text", "_RecordedAuthenticationPath.__repr__"):
             self.assertFalse([key for key in counts if key[1] == function], function)
 
 

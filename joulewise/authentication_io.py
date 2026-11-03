@@ -25,6 +25,7 @@ import json
 import math
 import os
 import stat
+import sys
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
@@ -312,19 +313,36 @@ class _RecordedAuthenticationPath(type(Path())):
         self._record("v2_path.read_bytes", raw)
         return raw
 
+    def __repr__(self) -> str:
+        # The text a plain Path of a run without a recorder would show.
+        return repr(Path(self))
+
     def read_text(
         self,
         encoding: str | None = None,
         errors: str | None = None,
+        newline: str | None = None,
     ) -> str:
+        if newline is not None and sys.version_info < (3, 13):
+            # Path.read_text takes ``newline`` only from 3.13: fail as it does.
+            return super().read_text(
+                encoding=encoding, errors=errors, newline=newline
+            )
         if _READ_RECORDER.get() is None:
-            return super().read_text(encoding=encoding, errors=errors)
-        with super().open("r", encoding=encoding, errors=errors) as handle:
+            if newline is None:
+                return super().read_text(encoding=encoding, errors=errors)
+            return super().read_text(
+                encoding=encoding, errors=errors, newline=newline
+            )
+        with super().open(
+            "r", encoding=encoding, errors=errors, newline=newline
+        ) as handle:
             raw = handle.buffer.read()
             text = io.TextIOWrapper(
                 io.BytesIO(raw),
                 encoding=handle.encoding,
                 errors=handle.errors,
+                newline=newline,
             ).read()
         self._record("v2_path.read_text", raw)
         return text
@@ -536,6 +554,51 @@ def forced_grammar(
     return _forced_grammar(identity, caller_grammar)
 
 
+# The verdict memo (L7) remembers a success only for bytes that parse with at
+# most _VERDICT_STACK_RESERVE Python frames of headroom, and serves it only to
+# a read with _VERDICT_STACK_SLACK frames more than that.
+_VERDICT_STACK_RESERVE = 256
+_VERDICT_STACK_SLACK = 64
+
+
+def _python_stack_headroom() -> int:
+    """Python frames this thread may still push before ``RecursionError``.
+
+    The recursion limit minus the depth of the caller's frame chain.  On
+    CPython 3.12+ the interpreter raises ``RecursionError`` from the count of
+    active Python frames against this same limit.
+    """
+
+    depth = 0
+    frame = sys._getframe(1)
+    while frame is not None:
+        depth += 1
+        frame = frame.f_back
+    return sys.getrecursionlimit() - depth
+
+
+def _parse_strict_below(
+    frames: int,
+    raw: bytes,
+    grammar: AuthenticationGrammar,
+    label: str,
+    allow_governed_spec_vocabulary: bool,
+) -> None:
+    """``_parse_strict`` called ``frames`` Python frames further down the stack."""
+
+    if frames > 0:
+        _parse_strict_below(
+            frames - 1, raw, grammar, label, allow_governed_spec_vocabulary
+        )
+        return
+    _parse_strict(
+        raw,
+        grammar,
+        label,
+        allow_governed_spec_vocabulary=allow_governed_spec_vocabulary,
+    )
+
+
 def _parse_strict_memoized(
     raw: bytes,
     digest: str,
@@ -545,11 +608,31 @@ def _parse_strict_memoized(
 ) -> None:
     """``_parse_strict`` behind the run's success-only verdict memo (L7).
 
-    ``_parse_strict`` is a pure function of (bytes, grammar, vocabulary
-    flag); ``label`` reaches only the text of a raised error.  A key is
-    stored only after a parse returned normally, so every failure always
-    re-runs the identical parse and raises its own type, message and
-    position.  Outside an analysis run there is no memo and every read parses.
+    Every ``V2AuthenticationInputError`` verdict of ``_parse_strict`` is a
+    function of (bytes, grammar, vocabulary flag) alone; ``label`` reaches
+    only the text of a raised error.  A key is stored only after a parse
+    returned normally, so every failure always re-runs the identical parse
+    and raises its own type, message and position.  Outside an analysis run
+    there is no memo and every read parses.
+
+    Interpreter limits are not a function of the bytes: deeply nested JSON
+    (hundreds of levels) can raise ``RecursionError`` from a deep call stack
+    and parse from a shallow one, and a cold ABC instance-check cache adds a
+    few frames.  So the first parse of a key runs pushed down the stack until
+    only ``_VERDICT_STACK_RESERVE`` frames of headroom
+    (:func:`_python_stack_headroom`) remain.  If it succeeds there, the bytes
+    need at most that many frames, and a later read with
+    ``_VERDICT_STACK_SLACK`` frames more than that is a hit: a parse there
+    could not reach the recursion limit either.  A read with less headroom
+    always parses.  If the pushed-down parse raises ``RecursionError`` (or
+    ``MemoryError``), the key is marked as needing a parse on every read, the
+    parse is re-run at the caller's own depth and its outcome stands, so a
+    ``RecursionError`` fires at the same read as without the memo.  Any other
+    error of the pushed-down parse (a grammar refusal) does not depend on the
+    stack and propagates as it is.  This is exact on CPython 3.12+, where
+    Python recursion counts Python frames only.  Not covered: a
+    ``MemoryError`` that a hit would have met, and Python 3.11, where C-level
+    calls in the caller's chain also consume the recursion budget.
     """
 
     if grammar != "json" and grammar != "jsonl":
@@ -561,17 +644,39 @@ def _parse_strict_memoized(
         )
         return
     table = _run_cache.memo(GRAMMAR_VERDICT_MEMO)
-    key = (digest, grammar, allow_governed_spec_vocabulary)
-    if table is not None and key in table:
+    headroom = _python_stack_headroom() if table is not None else 0
+    if table is None or headroom < _VERDICT_STACK_RESERVE + _VERDICT_STACK_SLACK:
+        _parse_strict(
+            raw,
+            grammar,
+            label,
+            allow_governed_spec_vocabulary=allow_governed_spec_vocabulary,
+        )
         return
+    key = (digest, grammar, allow_governed_spec_vocabulary)
+    verdict = table.get(key)
+    if verdict is True:
+        return
+    if verdict is None:
+        try:
+            _parse_strict_below(
+                headroom - _VERDICT_STACK_RESERVE,
+                raw,
+                grammar,
+                label,
+                allow_governed_spec_vocabulary,
+            )
+        except (RecursionError, MemoryError):
+            table[key] = False
+        else:
+            table[key] = True
+            return
     _parse_strict(
         raw,
         grammar,
         label,
         allow_governed_spec_vocabulary=allow_governed_spec_vocabulary,
     )
-    if table is not None:
-        table[key] = True
 
 
 def ensure_grammar_verdict(
