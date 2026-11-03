@@ -242,12 +242,16 @@ _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE]
 # (a fixed token). Neither is a step's own output.
 STEP_CODES_NAME = 'decisions/step-codes.jsonl'
 STEP_CODES_KEYS = ('pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class')
-# The step-codes file ends with one whitespace-only salt line (STEP_CODES_SALT_BITS
-# random bits, space = 0, tab = 1). The comparator skips blank lines, so the rows
-# are unchanged; the salt makes the record's sha256 of the file a hiding
-# commitment, so the redacted raw codes cannot be recovered from the blind record
-# by hashing guessed rows (review of PR #636, finding 1).
+# On a real (blind) run the step-codes file ends with one whitespace-only salt
+# line (STEP_CODES_SALT_BITS fresh random bits, space = 0, tab = 1). The
+# comparator skips blank lines, so the rows are unchanged; the salt makes the
+# record's sha256 of the file a hiding commitment, so the redacted raw codes
+# cannot be recovered from the blind record by hashing guessed rows (review of
+# PR #636, finding 1). A synthetic run (a Python test seam) has nothing to blind
+# and stays byte-reproducible, so it writes no salt line unless a test sets
+# STEP_CODES_SALT_SYNTHETIC.
 STEP_CODES_SALT_BITS = 256
+STEP_CODES_SALT_SYNTHETIC = False
 # The store-mode file is named by its token, so the record itself shows the
 # resolved mode as structure (the comparator's logs/* outputs are audit).
 VDL_MODE_PREFIX = 'logs/run-vdl-mode-'
@@ -1622,18 +1626,19 @@ def step_codes_salt():
     return ''.join(' \t'[(value >> bit) & 1] for bit in range(STEP_CODES_SALT_BITS)).encode('ascii') + b'\n'
 
 
-def _commit_sidecars(s, record, token):
+def _commit_sidecars(s, record, token, *, salted):
     """Write the step codes and the store-mode token and bind both in the last step that ran.
 
     Called after every step decision (including a release-equality rewrite), so
     the rows are the record's final ones. The comparator authenticates them
-    through these committed digests.
+    through these committed digests. ``salted`` (a real run) appends the random
+    salt line that makes the step-codes digest hiding.
     """
     ran = [row for row in record['steps'] if row['status'] != 'not_run']
     if not ran:
         return
     codes = b''.join(json.dumps(row, sort_keys=True, separators=(',', ':')).encode('utf-8') + b'\n'
-                     for row in step_code_rows(s, record)) + step_codes_salt()
+                     for row in step_code_rows(s, record)) + (step_codes_salt() if salted else b'')
     mode = _canonical({'schema_version': VDL_MODE_SCHEMA, 'vdl_mode': token})
     items = []
     try:
@@ -1816,7 +1821,7 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
                 record['completed_without_tooling_refusal']=False
         # D-188 SHIP: restricted step codes and the store-mode token, bound in
         # the record (after every decision above, so the rows are final).
-        _commit_sidecars(s,record,vdl_mode_token(vdl_mode))
+        _commit_sidecars(s,record,vdl_mode_token(vdl_mode),salted=not synthetic or STEP_CODES_SALT_SYNTHETIC)
         validate_dry_run_record(record,index=s.index,kept_units=s.kept)
         output=directory/('B5-BLIND-DRY-RUN-RECORD.json' if mode=='blind-dry-run' else 'B5-RELEASE-RECORD.json')
         with output.open('xb') as out:out.write(_canonical(record))

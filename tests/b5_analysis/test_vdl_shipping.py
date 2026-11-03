@@ -541,7 +541,8 @@ class StepCodesTests(unittest.TestCase):
         self.index.write_bytes(d._canonical({'schema': 'joulewise.b5_window_index.v1', 'attempts': []}))
         self.serial = 0
 
-    def execute(self, overrides, *, environ=None):
+    def execute(self, overrides, *, environ=None, salted=True):
+        """Run the stub driver; ``salted`` forces a real run's step-codes salt line (the default here)."""
         self.serial += 1
         custody = self.tmp / f'custody-{self.serial}'
         steps = [(name, overrides.get(name, lambda s, r, name=name: [s.record(name)])) for name in d.STEP_IDS]
@@ -549,6 +550,7 @@ class StepCodesTests(unittest.TestCase):
         with mock.patch.object(d, 'STEPS', steps), mock.patch.object(d, 'validate_dry_run_record', validate), \
                 mock.patch.object(d, '_record_parts', return_value=([], [], [])), \
                 mock.patch.dict(os.environ, environ or {}), \
+                mock.patch.object(d, 'STEP_CODES_SALT_SYNTHETIC', salted), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             code = d.run('blind-dry-run', self.index, custody, workers=1, _test_repo_root=self.tmp / 'repo',
                          _git=lambda repo: 'b' * 40)
@@ -556,8 +558,11 @@ class StepCodesTests(unittest.TestCase):
         record = json.loads((run / 'B5-BLIND-DRY-RUN-RECORD.json').read_bytes())
         lines = (run / 'restricted' / d.STEP_CODES_NAME).read_text().splitlines()
         rows = [json.loads(line) for line in lines if line.strip()]
-        self.assertEqual(lines[:-1], [line for line in lines if line.strip()], 'only the last line is blank')
-        self.assertRegex(lines[-1], '^[ \t]{%d}$' % d.STEP_CODES_SALT_BITS, 'the salt line')
+        if salted:
+            self.assertEqual(lines[:-1], [line for line in lines if line.strip()], 'only the last line is blank')
+            self.assertRegex(lines[-1], '^[ \t]{%d}$' % d.STEP_CODES_SALT_BITS, 'the salt line')
+        else:
+            self.assertTrue(all(line.strip() for line in lines), 'a synthetic run writes no salt line')
         return code, custody, record, rows
 
     def assertBound(self, custody, record, rows):
@@ -680,6 +685,13 @@ class StepCodesTests(unittest.TestCase):
             self.assertNotEqual(hashlib.sha256(plain).hexdigest(), digest)
             bound.append(digest)
         self.assertNotEqual(bound[0], bound[1], 'identical runs bind unlinkable digests')
+
+    def test_a_synthetic_run_writes_no_salt_and_stays_reproducible(self):
+        overrides = {'8': lambda s, r: [s.record('8', exit_status=2, code='unlisted_code_q')]}
+        first = self.execute(overrides, environ={vdl.ENV_VARIABLE: 'off'}, salted=False)
+        second = self.execute(overrides, environ={vdl.ENV_VARIABLE: 'off'}, salted=False)
+        self.assertEqual(first[2], second[2], 'two synthetic custody roots: identical records')
+        self.assertBound(first[1], first[2], first[3])
 
     def test_release_comparison_ignores_the_sidecars(self):
         before = {'input_census': [], 'steps': [{'step': '0', 'outputs': [
