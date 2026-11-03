@@ -12,7 +12,11 @@ exists/is_dir probe and its two-second timeout) in front of the S2 fixture's
 synthetic capture decoder. Today the store never stores a fill that started a
 thread, so those fills are unstorable; the tests that relax that rule (as a
 later store revision might) show that a refusal resting on a negative or
-timed-out probe is still never served.
+timed-out probe is still never served. Under that relaxed rule such a refusal
+IS stored and exported (only never served): the store has no per-leaf value
+predicate yet (review of PR #634, finding 1, deferred to AUTH-IO-2). The
+tolerance must not land without one; ``test_tolerated_probe_thread_needs_a_value_predicate``
+shows why and flips once the L4 spec carries ``storable_value``.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import io
 import json
 import os
 from pathlib import Path
+import pickle
 import re
 import shutil
 import sys
@@ -112,6 +117,55 @@ def bound_captures(built):
     binding = json.loads((built.archive / "derived/bracket-binding.json").read_bytes())
     root = built.claim / "instrument_validation"
     return [root / f"{binding['session_id']}-{slot}" for slot in ("pre", "post")]
+
+
+def contained_loader(path, *, runs_root, mode="issuing", **_):
+    """probing_loader plus the frozen loader's containment step (calibration_bracketing.py:1678-1682)."""
+    def inspect(mapped):
+        try:
+            directory = Path(mapped).resolve(strict=True)
+            directory.relative_to(Path(runs_root).resolve())
+        except (OSError, ValueError):
+            return None
+        return fx._decode_capture(directory, runs_root=runs_root, mode=mode)
+    return cl.probe_custody(Path(path), inspect, lambda: None, mode=mode)
+
+
+@contextlib.contextmanager
+def timed_out(slow: Path):
+    """The real probe of ``slow`` outlives a shortened custody-probe timeout."""
+    real_paths = cl._custody_probe_paths
+
+    class SlowPath(type(slow)):
+        def exists(self, *args, **kwargs):
+            time.sleep(0.5)
+            return super().exists(*args, **kwargs)
+
+    def paths(path, *, mode="issuing"):
+        found = real_paths(path, mode=mode)
+        return tuple(SlowPath(item) if Path(item) == slow else item for item in found)
+
+    stderr = io.StringIO()
+    with mock.patch.object(cl, "_custody_probe_paths", paths), \
+            mock.patch.object(cl, "CUSTODY_PROBE_TIMEOUT_S", 0.05), contextlib.redirect_stderr(stderr):
+        yield stderr
+
+
+def stored_l4(payload):
+    return [pickle.loads(entry.value) for entry in payload["entries"].values() if entry.leaf_id == L4]
+
+
+@contextlib.contextmanager
+def relocated_behind_symlink(directory: Path):
+    """Move ``directory`` out of its runs root and leave a symlink to it (bytes and inodes unchanged)."""
+    elsewhere = directory.parents[2] / ("relocated-" + directory.name)
+    directory.rename(elsewhere)
+    directory.symlink_to(elsewhere, target_is_directory=True)
+    try:
+        yield
+    finally:
+        directory.unlink()
+        elsewhere.rename(directory)
 
 
 @contextlib.contextmanager
@@ -323,6 +377,27 @@ class LeafBracketTests(_Base):
                 self.assertFalse(br._servable(assessment, reasons))
 
 
+class StorableValueTests(unittest.TestCase):
+    def test_storable_value_is_exactly_the_servable_pair(self):
+        good = {"status": "passed", "b_fiducial_s": 0}
+        self.assertTrue(br._storable_value((good, ())))
+        for value in ((good, ("x",)), [good, ()], (good,), ({**good, "status": "failed"}, ()), None):
+            with self.subTest(value=value):
+                self.assertFalse(br._storable_value(value))
+
+    def test_located_as_recorded(self):
+        with tempfile.TemporaryDirectory(prefix="leaf-located-") as raw:
+            root = Path(os.path.realpath(raw))
+            (root / "inside").mkdir()
+            (root / "inside" / "a").write_bytes(b"a")
+            entry = vdl.Entry(L4, b"", (), ((str(root / "inside" / "a"), "d"),), ((str(root / "inside"), "n"),), (), (), None)
+            self.assertTrue(br._located_as_recorded(entry))
+            (root / "inside").rename(root / "moved")
+            (root / "inside").symlink_to(root / "moved", target_is_directory=True)
+            self.assertFalse(br._located_as_recorded(entry))
+            self.assertFalse(br._located_as_recorded(object()))
+
+
 class CustodyProbeTests(_Base):
     """Sol #5: candidate custody probes (real probe_custody) and their timeout."""
 
@@ -352,7 +427,9 @@ class CustodyProbeTests(_Base):
                         stack.enter_context(mock.patch.object(br, "_servable", return_value=True))
                     with moved_aside(missing):
                         self.assertEqual(outcome(self.gamma), refused)
-                    self.assertEqual(counters(caches)["fill"], 1, "a storable fill on a negative probe")
+                    # Stored and exportable, only never served: no store value
+                    # predicate yet (finding 1, deferred to AUTH-IO-2).
+                    self.assertEqual(counters(caches)["fill"], 1, "a stored fill on a negative probe")
                     if guard:
                         self.assertEqual(outcome(self.gamma), restored)
                         self.assertEqual(calls.call_count, 2)
@@ -362,31 +439,100 @@ class CustodyProbeTests(_Base):
                         self.assertEqual(outcome(self.gamma), refused)
 
     def test_timed_out_probe_is_never_served(self):
-        slow = bound_captures(self.gamma)[0]
-        real_paths = cl._custody_probe_paths
-
-        class SlowPath(type(slow)):
-            def exists(self, *args, **kwargs):
-                time.sleep(0.5)
-                return super().exists(*args, **kwargs)
-
-        def paths(path, *, mode="issuing"):
-            found = real_paths(path, mode=mode)
-            return tuple(SlowPath(item) if Path(item) == slow else item for item in found)
-
         with probing(), threads_tolerated():
             expected = self.serial(self.gamma)
             with run() as caches, frozen_calls() as calls:
-                stderr = io.StringIO()
-                with mock.patch.object(cl, "_custody_probe_paths", paths), \
-                        mock.patch.object(cl, "CUSTODY_PROBE_TIMEOUT_S", 0.05), \
-                        contextlib.redirect_stderr(stderr):
+                with timed_out(bound_captures(self.gamma)[0]) as stderr:
                     timed = outcome(self.gamma)
                 self.assertIn("custody_locator_unreachable reason=timeout", stderr.getvalue())
                 self.assertEqual(timed[0], ("refused", "window_bracket_not_passed"))
+                # Stored and exportable, only never served: no store value
+                # predicate yet (finding 1, deferred to AUTH-IO-2).
                 self.assertEqual(counters(caches)["fill"], 1)
                 self.assertEqual(outcome(self.gamma), expected)
         self.assertEqual(calls.call_count, 2, "the timed-out outcome was recomputed, not served")
+
+    def test_timeout_dependent_fill_is_never_stored_or_merged(self):
+        """Review finding 1 tripwire, today's store rule (the real probe thread, not tolerated).
+
+        A refusal resting on a timed-out probe is not stored, so no export
+        carries it into a store that has served the pass. This fails if the
+        probe thread becomes tolerated without a value predicate.
+        """
+        with probing():
+            expected = self.serial(self.gamma)
+            with run() as filler:
+                with timed_out(bound_captures(self.gamma)[0]) as stderr:
+                    timed = outcome(self.gamma)
+                self.assertIn("custody_locator_unreachable reason=timeout", stderr.getvalue())
+                self.assertEqual(timed[0], ("refused", "window_bracket_not_passed"))
+                exported = filler.vdl.export_entries()
+            self.assertEqual(stored_l4(exported), [])
+            with run() as consumer:
+                self.assertEqual(outcome(self.gamma), expected)
+                self.assertEqual(outcome(self.gamma), expected)
+                consumer.vdl.merge_entries(exported)
+                self.assertFalse(consumer.vdl.defect_pending())
+                consumer.vdl.check_defects()
+
+    def test_tolerated_probe_thread_needs_a_value_predicate(self):
+        """Review finding 1: why the thread tolerance must land with a store value predicate.
+
+        Simulated tolerance: one process's timed-out refusal is merged into a
+        store that has served the pass under the same key. Without a value
+        predicate on the L4 spec (today) the refusal is exported and poisons a
+        served key: a host timing event becomes a store defect. Once
+        AUTH-IO-2 gives LeafSpec ``storable_value`` (bracket._storable_value
+        for L4), nothing is exported and nothing is poisoned.
+        """
+        predicate = getattr(vdl._LEAVES_BY_ID[L4], "storable_value", None)
+        with probing(), threads_tolerated():
+            expected = self.serial(self.gamma)
+            with run() as filler:
+                with timed_out(bound_captures(self.gamma)[0]):
+                    self.assertEqual(outcome(self.gamma)[0], ("refused", "window_bracket_not_passed"))
+                exported = filler.vdl.export_entries()
+            with run() as consumer:
+                self.assertEqual(outcome(self.gamma), expected)
+                self.assertEqual(outcome(self.gamma), expected)
+                self.assertEqual(counters(consumer)["hit"], 1)
+                consumer.vdl.merge_entries(exported)
+                poisoned = consumer.vdl.defect_pending()
+        stored = stored_l4(exported)
+        if predicate is None:
+            self.assertEqual(len(stored), 1)
+            self.assertFalse(br._storable_value(stored[0]))
+            self.assertTrue(poisoned, "the hazard the predicate removes")
+        else:
+            self.assertEqual(stored, [])
+            self.assertFalse(poisoned)
+
+    def test_relocated_candidate_behind_a_symlink_is_never_served(self):
+        """Review finding 2: same bytes and inodes, moved out of the runs root behind a symlink."""
+        captured = bound_captures(self.gamma)[0]
+        with mock.patch.object(calibration, "load_calibration_candidate", side_effect=contained_loader), \
+                threads_tolerated():
+            expected = self.serial(self.gamma)
+            self.assertEqual(expected[0][0], "bracket")
+            with relocated_behind_symlink(captured):
+                relocated = self.serial(self.gamma)
+            self.assertEqual(relocated[0], ("refused", "window_bracket_not_passed"))
+            for guard in (True, False):
+                with self.subTest(guard=guard), run() as caches, frozen_calls() as calls, \
+                        contextlib.ExitStack() as stack:
+                    if not guard:
+                        stack.enter_context(mock.patch.object(br, "_located_as_recorded", return_value=True))
+                    self.assertEqual(outcome(self.gamma), expected)
+                    self.assertEqual(counters(caches)["fill"], 1)
+                    with relocated_behind_symlink(captured):
+                        if guard:
+                            self.assertEqual(outcome(self.gamma), relocated)
+                            self.assertEqual(calls.call_count, 2, "recomputed live, not served")
+                        else:
+                            # Mutation check: the store alone verifies the
+                            # moved bytes and serves the stale pass.
+                            self.assertEqual(outcome(self.gamma), expected)
+                            self.assertEqual(counters(caches)["hit"], 1)
 
     def test_positive_probe_reads_bind_the_served_pass(self):
         captured = bound_captures(self.gamma)[0]

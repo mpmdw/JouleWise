@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import math
+import os
 from pathlib import Path, PurePath
 import pickle
 import tempfile
@@ -204,6 +205,37 @@ def _servable(assessment: Any, reasons: Any) -> bool:
             and type(bound) in (int, float) and math.isfinite(bound) and bound >= 0)
 
 
+def _storable_value(value: Any) -> bool:
+    """Whether an L4 return value is the servable shape (a LeafSpec value predicate).
+
+    Today a non-servable fill is still stored (and exported), only never
+    served. The store has no per-leaf value predicate yet; this is the one the
+    L4 spec should reference (review of PR #634, finding 1: deferred to
+    AUTH-IO-2, which owns analysis_verified_store.py) so that a fill resting on
+    a negative or timed-out custody probe is never stored, exported or merged.
+    """
+    return isinstance(value, tuple) and len(value) == 2 and _servable(*value)
+
+
+def _located_as_recorded(entry: Any) -> bool:
+    """Whether every out-of-tree path a stored L4 value read still resolves to itself.
+
+    The store records extras and listings at their realpaths and re-verifies
+    them with lstat on the full path, which follows a symlink in any ancestor.
+    A candidate directory moved out of the claim runs root and replaced by a
+    symlink keeps its inodes, so the hit would verify, while the frozen loader
+    (calibration_bracketing.py:1678-1682) resolves the locator and refuses it
+    as outside the runs root. A recorded path whose realpath is no longer
+    itself is never served (review of PR #634, finding 2); the frozen code
+    then runs live. Anything unreadable falls closed.
+    """
+    try:
+        paths = [path for path, _ in entry.extras] + [path for path, _ in entry.listings]
+        return all(isinstance(path, str) and os.path.realpath(path) == path for path in paths)
+    except Exception:  # noqa: BLE001 - an unreadable entry is never served
+        return False
+
+
 def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any, **kwargs: Any):
     """Leaf L4 (D-188): the frozen calibration_bracket_for_bundles, served from the VDL store.
 
@@ -214,7 +246,8 @@ def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any,
     runs root as given (a scalar), every other argument, and the copies by
     content only (path-free: each evaluation copies into a fresh temporary
     root; the store relocates in-tree reads, Sol #4). A stored value is served
-    only when it is the passed, reason-free outcome (``_servable``); a probe is
+    only when it is the passed, reason-free outcome (``_servable``) and every
+    out-of-tree path it read still resolves to itself (``_located_as_recorded``); a probe is
     side-effect free, so a non-servable entry costs one key computation and the
     call then runs the frozen code directly, never through the store.
     """
@@ -235,8 +268,7 @@ def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any,
     hit = store.probe(L4, fn, runs_root, paths, policy, **kwargs)
     if hit is not None:
         try:
-            stored = pickle.loads(hit.entry.value)
-            servable = (isinstance(stored, tuple) and len(stored) == 2 and _servable(*stored))
+            servable = _storable_value(pickle.loads(hit.entry.value)) and _located_as_recorded(hit.entry)
         except Exception:  # noqa: BLE001 - an unreadable entry is never served
             servable = False
         if not servable:
