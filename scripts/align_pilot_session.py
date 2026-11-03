@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -103,7 +105,8 @@ def episode_summary(bundle, *, target_precheck_paths=None):
             'per_turn_output_token_ids': [r.get('generation', {}).get('output_token_ids') for r in turn_rows],
             'per_turn_prompt_token_ids': [r.get('generation', {}).get('prompt_token_ids') for r in turn_rows],
             'cache_statistics': cache_statistics(turn_rows),
-            'repetition_flags_per_turn': [r.get('flags', []) for r in turn_rows],
+            'repetition_flags_per_turn': [[f for f in r.get('flags', []) if f.startswith('repetition.')]
+                                          for r in turn_rows],
             'phase_window_reason_counts': phase_reason_counts(precheck),
             'episode_id': episode.episode_id, 'task_pair': episode.task_pair,
             'condition': episode.condition, 'seed': episode.seed,
@@ -278,11 +281,16 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             '--export-dir', str(session / 'export'), '--non-claim']
     if harvest:
         result = run(argv, check=False, capture_output=True, text=True, timeout=h.HARVEST_TIMEOUT_S)
+        (session / 'staging/harvest.stdout').write_text(result.stdout or '')
+        (session / 'staging/harvest.stderr').write_text(result.stderr or '')
+        output = session
     else:
         from types import SimpleNamespace
         result = SimpleNamespace(returncode=None, stdout='', stderr='')
-    (session / 'staging/harvest.stdout').write_text(result.stdout or '')
-    (session / 'staging/harvest.stderr').write_text(result.stderr or '')
+        inspection = session / 'inspection'
+        inspection.mkdir(exist_ok=True)
+        output = Path(tempfile.mkdtemp(prefix=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ-'),
+                                       dir=inspection))
     exclusion_path = session / 'archive/derived/exclusions.json'
     exclusions = h.read(exclusion_path) if exclusion_path.is_file() else None
     excluded = {m['run_id']: m.get('codes', []) for m in (exclusions or {}).get('members_excluded', [])}
@@ -316,20 +324,23 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
              'exclusions_path': str(exclusion_path), 'members_excluded': (exclusions or {}).get('members_excluded', []),
              'cross_pilot_token_identity': comparison,
+             'session_harvest_flags': harvest_flags.get(None, []),
              'harvest_flags_status': 'recorded' if flag_path.is_file() else 'not_recorded',
              'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
-    h.write(session / 'PILOT.json', pilot)
+    h.write(output / 'PILOT.json', pilot)
     status = {'schema_version': SCHEMA, 'non_claim': True, 'plan_id': state['session_id'],
-              'pilot': str(session / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
+              'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
               'harvest_argv': argv, 'harvest_exit': result.returncode,
               'members_excluded': pilot['members_excluded'],
               'harvest_status': ('not_run' if not harvest else 'program_fault' if result.returncode not in (0, 6)
                                  else 'members_excluded' if excluded else 'exclusions_unavailable' if exclusions is None else 'ok')}
-    h.write(session / 'desk.json', status)
+    h.write(output / 'desk.json', status)
+    print('pilot_report: ' + status['pilot'])
     print('pilot_status: ' + pilot['status'])
     for name, ok in checks.items():
         print(f'{name}: {"not_evaluated" if ok == "not_evaluated" else "pass" if ok is True else "fail"}')
     print('model.identity_mismatch: under NON_CLAIM_FILE_IDENTITIES_ONLY pins the runtime identity is unsealed (null); this is expected and is not a claim identity pass.')
+    print('session harvest_flags: ' + json.dumps(pilot['session_harvest_flags'], sort_keys=True))
     for member in members:
         print(member['run_id'] + ' harvest_flags: ' + json.dumps({'flags': member['harvest_flags'],
               'battery_discharge': member['battery_discharge']}, sort_keys=True))
@@ -368,7 +379,7 @@ def main(argv=None):
     p.add_argument('--session-root', type=Path, required=True)
     for name in ('install', 'desk'):
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
-    commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract only; do not run archive/compression stages.')
+    commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract to session/inspection/<utc>-<unique>/; preserve harvest files and skip archive/compression.')
     commands.choices['desk'].add_argument('--compare-session', type=Path)
     args = parser.parse_args(argv)
     try:

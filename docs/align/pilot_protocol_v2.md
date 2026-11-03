@@ -43,7 +43,8 @@ Per turn, logical `prompt_tokens=len(P)`, `cached_prompt_tokens=C`,
 `Turn.context_tokens=C`, and `Turn.prefill_tokens=len(P)-C`. Full prompt/output
 IDs, fed delta IDs and digest, cache classes, offsets, trims, rebuilds and fallback
 reasons remain in custody. Prefill event metadata reports full, cached and fed
-counts separately; setup events disclose reconciliation. The first-token phase
+counts separately; the `generation_setup` `phase_end` event discloses reconciliation
+facts, which are not present on its `phase_start` event. The first-token phase
 boundary retains its existing interpretation, including native asynchronous
 lookahead. Logical throughput denominators are unchanged. The legacy
 `prior_hidden_prefill_tokens` remains the rendered hidden-free counterfactual
@@ -80,7 +81,13 @@ The first observed nonzero OS sample is printed relative to both episode start
 and episode end. The last recorded level at each turn start includes its sample
 time and age, without interpolation or an invented freshness bar. Every harvest
 flag is printed on one line per member, including contention, busy idle,
-identity and battery. Battery discharged energy is read from the existing
+identity and battery. Session-scoped harvest flags (null `scope.run_id`) are
+printed on their own `session harvest_flags:` line and retained as
+`session_harvest_flags` in `PILOT.json`. `desk --no-harvest` writes `PILOT.json`
+and `desk.json` to a fresh `<session>/inspection/<utc>-<unique>/` directory and
+prints the report path. It preserves the real harvest's session-root reports
+and `staging/harvest.stdout` / `harvest.stderr` for repeated inspection.
+Battery discharged energy is read from the existing
 withheld receipt. `model.identity_mismatch` is explained under non-claim null
 runtime pins; it is not silently cleared. Phase-window reason counts are grouped
 by phase kind. Short tool phases are never padded. Missing evidence stays missing.
@@ -91,7 +98,12 @@ without changing its state-change classification. Bank progress prints observed
 contact additions, attempted payment calls and observed email sends. Contact and
 email counts require observed state changes; they are progress diagnostics, not
 task scores. Bank score zero is accepted at these budgets: completing roughly
-ten contacts, payments and emails needs about 30–35 one-call turns. These cells
+ten contacts, payments and emails needs about 30–35 one-call turns: roughly
+10 reads/contact additions + 10 payments + 10 notification emails = 30,
+plus initial discovery and lookup calls gives about 35. This is the workflow
+count in Fable's pilot-2 consult §7.1, not a minimum for any nonzero score or
+a new stopping bar; actual extra reads, retries and multi-call turns can change it.
+These cells
 remain because A/bank/sabotage is the costliest cached onset probe.
 
 Sizing receipts are regenerated from pilot-2 session files with their SHA-256
@@ -107,8 +119,27 @@ The conditional cache planning envelope uses prefill ≤ cap + turns × budget
 (90,112 A; 81,920 C), and decode ≤ min(turns × budget, cap − 6,347), with 6,347
 the smallest recorded initial prompt. The prefill envelope assumes each rewind
 is bounded by one output budget; unexpected whole-cache rebuilds can exceed it.
+A's aggregate decode term assumes reasoning stays in context. If D decoded
+tokens drop from the rendered history, the context term becomes
+cap − first_prompt + D. Pilot-2 ID replay reproduces just three A rewinds:
+a-e01 turn 11: 143 tokens; a-e03 turns 8 and 10: 560 and 257 tokens (zero-based).
+The cold all-member replays in `fable-report.md` §2 and `opus-report.md` §2
+under `~/night-archive/seats-e1308804/align-pilot3/cold/` agree: 960 tokens
+across four A members; the checked-in ID fixture and
+`tests.align.test_pilot3_cache.CacheTests.test_recorded_pilot2_prompts_cover_exact_rewinds_and_B_suffix`
+replay those rewinds. The largest member slack is a-e03's D = 560 + 257 = 817
+tokens: 817 / 39.114358 = about 20.9 decode seconds, multiplied by the member
+OLS slope 1.151110 gives about 24 seconds, inside the 76.4-second margin
+(1,800 − 1,723.6). This observed slack supports the conditional transfer;
+it does not bound a changed trajectory's dropped tokens.
 Rates are the slowest observed pilot-2 phase rates per retained block, including
 throttled turns: A prefill/decode about 562/39.1 tokens/s, C about 754/57.6.
+The prefill rates were measured on full prompts. Applying them to cached fed
+deltas, in both the expected forecast and planning envelope, is an unmeasured
+transfer: short deltas at long cached offsets have different fixed costs and
+attention work. Rehearsal records per-turn fed-token prefill rates (fed tokens
+divided by measured prefill seconds, alongside cached-context counts) to replace
+that transfer. This adds no acceptance bar.
 This is a transferred planning bound, not a physical worst-case guarantee;
 `sizing.planning_bound_unmeasured` remains. Rehearsal must validate reconciliation,
 timing and disk before the lead seals a span. Runner caps remain
@@ -127,7 +158,8 @@ local hash or sealed runtime identity. A fresh Mac derivation is also preserved.
 
 The night can estimate pooled within-cell energy spread for identical work
 (16 residual degrees of freedom across eight cells), per-configuration spread
-(8 degrees of freedom), the five-term benign energy fit with nonzero cached
+(8 residual degrees of freedom per model/thinking configuration: two task pairs
+× two conditions × (three repeats − one cell mean) = 4 × 2), the five-term benign energy fit with nonzero cached
 context terms, sabotage residuals beside it, thermal onset under cached duty,
 and token identity across pilots. Interpret these with all eligibility flags.
 Energy differences from pilot 2 describe cache savings only for identical work

@@ -1,8 +1,143 @@
 ```json
-{"schema":"claude-codex-report/v1","genre":"implementation","status":"findings","completion":"complete","summary":"Implemented pilot-3 cache reuse, observe-only repetition, desk diagnostics and the 24-member kit; focused checks pass; hardware rehearsal remains lead-owned.","workspace":{"base_requested":"8510e77b2","base_mode":"exact","head_start":"8510e77b2a1493eb9a591f5dd20cacd6a8190caf","head_end":"8510e77b2a1493eb9a591f5dd20cacd6a8190caf","upstream_end":null,"branch":"lane/2026-11-02-align-pilot3"},"pathspec":[".codex-report/ALIGN-PILOT3-tests.json",".codex-report/ALIGN-PILOT3.md","configs/campaigns/align_pilot_v2/README.md","configs/campaigns/align_pilot_v2/collection_plan.json","configs/campaigns/align_pilot_v2/plan_tree.json","configs/campaigns/align_pilot_v2/registration/acceptance.json","configs/campaigns/align_pilot_v2/registration/derive_identity_pins.py","configs/campaigns/align_pilot_v2/registration/derive_sizing.py","configs/campaigns/align_pilot_v2/registration/identity_pins.json","configs/campaigns/align_pilot_v2/registration/local_file_verification.json","configs/campaigns/align_pilot_v2/registration/model_artifact_inventory.json","configs/campaigns/align_pilot_v2/registration/registration.json","configs/campaigns/align_pilot_v2/registration/sizing_b5.json","configs/campaigns/align_pilot_v2/registration/sizing_evidence.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e01.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e02.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e03.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e04.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e05.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e06.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e07.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e08.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e09.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e10.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e11.json","configs/campaigns/align_pilot_v2/stages/episodes-a/align-pilot-v2-episodes-a-e12.json","configs/campaigns/align_pilot_v2/stages/episodes-a/order_manifest.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e13.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e14.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e15.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e16.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e17.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e18.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e19.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e20.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e21.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e22.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e23.json","configs/campaigns/align_pilot_v2/stages/episodes-b/align-pilot-v2-episodes-b-e24.json","configs/campaigns/align_pilot_v2/stages/episodes-b/order_manifest.json","docs/align/pilot_protocol_v2.md","joulewise/adapters/mlx_runtime.py","joulewise/align/apple/campaign.py","joulewise/align/apple/diagnostics.py","joulewise/align/apple/endpoint.py","joulewise/align/apple/prompt_cache.py","joulewise/align/apple/workload.py","joulewise/align/runner.py","scripts/align_pilot_kit.py","scripts/align_pilot_session.py","tests/align/fixtures/pilot2_cache_ids.json.gz","tests/align/fixtures/pilot2_repetition.json.gz","tests/align/test_apple_endpoint.py","tests/align/test_pilot2_round1.py","tests/align/test_pilot3.py","tests/align/test_pilot3_cache.py","tests/test_align_pilot_session.py"],"unowned_dirty":[],"verdict":{"implementation":"implemented","acceptance":"pending_verification"},"verification":[{"id":"V1","kind":"test","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-final-focused.XXXXXX) PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/Users/edr/code/jw-wt/align-pilot3/tests /opt/homebrew/bin/python3.13 -m unittest tests.test_mlx_runtime tests.test_mlx_runtime_detokenizer tests.align.test_pilot3_cache tests.align.test_pilot3 tests.align.test_apple_campaign","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 80 tests in 134.563s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},{"id":"V2","kind":"test","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-final-session.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.test_align_pilot_session tests.align.test_pilot2 tests.align.test_pilot2_round1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 43 tests in 70.605s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},{"id":"V3","kind":"test","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-final-cache.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3_cache tests.align.test_pilot3","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 18 tests in 3.622s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},{"id":"V4","kind":"test","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-runner.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_runner tests.align.test_runner_review tests.align.test_runner_fixround tests.align.test_runner_matrix tests.align.test_apple_support_edges tests.align.test_apple_sampler tests.align.test_shade","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 98 tests in 16.139s","OK (skipped=8)"]},"expected":{"exit_code":0,"tail_regex":"OK"}},{"id":"V5","kind":"test","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-final-endpoint.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_apple_endpoint tests.align.test_apple_campaign","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 21 tests in 168.035s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},{"id":"V6","kind":"build","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-final-check2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["verified align pilot kit"]},"expected":{"exit_code":0,"tail_regex":"verified align pilot kit"}},{"id":"V7","kind":"inspection","cmd":"git -C /Users/edr/code/jw-wt/align-pilot3 diff --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":[]},"expected":{"exit_code":0,"tail_regex":"^$"}}],"flags":[{"id":"F1","kind":"verification_gap","level":"nonblocking","text":"Fixture and synthetic-chain checks do not establish native token identity, memory, live energy, thermal behavior or timing/disk bounds.","needs":"Lead: run the three-member quiet hardware rehearsal below before trusting cached measurements or freezing a span."},{"id":"F2","kind":"residual_risk","level":"nonblocking","text":"Cache sizing remains a conditional transferred planning bound; unexpected whole-cache rebuilds can exceed its prefill envelope.","needs":"Retain sizing.planning_bound_unmeasured and replace transfers with rehearsal receipts."}]}
+{"schema":"claude-codex-report/v1","genre":"implementation","status":"clean","completion":"complete","summary":"Fix round 1: all seven requested corrections implemented; 34 tests, portable sizing replay and kit check pass.","workspace":{"base_requested":"dc2204dba","base_mode":"exact","head_start":"dc2204dba1e0512e17ff264be4f2498b04d0cbb0","head_end":"dc2204dba1e0512e17ff264be4f2498b04d0cbb0","upstream_end":"dc2204dba1e0512e17ff264be4f2498b04d0cbb0","branch":"lane/2026-11-02-align-pilot3"},"pathspec":[".codex-report/ALIGN-PILOT3.md","configs/campaigns/align_pilot_v2/plan_tree.json","configs/campaigns/align_pilot_v2/registration/derive_sizing.py","configs/campaigns/align_pilot_v2/registration/identity_pins.json","configs/campaigns/align_pilot_v2/registration/local_file_verification.json","configs/campaigns/align_pilot_v2/registration/sizing_b5.json","configs/campaigns/align_pilot_v2/registration/sizing_evidence.json","docs/align/pilot_protocol_v2.md","scripts/align_pilot_kit.py","scripts/align_pilot_session.py","tests/align/test_pilot3.py"],"unowned_dirty":[],"verdict":{"implementation":"implemented","acceptance":"ready"},"verification":[{"id":"V1","kind":"test","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-fix1-tests.XXXXXX) PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/Users/edr/code/jw-wt/align-pilot3/tests /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3 tests.align.test_pilot3_cache tests.test_align_pilot_session","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 34 tests in 70.135s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},{"id":"V2","kind":"test","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-fix1-portable-test.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest -v tests.align.test_pilot3.KitTests.test_sizing_receipts_replay_exactly_from_the_named_sources","cwd":"/tmp/align-pilot3-fix1.PaZBv4/checkout","observed":{"result":"pass","exit_code":0,"tail":["Ran 1 test in 0.466s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},{"id":"V3","kind":"build","cmd":"TMPDIR=$(mktemp -d /tmp/align-p3-fix1-final-check.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["verified align pilot kit"]},"expected":{"exit_code":0,"tail_regex":"verified align pilot kit"}},{"id":"V4","kind":"inspection","cmd":"git -C /Users/edr/code/jw-wt/align-pilot3 diff --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":[]},"expected":{"exit_code":0,"tail_regex":"^$"}}],"flags":[]}
 ```
 
 ## Change
+
+### Fix round 1
+
+This section and the leading envelope supersede the original build handoff below.
+Intake: both cold reports were read in full at
+`~/night-archive/seats-e1308804/align-pilot3/cold/{fable,opus}-report.md`.
+M0 found no active stop card or global work-selection gate. This explicit
+delegated correction brief selects the task; queue/state/run-report writes
+remain lead-owned outside WRITE_SCOPE. Initial workspace was clean at the
+requested head. No staging, commit, push, model load, sudo or powermetrics.
+
+Diff by requested item:
+
+1. **Both F1:** `derive_sizing.digest` records repository files relative to ROOT.
+   External evidence paths retain their supplied spelling, including custody
+   symlinks. Regenerated `sizing_evidence.json`; its tool source is now
+   `configs/campaigns/align_pilot_v1/registration/sizing_b5.json`.
+   The receipt test checks that path and digest even when the external pilot
+   source is absent, and full replay passed here and in the archive copy.
+2. **Opus F2/F5, Fable F4:** sizing derivation and protocol state that A's aggregate
+   decode term requires reasoning retention. Dropped history adds D to the
+   context term. Both cold replays and the checked-in ID replay reproduce
+   a-e01 turn 11 = 143, a-e03 turns 8/10 = 560/257: 960 total across four A
+   members, with largest member D = 817. Its 817 / 39.114358 × 1.151110 is
+   about 24 member seconds, inside 1800 − 1723.6 = 76.4 seconds. This is
+   observed slack, not a bound on changed trajectories. Full-prompt prefill
+   rates transferred to cached fed deltas are explicitly unmeasured in the
+   envelope and expected forecast. Rehearsal records per-turn fed-token
+   prefill rates with cached-context counts to replace the transfer.
+3. **Opus F3:** desk prints null/missing-run-id harvest flags on a separate
+   `session harvest_flags:` line and persists `session_harvest_flags`.
+   Regression checks exact session flag rows and member/session separation.
+4. **Opus F4:** `--no-harvest` writes its reports to a fresh
+   `<session>/inspection/<UTC>-<unique>/`, prints its report path, and never
+   opens harvest stdout/stderr for writing. Two successive inspections verify
+   distinct report paths, preservation of the first inspection, no harvest
+   invocation, and unchanged bytes/mtime_ns for every pre-existing session
+   file, including the four harvest output sentinels.
+5. **Fable F2:** `repetition_flags_per_turn` filters to `repetition.` only.
+   Regression injects an unrelated per-turn flag and checks that it is omitted
+   while the expected repetition flag remains.
+6. **Fable F3:** protocol names `generation_setup` `phase_end` as the event
+   carrying reconciliation facts. Event emission is untouched.
+7. **Opus F6:** planning block count and time/disk totals derive from actual
+   member counts. A regression supplies unequal counts (11 A, 10 C).
+   Protocol derives roughly 30–35 one-call workflow turns as ten
+   reads/contact additions + ten payments + ten emails, plus discovery/lookups,
+   following Fable consult §7.1. Eight residual df means four task/condition
+   cells × (three repeats − one cell mean), per model/thinking configuration.
+
+Decisions: retained all sizing numbers and existing acceptance bars. Generated
+plan-tree generator SHA, identity-pin tree SHA and local verification identity
+SHA changed together because the generator bytes changed. All inherited Mac
+artifact hashes and runtime observations remain inherited. Fable F5/F6/F7
+remain deferred exactly as instructed.
+
+Commands and output tails (all exits 0):
+
+```sh
+TMPDIR=$(mktemp -d /tmp/align-p3-fix1-derive.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/configs/campaigns/align_pilot_v2/registration/derive_sizing.py --pilot-session /Users/edr/night-align/pilot-v1-20261102T183609Z
+TMPDIR=$(mktemp -d /tmp/align-p3-fix1-generate.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py
+TMPDIR=$(mktemp -d /tmp/align-p3-fix1-derive2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/configs/campaigns/align_pilot_v2/registration/derive_sizing.py --pilot-session /Users/edr/night-align/pilot-v1-20261102T183609Z
+```
+
+```text
+derived pilot2 sizing evidence (no model work)
+generated align pilot kit
+derived pilot2 sizing evidence (no model work)
+```
+
+The second derivation preserves the external custody symlink spelling; the
+first development version resolved it unnecessarily. The final diff changes
+only the repository-source path and forecast text in the evidence receipt.
+
+```sh
+TMPDIR=$(mktemp -d /tmp/align-p3-fix1-tests.XXXXXX) PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/Users/edr/code/jw-wt/align-pilot3/tests /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3 tests.align.test_pilot3_cache tests.test_align_pilot_session
+```
+
+```text
+Ran 34 tests in 70.135s
+OK
+```
+
+Archive-copy preparation (fresh scratch initially allocated by
+`mktemp -d /tmp/align-pilot3-fix1.XXXXXX`, returning
+`/tmp/align-pilot3-fix1.PaZBv4`; no Git worktree or registration):
+
+```sh
+set -e -o pipefail
+mkdir /tmp/align-pilot3-fix1.PaZBv4/checkout
+git -C /Users/edr/code/jw-wt/align-pilot3 archive dc2204dba1e0512e17ff264be4f2498b04d0cbb0 | tar -x -C /tmp/align-pilot3-fix1.PaZBv4/checkout
+git -C /Users/edr/code/jw-wt/align-pilot3 diff --binary -- configs/campaigns/align_pilot_v2 docs/align/pilot_protocol_v2.md scripts/align_pilot_kit.py scripts/align_pilot_session.py tests/align/test_pilot3.py > /tmp/align-pilot3-fix1.PaZBv4/fix.patch
+git -C /tmp/align-pilot3-fix1.PaZBv4/checkout apply /tmp/align-pilot3-fix1.PaZBv4/fix.patch
+```
+
+Preparation exited 0 with no output. From that checkout as cwd:
+
+```sh
+TMPDIR=$(mktemp -d /tmp/align-p3-fix1-portable-test.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest -v tests.align.test_pilot3.KitTests.test_sizing_receipts_replay_exactly_from_the_named_sources
+```
+
+```text
+test_sizing_receipts_replay_exactly_from_the_named_sources (tests.align.test_pilot3.KitTests.test_sizing_receipts_replay_exactly_from_the_named_sources) ... ok
+Ran 1 test in 0.466s
+OK
+```
+
+```sh
+TMPDIR=$(mktemp -d /tmp/align-p3-fix1-check.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py --check
+TMPDIR=$(mktemp -d /tmp/align-p3-fix1-final-check.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py --check
+```
+
+Both print:
+
+```text
+verified align pilot kit
+```
+
+Read-only numeric/checkout/index inspection also passed (JSON numeric values
+compared with HEAD; every changed implementation file compared byte-for-byte
+with the portable checkout; cached diff required empty):
+
+```text
+sizing numeric values unchanged; portable checkout matches every changed file; index unchanged
+```
+
+`git -C /Users/edr/code/jw-wt/align-pilot3 diff --check` passed with no output.
+Only the requested test modules ran; no broader suite or hardware exercise.
+No blockers or scope expansion. Next exact step: lead reviews this uncommitted
+diff and reruns its acceptance checks; native/quiet-Mac rehearsal remains
+lead-owned after the agent session ends.
+
+### Original build record (historical, committed at dc2204dba)
+
+The remainder records the initial build, not additional actions in Fix round 1.
 
 Implemented all five build items within WRITE_SCOPE. No model was loaded, no MLX generation or quiet-Mac capture was run, and no files were staged, committed or pushed. HEAD remains the requested base. The queue/state files are lead-owned and were preserved.
 

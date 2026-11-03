@@ -84,7 +84,7 @@
     "sha256": "832147e16b5738f3a7a44cca1b0c05164d8d9ad6c03c6b340da7702685c2c294"
   },
   "disk_derivation": "sum regular-file stat sizes per pilot2 bundle; OLS bytes ~ 1 + member_s",
-  "forecast_derivation": "Keep pilot2 non-prefill episode time; replace each prefill duration by fed LCP delta / same-turn measured rate. Native-state ledger = prompt+emitted IDs, including EOS; conditional transfer, not hardware validation.",
+  "forecast_derivation": "Keep pilot2 non-prefill episode time; replace each prefill duration by fed LCP delta / same-turn measured full-prompt rate. Transferring full-prompt rates to cached fed deltas is unmeasured; rehearsal records per-turn fed-token prefill rates with cached-context counts to replace it. Native-state ledger = prompt+emitted IDs, including EOS; conditional transfer, not hardware validation.",
   "member_observations": [
     {
       "block": "A",
@@ -3497,7 +3497,7 @@
   "tool_allowance_s_per_turn": 0.0831742986677246,
   "tool_allowance_source": {
     "digest_bytes": "logical uncompressed bytes",
-    "path": "/Users/edr/code/jw-wt/align-pilot3/configs/campaigns/align_pilot_v1/registration/sizing_b5.json",
+    "path": "configs/campaigns/align_pilot_v1/registration/sizing_b5.json",
     "sha256": "934b52fdadf6f2a5bafb969ec8ee0c644dcb128fe2a7a4dfbd301ddecc6d5c67"
   },
   "tool_calls_per_turn_observed_max": 1,

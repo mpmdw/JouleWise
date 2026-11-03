@@ -71,10 +71,26 @@ class KitTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         evidence = h.read(path.with_name('sizing_evidence.json'))
+        source = 'configs/campaigns/align_pilot_v1/registration/sizing_b5.json'
+        self.assertEqual(module.digest(ROOT / source)['path'], source)
+        self.assertEqual(evidence['tool_allowance_source'], module.digest(ROOT / source))
         session = Path(evidence['source_session'])
         if not session.is_dir():
             self.skipTest('immutable pilot2 source session is not installed on this host')
         self.assertEqual(module.derive(session), evidence)
+
+    def test_planning_bound_counts_actual_members_per_block(self):
+        tree = h.read(ROOT / kit.KIT / 'plan_tree.json')
+        evidence = h.read(ROOT / kit.KIT / 'registration/sizing_evidence.json')
+        members = kit.ordered_members()
+        members = [m for i, m in enumerate(members) if i not in (0, 12, 13)]
+        sizing = kit.planning_sizing(tree, members, evidence)['packs'][kit.PACK_ID]
+        self.assertEqual([r['count'] for r in sizing['blocks']], [11, 10])
+        for row in sizing['blocks']:
+            self.assertEqual(row['block_upper_s'], row['count'] * row['member_upper_s'])
+            self.assertEqual(row['block_upper_bytes'], row['count'] * row['member_upper_bytes'])
+        self.assertEqual(sizing['programmed_span_s'],
+                         sizing['scaffold_s'] + sum(r['block_upper_s'] for r in sizing['blocks']))
 
 
 class DeskTests(unittest.TestCase):
@@ -121,6 +137,11 @@ class DeskTests(unittest.TestCase):
                         bundle, status, _ = run_native_review(root / rid, 'think', FakeClock(), prompt_cache='episode_prefix')
                     self.assertEqual(status.status.value, 'succeeded')
                     shutil.copytree(bundle, runs / rid)
+                    turn_path = runs / rid / 'outputs/align_turns.jsonl'
+                    turn_rows = [json.loads(line) for line in turn_path.read_text().splitlines()]
+                    for row in turn_rows:
+                        row.setdefault('flags', []).append('other.turn_flag')
+                    turn_path.write_text(''.join(json.dumps(row) + '\n' for row in turn_rows))
                     summary = desk.episode_summary(runs / rid)
                     start, end = summary['episode_start_ns'], summary['episode_end_ns']
                     clocks.extend({'run_id': rid, 'event': kind, 'clock': {'monotonic_ns': t}}
@@ -152,12 +173,35 @@ class DeskTests(unittest.TestCase):
             flags = [{'code': code, 'scope': {'run_id': m['run_id']}, 'observed': {'synthetic': True}}
                      for m in members for code in ('contention.request_overlap', 'idle.busy_fraction_exceeded',
                                                   'model.identity_mismatch', 'battery.assist')]
+            session_flags = [{'code': 'code.executed_differs_from_sealed', 'scope': {'run_id': None}},
+                             {'code': 'meter.duplicates', 'scope': {}}]
+            flags.extend(session_flags)
             (session / 'archive/derived/flags.jsonl').write_text(''.join(json.dumps(f) + '\n' for f in flags))
             h.write(session / 'archive/withheld/battery-assist.json', {'members': {
                 m['run_id']: {'phases': {'request': {'discharged_energy_j': 2.0}}} for m in members}})
+            for name in ('PILOT.json', 'desk.json', 'staging/harvest.stdout', 'staging/harvest.stderr'):
+                (session / name).write_text('real harvest sentinel: ' + name)
+            before = {p.relative_to(session): (p.read_bytes(), p.stat().st_mtime_ns)
+                      for p in session.rglob('*') if p.is_file()}
+            def assert_harvest_preserved():
+                self.assertEqual(before, {p: ((session / p).read_bytes(), (session / p).stat().st_mtime_ns)
+                                          for p in before})
+                self.assertEqual(set(before), {p.relative_to(session) for p in session.rglob('*')
+                                               if p.is_file() and 'inspection' not in p.relative_to(session).parts})
+            no_harvest = unittest.mock.Mock(side_effect=AssertionError('harvest must not run'))
             with redirect_stdout(io.StringIO()) as output:
-                desk.desk(session, harvest=False, compare_session=reference)
-            report = h.read(session / 'PILOT.json')
+                status = desk.desk(session, run=no_harvest, harvest=False, compare_session=reference)
+            no_harvest.assert_not_called()
+            assert_harvest_preserved()
+            report_path = Path(status['pilot'])
+            self.assertEqual(report_path.parent.parent, session / 'inspection')
+            self.assertEqual(h.read(report_path.with_name('desk.json')), status)
+            self.assertEqual(status['harvest_status'], 'not_run')
+            self.assertEqual(status['harvest_exit'], None)
+            report = h.read(report_path)
+            self.assertEqual(report['session_harvest_flags'], session_flags)
+            session_line, = [line for line in output.getvalue().splitlines() if line.startswith('session harvest_flags: ')]
+            self.assertEqual(json.loads(session_line.removeprefix('session harvest_flags: ')), session_flags)
             self.assertTrue(report['checks']['I4_greedy_repeats_identical_tokens'])
             self.assertTrue(all(r['status'] == 'identical' for rows in report['cross_pilot_token_identity'].values() for r in rows))
             for member in report['members']:
@@ -171,6 +215,7 @@ class DeskTests(unittest.TestCase):
                 self.assertLess(summary['os_thermal']['onset_from_episode_end_s'], 0)
                 self.assertEqual(len(summary['os_thermal']['turn_start_os_levels']), 4)
                 self.assertIn('repetition.identical_output:2', summary['repetition_flags_per_turn'][1])
+                self.assertTrue(all(f.startswith('repetition.') for flags in summary['repetition_flags_per_turn'] for f in flags))
                 self.assertEqual(len(member['harvest_flags']), 4)
                 self.assertEqual(member['battery_discharge']['phases']['request']['discharged_energy_j'], 2.0)
             for text in ('harvest_flags:', 'cache_statistics', 'onset_from_episode_end_s', 'acted_beyond_read_marking',
@@ -181,8 +226,12 @@ class DeskTests(unittest.TestCase):
             rows[1]['generation']['output_token_ids'][0] += 1
             changed.write_text(''.join(json.dumps(r) + '\n' for r in rows))
             with redirect_stdout(io.StringIO()):
-                desk.desk(session, harvest=False, compare_session=reference)
-            changed_report = h.read(session / 'PILOT.json')
+                changed_status = desk.desk(session, run=no_harvest, harvest=False, compare_session=reference)
+            no_harvest.assert_not_called()
+            assert_harvest_preserved()
+            self.assertNotEqual(changed_status['pilot'], status['pilot'])
+            self.assertEqual(h.read(report_path), report)
+            changed_report = h.read(changed_status['pilot'])
             divergent = [r for rows in changed_report['cross_pilot_token_identity'].values() for r in rows if r['status'] == 'divergent']
             self.assertTrue(divergent)
             self.assertEqual({r['first_divergent_turn'] for r in divergent}, {1})

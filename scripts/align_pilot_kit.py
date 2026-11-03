@@ -124,6 +124,7 @@ def planning_sizing(tree, members, evidence):
     cap_unspent, cap_spent = 1800 + 1500, 1800
     rows = []
     for block in BLOCKS:
+        block_count = sum(m['block'] == block['block'] for m in members)
         model = block["model_id"]
         rates = {phase: min(r[phase + "_tok_s"] for r in evidence["phase_rates"][block["block"]])
                  for phase in ("prefill", "decode")}
@@ -152,8 +153,8 @@ def planning_sizing(tree, members, evidence):
                      "episode_upper_s": episode_s, "idle_increase_s": dwell_per_member, "member_upper_s": member_s,
                      "member_cap_unspent_s": cap_unspent, "member_cap_spent_s": cap_spent,
                      "fits_unspent_cap": member_s <= cap_unspent, "fits_spent_cap": member_s <= cap_spent,
-                     "count": 12, "block_upper_s": 12 * member_s,
-                     "member_upper_bytes": member_bytes, "block_upper_bytes": 12 * member_bytes,
+                     "count": block_count, "block_upper_s": block_count * member_s,
+                     "member_upper_bytes": member_bytes, "block_upper_bytes": block_count * member_bytes,
                      "flags": ["sizing.planning_bound_unmeasured"]})
     scaffold = sum(s["expected_count"] for s in tree["stage_graph"] if s["kind"] == "campaign_collection") - len(members)
     dwell = len(members) * dwell_per_member
@@ -167,7 +168,7 @@ def planning_sizing(tree, members, evidence):
     expected_bytes = 3 * math.fsum(disk["intercept"] + disk["slope"] * t for t in expected_members) + scaffold_bytes
     uncached_align = 3 * math.fsum(r["member_s"] for r in observations if r["block"] in {b["block"] for b in BLOCKS})
     return {"schema_version": "joulewise.b5_sizing.v1", "non_claim": True,
-        "derivation": "Cache planning: prefill <= cap + turns*budget, conditional on each rewind <= one output budget (whole-cache rebuilds can exceed this transferred bound). Decode <= min(turns*budget,cap-smallest pilot2 first prompt). Rates are the slowest pilot2 prefill/decode phase for this block. Episode = prefill/rate + decode/rate + turns*pilot1 tool allowance. Member = pilot2 OLS intercept+slope*episode; idle 300 s already included. Scaffold added once. Rehearsal must replace transfers; not a physical worst-case guarantee.",
+        "derivation": "Cache planning: prefill <= cap + turns*budget, conditional on each rewind <= one output budget (whole-cache rebuilds can exceed this transferred bound). Decode <= min(turns*budget,cap-smallest pilot2 first prompt) assumes reasoning stays in context, including A; with dropped-token slack D the context term is cap-first_prompt+D. Pilot2 ID replay (tests.align.test_pilot3_cache, test_recorded_pilot2_prompts_cover_exact_rewinds_and_B_suffix) reproduces A rewinds a-e01 turn 11=143 and a-e03 turns 8=560,10=257; the cold all-member replays found no others in A (960 tokens total). Largest member D is a-e03: 817 tokens / 39.114358 tok/s * OLS slope 1.151110 = about 24 s member time, inside the 76.4 s spent-cap margin (1800-1723.6). This observed slack is evidence, not a guarantee for changed trajectories. Rates are the slowest pilot2 full-prompt prefill/decode phase for this block. Transferring full-prompt prefill rates to cached fed deltas is unmeasured; rehearsal records per-turn fed-token prefill rates (fed tokens / measured prefill seconds, with cached context) to replace that transfer in both the envelope and expected forecast. Episode = prefill/rate + decode/rate + turns*pilot1 tool allowance. Member = pilot2 OLS intercept+slope*episode; idle 300 s already included. Scaffold added once. Rehearsal must replace transfers; not a physical worst-case guarantee.",
         "packs": {PACK_ID: {"pack_id": PACK_ID, "flags": ["sizing.planning_bound_unmeasured"],
             "member_law": {"intercept_s": law["intercept"], "slope": law["slope"], "n": law["n"],
                            "residual_sd_s": law["residual_sd"], "largest_abs_residual_s": law["largest_abs_residual"], "flags": []},

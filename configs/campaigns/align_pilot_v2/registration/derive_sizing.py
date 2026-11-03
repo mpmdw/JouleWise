@@ -14,7 +14,10 @@ from joulewise.desk_compress import read_bytes
 
 
 def digest(path):
-    return {'path': str(path), 'sha256': hashlib.sha256(read_bytes(path)).hexdigest(),
+    path = Path(path)
+    resolved = path.resolve()
+    recorded_path = resolved.relative_to(ROOT).as_posix() if resolved.is_relative_to(ROOT) else str(path)
+    return {'path': recorded_path, 'sha256': hashlib.sha256(read_bytes(path)).hexdigest(),
             'digest_bytes': 'logical uncompressed bytes'}
 
 
@@ -101,7 +104,7 @@ def derive(session):
             **{k: old[k] for k in ('tool_s_per_turn', 'tool_calls_per_turn_observed_max',
                                    'state_observation_s_per_call', 'tool_allowance_s_per_turn')},
             'tool_allowance_source': digest(old_path),
-            'forecast_derivation': 'Keep pilot2 non-prefill episode time; replace each prefill duration by fed LCP delta / same-turn measured rate. Native-state ledger = prompt+emitted IDs, including EOS; conditional transfer, not hardware validation.'}
+            'forecast_derivation': 'Keep pilot2 non-prefill episode time; replace each prefill duration by fed LCP delta / same-turn measured full-prompt rate. Transferring full-prompt rates to cached fed deltas is unmeasured; rehearsal records per-turn fed-token prefill rates with cached-context counts to replace it. Native-state ledger = prompt+emitted IDs, including EOS; conditional transfer, not hardware validation.'}
 
 
 def main(argv=None):
