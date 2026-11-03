@@ -266,9 +266,13 @@ class ModesAndCanonicalForm(unittest.TestCase):
                 vdl.parse_mode(bad)
         # Lead ruling: shadow on by default for synthetic runs, never on a real blind run.
         self.assertEqual(vdl.resolve_mode(None, synthetic=True), vdl.Mode("shadow", 1000))
-        self.assertEqual(vdl.resolve_mode(None, synthetic=False), vdl.ON)
-        self.assertEqual(vdl.resolve_mode("shadow:20", synthetic=False), vdl.ON)
+        self.assertEqual(vdl.resolve_mode(None, synthetic=False), vdl.BLIND_ON)
+        self.assertEqual(vdl.resolve_mode("shadow:20", synthetic=False), vdl.BLIND_ON)
+        self.assertEqual(vdl.resolve_mode("on", synthetic=False), vdl.BLIND_ON)
+        self.assertEqual(vdl.resolve_mode("off", synthetic=False), vdl.OFF)
         self.assertEqual(vdl.resolve_mode("garbage", synthetic=False), vdl.OFF)
+        self.assertEqual(vdl.resolve_mode("on", synthetic=True), vdl.ON)
+        self.assertFalse(vdl.ON.blind)
         with self.assertRaises(ValueError):
             vdl.resolve_mode("garbage", synthetic=True)
 
@@ -657,7 +661,7 @@ class SessionBridging(_Base):
                 vdl.call("T_digest", digest_tree, self.tree, 1)
             self.assertEqual(CALLS["digest_tree"], 2)
             self.assertTrue(session.records)
-            self.assertIn("T_digest:verify_miss", self.counters(caches))
+            self.assertEqual(self.counters(caches), {"T_digest:miss": 2, "T_digest:fill": 2})
 
     def test_in_session_fill_serves_a_later_session_with_identical_records(self):
         expected_value, expected = self.serial_records(self.tree)
@@ -667,9 +671,10 @@ class SessionBridging(_Base):
                 vdl.call("T_digest", digest_tree, self.tree, 1)
             with aio.V2AuthenticationReadSession() as consumer:
                 value = vdl.call("T_digest", digest_tree, self.tree, 1)
-            # A session-less consumer may use an in-session fill as well.
+            # Session presence is in the key: a session-less consumer never uses
+            # an in-session fill (review of #629, finding 2).
             vdl.call("T_digest", digest_tree, self.tree, 1)
-        self.assertEqual(CALLS["digest_tree"], 1)
+        self.assertEqual(CALLS["digest_tree"], 2)
         self.assertEqual(value, expected_value)
         self.assertEqual(dict(consumer.records), expected)
         self.assertEqual(list(consumer.records), list(expected))
@@ -968,7 +973,7 @@ class RealStrictLeaf(unittest.TestCase):
 
     Session-less fill then hit; an in-session call cannot use the session-less
     entry (no capability rows on this AUTH-IO), computes in its session and
-    upgrades the entry with that session's rows; a later session is served
+    stores an in-session entry with that session's rows; a later session is served
     with exactly the serial session's records; a path-free copy under another
     parent hits; shadow:1000 recomputes a hit and finds no mismatch.
     """
@@ -1027,3 +1032,318 @@ class RealStrictLeaf(unittest.TestCase):
             self.assertEqual(dict(shadowed.records), dict(filler.records))
             self.assertFalse(caches.vdl.defect_pending())
             self.assertEqual(caches.vdl.restricted_counters()["L1_strict_validation:shadow"], 1)
+
+
+# --------------------------------------------------------------------------------------
+# Review of #629 (independent reviewer, CHANGES REQUESTED): regression tests per finding.
+
+
+def raw_reader_leaf(path, factor):
+    """Reads data.txt with the raw grammar (as a session read would)."""
+
+    _called("raw_reader_leaf")
+    return len(_read(Path(path) / "data.txt", "raw")) + factor
+
+
+def spelled_path_leaf(path, factor):
+    """A value carrying the caller's own spelling of the path (no resolve())."""
+
+    _called("spelled_path_leaf")
+    return f"problem in {path}/metadata.json"
+
+
+def path_object_leaf(path, factor):
+    """A value holding a Path object (pickled as separate parts)."""
+
+    _called("path_object_leaf")
+    return {"where": Path(path).resolve() / "metadata.json"}
+
+
+def catching_leaf(path, factor):
+    """Maps a V2 read failure to a value (as calibration_ledger's custody probes do)."""
+
+    _called("catching_leaf")
+    try:
+        _read(Path(path) / "metadata.json", "json")
+    except aio.V2AuthenticationInputError:
+        return "refused"
+    return "accepted"
+
+
+REVIEW_SPECS = (
+    _spec("R_raw", raw_reader_leaf),
+    _spec("R_spelled_free", spelled_path_leaf, path_free=True),
+    _spec("R_spelled", spelled_path_leaf),
+    _spec("R_path_object_free", path_object_leaf, path_free=True),
+    _spec("R_catch", catching_leaf),
+)
+
+
+class _ReviewBase(_Base):
+    def setUp(self):
+        super().setUp()
+        registration = vdl._registered(*REVIEW_SPECS)
+        registration.__enter__()
+        self.addCleanup(registration.__exit__, None, None, None)
+
+    @staticmethod
+    def records(session):
+        return {identity: (record.sha256, record.grammar, record.read_count)
+                for identity, record in session.records.items()}
+
+
+class ShadowServesThroughApply(_ReviewBase):
+    """Finding 1 (MEDIUM) and finding 4 (LOW): shadow exercises the serving path."""
+
+    SHADOW = vdl.Mode("shadow", 1000)
+
+    def test_synthetic_default_is_full_shadow(self):
+        self.assertEqual(vdl.resolve_mode(None, synthetic=True), self.SHADOW)
+
+    def test_shadow_detects_corrupted_rows(self):
+        import dataclasses
+
+        with run(self.SHADOW) as caches:
+            with aio.V2AuthenticationReadSession():
+                vdl.call("T_digest", digest_tree, self.tree, 1)
+            (key, entry), = caches.vdl._entries.items()
+            caches.vdl._entries[key] = dataclasses.replace(entry, rows=())
+            with aio.V2AuthenticationReadSession() as consumer:
+                vdl.call("T_digest", digest_tree, self.tree, 1)
+            self.assertEqual(caches.vdl.restricted_counters()["T_digest:shadow"], 1)
+            self.assertTrue(caches.vdl.defect_pending())
+            self.assertNotIn(key, caches.vdl._entries)
+            with self.assertRaises(vdl.VerifiedStoreDefect):
+                vdl.check_defects()
+        # The caller still got the serial session.
+        _, serial = SessionBridging.serial_records(self, self.tree)
+        self.assertEqual(dict(consumer.records), serial)
+
+    def test_shadow_detects_a_wrong_physics_insert(self):
+        import dataclasses
+
+        with run(self.SHADOW) as caches:
+            with aio.V2AuthenticationReadSession():
+                vdl.call("T_physics", physics_leaf, self.tree, {})
+            (key, entry), = caches.vdl._entries.items()
+            # Same post on record for the comparison of posts, but the served insert differs.
+            caches.vdl._entries[key] = dataclasses.replace(entry, physics=(("cal", vdl.ABSENT, 3.5),))
+            with aio.V2AuthenticationReadSession():
+                cache: dict = {}
+                vdl.call("T_physics", physics_leaf, self.tree, cache)
+            self.assertEqual(cache, {"cal": 2.5})
+            self.assertTrue(caches.vdl.defect_pending())
+
+    def test_clean_shadow_hit_matches_serial_without_a_defect(self):
+        _, serial = SessionBridging.serial_records(self, self.tree)
+        with run(self.SHADOW) as caches:
+            with aio.V2AuthenticationReadSession():
+                vdl.call("T_digest", digest_tree, self.tree, 1)
+                vdl.call("T_physics", physics_leaf, self.tree, {})
+            with aio.V2AuthenticationReadSession() as consumer:
+                vdl.call("T_digest", digest_tree, self.tree, 1)
+                cache: dict = {}
+                vdl.call("T_physics", physics_leaf, self.tree, cache)
+            counters = caches.vdl.restricted_counters()
+            self.assertEqual(counters["T_digest:shadow"], 1)
+            self.assertEqual(counters["T_physics:shadow"], 1)
+            self.assertFalse(caches.vdl.defect_pending())
+        self.assertEqual(dict(consumer.records), serial)
+        self.assertEqual(cache, {"cal": 2.5})
+
+    def _grammar_conflict(self, mode):
+        tree = make_tree(self.tmp, "g", **{"data.txt": b'{"x": 1}', "metadata.json": b"{}"})
+        with run(mode) as caches:
+            with aio.V2AuthenticationReadSession():
+                vdl.call("R_raw", raw_reader_leaf, tree, 1)  # in-session fill
+            with aio.V2AuthenticationReadSession():
+                _read(tree / "data.txt", "json")  # the consumer's earlier json read
+                with self.assertRaises(aio.V2AuthenticationInputError) as raised:
+                    vdl.call("R_raw", raw_reader_leaf, tree, 1)
+            return raised.exception, caches.vdl
+
+    def test_on_mode_reproduces_the_serial_refusal_without_a_defect(self):
+        exc, store = self._grammar_conflict(vdl.ON)
+        self.assertEqual(exc.reason, "v2_authentication_input_grammar_changed")
+        self.assertFalse(store.defect_pending())
+
+    def test_shadow_mode_reproduces_the_serial_refusal_without_a_defect(self):
+        exc, store = self._grammar_conflict(self.SHADOW)
+        self.assertEqual(exc.reason, "v2_authentication_input_grammar_changed")
+        self.assertFalse(store.defect_pending())
+        counters = store.restricted_counters()
+        self.assertEqual(counters["R_raw:hit_discarded"], 1)
+        self.assertNotIn("R_raw:shadow", counters)
+
+
+class SessionDependentOutcome(_ReviewBase):
+    """Finding 2 (MEDIUM): a caught V2 failure, or session presence, never crosses sessions."""
+
+    def test_in_session_caught_grammar_failure_is_not_served_session_less(self):
+        tree = make_tree(self.tmp, "dup", **{"metadata.json": b'{"a": 1, "a": 2}'})
+        with run() as caches:
+            with aio.V2AuthenticationReadSession():
+                self.assertEqual(vdl.call("R_catch", catching_leaf, tree, 1), "refused")
+            served = vdl.call("R_catch", catching_leaf, tree, 1)
+            counters = caches.vdl.restricted_counters()
+        self.assertEqual(catching_leaf(tree, 1), "accepted")
+        self.assertEqual(served, "accepted")
+        self.assertEqual(counters["R_catch:unstorable"], 1)
+        self.assertNotIn("R_catch:hit", counters)
+
+    def test_in_session_caught_session_state_failure_is_not_served_to_a_clean_session(self):
+        tree = make_tree(self.tmp, "g2", **{"metadata.json": b'{"a": 1}'})
+        with run() as caches:
+            with aio.V2AuthenticationReadSession() as first:
+                first._register(str((tree / "metadata.json").resolve()), "0" * 64, "json", "earlier")
+                self.assertEqual(vdl.call("R_catch", catching_leaf, tree, 1), "refused")
+            with aio.V2AuthenticationReadSession() as clean:
+                served = vdl.call("R_catch", catching_leaf, tree, 1)
+            counters = caches.vdl.restricted_counters()
+        with aio.V2AuthenticationReadSession() as serial:
+            expected = catching_leaf(tree, 1)
+        self.assertEqual((served, expected), ("accepted", "accepted"))
+        self.assertEqual(self.records(clean), self.records(serial))
+        self.assertNotIn("R_catch:hit", counters)
+
+    def test_a_clean_in_session_fill_still_serves_a_later_session(self):
+        tree = make_tree(self.tmp, "ok", **{"metadata.json": b'{"a": 1}'})
+        with run() as caches:
+            with aio.V2AuthenticationReadSession():
+                vdl.call("R_catch", catching_leaf, tree, 1)
+            with aio.V2AuthenticationReadSession() as consumer:
+                self.assertEqual(vdl.call("R_catch", catching_leaf, tree, 1), "accepted")
+            self.assertEqual(caches.vdl.restricted_counters()["R_catch:hit"], 1)
+        with aio.V2AuthenticationReadSession() as serial:
+            catching_leaf(tree, 1)
+        self.assertEqual(self.records(consumer), self.records(serial))
+
+    def test_unobservable_failures_make_every_fill_unstorable(self):
+        with mock.patch.object(vdl, "_raise_monitor_enter", lambda: False), run() as caches:
+            vdl.call("T_digest", digest_tree, self.tree, 1)
+            vdl.call("T_digest", digest_tree, self.tree, 1)
+            counters = caches.vdl.restricted_counters()
+        self.assertEqual(counters["T_digest:unstorable"], 2)
+        self.assertEqual(CALLS["digest_tree"], 2)
+
+    def _failure_recorder(self, failed):
+        @contextlib.contextmanager
+        def recording():
+            rows: list = [SimpleRow(failed=True, identity="/x", api="read")] if failed else []
+            yield rows
+
+        return [mock.patch.object(vdl, "_raise_monitor_enter", lambda: False),
+                mock.patch.object(vdl._AUTH, "records_failures", lambda: True),
+                mock.patch.object(vdl._AUTH, "recording", recording)]
+
+    def test_recorder_failure_rows_make_a_fill_unstorable(self):
+        for failed, outcome in ((True, "T_nondet:unstorable"), (False, "T_nondet:fill")):
+            with self.subTest(failed=failed), contextlib.ExitStack() as stack:
+                for patch in self._failure_recorder(failed):
+                    stack.enter_context(patch)
+                with run() as caches:
+                    vdl.call("T_nondet", nondeterministic_leaf, self.tree, 1)
+                    self.assertEqual(caches.vdl.restricted_counters()[outcome], 1)
+
+    def test_the_raise_observer_never_takes_the_deadline_observers_id(self):
+        from joulewise.b5_analysis.deadline_observer import observe_wall_deadline
+
+        with run():
+            vdl.call("T_digest", digest_tree, self.tree, 1)  # claims the RAISE observer's id
+            with observe_wall_deadline() as observer:
+                self.assertIsNotNone(observer)
+                vdl.call("T_digest", digest_tree, self.tree, 2)
+
+    def test_session_presence_is_part_of_the_key(self):
+        with run() as caches:
+            vdl.call("T_nondet", nondeterministic_leaf, self.tree, 1)
+            with aio.V2AuthenticationReadSession():
+                vdl.call("T_nondet", nondeterministic_leaf, self.tree, 1)
+            self.assertEqual(len(caches.vdl._entries), 2)
+            self.assertFalse(caches.vdl.defect_pending())
+
+
+class TreeSpellings(_ReviewBase):
+    """Finding 3 (MEDIUM): values built from the caller's spelling of a tree path."""
+
+    def test_path_free_value_with_an_unresolved_spelling_is_not_served_elsewhere(self):
+        real_parent = self.tmp / "real"
+        real_parent.mkdir()
+        make_tree(real_parent, "bundle")
+        alias = self.tmp / "alias"
+        os.symlink(real_parent, alias)
+        other = self.tmp / "copy"
+        other.mkdir()
+        twin = make_tree(other, "bundle")
+        with run() as caches:
+            vdl.call("R_spelled_free", spelled_path_leaf, alias / "bundle", 1)
+            served = vdl.call("R_spelled_free", spelled_path_leaf, twin, 1)
+            counters = caches.vdl.restricted_counters()
+        self.assertEqual(served, spelled_path_leaf(twin, 1))
+        self.assertNotIn("R_spelled_free:hit", counters)
+
+    def test_non_path_free_spellings_do_not_collide(self):
+        real_parent = self.tmp / "real2"
+        real_parent.mkdir()
+        tree = make_tree(real_parent, "bundle")
+        alias = self.tmp / "alias2"
+        os.symlink(real_parent, alias)
+        with run() as caches:
+            vdl.call("R_spelled", spelled_path_leaf, alias / "bundle", 1)
+            second = vdl.call("R_spelled", spelled_path_leaf, tree, 1)
+            third = vdl.call("R_spelled", spelled_path_leaf, alias / "bundle", 1)
+            counters = caches.vdl.restricted_counters()
+        self.assertEqual(second, spelled_path_leaf(tree, 1))
+        self.assertEqual(third, spelled_path_leaf(alias / "bundle", 1))
+        self.assertEqual(counters["R_spelled:hit"], 1)  # the same spelling still hits
+
+    def test_path_free_value_holding_a_path_object_is_not_stored(self):
+        with run() as caches:
+            vdl.call("R_path_object_free", path_object_leaf, self.tree, 1)
+            self.assertEqual(caches.vdl.restricted_counters()["R_path_object_free:unstorable"], 1)
+
+    def test_relative_spelling_is_searched_too(self):
+        cwd = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, cwd)
+        with run() as caches:
+            vdl.call("R_spelled_free", spelled_path_leaf, "bundle", 1)
+            self.assertEqual(caches.vdl.restricted_counters()["R_spelled_free:unstorable"], 1)
+
+
+class BlindRunDefects(_ReviewBase):
+    """Finding 5 (LOW): a blind (real) run never turns a store defect into a refusal."""
+
+    def _poison_after_serving(self, mode):
+        import dataclasses
+        import pickle
+
+        with run(mode) as caches:
+            vdl.call("T_nondet", nondeterministic_leaf, self.tree, 1)  # fill
+            vdl.call("T_nondet", nondeterministic_leaf, self.tree, 1)  # served
+            other = vdl.VerifiedStore(vdl.ON)
+            (key, entry), = caches.vdl._entries.items()
+            other._entries[key] = dataclasses.replace(entry, value=pickle.dumps(99))
+            caches.vdl.merge_entries(other.export_entries())
+            return caches.vdl
+
+    def test_blind_run_counts_the_defect_and_stops_serving(self):
+        mode = vdl.resolve_mode(None, synthetic=False)
+        self.assertEqual(mode, vdl.BLIND_ON)
+        with run(mode) as caches:
+            vdl.call("T_digest", digest_tree, self.tree, 1)
+            store = caches.vdl
+            store._defect("synthetic")
+            self.assertFalse(store.defect_pending())
+            vdl.check_defects()  # never raises on a blind run
+            vdl.call("T_digest", digest_tree, self.tree, 1)
+            self.assertEqual(CALLS["digest_tree"], 2)  # the store serves nothing more
+            self.assertEqual(store.restricted_counters()["defect:synthetic"], 1)
+            self.assertEqual(store.export_entries()["defects"], [])
+
+    def test_poisoned_after_serving(self):
+        blind = self._poison_after_serving(vdl.BLIND_ON)
+        self.assertFalse(blind.defect_pending())
+        self.assertEqual(blind.restricted_counters()["defect:poisoned_after_serving"], 1)
+        synthetic = self._poison_after_serving(vdl.ON)
+        self.assertTrue(synthetic.defect_pending())

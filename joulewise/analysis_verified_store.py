@@ -14,8 +14,10 @@ vdl_mode=...)``: ``call`` then is exactly ``fn(*args, **kwargs)``.
 Key. sha256 over an injective, type-tagged encoding of: the schema, the run
 commit (if the driver supplies one) and a content digest of the ``joulewise``
 package sources, a digest of every ``JOULEWISE_*`` environment variable, the
-leaf id, the leaf's scalar arguments, and for every tree argument its resolved
-path (or, for a path-free leaf, its final name) and its tree digest.
+leaf id, the leaf's scalar arguments, for every tree argument its resolved
+path (or, for a path-free leaf, its final name) together with the caller's
+absolute spelling when that differs (a leaf may build a value from the
+spelling it was given), its tree digest, and whether a V2 session is active.
 
 Tree digest. An lstat walk that follows no symlink: per file (relpath, kind,
 mode, size, sha256), per directory (relpath, mode, sorted listing). A path-free
@@ -32,9 +34,11 @@ activation and the program generation it was created under, so a fresh
 ``contextvars.Context()`` replay, a member task and a new program re-hash.
 
 A fill (a miss) runs the leaf and is stored only when all of these hold:
-the leaf returned normally; the run's wall-deadline firings did not change and
-the observer was available; ``note_clock()``/``note_unstorable()`` was not
-called inside it; the recorder saw no write-mode open, file mutation,
+the leaf returned normally; no V2AuthenticationInputError was raised inside it,
+even if the leaf caught it (observed by a sys.monitoring RAISE callback, or by
+AUTH-IO failure rows; with neither, nothing is stored); the run's wall-deadline
+firings did not change and the observer was available;
+``note_clock()``/``note_unstorable()`` was not called inside it; the recorder saw no write-mode open, file mutation,
 subprocess, thread start, chdir or network use; every read and listing could be
 attributed (an ``os.open`` of a relative name, as the no-follow ``dir_fd`` walk
 makes, is attributed only through an authentication_io no-follow row); the
@@ -42,7 +46,9 @@ scalar arguments are unchanged by the call; every tree's lstat signature is
 unchanged across the call; the physics view behaves as the J2 premise needs.
 Reads outside the leaf's trees and outside the Python installation and the
 ``joulewise`` sources are kept as (path, sha256) extras, and listings as name
-digests; both are re-verified on every hit (cached per scope, lstat-guarded).
+digests; both are re-verified on every hit (cached per scope, lstat-guarded). A path-free leaf's value must
+not contain any spelling of its tree's location or parent (searched in the
+pickled bytes and in every string and path inside the value).
 
 V2 authentication rows. An entry carries the V2 registration rows a session
 would hold after the leaf: from the session's own record delta for an
@@ -72,12 +78,21 @@ A fill records the visible value before (V0) and after (P). A lookup is
 admitted only if the caller's visible value V is ABSENT or equals P exactly;
 P is inserted where V is ABSENT.
 
+Shadow. A sampled hit is first served by the identical ``_apply`` into a
+scratch copy of the consumer's session (no real registration, no insert); if
+that refuses, the call is a plain miss, exactly as in ``on`` mode. Otherwise the
+leaf runs in the real session and its value, physics and resulting session
+records are compared with what serving the hit produced.
+
 Defects. Nothing in this module raises into a caller's ``except`` clauses: a
 hit anomaly falls through to the leaf, a poisoned key (two fills disagree) falls
 back to the leaf, and a shadow mismatch returns the freshly computed value and
 sets a run-level defect flag. ``check_defects()`` raises ``VerifiedStoreDefect``
 (a ``BaseException``) and is meant for the driver's step boundaries, outside
-every leaf; the flag also travels in ``export_entries`` payloads.
+every leaf; the flag also travels in ``export_entries`` payloads. On a blind
+(real) run (``BLIND_ON``, what ``resolve_mode`` gives for real data) a defect is
+never raised: it is counted in the restricted tier and the store stops serving
+for the rest of the run (lead ruling: no new refusal path on real data).
 
 Blinding. Hit, miss, poison and shadow counts live only in process memory and
 are read only through ``restricted_counters()``, for the custody root's
@@ -88,6 +103,7 @@ from __future__ import annotations
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 import contextvars
+import copy
 from dataclasses import dataclass, field, fields, is_dataclass
 import enum
 import hashlib
@@ -150,6 +166,10 @@ class _Bypass(Exception):
 class Mode:
     name: str  # "off" | "on" | "shadow"
     permille: int = 0
+    # A real blind run: a store defect never becomes a refusal there (lead
+    # ruling, no new refusal path on real data); it is counted in the
+    # restricted tier and the store stops serving for the rest of the run.
+    blind: bool = False
 
     @property
     def active(self) -> bool:
@@ -158,6 +178,7 @@ class Mode:
 
 OFF = Mode("off")
 ON = Mode("on")
+BLIND_ON = Mode("on", blind=True)
 
 
 def parse_mode(raw: str | None) -> Mode:
@@ -182,19 +203,20 @@ def parse_mode(raw: str | None) -> Mode:
 def resolve_mode(raw: str | None, *, synthetic: bool) -> Mode:
     """The run's mode. Lead ruling: shadow verification is on by default for
     synthetic runs and never runs on a real blind run (no new refusal path on
-    real data): there an unset value is ``on``, a shadow request runs ``on``,
-    and a malformed value runs ``off`` (the R2 behaviour).
+    real data): there an unset value, ``on`` or a shadow request all run
+    ``BLIND_ON`` (defects counted in the restricted tier, never raised), and a
+    malformed value runs ``off`` (the R2 behaviour).
     """
 
     if raw is None:
-        return Mode("shadow", 1000) if synthetic else ON
+        return Mode("shadow", 1000) if synthetic else BLIND_ON
     if synthetic:
         return parse_mode(raw)
     try:
         mode = parse_mode(raw)
     except ValueError:
         return OFF
-    return ON if mode.name == "shadow" else mode
+    return OFF if mode.name == "off" else BLIND_ON
 
 
 # ----------------------------------------------------------- canonical encoding
@@ -635,6 +657,7 @@ class _Fill:
     def __init__(self) -> None:
         self.unstorable: set[str] = set()
         self.clock = False
+        self.v2_failed = False  # a V2AuthenticationInputError was raised inside (caught or not)
         self.reads: list[str] = []
         self.relative_opens: list[str] = []
         self.listings: list[str] = []
@@ -746,6 +769,75 @@ def fill_active() -> bool:
     return bool(_FILLS.get())
 
 
+# A leaf may catch a V2 read failure and return normally (a "refused" value).
+# Whether such a read fails can depend on session presence or session state
+# (an earlier conflicting registration, the vocabulary flag), which the key
+# does not carry, and a failed read leaves no registration row for the bridge
+# to re-check. So a fill inside which any V2AuthenticationInputError was raised
+# is never stored. The raise is observed with a sys.monitoring RAISE callback
+# (enabled only while a fill is active); without one (no sys.monitoring, or
+# fewer than three free tool ids, so the wall-deadline observer always finds
+# one) a fill is storable only if the AUTH-IO recorder declares that it emits a
+# ``failed`` row for every raised read (``RECORDS_FAILURES``).
+_RAISE_MONITOR: dict[str, Any] = {"tool": None, "active": 0, "error": None}
+_RAISE_LOCK = threading.Lock()
+_RAISE_TOOL_NAME = "joulewise-vdl-v2-failure-observer"
+
+
+def _on_raise(_code: Any, _offset: int, exception: BaseException) -> None:
+    fills = _FILLS.get()
+    if fills and isinstance(exception, _RAISE_MONITOR["error"]):
+        for fill in fills:
+            fill.v2_failed = True
+
+
+def _raise_monitor_enter() -> bool:
+    """Count one active fill; true when V2 raises inside it are observed."""
+
+    monitoring = getattr(sys, "monitoring", None)
+    if monitoring is None:
+        return False
+    with _RAISE_LOCK:
+        try:
+            if _RAISE_MONITOR["tool"] is None:
+                error = getattr(_AUTH.module(), "V2AuthenticationInputError", None)
+                if not (isinstance(error, type) and issubclass(error, BaseException)):
+                    return False
+                free = [tool for tool in range(6) if monitoring.get_tool(tool) is None]
+                if len(free) < 3:
+                    return False
+                tool = free[-1]  # the observer scans from 0: never contend for its id
+                monitoring.use_tool_id(tool, _RAISE_TOOL_NAME)
+                _RAISE_MONITOR["error"] = error
+                monitoring.register_callback(tool, monitoring.events.RAISE, _on_raise)
+                _RAISE_MONITOR["tool"] = tool
+            tool = _RAISE_MONITOR["tool"]
+            if monitoring.get_tool(tool) != _RAISE_TOOL_NAME:
+                _RAISE_MONITOR["tool"] = None
+                _RAISE_MONITOR["active"] = 0
+                return False
+            if _RAISE_MONITOR["active"] == 0:
+                monitoring.set_events(tool, monitoring.events.RAISE)
+            _RAISE_MONITOR["active"] += 1
+            return True
+        except (AttributeError, RuntimeError, ValueError):
+            return False
+
+
+def _raise_monitor_exit() -> None:
+    monitoring = getattr(sys, "monitoring", None)
+    with _RAISE_LOCK:
+        tool = _RAISE_MONITOR["tool"]
+        if monitoring is None or tool is None or _RAISE_MONITOR["active"] <= 0:
+            return
+        _RAISE_MONITOR["active"] -= 1
+        if _RAISE_MONITOR["active"] == 0:
+            try:
+                monitoring.set_events(tool, 0)
+            except (RuntimeError, ValueError):
+                pass
+
+
 # ------------------------------------------------------ authentication_io adapter
 
 
@@ -759,6 +851,9 @@ class _AuthAdapter:
     * ``RECORDS_CAPABILITY_READS``: true only when session-less recording also
       represents every read an active session would register (capability-path
       reads, pinned no-follow reads, git ingests); absent: false.
+    * ``RECORDS_FAILURES``: true only when the recorder also appends a row with
+      a true ``failed`` attribute for every read that raised; absent: false
+      (the store then relies on its own RAISE observer).
     * ``ensure_grammar_verdict`` on the session or module: the identical
       ``_parse_strict`` behind a success-only memo; absent: ``_parse_strict``.
     """
@@ -775,6 +870,11 @@ class _AuthAdapter:
 
     def capability_complete(self) -> bool:
         return bool(getattr(self.module(), "RECORDS_CAPABILITY_READS", False))
+
+    def records_failures(self) -> bool:
+        """Whether the recorder emits a row with a true ``failed`` for every raised read."""
+
+        return bool(getattr(self.module(), "RECORDS_FAILURES", False))
 
     def session(self) -> Any:
         return self.module().active_v2_authentication_session()
@@ -1026,8 +1126,19 @@ def _registered(*specs: LeafSpec) -> Iterator[None]:
 @dataclass(frozen=True)
 class _TreeRef:
     root: str  # resolved absolute root (consumer side)
-    name: str  # identity in the key: the root, or its final name for a path-free leaf
+    # Identity in the key. A leaf may build values from the caller's own
+    # spelling of the path (not the resolved one), so the key carries the
+    # absolute spelling too when it differs: ``spelled\0root``, or for a
+    # path-free leaf ``spelled-name\0root-name`` (only the final names).
+    name: str
     content_only: bool
+    spellings: tuple[str, ...] = ()  # every spelling a value could embed (leak guard)
+
+
+def _identity_root(identity: str) -> str:
+    """The resolved root of a non-path-free key identity."""
+
+    return identity.rsplit("\0", 1)[-1]
 
 
 @dataclass(frozen=True)
@@ -1051,15 +1162,19 @@ class _Prepared:
     trees: tuple[_TreeRef, ...]
     verdicts: tuple[TreeVerdict, ...]
     views: list[tuple[Any, str]] = field(default_factory=list)
+    # Inside a session: the session-less key, whose entry may serve this call
+    # only through complete capability rows (the bridge re-checks them).
+    fallback_key: str | None = None
 
 
 class _Hit:
     """A verified, not yet applied hit (``probe`` returns one; ``apply`` serves it)."""
 
     def __init__(self, store: "VerifiedStore", entry: Entry, prepared: _Prepared,
-                 views: list[tuple[Any, str]], *, deferred: bool = False) -> None:
+                 views: list[tuple[Any, str]], *, deferred: bool = False, key: str | None = None) -> None:
         self.store, self.entry, self.prepared, self.views = store, entry, prepared, views
         self.deferred = deferred
+        self.key = prepared.key if key is None else key  # the key the entry is stored under
 
     def apply(self) -> Any:
         """Register, insert and return a fresh value; raises ``_Bypass`` if no longer valid."""
@@ -1086,6 +1201,7 @@ class VerifiedStore:
         self._defects: list[str] = []
         self._counters: dict[str, int] = {}
         self._signatures: dict[Callable[..., Any], inspect.Signature] = {}
+        self._serving_disabled = False  # a blind run's store after any defect
 
     # -- restricted-tier state ------------------------------------------------
 
@@ -1104,7 +1220,14 @@ class VerifiedStore:
             return bool(self._defects)
 
     def _defect(self, kind: str) -> None:
+        """Record a defect. On a blind (real) run it is never raised: it is
+        counted in the restricted tier and the store serves nothing more."""
+
         with self._lock:
+            if self.mode.blind:
+                self._counters[f"defect:{kind}"] = self._counters.get(f"defect:{kind}", 0) + 1
+                self._serving_disabled = True
+                return
             self._defects.append(kind)
 
     def check_defects(self) -> None:
@@ -1151,8 +1274,18 @@ class VerifiedStore:
             for value in values:
                 if not isinstance(value, (str, PurePath)):
                     raise _Bypass("tree argument is not a path")
-                root = os.fspath(Path(value).resolve(strict=False))
-                trees.append(_TreeRef(root, Path(root).name if spec.path_free else root, spec.path_free))
+                raw = os.fspath(value)
+                if not isinstance(raw, str):
+                    raise _Bypass("tree argument is not a text path")
+                root = os.fspath(Path(raw).resolve(strict=False))
+                spelled = os.path.abspath(raw)
+                if spec.path_free:
+                    spelled_name, root_name = os.path.basename(spelled), os.path.basename(root)
+                    name = root_name if spelled_name == root_name else f"{spelled_name}\0{root_name}"
+                else:
+                    name = root if spelled == root else f"{spelled}\0{root}"
+                spellings = tuple(dict.fromkeys((raw, str(Path(raw)), spelled, root)))
+                trees.append(_TreeRef(root, name, spec.path_free, spellings))
         scope = _current_scope()
         verdicts: list[TreeVerdict] = []
         with _suspended():
@@ -1169,12 +1302,19 @@ class VerifiedStore:
         prepared.views = self._views(prepared)
         # Which physics entries the call consults (not their values) is call
         # context: a session cache, a run-partition view, or none.
+        # Session presence is part of the key: a leaf's value may depend on it
+        # (a read that is strict only in a session). A call inside a session
+        # may still use a session-less entry, but only through its complete
+        # capability rows, which the bridge re-checks (``fallback_key``).
         material = (
             SCHEMA, self.commit, code_digest(), environment_digest(), spec.leaf_id, scalars,
             tree_types, tuple((tree.name, verdict.digest) for tree, verdict in zip(trees, verdicts)),
             tuple(sorted(key for _, key in prepared.views)),
         )
-        prepared.key = canonical_digest(material)
+        in_session = _AUTH.session() is not None
+        prepared.key = canonical_digest(material + ("session" if in_session else "sessionless",))
+        if in_session:
+            prepared.fallback_key = canonical_digest(material + ("sessionless",))
         return prepared
 
     # -- physics ---------------------------------------------------------------
@@ -1257,9 +1397,14 @@ class VerifiedStore:
 
     def _find(self, prepared: _Prepared) -> _Hit | None:
         with self._lock:
-            if prepared.key in self._poisoned:
+            if self._serving_disabled or prepared.key in self._poisoned:
                 return None
-            entry = self._entries.get(prepared.key)
+            key = prepared.key
+            entry = self._entries.get(key)
+            if entry is None and prepared.fallback_key is not None and prepared.fallback_key not in self._poisoned:
+                fallback = self._entries.get(prepared.fallback_key)
+                if fallback is not None and fallback.rows is not None:
+                    key, entry = prepared.fallback_key, fallback
         if entry is None:
             self._count(f"{prepared.spec.leaf_id}:miss")
             return None
@@ -1270,7 +1415,7 @@ class VerifiedStore:
         if views is None:
             self._count(f"{prepared.spec.leaf_id}:verify_miss")
             return None
-        return _Hit(self, entry, prepared, views)
+        return _Hit(self, entry, prepared, views, key=key)
 
     def _verify(self, entry: Entry, prepared: _Prepared) -> list[tuple[Any, str]] | None:
         scope = _current_scope()
@@ -1305,8 +1450,9 @@ class VerifiedStore:
             return
         parents = {os.path.dirname(tree.root) for tree in prepared.trees}
         with self._lock:
-            roots = sorted({identity for entry in self._entries.values() if not _path_free(entry)
-                            for identity, _ in entry.trees if os.path.dirname(identity) in parents})
+            roots = sorted({_identity_root(identity) for entry in self._entries.values() if not _path_free(entry)
+                            for identity, _ in entry.trees
+                            if os.path.dirname(_identity_root(identity)) in parents})
         scope.prefetch([(root, False) for root in roots])
 
     @staticmethod
@@ -1316,12 +1462,21 @@ class VerifiedStore:
         root = prepared.trees[index].root
         return (os.path.join(root, identity) if identity else root), label.replace(_ROOT_MARK, root)
 
-    def _apply(self, hit: _Hit) -> Any:
+    def _apply(self, hit: _Hit, *, dry: bool = False, session: Any = None) -> Any:
+        """Serve the hit: register its rows, insert its physics, return a fresh value.
+
+        ``dry`` (shadow mode) runs the identical admission, bridge and
+        registration against ``session`` (a scratch copy of the consumer's
+        session, or None) and returns ``(value, physics inserts)`` without
+        touching the real session, the views or any recorder.
+        """
+
         entry, prepared = hit.entry, hit.prepared
         if hit.deferred:
             # Probed earlier (a pool pre-filter): re-verify at the serial position.
             with self._lock:
-                if prepared.key in self._poisoned or self._entries.get(prepared.key) is not entry:
+                if (hit.key in self._poisoned or prepared.key in self._poisoned
+                        or self._entries.get(hit.key) is not entry):
                     raise _Bypass("entry changed since the probe")
             scope = _current_scope()
             with _suspended():
@@ -1331,7 +1486,8 @@ class VerifiedStore:
                         raise _Bypass("tree changed since the probe")
             if self._verify(entry, prepared) is None:
                 raise _Bypass("hit no longer admissible")
-        session = _AUTH.session()
+        if not dry:
+            session = _AUTH.session()
         rows: list[_Row] = []
         if entry.rows is not None:
             for index, identity, digest, grammar, caller_grammar, label in entry.rows:
@@ -1342,12 +1498,18 @@ class VerifiedStore:
                 raise _Bypass("rows incomplete for a session")
             self._bridge(session, rows, prepared)
         value = pickle.loads(entry.value)
+        inserts: dict[str, Any] = {}
         for view, key in hit.views:
             stored = {k: after for k, _, after in entry.physics}[key]
             if self._peek(view, key) is ABSENT and stored is not ABSENT:
-                view[key] = stored
+                if dry:
+                    inserts[key] = stored
+                else:
+                    view[key] = stored
+        if dry:
+            return value, inserts
         with self._lock:
-            self._served[prepared.key] = self._served.get(prepared.key, 0) + 1
+            self._served[hit.key] = self._served.get(hit.key, 0) + 1
         self._forward(entry, prepared, rows)
         return value
 
@@ -1397,19 +1559,36 @@ class VerifiedStore:
     # -- shadow -----------------------------------------------------------------
 
     def _shadow(self, hit: _Hit, fn: Callable[..., Any], args: tuple, kwargs: dict) -> Any:
-        """Recompute a sampled hit at its position; the fresh value is what the caller gets."""
+        """Serve a sampled hit into a scratch copy, recompute it for real, compare.
+
+        First the hit goes through the identical ``_apply`` (admission, bridge
+        verdicts, pre-checked registration, physics inserts) against a scratch
+        copy of the consumer's session. If that refuses, the hit would not have
+        been served in ``on`` mode either: the call is a plain miss (the leaf
+        runs, any V2 refusal is the serial one, no defect). Otherwise the leaf
+        runs in the real session, and a defect is recorded if it raises, or if
+        its value, its physics post-values, the physics the caller now sees or
+        the session's records (identity, sha256, grammar, read count, strict
+        parse) differ from what serving the hit would have produced. The
+        caller always gets the freshly computed value.
+        """
 
         leaf_id = hit.prepared.spec.leaf_id
+        session = _AUTH.session()
+        try:
+            scratch = None if session is None else _scratch_session(session)
+            _, inserts = self._apply(hit, dry=True, session=scratch)
+        except Exception:  # noqa: BLE001 - not admissible here: exactly an on-mode discarded hit
+            self._count(f"{leaf_id}:hit_discarded")
+            return self._fill(hit.prepared, fn, args, kwargs)
         self._count(f"{leaf_id}:shadow")
+        visible_before = {key: self._peek(view, key) for view, key in hit.views}
         outcome: dict[str, Any] = {}
         try:
             value = self._fill(hit.prepared, fn, args, kwargs, outcome=outcome)
         except BaseException:
             if not isinstance(sys.exc_info()[1], (KeyboardInterrupt, SystemExit)):
-                self._count(f"{leaf_id}:shadow_mismatch")
-                self._defect(f"{leaf_id}:shadow_raised")
-                with self._lock:
-                    self._poisoned.add(hit.prepared.key)
+                self._shadow_defect(hit, "shadow_raised")
             raise
         if not outcome.get("comparable"):
             self._count(f"{leaf_id}:shadow_incomparable")
@@ -1417,12 +1596,25 @@ class VerifiedStore:
         stored_physics = {key: after for key, _, after in hit.entry.physics}
         same_physics = all(self._same(stored_physics.get(key, ABSENT), after)
                            for key, after in outcome.get("physics", {}).items())
-        if not _same_value(outcome.get("value"), hit.entry.value) or not same_physics:
-            self._count(f"{leaf_id}:shadow_mismatch")
-            self._defect(f"{leaf_id}:shadow_mismatch")
-            with self._lock:
-                self._poisoned.add(hit.prepared.key)
+        try:
+            same_visible = all(self._same(inserts.get(key, visible_before[key]), self._peek(view, key))
+                               for view, key in hit.views)
+        except Exception:  # noqa: BLE001 - an unreadable view after the recompute is a mismatch
+            same_visible = False
+        same_records = scratch is None or _record_map(scratch) == _record_map(session)
+        if not (_same_value(outcome.get("value"), hit.entry.value) and same_physics
+                and same_visible and same_records):
+            self._shadow_defect(hit, "shadow_mismatch")
         return value
+
+    def _shadow_defect(self, hit: _Hit, kind: str) -> None:
+        leaf_id = hit.prepared.spec.leaf_id
+        self._count(f"{leaf_id}:shadow_mismatch")
+        self._defect(f"{leaf_id}:{kind}")
+        with self._lock:
+            self._poisoned.add(hit.key)
+            self._entries.pop(hit.key, None)
+            self._new.discard(hit.key)
 
     # -- fill ---------------------------------------------------------------------
 
@@ -1451,11 +1643,18 @@ class VerifiedStore:
         fill = _Fill()
         _install_hook()
         token = _FILLS.set(_FILLS.get() + (fill,))
+        observed = _raise_monitor_enter()
+        if not observed and not _AUTH.records_failures():
+            fill.unstorable.add("v2_failures_unobservable")
         try:
             with _AUTH.recording() as recorded:
                 value = fn(*args, **kwargs)
         finally:
+            if observed:
+                _raise_monitor_exit()
             _FILLS.reset(token)
+        if fill.v2_failed or any(getattr(row, "failed", False) for row in recorded or ()):
+            storable = False
         if not storable:
             self._count(f"{leaf_id}:unstorable")
             return value
@@ -1522,11 +1721,8 @@ class VerifiedStore:
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception:  # noqa: BLE001 - an unpicklable value is not stored
                 return None
-            if prepared.spec.path_free:
-                for tree in prepared.trees:
-                    for needle in (tree.root, os.path.dirname(tree.root)):
-                        if needle and needle != os.sep and needle.encode("utf-8", "surrogatepass") in payload:
-                            return None
+            if prepared.spec.path_free and _embeds_location(prepared.trees, value, payload):
+                return None
         return Entry(
             prepared.spec.leaf_id, payload,
             tuple((tree.name, verdict.digest) for tree, verdict in zip(prepared.trees, prepared.verdicts)),
@@ -1688,7 +1884,7 @@ class VerifiedStore:
         self._new.discard(key)
         self._count("poison")
         if self._served.get(key):
-            self._defects.append("poisoned_after_serving")
+            self._defect("poisoned_after_serving")
 
     def export_entries(self, selector: Callable[[str, Entry], bool] | None = None,
                        *, new_only: bool = False) -> dict[str, Any]:
@@ -1709,7 +1905,7 @@ class VerifiedStore:
         with self._lock:
             for defect in payload.get("defects", ()):
                 if isinstance(defect, str):
-                    self._defects.append(defect)
+                    self._defect(defect)
             for key in payload.get("poisoned", ()):
                 if isinstance(key, str) and key not in self._poisoned:
                     self._poison(key)
@@ -1717,6 +1913,77 @@ class VerifiedStore:
                 if isinstance(key, str) and isinstance(entry, Entry):
                     self._insert(key, entry)
                     self._new.discard(key)
+
+
+def _embeds_location(trees: Sequence[_TreeRef], value: Any, payload: bytes) -> bool:
+    """Whether a path-free leaf's value may carry where its tree lives.
+
+    Every spelling the caller could have used (its own argument, its absolute
+    spelling, the resolved root) and each one's parent is searched for, both in
+    the pickled bytes and in every string or path inside the value (a pickled
+    ``Path`` stores its parts separately, so the bytes alone would miss it).
+    """
+
+    needles: set[str] = set()
+    for tree in trees:
+        for spelling in tree.spellings or (tree.root,):
+            for needle in (spelling, os.path.dirname(spelling)):
+                if needle and needle not in (os.sep, os.curdir):
+                    needles.add(needle)
+    if any(needle.encode("utf-8", "surrogatepass") in payload for needle in needles):
+        return True
+    return any(needle in text for text in _value_strings(value) for needle in needles)
+
+
+def _value_strings(value: Any, depth: int = 0) -> Iterator[str]:
+    """Every string, path and exception text reachable in a value (bounded depth)."""
+
+    if depth > 64:
+        yield ""  # too deep to inspect: the caller's search finds nothing here
+        return
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, PurePath):
+        yield str(value)
+    elif isinstance(value, (bytes, bytearray)):
+        yield bytes(value).decode("utf-8", "surrogateescape")
+    elif isinstance(value, Mapping):
+        for key, item in value.items():
+            yield from _value_strings(key, depth + 1)
+            yield from _value_strings(item, depth + 1)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            yield from _value_strings(item, depth + 1)
+    elif isinstance(value, BaseException):
+        yield str(value)
+        yield from _value_strings(value.args, depth + 1)
+    elif is_dataclass(value) and not isinstance(value, type):
+        for item in fields(value):
+            yield from _value_strings(getattr(value, item.name), depth + 1)
+    elif hasattr(value, "__dict__") and not isinstance(value, type):
+        yield from _value_strings(vars(value), depth + 1)
+
+
+def _scratch_session(session: Any) -> Any:
+    """A detached copy of a V2 session: same records and vocabulary, own lock, never active."""
+
+    scratch = copy.copy(session)
+    with session._lock:
+        scratch._records = dict(session._records)
+        vocabulary = getattr(session, "_governed_spec_vocabulary_identities", None)
+        if isinstance(vocabulary, set):
+            scratch._governed_spec_vocabulary_identities = set(vocabulary)
+    scratch._lock = threading.RLock()
+    if hasattr(scratch, "_token"):
+        scratch._token = None
+    return scratch
+
+
+def _record_map(session: Any) -> dict[str, tuple[Any, ...]]:
+    with session._lock:
+        return {identity: (getattr(record, "sha256", None), getattr(record, "grammar", None),
+                           getattr(record, "read_count", None), getattr(record, "strict_parse_succeeded", None))
+                for identity, record in session._records.items()}
 
 
 def _strict_equal(left: Any, right: Any) -> bool:
