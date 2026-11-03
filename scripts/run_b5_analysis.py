@@ -30,6 +30,14 @@ The arguments, each the only thing of its kind the run takes:
                        steps 1, 2 and 4 (spawned; every record decision stays serial in this
                        process). Default: JOULEWISE_B5_ANALYSIS_WORKERS, else min(8, CPU count - 2);
                        1 is the serial path. The record and every output are the same for every N.
+--phase-log PATH       Optional (D-188 TIMERS). A structure-only timing log for the operator: one JSON
+                       line per event (run start, step begin, heartbeat, step end, run end) carrying only
+                       step ids and integer wall seconds; no label, phase, count, status word or value.
+                       Default: JOULEWISE_B5_PHASE_LOG, else no log. PATH must be absolute, contain no
+                       symbolic link, not exist yet, and lie outside the custody root and the repository;
+                       otherwise the run refuses at step 0 as tooling_refusal before anything is written.
+                       It is opened before step 0 and is not a recorded output. Per-phase detail goes only
+                       to <custody root>/<mode>/restricted/logs/runtime-*.
 --custody DIR          The analysis custody root: a directory outside the repository, given as a
                        path with no symbolic link in it (on macOS write /private/tmp, not /tmp)
                        and no whitespace. It is created if absent. A mode refuses to start when its
@@ -46,6 +54,7 @@ p42 outcome counts as completed), 3 when the run ended at an outcome-class refus
 """
 from __future__ import annotations
 import argparse
+import os
 from pathlib import Path
 import sys
 
@@ -66,11 +75,30 @@ def main(argv=None):
     parser.add_argument('--index',type=Path,required=True)
     parser.add_argument('--custody',type=Path,required=True)
     parser.add_argument('--workers',type=_positive_int,default=None)
+    parser.add_argument('--phase-log',type=Path,default=None)
     try:
         args=parser.parse_args(argv)
     except AnalysisRefusal:
         print('step 0 - tooling_refusal',file=sys.stderr)
         return 2
+    phase_log=args.phase_log if args.phase_log is not None else os.environ.get(PHASE_LOG_ENV) or None
+    if phase_log is None:
+        return _run(args)
+    from joulewise.b5_analysis import phase_timing
+    try:
+        descriptor=phase_timing.open_structure_log(phase_log,custody=args.custody,repo=_REPO)
+    except (ValueError,OSError):
+        print('step 0 - tooling_refusal',file=sys.stderr)
+        return 2
+    with phase_timing.session(descriptor,mode=args.mode):
+        return _run(args)
+
+
+PHASE_LOG_ENV='JOULEWISE_B5_PHASE_LOG'
+_REPO=Path(__file__).resolve().parents[1]
+
+
+def _run(args):
     if args.workers is None:
         return run(args.mode,args.index,args.custody)
     return run(args.mode,args.index,args.custody,workers=args.workers)
