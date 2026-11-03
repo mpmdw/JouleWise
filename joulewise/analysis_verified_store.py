@@ -45,8 +45,14 @@ makes, is attributed only through an authentication_io no-follow row); the
 scalar arguments are unchanged by the call; every tree's lstat signature is
 unchanged across the call; the physics view behaves as the J2 premise needs.
 Reads outside the leaf's trees and outside the Python installation and the
-``joulewise`` sources are kept as (path, sha256) extras, and listings as name
-digests; both are re-verified on every hit (cached per scope, lstat-guarded).
+``joulewise`` sources are kept as (path, sha256) extras, and listings as
+digests of every entry's name and own lstat type; both are re-verified on
+every hit (cached per scope, lstat-guarded). D-188 VDL-FIX round 2 (Sol HC1):
+an open outside the trees that found a directory (a file open that failed, or
+a no-follow root) is kept as (path, mode) and must still be a directory with
+that mode on every hit; any other failed open (nothing hashable there) makes
+the fill unstorable, and so does a no-follow component opened more often than
+successful rows account for (a failed no-follow read).
 Each is bound to the pathname the leaf used (Sol wave-2 #2): a pathname that
 is not its own target is kept as an alias and re-resolved on every hit, and a
 read into a tree through any pathname but one of that tree's spellings is
@@ -89,7 +95,10 @@ serial there, because a worker process's reads are invisible to this recorder.
 Physics. A leaf's probe names the physics-cache entries it may read or insert;
 which entries a call consults (not their values) is part of the key.
 A fill records the visible value before (V0) and after (P). A lookup is
-admitted only if the caller's visible value V is ABSENT or equals P exactly.
+admitted only if the caller's visible value V equals P exactly, or V is ABSENT
+and the fill itself started cold for the key or never consulted it (kinds
+``absent``, ``set``, ``noconsult``; Sol HB: a warm fill is no proof of what a
+cold refit returns).
 D-188 VDL-FIX (Sol wave-2 #1): a fill also records, per key, what its leaf
 provably did to every caller-visible layer (a run view's local dict and its
 run partition, or a plain dict; ``_PHYSICS_KINDS``), and a hit replays
@@ -475,20 +484,51 @@ def _file_signature(path: str) -> str | None:
     return repr(_signature_row(st))
 
 
+def _entry_kind(entry: os.DirEntry) -> str:
+    """An entry's own type, following no symlink: d(irectory), f(ile), l(ink) or o(ther)."""
+
+    if entry.is_symlink():
+        return "l"
+    if entry.is_dir(follow_symlinks=False):
+        return "d"
+    if entry.is_file(follow_symlinks=False):
+        return "f"
+    return "o"
+
+
 def _listing(path: str) -> tuple[str, str] | None:
-    """(names digest, signature) of a directory listing, following no symlink."""
+    """(digest of names and entry kinds, signature) of a directory listing, following no symlink.
+
+    D-188 VDL-FIX round 2 (HC1, Sol): a listing binds each entry's own lstat
+    type as well as its name. A caller that tries every listed candidate and
+    skips the ones it cannot read (``environment_admission``'s registered
+    policies) answers differently when a same-named entry changes type (a
+    directory becomes a file, a file a symlink), so a names-only digest would
+    keep serving a stale value.
+    """
 
     try:
         st = os.lstat(path)
         if not stat.S_ISDIR(st.st_mode):
             return None
-        names = sorted(os.listdir(path))
+        with os.scandir(path) as entries:
+            rows = sorted((entry.name, _entry_kind(entry)) for entry in entries)
         after = os.lstat(path)
     except OSError:
         return None
     if _signature_row(st) != _signature_row(after):
         return None
-    return canonical_digest(tuple(names)), repr(_signature_row(st))
+    return canonical_digest(("kinds", tuple(rows))), repr(_signature_row(st))
+
+
+def _directory_mode(path: str) -> int | None:
+    """The permission bits of the directory at ``path`` (no symlink followed), or None."""
+
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    return stat.S_IMODE(st.st_mode) if stat.S_ISDIR(st.st_mode) else None
 
 
 # ------------------------------------------------------------ verification scope
@@ -685,6 +725,7 @@ class _Fill:
         self.forwarded_extras: list[tuple[str, str]] = []
         self.forwarded_listings: list[tuple[str, str]] = []
         self.forwarded_aliases: list[tuple[str, str]] = []
+        self.forwarded_directories: list[tuple[str, int]] = []
         # A hit served inside this fill carried no session rows: this fill's
         # rows cannot stand for a session's either.
         self.rows_incomplete = False
@@ -1029,6 +1070,12 @@ class LeafSpec:
     params: tuple[tuple[str, str], ...]  # (parameter, role): every parameter, exactly once
     path_free: bool = False
     physics_probe: Callable[[Mapping[str, Any]], list[tuple[Any, str]]] | None = None
+    # D-188 VDL-FIX round 2 (RL): the leaf body's first and only use of each
+    # tree argument is ``Path(argument)``, which drops any capability
+    # subclass; a capability path and a plain path of the same spelling then
+    # yield the same value and the same reads, and the key does not tell them
+    # apart (see ``reduce_bundle_dict``).
+    plain_trees: bool = False
 
     def roles(self) -> dict[str, str]:
         return dict(self.params)
@@ -1101,10 +1148,22 @@ def reduce_bundle_dict(
     Both stages raise exactly as before; a caller whose serial code separates
     the reduction and serialization failures (``cli._cmd_reduce``) must keep
     them separate around this leaf.
+
+    D-188 VDL-FIX round 2 (RL): the body uses ``path`` only as ``Path(path)``,
+    exactly as ``reduce_bundle`` itself does first (``BundleReader(Path(path))``,
+    its only use of the argument; a test pins this). A capability path (a
+    session's ``V2AuthenticationPath`` or a recorder's
+    ``_RecordedAuthenticationPath``) therefore computes exactly what the plain
+    path of the same spelling computes: the reader re-derives its own
+    capability from the session or recorder in force (``BundleReader.path``),
+    not from the argument's type. So the spec keys the argument as a plain
+    path (``plain_trees``): step 1's strict validation (``reader.path``, a
+    capability) and step 2's ``reduce`` verb (a plain path) share one entry.
     """
 
     from joulewise.reduce import reduce_bundle
 
+    path = Path(path)
     if physics_cache is None:
         return reduce_bundle(path, reducer_version=reducer_version).to_dict()
     return reduce_bundle(path, reducer_version=reducer_version,
@@ -1153,6 +1212,7 @@ LEAVES: tuple[LeafSpec, ...] = (
         (("path", TREE), ("reducer_version", SCALAR), ("physics_cache", PHYSICS)),
         physics_probe=_probe_explicit(
             "physics_cache", lambda arguments: _calibration_key(_bundle_metadata(arguments["path"]))),
+        plain_trees=True,
     ),
     LeafSpec(
         "L4_calibration_bracket",
@@ -1240,6 +1300,12 @@ class Entry:
     # target) of every extra read or listing whose pathname is not its own
     # target; each binding is re-checked on every hit.
     aliases: tuple[tuple[str, str], ...] = ()
+    # D-188 VDL-FIX round 2 (HC1, Sol): (resolved path, permission bits) of
+    # every pathname outside the trees that the fill opened and found to be a
+    # directory (an attempted file open that failed with IsADirectoryError, or
+    # the no-follow route's root). Each must still be a directory with those
+    # bits on every hit.
+    directories: tuple[tuple[str, int], ...] = ()
 
 
 # What a fill's leaf did to one physics key, from the caller-visible layers
@@ -1420,7 +1486,8 @@ class VerifiedStore:
         capabilities = tuple(kind for kind in (getattr(module, name, None) for name in kinds)
                              if isinstance(kind, type))
         tree_types = tuple(
-            "v2-capability" if capabilities and isinstance(arguments[name], capabilities) else "path"
+            "v2-capability" if (capabilities and not spec.plain_trees
+                                and isinstance(arguments[name], capabilities)) else "path"
             for name, role in spec.params if role == TREE)
         prepared = _Prepared(spec, "", arguments, scalars, tuple(trees), tuple(verdicts))
         prepared.views = self._views(prepared)
@@ -1645,6 +1712,13 @@ class VerifiedStore:
             for original, resolved in entry.aliases:
                 if os.path.realpath(original) != resolved:
                     return None
+            # HC1 (Sol): a pathname the fill opened that was a directory (a
+            # failed file open, or the no-follow route's root) must still be
+            # one, with the same mode: a file, symlink or unreadable entry
+            # there now could make the serial open succeed or fail differently.
+            for path, mode in entry.directories:
+                if _directory_mode(path) != mode:
+                    return None
             for path, digest in entry.extras:
                 if scope.verify_file(path) != digest:
                     return None
@@ -1659,9 +1733,24 @@ class VerifiedStore:
         stored = {key: (before, after) for key, before, after in entry.physics}
         if set(stored) != {key for _, key in views}:
             return None
+        kinds = dict(entry.physics_kinds)
         for view, key in views:
             visible = self._peek(view, key)
-            if not (visible is ABSENT or self._same(visible, stored[key][1])):
+            if visible is ABSENT:
+                # D-188 VDL-FIX round 2 (HB, Sol): a cold consumer (nothing
+                # visible) is served only by a fill that itself started cold
+                # for this key (``absent``/``set``: it fitted, or never wrote,
+                # P on these very bytes), or by one that provably never
+                # consulted the key (``noconsult``: the reducer's only consult
+                # is a promoting ``get``, and nothing was promoted). A fill
+                # that read a value already in front of it (``opaque``,
+                # ``promote``: e.g. another member's bound in a shared local
+                # dict) is no proof of what a cold refit returns, so it never
+                # serves a cold consumer. ``_physics_plan`` declines the same
+                # cases; this is the admission rule stated where it applies.
+                if kinds.get(key, "opaque") not in ("absent", "set", "noconsult"):
+                    return None
+            elif not self._same(visible, stored[key][1]):
                 return None
         try:
             self._physics_plan(entry, views)
@@ -1795,6 +1884,7 @@ class VerifiedStore:
             fill.forwarded_extras.extend(entry.extras)
             fill.forwarded_listings.extend(entry.listings)
             fill.forwarded_aliases.extend(entry.aliases)
+            fill.forwarded_directories.extend(entry.directories)
         if rows:
             _AUTH.forward_rows(rows, headroom)
 
@@ -1968,7 +2058,7 @@ class VerifiedStore:
                     return None
                 physics.append((key, visible_before, after))
                 kinds.append((key, self._kind(layers, self._layers(view, key), visible_before, after)))
-            extras, listings, extra_trees, aliases = self._classify(prepared, fill, recorded)
+            extras, listings, extra_trees, aliases, directories = self._classify(prepared, fill, recorded)
             try:
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception:  # noqa: BLE001 - an unpicklable value is not stored
@@ -1980,7 +2070,7 @@ class VerifiedStore:
             prepared.spec.leaf_id, payload,
             tuple((tree.name, verdict.digest) for tree, verdict in zip(prepared.trees, prepared.verdicts)),
             extras, listings, extra_trees, tuple(physics), rows,
-            physics_kinds=tuple(kinds), aliases=aliases,
+            physics_kinds=tuple(kinds), aliases=aliases, directories=directories,
         )
 
     def _classify(self, prepared: _Prepared, fill: _Fill, recorded: Any):
@@ -1999,20 +2089,26 @@ class VerifiedStore:
                                               or os.path.isdir(path))
 
         parents = {os.path.dirname(root) for root in roots} if prepared.spec.path_free else set()
-        nofollow: set[str] = set()
+        # HC1 (Sol): every relative open is one component of a successful
+        # no-follow read (its row's relative parts), counted: a component
+        # opened more often than successful rows account for is a failed
+        # no-follow read, which leaves no row to re-verify, so the fill is
+        # unstorable rather than silently omitting that dependency.
+        nofollow: dict[str, int] = {}
         for row in recorded or ():
             relative = getattr(row, "relative", None)
             identity = getattr(row, "identity", None)
             if relative:
-                nofollow.update(Path(relative).parts)
+                for part in Path(relative).parts:
+                    nofollow[part] = nofollow.get(part, 0) + 1
                 if identity:
                     fill.reads.append(identity)
-                    nofollow.add(os.fspath(Path(identity).parent))
             elif getattr(row, "identity", None) is None:
                 raise _Bypass("unattributable authentication read")
         for name in fill.relative_opens:
-            if name not in nofollow:
+            if nofollow.get(name, 0) <= 0:
                 raise _Bypass("unattributable relative open")
+            nofollow[name] -= 1
         # Sol wave-2 #2: a read is bound to the pathname the leaf used, not
         # only to its target. A pathname that is not its own target is kept
         # as an alias (re-resolved on every hit); a relative pathname is
@@ -2038,6 +2134,15 @@ class VerifiedStore:
             return False
 
         extras: dict[str, str] = {}
+        directories: dict[str, int] = {}
+
+        def directory(resolved: str) -> None:
+            mode = _directory_mode(resolved)
+            if mode is None:
+                raise _Bypass("opened directory not stable")
+            if directories.setdefault(resolved, mode) != mode:
+                raise _Bypass("opened directory changed during the fill")
+
         for path in fill.reads:
             resolved = os.path.realpath(path)
             if in_tree(path, resolved) or is_code(resolved):
@@ -2046,7 +2151,12 @@ class VerifiedStore:
                 # Review of #639: a directory opened by pathname (the no-follow
                 # route reads a row relative to it) is bound like a file read,
                 # so retargeting any component of that pathname is a miss.
+                # HC1 (Sol): an open that found a directory (a file open that
+                # failed, as a caller trying every listed candidate does, or
+                # the no-follow root) also binds that it is a directory with
+                # these bits: a file there would read, or fail, differently.
                 bind(path, resolved)
+                directory(resolved)
                 continue
             if any(within(resolved, parent) or within(os.path.normpath(path), parent) for parent in parents):
                 raise _Bypass("path-free leaf read beside its tree")
@@ -2076,6 +2186,9 @@ class VerifiedStore:
             bind(path, resolved)
         for original, resolved in fill.forwarded_aliases:
             bind(original, resolved)
+        for path, mode in fill.forwarded_directories:
+            if directories.setdefault(path, mode) != mode:
+                raise _Bypass("forwarded directory disagrees")
         for path, digest in fill.forwarded_extras:
             if extras.setdefault(path, digest) != digest:
                 raise _Bypass("forwarded extra disagrees")
@@ -2092,7 +2205,7 @@ class VerifiedStore:
                 raise _Bypass("forwarded tree disagrees")
         return (tuple(sorted(extras.items())), tuple(sorted(listings.items())),
                 tuple(sorted((root, content_only, digest) for (root, content_only), digest in extra_trees.items())),
-                tuple(sorted(aliases.items())))
+                tuple(sorted(aliases.items())), tuple(sorted(directories.items())))
 
     def _rows(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None, recorded: Any,
               *, fill: _Fill | None = None, payload: bytes = b""):
