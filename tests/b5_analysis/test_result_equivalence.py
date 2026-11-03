@@ -56,7 +56,7 @@ def parse_blinded(test: unittest.TestCase, text: str, cfg) -> dict:
     test.assertIsNone(re.search(r'[0-9a-f]{64}', joined))
     out, current, order = {}, None, {}
     allowed_names = set(cfg.vocabulary) | {f'{c}:<unlisted>' for c in cmp.ROLE_CLASSES + ('unlisted',)}
-    for line in body[:-3]:
+    for line in body[:-4]:
         m = TIER_LINE.fullmatch(line)
         if m:
             current = m.group(1)
@@ -69,16 +69,18 @@ def parse_blinded(test: unittest.TestCase, text: str, cfg) -> dict:
         test.assertIn(f.group(1), allowed_names)
         out[current].add(f.group(1))
         order[current].append(f.group(1))
-    test.assertRegex(body[-3], r'^audit: (MATCH|DIFFER \(not printed\)|NOT_COMPARED)$')
-    test.assertRegex(body[-2], r'^scope: (full|prefix)$')
+    test.assertRegex(body[-4], r'^audit: (MATCH|DIFFER \(not printed\)|NOT_COMPARED)$')
+    test.assertRegex(body[-3], r'^scope: (full|prefix)$')
+    test.assertRegex(body[-2], r'^refusal-source: (step-codes|step-codes-unauthenticated|logs-unauthenticated)$')
     test.assertRegex(body[-1], r'^VERDICT: (EQUIVALENT|NOT_EQUIVALENT)$')
     test.assertEqual(list(out), list(TIER_KEYS))
     for tier in TIER_KEYS:
         if isinstance(out[tier], set):
             test.assertTrue(out[tier], 'DIFFER without a field line')
             test.assertEqual(order[tier], sorted(set(order[tier])), 'field names sorted and de-duplicated')
-    out['audit'] = body[-3].split(': ', 1)[1].split(' ')[0]
-    out['scope'] = body[-2].split(': ', 1)[1]
+    out['audit'] = body[-4].split(': ', 1)[1].split(' ')[0]
+    out['scope'] = body[-3].split(': ', 1)[1]
+    out['refusal_source'] = body[-2].split(': ', 1)[1]
     out['verdict'] = body[-1].split(': ', 1)[1]
     return out
 
@@ -153,6 +155,26 @@ class MutationCorpusTest(_TmpCase):
         rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
         self.assertIn('$.cells[0].floor_abs_j: 0.0 -> -0.0', text)
 
+    def test_claim_labels_under_name_keys_are_registered(self):
+        ref, cand, _ = corpus.build_case('registered_claim_term_names_swapped', self.tmp)
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('registered: DIFFER', text)
+        self.assertIn('$.contrasts[0].deterministic_bounds.terms[0].name: "E_idle_mean_j2" -> "E_meter_j2"', text)
+        self.assertIn('audit: MATCH', text)
+
+    def test_empty_object_is_not_the_string(self):
+        ref, cand, _ = corpus.build_case('registered_empty_object_vs_string', self.tmp)
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('$.cells[0].per_token: {} -> "{}"', text)
+        a = cmp.exact_json(b'{"v": {}}')
+        b = cmp.exact_json(b'{"v": "{}"}')
+        side = cmp.Side('ref', Path('.'), b'', {}, {}, [], {}, None)
+        flat = cmp.Flattener(self.cfg, side)
+        self.assertNotEqual(flat.flatten(a, 'outputs/projection-alpha.json', {}),
+                            flat.flatten(b, 'outputs/projection-alpha.json', {}))
+
     def test_referential_break_is_caught(self):
         ref, cand = self.pair(name='break')
         name = _extraction_name(cand)
@@ -223,6 +245,51 @@ class BlindedLeakTest(_TmpCase):
         self.assertIn('does not match its committed sha256', errors[0].read_text())
 
 
+class BlindedVerdictFreshnessTest(_TmpCase):
+    """Review of PR 628: BLINDED-VERDICT.txt never outlives the run that wrote it."""
+
+    def _verdict(self, cand):
+        return (cand / 'equivalence' / 'BLINDED-VERDICT.txt').read_text()
+
+    def test_error_after_equivalent_replaces_the_verdict(self):
+        ref, cand = self.pair(name='stale')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual(rc, 0, text)
+        self.assertTrue(self._verdict(cand).endswith('VERDICT: EQUIVALENT\n'))
+        path = cand / 'dry-run' / 'restricted' / _extraction_name(cand)
+        path.write_bytes(path.read_bytes().replace(b'false', b'true', 1))
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=authenticate side=cand\n'))
+        self.assertEqual(self._verdict(cand), text)
+        self.assertNotIn('EQUIVALENT', self._verdict(cand))
+
+    def test_record_error_and_reference_error_replace_the_verdict(self):
+        ref, cand = self.pair(name='stale-rec')
+        self.assertEqual(run_tool(['--mode', 'blinded', ref, cand])[0], 0)
+        os.unlink(ref / 'dry-run' / corpus.RECORD)
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=record side=ref\n'))
+        self.assertEqual(self._verdict(cand), text)
+
+    def test_a_run_starts_by_invalidating_the_verdict(self):
+        ref, cand = self.pair(name='pending')
+        self.assertEqual(run_tool(['--mode', 'blinded', ref, cand])[0], 0)
+        cmp.invalidate_blinded_verdict(cand)
+        self.assertEqual(self._verdict(cand), 'VERDICT: PENDING\n')
+        self.assertEqual(stat.S_IMODE(os.lstat(cand / 'equivalence').st_mode), 0o700)
+        self.assertEqual(sorted(p.name for p in (cand / 'equivalence').iterdir()), ['BLINDED-VERDICT.txt', 'restricted'])
+        # A missing candidate root is left alone (the run then fails at 'record').
+        cmp.invalidate_blinded_verdict(self.tmp / 'no-such-root')
+        self.assertFalse((self.tmp / 'no-such-root').exists())
+
+    def test_open_mode_leaves_the_blinded_verdict(self):
+        ref, cand = self.pair(name='open-keeps')
+        self.assertEqual(run_tool(['--mode', 'blinded', ref, cand])[0], 0)
+        before = self._verdict(cand)
+        self.assertEqual(run_tool(['--mode', 'open', '--no-report', ref, cand])[0], 0)
+        self.assertEqual(self._verdict(cand), before)
+
+
 class AuthenticationTest(_TmpCase):
     def test_uncommitted_bytes_are_refused(self):
         ref, cand = self.pair()
@@ -291,6 +358,64 @@ class StepCodesTest(_TmpCase):
         self.assertEqual(rc, 1)
         self.assertIn('decisions:step_codes', got['decisions'])
         self.assertIn('record:steps', got['decisions'])
+
+
+def _commit_step_codes(root: Path):
+    """Commit restricted/decisions/step-codes.jsonl as an output of the last step that ran."""
+    run = root / 'dry-run'
+    record = json.loads((run / corpus.RECORD).read_bytes())
+    data = (run / 'restricted' / 'decisions' / 'step-codes.jsonl').read_bytes()
+    ran = [row for row in record['steps'] if row['status'] != 'not_run']
+    ran[-1]['outputs'].append({'name': 'decisions/step-codes.jsonl', 'sha256': hashlib.sha256(data).hexdigest()})
+    (run / corpus.RECORD).write_bytes(json.dumps(record, sort_keys=True, separators=(',', ':')).encode())
+
+
+class RefusalSourceTest(_TmpCase):
+    """Review of PR 628: the refusal source says whether the raw code rests on committed bytes."""
+
+    def _codes(self, raw_code=corpus.SENTINEL_CODE):
+        return lambda m: (corpus._refused(corpus.REFUSED_POS)(m), corpus._step_codes(raw_code=raw_code)(m))
+
+    def test_logs_fallback_is_labelled_unauthenticated(self):
+        mut = corpus._refused(corpus.REFUSED_POS)
+        ref, cand = self.pair(mut, mut, name='logs')
+        got = parse_blinded(self, run_tool(['--mode', 'blinded', ref, cand])[1], self.cfg)
+        self.assertEqual((got['verdict'], got['refusal_source']), ('EQUIVALENT', 'logs-unauthenticated'))
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertIn('refusal-source: logs-unauthenticated', text)
+
+    def test_uncommitted_step_codes_are_labelled_unauthenticated(self):
+        ref, cand = self.pair(self._codes(), self._codes(), name='uncommitted')
+        got = parse_blinded(self, run_tool(['--mode', 'blinded', ref, cand])[1], self.cfg)
+        self.assertEqual((got['verdict'], got['refusal_source']), ('EQUIVALENT', 'step-codes-unauthenticated'))
+        _commit_step_codes(ref)
+        got = parse_blinded(self, run_tool(['--mode', 'blinded', ref, cand])[1], self.cfg)
+        self.assertEqual(got['refusal_source'], 'step-codes-unauthenticated', 'both sides must commit')
+
+    def test_committed_step_codes_are_authenticated_and_compared(self):
+        ref, cand = self.pair(self._codes(), self._codes(), name='committed')
+        _commit_step_codes(ref)
+        _commit_step_codes(cand)
+        got = parse_blinded(self, run_tool(['--mode', 'blinded', ref, cand])[1], self.cfg)
+        self.assertEqual((got['verdict'], got['refusal_source']), ('EQUIVALENT', 'step-codes'))
+        self.assertEqual(got['audit'], 'MATCH')
+        # An edit to a committed step-codes row is an authentication failure, not EQUIVALENT.
+        path = cand / 'dry-run' / 'restricted' / 'decisions' / 'step-codes.jsonl'
+        path.write_text(path.read_text().replace(corpus.SENTINEL_CODE, corpus.SENTINEL_CODE_MUTANT))
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=authenticate side=cand\n'))
+
+    def test_committed_step_codes_difference_is_a_decision(self):
+        ref, cand = self.pair(self._codes(), self._codes(corpus.SENTINEL_CODE_MUTANT), name='committed-diff')
+        _commit_step_codes(ref)
+        _commit_step_codes(cand)
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        got = parse_blinded(self, text, self.cfg)
+        self.assertEqual((rc, got['refusal_source']), (1, 'step-codes'))
+        self.assertEqual(got['decisions'], {'decisions:step_codes'})
+        self.assertEqual(cmp.assign_role('11', None, 'decisions/step-codes.jsonl', b'', 'ref'),
+                         (cmp.STEP_CODES_ROLE, cmp.STEP_CODES_ROLE))
+        self.assertEqual(self.cfg.tier(cmp.STEP_CODES_ROLE, '$text', None), 'A')
 
 
 class LegacyRefusalDecoderTest(_TmpCase):
@@ -475,6 +600,16 @@ class TierAssignmentTest(unittest.TestCase):
             ('finalized/analysed-attempt-exclusions.json', '$.members_excluded[*].code', 'code', 'D'),
             ('outputs/claim-verdicts.json', '$.contrasts[*].claim_evaluation.verdict', 'verdict', 'D'),
             ('outputs/claim-verdicts.json', '$.contrasts[*].estimator.difference_j', 'difference_j', 'R'),
+            # Review of PR 628: a 'name' inside a registered section is a result label, never audit.
+            ('outputs/claim-verdicts.json', '$.contrasts[*].estimator.name', 'name', 'R'),
+            ('outputs/claim-verdicts.json', '$.contrasts[*].metric.name', 'name', 'R'),
+            ('outputs/claim-verdicts.json', '$.contrasts[*].deterministic_bounds.terms[*].name', 'name', 'R'),
+            ('outputs/claim-verdicts.json', '$.contrasts[*].estimator.variance_contributions[*].name', 'name', 'R'),
+            ('outputs/claim-verdicts.json', '$.families[*].name', 'name', 'R'),
+            ('finalized/outputs/closeout.json', '$.independent_ratios[*].name', 'name', 'R'),
+            ('outputs/claim-verdicts.json', '$.bundle_audit[*].name', 'name', 'A'),
+            ('mint/alpha/calibration_plan.json', '$.name', 'name', 'A'),
+            ('outputs/claim-verdicts.json', '$.contrasts[*].estimator.inputs_sha256', 'inputs_sha256', 'A'),
             ('outputs/claim-verdicts.json', '$.bundle_audit[*].inclusion_status', 'inclusion_status', 'D'),
             ('outputs/claim-verdicts.json', '$.bundle_audit[*].bundle', 'bundle', 'I'),
             ('outputs/claim-verdicts.json', '$.claim_verdicts_id', 'claim_verdicts_id', 'A'),
@@ -621,6 +756,13 @@ class ExemptionsTest(_TmpCase):
             {'role': '*', 'path': '*'},
             {'role': 'record', 'path': '$.novel'},
             {'role': 'decisions', 'path': '$.x'},
+            # Review of PR 628: role globs that MATCH a protected role are refused too.
+            {'role': 'reco?d', 'path': '$.novel*'},
+            {'role': 'r*', 'path': '$.novel*'},
+            {'role': '*cord', 'path': '$.novel*'},
+            {'role': 'decision?', 'path': '$.x'},
+            {'role': '*-audit', 'path': '$.x'},
+            {'role': '?ecisions-audit/step-codes', 'path': '$text'},
         ]
         for row in statically:
             with self.subTest(row=row), self.assertRaises(cmp.ComparatorError) as ctx:

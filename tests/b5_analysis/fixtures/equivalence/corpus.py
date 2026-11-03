@@ -418,6 +418,22 @@ def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal'):
     return apply
 
 
+def _claim_labels(estimator, metric, terms):
+    """Result labels under 'name' keys inside a registered claim-verdicts section (same numbers)."""
+    def apply(model):
+        c = file_body(model, 'outputs/{H}-claim-verdicts.json')['contrasts'][0]
+        c['metric'] = {'name': metric, 'unit': 'J'}
+        c['estimator'] = {'name': estimator, 'difference_j': Num('4.25'),
+                          'variance_contributions': [{'name': terms[0], 'squared_standard_error': Num('0.01')},
+                                                     {'name': terms[1], 'squared_standard_error': Num('0.04')}]}
+        c['deterministic_bounds'] = {'terms': [{'name': terms[0], 'bound': Num('0.5')},
+                                               {'name': terms[1], 'bound': Num('0.9')}]}
+    return apply
+
+
+CLAIM_LABELS = ('abba_block_arm_mean_difference_t_v1', 'energy_per_token', ('E_idle_mean_j2', 'E_meter_j2'))
+
+
 def _chain(*fns):
     def apply(model):
         for fn in fns:
@@ -458,6 +474,19 @@ CASES = {
                                   {'registered': {'finalized/outputs/closeout.json:independent_ratios'}}),
     'registered_block_bracket': (None, _set('brackets/{H}-block.json', ['value_s'], Num('0.0413')),
                                  {'registered': {'brackets/block.json:value_s'}}),
+    'registered_claim_estimator_name': (_claim_labels(*CLAIM_LABELS),
+                                        _claim_labels('ratio_of_totals_delete_one_block_jackknife_t_v1',
+                                                      *CLAIM_LABELS[1:]),
+                                        {'registered': {'outputs/claim-verdicts.json:contrasts'}}),
+    'registered_claim_metric_name': (_claim_labels(*CLAIM_LABELS),
+                                     _claim_labels(CLAIM_LABELS[0], 'energy_per_request', CLAIM_LABELS[2]),
+                                     {'registered': {'outputs/claim-verdicts.json:contrasts'}}),
+    'registered_claim_term_names_swapped': (_claim_labels(*CLAIM_LABELS),
+                                            _claim_labels(*CLAIM_LABELS[:2], CLAIM_LABELS[2][::-1]),
+                                            {'registered': {'outputs/claim-verdicts.json:contrasts'}}),
+    'registered_empty_object_vs_string': (_set('outputs/{H}-projection-alpha.json', ['cells', 0, 'per_token'], {}),
+                                          _set('outputs/{H}-projection-alpha.json', ['cells', 0, 'per_token'], '{}'),
+                                          {'registered': {'outputs/projection-alpha.json:cells'}}),
     # --- decisions ------------------------------------------------------------
     'decision_extractable': (None, _set('mint/{H}-extraction-alpha.json', ['cells', 1, 'extractable'], True),
                              {'decisions': {'mint/extraction-alpha.json:cells'}}),
@@ -528,6 +557,9 @@ CASES = {
     'audit_path_key': (None, _set('outputs/{H}-claim-verdicts.json', ['bundle_audit', 0, 'path'], '/elsewhere/a'),
                        {'audit': 'DIFFER'}),
     'audit_census_membership': (None, _census_extra, {'audit': 'DIFFER'}),
+    'audit_name_outside_results': (_top_key('mint/alpha/calibration_plan.json', 'name', 'plan-r1'),
+                                   _top_key('mint/alpha/calibration_plan.json', 'name', 'plan-r2'),
+                                   {'audit': 'DIFFER'}),
     'audit_analysis_commit': (None, _commit, {'audit': 'DIFFER'}),
     'audit_serialization_only': (None, _reformat, {'audit': 'MATCH'}),
     'audit_log_noise': (None, _logs_noise, {'audit': 'MATCH'}),

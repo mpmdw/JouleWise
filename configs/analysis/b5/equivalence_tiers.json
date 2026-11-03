@@ -1,6 +1,6 @@
 {
  "schema_version": "joulewise.b5_equivalence_tiers.v1",
- "description": "D-188 result-equivalence tiers for tools/b5_equivalence/compare_b5_results.py. Precedence: input preconditions (P) > audit keys > decisions (D) > audit roles > registered numbers (R) > intermediate (I, the default; a difference fails). Only audit (A) leaves may differ. This file may only TIGHTEN the comparator's hard-coded floors: it must list every hard-coded P/D/R rule, and its audit lists must be subsets of the hard-coded audit allowances (the comparator refuses otherwise). Rules are [role glob, generic json-path glob]; '[*]' stands for any list index. timing_class_policy 'strict' (default, lead ruling 2026-11-02) treats a timing-class tooling refusal in the reference as an ordinary mismatch; 'truncate' compares the prefix before it. vocabulary is the fixed, public set V of role:section names the blinded mode may print; any other name prints as <role-class>:<unlisted>.",
+ "description": "D-188 result-equivalence tiers for tools/b5_equivalence/compare_b5_results.py. Precedence: input preconditions (P) > identity audit keys (hashes, ids, paths, timestamps) > decisions (D) > audit roles > registered numbers (R) > label audit key 'name' > intermediate (I, the default; a difference fails). A 'name' inside a D or R section is therefore a result label and never audit. Only audit (A) leaves may differ. This file may only TIGHTEN the comparator's hard-coded floors: it must list every hard-coded P/D/R rule, and its audit lists must be subsets of the hard-coded audit allowances (the comparator refuses otherwise). Rules are [role glob, generic json-path glob]; '[*]' stands for any list index. timing_class_policy 'strict' (default, lead ruling 2026-11-02) treats a timing-class tooling refusal in the reference as an ordinary mismatch; 'truncate' compares the prefix before it. vocabulary is the fixed, public set V of role:section names the blinded mode may print; any other name prints as <role-class>:<unlisted>.",
  "input_record_paths": [
   "$.window_index_sha256",
   "$.sealed*",
@@ -190,7 +190,8 @@
   "custody/paper_custody_inventory*",
   "step-eleven/index",
   "logs/*",
-  "decisions-audit"
+  "decisions-audit",
+  "decisions-audit/step-codes"
  ],
  "registered_rules": [
   [

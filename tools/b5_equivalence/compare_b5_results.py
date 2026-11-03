@@ -20,7 +20,14 @@ Blinded mode (default) prints only fixed grammar: tier MATCH/DIFFER lines and
 sorted 'field <role>:<section>' names drawn from the tracked vocabulary V. It never
 prints values, counts, list indices, ids, refusal codes or exception text. The full
 valued report goes only to <CAND>/equivalence/restricted/ (mode 0600); the blinded
-stdout is mirrored to <CAND>/equivalence/BLINDED-VERDICT.txt.
+stdout is mirrored to <CAND>/equivalence/BLINDED-VERDICT.txt. A blinded run first
+replaces that file with 'VERDICT: PENDING' and, on COMPARATOR_ERROR, with the error
+line, so the exported file never outlives the run that wrote it.
+
+Refusal identity: 'refusal-source' names where the raw refusal code came from.
+'step-codes' is decisions/step-codes.jsonl committed by both records (authenticated);
+'step-codes-unauthenticated' and 'logs-unauthenticated' (the R1 fallback) rest on
+uncommitted restricted bytes being intact on the candidate side.
 
 Open mode prints every differing leaf with both exact tokens. It refuses unless both
 records' window_index_sha256 values are listed in equivalence_open_indices.json
@@ -51,6 +58,8 @@ TIERS_SCHEMA = 'joulewise.b5_equivalence_tiers.v1'
 EXEMPTIONS_SCHEMA = 'joulewise.b5_equivalence_exemptions.v1'
 OPEN_INDICES_SCHEMA = 'joulewise.b5_equivalence_open_indices.v1'
 REPORT_SCHEMA = 'joulewise.b5_equivalence_report.v1'
+STEP_CODES_NAME = 'decisions/step-codes.jsonl'
+STEP_CODES_ROLE = 'decisions-audit/step-codes'
 STEP_CODES_KEYS = frozenset({'pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class'})
 
 RUNS = {'blind-dry-run': ('dry-run', 'B5-BLIND-DRY-RUN-RECORD.json'),
@@ -118,10 +127,15 @@ HARD_REGISTERED = (
 ALLOWED_AUDIT_KEY_SUFFIXES = ('sha256', 'digest')
 ALLOWED_AUDIT_KEYS = ('validator_source_sha256', 'binder_source_sha256', 'content_id', 'claim_verdicts_id',
                       'manifest_id', 'runs_root', 'runs_dir', 'relative_path', 'path', 'name', 'timestamp')
+# Label keys never outrank a decision or registered rule: inside a D/R section a 'name'
+# is a result label (contrasts[*].estimator.name, metric.name, bound and variance term
+# names), so the audit-key rule applies to it only after the D and R rules have missed.
+LABEL_AUDIT_KEYS = frozenset({'name'})
 ALLOWED_AUDIT_ROLES = ('supply-census/*', 'custody/paper_custody_receipt*', 'custody/paper_custody_inventory*',
-                       'step-eleven/index', 'logs/*', 'decisions-audit')
+                       'step-eleven/index', 'logs/*', 'decisions-audit', 'decisions-audit/step-codes')
 ALLOWED_AUDIT_RECORD_PATHS = ('$.input_census*', '$.steps[*].outputs*', '$.analysis_commit')
 TIMING_POLICIES = ('strict', 'truncate')
+PROTECTED_EXEMPTION_ROLES = ('record', 'decisions', 'decisions-audit', 'decisions-audit/step-codes')
 
 
 class ComparatorError(Exception):
@@ -235,8 +249,11 @@ def plain_json(raw: bytes):
     return json.loads(raw, object_pairs_hook=_pairs)
 
 
+EMPTY_OBJECT = ('#o', '{}')
+
+
 def show(token) -> str:
-    if isinstance(token, tuple) and len(token) == 2 and token[0] in ('#f', '#i', '#c'):
+    if isinstance(token, tuple) and len(token) == 2 and token[0] in ('#f', '#i', '#c', '#o'):
         return token[1]
     if token is ABSENT:
         return '<absent>'
@@ -281,13 +298,14 @@ class Config:
         self._registered = [(_glob(r), _glob(p)) for r, p in self.registered]
         self._exempt = [(_glob(e['role']), _glob(e['path']), e['action']) for e in self.exemptions]
         suffixes = '|'.join(re.escape(s) for s in self.audit_key_suffixes)
-        exact = '|'.join(re.escape(k) for k in self.audit_keys)
+        exact = '|'.join(re.escape(k) for k in self.audit_keys if k not in LABEL_AUDIT_KEYS)
         parts = []
         if suffixes:
             parts.append(rf'(?:^|_)(?:{suffixes})$')
         if exact:
             parts.append(rf'^(?:{exact})$')
         self._audit_key = re.compile('|'.join(parts)) if parts else None
+        self._label_keys = frozenset(k for k in self.audit_keys if k in LABEL_AUDIT_KEYS)
         self._cache = {}
 
     def is_input_role(self, role: str) -> bool:
@@ -314,6 +332,8 @@ class Config:
         for r, p in self._registered:
             if r.match(role) and p.match(gpath):
                 return 'R'
+        if key in self._label_keys:
+            return 'A'
         return 'I'
 
     def tier(self, role: str, gpath: str, key) -> str:
@@ -400,7 +420,10 @@ def load_config(config_dir: Path = CONFIG_DIR, *, timing_policy: str | None = No
         _need(isinstance(row, dict) and set(row) == {'role', 'path', 'action', 'reason'}, 'exemptions', 'row keys')
         _need(all(isinstance(row[k], str) and row[k].strip() for k in row), 'exemptions', 'row values')
         _need(row['action'] in ('audit', 'unordered'), 'exemptions', 'action')
-        _need(row['role'] != 'record' and not row['role'].startswith('decisions'), 'exemptions', 'record role')
+        # Roles are globs: refuse any that can MATCH the record or the derived decision roles
+        # ('reco?d', 'r*', 'decisions*'), not only the literal names.
+        _need(not row['role'].startswith('decisions')
+              and not any(_glob(row['role']).match(r) for r in PROTECTED_EXEMPTION_ROLES), 'exemptions', 'record role')
         _need(len(row['reason'].strip()) >= 12, 'exemptions', 'reason too short')
         # Static refusal: an exemption glob overlapping any hard P/D/R rule is refused
         # outright; the dynamic check in Config.tier catches every remaining leaf.
@@ -470,6 +493,10 @@ def _window_of(text: str):
 def assign_role(step: str, window, name: str, raw: bytes, side: str):
     """Return (role, vocab). Roles never depend on a digest."""
     n = _strip_hex_name(name)
+    if name == STEP_CODES_NAME:
+        # Committed step codes are compared through the derived 'decisions' structure;
+        # the raw bytes (which also carry the audit-only exception_class) are audit.
+        return STEP_CODES_ROLE, STEP_CODES_ROLE
     if name.startswith('rereduced/'):
         parts = name.split('/')
         w = parts[1] if len(parts) == 3 and parts[1] in WINDOWS else (window or 'block')
@@ -651,7 +678,8 @@ class Flattener:
             if not value:
                 t = cfg.tier(role, gpath, key)
                 self._guard(guard, t, role, gpath)
-                self._put(out, path, t, '{}')
+                # Tagged like a number, so an empty object never equals the string "{}".
+                self._put(out, path, t, EMPTY_OBJECT)
             for k, v in value.items():
                 ck = self.canon(k)
                 seg = '.' + ck if SAFE_KEY.fullmatch(ck) else '[' + json.dumps(ck) + ']'
@@ -734,9 +762,19 @@ def _first_non_ok(record):
 
 
 def read_step_codes(side: Side):
-    if side.restricted_fd is None or not _exists_beneath(side.restricted_fd, 'decisions/step-codes.jsonl'):
-        return None
-    raw = _read_beneath(side.restricted_fd, 'decisions/step-codes.jsonl', side.label, 'step-codes')
+    """Return (rows, authenticated) or (None, False).
+
+    Authenticated when the record commits decisions/step-codes.jsonl as a step output
+    (its bytes were checked against the committed sha256 in load_side); otherwise the
+    file is read from disk and the refusal source is reported as unauthenticated.
+    """
+    committed = [a for a in side.artifacts.values() if a.name == STEP_CODES_NAME]
+    if committed:
+        raw, authenticated = committed[-1].raw, True
+    elif side.restricted_fd is None or not _exists_beneath(side.restricted_fd, STEP_CODES_NAME):
+        return None, False
+    else:
+        raw, authenticated = _read_beneath(side.restricted_fd, STEP_CODES_NAME, side.label, 'step-codes'), False
     rows = []
     try:
         for line in raw.decode('utf-8').splitlines():
@@ -762,7 +800,7 @@ def read_step_codes(side: Side):
             raise ComparatorError('step-codes', side.label, f'row {i} tooling code differs from the record')
         if st['status'] in ('ok', 'not_run') and st['exit_status'] in (None, 0) and code is not None:
             raise ComparatorError('step-codes', side.label, f'row {i} ok step carries a code')
-    return rows
+    return rows, authenticated
 
 
 DRIVER_TOKEN = re.compile(r'[A-Za-z][A-Za-z0-9_.]*')   # joulewise/b5_analysis/dry_run.py _TOKEN
@@ -853,8 +891,13 @@ def _int_token(value):
 
 def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
     """Derived decision leaves: per-step result outputs and the raw refusal identity."""
-    codes_ref, codes_cand = read_step_codes(ref), read_step_codes(cand)
-    source = 'step-codes' if codes_ref is not None and codes_cand is not None else 'logs'
+    (codes_ref, auth_ref), (codes_cand, auth_cand) = read_step_codes(ref), read_step_codes(cand)
+    if codes_ref is not None and codes_cand is not None:
+        source = 'step-codes' if auth_ref and auth_cand else 'step-codes-unauthenticated'
+    else:
+        # Restricted logs are never committed by the record: a raw code derived from
+        # them rests on the logs being intact (R1 references always take this path).
+        source = 'logs-unauthenticated'
     structures = {}
     for side, codes in ((ref, codes_ref), (cand, codes_cand)):
         steps = side.record['steps']
@@ -862,7 +905,7 @@ def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
         outputs = [sorted(k for k in side.step_keys[i] if not cfg.is_audit_role(side.artifacts[k].role))
                    for i in range(min(limit, len(steps)))]
         d, audit = {'step_outputs': outputs}, {}
-        if source == 'step-codes':
+        if source.startswith('step-codes'):
             d['step_codes'] = [{k: r[k] for k in ('pos', 'step', 'window', 'raw_code', 'exit_status')}
                                for r in codes[:limit]]
             audit['exception_class'] = [r['exception_class'] for r in codes[:limit]]
@@ -1011,6 +1054,7 @@ def blinded_lines(result: Result, cfg: Config) -> list:
     else:
         lines.append('audit: ' + ('DIFFER (not printed)' if result.diffs['A'] else 'MATCH'))
     lines.append(f'scope: {result.scope}')
+    lines.append(f'refusal-source: {result.refusal_source}')
     lines.append('VERDICT: ' + ('EQUIVALENT' if result.equivalent else 'NOT_EQUIVALENT'))
     return lines
 
@@ -1083,24 +1127,46 @@ def write_report(result: Result, cfg: Config, mode: str, lines: list) -> Path:
     stem = f'{sha256(ref.record_raw)}-{sha256(cand.record_raw)}.{mode}'
     path = _write_exclusive(restricted, stem, '.json', data)
     if mode == 'blinded':
-        tmp = eq / '.BLINDED-VERDICT.txt.tmp'
-        try:
-            os.unlink(tmp)
-        except FileNotFoundError:
-            pass
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
-        try:
-            os.write(fd, ('\n'.join(lines) + '\n').encode())
-        finally:
-            os.close(fd)
-        os.replace(tmp, eq / 'BLINDED-VERDICT.txt')
+        write_blinded_verdict(eq, lines)
     return path
 
 
-def write_error(cand_root: Path, text: str):
+BLINDED_VERDICT = 'BLINDED-VERDICT.txt'
+VERDICT_PENDING = 'VERDICT: PENDING'
+
+
+def write_blinded_verdict(eq: Path, lines: list):
+    """Atomically replace <CAND>/equivalence/BLINDED-VERDICT.txt (the only artifact leaving custody)."""
+    tmp = eq / ('.' + BLINDED_VERDICT + '.tmp')
     try:
-        _eq, restricted = equivalence_dirs(cand_root)
+        os.unlink(tmp)
+    except FileNotFoundError:
+        pass
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    try:
+        os.write(fd, ('\n'.join(lines) + '\n').encode())
+    finally:
+        os.close(fd)
+    os.replace(tmp, eq / BLINDED_VERDICT)
+
+
+def invalidate_blinded_verdict(cand_root: Path):
+    """Before a blinded run: no earlier verdict may survive a run that later fails or dies."""
+    try:
+        if not stat.S_ISDIR(os.lstat(cand_root).st_mode):
+            return
+    except OSError:
+        return
+    eq, _restricted = equivalence_dirs(cand_root)
+    write_blinded_verdict(eq, [VERDICT_PENDING])
+
+
+def write_error(cand_root: Path, text: str, line: str | None = None):
+    try:
+        eq, restricted = equivalence_dirs(cand_root)
         _write_exclusive(restricted, 'comparator-error', '.txt', text.encode('utf-8', 'replace'))
+        if line is not None:
+            write_blinded_verdict(eq, [line])
     except Exception:
         pass
 
@@ -1129,6 +1195,8 @@ def run(argv, *, cfg: Config | None = None, out=None, err=None) -> int:
         mode, cand_root = a.mode, a.cand
         if a.no_report and mode != 'open':
             raise ComparatorError('args', 'both', '--no-report is open mode only')
+        if mode == 'blinded':
+            invalidate_blinded_verdict(cand_root)
         cfg = cfg or load_config()
         ref_fd, ref_raw, ref_rec = read_record(a.ref, a.run, 'ref')
         sides.append(ref_fd)
@@ -1168,11 +1236,12 @@ def run(argv, *, cfg: Config | None = None, out=None, err=None) -> int:
         if not re.fullmatch(r'[a-z\-]+', stage):
             stage = 'internal'
         text = traceback.format_exc()
+        line = f'COMPARATOR_ERROR stage={stage} side={side}'
         if mode == 'open':
             err.write(text)
         elif cand_root is not None and stage not in ('args',):
-            write_error(cand_root, text)
-        out.write(f'COMPARATOR_ERROR stage={stage} side={side}\n')
+            write_error(cand_root, text, line)
+        out.write(line + '\n')
         out.flush()
         return 2
 
