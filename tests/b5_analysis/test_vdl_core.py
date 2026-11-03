@@ -1004,17 +1004,21 @@ class RealStrictLeaf(unittest.TestCase):
         from joulewise import cli
 
         strict = mock.patch.object(cli, "_strict_problems", wraps=cli._strict_problems)
+        # Integration resolution (PR #635 x PR #638): both references are taken outside
+        # the run, where a plain strict cli.validate_bundle is not the L1 leaf (PR #635);
+        # the serial-session reference (PR #638) supplies the records compared below.
         with aio.V2AuthenticationReadSession() as serial:
             serial_value = cli.validate_bundle(self.member, True)
+        expected = cli.validate_bundle(self.member, True)
+        self.assertEqual(serial_value, expected)
         with run(vdl.Mode("shadow", 0)) as caches, strict as counted:
-            expected = cli.validate_bundle(self.member, True)
-            self.assertEqual(serial_value, expected)
-            computed = counted.call_count
+            computed = counted.call_count  # 0: nothing computed in the run yet
             first = vdl.call("L1_strict_validation", cli.validate_bundle, self.member, True)
             second = vdl.call("L1_strict_validation", cli.validate_bundle, self.member, True)
             self.assertEqual(first, expected)
             self.assertEqual(second, expected)
             self.assertEqual(counted.call_count, computed + 1)
+            self.assertEqual(caches.vdl.restricted_counters()["L1_strict_validation:fill"], 1)
             # The path-free copy (another parent, same relative name and bytes) hits.
             self.assertEqual(vdl.call("L1_strict_validation", cli.validate_bundle, self.copy, True), expected)
             self.assertEqual(counted.call_count, computed + 1)
