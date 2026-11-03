@@ -1,0 +1,95 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "published": true
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 1663197863041125,
+    "monotonic_raw_ns": 1663197863040750,
+    "wall_s": 1793678860.8792572
+  },
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-align/pilot-v2-20261103T035512Z/runs-parent/runs_align_pilot_v2_bound",
+      "sha256": "9d4943df037a123cfa755f8f0db4e16a7353f1932efa0dfeed42974161e06e5e",
+      "valid": true
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-align/pilot-v2-20261103T035512Z/runs-parent/runs_align_pilot_v2",
+      "sha256": "2fc7fbc8156a10dfcca819523755ad905dbbbe2ddb0c27d86dd23b899e1f7311",
+      "valid": true
+    }
+  },
+  "locators_valid": true,
+  "published": true,
+  "requested": {
+    "monotonic_ns": 1663197829964291,
+    "monotonic_raw_ns": 1663197829964208,
+    "wall_s": 1793678860.8461812
+  },
+  "result": {
+    "launch_lineage": {
+      "bracket_session_id": "align-pilot-20261103T035513011728Z-calibration",
+      "collection_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "launch_record": {
+        "path": "/Users/edr/night-align/pilot-v2-20261103T035512Z/custody/window_lineage/launch.json",
+        "sha256": "e3b83f10913b7832df4ac06baf312ef87f23fc6eea356bb4ea83ed04557a6a80"
+      },
+      "pack_id": "align-pilot-v2",
+      "pack_root": "/Users/edr/night-align/pilot-v2-20261103T035512Z/measurement/configs/campaigns/align-pilot-v2",
+      "pack_sha256": null,
+      "plan_id": "align-pilot-v2",
+      "plan_tree_sha256": "bc110e656a0fe65568fc581eaf011c93989b316da0ee616df74efa8431d59ead",
+      "schema_version": "joulewise.hazard_window_lineage.v1",
+      "window_context": {
+        "bound_runs_root": "/Users/edr/night-align/pilot-v2-20261103T035512Z/runs-parent/runs_align_pilot_v2_bound",
+        "claim_runs_root": "/Users/edr/night-align/pilot-v2-20261103T035512Z/runs-parent/runs_align_pilot_v2",
+        "custody_root": "/Users/edr/night-align/pilot-v2-20261103T035512Z/custody",
+        "night_dir": "/Users/edr/night-align/pilot-v2-20261103T035512Z/custody/night",
+        "post_attempt_id": "align-pilot-20261103T035513011728Z-cal-post",
+        "pre_attempt_id": "align-pilot-20261103T035513011728Z-cal-pre"
+      },
+      "window_id": "align-pilot-v2"
+    },
+    "locators": {
+      "bound_runs_root": {
+        "path": "/Users/edr/night-align/pilot-v2-20261103T035512Z/runs-parent/runs_align_pilot_v2_bound/.joulewise-launch-lineage.json",
+        "sha256": "9d4943df037a123cfa755f8f0db4e16a7353f1932efa0dfeed42974161e06e5e"
+      },
+      "claim_runs_root": {
+        "path": "/Users/edr/night-align/pilot-v2-20261103T035512Z/runs-parent/runs_align_pilot_v2/.joulewise-launch-lineage.json",
+        "sha256": "2fc7fbc8156a10dfcca819523755ad905dbbbe2ddb0c27d86dd23b899e1f7311"
+      }
+    },
+    "records": {
+      "authorization": {
+        "path": "/Users/edr/night-align/pilot-v2-20261103T035512Z/custody/window_lineage/authorization.json",
+        "sha256": "6d0dbb739fdb6dbc41db49ad4875dab96a63030886514108cab00bdeb57f7511"
+      },
+      "go": {
+        "path": "/Users/edr/night-align/pilot-v2-20261103T035512Z/custody/window_lineage/go.json",
+        "sha256": "b0a9e2901bedbab349f37820c4837d66587811c8241f04d8fc6a206c3e4addb1"
+      },
+      "launch": {
+        "path": "/Users/edr/night-align/pilot-v2-20261103T035512Z/custody/window_lineage/launch.json",
+        "sha256": "e3b83f10913b7832df4ac06baf312ef87f23fc6eea356bb4ea83ed04557a6a80"
+      }
+    },
+    "unrecorded": [
+      {
+        "error": "ArmReadinessError: pack contains no committed files",
+        "field": "pack_sha256"
+      }
+    ]
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}
