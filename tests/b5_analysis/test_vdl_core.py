@@ -655,7 +655,8 @@ class SessionBridging(_Base):
         return value, dict(session.records)
 
     def test_sessionless_fill_without_capability_rows_never_serves_a_session(self):
-        with run() as caches:
+        # An AUTH-IO without RECORDS_CAPABILITY_READS (before AUTH-IO-2): no bridge.
+        with mock.patch.object(aio, "RECORDS_CAPABILITY_READS", False), run() as caches:
             vdl.call("T_digest", digest_tree, self.tree, 1)
             with aio.V2AuthenticationReadSession() as session:
                 vdl.call("T_digest", digest_tree, self.tree, 1)
@@ -971,11 +972,12 @@ if __name__ == "__main__":
 class RealStrictLeaf(unittest.TestCase):
     """L1 end to end on the committed synthetic S10 ALPHA member (no custody data).
 
-    Session-less fill then hit; an in-session call cannot use the session-less
-    entry (no capability rows on this AUTH-IO), computes in its session and
-    stores an in-session entry with that session's rows; a later session is served
-    with exactly the serial session's records; a path-free copy under another
-    parent hits; shadow:1000 recomputes a hit and finds no mismatch.
+    Session-less fill then hit; a path-free copy under another parent hits; an
+    in-session call is served from the session-less entry through its complete
+    capability rows (AUTH-IO-2: RECORDS_CAPABILITY_READS), re-verifying every
+    JSON row under the consumer's grammar, and ends with exactly the records
+    and physics of a serial in-session validation; shadow:1000 recomputes a
+    bridged hit in a session and finds no mismatch.
     """
 
     @classmethod
@@ -1000,8 +1002,11 @@ class RealStrictLeaf(unittest.TestCase):
         from joulewise import cli
 
         strict = mock.patch.object(cli, "_strict_problems", wraps=cli._strict_problems)
+        with aio.V2AuthenticationReadSession() as serial:
+            serial_value = cli.validate_bundle(self.member, True)
         with run(vdl.Mode("shadow", 0)) as caches, strict as counted:
             expected = cli.validate_bundle(self.member, True)
+            self.assertEqual(serial_value, expected)
             computed = counted.call_count
             first = vdl.call("L1_strict_validation", cli.validate_bundle, self.member, True)
             second = vdl.call("L1_strict_validation", cli.validate_bundle, self.member, True)
@@ -1011,25 +1016,23 @@ class RealStrictLeaf(unittest.TestCase):
             # The path-free copy (another parent, same relative name and bytes) hits.
             self.assertEqual(vdl.call("L1_strict_validation", cli.validate_bundle, self.copy, True), expected)
             self.assertEqual(counted.call_count, computed + 1)
-            with aio.V2AuthenticationReadSession() as filler:
-                self.assertEqual(vdl.call("L1_strict_validation", cli.validate_bundle, self.member, True),
-                                 expected)
-            self.assertEqual(counted.call_count, computed + 2)
             with aio.V2AuthenticationReadSession() as consumer:
                 self.assertEqual(vdl.call("L1_strict_validation", cli.validate_bundle, self.member, True),
                                  expected)
-            self.assertEqual(counted.call_count, computed + 2)
-            self.assertEqual(dict(consumer.records), dict(filler.records))
+            self.assertEqual(counted.call_count, computed + 1)
+            self.assertEqual(dict(consumer.records), dict(serial.records))
+            self.assertEqual(list(consumer.records), list(serial.records))
+            self.assertTrue(any(record.grammar == "json" for record in consumer.records.values()))
             self.assertEqual(consumer.instrument_calibration_physics_cache,
-                             filler.instrument_calibration_physics_cache)
+                             serial.instrument_calibration_physics_cache)
             counters = caches.vdl.restricted_counters()
             self.assertEqual(counters["L1_strict_validation:hit"], 3)
             caches.vdl.mode = vdl.Mode("shadow", 1000)
             with aio.V2AuthenticationReadSession() as shadowed:
                 self.assertEqual(vdl.call("L1_strict_validation", cli.validate_bundle, self.member, True),
                                  expected)
-            self.assertEqual(counted.call_count, computed + 3)
-            self.assertEqual(dict(shadowed.records), dict(filler.records))
+            self.assertEqual(counted.call_count, computed + 2)
+            self.assertEqual(dict(shadowed.records), dict(serial.records))
             self.assertFalse(caches.vdl.defect_pending())
             self.assertEqual(caches.vdl.restricted_counters()["L1_strict_validation:shadow"], 1)
 
@@ -1255,7 +1258,8 @@ class SessionDependentOutcome(_ReviewBase):
                 vdl.call("T_digest", digest_tree, self.tree, 2)
 
     def test_session_presence_is_part_of_the_key(self):
-        with run() as caches:
+        # Without capability rows a session never falls back to the session-less entry.
+        with mock.patch.object(aio, "RECORDS_CAPABILITY_READS", False), run() as caches:
             vdl.call("T_nondet", nondeterministic_leaf, self.tree, 1)
             with aio.V2AuthenticationReadSession():
                 vdl.call("T_nondet", nondeterministic_leaf, self.tree, 1)

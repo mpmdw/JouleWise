@@ -54,8 +54,12 @@ V2 authentication rows. An entry carries the V2 registration rows a session
 would hold after the leaf: from the session's own record delta for an
 in-session fill, and from authentication_io's read recorder for a session-less
 fill only when that recorder declares it represents capability
-(``V2AuthenticationPath``) reads too (``RECORDS_CAPABILITY_READS``). Otherwise
-the entry cannot serve a call inside a session. A hit inside a session first
+(``V2AuthenticationPath``) reads too (``RECORDS_CAPABILITY_READS``), and only
+when that recording scope is not marked ``unrepresented`` (a session entered
+inside the fill, a session-presence query the store does not represent, a
+text read a session would decode differently), no hit served inside the fill
+lacked rows, and the value holds no capability path. Otherwise the entry
+cannot serve a call inside a session. A hit inside a session first
 obtains, for every json/jsonl row, a grammar verdict under the consumer's own
 effective grammar and vocabulary flag (``_parse_strict`` on the just re-read
 and re-hashed bytes, through authentication_io's success-only memo when
@@ -664,6 +668,9 @@ class _Fill:
         self.forwarded_trees: list[tuple[str, bool, str]] = []
         self.forwarded_extras: list[tuple[str, str]] = []
         self.forwarded_listings: list[tuple[str, str]] = []
+        # A hit served inside this fill carried no session rows: this fill's
+        # rows cannot stand for a session's either.
+        self.rows_incomplete = False
 
 
 _FILLS: contextvars.ContextVar[tuple[_Fill, ...]] = contextvars.ContextVar("joulewise_vdl_fills", default=())
@@ -850,7 +857,11 @@ class _AuthAdapter:
       relative); absent: no rows.
     * ``RECORDS_CAPABILITY_READS``: true only when session-less recording also
       represents every read an active session would register (capability-path
-      reads, pinned no-follow reads, git ingests); absent: false.
+      reads, pinned no-follow reads, git ingests); absent: false. The yielded
+      list may carry ``unrepresented`` (a non-empty list when the scope's
+      session-less code does not stand for a session's: a session entered
+      inside it, an unrepresented session-presence query, a text read whose
+      session decode differs); such a fill never serves a session.
     * ``RECORDS_FAILURES``: true only when the recorder also appends a row with
       a true ``failed`` attribute for every read that raised; absent: false
       (the store then relies on its own RAISE observer).
@@ -1294,9 +1305,15 @@ class VerifiedStore:
                 if verdict is None:
                     raise _Bypass("tree not hashable")
                 verdicts.append(verdict)
-        capability = getattr(_AUTH.module(), "V2AuthenticationPath", None)
+        # A capability path (in a session) and its session-less recording
+        # twin (``v2_authentication_path`` while recording) are one kind: the
+        # twin's reads are recorded exactly where the capability's register.
+        module = _AUTH.module()
+        capabilities = tuple(kind for kind in (getattr(module, "V2AuthenticationPath", None),
+                                               getattr(module, "_RecordedAuthenticationPath", None))
+                             if isinstance(kind, type))
         tree_types = tuple(
-            "v2-capability" if capability is not None and isinstance(arguments[name], capability) else "path"
+            "v2-capability" if capabilities and isinstance(arguments[name], capabilities) else "path"
             for name, role in spec.params if role == TREE)
         prepared = _Prepared(spec, "", arguments, scalars, tuple(trees), tuple(verdicts))
         prepared.views = self._views(prepared)
@@ -1549,6 +1566,8 @@ class VerifiedStore:
         trees = [(tree.root, tree.content_only, verdict.digest)
                  for tree, verdict in zip(prepared.trees, prepared.verdicts)]
         for fill in fills:
+            if entry.rows is None:
+                fill.rows_incomplete = True
             fill.forwarded_trees.extend(trees)
             fill.forwarded_trees.extend(entry.extra_trees)
             fill.forwarded_extras.extend(entry.extras)
@@ -1716,11 +1735,11 @@ class VerifiedStore:
                     return None
                 physics.append((key, visible_before, after))
             extras, listings, extra_trees = self._classify(prepared, fill, recorded)
-            rows = self._rows(prepared, session, snapshot, recorded)
             try:
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception:  # noqa: BLE001 - an unpicklable value is not stored
                 return None
+            rows = self._rows(prepared, session, snapshot, recorded, fill=fill, payload=payload)
             if prepared.spec.path_free and _embeds_location(prepared.trees, value, payload):
                 return None
         return Entry(
@@ -1805,8 +1824,17 @@ class VerifiedStore:
         return (tuple(sorted(extras.items())), tuple(sorted(listings.items())),
                 tuple(sorted((root, content_only, digest) for (root, content_only), digest in extra_trees.items())))
 
-    def _rows(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None, recorded: Any):
-        """The V2 registration rows a session would hold after the leaf, or None (session use barred)."""
+    def _rows(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None, recorded: Any,
+              *, fill: _Fill | None = None, payload: bytes = b""):
+        """The V2 registration rows a session would hold after the leaf, or None (session use barred).
+
+        A session-less fill's rows serve a session only if the recorder says
+        they are complete (``RECORDS_CAPABILITY_READS``) and none of these
+        holds: the recording scope is ``unrepresented``; a row came from a
+        session entered inside the fill; a hit served inside the fill had no
+        rows; the value holds a capability path (a session's computation would
+        return a registering ``V2AuthenticationPath`` there).
+        """
 
         rows: list[_Row] = []
         if session is not None:
@@ -1835,7 +1863,13 @@ class VerifiedStore:
         else:
             if recorded is None or not _AUTH.capability_complete():
                 return None
+            if getattr(recorded, "unrepresented", None) or (fill is not None and fill.rows_incomplete):
+                return None
+            if b"AuthenticationPath" in payload:
+                return None
             for row in recorded:
+                if str(getattr(row, "api", "")).startswith("session."):
+                    return None
                 if getattr(row, "identity", None) is None:
                     return None
                 rows.append(_Row(row.identity, row.sha256, row.grammar, row.caller_grammar, row.label))
