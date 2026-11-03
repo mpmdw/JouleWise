@@ -213,6 +213,30 @@ class ConsumedOnlyMergeTests(unittest.TestCase):
             self.assertEqual([self.retained(caches, root) for root in self.roots], [True, True, False])
 
 
+class SideChannelMergeTests(unittest.TestCase):
+    """Finding B (review of #640): the any-outcome side channel carries defects
+    and counters only; poison, entries and memos never come from it (the
+    contract parallel.py's module docstring states)."""
+
+    def test_side_channel_merges_defects_and_counters_only(self):
+        payload = {'schema': vdl.SCHEMA, 'entries': {'unconsumed-entry': object()},
+                   'poisoned': ['unconsumed-poison'], 'defects': ['side-defect'],
+                   'memos': {pool.SHIPPED_MEMOS[0]: {'unconsumed-memo': ()}},
+                   'counters': {'side-counter': 2}}
+        with vdl._registered(fx.SPEC), \
+                arc.analysis_run_caches({}, workers=2, vdl_mode=vdl.ON, vdl_commit='test') as caches:
+            pool.merge_side_channel(caches, payload)
+            self.assertEqual(caches.vdl._defects, ['side-defect'])
+            self.assertEqual(caches.vdl.restricted_counters().get('side-counter'), 2)
+            self.assertNotIn('unconsumed-poison', caches.vdl._poisoned)
+            self.assertNotIn('unconsumed-entry', caches.vdl._entries)
+            self.assertNotIn('unconsumed-memo', caches.memos.get(pool.SHIPPED_MEMOS[0], {}))
+            # The consumed path is where poison does merge.
+            pool.merge_consumed_poison(caches, payload)
+            self.assertIn('unconsumed-poison', caches.vdl._poisoned)
+            self.assertNotIn('unconsumed-entry', caches.vdl._entries)
+
+
 class StepCodePositionTests(unittest.TestCase):
     """Finding C: the refusing invocation and bundle are decision fields of the step codes."""
 

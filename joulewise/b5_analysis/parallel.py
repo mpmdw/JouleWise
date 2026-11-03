@@ -23,9 +23,10 @@ Verified store (D-188 SHIP). When the run has a store, each task is shipped a
 store context (``ChildTask.vdl``: mode, commit, the entries the driver selected
 for it, the shipped memos); the child creates its own store from it, enters a
 verification scope per program (``StepRunner.run``) and returns what it added
-(``ChildResult.vdl_new``). Defects, poisoned keys and restricted counters merge
-into the driver's store here, from every result (consumed or not); entries
-merge only in the driver after its serial stop (``dry_run._account_deadlines``),
+(``ChildResult.vdl_new``). Defects and restricted counters merge into the
+driver's store here, from every result (consumed or not); poisoned keys and
+entries merge only in the driver after its serial stop
+(``dry_run._account_deadlines``): poison for every consumed child, entries only
 from the consumed, firing-free prefix.
 
 Physics: the driver's run store is shipped to every task (seeded first with one
