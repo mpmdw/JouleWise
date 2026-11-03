@@ -265,7 +265,7 @@ class FailClosedTimingTests(_Scratch):
             pt.attach_restricted(self.restricted)
             timer.write('structure', {'event': 'step_end', 'step': '5', 'wall_s': 1.5})
             self.assertIsNone(timer.sinks['structure'])
-            timer.write('restricted', {'event': 'run_end', 'total_ms': 3})
+            timer.write('restricted', {'event': 'run_end', 'total_ms': 3, 'cpu_ms': 1, 'phases': {}, 'top': []})
             self.assertIsNotNone(timer.sinks['restricted'])
             self.assertTrue(timer.on)
         self.assertEqual(_lines(self.structure), [{'event': 'run_start', 'mode': 'release', 'schema': pt.SCHEMA}])
@@ -281,6 +281,34 @@ class FailClosedTimingTests(_Scratch):
     def test_no_timer_hooks_are_noops(self):
         self.assertFalse(pt.enabled())
         self.assertEqual(self.baseline(), self.baseline())
+        # Review of #631 (LOW): with no timer, pool_batch never touches costs.
+        consumed = []
+
+        def raising():
+            consumed.append(1)
+            raise RuntimeError('caller generator')
+            yield {}
+        for costs in (5, raising(), iter([{'wall_ns': 1}]), object()):
+            with self.subTest(costs=type(costs).__name__):
+                self.assertIsNone(pt.pool_batch('x', costs, 0, 1))
+        self.assertEqual(consumed, [])
+
+    def test_active_pool_batch_never_iterates_a_caller_iterator(self):
+        consumed = []
+
+        def raising():
+            consumed.append(1)
+            raise RuntimeError('caller generator')
+            yield {}
+        with pt.session(None, mode='release', start_sampler=False) as timer:
+            pt.step_begin('5')
+            for costs in (5, raising(), iter([{'wall_ns': 1}]), None):
+                pt.pool_batch('joulewise.reduce:_reduce', costs, 7, 2)
+            pt.pool_batch('joulewise.reduce:_reduce', ({'wall_ns': 3, 'cpu_ns': 1},), 7, 2)
+            self.assertTrue(timer.on)
+            self.assertEqual(timer.acc.pool['k.reduce'], [5, 1, 35, 3, 1, 3, 2])
+            pt.step_end('5')
+        self.assertEqual(consumed, [])
         with pt.task_cost(False) as cost:
             self.assertIsNone(cost)
         self.assertIsNone(pt.child_table())
@@ -317,15 +345,68 @@ class ValidatePhaseLineTests(unittest.TestCase):
             with self.subTest(line=line), self.assertRaises(pt.PhaseLineError):
                 pt.validate_phase_line(line)
 
+    restricted_end = {
+        'event': 'step_end', 'step': '5', 'wall_ms': 9, 'cpu_ms': 3, 'serial_ms': 8,
+        'spans_ms': {'pool.wait': 1}, 'maxrss_mib': 40, 'load_x100': {'start': 1, 'end': 2, 'max': 3},
+        'programs': {'driver:prog.mint': {'count': 1, 'wall_ms': 2, 'cpu_ms': 1, 'max_ms': 2}},
+        'pool': {'child:k.strict': {'batches': 1, 'tasks': 2, 'wall_ms': 3, 'busy_ms': 4, 'cpu_ms': 5,
+                                    'max_task_ms': 6, 'pool_size': 2, 'busy_permille': 666}},
+        'children': {'tasks': 1, 'wall_ms': 2, 'cpu_ms': 3},
+        'phases': {'driver': {'k.strict': [1, 2], 'other': [3, 0]}, 'child': {}, 'member': {}},
+        'sampled_ms': 9, 'unattributed_ms': 3, 'top': [['cli:_strict_problems', 3], ['qualname', 1]]}
+    restricted_beat = {'event': 'heartbeat', 'step': '-', 'step_ms': 0, 'elapsed_ms': 5, 'label': 'other',
+                       'program': None, 'top': [['k.reduce', 1]], 'progress_permille': None}
+
     def test_restricted_rejections(self):
-        pt.validate_phase_line({'event': 'step_end', 'step': '5', 'top': [['cli:_strict_problems', 3]],
-                                'program': None}, 'restricted')
-        for document in ({'event': 'step_end', 'x': 1.5}, {'event': 'step_end', 'x': False},
-                         {'event': 'step_end', 'x': 'has space'}, {'event': 'step_end', 'x': 'a:2.5'},
-                         {'event': 'invented'}, {'event': 'step_end', 'bad key': 1},
-                         {'event': 'step_end', 'x': -3}):
+        pt.validate_phase_line(self.restricted_end, 'restricted')
+        pt.validate_phase_line(self.restricted_beat, 'restricted')
+        pt.validate_phase_line(dict(self.restricted_beat, step='9b', program='prog.mint', progress_permille=500),
+                               'restricted')
+        end, beat = self.restricted_end, self.restricted_beat
+        bad = [
+            {'event': 'step_end', 'x': 1.5}, {'event': 'step_end', 'x': False},
+            {'event': 'step_end', 'x': 'has space'}, {'event': 'step_end', 'x': 'a:2.5'},
+            {'event': 'invented'}, {'event': 'step_end', 'bad key': 1}, {'event': 'step_end', 'x': -3},
+            # Review of #631 (LOW): arbitrary keys and outcome words are refused.
+            {'event': 'heartbeat', 'outcome': 'outcome_class', 'status': 'refused', 'decision': 'accepted'},
+            {'event': 'step_end', 'arbitrary_key': ['tooling_refusal', 'calibration_wall_deadline_fired']},
+            dict(end, outcome='x'), {k: v for k, v in end.items() if k != 'wall_ms'},
+            dict(end, step='-'), dict(end, wall_ms=1.5), dict(end, wall_ms=True),
+            dict(end, spans_ms={'tooling_refusal': 1}), dict(end, spans_ms={'pool.wait': -1}),
+            dict(end, load_x100={'start': 1, 'end': 2}), dict(end, load_x100={'start': 1, 'end': 2, 'max': 3, 'x': 4}),
+            dict(end, programs={'driver:refused': {'count': 1, 'wall_ms': 2, 'cpu_ms': 1, 'max_ms': 2}}),
+            dict(end, programs={'outcome:prog.mint': {'count': 1, 'wall_ms': 2, 'cpu_ms': 1, 'max_ms': 2}}),
+            dict(end, programs={'driver:prog.mint': {'count': 1, 'wall_ms': 2, 'cpu_ms': 1, 'status': 2}}),
+            dict(end, pool={'decision': end['pool']['child:k.strict']}),
+            dict(end, children={'tasks': 1, 'wall_ms': 2, 'cpu_ms': 3, 'refusals': 1}),
+            dict(end, phases={'driver': {}, 'child': {}}),
+            dict(end, phases={'driver': {'calibration_wall_deadline': [1, 1]}, 'child': {}, 'member': {}}),
+            dict(end, phases={'driver': {'k.strict': [1]}, 'child': {}, 'member': {}}),
+            dict(end, top=[['dry_run:_refuse_tooling', 3]]), dict(end, top=[['nocolon', 3]]),
+            dict(end, top=[['x:outcome_class', 3]]), dict(end, top=[['cli:_strict_problems', 3, 4]]),
+            dict(beat, label='tooling_refusal'), dict(beat, program='observer_unavailable'),
+            dict(beat, top=[['cli:_strict_problems', 1]]), dict(beat, progress_permille='half'),
+            dict(beat, step='12'),
+            {'event': 'run_start', 'schema': pt.RESTRICTED_SCHEMA, 'mode': 'accepted', 'sample_ms': 1,
+             'heartbeat_s': 1, 'pid': 1, 'cpu_count': 1},
+            {'event': 'run_start', 'schema': pt.SCHEMA, 'mode': None, 'sample_ms': 1, 'heartbeat_s': 1,
+             'pid': 1, 'cpu_count': 1},
+            {'event': 'run_end', 'total_ms': 3},
+            {'event': 'run_end', 'total_ms': 3, 'cpu_ms': 1, 'phases': {}, 'top': [], 'status': 'refused'},
+        ]
+        for document in bad:
             with self.subTest(document=document), self.assertRaises(pt.PhaseLineError):
                 pt.validate_phase_line(document, 'restricted')
+        pt.validate_phase_line({'event': 'run_end', 'total_ms': 3, 'cpu_ms': 1, 'phases': {}, 'top': []},
+                               'restricted')
+
+    def test_outcome_qualnames_collapse_when_sampled(self):
+        def code(filename, qualname):
+            return type('Code', (), {'co_filename': filename, 'co_qualname': qualname, 'co_name': qualname})()
+        self.assertEqual(pt._qualname_key(code('/x/dry_run.py', 'RunState.prepare')), 'dry_run:RunState.prepare')
+        for qualname in ('_refuse_tooling', 'outcome_class', 'wall_deadline_fired', 'Status.check'):
+            self.assertEqual(pt._qualname_key(code('/x/dry_run.py', qualname)), 'qualname')
+
         with self.assertRaises(pt.PhaseLineError):
             pt.validate_phase_line(self.good, 'neither')
 
@@ -406,6 +487,20 @@ class StructureLogSchemaT3bTests(unittest.TestCase):
                 code, record, out, err, custody = self.execute(['--phase-log', bad])
                 self.assertEqual((code, record, out, err), (2, None, '', 'step 0 - tooling_refusal\n'))
                 self.assertFalse(custody.exists())
+        # Review of #631 (MEDIUM): a case-variant spelling of an existing custody
+        # root is refused at step 0 too, and nothing is written into custody.
+        swapped = Path(str(self.harness.root).swapcase())
+        if os.path.exists(swapped) and os.path.samefile(swapped, self.harness.root):
+            existing = self.harness.root / ('cased-custody-' + str(self.harness.serial))
+            existing.mkdir()
+            from scripts import run_b5_analysis as script
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), mock.patch.object(script, 'run') as run:
+                self.assertEqual(script.main(['--mode', 'blind-dry-run', '--index', 'i', '--custody', str(existing),
+                                              '--phase-log', str(swapped / existing.name.upper() / 'DRY-RUN')]), 2)
+            run.assert_not_called()
+            self.assertEqual(err.getvalue(), 'step 0 - tooling_refusal\n')
+            self.assertEqual(os.listdir(existing), [])
         custody = self.harness.root / 'inside-custody'
         from scripts import run_b5_analysis as script
         err = io.StringIO()
@@ -600,6 +695,48 @@ class OpenStructureLogTests(unittest.TestCase):
                 with self.subTest(bad=bad), self.assertRaises((ValueError, OSError)):
                     pt.open_structure_log(bad, custody=custody, repo=ROOT)
             self.assertFalse((custody / 'n.jsonl').exists())
+
+    # Review of #631 (MEDIUM): "outside" is decided by identity, not spelling.
+    def _case_insensitive(self, path):
+        swapped = str(path).swapcase()
+        return swapped != str(path) and os.path.exists(swapped) and os.path.samefile(swapped, path)
+
+    def test_case_variant_and_firmlink_spellings_refused(self):
+        with tempfile.TemporaryDirectory(prefix='phase-log-') as tmp:
+            root = Path(tmp).resolve()
+            custody = root / 'custody'
+            (custody / 'sub').mkdir(parents=True)
+            spellings = []
+            if self._case_insensitive(custody):
+                spellings += [root / 'CUSTODY' / 'b.jsonl', root / 'Custody' / 'sub' / 'b.jsonl',
+                              root / 'CUSTODY' / 'DRY-RUN']
+            if self._case_insensitive(ROOT):
+                spellings += [Path(str(ROOT).swapcase()) / 'd.jsonl']
+            data = Path('/System/Volumes/Data')
+            if data.is_dir() and os.path.exists(str(data) + str(custody)) \
+                    and os.path.samefile(str(data) + str(custody), custody):
+                spellings += [Path(str(data) + str(custody)) / 'c.jsonl']
+            if os.path.exists(str(data) + str(ROOT)) and os.path.samefile(str(data) + str(ROOT), ROOT):
+                spellings += [Path(str(data) + str(ROOT)) / 'e.jsonl']
+            if not spellings:
+                self.skipTest('no case-insensitive volume and no firmlink alias here')
+            for bad in spellings:
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    pt.open_structure_log(bad, custody=custody, repo=ROOT)
+            self.assertEqual(sorted(os.listdir(custody)), ['sub'])
+            self.assertEqual(sorted(os.listdir(custody / 'sub')), [])
+
+    def test_log_may_not_take_a_missing_custody_name(self):
+        with tempfile.TemporaryDirectory(prefix='phase-log-') as tmp:
+            root = Path(tmp).resolve()
+            bad = [(root / 'custody', root / 'custody' / 'x' / 'y'), (root / 'outer', root / 'outer' / 'custody')]
+            if self._case_insensitive(root):
+                bad += [(root / 'CUSTODY', root / 'custody'), (root / 'Outer', root / 'outer' / 'custody')]
+            for log, custody in bad:
+                with self.subTest(log=log, custody=custody), self.assertRaises(ValueError):
+                    pt.open_structure_log(log, custody=custody, repo=ROOT)
+            self.assertEqual(os.listdir(root), [])
+            os.close(pt.open_structure_log(root / 'custody-phases.jsonl', custody=root / 'custody', repo=ROOT))
 
 
 class PhaseReportTests(unittest.TestCase):

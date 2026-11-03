@@ -49,7 +49,9 @@ the leaf lanes code against these names):
     span(label)                                  context manager; label from SPAN_LABELS
     pool_wait() / dispatch_wait()                context managers around a result loop
     pool_progress(done, total)                   restricted heartbeat progress only
-    pool_batch(reference, costs, wall_ns, pool_size)   driver, after a member/child batch
+    pool_batch(reference, costs, wall_ns, pool_size)   driver, after a member/child batch; costs is a
+                                                 list or tuple of task_cost dicts (anything else
+                                                 counts as no tasks and is never iterated)
     enabled()                                    True when a timer is active (sets *.timing)
     task_cost(enabled)                           context manager in a worker; yields a dict or None
     child_session(enabled)                       context manager around a child program
@@ -169,7 +171,28 @@ _STRUCTURE_KEYS = {
     'run_end': frozenset({'event', 'total_s'}),
 }
 _STRUCTURE_INTS = frozenset({'elapsed_s', 'step_s', 'wall_s', 'total_s'})
-_RESTRICTED_EVENTS = frozenset({'run_start', 'step_begin', 'heartbeat', 'step_end', 'run_end'})
+_RESTRICTED_KEYS = {
+    'run_start': frozenset({'event', 'schema', 'mode', 'sample_ms', 'heartbeat_s', 'pid', 'cpu_count'}),
+    'step_begin': frozenset({'event', 'step', 'elapsed_ms'}),
+    'heartbeat': frozenset({'event', 'step', 'step_ms', 'elapsed_ms', 'label', 'program', 'top',
+                            'progress_permille'}),
+    'step_end': frozenset({'event', 'step', 'wall_ms', 'cpu_ms', 'serial_ms', 'spans_ms', 'maxrss_mib',
+                           'load_x100', 'programs', 'pool', 'children', 'phases', 'sampled_ms',
+                           'unattributed_ms', 'top'}),
+    'run_end': frozenset({'event', 'total_ms', 'cpu_ms', 'phases', 'top'}),
+}
+_RESTRICTED_EVENTS = frozenset(_RESTRICTED_KEYS)
+_GROUPS = ('driver', 'child', 'member')
+_LOAD_KEYS = frozenset({'start', 'end', 'max'})
+_PROGRAM_KEYS = frozenset({'count', 'wall_ms', 'cpu_ms', 'max_ms'})
+_POOL_KEYS = frozenset({'batches', 'tasks', 'wall_ms', 'busy_ms', 'cpu_ms', 'max_task_ms', 'pool_size',
+                        'busy_permille'})
+_CHILDREN_KEYS = frozenset({'tasks', 'wall_ms', 'cpu_ms'})
+# Sampled-histogram keys are '<file base>:<qualname>' code locations. A key that
+# spells an outcome or refusal word is collapsed to 'qualname' when sampled and
+# refused by the validator, so the restricted tier never carries such a token.
+_QUALNAME_KEY = re.compile(r'[A-Za-z0-9_.<>/-]{1,199}:[A-Za-z0-9_.:<>/-]{1,199}')
+_OUTCOME_TOKEN = re.compile(r'(?i)refus|outcome|verdict|decision|accept|reject|deadline|unavailable|status')
 _SAFE = re.compile(r'[A-Za-z0-9_.:<>/-]{1,200}')
 _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])')
 _MAX_INT = 10 ** 15
@@ -209,8 +232,10 @@ def validate_phase_line(line, tier: str = 'structure') -> dict:
 
     STRUCTURE: closed keys per event, non-negative ints for durations (no
     float, no bool), the step vocabulary, the mode vocabulary, canonical bytes.
-    RESTRICTED: a closed event set; nested dicts/lists of non-negative ints,
-    vocabulary-safe strings and null only; no float token anywhere.
+    RESTRICTED: closed keys per event and per nested object (exactly what
+    _Timer writes); non-negative ints; label strings from VOCABULARY only;
+    sampled-histogram keys must be code locations that spell no outcome or
+    refusal word; no float token anywhere.
     """
     if tier not in ('structure', 'restricted'):
         raise PhaseLineError('tier')
@@ -253,31 +278,91 @@ def validate_phase_line(line, tier: str = 'structure') -> dict:
             elif key != 'event':
                 raise PhaseLineError(key)
         return document
-    if event not in _RESTRICTED_EVENTS:
-        raise PhaseLineError('event')
-
-    def check(value, depth):
-        if depth > 6:
-            raise PhaseLineError('depth')
-        if value is None or _is_count(value):
-            return
-        if type(value) is str:
-            if not _SAFE.fullmatch(value):
-                raise PhaseLineError('string')
-            return
-        if type(value) is list:
-            for item in value:
-                check(item, depth + 1)
-            return
-        if type(value) is dict:
-            for key, item in value.items():
-                if not _SAFE.fullmatch(key):
-                    raise PhaseLineError('key')
-                check(item, depth + 1)
-            return
-        raise PhaseLineError('value type')
-    check(document, 0)
+    keys = _RESTRICTED_KEYS.get(event) if isinstance(event, str) else None
+    if keys is None or set(document) != keys:
+        raise PhaseLineError('keys')
+    _check_restricted(document)
     return document
+
+
+def _need(condition, what):
+    if not condition:
+        raise PhaseLineError(what)
+
+
+def _int_map(value, keys, what):
+    _need(type(value) is dict and set(value) == keys and all(_is_count(v) for v in value.values()), what)
+
+
+def _label(value, what, *, none=False):
+    _need((none and value is None) or (type(value) is str and value in VOCABULARY), what)
+
+
+def _top_rows(value, what, *, qualname):
+    _need(type(value) is list, what)
+    for row in value:
+        _need(type(row) is list and len(row) == 2 and _is_count(row[1]), what)
+        if qualname:
+            key = row[0]
+            _need(type(key) is str and (key == 'qualname' or (_QUALNAME_KEY.fullmatch(key) is not None
+                                                             and not _OUTCOME_TOKEN.search(key))), what)
+        else:
+            _label(row[0], what)
+
+
+def _phase_table(value, what):
+    _need(type(value) is dict, what)
+    for label, pair in value.items():
+        _label(label, what)
+        _need(type(pair) is list and len(pair) == 2 and all(_is_count(v) for v in pair), what)
+
+
+def _check_restricted(document):
+    """The restricted tier's closed schema: exactly what _Timer writes, nothing else."""
+    event = document['event']
+    if 'step' in document:
+        _need(document['step'] in STEP_IDS or (event == 'heartbeat' and document['step'] == '-'), 'step')
+    for key in ('sample_ms', 'heartbeat_s', 'pid', 'cpu_count', 'elapsed_ms', 'step_ms', 'wall_ms', 'cpu_ms',
+                'serial_ms', 'maxrss_mib', 'sampled_ms', 'unattributed_ms', 'total_ms'):
+        if key in document:
+            _need(_is_count(document[key]), key)
+    if event == 'run_start':
+        _need(document['schema'] == RESTRICTED_SCHEMA, 'schema')
+        _need(document['mode'] is None or document['mode'] in MODES, 'mode')
+    elif event == 'heartbeat':
+        _label(document['label'], 'label')
+        _label(document['program'], 'program', none=True)
+        _top_rows(document['top'], 'top', qualname=False)
+        _need(document['progress_permille'] is None or _is_count(document['progress_permille']),
+              'progress_permille')
+    elif event == 'step_end':
+        spans = document['spans_ms']
+        _need(type(spans) is dict, 'spans_ms')
+        for label, value in spans.items():
+            _label(label, 'spans_ms')
+            _need(_is_count(value), 'spans_ms')
+        _int_map(document['load_x100'], _LOAD_KEYS, 'load_x100')
+        programs = document['programs']
+        _need(type(programs) is dict, 'programs')
+        for key, value in programs.items():
+            group, _sep, label = key.partition(':')
+            _need(group in _GROUPS, 'programs')
+            _label(label, 'programs')
+            _int_map(value, _PROGRAM_KEYS, 'programs')
+        pool = document['pool']
+        _need(type(pool) is dict, 'pool')
+        for key, value in pool.items():
+            _label(key[len('child:'):] if key.startswith('child:') else key, 'pool')
+            _int_map(value, _POOL_KEYS, 'pool')
+        _int_map(document['children'], _CHILDREN_KEYS, 'children')
+        phases = document['phases']
+        _need(type(phases) is dict and set(phases) == set(_GROUPS), 'phases')
+        for group in _GROUPS:
+            _phase_table(phases[group], 'phases')
+        _top_rows(document['top'], 'top', qualname=True)
+    elif event == 'run_end':
+        _phase_table(document['phases'], 'phases')
+        _top_rows(document['top'], 'top', qualname=True)
 
 
 def _env_int(name, default):
@@ -305,7 +390,9 @@ def _qualname_key(code) -> str:
         base = base[:-3]
     key = base + ':' + getattr(code, 'co_qualname', code.co_name)
     key = re.sub(r'[^A-Za-z0-9_.:<>/-]', '_', key)[:200]
-    return key if not _FLOAT_TOKEN.search(key) else 'qualname'
+    if _FLOAT_TOKEN.search(key) or _OUTCOME_TOKEN.search(key) or not _QUALNAME_KEY.fullmatch(key):
+        return 'qualname'
+    return key
 
 
 def _static_code(module, qualname):
@@ -726,7 +813,7 @@ class _Timer:
     # -- pools and children -------------------------------------------------
     def pool_batch(self, reference, costs, wall_ns, pool_size):
         label = _member_label(reference)
-        costs = [cost for cost in costs if isinstance(cost, dict)]
+        costs = [cost for cost in list(costs) if isinstance(cost, dict)] if isinstance(costs, (list, tuple)) else []
         busy = sum(int(cost.get('wall_ns', 0)) for cost in costs)
         cpu = sum(int(cost.get('cpu_ns', 0)) for cost in costs)
         longest = max((int(cost.get('wall_ns', 0)) for cost in costs), default=0)
@@ -976,7 +1063,7 @@ def pool_progress(done, total) -> None:
 
 
 def pool_batch(reference, costs, wall_ns, pool_size=0) -> None:
-    _call('pool_batch', reference, list(costs or ()), wall_ns, pool_size)
+    _call('pool_batch', reference, costs, wall_ns, pool_size)
 
 
 def merge_child(table) -> None:
@@ -1071,11 +1158,46 @@ def child_table():
 
 
 # -- structure log path (scripts/run_b5_analysis.py --phase-log) --------------
+def _identity(path):
+    """(st_dev, st_ino) of an existing path (following links), or None if it does not exist."""
+    try:
+        info = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return info.st_dev, info.st_ino
+
+
+def _fold_name(name) -> str:
+    import unicodedata
+    return unicodedata.normalize('NFD', name).casefold()
+
+
+def _root_guard(root):
+    """Identity of a root, or of its nearest existing ancestor plus the first missing component."""
+    text = os.path.abspath(os.fspath(root))
+    missing = []
+    while True:
+        ident = _identity(text)
+        if ident is not None:
+            return ident, (missing[-1] if missing else None)
+        parent, name = os.path.split(text)
+        if parent == text:
+            return None, None
+        missing.append(name)
+        text = parent
+
+
 def open_structure_log(path, *, custody, repo) -> int:
     """Open the structure log before step 0; raise ValueError or OSError if it is not admissible.
 
     The path must be absolute, contain no '..' and no symbolic link, not exist
-    yet, and lie outside both the custody root and the repository.
+    yet, and lie outside both the custody root and the repository. "Outside"
+    is decided by identity, not by spelling: no existing ancestor of the log
+    may be the custody root or the repository by (st_dev, st_ino), which also
+    covers a case-variant spelling on a case-insensitive volume and a firmlink
+    alias such as /System/Volumes/Data on macOS. When the custody root does not
+    exist yet, the log may not take the name (case- and normalization-folded)
+    of its first missing component in the directory where it would be created.
     """
     text = os.fspath(path)
     if not isinstance(text, str) or not os.path.isabs(text) or '\0' in text:
@@ -1100,5 +1222,23 @@ def open_structure_log(path, *, custody, repo) -> int:
         for form in {root.absolute(), root.resolve()}:
             if candidate == form or candidate.is_relative_to(form):
                 raise ValueError('phase log path inside custody or repository')
+    parent, name = os.path.split(text)
+    ancestors = []
+    walk = parent
+    while True:
+        ancestors.append(_identity(walk))
+        up = os.path.dirname(walk)
+        if up == walk:
+            break
+        walk = up
+    for root in (custody, repo):
+        ident, first_missing = _root_guard(root)
+        if ident is None:
+            raise ValueError('phase log root unresolvable')
+        if first_missing is None:
+            if ident in ancestors:
+                raise ValueError('phase log path inside custody or repository')
+        elif ident == ancestors[0] and _fold_name(name) == _fold_name(first_missing):
+            raise ValueError('phase log path would take the custody or repository name')
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
     return os.open(text, flags, 0o644)
