@@ -46,7 +46,11 @@ scalar arguments are unchanged by the call; every tree's lstat signature is
 unchanged across the call; the physics view behaves as the J2 premise needs.
 Reads outside the leaf's trees and outside the Python installation and the
 ``joulewise`` sources are kept as (path, sha256) extras, and listings as name
-digests; both are re-verified on every hit (cached per scope, lstat-guarded). A path-free leaf's value must
+digests; both are re-verified on every hit (cached per scope, lstat-guarded).
+Each is bound to the pathname the leaf used (Sol wave-2 #2): a pathname that
+is not its own target is kept as an alias and re-resolved on every hit, and a
+read into a tree through any pathname but one of that tree's spellings is
+unstorable. A path-free leaf's value must
 not contain any spelling of its tree's location or parent (searched in the
 pickled bytes and in every string and path inside the value).
 
@@ -85,8 +89,14 @@ serial there, because a worker process's reads are invisible to this recorder.
 Physics. A leaf's probe names the physics-cache entries it may read or insert;
 which entries a call consults (not their values) is part of the key.
 A fill records the visible value before (V0) and after (P). A lookup is
-admitted only if the caller's visible value V is ABSENT or equals P exactly;
-P is inserted where V is ABSENT.
+admitted only if the caller's visible value V is ABSENT or equals P exactly.
+D-188 VDL-FIX (Sol wave-2 #1): a fill also records, per key, what its leaf
+provably did to every caller-visible layer (a run view's local dict and its
+run partition, or a plain dict; ``_PHYSICS_KINDS``), and a hit replays
+exactly the serial effect for the caller's current layers: a partition entry
+promoted into an empty local dict, P written where nothing is visible only
+after a fill that fitted P itself, nothing otherwise; where the serial effect
+is not determined by the fill, the hit is declined and the leaf runs.
 
 Shadow. A sampled hit is first served by the identical ``_apply`` into a
 scratch copy of the consumer's session (no real registration, no insert); if
@@ -114,7 +124,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 import contextvars
 import copy
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 import enum
 import hashlib
 import importlib
@@ -674,6 +684,7 @@ class _Fill:
         self.forwarded_trees: list[tuple[str, bool, str]] = []
         self.forwarded_extras: list[tuple[str, str]] = []
         self.forwarded_listings: list[tuple[str, str]] = []
+        self.forwarded_aliases: list[tuple[str, str]] = []
         # A hit served inside this fill carried no session rows: this fill's
         # rows cannot stand for a session's either.
         self.rows_incomplete = False
@@ -738,7 +749,9 @@ def _audit(event: str, args: tuple) -> None:
                 for fill in fills:
                     fill.relative_opens.append(path)
                 return
-            absolute = os.path.abspath(path)
+            # The leaf's own pathname, made absolute without lexical
+            # normalization (a ``..`` after a symlink is the kernel's to resolve).
+            absolute = path if os.path.isabs(path) else os.path.join(os.getcwd(), path)
             for fill in fills:
                 fill.reads.append(absolute)
         elif event in ("os.listdir", "os.scandir"):
@@ -750,7 +763,7 @@ def _audit(event: str, args: tuple) -> None:
             if not isinstance(path, str):
                 _mark(fills, "unattributable_listing")
                 return
-            absolute = os.path.abspath(path)
+            absolute = path if os.path.isabs(path) else os.path.join(os.getcwd(), path)
             for fill in fills:
                 fill.listings.append(absolute)
         elif event in _WRITE_EVENTS:
@@ -1048,7 +1061,11 @@ def _probe_strict(arguments: Mapping[str, Any]) -> list[tuple[Any, str]]:
         session = _AUTH.session()
         view = session.instrument_calibration_physics_cache if session is not None else None
         if view is None:
-            view = physics_cache_for_call(None, metadata)
+            # The leaf builds its own view over a fresh local dict: only the
+            # run partition is caller-visible (VDL-FIX: a private local layer).
+            view = physics_cache_for_call(_PrivateLocal(), metadata)
+            if not hasattr(view, "_store"):
+                view = None  # no run partition: the leaf's own cache is None, as before
     else:
         view = physics_cache_for_call(explicit, metadata)
     return [] if view is None else [(view, key)]
@@ -1069,7 +1086,7 @@ def _probe_operative(arguments: Mapping[str, Any]) -> list[tuple[Any, str]]:
     from joulewise.analysis_run_cache import physics_cache_for_call
 
     key = _calibration_key(arguments["metadata"])
-    view = physics_cache_for_call({}, arguments["metadata"])
+    view = physics_cache_for_call(_PrivateLocal(), arguments["metadata"])
     return [] if view is None or key is None else [(view, key)]
 
 
@@ -1215,6 +1232,40 @@ class Entry:
     physics: tuple[tuple[str, Any, Any], ...]  # (cache key, V0, P)
     # (tree index or -1, identity, sha, grammar, caller grammar, label, parse depth below the fill or None)
     rows: tuple[tuple[int, str, str, str, str, str, int | None], ...] | None
+    # D-188 VDL-FIX (Sol wave-2 #1): per physics key, what the fill's leaf
+    # provably did to the caller-visible layers (``_PHYSICS_KINDS``). A key
+    # with no kind is ``opaque``.
+    physics_kinds: tuple[tuple[str, str], ...] = ()
+    # D-188 VDL-FIX (Sol wave-2 #2): (original absolute pathname, resolved
+    # target) of every extra read or listing whose pathname is not its own
+    # target; each binding is re-checked on every hit.
+    aliases: tuple[tuple[str, str], ...] = ()
+
+
+# What a fill's leaf did to one physics key, from the caller-visible layers
+# (a run view's own local dict and its run partition; a plain dict) before
+# and after it. The reducer's only operations on a physics cache are
+# ``get(key)`` (a run view copies a partition entry into its local dict) and,
+# after a ``get`` that found nothing and a successful fresh fit, ``cache[key] =
+# bound`` (a run view writes local and partition).
+#   absent    nothing visible before or after: nothing to replay.
+#   set       nothing visible before, P after: the leaf consulted the key and
+#             fitted P on these very bytes. A hit promotes a partition entry
+#             into an empty local layer, or writes P where nothing is visible.
+#   promote   local empty, partition P: the leaf consulted and promoted. A hit
+#             promotes where the local layer is empty and the partition holds
+#             P; with nothing visible it is declined (no fit was observed).
+#   noconsult local empty, partition P, unchanged: the leaf never consulted
+#             the key. A hit changes nothing.
+#   opaque    a visible value nothing changed, consulting unknown. A hit is
+#             served only where a caller-visible value is already in front
+#             (the serial ``get`` then changes nothing); otherwise declined.
+_PHYSICS_KINDS = ("absent", "set", "promote", "noconsult", "opaque")
+_KIND_RANK = {"opaque": 0, "promote": 1, "set": 2, "noconsult": 2, "absent": 2}
+
+
+class _PrivateLocal(dict):
+    """A probe's own local layer for a view the leaf rebuilds itself: no caller sees it."""
 
 
 @dataclass
@@ -1410,6 +1461,100 @@ class VerifiedStore:
             return left is right
         return type(left) is type(right) is float and left.hex() == right.hex()
 
+    @staticmethod
+    def _layers(view: Any, key: str) -> tuple[Any, Any]:
+        """(local layer, partition layer) for ``key``: a value, ABSENT, or None (no such visible layer).
+
+        A run view has both (its local layer is None when it is a probe's
+        ``_PrivateLocal``); a plain dict is a local layer only (None when private).
+        """
+
+        local = getattr(view, "_local", None)
+        store = getattr(view, "_store", None)
+        if isinstance(local, dict) and isinstance(store, dict):
+            partition = store.get(getattr(view, "_key", None))
+            shared = partition.get(key, ABSENT) if isinstance(partition, dict) else ABSENT
+            return (None if isinstance(local, _PrivateLocal) else local.get(key, ABSENT)), shared
+        if isinstance(view, dict):
+            return (None if isinstance(view, _PrivateLocal) else dict.get(view, key, ABSENT)), None
+        raise _Bypass("unknown physics view")
+
+    @classmethod
+    def _layer_same(cls, left: Any, right: Any) -> bool:
+        if left is None or right is None:
+            return left is right
+        return cls._same(left, right)
+
+    @classmethod
+    def _kind(cls, before: tuple[Any, Any], after: tuple[Any, Any], visible_before: Any,
+              visible_after: Any) -> str:
+        """The fill's ``_PHYSICS_KINDS`` for one key; raises ``_Bypass`` for any other pattern."""
+
+        (local_before, shared_before), (local_after, shared_after) = before, after
+        if visible_before is ABSENT and visible_after is ABSENT:
+            if cls._layer_same(local_before, local_after) and cls._layer_same(shared_before, shared_after):
+                return "absent"
+            raise _Bypass("physics layers changed while nothing was visible")
+        if visible_before is ABSENT:
+            if ((local_before is None or cls._same(local_after, visible_after))
+                    and (shared_before is None or cls._same(shared_after, visible_after))):
+                return "set"
+            raise _Bypass("physics write outside the reducer's pattern")
+        if local_before is ABSENT:
+            if cls._same(local_after, visible_after) and cls._layer_same(shared_after, shared_before):
+                return "promote"
+            if local_after is ABSENT and cls._layer_same(shared_after, shared_before):
+                return "noconsult"
+            raise _Bypass("physics promotion outside the reducer's pattern")
+        if cls._layer_same(local_after, local_before) and cls._layer_same(shared_after, shared_before):
+            return "opaque"
+        raise _Bypass("a visible physics value changed")
+
+    def _physics_plan(self, entry: Entry, views: list[tuple[Any, str]]) -> list[tuple[Any, str, str, Any]]:
+        """What serving ``entry`` must do to each view so its layers end as the serial call's would.
+
+        Returns (view, key, operation, value) with operation ``promote`` (copy
+        the partition entry into the empty local layer, as ``get`` does) or
+        ``write`` (``view[key] = P``, as the reducer's insert does); raises
+        ``_Bypass`` where the serial effect is not determined by the fill.
+        """
+
+        posts = {key: after for key, _, after in entry.physics}
+        kinds = dict(entry.physics_kinds)
+        plan: list[tuple[Any, str, str, Any]] = []
+        for view, key in views:
+            kind = kinds.get(key, "opaque")
+            if kind not in _PHYSICS_KINDS:
+                raise _Bypass("unknown physics kind")
+            post = posts[key]
+            if kind in ("absent", "noconsult"):
+                continue
+            local, shared = self._layers(view, key)
+            if local is not None and local is not ABSENT:
+                continue  # the serial get reads the local layer and changes nothing
+            if shared is not None and shared is not ABSENT:
+                if local is None:
+                    continue  # no caller-visible local layer to promote into
+                if kind == "opaque":
+                    raise _Bypass("promotion depends on whether the leaf consulted the key")
+                plan.append((view, key, "promote", shared))
+                continue
+            if local is None and shared is None:
+                continue  # nothing caller-visible
+            if kind != "set":
+                raise _Bypass("nothing visible and no fit observed")
+            plan.append((view, key, "write", post))
+        return plan
+
+    @staticmethod
+    def _planned_layers(layers: tuple[Any, Any], operation: str | None, value: Any) -> tuple[Any, Any]:
+        local, shared = layers
+        if operation == "promote":
+            return value, shared
+        if operation == "write":
+            return (None if local is None else value), (None if shared is None else value)
+        return layers
+
     def _views(self, prepared: _Prepared) -> list[tuple[Any, str]]:
         probe = prepared.spec.physics_probe
         if probe is None:
@@ -1495,6 +1640,11 @@ class VerifiedStore:
             if not scope.prefetched:
                 scope.prefetched = True
                 self._prefetch_siblings(scope, prepared)
+            # Sol wave-2 #2: every extra read and listing reached through a
+            # pathname that is not its own target must still reach that target.
+            for original, resolved in entry.aliases:
+                if os.path.realpath(original) != resolved:
+                    return None
             for path, digest in entry.extras:
                 if scope.verify_file(path) != digest:
                     return None
@@ -1513,6 +1663,10 @@ class VerifiedStore:
             visible = self._peek(view, key)
             if not (visible is ABSENT or self._same(visible, stored[key][1])):
                 return None
+        try:
+            self._physics_plan(entry, views)
+        except _Bypass:
+            return None  # Sol wave-2 #1: the serial layer effect is not replayable here
         if _AUTH.session() is not None and entry.rows is None:
             return None
         return views
@@ -1539,7 +1693,7 @@ class VerifiedStore:
 
         ``dry`` (shadow mode) runs the identical admission, bridge and
         registration against ``session`` (a scratch copy of the consumer's
-        session, or None) and returns ``(value, physics inserts)`` without
+        session, or None) and returns ``(value, {key: (operation, value)})`` without
         touching the real session, the views or any recorder.
         """
 
@@ -1568,21 +1722,22 @@ class VerifiedStore:
             for index, identity, digest, grammar, caller_grammar, label, depth in entry.rows:
                 identity, label = self._relocate(prepared, index, identity, label)
                 rows.append(_Row(identity, digest, grammar, caller_grammar, label, depth))
+        # Sol wave-2 #1: leave every caller-visible layer exactly as the
+        # serial call would (a promotion into an empty local layer included).
+        # Planned before any registration: a plan that refuses touches nothing.
+        plan = self._physics_plan(entry, hit.views)
         if session is not None:
             if entry.rows is None:
                 raise _Bypass("rows incomplete for a session")
             self._bridge(session, rows, prepared, headroom)
         value = pickle.loads(entry.value)
-        inserts: dict[str, Any] = {}
-        for view, key in hit.views:
-            stored = {k: after for k, _, after in entry.physics}[key]
-            if self._peek(view, key) is ABSENT and stored is not ABSENT:
-                if dry:
-                    inserts[key] = stored
-                else:
-                    view[key] = stored
         if dry:
-            return value, inserts
+            return value, {key: (operation, stored) for _, key, operation, stored in plan}
+        for view, key, operation, stored in plan:
+            if operation == "promote":
+                view._local[key] = stored
+            else:
+                view[key] = stored
         with self._lock:
             self._served[hit.key] = self._served.get(hit.key, 0) + 1
         self._forward(entry, prepared, rows, headroom)
@@ -1639,6 +1794,7 @@ class VerifiedStore:
             fill.forwarded_trees.extend(entry.extra_trees)
             fill.forwarded_extras.extend(entry.extras)
             fill.forwarded_listings.extend(entry.listings)
+            fill.forwarded_aliases.extend(entry.aliases)
         if rows:
             _AUTH.forward_rows(rows, headroom)
 
@@ -1663,12 +1819,12 @@ class VerifiedStore:
         session = _AUTH.session()
         try:
             scratch = None if session is None else _scratch_session(session)
-            _, inserts = self._apply(hit, dry=True, session=scratch)
+            _, planned = self._apply(hit, dry=True, session=scratch)
         except Exception:  # noqa: BLE001 - not admissible here: exactly an on-mode discarded hit
             self._count(f"{leaf_id}:hit_discarded")
             return self._fill(hit.prepared, fn, args, kwargs)
         self._count(f"{leaf_id}:shadow")
-        visible_before = {key: self._peek(view, key) for view, key in hit.views}
+        layers_before = {key: self._layers(view, key) for view, key in hit.views}
         outcome: dict[str, Any] = {}
         try:
             value = self._fill(hit.prepared, fn, args, kwargs, outcome=outcome)
@@ -1683,8 +1839,14 @@ class VerifiedStore:
         same_physics = all(self._same(stored_physics.get(key, ABSENT), after)
                            for key, after in outcome.get("physics", {}).items())
         try:
-            same_visible = all(self._same(inserts.get(key, visible_before[key]), self._peek(view, key))
-                               for view, key in hit.views)
+            # Every caller-visible layer (not only the visible value): an
+            # omitted promotion into a local layer is a mismatch (Sol wave-2 #1).
+            same_visible = True
+            for view, key in hit.views:
+                expected = self._planned_layers(layers_before[key], *planned.get(key, (None, None)))
+                actual = self._layers(view, key)
+                same_visible = same_visible and all(self._layer_same(left, right)
+                                                    for left, right in zip(expected, actual))
         except Exception:  # noqa: BLE001 - an unreadable view after the recompute is a mismatch
             same_visible = False
         same_records = scratch is None or _record_map(scratch) == _record_map(session)
@@ -1717,10 +1879,11 @@ class VerifiedStore:
         try:
             views = prepared.views
             before = [self._peek(view, key) for view, key in views]
+            layers_before = [self._layers(view, key) for view, key in views]
             dicts = _physics_dicts(prepared, views)
             physics_before = [(item, dict(item)) for item in dicts]
         except Exception:  # noqa: BLE001 - an unprobeable call is computed, never stored
-            views, before, physics_before, storable = [], [], [], False
+            views, before, layers_before, physics_before, storable = [], [], [], [], False
         session = _AUTH.session()
         snapshot = None
         if session is not None:
@@ -1747,7 +1910,7 @@ class VerifiedStore:
             return value
         try:
             entry = self._entry(prepared, fill, value, views, before, session, snapshot, recorded,
-                                caches, deadline, firings_before, physics_before)
+                                caches, deadline, firings_before, physics_before, layers_before)
         except _Bypass:
             entry = None
         except Exception:  # noqa: BLE001 - a store failure never changes the leaf's value
@@ -1767,7 +1930,8 @@ class VerifiedStore:
     def _entry(self, prepared: _Prepared, fill: _Fill, value: Any, views: list[tuple[Any, str]],
                before: list[Any], session: Any, snapshot: dict[str, int] | None, recorded: Any,
                caches: Any, deadline: Any, firings_before: int,
-               physics_before: list[tuple[dict, dict]]) -> Entry | None:
+               physics_before: list[tuple[dict, dict]],
+               layers_before: list[tuple[Any, Any]]) -> Entry | None:
         if fill.clock or fill.unstorable:
             return None
         if getattr(deadline, "firings", None) != firings_before or getattr(caches, "deadline", None) is not deadline:
@@ -1795,14 +1959,16 @@ class VerifiedStore:
                     if isinstance(created, dict) and not set(created) <= allowed:
                         return None
             physics: list[tuple[str, Any, Any]] = []
-            for (view, key), visible_before in zip(views, before):
+            kinds: list[tuple[str, str]] = []
+            for (view, key), visible_before, layers in zip(views, before, layers_before):
                 after = self._peek(view, key)
                 if after is not ABSENT and type(after) is not float:
                     return None
                 if visible_before is not ABSENT and not self._same(visible_before, after):
                     return None
                 physics.append((key, visible_before, after))
-            extras, listings, extra_trees = self._classify(prepared, fill, recorded)
+                kinds.append((key, self._kind(layers, self._layers(view, key), visible_before, after)))
+            extras, listings, extra_trees, aliases = self._classify(prepared, fill, recorded)
             try:
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception:  # noqa: BLE001 - an unpicklable value is not stored
@@ -1814,6 +1980,7 @@ class VerifiedStore:
             prepared.spec.leaf_id, payload,
             tuple((tree.name, verdict.digest) for tree, verdict in zip(prepared.trees, prepared.verdicts)),
             extras, listings, extra_trees, tuple(physics), rows,
+            physics_kinds=tuple(kinds), aliases=aliases,
         )
 
     def _classify(self, prepared: _Prepared, fill: _Fill, recorded: Any):
@@ -1846,35 +2013,63 @@ class VerifiedStore:
         for name in fill.relative_opens:
             if name not in nofollow:
                 raise _Bypass("unattributable relative open")
+        # Sol wave-2 #2: a read is bound to the pathname the leaf used, not
+        # only to its target. A pathname that is not its own target is kept
+        # as an alias (re-resolved on every hit); a read into a tree is
+        # covered by the tree only through one of that tree's own spellings.
+        spellings = [tuple(dict.fromkeys([tree.root] + [os.path.normpath(spelling) for spelling in tree.spellings
+                                                       if os.path.isabs(spelling)]))
+                     for tree in prepared.trees]
+        aliases: dict[str, str] = {}
+
+        def bind(original: str, resolved: str) -> None:
+            if original != resolved and aliases.setdefault(original, resolved) != resolved:
+                raise _Bypass("a pathname reached two targets during the fill")
+
+        def in_tree(original: str, resolved: str) -> bool:
+            lexical = os.path.normpath(original)
+            direct = os.pardir not in Path(original).parts
+            if direct and any(within(lexical, spelling) for spelled in spellings for spelling in spelled):
+                return True
+            if any(within(resolved, root) for root in roots):
+                raise _Bypass("tree read through an alias")
+            return False
+
         extras: dict[str, str] = {}
         for path in fill.reads:
             resolved = os.path.realpath(path)
-            if any(within(path, root) or within(resolved, root) for root in roots) or is_code(resolved):
+            if in_tree(path, resolved) or is_code(resolved):
                 continue
             if os.path.isdir(resolved):
                 continue
-            if any(within(resolved, parent) for parent in parents):
+            if any(within(resolved, parent) or within(os.path.normpath(path), parent) for parent in parents):
                 raise _Bypass("path-free leaf read beside its tree")
             digest = scope.verify_file(resolved)
             if digest is None:
                 raise _Bypass("extra read not hashable")
             extras[resolved] = digest
+            bind(path, resolved)
         for row in recorded or ():
             identity = getattr(row, "identity", None)
-            if identity and not identity.startswith("git:") and identity in extras:
-                if getattr(row, "sha256", None) != extras[identity]:
+            if identity and not identity.startswith("git:"):
+                target = identity if identity in extras else os.path.realpath(identity)
+                if target in extras and getattr(row, "sha256", None) != extras[target]:
                     raise _Bypass("extra read changed during the fill")
         listings: dict[str, str] = {}
         for path in fill.listings:
             resolved = os.path.realpath(path)
-            if any(within(resolved, root) for root in roots) or is_code(resolved):
+            if in_tree(path, resolved) or is_code(resolved):
                 continue
-            if any(within(resolved, parent) or resolved == parent for parent in parents):
+            if any(within(resolved, parent) or resolved == parent or within(os.path.normpath(path), parent)
+                   for parent in parents):
                 raise _Bypass("path-free leaf listed beside its tree")
             digest = scope.verify_listing(resolved)
             if digest is None:
                 raise _Bypass("listing not hashable")
             listings[resolved] = digest
+            bind(path, resolved)
+        for original, resolved in fill.forwarded_aliases:
+            bind(original, resolved)
         for path, digest in fill.forwarded_extras:
             if extras.setdefault(path, digest) != digest:
                 raise _Bypass("forwarded extra disagrees")
@@ -1890,7 +2085,8 @@ class VerifiedStore:
             if extra_trees.setdefault((root, content_only), digest) != digest:
                 raise _Bypass("forwarded tree disagrees")
         return (tuple(sorted(extras.items())), tuple(sorted(listings.items())),
-                tuple(sorted((root, content_only, digest) for (root, content_only), digest in extra_trees.items())))
+                tuple(sorted((root, content_only, digest) for (root, content_only), digest in extra_trees.items())),
+                tuple(sorted(aliases.items())))
 
     def _rows(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None, recorded: Any,
               *, fill: _Fill | None = None, payload: bytes = b""):
@@ -2004,8 +2200,10 @@ class VerifiedStore:
             if not same_post:
                 return  # a different physics post-value: a different computation, keep the first
             if _same_value(current.value, entry.value):
-                if current.rows is None and entry.rows is not None:
-                    self._entries[key] = entry
+                base = entry if current.rows is None and entry.rows is not None else current
+                kinds = _merged_kinds(current, entry)
+                if base is not current or kinds != dict(current.physics_kinds):
+                    self._entries[key] = replace(base, physics_kinds=tuple(sorted(kinds.items())))
                     self._new.add(key)
                 return
             self._poison(key)
@@ -2151,6 +2349,16 @@ def _unchanged(before: Any, after: Any) -> bool:
     if before is after:
         return True
     return type(before) is type(after) is float and before.hex() == after.hex()
+
+
+def _merged_kinds(current: Entry, entry: Entry) -> dict[str, str]:
+    """Per physics key, the more informative kind of two agreeing fills (a tie keeps ``current``'s)."""
+
+    merged = dict(current.physics_kinds)
+    for key, kind in entry.physics_kinds:
+        if _KIND_RANK.get(kind, 0) > _KIND_RANK.get(merged.get(key, "opaque"), 0):
+            merged[key] = kind
+    return merged
 
 
 def _posts(entry: Entry) -> dict[str, str]:
