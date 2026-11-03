@@ -293,6 +293,61 @@ class StepCodesTest(_TmpCase):
         self.assertIn('record:steps', got['decisions'])
 
 
+class LegacyRefusalDecoderTest(_TmpCase):
+    """R1 layout: the driver's raw-code derivation is replayed from the refusing step's last runner logs."""
+
+    def _refused_pair(self, step, name):
+        mut = corpus._refused(corpus.POS[step])
+        return self.pair(mut, mut, name=name)
+
+    def _logs(self, root):
+        return root / 'dry-run' / 'restricted' / 'logs'
+
+    def test_step5_second_invocation_and_mint_label(self):
+        ref, cand = self._refused_pair('5', 'mint')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual(rc, 0, text)
+        (self._logs(cand) / '0050-5-block.stderr.log').write_text(
+            'error: alpha_report: authenticated whole-window consumption refused: detail 1.5\n')
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('$.first_refusal.raw_code: "claim_family_underpowered" -> "mint_consumption_session_refused"', text)
+        self.assertIn('$.first_refusal.invocation: 1 -> 2', text)
+        (self._logs(ref) / '0050-5-block.stderr.log').write_text(
+            'error: beta_report: authenticated whole-window consumption refused: other detail\n')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual(rc, 0, 'the label and detail are not the code')
+
+    def test_step8_stdout_refuse_message(self):
+        ref, cand = self._refused_pair('8', 'finalize')
+        for root, reason in ((ref, 'finalization_lineage_invalid: x'), (cand, 'finalization_plan_tree_mismatch: y')):
+            (self._logs(root) / '0008-8-block.stdout.log').write_text(
+                'progress\n' + json.dumps({'status': 'REFUSE', 'reason': reason, 'detail': 'd'}) + '\n')
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('"finalization_lineage_invalid" -> "finalization_plan_tree_mismatch"', text)
+        got = parse_blinded(self, run_tool(['--mode', 'blinded', ref, cand])[1], self.cfg)
+        self.assertEqual(got['decisions'], {'decisions:first_refusal'})
+
+    def test_step6_stdout_step_record(self):
+        ref, cand = self._refused_pair('6', 'closeout')
+        (self._logs(ref) / '0009-6-block.stdout.log').write_text(json.dumps({'status': 'tooling_refusal',
+                                                                            'refusal': 'closeout_input_malformed'}))
+        (self._logs(cand) / '0009-6-block.stdout.log').write_text(json.dumps({'status': 'tooling_refusal',
+                                                                             'refusal': 'closeout_branch_invalid'}))
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('"closeout_input_malformed" -> "closeout_branch_invalid"', text)
+
+    def test_last_invocation_without_error_line_uses_stdout(self):
+        ref, cand = self._refused_pair('9', 'exception')
+        # The driver's exception path leaves a traceback-only log: no code, but a later invocation.
+        (self._logs(cand) / '0090-9-block.stderr.log').write_text('Traceback (most recent call last):\n  boom\n')
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('$.first_refusal.raw_code: "claim_family_underpowered" -> null', text)
+
+
 class TimingClassTest(_TmpCase):
     """Lead ruling 2026-11-02: timing-class refusals are a strict mismatch by default."""
 

@@ -63,7 +63,6 @@ HEX64 = re.compile(r'(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])')
 COMMIT40 = re.compile(r'[0-9a-f]{40}')
 SAFE_KEY = re.compile(r'[A-Za-z_][A-Za-z0-9_\-]*')
 SAFE_NAME = re.compile(r'[A-Za-z0-9_.@=+\-]+(/[A-Za-z0-9_.@=+\-]+)*')
-CODE_TOKEN = re.compile(r'[a-z0-9_.\-]{1,96}')
 LOG_NAME = re.compile(r'(\d{4,})-([0-9a-z]+)-(alpha|beta|gamma|block)\.stderr\.log')
 VOCAB_NAME = re.compile(r'[a-z][a-z_\-/.]*:[A-Za-z_\-]+')
 ROLE_CLASSES = ('attempts', 'brackets', 'custody', 'decisions', 'disclosures', 'finalized', 'kept-units',
@@ -766,31 +765,85 @@ def read_step_codes(side: Side):
     return rows
 
 
-def log_refusal_code(side: Side, row) -> str | None:
-    """R1 layout: last 'error: ' token in the newest matching runner stderr log."""
+DRIVER_TOKEN = re.compile(r'[A-Za-z][A-Za-z0-9_.]*')   # joulewise/b5_analysis/dry_run.py _TOKEN
+MINT_CONSUMPTION_REFUSED = 'mint_consumption_session_refused'
+DOMINANCE_ZERO_DENOMINATOR = 'dominance_ratio_zero_denominator'
+
+
+def _driver_token(text: str):
+    """dry_run.refusal_token: last 'error: ' line, else the last line; the part before ':'."""
+    lines = text.splitlines()
+    errors = [line[len('error: '):] for line in lines if line.startswith('error: ')]
+    candidate = errors[-1] if errors else lines[-1] if lines else ''
+    token = candidate.split(':', 1)[0]
+    return token if DRIVER_TOKEN.fullmatch(token) else None
+
+
+def _last_json_line(text: str):
+    try:
+        value = json.loads(text.splitlines()[-1])
+    except (ValueError, IndexError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def legacy_refusal(side: Side, row) -> dict:
+    """R1 layout: re-derive the driver's raw code for a refusing step from restricted logs.
+
+    The record redacts outcome-class and unclassified codes (steps.step_record), so
+    this replays the driver's own derivation on the step's LAST runner invocation:
+    RunnerResult.token (stderr 'error:' line, else last stdout line), plus the step-5
+    mint consumption label, the step-8 stdout REFUSE message and the step-6 stdout
+    StepRecord. The invocation ordinal within the step pins which program stopped
+    (step 5 runs two). A tooling code is public in the record and is taken from it.
+    Driver-raised codes outside any runner program are persisted nowhere in R1; for
+    those the derived value is whatever the last program left, identically derived
+    on both sides.
+    """
     if row['status'] == 'tooling_refusal':
-        return row['refusal']
+        return {'raw_code': row['refusal'], 'invocation': None}
     want = (str(row['step']), row['window'] or 'block')
     try:
         logs_fd = os.open('logs', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=side.restricted_fd)
     except OSError:
-        return None
+        return {'raw_code': None, 'invocation': None}
     try:
-        names = []
+        stems = []
         with os.scandir(logs_fd) as it:
             for entry in it:
                 m = LOG_NAME.fullmatch(entry.name)
                 if m and (m.group(2), m.group(3)) == want and entry.is_file(follow_symlinks=False):
-                    names.append((int(m.group(1)), entry.name))
-        for _n, name in sorted(names, reverse=True):
-            text = _read_beneath(logs_fd, name, side.label, 'refusal').decode('utf-8', 'replace')
-            lines = [line[7:] for line in text.splitlines() if line.startswith('error: ')]
-            if lines:
-                token = lines[-1].split(':', 1)[0].strip()
-                return token if CODE_TOKEN.fullmatch(token) else '<untokenizable>'
+                    stems.append((int(m.group(1)), entry.name[:-len('.stderr.log')]))
+        if not stems:
+            return {'raw_code': None, 'invocation': None}
+        stems.sort()
+        stem = stems[-1][1]
+        stderr = _read_beneath(logs_fd, stem + '.stderr.log', side.label, 'refusal').decode('utf-8', 'replace')
+        try:
+            stdout = _read_beneath(logs_fd, stem + '.stdout.log', side.label, 'refusal').decode('utf-8', 'replace')
+        except ComparatorError:
+            stdout = ''
     finally:
         os.close(logs_fd)
-    return None
+    error_lines = [line for line in stderr.splitlines() if line.startswith('error: ')]
+    code = _driver_token(stderr) if error_lines else _driver_token(stdout)
+    step = str(row['step'])
+    if step == '5' and any('authenticated whole-window consumption refused' in line for line in error_lines):
+        code = MINT_CONSUMPTION_REFUSED
+    elif step == '8':
+        message = _last_json_line(stdout)
+        if message is not None and set(message) == {'status', 'reason', 'detail'} and message['status'] == 'REFUSE' \
+                and isinstance(message['reason'], str):
+            code = _driver_token(message['reason'])
+    elif step == '6':
+        child = _last_json_line(stdout)
+        closeout = sum(1 for o in row['outputs'] if re.fullmatch(r'finalized/outputs/closeout(\.ratio-table)?\.json',
+                                                                 o['name']))
+        if child is not None and child.get('status') == 'outcome_class' and row['exit_status'] == 3 and closeout == 2:
+            code = DOMINANCE_ZERO_DENOMINATOR
+        elif child is not None and child.get('status') == 'tooling_refusal' and isinstance(child.get('refusal'), str):
+            code = _driver_token(child['refusal'])
+    return {'raw_code': code, 'invocation': ('#i', str(len(stems)))}
 
 
 def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
@@ -813,7 +866,7 @@ def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
             d['first_refusal'] = None if row is None else {
                 'pos': ('#i', str(i)), 'step': row['step'], 'window': row['window'], 'status': row['status'],
                 'exit_status': row['exit_status'], 'registered_exit': row.get('registered_exit'),
-                'raw_code': log_refusal_code(side, row)}
+                **legacy_refusal(side, row)}
         structures[side.label] = (d, audit)
     return structures, source
 
