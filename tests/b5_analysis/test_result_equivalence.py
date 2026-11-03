@@ -473,6 +473,130 @@ class LegacyRefusalDecoderTest(_TmpCase):
         self.assertIn('$.first_refusal.raw_code: "claim_family_underpowered" -> null', text)
 
 
+class LegacyReferencePositionTest(_TmpCase):
+    """Review of PR #640 (finding S1): an R1 reference (no step codes) still pins WHERE a step refused.
+
+    The real gate compares a candidate against an R1-format reference. A tooling
+    refusal's invocation ordinal is counted from the reference's logs and compared
+    with the candidate's step-codes ordinal (never discarded). R1 persists no identity
+    of the bundle a refusing step-1/step-2 child ran, so when everything else agrees
+    the member cannot be established and the comparison fails closed.
+    """
+
+    BUNDLE_CODE = 'kept_bundle_strict_validation_failed'
+
+    def _tree(self, name, count, codes, member=None, commit=True):
+        model = corpus.base_model()
+        corpus._invocation_refusal('1', count, 'alpha', self.BUNDLE_CODE)(model)
+        if codes:
+            corpus._step_codes(member=member)(model)
+        root = corpus.build(model, self.tmp / name)
+        if codes and commit:
+            _commit_step_codes(root)
+        return root
+
+    def _codes(self, root):
+        path = root / 'dry-run' / 'restricted' / 'decisions' / 'step-codes.jsonl'
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_tooling_bundle_position_against_an_r1_reference(self):
+        # The Sol probe, committed: one versus two alpha bundle children, step 1 refusing.
+        r1 = self._tree('r1', 1, codes=False)
+        first = self._tree('new-first', 1, codes=True, member=corpus._h('member-one'))
+        second = self._tree('new-second', 2, codes=True, member=corpus._h('member-two'))
+        pos = corpus.POS['1']
+        self.assertEqual([(r['invocation'], r['member']) for r in (self._codes(first)[pos], self._codes(second)[pos])],
+                         [(1, corpus._h('member-one')), (2, corpus._h('member-two'))])
+        # A different bundle (ordinal) than the R1 reference: NOT_EQUIVALENT, both directions.
+        for left, right in ((r1, second), (second, r1)):
+            rc, text = run_tool(['--mode', 'blinded', left, right])
+            got = parse_blinded(self, text, self.cfg)
+            self.assertEqual((rc, got['verdict'], got['decisions']),
+                             (1, 'NOT_EQUIVALENT', {'decisions:first_refusal'}), text)
+            rc, text = run_tool(['--mode', 'open', '--no-report', left, right])
+            self.assertEqual(rc, 1, text)
+            self.assertRegex(text, r'\$\.first_refusal\.invocation: (1 -> 2|2 -> 1)')
+        # The same ordinal: everything agrees but the member, which R1 does not record: fail closed.
+        for left, right, side in ((r1, first, 'ref'), (first, r1, 'cand')):
+            for mode in ('blinded', 'open'):
+                args = ['--mode', mode] + (['--no-report'] if mode == 'open' else []) + [left, right]
+                rc, text = run_tool(args)
+                self.assertEqual((rc, text), (2, f'COMPARATOR_ERROR stage=refusal-member side={side}\n'))
+                self.assertIsNone(re.search(r'[0-9]', text))
+        # Two step-codes trees still compare both position fields.
+        rc, text = run_tool(['--mode', 'open', '--no-report', first, second])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('invocation', text)
+        self.assertIn('member', text)
+
+    def test_uncommitted_candidate_codes_are_not_discarded_either(self):
+        r1 = self._tree('r1', 1, codes=False)
+        second = self._tree('new-second', 2, codes=True, member=corpus._h('member-two'), commit=False)
+        rc, text = run_tool(['--mode', 'blinded', r1, second])
+        got = parse_blinded(self, text, self.cfg)
+        self.assertEqual((rc, got['decisions'], got['refusal_source']),
+                         (1, {'decisions:first_refusal'}, 'logs-unauthenticated'))
+
+    def test_member_free_refusal_against_an_r1_reference(self):
+        # Step 5 runs two member-free programs: the ordinal alone is the position; equal -> EQUIVALENT.
+        code = 'floor_mint_inputs_invalid'
+        ref, cand = self.pair(corpus._invocation_refusal('5', 2, code=code),
+                              corpus._chain(corpus._invocation_refusal('5', 2, code=code), corpus._step_codes()),
+                              name='mint')
+        _commit_step_codes(cand)
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual(rc, 0, text)
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertIn('VERDICT: EQUIVALENT', text)
+
+    def test_no_refusal_never_fails_closed(self):
+        ref = corpus.build(corpus.base_model(), self.tmp / 'clean-r1')
+        model = corpus.base_model()
+        corpus._step_codes()(model)
+        cand = corpus.build(model, self.tmp / 'clean-new')
+        _commit_step_codes(cand)
+        for left, right in ((ref, cand), (cand, ref)):
+            rc, text = run_tool(['--mode', 'blinded', left, right])
+            self.assertEqual(rc, 0, text)
+            self.assertEqual(parse_blinded(self, text, self.cfg)['verdict'], 'EQUIVALENT')
+
+    def test_candidate_bundle_refusal_against_a_completed_r1_reference(self):
+        # Only the candidate refuses: an ordinary decision difference, never COMPARATOR_ERROR.
+        ref = corpus.build(corpus.base_model(), self.tmp / 'clean-r1')
+        cand = self._tree('new-first', 1, codes=True, member=corpus._h('member-one'))
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        got = parse_blinded(self, text, self.cfg)
+        self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT'))
+        self.assertIn('decisions:first_refusal', got['decisions'])
+
+    def test_r1_against_r1_compares_the_tooling_ordinal(self):
+        one, two = self._tree('r1-one', 1, codes=False), self._tree('r1-two', 2, codes=False)
+        again = self._tree('r1-one-again', 1, codes=False)
+        rc, text = run_tool(['--mode', 'blinded', one, again])
+        self.assertEqual(rc, 0, text)
+        rc, text = run_tool(['--mode', 'open', '--no-report', one, two])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('$.first_refusal.invocation: 1 -> 2', text)
+        self.assertNotIn('member', text)
+
+    def test_legacy_decoder_counts_tooling_logs_as_the_runner_names_them(self):
+        from joulewise.b5_analysis import dry_run
+        self.assertEqual(cmp.LOG_NAME.pattern, dry_run.STEP_CODES_LOG.pattern)
+        root = self._tree('r1', 2, codes=False)
+        logs = root / 'dry-run' / 'restricted' / 'logs'
+        (logs / '0041-1-alpha.stdout.log').write_text('not counted\n')      # stdout logs are not invocations
+        (logs / '0041-1-beta.stderr.log').write_text('another window\n')    # another (step, window)
+        (logs / '0099-1-alpha.stderr.log').symlink_to(logs / '0041-1-beta.stderr.log')  # not a regular file
+        cfg = self.cfg
+        side = cmp.load_side(root, 'blind-dry-run', 'ref', cfg)
+        try:
+            row = side.record['steps'][corpus.POS['1']]
+            self.assertEqual(cmp.legacy_refusal(side, row),
+                             {'raw_code': self.BUNDLE_CODE, 'invocation': ('#i', '2')})
+        finally:
+            os.close(side.restricted_fd)
+
+
 class TimingClassTest(_TmpCase):
     """Lead ruling 2026-11-02: timing-class refusals are a strict mismatch by default."""
 

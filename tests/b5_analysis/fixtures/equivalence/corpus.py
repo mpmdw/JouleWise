@@ -428,6 +428,27 @@ def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal', invoc
     return apply
 
 
+def _invocation_refusal(step, count, window=None, code='kept_bundle_strict_validation_failed'):
+    """A public tooling refusal by the ``count``-th runner invocation of (step, window).
+
+    Review of PR #640 (finding S1): with ``window`` a pack and ``step`` 1 or 2 this
+    is a refusing kept-bundle child (the ``count``-th bundle of the pack); with
+    ``window`` None it is a member-free program of the step (step 5 runs two).
+    Only the last of the (step, window) stderr logs carries the error line.
+    """
+    def apply(model):
+        pos = POS[step]
+        _refused(pos, code=code, status='tooling_refusal')(model)
+        model['record']['steps'][pos]['window'] = window
+        # build() writes the refusing step's own <pos+1>-<step>-<STEPS window|block> log.
+        existing = 1 if window is None and STEPS[pos][1] is None else 0
+        for i in range(count - existing):
+            last = i == count - existing - 1
+            model['logs'][f'{40 + i:04d}-{step}-{window or "block"}.stderr.log'] = (
+                f'error: {code}\n' if last else 'child progress line\n')
+    return apply
+
+
 def _claim_labels(estimator, metric, terms):
     """Result labels under 'name' keys inside a registered claim-verdicts section (same numbers)."""
     def apply(model):
@@ -535,6 +556,25 @@ CASES = {
     'refusal_member_from_step_codes': (_chain(_refused(REFUSED_POS), _step_codes(member=_h('member-one'))),
                                        _chain(_refused(REFUSED_POS), _step_codes(member=_h('member-two'))),
                                        {'decisions': {'decisions:step_codes'}}),
+    # Review of PR #640 (finding S1): an R1 reference (no step codes) against a candidate
+    # with step codes, and R1 against R1. A tooling refusal's invocation ordinal is
+    # counted from the logs on the legacy side and taken from the step codes on the other.
+    'refusal_r1_reference_other_bundle': (
+        _invocation_refusal('1', 1, 'alpha'),
+        _chain(_invocation_refusal('1', 2, 'alpha'), _step_codes(member=_h('member-two'))),
+        {'decisions': {'decisions:first_refusal'}}),
+    'refusal_r1_vs_r1_other_bundle': (_invocation_refusal('1', 1, 'alpha'), _invocation_refusal('1', 2, 'alpha'),
+                                      {'decisions': {'decisions:first_refusal'}}),
+    'refusal_r1_vs_r1_same_bundle': (_invocation_refusal('1', 2, 'alpha'), _invocation_refusal('1', 2, 'alpha'),
+                                     {'audit': 'MATCH'}),
+    'refusal_r1_reference_member_free_same_invocation': (
+        _invocation_refusal('5', 2, code='floor_mint_inputs_invalid'),
+        _chain(_invocation_refusal('5', 2, code='floor_mint_inputs_invalid'), _step_codes()),
+        {'audit': 'MATCH'}),
+    'refusal_r1_reference_member_free_other_invocation': (
+        _invocation_refusal('5', 2, code='floor_mint_inputs_invalid'),
+        _chain(_invocation_refusal('5', 1, code='floor_mint_inputs_invalid'), _step_codes()),
+        {'decisions': {'decisions:first_refusal'}}),
     'refusal_position': (_refused(REFUSED_POS), _refused(POS['6']),
                          {'decisions': {'record:steps', 'decisions:first_refusal', 'decisions:step_outputs',
                                         'outputs/claim-verdicts.json:presence'}, 'audit': 'DIFFER'}),

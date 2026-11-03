@@ -31,6 +31,12 @@ uncommitted restricted bytes being intact on the candidate side. A step-codes ro
 carries the refusal's position inside its step as decision fields: 'invocation' (the
 refusing runner invocation's ordinal, as the R1 log decoder counts it) and 'member'
 (a keyed digest of the refusing bundle, steps 1 and 2); neither is ever printed blinded.
+When only one side carries step codes (an R1-format reference), the R1 log decoder
+counts the legacy side's ordinal for every refusal, tooling ones included, and the
+other side's step-codes ordinal and member are compared against it, never dropped.
+R1 records no identity for a refusing step-1/step-2 bundle, so when that member is
+all that could still differ the comparison fails closed:
+'COMPARATOR_ERROR stage=refusal-member side=<the legacy side>'.
 
 Open mode prints every differing leaf with both exact tokens. It refuses unless both
 records' window_index_sha256 values are listed in equivalence_open_indices.json
@@ -851,18 +857,23 @@ def legacy_refusal(side: Side, row) -> dict:
     RunnerResult.token (stderr 'error:' line, else last stdout line), plus the step-5
     mint consumption label, the step-8 stdout REFUSE message and the step-6 stdout
     StepRecord. The invocation ordinal within the step pins which program stopped
-    (step 5 runs two). A tooling code is public in the record and is taken from it.
-    Driver-raised codes outside any runner program are persisted nowhere in R1; for
-    those the derived value is whatever the last program left, identically derived
-    on both sides.
+    (step 5 runs two) and which bundle of a pack (steps 1 and 2). A tooling code is
+    public in the record and is taken from it; its invocation ordinal is still
+    counted from the logs (review of PR #640, finding S1: step 1 refusing its first
+    and its second bundle carry the same tooling code). The ordinal is counted as
+    the runner names its logs (dry_run.STEP_CODES_LOG, dry_run._refusal_position):
+    the number of <counter>-<step>-<window|block>.stderr.log regular files, None
+    when there are none. Driver-raised codes outside any runner program are
+    persisted nowhere in R1; for those the derived value is whatever the last
+    program left, identically derived on both sides.
     """
-    if row['status'] == 'tooling_refusal':
-        return {'raw_code': row['refusal'], 'invocation': None}
+    tooling = row['status'] == 'tooling_refusal'
+    none = {'raw_code': row['refusal'] if tooling else None, 'invocation': None}
     want = (str(row['step']), row['window'] or 'block')
     try:
         logs_fd = os.open('logs', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=side.restricted_fd)
     except OSError:
-        return {'raw_code': None, 'invocation': None}
+        return none
     try:
         stems = []
         with os.scandir(logs_fd) as it:
@@ -871,7 +882,9 @@ def legacy_refusal(side: Side, row) -> dict:
                 if m and (m.group(2), m.group(3)) == want and entry.is_file(follow_symlinks=False):
                     stems.append((int(m.group(1)), entry.name[:-len('.stderr.log')]))
         if not stems:
-            return {'raw_code': None, 'invocation': None}
+            return none
+        if tooling:
+            return {'raw_code': row['refusal'], 'invocation': ('#i', str(len(stems)))}
         stems.sort()
         stem = stems[-1][1]
         stderr = _read_beneath(logs_fd, stem + '.stderr.log', side.label, 'refusal').decode('utf-8', 'replace')
@@ -907,9 +920,77 @@ def _int_token(value):
     return ('#i', str(value)) if type(value) is int else value
 
 
+# Steps whose refusing runner invocation ran one kept bundle (dry_run.note_member):
+# a refusing row of one of these steps, in a pack window, with a runner log, has a
+# step-codes 'member'.
+MEMBER_STEPS = frozenset({'1', '2'})
+MEMBER_UNESTABLISHED = '<member-not-established-in-legacy-layout>'
+
+
+def _legacy_member(row, refusal, other_row):
+    """The legacy side's 'member' in a mixed legacy/step-codes comparison.
+
+    R1 persists no identity of the bundle a refusing step-1/step-2 invocation ran
+    (validate-bundle names its bundle only on success; kept-units are written by
+    step 3), so the member of such a refusal cannot be established from an R1
+    layout: it is MEMBER_UNESTABLISHED, which never equals a digest or None. A
+    refusal with no member (any other step, a driver-level stop with no pack
+    window, no runner log) is None, as the runner writes it.
+    """
+    bearing = (str(row['step']) in MEMBER_STEPS and row['window'] in WINDOWS
+               and refusal['invocation'] is not None)
+    if other_row is not None and other_row['member'] is not None:
+        bearing = True
+    return MEMBER_UNESTABLISHED if bearing else None
+
+
+def _first_refusal(side, i, row):
+    return None if row is None else {
+        'pos': ('#i', str(i)), 'step': row['step'], 'window': row['window'], 'status': row['status'],
+        'exit_status': _int_token(row['exit_status']), 'registered_exit': row.get('registered_exit'),
+        **legacy_refusal(side, row)}
+
+
+def _mixed_first_refusals(ref: Side, cand: Side, codes_ref, codes_cand):
+    """First-refusal leaves when exactly one side carries step codes (an R1 reference).
+
+    Both sides keep the log-derived raw code (one derivation for both). The
+    step-codes side's invocation and member come from its step codes instead of
+    being discarded (review of PR #640, finding S1); the legacy side's invocation
+    is its log-counted ordinal and its member is _legacy_member. When everything
+    but the member agrees and the legacy side cannot establish the member, the
+    comparison cannot be decided: it fails closed (ComparatorError, digit-free
+    stage). A side with no refusal never fails closed.
+    """
+    firsts, legacy_label = {}, None
+    for side, codes in ((ref, codes_ref), (cand, codes_cand)):
+        i, row = _first_non_ok(side.record)
+        first = _first_refusal(side, i, row)
+        if first is not None and codes is not None:
+            first['invocation'], first['member'] = codes[i]['invocation'], codes[i]['member']
+        if codes is None:
+            legacy_label = side.label
+        firsts[side.label] = (first, i, row)
+    other_codes = codes_cand if codes_ref is None else codes_ref
+    legacy, i, row = firsts[legacy_label]
+    if legacy is not None:
+        other_row = other_codes[i] if i < len(other_codes) else None
+        legacy['member'] = _legacy_member(row, legacy, other_row)
+        other = firsts[cand.label if legacy_label == ref.label else ref.label][0]
+        if (legacy['member'] == MEMBER_UNESTABLISHED and other is not None
+                and {k: v for k, v in legacy.items() if k != 'member'}
+                == {k: v for k, v in other.items() if k != 'member'}):
+            raise ComparatorError('refusal-member', legacy_label,
+                                  'the legacy layout does not establish the refusing bundle')
+    return {label: first for label, (first, _, _) in firsts.items()}
+
+
 def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
     """Derived decision leaves: per-step result outputs and the raw refusal identity."""
     (codes_ref, auth_ref), (codes_cand, auth_cand) = read_step_codes(ref), read_step_codes(cand)
+    mixed = None
+    if prefix is None and (codes_ref is None) != (codes_cand is None):
+        mixed = _mixed_first_refusals(ref, cand, codes_ref, codes_cand)
     if codes_ref is not None and codes_cand is not None:
         source = 'step-codes' if auth_ref and auth_cand else 'step-codes-unauthenticated'
     else:
@@ -926,12 +1007,10 @@ def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
         if source.startswith('step-codes'):
             d['step_codes'] = [{k: r[k] for k in STEP_CODES_DECISION_KEYS} for r in codes[:limit]]
             audit['exception_class'] = [r['exception_class'] for r in codes[:limit]]
+        elif mixed is not None:
+            d['first_refusal'] = mixed[side.label]
         elif prefix is None:
-            i, row = _first_non_ok(side.record)
-            d['first_refusal'] = None if row is None else {
-                'pos': ('#i', str(i)), 'step': row['step'], 'window': row['window'], 'status': row['status'],
-                'exit_status': _int_token(row['exit_status']), 'registered_exit': row.get('registered_exit'),
-                **legacy_refusal(side, row)}
+            d['first_refusal'] = _first_refusal(side, *_first_non_ok(side.record))
         structures[side.label] = (d, audit)
     return structures, source
 

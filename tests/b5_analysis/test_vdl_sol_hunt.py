@@ -16,6 +16,11 @@ Each class is one hunter reproducer turned into a test; each fails on de0cf3209.
 * C (P1, /private/tmp/jwsol-hc repro_step_position.py): step-codes rows carried
   only the StepRecord ordinal, so a refusal at step 5's first program and one at
   its second (or at another bundle of one pack) were the same decision.
+* S2 (P2, review of PR #640, /private/tmp/jwsol-sf1 review_repro.py): the
+  injective key encoder of 4d6c575da was recursive, so a deeply nested unused
+  field that the serial scan accepts made the memoized scan raise RecursionError
+  (L5ThermalMemoTests.test_deeply_nested_unused_field_keys_like_the_serial_scan;
+  fails on 4d6c575da).
 """
 from __future__ import annotations
 
@@ -106,6 +111,36 @@ class L5ThermalMemoTests(unittest.TestCase):
             self.assertEqual(self.scan(self.bad), MISSING, 'a warm memo must not serve the float key')
             self.assertEqual(self.scan(self.bad), MISSING)
             self.assertEqual(self.scan(self.good), ())
+
+    def test_deeply_nested_unused_field_keys_like_the_serial_scan(self):
+        """Review of PR #640 (finding S2, /private/tmp/jwsol-sf1 review_repro.py recursion_probe).
+
+        A 600-level nested list under an unused field of a valid clock-stamp row
+        passes strict authenticated JSON parsing and stamp_from_mapping ignores
+        it, so the serial scan (and tag b5/analysis-r1's memo) returns (). The
+        recursive key encoder of 4d6c575da raised RecursionError there, which the
+        memo callers (TypeError/ValueError only) did not catch: a memoized scan
+        crashed where the serial one succeeds.
+        """
+        metadata = copy.deepcopy(self.good)
+        nested = None
+        for _ in range(600):
+            nested = [nested]
+        stamps = metadata['uncertainty_evidence']['clock_anchor']['clock_stamps']
+        stamps[next(iter(stamps))]['unused'] = nested
+        path = self.root / 'metadata.json'
+        path.write_text(json.dumps(metadata))
+        with V2AuthenticationReadSession():
+            parsed = json.loads(read_authentication_input(path, grammar='json', label='S2 regression'))
+        self.assertEqual(self.scan(parsed), (), 'serial reference')
+        with arc.analysis_run_caches({}):
+            self.assertEqual(self.scan(parsed), (), 'memo fill')
+            self.assertEqual(self.scan(parsed), (), 'memo hit')
+            bad = json.loads(path.read_bytes())
+            bad_stamps = bad['uncertainty_evidence']['clock_anchor']['clock_stamps']
+            stamp = bad_stamps[next(iter(bad_stamps))]
+            stamp['epoch_s'] = {'float': stamp['epoch_s'].hex()}
+            self.assertEqual(self.scan(bad), MISSING, 'the deep key stays injective')
 
     def test_store_on_and_shadow_fill_and_hit_the_serial_result(self):
         for mode in (vdl.ON, vdl.Mode('shadow', 1000)):
