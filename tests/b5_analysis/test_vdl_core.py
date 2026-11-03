@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -32,6 +33,13 @@ CALLS: dict[str, int] = {}
 NONDETERMINISTIC = [0]
 SIDE_FILE: list[Path] = []
 _TEST_ROWS: contextvars.ContextVar[list | None] = contextvars.ContextVar("vdl_test_rows", default=None)
+
+
+def tick() -> None:
+    """Outlast coarse filesystem timestamps (Linux ext4 can tick in milliseconds) before an
+    in-place rewrite: the lstat guard sees a same-size rewrite only through mtime/ctime."""
+
+    time.sleep(0.05)
 
 
 def _called(name: str) -> None:
@@ -341,6 +349,7 @@ class StoreRules(_Base):
     def test_tampered_byte_is_a_miss_and_the_leaf_decides(self):
         with run():
             before = vdl.call("T_digest", digest_tree, self.tree, 1)
+            tick()
             (self.tree / "data.txt").write_bytes(b"paYload")
             after = vdl.call("T_digest", digest_tree, self.tree, 1)
         self.assertEqual(CALLS["digest_tree"], 2)
@@ -351,6 +360,7 @@ class StoreRules(_Base):
         with run(), vdl.enter_program_scope():
             before = vdl.call("T_digest", digest_tree, self.tree, 1)
             st = os.lstat(target)
+            tick()
             with open(target, "r+b") as handle:  # in place: same inode, same size
                 handle.write(b"PAYLOAD")
             os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
@@ -485,6 +495,7 @@ class StoreRules(_Base):
             vdl.call("T_extra", extra_leaf, self.tree, str(extra))
             vdl.call("T_extra", extra_leaf, self.tree, str(extra))
             self.assertEqual(CALLS["extra_leaf"], 1)
+            tick()
             extra.write_bytes(b'{"p": 2}')
             vdl.call("T_extra", extra_leaf, self.tree, str(extra))
             self.assertEqual(CALLS["extra_leaf"], 2)

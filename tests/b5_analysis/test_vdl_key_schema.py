@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -116,8 +117,10 @@ class KeyMutations(unittest.TestCase):
                 tree_name = next(name for name, role in spec.params if role in (vdl.TREE, vdl.TREES))
                 role = spec.roles()[tree_name]
                 first = arguments[tree_name] if role == vdl.TREE else arguments[tree_name][0]
+                time.sleep(0.05)  # outlast coarse timestamps before a same-size rewrite
                 (first / "data.txt").write_bytes(b"paYload")
                 self.assertNotEqual(self.key(spec, arguments), base)
+                time.sleep(0.05)
                 (first / "data.txt").write_bytes(b"payload")
                 self.assertEqual(self.key(spec, arguments), base)
                 elsewhere = self.arguments(spec, parent="b")  # same names, same bytes, another parent
