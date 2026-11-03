@@ -1,0 +1,5 @@
+{
+ "schema_version": "joulewise.b5_equivalence_exemptions.v1",
+ "description": "Reviewed D-188 exemptions. Each row moves intermediate (I) leaves to audit (action 'audit') or marks an intermediate list as unordered (action 'unordered'), and must give a reason. The comparator refuses any row that touches an input-precondition (P), decision (D) or registered-number (R) leaf, statically by rule overlap and dynamically per leaf. Rows: {role, path, action, reason}.",
+ "exemptions": []
+}

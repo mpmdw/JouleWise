@@ -1,0 +1,16 @@
+{
+ "schema_version": "joulewise.b5_equivalence_open_indices.v1",
+ "description": "Window indices whose trees the comparator may compare in OPEN mode (values printed). Only synthetic fixtures and the D-188 engineering window may be listed; the real block-5 index (configs/analysis/b5/analysed_windows.json) must never be listed (tests/b5_analysis/test_result_equivalence.py asserts this). Everything else is compared in blinded mode.",
+ "open_indices": [
+  {
+   "window_index_sha256": "6e76ce7a2e31ea5e851875618f88e40864d73920aeed61520baa9f6d6047f2bc",
+   "label": "S10 synthetic chain fixture",
+   "reason": "Synthetic window index of the tests/b5_analysis S10 chain fixture (synthetic custody trees cust-r1, cust-head3, cust-prof3); carries no study data."
+  },
+  {
+   "window_index_sha256": "729ae78251ac514c61058fb2c221cd38379370772d4f149e1050941626be96b8",
+   "label": "equivalence mutation corpus",
+   "reason": "Synthetic index of tests/b5_analysis/fixtures/equivalence/corpus.py; carries no study data."
+  }
+ ]
+}
