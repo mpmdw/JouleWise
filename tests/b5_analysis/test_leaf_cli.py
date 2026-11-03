@@ -113,6 +113,33 @@ class Wiring(unittest.TestCase):
 
 
 class StrictLeaf(_Member):
+    def test_an_external_store_call_is_one_store_call(self):
+        """Review of #635 (LOW 3): ``vdl.call(L1, cli.validate_bundle, ...)`` (PR #629's call
+        shape) runs validate_bundle as the leaf body: one miss and one fill, never a nested
+        second store call on the same key; a plain call then hits that entry."""
+
+        bundle = self.copy("external")
+        serial = cli.validate_bundle(bundle, True)
+        with run() as caches, self.counted_strict() as strict:
+            self.assertEqual(vdl.call(L1, cli.validate_bundle, bundle, True), serial)
+            counters = caches.vdl.restricted_counters()
+            self.assertEqual((counters.get(f"{L1}:miss"), counters.get(f"{L1}:fill")), (1, 1))
+            self.assertEqual(strict.call_count, 1)
+            self.assertEqual(cli.validate_bundle(bundle, True), serial)
+            self.assertEqual(vdl.call(L1, cli.validate_bundle, bundle, True), serial)
+            counters = caches.vdl.restricted_counters()
+            self.assertEqual((counters[f"{L1}:miss"], counters[f"{L1}:fill"], counters[f"{L1}:hit"]),
+                             (1, 1, 2))
+            self.assertEqual(strict.call_count, 1)
+        with run(vdl.Mode("shadow", 1000)) as caches, self.counted_strict() as strict:
+            vdl.call(L1, cli.validate_bundle, bundle, True)
+            self.assertEqual(vdl.call(L1, cli.validate_bundle, bundle, True), serial)
+            counters = caches.vdl.restricted_counters()
+            self.assertEqual((counters[f"{L1}:fill"], counters[f"{L1}:shadow"]), (1, 1))
+            self.assertNotIn(f"{L1}:hit", counters)
+            self.assertEqual(strict.call_count, 2)
+            self.assertFalse(caches.vdl.defect_pending())
+
     def test_fill_hit_and_path_free_copy_under_another_parent(self):
         first, second = self.copy("parent-one"), self.copy("parent-two")
         serial = cli.validate_bundle(first, True)
@@ -251,20 +278,42 @@ class SessionLeaf(_Member):
         bundle = self.copy("duplicate")
         manifest = bundle / "instrument_calibration/manifest.json"
         raw = manifest.read_text(encoding="utf-8")
-        manifest.write_text(raw.replace("{", '{\n  "pulse_count": -1,', 1), encoding="utf-8")
+        duplicated = raw.replace("{", '{\n  "pulse_count": -1,', 1)
+        manifest.write_text(duplicated, encoding="utf-8")
+        # Re-bind the manifest digest (review of #635, LOW 4): the session-less strict
+        # validation is then clean ([]) and stored, so the in-session consumer below
+        # really meets a session-less L1 entry (through the fallback key when rows exist).
+        metadata = json.loads((bundle / "metadata.json").read_bytes())
+        metadata["instrument_calibration"]["validation_manifest_sha256"] = hashlib.sha256(
+            duplicated.encode("utf-8")).hexdigest()
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         session_less = outcome(cli.validate_bundle, bundle, True)
+        self.assertEqual(session_less, ("value", []), "the fixture must be clean session-less")
         with aio.V2AuthenticationReadSession() as reference:
             in_session = outcome(cli.validate_bundle, bundle, True)
-        self.assertNotEqual(session_less, in_session, "the fixture must separate the two grammars")
+        self.assertEqual(in_session[:2], ("raised", "V2AuthenticationInputError"))
+        self.assertIn("duplicate", in_session[2])
         for complete in (False, True):
             with self.subTest(records_capability_reads=complete), \
                     mock.patch.object(aio, "RECORDS_CAPABILITY_READS", complete, create=True), \
                     run() as caches:
                 self.assertEqual(outcome(cli.validate_bundle, bundle, True), session_less)
+                counters = caches.vdl.restricted_counters()
+                self.assertEqual(counters.get(f"{L1}:fill"), 1, "the session-less L1 entry is stored")
+                (entry,) = [e for e in caches.vdl._entries.values() if e.leaf_id == L1]
                 with aio.V2AuthenticationReadSession() as consumer:
                     self.assertEqual(outcome(cli.validate_bundle, bundle, True), in_session)
                 self.assertEqual(records(consumer), records(reference))
+                counters = caches.vdl.restricted_counters()
+                self.assertNotIn(f"{L1}:hit", counters)
+                if complete:
+                    # Found through the fallback key; the bridge's grammar check discards it.
+                    self.assertIsNotNone(entry.rows)
+                    self.assertEqual(counters.get(f"{L1}:hit_discarded"), 1)
+                else:
+                    self.assertNotIn(f"{L1}:hit_discarded", counters)
                 self.assertEqual(outcome(cli.validate_bundle, bundle, True), session_less)
+                self.assertEqual(caches.vdl.restricted_counters().get(f"{L1}:hit"), 1)
                 self.assertFalse(caches.vdl.defect_pending())
 
     def test_shadow_recomputes_hits_without_defects(self):
@@ -330,6 +379,56 @@ class ReduceLeaf(_Member):
                                   results[1][1][2])
                 else:
                     self.assertEqual(results[1], ("value", (2, "", "error: reduction raised\n")))
+
+    def test_shadow_mode_serves_without_recomputing_the_combined_leaf(self):
+        """Review of #635 (LOW 2): at the reduce site a probe hit is applied, never routed
+        through ``store.call``, so shadow mode does not recompute the combined leaf there (a
+        disagreeing recompute could otherwise turn exit 3 into exit 2)."""
+
+        bundle = self.copy("shadow-reduce")
+        outputs = self.tmp / "shadow-reduce-out"
+        outputs.mkdir()
+        self.addCleanup(shutil.rmtree, outputs, ignore_errors=True)
+        serial = self.reduce(bundle, outputs / "serial.json")
+        unserializable = mock.Mock()
+        unserializable.to_dict.side_effect = SchemaError("not admissible here")
+        recompute = (mock.patch.object(cli, "reduce_bundle", return_value=unserializable),
+                     mock.patch("joulewise.reduce.reduce_bundle", return_value=unserializable))
+        with run(vdl.Mode("shadow", 1000)) as caches:
+            self.assertEqual(cli.validate_bundle(bundle, True), [])  # step 1 deposits L3
+            with recompute[0] as cli_reduce, recompute[1] as module_reduce:
+                served = self.reduce(bundle, outputs / "served.json")
+            self.assertEqual((cli_reduce.call_count, module_reduce.call_count), (0, 0))
+            counters = caches.vdl.restricted_counters()
+            self.assertFalse(caches.vdl.defect_pending())
+        self.assertEqual(served, serial)
+        self.assertEqual(counters[f"{L3}:hit"], 1)
+        self.assertNotIn(f"{L3}:shadow_mismatch", counters)
+
+    def test_a_discarded_hit_runs_the_serial_two_stage_code(self):
+        """A probe hit that is no longer admissible at the reduce position: the serial
+        two stages run, so a to_dict SchemaError is still the exit-3 diagnostic."""
+
+        bundle = self.copy("discarded")
+        outputs = self.tmp / "discarded-out"
+        outputs.mkdir()
+        self.addCleanup(shutil.rmtree, outputs, ignore_errors=True)
+        unserializable = mock.Mock()
+        unserializable.to_dict.side_effect = SchemaError("not admissible here")
+        with mock.patch.object(cli, "reduce_bundle", return_value=unserializable):
+            serial = self.reduce(bundle, outputs / "serial.json")
+        self.assertEqual(serial[0], 3)
+        self.assertIn("reduced summary is not admissible: not admissible here", serial[2])
+        for mode in (vdl.ON, vdl.Mode("shadow", 1000)):
+            with self.subTest(mode=mode.name), run(mode) as caches:
+                self.assertEqual(cli.validate_bundle(bundle, True), [])
+                with mock.patch.object(vdl._Hit, "apply", side_effect=vdl._Bypass("changed")), \
+                        mock.patch.object(cli, "reduce_bundle", return_value=unserializable):
+                    self.assertEqual(self.reduce(bundle, outputs / f"{mode.name}.json"), serial)
+                counters = caches.vdl.restricted_counters()
+                self.assertEqual(counters[f"{L3}:hit_discarded"], 1)
+                self.assertNotIn(f"{L3}:hit", counters)
+                self.assertFalse(caches.vdl.defect_pending())
 
     def test_reduce_never_fills_the_store(self):
         bundle = self.copy("nofill")

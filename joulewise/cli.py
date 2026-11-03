@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import contextvars
 import copy
 import json
 import shlex
@@ -446,12 +445,11 @@ def _cmd_run_body(args: argparse.Namespace) -> int:
 # vdl_mode=...)``): every helper below is then the unchanged serial code.
 _L1_STRICT_VALIDATION = "L1_strict_validation"
 _L3_REDUCE_DICT = "L3_reduce_dict"
-# True while ``validate_bundle`` runs as the store's own L1 leaf computation
-# (a fill or a shadow recompute): that call is the body, never a second store
-# call. The ContextVar name is dotted so it is no snake_case literal.
-_STRICT_LEAF_BODY: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "joulewise.cli.strict_leaf_body", default=False
-)
+# The store's module: a ``validate_bundle`` called directly from it is the
+# store's own L1 leaf computation (a fill, a shadow recompute, or a bypass of an
+# unservable call), never a second store call, whoever opened the outer call
+# (this function, or an external ``vdl.call(L1, cli.validate_bundle, ...)``).
+_VERIFIED_STORE_MODULE = "joulewise.analysis_verified_store"
 
 
 def _verified_store() -> Any:
@@ -515,29 +513,30 @@ def _served_reduction(
         return None
     from joulewise.analysis_verified_store import reduce_bundle_dict  # noqa: PLC0415
 
-    if (
-        store.probe(
-            _L3_REDUCE_DICT,
-            reduce_bundle_dict,
-            bundle_path,
-            reducer_version=reducer_version,
-            physics_cache=physics_cache,
-        )
-        is None
-    ):
-        return None
-    # The probe found a verified entry; ``call`` serves it at this position
-    # (registration, physics admission, shadow sampling). It computes the
-    # leaf only if the entry stopped verifying in between (custody bytes
-    # changed under a running analysis) or as a shadow recompute, whose
-    # raising is a store defect, never a study refusal.
-    return store.call(
+    hit = store.probe(
         _L3_REDUCE_DICT,
         reduce_bundle_dict,
         bundle_path,
         reducer_version=reducer_version,
         physics_cache=physics_cache,
     )
+    if hit is None:
+        return None
+    # Served here with ``apply`` (re-verification at this position,
+    # registration, physics admission), never through ``store.call``: a call
+    # could recompute the combined leaf (a shadow sample, or a hit that stopped
+    # verifying), and a recompute cannot keep the two stages apart. So this
+    # site never shadow-samples (step 1 and the NEG-8 re-reduction sample the
+    # same key), and a hit that is no longer admissible here is ``None``: the
+    # unchanged two-stage serial code runs and raises or refuses at its own
+    # position. The counters mirror ``store.call``'s (restricted tier).
+    try:
+        value = hit.apply()
+    except Exception:  # noqa: BLE001 - not servable here: the serial code runs
+        store._count(f"{_L3_REDUCE_DICT}:hit_discarded")
+        return None
+    store._count(f"{_L3_REDUCE_DICT}:hit")
+    return value
 
 
 def _payload_bundle_line(bundle_path: Path, payload: Mapping[str, Any]) -> str:
@@ -581,22 +580,23 @@ def validate_bundle(
     function, served from a hash-verified earlier computation of it on the
     same bundle bytes (and the same policy files and listings it read beside
     the bundle), or computed here. An exception is never stored, so a raising
-    validation raises from this code at this position.
+    validation raises from this code at this position. Called directly from
+    the store's module, this is the leaf body itself (one store call per
+    logical computation, also for an external ``vdl.call(L1, ...)``).
     """
-    if strict and not _STRICT_LEAF_BODY.get():
+    leaf_body = (
+        strict and sys._getframe(1).f_globals.get("__name__") == _VERIFIED_STORE_MODULE
+    )
+    if strict and not leaf_body:
         store = _verified_store()
         if store is not None:
-            token = _STRICT_LEAF_BODY.set(True)
-            try:
-                return store.call(
-                    _L1_STRICT_VALIDATION,
-                    validate_bundle,
-                    path,
-                    strict,
-                    physics_cache=physics_cache,
-                )
-            finally:
-                _STRICT_LEAF_BODY.reset(token)
+            return store.call(
+                _L1_STRICT_VALIDATION,
+                validate_bundle,
+                path,
+                strict,
+                physics_cache=physics_cache,
+            )
     reader = BundleReader(Path(path))
     problems = reader.problems()
     if strict:
@@ -605,7 +605,7 @@ def validate_bundle(
             if physics_cache is None
             else _strict_problems(reader, physics_cache=physics_cache)
         )
-        if problems and _STRICT_LEAF_BODY.get():
+        if problems and leaf_body:
             # A problem list is not stored at all: the L1 entry is path-free
             # (relative name plus content), and problem text can quote the
             # bundle's location in ways a location search cannot see.
