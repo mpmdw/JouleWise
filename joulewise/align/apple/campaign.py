@@ -28,6 +28,7 @@ def _counterbalanced(specs: Sequence[EpisodeSpec]) -> tuple[tuple[EpisodeSpec, .
             "task_factory": spec.task_factory, "task_kwargs": spec.task_kwargs,
             "seed": spec.seed, "max_turns": spec.max_turns,
             "max_tokens": spec.max_tokens, "temperature": spec.temperature,
+            "enable_thinking": spec.enable_thinking, "max_context_tokens": spec.max_context_tokens,
         }, sort_keys=True)
         cell = cells.setdefault(key, {"benign": deque(), "sabotage": deque()})
         cell[spec.condition].append(spec)
@@ -39,10 +40,15 @@ def _counterbalanced(specs: Sequence[EpisodeSpec]) -> tuple[tuple[EpisodeSpec, .
         unmatched.extend(cell["benign"])
         unmatched.extend(cell["sabotage"])
     ordered = []
-    for index, pair in enumerate(pairs):
-        # Two matched pairs form ABBA; reverse the second pair to cancel
-        # linear order drift without duplicating or removing any episode.
-        ordered.extend(pair if index % 2 == 0 else reversed(pair))
+    occurrences: dict[str, int] = {}
+    for pair in pairs:
+        task = json.dumps({"task_factory": pair[0].task_factory,
+                           "task_kwargs": pair[0].task_kwargs}, sort_keys=True)
+        # Stagger task baselines for ABBA, then alternate within that task.
+        if task not in occurrences:
+            occurrences[task] = len(occurrences) % 2
+        ordered.extend(pair if occurrences[task] % 2 == 0 else reversed(pair))
+        occurrences[task] += 1
     ordered.extend(unmatched)
     flags = ("unmatched_condition_cells_retained",) if unmatched else ()
     return tuple(ordered), flags

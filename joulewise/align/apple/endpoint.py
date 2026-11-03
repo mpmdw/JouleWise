@@ -19,11 +19,46 @@ from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mappin
 from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
+
+def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False):
+    """Count reasoning content in the emitted IDs; delimiters/EOS are not content.
+
+    Only the fixed delimiters are encoded to locate their ID sequences. The
+    generated text is never retokenized, including at native stop or length cut.
+    """
+    from joulewise.adapters.mlx_runtime import _encode
+    opening = _encode(tokenizer, "<think>", add_special_tokens=False)
+    closing = _encode(tokenizer, "</think>", add_special_tokens=False)
+    ids = list(output_ids)
+    eos = getattr(tokenizer, "eos_token_ids", None)
+    if eos is None:
+        eos = getattr(tokenizer, "eos_token_id", ())
+    eos = {eos} if isinstance(eos, int) else set(eos or ())
+    if ids and ids[-1] in eos:
+        ids.pop()
+    def first(sequence):
+        return next((i for i in range(len(ids)) if ids[i:i+len(sequence)] == list(sequence)), len(ids)) if sequence else len(ids)
+    # Some templates prefill the opening tag; a leading close in the emitted
+    # IDs is also exact evidence that the initial content was reasoning.
+    active = reasoning_open or first(closing) < first(opening)
+    count, index = 0, 0
+    while index < len(ids):
+        if opening and ids[index:index + len(opening)] == list(opening):
+            active = True
+            index += len(opening)
+        elif closing and ids[index:index + len(closing)] == list(closing):
+            active = False
+            index += len(closing)
+        else:
+            count += int(active)
+            index += 1
+    return count
+
 _TOOL_CALL = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
 
 def _split_reasoning(text: str) -> tuple[str, str, tuple[str, ...]]:
-    """Remove every closed think span, including a template-prefilled opener."""
+    """Separate reasoning, including an unclosed tail and a prefilled opener."""
     visible: list[str] = []
     hidden: list[str] = []
     flags: list[str] = []
@@ -43,7 +78,7 @@ def _split_reasoning(text: str) -> tuple[str, str, tuple[str, ...]]:
             visible.append(text[cursor:opening])
             closing = text.find("</think>", opening + len("<think>"))
             if closing < 0:
-                visible.append(text[opening:])
+                hidden.append(text[opening + len("<think>"):])
                 flags.append("unclosed_reasoning_span")
                 break
             hidden.append(text[opening + len("<think>"):closing])
@@ -55,15 +90,17 @@ def _split_reasoning(text: str) -> tuple[str, str, tuple[str, ...]]:
 
 
 def parse_completion(
-    text: str, *, reasoning_tokens: int = 0,
+    text: str, *, reasoning_tokens: int = 0, reasoning_open: bool = False,
 ) -> tuple[str, str, tuple[ToolCallRequest, ...], tuple[str, ...]]:
     """Parse think spans, Qwen envelopes and bare Llama name/parameters JSON.
 
     Unknown tool-like syntax remains text with a flag. Retokenization is an
     estimate of hidden generation, never a server-provided ground-truth count.
     """
-    visible, reasoning, reasoning_flags = _split_reasoning(text)
+    visible, reasoning, reasoning_flags = _split_reasoning("<think>" + text if reasoning_open else text)
     flags = list(reasoning_flags)
+    if reasoning_open:
+        flags.append("reasoning_open_tag_prefilled_or_missing")
     calls: list[ToolCallRequest] = []
 
     def add_call(obj: Any, emitted: str) -> None:
@@ -189,6 +226,30 @@ class MlxEndpoint:
         }, sort_keys=True)
         self._prepare_flags = tuple(self.flags)
 
+    def _render_prompt(self, messages, tools):
+        return self.runtime._tokenizer.apply_chat_template(
+            [{"role": m.role, "content": m.content,
+              **({"name": m.name} if m.name else {}),
+              **({"tool_call_id": m.tool_call_id} if m.tool_call_id else {}),
+              **({"tool_calls": [{"id": c.call_id, "type": "function", "function": {
+                  "name": c.name, "arguments": c.arguments_json}} for c in getattr(m, "tool_calls", ())]}
+                 if getattr(m, "tool_calls", ()) else {})} for m in _coalesce_assistant_calls(messages)],
+            tools=list(tools) or None, tokenize=False, add_generation_prompt=True,
+            **({"enable_thinking": self.enable_thinking} if self.enable_thinking is not None else {}),
+        )
+
+    def rendered_prompt_length(self, messages, *, tools=()):
+        """Count the exact next template without generation or native model work."""
+        if self.config.hardware_target.runtime_backend == RuntimeBackend.MOCK:
+            script = self.mock_turns[self._turn] if self._turn < len(self.mock_turns) else {}
+            if "prompt_tokens" in script:
+                count = int(script["prompt_tokens"])
+            else:
+                count = len(json.dumps([m.__dict__ for m in messages], sort_keys=True).split())
+            return count
+        from joulewise.adapters.mlx_runtime import _encode
+        return len(_encode(self.runtime._tokenizer, self._render_prompt(messages, tools), add_special_tokens=False))
+
     def chat(
         self, messages: Sequence[ChatMessage], *, tools: Sequence[Mapping[str, Any]] = (),
         max_tokens: int, temperature: float, seed: int | None,
@@ -209,6 +270,7 @@ class MlxEndpoint:
         first_epoch: float | None = None
         provenance: dict[str, Any] = {}
         finish_reason: str | None = None
+        reasoning_open_from_template = False
         prior_hidden = any(
             message.role == "assistant" and _split_reasoning(message.content)[0] != message.content
             for message in messages
@@ -268,29 +330,12 @@ class MlxEndpoint:
                 tokenizer = self.runtime._tokenizer
 
                 def render_prompt(chat: Sequence[ChatMessage]) -> str:
-                    return tokenizer.apply_chat_template(
-                        [
-                            {
-                                "role": message.role, "content": message.content,
-                                **({"name": message.name} if message.name else {}),
-                                **({"tool_call_id": message.tool_call_id} if message.tool_call_id else {}),
-                                **({"tool_calls": [
-                                    {"id": call.call_id, "type": "function", "function": {
-                                        "name": call.name, "arguments": call.arguments_json}}
-                                    for call in message.tool_calls]}
-                                   if getattr(message, "tool_calls", ()) else {}),
-                            }
-                            for message in _coalesce_assistant_calls(chat)
-                        ],
-                        tools=list(tools) or None, tokenize=False,
-                        add_generation_prompt=True,
-                        **({"enable_thinking": self.enable_thinking}
-                           if self.enable_thinking is not None else {}),
-                    )
+                    return self._render_prompt(chat, tools)
 
                 def prepare_prompt():
-                    nonlocal prior_hidden_prefill_tokens
+                    nonlocal prior_hidden_prefill_tokens, reasoning_open_from_template
                     rendered = render_prompt(messages)
+                    reasoning_open_from_template = rendered.rstrip().endswith("<think>")
                     # Chat templates already contain their special tokens.
                     ids = _encode(tokenizer, rendered, add_special_tokens=False)
                     if prior_hidden:
@@ -336,14 +381,9 @@ class MlxEndpoint:
                     "stop_condition": finish_reason or record.stop_condition,
                     "runtime_stop_condition": record.stop_condition,
                 }
-                _, hidden, _, _ = parse_completion(text)
-                if hidden:
-                    # Retokenization is labelled because token boundaries at
-                    # the reasoning delimiters need not match the stream.
-                    reasoning_tokens = min(
-                        completion_tokens, len(_encode(tokenizer, hidden, add_special_tokens=False))
-                    )
-                    flags.append("reasoning_tokens_retokenized")
+                reasoning_tokens = reasoning_tokens_from_ids(
+                    tokenizer, record.output_token_ids, reasoning_open=reasoning_open_from_template)
+                provenance["reasoning_token_accounting"] = "output_ids_between_think_delimiters_excluding_trailing_eos"
             else:
                 raise ValueError("align_episode supports only mock and mlx backends")
             for event in new_events:
@@ -387,7 +427,7 @@ class MlxEndpoint:
             flags.append("first_token_clock_outside_turn")
             first_ns = max(start_ns, min(end_ns, first_ns))
         visible, reasoning, calls, parse_flags = parse_completion(
-            text, reasoning_tokens=reasoning_tokens
+            text, reasoning_tokens=reasoning_tokens, reasoning_open=reasoning_open_from_template,
         )
         flags.extend(parse_flags)
         if cut and "unclosed_reasoning_span" in parse_flags:
@@ -400,11 +440,6 @@ class MlxEndpoint:
             )
             reasoning = "\n".join(part for part in (prior, tail) if part)
             flags.extend(prefix_flags)
-            if self.config.hardware_target.runtime_backend == RuntimeBackend.MLX:
-                reasoning_tokens = min(completion_tokens, sum(
-                    len(_encode(tokenizer, part, add_special_tokens=False))
-                    for part in (prior, tail) if part))
-                flags.append("reasoning_tokens_retokenized")
             flags.append("reasoning_censored_at_token_limit")
         calls = tuple(replace(call, call_id=f"{turn_index}-{call.call_id}") for call in calls)
         self.flags.extend(flags)

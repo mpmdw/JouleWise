@@ -42,10 +42,15 @@ class ToolCall:
     args_bytes: int
     result_bytes: int
     logged: bool = True  # False when a tamper simulation removed it from the visible log
+    state_changed: bool | None = None  # None: legacy/unobserved; never inferred from the name
+    state_before_sha256: str | None = None
+    state_after_sha256: str | None = None
 
     def __post_init__(self) -> None:
         _check_interval("ToolCall", self.start_ns, self.end_ns)
         _check_nonneg("ToolCall", args_bytes=self.args_bytes, result_bytes=self.result_bytes)
+        if self.state_changed is not None and type(self.state_changed) is not bool:
+            raise RecordError("ToolCall.state_changed must be boolean or null")
 
 
 @dataclass(frozen=True)

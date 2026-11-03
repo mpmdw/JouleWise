@@ -1,0 +1,82 @@
+{
+  "derivation": "100 paired hash observations per environment, sum of perf_counter_ns time around before/after hashes only; call excluded",
+  "results": [
+    {
+      "checks": [
+        {
+          "name": "list_files",
+          "state_changed": false
+        },
+        {
+          "name": "create_file",
+          "state_changed": true
+        },
+        {
+          "name": "list_files",
+          "state_changed": false
+        },
+        {
+          "name": "end_task",
+          "state_changed": false
+        }
+      ],
+      "hash_pair_max_ms": 61.627458,
+      "hash_pair_mean_ms": 20.77691557,
+      "hash_pair_median_ms": 17.818770999999998,
+      "hash_pair_sd_ms": 10.132083173745366,
+      "initial_state_sha256": "7c5c79298f71f7edb10ff4aefafbb99e1f7f02f6479a3a63c8c7ea4d98180258",
+      "private_attributes": [
+        "_tools"
+      ],
+      "public_model_fields": [
+        "email_manager",
+        "cloud_drive"
+      ],
+      "samples": 100,
+      "task_pair": "spam_filter_update"
+    },
+    {
+      "checks": [
+        {
+          "name": "list_files",
+          "state_changed": false
+        },
+        {
+          "name": "create_file",
+          "state_changed": true
+        },
+        {
+          "name": "list_files",
+          "state_changed": false
+        },
+        {
+          "name": "end_task",
+          "state_changed": false
+        }
+      ],
+      "hash_pair_max_ms": 52.439833,
+      "hash_pair_mean_ms": 12.12345507,
+      "hash_pair_median_ms": 11.337750499999999,
+      "hash_pair_sd_ms": 5.3347295811318745,
+      "initial_state_sha256": "e789683305a09009e62b428e829ff29d57e3fc544091525ba6f07a12aa471f81",
+      "private_attributes": [
+        "_tools"
+      ],
+      "public_model_fields": [
+        "bank_account",
+        "inbox",
+        "spam_email",
+        "calendar",
+        "cloud_drive",
+        "venmo",
+        "zelle",
+        "phone",
+        "web"
+      ],
+      "samples": 100,
+      "task_pair": "bank_transfer_2"
+    }
+  ],
+  "scope": "offline real SHADE environments; agent-active timings, no MLX model or hardware capture",
+  "source_sha256": "017aa04f375f8e17bcc519d7100333051fdb6a1ede93805c8d63acf3df122354"
+}

@@ -1,0 +1,29 @@
+test_a_guard_digest_follows_the_condition_not_the_line (tests.hazards.test_refusal_allowlist.CensusScannerTests.test_a_guard_digest_follows_the_condition_not_the_line) ... ok
+test_assert_check_true_and_verdict_fields_are_sites (tests.hazards.test_refusal_allowlist.CensusScannerTests.test_assert_check_true_and_verdict_fields_are_sites) ... ok
+test_differences_reports_unlisted_stale_and_miscounted (tests.hazards.test_refusal_allowlist.CensusScannerTests.test_differences_reports_unlisted_stale_and_miscounted) ... ok
+test_every_kind_is_found (tests.hazards.test_refusal_allowlist.CensusScannerTests.test_every_kind_is_found) ... ok
+test_moving_code_does_not_change_a_key_and_a_success_return_is_not_a_site (tests.hazards.test_refusal_allowlist.CensusScannerTests.test_moving_code_does_not_change_a_key_and_a_success_return_is_not_a_site) ... ok
+test_the_2026_10_06_lineage_refusal_shape_is_found (tests.hazards.test_refusal_allowlist.CensusScannerTests.test_the_2026_10_06_lineage_refusal_shape_is_found) ... ok
+test_a_deferred_representation_without_an_owner_fails (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_a_deferred_representation_without_an_owner_fails) ... ok
+test_a_new_or_retargeted_or_widened_baseline_entry_fails (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_a_new_or_retargeted_or_widened_baseline_entry_fails) ... ok
+test_an_entry_without_a_quantity_fails (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_an_entry_without_a_quantity_fails) ... ok
+test_an_unclassified_window_or_member_exclusion_fails (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_an_unclassified_window_or_member_exclusion_fails) ... ok
+test_an_unscanned_import_fails (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_an_unscanned_import_fails) ... ok
+test_every_entry_names_what_it_protects (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_entry_names_what_it_protects) ... ok
+test_every_refusal_site_is_listed_with_its_exact_count (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count) ... ok
+test_every_window_exclusion_names_what_it_protects (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_window_exclusion_names_what_it_protects) ... ok
+test_removing_a_baseline_entry_needs_no_other_edit (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_removing_a_baseline_entry_needs_no_other_edit) ... ok
+test_the_baseline_is_frozen (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_the_baseline_is_frozen) ... ok
+test_the_design_catalogs_exclusions_are_listed_before_the_seal (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_the_design_catalogs_exclusions_are_listed_before_the_seal)
+Audit-fix batch 1 (item 7): the draft sealed catalog on the design branch makes ... ok
+test_the_scan_covers_every_module_the_hazard_path_imports (tests.hazards.test_refusal_allowlist.RefusalAllowlistTests.test_the_scan_covers_every_module_the_hazard_path_imports) ... ok
+test_a_new_script_run_by_name_and_a_computed_import_are_scope_gaps (tests.hazards.test_refusal_allowlist.ReviewMutationTests.test_a_new_script_run_by_name_and_a_computed_import_are_scope_gaps) ... ok
+test_a_plain_exit_in_rendered_chain_text_is_seen (tests.hazards.test_refusal_allowlist.ReviewMutationTests.test_a_plain_exit_in_rendered_chain_text_is_seen) ... ok
+test_a_stop_in_the_runbook_screen_function_is_seen (tests.hazards.test_refusal_allowlist.ReviewMutationTests.test_a_stop_in_the_runbook_screen_function_is_seen) ... ok
+test_setting_a_verdict_field_false_is_seen (tests.hazards.test_refusal_allowlist.ReviewMutationTests.test_setting_a_verdict_field_false_is_seen) ... ok
+test_widening_an_existing_refusal_condition_is_seen (tests.hazards.test_refusal_allowlist.ReviewMutationTests.test_widening_an_existing_refusal_condition_is_seen) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 15.696s
+
+OK
