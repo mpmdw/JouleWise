@@ -477,7 +477,10 @@ class _RecordedAuthenticationPath(type(Path())):
         return raw
 
     def __repr__(self) -> str:
-        # The text a plain Path of a run without a recorder would show.
+        # The text a plain Path of a run without a recorder would show.  A
+        # session's capability shows ``V2AuthenticationPath(...)`` instead, so
+        # inside a recording scope the repr is unrepresented (D-188 AUTH-IO-2).
+        _note_unrepresented("capability path repr")
         return repr(Path(self))
 
     def read_text(

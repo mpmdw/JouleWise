@@ -141,10 +141,20 @@ class FakeDeadline:
 
 
 @contextlib.contextmanager
-def run(mode=vdl.ON):
-    with arc.analysis_run_caches({}, vdl_mode=mode) as caches:
+def run(mode=vdl.ON, physics=None):
+    with arc.analysis_run_caches({} if physics is None else physics, vdl_mode=mode) as caches:
         caches.deadline = FakeDeadline()
         yield caches
+
+
+@contextlib.contextmanager
+def session(physics=None):
+    """A V2 session; with ``physics``, its calibration physics cache is that shared dict."""
+
+    with aio.V2AuthenticationReadSession() as active:
+        if physics is not None:
+            active.instrument_calibration_physics_cache = physics
+        yield active
 
 
 class _Tmp(unittest.TestCase):
@@ -226,6 +236,7 @@ class CapabilityRecording(_Tmp):
             "text read differs from the session decode": lambda: aio.read_authentication_text(
                 crlf / "notes.txt", grammar="raw", label="crlf"),
             "capability read_text newline argument": lambda: twin.read_text(newline=""),
+            "capability path repr": lambda: repr(twin),
             "capability read-write open": lambda: notes.open("r+").close(),
             "capability open buffering argument": lambda: notes.open("rb", buffering=0).close(),
             "text read failed to decode": lambda: aio.read_authentication_text(
@@ -438,6 +449,10 @@ class RealLeafTracer(unittest.TestCase):
         cls.tmp = Path(tempfile.mkdtemp(prefix="authio2-leaves-"))
         cls.good, cls.refused = GOOD, REFUSED
         cls.runs = _extract_members(cls.tmp, (*GOOD, REFUSED))
+        # Calibration physics fits are shared across the class (a fit costs seconds); a warm and
+        # a cold fit register the same reads for these leaves, and both arms of every comparison
+        # below run against the same warm caches.
+        cls.physics, cls.session_physics = {}, {}
 
     @classmethod
     def tearDownClass(cls):
@@ -469,10 +484,12 @@ class RealLeafTracer(unittest.TestCase):
         for member in sorted(self.runs.iterdir()):
             for name, (fn, args, kwargs) in self.leaves(member).items():
                 with self.subTest(member=member.name, leaf=name):
-                    with arc.analysis_run_caches({}), traced_registrations() as registered:
-                        with aio.V2AuthenticationReadSession():
+                    with arc.analysis_run_caches(self.physics):
+                        outcome(lambda: fn(*args, **kwargs))  # warm the shared physics
+                    with arc.analysis_run_caches(self.physics), traced_registrations() as registered:
+                        with session(self.session_physics):
                             in_session = outcome(lambda: fn(*args, **kwargs))
-                    with arc.analysis_run_caches({}), aio.recording_authentication_reads() as rows:
+                    with arc.analysis_run_caches(self.physics), aio.recording_authentication_reads() as rows:
                         sessionless = outcome(lambda: fn(*args, **kwargs))
                     self.assertEqual(rows.unrepresented, [])
                     recorded = mapped(rows)
@@ -496,11 +513,11 @@ class RealLeafTracer(unittest.TestCase):
         for name, (fn, args, kwargs) in self.leaves(member).items():
             leaf_id = {spec.leaf_id[:2]: spec.leaf_id for spec in vdl.LEAVES}[name]
             with self.subTest(leaf=leaf_id):
-                with aio.V2AuthenticationReadSession() as serial:
+                with arc.analysis_run_caches(self.physics), session(self.session_physics) as serial:
                     expected = fn(*args, **kwargs)
-                with run() as caches:
+                with run(physics=self.physics) as caches:
                     self.assertEqual(vdl.call(leaf_id, fn, *args, **kwargs), expected)
-                    with aio.V2AuthenticationReadSession() as consumer:
+                    with session(self.session_physics) as consumer:
                         value = vdl.call(leaf_id, fn, *args, **kwargs)
                     counters = caches.vdl.restricted_counters()
                 self.assertEqual(value, expected)
