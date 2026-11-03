@@ -56,11 +56,21 @@ pre-filtered, nothing is shipped, nothing is merged.
 * Fills in workers. A worker task with a store context runs a registered leaf
   through ``store.call`` in a fresh store seeded with the entries it was
   shipped, and returns what it added (``MemberOutcome.vdl_new``).
-* Merge. Defects, poisoned keys and restricted counters merge from every
-  outcome, consumed or not (Sol #11: a shadow mismatch survives the worker's
-  ``except BaseException`` and the caller's serial recomputation). Entries and
-  the shipped memos merge only from consumed outcomes that are ok and
-  firing-free, and never overwrite.
+* Merge. Defects and restricted counters merge from every outcome, consumed
+  or not (Sol #11: a shadow mismatch survives the worker's
+  ``except BaseException`` and the caller's serial recomputation). Poisoned
+  keys merge only from outcomes the caller consumed (reached at their serial
+  position); entries and the shipped memos only from consumed outcomes that are
+  ok and firing-free, after their read census registered without a refusal,
+  and never overwrite. This is independent of ``account``: ``consume`` merges
+  them (D-188 SHIP-FIX, finding B). A member after the caller's first refusal
+  is never consumed, so nothing it stored reaches the run.
+* Accounting is not merging. ``member_map(..., account=True)`` (the default,
+  the whole-window call site) reports every outcome's deadline firings,
+  unobservable workers and verified fits as soon as the batch returns, exactly
+  as tag b5/analysis-r1's ``member_map`` does (equivalence keeps that; see the
+  SHIP-FIX PR for the pre-existing finding); store entries, memos and poison
+  still wait for ``consume``.
 * Recorder. While a leaf fill is being recorded in this process
   (``fill_active()``), ``member_map`` stays serial: a pool worker's reads are
   invisible to the fill's read recorder, also when the pool already exists (no
@@ -324,12 +334,12 @@ def export_new(caches, context: dict, memos_before: dict) -> dict:
 
 
 def merge_side_channel(caches, payload: dict | None) -> None:
-    """Defects, poisoned keys and restricted counters of any outcome (consumed or not)."""
+    """Defects and restricted counters of any outcome (consumed or not); never entries, memos or poison."""
     store = vdl_store(caches)
     if store is None or not payload:
         return
     store.merge_entries({'schema': payload.get('schema'), 'entries': {},
-                         'poisoned': payload.get('poisoned', ()), 'defects': payload.get('defects', ())})
+                         'poisoned': (), 'defects': payload.get('defects', ())})
     counters = payload.get('counters')
     if not isinstance(counters, dict):
         return
@@ -346,13 +356,22 @@ def merge_side_channel(caches, payload: dict | None) -> None:
             store._counters[name] = store._counters.get(name, 0) + count
 
 
+def merge_consumed_poison(caches, payload: dict | None) -> None:
+    """Poisoned keys of a consumed outcome (whatever its result): poison only ever stops serving."""
+    store = vdl_store(caches)
+    if store is None or not payload:
+        return
+    store.merge_entries({'schema': payload.get('schema'), 'entries': {},
+                         'poisoned': payload.get('poisoned', ()), 'defects': ()})
+
+
 def merge_consumed(caches, payload: dict | None) -> None:
-    """Entries and shipped memos of a consumed, ok, firing-free outcome (never overwrite)."""
+    """Poison, entries and shipped memos of a consumed, ok, firing-free outcome (never overwrite)."""
     store = vdl_store(caches)
     if store is None or not payload:
         return
     store.merge_entries({'schema': payload.get('schema'), 'entries': payload.get('entries') or {},
-                         'poisoned': (), 'defects': ()})
+                         'poisoned': payload.get('poisoned', ()), 'defects': ()})
     tables = getattr(caches, 'memos', None)
     if tables is None:
         return
@@ -451,7 +470,10 @@ def member_map(function: Callable[..., Any], calls: Sequence[tuple[tuple, dict]]
 
     With ``account=False`` nothing is reported to the run yet: the caller passes
     the outcomes it consumed to ``account_outcomes`` (always, also when its loop
-    stops early or raises).
+    stops early or raises). With ``account=True`` every outcome's firings,
+    unobservable workers and fits are reported here (tag b5/analysis-r1's
+    accounting). Either way, store entries, memos and poison merge only through
+    ``consume`` (D-188 SHIP-FIX, finding B); defects and counters merge here.
     """
     from joulewise import analysis_run_cache
     from joulewise.authentication_io import active_v2_authentication_session
@@ -517,7 +539,11 @@ def member_map(function: Callable[..., Any], calls: Sequence[tuple[tuple, dict]]
 
 
 def account_outcomes(outcomes: Sequence[MemberOutcome | None]) -> None:
-    """Report consumed outcomes to the run: firings, unobservable workers, verified fits."""
+    """Report outcomes to the run: firings, unobservable workers, verified fits.
+
+    Never store entries, memos or poison: those merge in ``consume``, only for an
+    outcome the caller actually consumed (D-188 SHIP-FIX, finding B).
+    """
     from joulewise import analysis_run_cache
 
     caches = analysis_run_cache.current()
@@ -533,11 +559,8 @@ def account_outcomes(outcomes: Sequence[MemberOutcome | None]) -> None:
                 caches.deadline.firings += outcome.firings
             else:
                 caches.worker_observer_unavailable = True
-        elif outcome.ok:
-            if caches.physics_store is not None:
-                _merge_physics(caches.physics_store, outcome.physics)
-            # D-188: a consumed, firing-free outcome's store entries and memos.
-            merge_consumed(caches, outcome.vdl_new)
+        elif outcome.ok and caches.physics_store is not None:
+            _merge_physics(caches.physics_store, outcome.physics)
 
 
 def consume(outcome: MemberOutcome | None, compute: Callable[[], Any], *, account: bool = False) -> Any:
@@ -546,10 +569,18 @@ def consume(outcome: MemberOutcome | None, compute: Callable[[], Any], *, accoun
     ``account=True`` (for outcomes of ``member_map(..., account=False)``) first
     reports this outcome to the run, as the serial loop's own observation of a
     member it reached.
+
+    D-188 SHIP-FIX (finding B): this is the only place a worker's store payload
+    reaches the run. Its poisoned keys merge once the member is reached; its
+    entries and memos merge only when the worker's value is used (ok,
+    firing-free) and its read census registered without a refusal.
     """
     if account:
         account_outcomes((outcome,))
-    if outcome is None or not outcome.ok:
+    if outcome is None:
+        return compute()
+    if not outcome.ok:
+        merge_consumed_poison(_current_caches(), outcome.vdl_new)
         return compute()
     if outcome.hit is not None:
         # D-188: a pre-filtered store hit, applied here (its rows registered
@@ -569,10 +600,19 @@ def consume(outcome: MemberOutcome | None, compute: Callable[[], Any], *, accoun
         return value if outcome.post is None else outcome.post(value)
     from joulewise.authentication_io import active_v2_authentication_session
 
+    caches = _current_caches()
+    merge_consumed_poison(caches, outcome.vdl_new)
     session = active_v2_authentication_session()
     if session is not None:
         with session._lock:
             for identity, digest, grammar, count in outcome.records:
                 for _ in range(count):
                     session._register(identity, digest, grammar, f'member derivation input {identity}')
+    if outcome.firings == 0:
+        merge_consumed(caches, outcome.vdl_new)
     return outcome.value
+
+
+def _current_caches():
+    from joulewise import analysis_run_cache
+    return analysis_run_cache.current()

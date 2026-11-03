@@ -27,7 +27,10 @@ line, so the exported file never outlives the run that wrote it.
 Refusal identity: 'refusal-source' names where the raw refusal code came from.
 'step-codes' is decisions/step-codes.jsonl committed by both records (authenticated);
 'step-codes-unauthenticated' and 'logs-unauthenticated' (the R1 fallback) rest on
-uncommitted restricted bytes being intact on the candidate side.
+uncommitted restricted bytes being intact on the candidate side. A step-codes row
+carries the refusal's position inside its step as decision fields: 'invocation' (the
+refusing runner invocation's ordinal, as the R1 log decoder counts it) and 'member'
+(a keyed digest of the refusing bundle, steps 1 and 2); neither is ever printed blinded.
 
 Open mode prints every differing leaf with both exact tokens. It refuses unless both
 records' window_index_sha256 values are listed in equivalence_open_indices.json
@@ -60,7 +63,14 @@ OPEN_INDICES_SCHEMA = 'joulewise.b5_equivalence_open_indices.v1'
 REPORT_SCHEMA = 'joulewise.b5_equivalence_report.v1'
 STEP_CODES_NAME = 'decisions/step-codes.jsonl'
 STEP_CODES_ROLE = 'decisions-audit/step-codes'
-STEP_CODES_KEYS = frozenset({'pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class'})
+STEP_CODES_KEYS = frozenset({'pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class',
+                             'invocation', 'member'})
+# D-188 SHIP-FIX (finding C): the decision fields of a step-codes row. 'invocation'
+# (the refusing runner invocation's ordinal within its (step, window), counted as
+# legacy_refusal counts restricted logs) and 'member' (a keyed digest of the
+# refusing bundle) pin WHERE inside a step a run refused, not only which step.
+STEP_CODES_DECISION_KEYS = ('pos', 'step', 'window', 'raw_code', 'exit_status', 'invocation', 'member')
+MEMBER_DIGEST = re.compile(r'[0-9a-f]{64}')
 
 RUNS = {'blind-dry-run': ('dry-run', 'B5-BLIND-DRY-RUN-RECORD.json'),
         'release': ('release', 'B5-RELEASE-RECORD.json')}
@@ -800,6 +810,14 @@ def read_step_codes(side: Side):
             raise ComparatorError('step-codes', side.label, f'row {i} tooling code differs from the record')
         if st['status'] in ('ok', 'not_run') and st['exit_status'] in (None, 0) and code is not None:
             raise ComparatorError('step-codes', side.label, f'row {i} ok step carries a code')
+        invocation, member = row['invocation'], row['member']
+        if invocation is not None and not (isinstance(invocation, tuple) and invocation[0] == '#i'
+                                           and re.fullmatch(r'[1-9][0-9]*', invocation[1])):
+            raise ComparatorError('step-codes', side.label, f'row {i} invocation')
+        if member is not None and not (isinstance(member, str) and MEMBER_DIGEST.fullmatch(member)):
+            raise ComparatorError('step-codes', side.label, f'row {i} member')
+        if st['status'] in ('ok', 'not_run') and (invocation is not None or member is not None):
+            raise ComparatorError('step-codes', side.label, f'row {i} ok step carries a position')
     return rows, authenticated
 
 
@@ -906,8 +924,7 @@ def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
                    for i in range(min(limit, len(steps)))]
         d, audit = {'step_outputs': outputs}, {}
         if source.startswith('step-codes'):
-            d['step_codes'] = [{k: r[k] for k in ('pos', 'step', 'window', 'raw_code', 'exit_status')}
-                               for r in codes[:limit]]
+            d['step_codes'] = [{k: r[k] for k in STEP_CODES_DECISION_KEYS} for r in codes[:limit]]
             audit['exception_class'] = [r['exception_class'] for r in codes[:limit]]
         elif prefix is None:
             i, row = _first_non_ok(side.record)

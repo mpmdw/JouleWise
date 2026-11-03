@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, field, replace
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -241,7 +242,19 @@ _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE]
 # captured before step_record redacts it; Sol #12) and the resolved store mode
 # (a fixed token). Neither is a step's own output.
 STEP_CODES_NAME = 'decisions/step-codes.jsonl'
-STEP_CODES_KEYS = ('pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class')
+STEP_CODES_KEYS = ('pos', 'step', 'window', 'raw_code', 'exit_status', 'exception_class',
+                   'invocation', 'member')
+# D-188 SHIP-FIX (finding C): a refusing row also carries its position inside
+# the step. 'invocation' is the ordinal of the step's last runner invocation for
+# the row's (step, window) (restricted/logs/<counter>-<step>-<window|block>
+# stderr logs, counted exactly as the comparator's R1 log decoder counts them):
+# it tells step 5's two programs, and step 1's or step 2's bundles of one pack,
+# apart. 'member' is, for a refusing step-1/step-2 bundle invocation, an HMAC of
+# the bundle's run id keyed by the window-index digest (STEP_CODES_MEMBER_DOMAIN):
+# comparable between two runs of one index, never a raw id. Both are None on an
+# ok or not-run row.
+STEP_CODES_LOG = re.compile(r'(\d{4,})-([0-9a-z]+)-(alpha|beta|gamma|block)\.stderr\.log')
+STEP_CODES_MEMBER_DOMAIN = b'joulewise.b5.step-codes.member.v1\0'
 # On a real (blind) run the step-codes file ends with one whitespace-only salt
 # line (STEP_CODES_SALT_BITS fresh random bits, space = 0, tab = 1). The
 # comparator skips blank lines, so the rows are unchanged; the salt makes the
@@ -544,6 +557,16 @@ class RunState:
         self.vdl_store = None
         self._runner = None
         self._raw_codes = []
+        # D-188 SHIP-FIX (finding C): stderr log name -> the bundle run id that
+        # invocation ran (steps 1 and 2); in memory only, digested into step codes.
+        self._members = {}
+
+    def note_member(self, result, member):
+        """Remember which bundle the runner invocation behind ``result`` ran (never raises)."""
+        try:
+            self._members[Path(result.stderr_path).name] = str(member)
+        except (AttributeError, TypeError, ValueError):
+            pass
 
     def path(self, relative):
         if (type(relative) is not str or not relative or '\\' in relative or '\x00' in relative
@@ -901,6 +924,8 @@ def _account_deadlines(s, consumed):
     no more than its outputs do. D-188: only then, and only when no consumed task
     fired and every one could observe, their store entries and memos merge into
     the run's store (the consumed, firing-free prefix; never a discarded task).
+    A consumed task's poisoned keys merge in any case (SHIP-FIX finding B:
+    poison, like entries, never comes from a task the serial run never reached).
     """
     from .deadline_observer import OBSERVER_UNAVAILABLE
     firings=sum(res.firings or 0 for res in consumed)
@@ -908,13 +933,15 @@ def _account_deadlines(s, consumed):
         s.deadline.firings+=firings
     if any(res.firings is None for res in consumed):
         raise AnalysisRefusal(OBSERVER_UNAVAILABLE)
-    if not firings and getattr(s, 'vdl_store', None) is not None:
+    if getattr(s, 'vdl_store', None) is not None:
         from joulewise import analysis_run_cache
-        from joulewise.analysis_member_pool import merge_consumed
+        from joulewise.analysis_member_pool import merge_consumed, merge_consumed_poison
         caches=analysis_run_cache.current()
         for res in consumed:
-            if not res.exception and res.firings==0:
+            if not firings and not res.exception and res.firings==0:
                 merge_consumed(caches,res.vdl_new)
+            else:
+                merge_consumed_poison(caches,res.vdl_new)
 
 
 def _stop_at(r, base, results, stop, outputs=(), created_dirs=(), needed_dirs=()):
@@ -950,6 +977,7 @@ def _step_1_parallel(s,r,jobs):
                     _stop_at(r,base,results,i-1);raise
             consumed=i+1
             _consumed_result(r,res)
+            s.note_member(res,jobs[i][1])
             exit_status=2 if res.exception else res.exit_status
             if exit_status:
                 _stop_at(r,base,results,i)
@@ -968,6 +996,7 @@ def step_1(s,r):
         return _step_1_parallel(s,r,jobs)
     for pack,run_id,bundle in jobs:
         result,_,_,exit_status=s.invoke(r,main,['validate-bundle','--strict',bundle],step='1',window=pack)
+        s.note_member(result,run_id)
         if exit_status:
             return [s.record('1',window=pack,exit_status=2,code='kept_bundle_strict_validation_failed')]
     return [s.record('1')]
@@ -1028,6 +1057,7 @@ def _step_2_parallel(s,r,jobs):
                     stop(None,i-1);raise
             consumed=i+1
             _consumed_result(r,res)
+            s.note_member(res,run_id)
             result=RunnerResult(res.exit_status,Path(res.stdout_path),Path(res.stderr_path),res.exception,
                                 res.exception_class)
             code=result.token() if result.exit_status or result.exception else None
@@ -1061,6 +1091,7 @@ def step_2(s,r):
     for pack,run_id,bundle in jobs:
         output=s.path('rereduced/'+pack+'/'+run_id+'.rereduced.json')
         result,_,code,exit_status=s.invoke(r,main,['reduce',bundle,'--output',output],step='2',window=pack)
+        s.note_member(result,run_id)
         if exit_status and Path(output).is_file():
             # As at a refusal below: a failed re-reduction leaves no unregistered output.
             Path(output).unlink()
@@ -1610,13 +1641,50 @@ def _raw_code(s, row):
     return (row['refusal'] if row['status'] == 'tooling_refusal' else None), None
 
 
+def _invocation_logs(s):
+    """{(step, window|block): [stderr log names in counter order]} of the run's runner invocations."""
+    runner = getattr(s, '_runner', None)
+    logs = Path(getattr(runner, 'logs', None) or Path(s.restricted) / 'logs')
+    found = {}
+    try:
+        with os.scandir(logs) as entries:
+            for entry in entries:
+                match = STEP_CODES_LOG.fullmatch(entry.name)
+                if match and entry.is_file(follow_symlinks=False):
+                    found.setdefault((match.group(2), match.group(3)), []).append((int(match.group(1)), entry.name))
+    except OSError:
+        return {}
+    return {key: [name for _, name in sorted(names)] for key, names in found.items()}
+
+
+def _member_digest(s, member):
+    """A comparison token for a bundle run id: HMAC-SHA256 keyed by the window-index digest (never the id)."""
+    index_digest = getattr(getattr(s, 'index', None), 'sha256', None) or ''
+    key = hashlib.sha256(STEP_CODES_MEMBER_DOMAIN + index_digest.encode('ascii', 'replace')).digest()
+    return hmac.new(key, member.encode('utf-8', 'surrogatepass'), hashlib.sha256).hexdigest()
+
+
+def _refusal_position(s, row, logs):
+    """(invocation ordinal, member digest) of a refusing row's last runner invocation, or (None, None)."""
+    if row['status'] in ('ok', 'not_run'):
+        return None, None
+    names = logs.get((str(row['step']), row['window'] or 'block'), [])
+    if not names:
+        return None, None
+    member = s._members.get(names[-1]) if isinstance(getattr(s, '_members', None), dict) else None
+    return len(names), (None if member is None else _member_digest(s, member))
+
+
 def step_code_rows(s, record):
     """decisions/step-codes.jsonl rows: exactly STEP_CODES_KEYS, one per record step, in order."""
     rows = []
+    logs = _invocation_logs(s)
     for position, row in enumerate(record['steps']):
         code, exception_class = _raw_code(s, row)
+        invocation, member = _refusal_position(s, row, logs)
         rows.append({'pos': position, 'step': row['step'], 'window': row['window'], 'raw_code': code,
-                     'exit_status': row['exit_status'], 'exception_class': exception_class})
+                     'exit_status': row['exit_status'], 'exception_class': exception_class,
+                     'invocation': invocation, 'member': member})
     return rows
 
 

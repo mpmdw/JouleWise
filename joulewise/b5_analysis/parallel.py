@@ -276,8 +276,9 @@ def dispatch(tasks: Sequence[tuple[str, Sequence[str], str, str | None]], *, res
             state.firings += result.firings
         else:
             _merge(physics_store, result.physics)
-        # D-188: a child's defects, poison and counters count whether or not the
-        # driver consumes it (its entries merge only after the serial stop).
+        # D-188: a child's defects and counters count whether or not the driver
+        # consumes it; its poison and entries merge only for a consumed child,
+        # after the serial stop (dry_run._account_deadlines; SHIP-FIX finding B).
         merge_side_channel(caches, result.vdl_new)
         phase_timing.merge_child(result.timing)
 

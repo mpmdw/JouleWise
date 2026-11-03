@@ -581,6 +581,7 @@ class StepCodesTests(unittest.TestCase):
             if step['status'] in ('ok', 'not_run'):
                 self.assertIsNone(row['raw_code'])
                 self.assertIsNone(row['exception_class'])
+                self.assertEqual((row['invocation'], row['member']), (None, None))
         # The comparator authenticates the committed rows and accepts them.
         side = self.cmp.load_side(custody, 'blind-dry-run', 'cand', self.cfg)
         try:
@@ -678,7 +679,9 @@ class StepCodesTests(unittest.TestCase):
             failing = {i for i, row in enumerate(record['steps']) if row['status'] not in ('ok', 'not_run')}
             guess = [{'pos': i, 'step': row['step'], 'window': row['window'],
                       'raw_code': secret if i in failing else None, 'exit_status': row['exit_status'],
-                      'exception_class': rows[i]['exception_class'] if i in failing else None}
+                      'exception_class': rows[i]['exception_class'] if i in failing else None,
+                      'invocation': rows[i]['invocation'] if i in failing else None,
+                      'member': rows[i]['member'] if i in failing else None}
                      for i, row in enumerate(record['steps'])]
             self.assertEqual(guess, rows, 'the guess is exactly the restricted rows')
             plain = b''.join(json.dumps(row, sort_keys=True, separators=(',', ':')).encode() + b'\n' for row in guess)

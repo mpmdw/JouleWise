@@ -201,7 +201,8 @@ def base_model() -> dict:
         },
         'files': files,
         'logs': logs,
-        'step_codes': None,     # None: no step-codes.jsonl; otherwise {'raw_code': ..., 'exception_class': ...}
+        'step_codes': None,     # None: no step-codes.jsonl; otherwise {'raw_code', 'exception_class',
+                                # 'invocation' (None: count the step's logs), 'member'}
         'refused_at': None,     # serial position of an outcome-class refusal, if any
         'refusal_code': SENTINEL_CODE,
         'refusal_status': 'outcome_class',   # or 'tooling_refusal' (code then public in the record)
@@ -287,14 +288,22 @@ def build(model: dict, root: Path) -> Path:
         for i, row in enumerate(steps):
             code = None
             exc = None
+            invocation = member = None
             if row['status'] == 'tooling_refusal':
                 code = row['refusal']
             elif row['status'] in ('outcome_class', 'unclassified_refusal'):
                 code, exc = model['step_codes']['raw_code'], model['step_codes']['exception_class']
             elif row['exit_status'] not in (None, 0):
                 code = row['registered_exit']
+            if row['status'] not in ('ok', 'not_run'):
+                # As the driver: the refusing invocation's ordinal within its (step, window).
+                suffix = f'-{row["step"]}-{row["window"] or "block"}.stderr.log'
+                invocation = model['step_codes'].get('invocation') or (
+                    sum(1 for log in logs.iterdir() if log.name.endswith(suffix)) or None)
+                member = model['step_codes'].get('member')
             rows.append({'pos': i, 'step': row['step'], 'window': row['window'], 'raw_code': code,
-                         'exit_status': row['exit_status'], 'exception_class': exc})
+                         'exit_status': row['exit_status'], 'exception_class': exc,
+                         'invocation': invocation, 'member': member})
         (restricted / 'decisions').mkdir()
         (restricted / 'decisions' / 'step-codes.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
     record['completed_without_tooling_refusal'] = not any(
@@ -412,9 +421,10 @@ def _refused(pos, code=SENTINEL_CODE, status='outcome_class'):
     return apply
 
 
-def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal'):
+def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal', invocation=None, member=None):
     def apply(model):
-        model['step_codes'] = {'raw_code': raw_code, 'exception_class': exception_class}
+        model['step_codes'] = {'raw_code': raw_code, 'exception_class': exception_class,
+                               'invocation': invocation, 'member': member}
     return apply
 
 
@@ -518,6 +528,13 @@ CASES = {
     'refusal_code_from_step_codes': (_chain(_refused(REFUSED_POS), _step_codes()),
                                      _chain(_refused(REFUSED_POS), _step_codes(raw_code=SENTINEL_CODE_MUTANT)),
                                      {'decisions': {'decisions:step_codes'}}),
+    # D-188 SHIP-FIX (finding C): same code, same step, a different invocation or bundle.
+    'refusal_invocation_from_step_codes': (_chain(_refused(REFUSED_POS), _step_codes(invocation=1)),
+                                           _chain(_refused(REFUSED_POS), _step_codes(invocation=2)),
+                                           {'decisions': {'decisions:step_codes'}}),
+    'refusal_member_from_step_codes': (_chain(_refused(REFUSED_POS), _step_codes(member=_h('member-one'))),
+                                       _chain(_refused(REFUSED_POS), _step_codes(member=_h('member-two'))),
+                                       {'decisions': {'decisions:step_codes'}}),
     'refusal_position': (_refused(REFUSED_POS), _refused(POS['6']),
                          {'decisions': {'record:steps', 'decisions:first_refusal', 'decisions:step_outputs',
                                         'outputs/claim-verdicts.json:presence'}, 'audit': 'DIFFER'}),
