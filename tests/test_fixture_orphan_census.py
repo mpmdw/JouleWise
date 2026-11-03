@@ -29,6 +29,14 @@ WORKER = (
     "--artifacts /private/tmp/tmpfixture/remote/nv5-localhost-contract/artifacts/task-runtime-prepare "
     "--work-root /private/tmp/tmpfixture/remote"
 )
+PM_SAMPLER = (
+    "/usr/bin/python3 /private/tmp/fixture/pm-orphan-test-sampler.py "
+    "-n 1 -b 0 -i 100 --samplers cpu_power --format plist -o /private/tmp/capture.plist"
+)
+PM_RELAY = (
+    "/usr/bin/python3 /private/tmp/fixture/pm-orphan-test-sudo-relay.py "
+    "/private/tmp/fixture/relay.signals " + PM_SAMPLER.split(" ", 1)[1]
+)
 START = "Thu Sep  3 10:20:30 2026"
 
 
@@ -43,13 +51,16 @@ class FixtureOrphanCensusTests(unittest.TestCase):
     def test_required_fixture_signatures(self) -> None:
         # Independent expected names/commands ensure deleting either registry
         # entry cannot quietly remove its corresponding coverage.
-        for command, expected in ((VLLM, "nv5-fake-vllm"), (WORKER, "nv5-fake-node-worker")):
+        for command, expected in (
+            (VLLM, "nv5-fake-vllm"), (WORKER, "nv5-fake-node-worker"),
+            (PM_RELAY, "pm-orphan-sudo-relay"), (PM_SAMPLER, "pm-orphan-sampler"),
+        ):
             with self.subTest(signature=expected):
                 matches = sentinel.census(row(command), self.signatures)
                 self.assertEqual([item["signature"] for item in matches], [expected])
 
     def test_pid_one_filter(self) -> None:
-        for command in (VLLM, WORKER):
+        for command in (VLLM, WORKER, PM_RELAY, PM_SAMPLER):
             for parent in (0, 2, 199):
                 with self.subTest(command=command, parent=parent):
                     self.assertEqual(sentinel.census(row(command, ppid=parent), self.signatures), [])
@@ -62,6 +73,13 @@ class FixtureOrphanCensusTests(unittest.TestCase):
             VLLM.replace("/bin/vllm", "/bin/not-vllm"),
             WORKER.replace("nv5-localhost-contract", "production-run"),
             WORKER.replace("node_worker.py", "other_node_worker.py"),
+            PM_SAMPLER.replace("pm-orphan-test-sampler.py", "powermetrics.py"),
+            PM_SAMPLER.replace("pm-orphan-test-sampler.py", "pm-orphan-test-sampler.py-production"),
+            PM_RELAY.replace("pm-orphan-test-sudo-relay.py", "sudo-relay.py"),
+            PM_RELAY.replace("relay.signals", "production.signals").replace(
+                "pm-orphan-test-sampler.py", "powermetrics.py"
+            ),
+            "/usr/bin/sudo -n /usr/bin/powermetrics -n 1 -b 0 -i 100 -o /private/tmp/capture.plist",
         ):
             with self.subTest(command=command):
                 self.assertEqual(sentinel.census(row(command), self.signatures), [])
@@ -206,6 +224,12 @@ class FixtureOrphanCensusTests(unittest.TestCase):
     def test_live_an_orphaned_fake_meter_is_reported(self) -> None:
         # A real orphan: the fake meter started by a shell that exits at once,
         # so the meter is reparented to PID 1; the census must name it.
+        try:
+            sentinel.process_inventory()
+        except PermissionError:
+            # Reaping this deliberate orphan also needs ps; refuse to spawn
+            # it when the sandbox prevents both observation and cleanup.
+            self.skipTest("sandbox denies ps")
         from tests import process_reaper
         from tests.test_b5_driver_p3 import FAKE_METER
         directory = Path(tempfile.mkdtemp(prefix="orphan-census-"))

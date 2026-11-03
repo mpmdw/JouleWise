@@ -1126,13 +1126,17 @@ class PowermetricsTelemetryAdapter:
         capture_path = self._new_capture_path()
         command = self._probe_command(capture_path)
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=15.0,
-                check=False,
             )
+            try:
+                _, stderr = process.communicate(timeout=15.0)
+            except BaseException:
+                # SIGTERM lets sudo relay shutdown to the privileged sampler.
+                self._stop_process(process)
+                raise
         except FileNotFoundError as exc:
             self._record_sampler_probe_unavailable("not_found")
             return AdapterResult(
@@ -1149,8 +1153,8 @@ class PowermetricsTelemetryAdapter:
                 message=f"powermetrics capability probe timed out: {exc}",
             )
 
-        if completed.returncode != 0:
-            stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+        if process.returncode != 0:
+            stderr = stderr.decode("utf-8", errors="replace").strip()
             capture_path.unlink(missing_ok=True)
             self._device_metadata["capability_precheck"] = {
                 "ok": False,
@@ -1158,7 +1162,7 @@ class PowermetricsTelemetryAdapter:
                 "sudoers_line": sudoers_line(),
             }
             self._record_sampler_probe_unavailable(
-                f"returncode_{completed.returncode}"
+                f"returncode_{process.returncode}"
             )
             return AdapterResult(
                 ok=False,
@@ -1168,7 +1172,7 @@ class PowermetricsTelemetryAdapter:
                     f"Install this sudoers line: {sudoers_line()}"
                     + (f" (probe stderr: {stderr})" if stderr else "")
                 ),
-                metadata={"command": command, "returncode": completed.returncode},
+                metadata={"command": command, "returncode": process.returncode},
             )
 
         if capture_path.exists():
@@ -1200,15 +1204,20 @@ class PowermetricsTelemetryAdapter:
         command = self._command(config, capture_path, count=count)
         timeout_s = self._capture_timeout_s(config, count)
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=timeout_s,
-                check=False,
             )
-            if completed.returncode != 0:
-                stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+            try:
+                _, stderr = process.communicate(timeout=timeout_s)
+            except BaseException:
+                # Let sudo relay SIGTERM to its privileged child before the
+                # existing stop helper resorts to killing the launcher.
+                self._stop_process(process)
+                raise
+            if process.returncode != 0:
+                stderr = stderr.decode("utf-8", errors="replace").strip()
                 raise RuntimeError(f"powermetrics capture failed: {stderr}")
             return capture_path.read_bytes()
         except BaseException:
