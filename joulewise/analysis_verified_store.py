@@ -54,13 +54,23 @@ V2 authentication rows. An entry carries the V2 registration rows a session
 would hold after the leaf: from the session's own record delta for an
 in-session fill, and from authentication_io's read recorder for a session-less
 fill only when that recorder declares it represents capability
-(``V2AuthenticationPath``) reads too (``RECORDS_CAPABILITY_READS``). Otherwise
-the entry cannot serve a call inside a session. A hit inside a session first
+(``V2AuthenticationPath``) reads too (``RECORDS_CAPABILITY_READS``), and only
+when that recording scope is not marked ``unrepresented`` (a session entered
+inside the fill, a session-presence query the store does not represent, a
+text read a session would decode differently), no hit served inside the fill
+lacked rows, and the value holds no capability path. Otherwise the entry
+cannot serve a call inside a session. A hit inside a session first
 obtains, for every json/jsonl row, a grammar verdict under the consumer's own
 effective grammar and vocabulary flag (``_parse_strict`` on the just re-read
-and re-hashed bytes, through authentication_io's success-only memo when
-present); any failure discards the hit and the leaf runs in the session, so the
-same V2 refusal fires at the same read. The rows are then pre-checked against
+and re-hashed bytes, through authentication_io's depth-aware
+``bridged_grammar_verdict``); any failure discards the hit and the leaf runs in
+the session, so the same V2 refusal fires at the same read. Every row carries
+the depth of its read's parse below the fill (``_Row.depth``); the verdict is
+decided for the depth the serial read would parse at (the consumer's headroom
+less that depth), and a verdict that may depend on the stack there (a read
+near the recursion limit, bytes the memo marks stack-dependent) is not served
+(D-188 AUTH-IO-2). A recording twin argument is keyed as a capability only
+outside a session. The rows are then pre-checked against
 the session's first digests and grammars and registered in order. Path-free
 rows inside a tree are stored relative to the tree and relocated to the
 consumer's tree.
@@ -657,13 +667,18 @@ class _Fill:
     def __init__(self) -> None:
         self.unstorable: set[str] = set()
         self.clock = False
-        self.v2_failed = False  # a V2AuthenticationInputError was raised inside (caught or not)
+        self.v2_failed = False  # a V2AuthenticationInputError, RecursionError or MemoryError was raised inside
         self.reads: list[str] = []
         self.relative_opens: list[str] = []
         self.listings: list[str] = []
         self.forwarded_trees: list[tuple[str, bool, str]] = []
         self.forwarded_extras: list[tuple[str, str]] = []
         self.forwarded_listings: list[tuple[str, str]] = []
+        # A hit served inside this fill carried no session rows: this fill's
+        # rows cannot stand for a session's either.
+        self.rows_incomplete = False
+        # ``_stack_headroom`` at the ``_fill`` frame (the leaf runs one below).
+        self.headroom: int | None = None
 
 
 _FILLS: contextvars.ContextVar[tuple[_Fill, ...]] = contextvars.ContextVar("joulewise_vdl_fills", default=())
@@ -671,6 +686,27 @@ _SUSPENDED: contextvars.ContextVar[bool] = contextvars.ContextVar("joulewise_vdl
 _HOOK_INSTALLED = [False]
 _HOOK_LOCK = threading.Lock()
 _IN_HOOK = threading.local()
+
+
+class _DepthUnknown(Exception):
+    """A row's read depth is unknown: its entry cannot serve a session."""
+
+
+def _stack_headroom() -> int:
+    """Python frames the caller may still push before ``RecursionError``.
+
+    The same measure as ``authentication_io._python_stack_headroom``: the
+    recursion limit minus the depth of the caller's frame chain. ``_fill``
+    and ``_apply`` take it at their own frames so a row's depth below the
+    fill can be replayed below the consumer (D-188 AUTH-IO-2).
+    """
+
+    depth = 0
+    frame = sys._getframe(1)
+    while frame is not None:
+        depth += 1
+        frame = frame.f_back
+    return sys.getrecursionlimit() - depth
 
 
 def _mark(fills: tuple[_Fill, ...], reason: str) -> None:
@@ -774,8 +810,11 @@ def fill_active() -> bool:
 # (an earlier conflicting registration, the vocabulary flag), which the key
 # does not carry, and a failed read leaves no registration row for the bridge
 # to re-check. So a fill inside which any V2AuthenticationInputError was raised
-# is never stored. The raise is observed with a sys.monitoring RAISE callback
-# (enabled only while a fill is active); without one (no sys.monitoring, or
+# is never stored. Nor is one inside which a RecursionError or MemoryError was
+# raised (a leaf may catch those too): whether they fire depends on the stack
+# depth or the memory at the call, which the key does not carry either (D-188
+# AUTH-IO-2, review of #638). The raise is observed with a sys.monitoring RAISE
+# callback (enabled only while a fill is active); without one (no sys.monitoring, or
 # fewer than three free tool ids, so the wall-deadline observer always finds
 # one) a fill is storable only if the AUTH-IO recorder declares that it emits a
 # ``failed`` row for every raised read (``RECORDS_FAILURES``).
@@ -808,7 +847,7 @@ def _raise_monitor_enter() -> bool:
                     return False
                 tool = free[-1]  # the observer scans from 0: never contend for its id
                 monitoring.use_tool_id(tool, _RAISE_TOOL_NAME)
-                _RAISE_MONITOR["error"] = error
+                _RAISE_MONITOR["error"] = (error, RecursionError, MemoryError)
                 monitoring.register_callback(tool, monitoring.events.RAISE, _on_raise)
                 _RAISE_MONITOR["tool"] = tool
             tool = _RAISE_MONITOR["tool"]
@@ -850,12 +889,19 @@ class _AuthAdapter:
       relative); absent: no rows.
     * ``RECORDS_CAPABILITY_READS``: true only when session-less recording also
       represents every read an active session would register (capability-path
-      reads, pinned no-follow reads, git ingests); absent: false.
+      reads, pinned no-follow reads, git ingests); absent: false. The yielded
+      list may carry ``unrepresented`` (a non-empty list when the scope's
+      session-less code does not stand for a session's: a session entered
+      inside it, an unrepresented session-presence query, a text read whose
+      session decode differs); such a fill never serves a session.
     * ``RECORDS_FAILURES``: true only when the recorder also appends a row with
       a true ``failed`` attribute for every read that raised; absent: false
       (the store then relies on its own RAISE observer).
-    * ``ensure_grammar_verdict`` on the session or module: the identical
-      ``_parse_strict`` behind a success-only memo; absent: ``_parse_strict``.
+    * ``bridged_grammar_verdict`` on the session or module: the identical
+      ``_parse_strict`` behind the success-only memo, decided for the serial
+      read's stack headroom (rows carry ``parse_headroom``); it declines
+      (returns a false value) where the verdict may depend on the stack.
+      Absent: a json/jsonl row is never served into a session.
     """
 
     @staticmethod
@@ -890,28 +936,36 @@ class _AuthAdapter:
             return identity in session._governed_spec_vocabulary_identities
 
     def ensure_verdict(self, session: Any, identity: str, raw: bytes, digest: str,
-                       caller_grammar: str, label: str) -> str:
-        """Raise exactly what ``session.read`` would raise for these bytes; else the grammar."""
+                       caller_grammar: str, label: str, read_headroom: int | None) -> str | None:
+        """The consumer's effective grammar if a serial read at ``read_headroom`` would pass.
 
-        module = self.module()
-        bridge = getattr(session, "ensure_grammar_verdict", None)
+        Raises exactly the grammar refusal ``session.read`` would raise for
+        these bytes and label. Returns None when the verdict may depend on the
+        stack (a serial read near the recursion limit, bytes the memo marks
+        stack-dependent), or when authentication_io offers no depth-aware
+        verdict: the hit is then not served. ``read_headroom`` is a lower bound
+        on the headroom of the serial read's parse, or None when the serial
+        computation runs no parse at this position.
+        """
+
+        bridge = getattr(session, "bridged_grammar_verdict", None)
         if callable(bridge):
-            return bridge(identity, raw, caller_grammar=caller_grammar, label=label, sha256=digest)
-        effective = module._forced_grammar(identity, caller_grammar)
+            return bridge(identity, raw, caller_grammar=caller_grammar, label=label, sha256=digest,
+                          read_headroom=read_headroom)
+        verdict = getattr(self.module(), "bridged_grammar_verdict", None)
+        if not callable(verdict):
+            return None
+        effective = self.module()._forced_grammar(identity, caller_grammar)
         flag = self.vocabulary_flag(session, identity)
-        from joulewise import analysis_run_cache
+        return effective if verdict(raw, digest, effective, flag, label, read_headroom=read_headroom) else None
 
-        memo = analysis_run_cache.memo(GRAMMAR_VERDICT_MEMO)
-        key = (digest, effective, flag)
-        if memo is not None and memo.get(key) is True and hashlib.sha256(raw).hexdigest() == digest:
-            return effective
-        module._parse_strict(raw, effective, label, allow_governed_spec_vocabulary=flag)
-        if memo is not None and hashlib.sha256(raw).hexdigest() == digest:
-            memo[key] = True
-        return effective
+    def forward_rows(self, rows: Sequence["_Row"], headroom: int) -> None:
+        """Hand a hit's rows to any enclosing authentication_io recorder, in order.
 
-    def forward_rows(self, rows: Sequence["_Row"]) -> None:
-        """Hand a hit's rows to any enclosing authentication_io recorder, in order."""
+        Each forwarded row's ``parse_headroom`` is ``headroom`` (taken in
+        ``_apply``) less the row's depth below its own fill: a lower bound on
+        where the replaced read would have parsed.
+        """
 
         module = self.module()
         holder = getattr(module, "_READ_RECORDER", None)
@@ -920,9 +974,11 @@ class _AuthAdapter:
         if not sinks or row_type is None:
             return
         for row in rows:
+            parse_headroom = None if row.depth is None else headroom - row.depth
             record = row_type(api="vdl.hit", identity=row.identity, sha256=row.sha256,
                               grammar=row.grammar, caller_grammar=row.caller_grammar, label=row.label,
-                              in_session=True, grammar_verified=False, vocabulary_flag=False)
+                              in_session=True, grammar_verified=False, vocabulary_flag=False,
+                              parse_headroom=parse_headroom)
             for sink in sinks:
                 sink.append(record)
 
@@ -932,13 +988,20 @@ _AUTH = _AuthAdapter()
 
 @dataclass(frozen=True)
 class _Row:
-    """One V2 registration: (identity, sha256, effective grammar, caller grammar, label)."""
+    """One V2 registration: (identity, sha256, effective grammar, caller grammar, label, depth).
+
+    ``depth`` is an upper bound on how many frames below the frame that took
+    the reference headroom (``_fill``; ``_apply`` for a served hit) the
+    serial read's strict parse runs, or None when the serial computation runs
+    no parse at this position (a registration replayed from elsewhere).
+    """
 
     identity: str
     sha256: str
     grammar: str
     caller_grammar: str
     label: str
+    depth: int | None = None
 
 
 # ------------------------------------------------------------------ leaf specs
@@ -1150,7 +1213,8 @@ class Entry:
     listings: tuple[tuple[str, str], ...]  # (absolute path, names digest)
     extra_trees: tuple[tuple[str, bool, str], ...]  # (absolute root, content_only, digest)
     physics: tuple[tuple[str, Any, Any], ...]  # (cache key, V0, P)
-    rows: tuple[tuple[int, str, str, str, str, str], ...] | None  # (tree index or -1, identity, sha, grammar, caller grammar, label)
+    # (tree index or -1, identity, sha, grammar, caller grammar, label, parse depth below the fill or None)
+    rows: tuple[tuple[int, str, str, str, str, str, int | None], ...] | None
 
 
 @dataclass
@@ -1294,9 +1358,18 @@ class VerifiedStore:
                 if verdict is None:
                     raise _Bypass("tree not hashable")
                 verdicts.append(verdict)
-        capability = getattr(_AUTH.module(), "V2AuthenticationPath", None)
+        # A capability path and, outside a session, its session-less recording
+        # twin (``v2_authentication_path`` while recording) are one kind: the
+        # twin's reads are recorded exactly where the capability's register.
+        # Inside a session the twin is a plain path (it never routes through a
+        # session, so its reads register nothing) and is keyed as one.
+        module = _AUTH.module()
+        in_session = _AUTH.session() is not None
+        kinds = ("V2AuthenticationPath",) if in_session else ("V2AuthenticationPath", "_RecordedAuthenticationPath")
+        capabilities = tuple(kind for kind in (getattr(module, name, None) for name in kinds)
+                             if isinstance(kind, type))
         tree_types = tuple(
-            "v2-capability" if capability is not None and isinstance(arguments[name], capability) else "path"
+            "v2-capability" if capabilities and isinstance(arguments[name], capabilities) else "path"
             for name, role in spec.params if role == TREE)
         prepared = _Prepared(spec, "", arguments, scalars, tuple(trees), tuple(verdicts))
         prepared.views = self._views(prepared)
@@ -1311,7 +1384,6 @@ class VerifiedStore:
             tree_types, tuple((tree.name, verdict.digest) for tree, verdict in zip(trees, verdicts)),
             tuple(sorted(key for _, key in prepared.views)),
         )
-        in_session = _AUTH.session() is not None
         prepared.key = canonical_digest(material + ("session" if in_session else "sessionless",))
         if in_session:
             prepared.fallback_key = canonical_digest(material + ("sessionless",))
@@ -1486,17 +1558,20 @@ class VerifiedStore:
                         raise _Bypass("tree changed since the probe")
             if self._verify(entry, prepared) is None:
                 raise _Bypass("hit no longer admissible")
+        # The serial leaf would run where this frame is (or shallower): a
+        # row's depth below its fill, replayed below here, bounds its read.
+        headroom = _stack_headroom()
         if not dry:
             session = _AUTH.session()
         rows: list[_Row] = []
         if entry.rows is not None:
-            for index, identity, digest, grammar, caller_grammar, label in entry.rows:
+            for index, identity, digest, grammar, caller_grammar, label, depth in entry.rows:
                 identity, label = self._relocate(prepared, index, identity, label)
-                rows.append(_Row(identity, digest, grammar, caller_grammar, label))
+                rows.append(_Row(identity, digest, grammar, caller_grammar, label, depth))
         if session is not None:
             if entry.rows is None:
                 raise _Bypass("rows incomplete for a session")
-            self._bridge(session, rows, prepared)
+            self._bridge(session, rows, prepared, headroom)
         value = pickle.loads(entry.value)
         inserts: dict[str, Any] = {}
         for view, key in hit.views:
@@ -1510,11 +1585,16 @@ class VerifiedStore:
             return value, inserts
         with self._lock:
             self._served[hit.key] = self._served.get(hit.key, 0) + 1
-        self._forward(entry, prepared, rows)
+        self._forward(entry, prepared, rows, headroom)
         return value
 
-    def _bridge(self, session: Any, rows: list[_Row], prepared: _Prepared) -> None:
-        """Grammar verdicts under the consumer's grammar, then pre-checked registration."""
+    def _bridge(self, session: Any, rows: list[_Row], prepared: _Prepared, headroom: int) -> None:
+        """Grammar verdicts under the consumer's grammar, then pre-checked registration.
+
+        Each json/jsonl verdict is decided at the depth the serial read would
+        parse at (``headroom`` less the row's depth): a verdict that may depend
+        on the stack there is not served (D-188 AUTH-IO-2).
+        """
 
         effective: list[str] = []
         scope = _current_scope()
@@ -1528,7 +1608,11 @@ class VerifiedStore:
                     digest = hashlib.sha256(raw).hexdigest()
                     if digest != row.sha256 or scope.verify_file(row.identity) != row.sha256:
                         raise _Bypass("row bytes changed")
-                    grammar = _AUTH.ensure_verdict(session, row.identity, raw, digest, row.caller_grammar, row.label)
+                    read_headroom = None if row.depth is None else headroom - row.depth
+                    grammar = _AUTH.ensure_verdict(session, row.identity, raw, digest, row.caller_grammar,
+                                                   row.label, read_headroom)
+                    if grammar is None:
+                        raise _Bypass("grammar verdict may depend on the stack")
                 effective.append(grammar)
         with session._lock:
             known = dict(session._records)
@@ -1542,19 +1626,21 @@ class VerifiedStore:
             for row, grammar in zip(rows, effective):
                 session._register(row.identity, row.sha256, grammar, row.label)
 
-    def _forward(self, entry: Entry, prepared: _Prepared, rows: list[_Row]) -> None:
+    def _forward(self, entry: Entry, prepared: _Prepared, rows: list[_Row], headroom: int) -> None:
         fills = _FILLS.get()
         if not fills:
             return
         trees = [(tree.root, tree.content_only, verdict.digest)
                  for tree, verdict in zip(prepared.trees, prepared.verdicts)]
         for fill in fills:
+            if entry.rows is None:
+                fill.rows_incomplete = True
             fill.forwarded_trees.extend(trees)
             fill.forwarded_trees.extend(entry.extra_trees)
             fill.forwarded_extras.extend(entry.extras)
             fill.forwarded_listings.extend(entry.listings)
         if rows:
-            _AUTH.forward_rows(rows)
+            _AUTH.forward_rows(rows, headroom)
 
     # -- shadow -----------------------------------------------------------------
 
@@ -1641,6 +1727,7 @@ class VerifiedStore:
             with session._lock:
                 snapshot = {identity: record.read_count for identity, record in session._records.items()}
         fill = _Fill()
+        fill.headroom = _stack_headroom()
         _install_hook()
         token = _FILLS.set(_FILLS.get() + (fill,))
         observed = _raise_monitor_enter()
@@ -1716,11 +1803,11 @@ class VerifiedStore:
                     return None
                 physics.append((key, visible_before, after))
             extras, listings, extra_trees = self._classify(prepared, fill, recorded)
-            rows = self._rows(prepared, session, snapshot, recorded)
             try:
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception:  # noqa: BLE001 - an unpicklable value is not stored
                 return None
+            rows = self._rows(prepared, session, snapshot, recorded, fill=fill, payload=payload)
             if prepared.spec.path_free and _embeds_location(prepared.trees, value, payload):
                 return None
         return Entry(
@@ -1805,8 +1892,40 @@ class VerifiedStore:
         return (tuple(sorted(extras.items())), tuple(sorted(listings.items())),
                 tuple(sorted((root, content_only, digest) for (root, content_only), digest in extra_trees.items())))
 
-    def _rows(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None, recorded: Any):
-        """The V2 registration rows a session would hold after the leaf, or None (session use barred)."""
+    def _rows(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None, recorded: Any,
+              *, fill: _Fill | None = None, payload: bytes = b""):
+        try:
+            return self._rows_with_depth(prepared, session, snapshot, recorded, fill=fill, payload=payload)
+        except _DepthUnknown:
+            return None
+
+    def _rows_with_depth(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None,
+                         recorded: Any, *, fill: _Fill | None, payload: bytes):
+        """The V2 registration rows a session would hold after the leaf, or None (session use barred).
+
+        A session-less fill's rows serve a session only if the recorder says
+        they are complete (``RECORDS_CAPABILITY_READS``) and none of these
+        holds: the recording scope is ``unrepresented``; a row came from a
+        session entered inside the fill; a hit served inside the fill had no
+        rows; the value holds a capability path (a session's computation would
+        return a registering ``V2AuthenticationPath`` there). Every row carries
+        the depth of its read's parse below this fill (``_Row.depth``); an API
+        row without a recorded ``parse_headroom`` bars session use.
+        """
+
+        reference = None if fill is None else fill.headroom
+
+        def depth(row: Any) -> int | None:
+            # Frames from the fill's reference down to the read's parse (an
+            # upper bound); an API row without a usable headroom bars sessions.
+            # A forwarded hit row without one stands for a replayed
+            # registration (no parse at this position) and stays without.
+            parse_headroom = getattr(row, "parse_headroom", None)
+            if parse_headroom is None and getattr(row, "api", None) == "vdl.hit":
+                return None
+            if not isinstance(reference, int) or type(parse_headroom) is not int:
+                raise _DepthUnknown
+            return max(0, reference - parse_headroom)
 
         rows: list[_Row] = []
         if session is not None:
@@ -1825,20 +1944,33 @@ class VerifiedStore:
             if api_rows and counted == delta and all(
                     records[row.identity].sha256 == row.sha256 and records[row.identity].grammar == row.grammar
                     for row in api_rows):
-                rows = [_Row(row.identity, row.sha256, row.grammar, row.caller_grammar, row.label)
+                rows = [_Row(row.identity, row.sha256, row.grammar, row.caller_grammar, row.label, depth(row))
                         for row in api_rows]
             else:
+                # A registration no API row accounts for was replayed from
+                # elsewhere (no parse at this position: depth None); an identity
+                # some API read also registered takes that read's deepest depth.
+                deepest: dict[str, int] = {}
+                for row in api_rows:
+                    deepest[row.identity] = max(deepest.get(row.identity, 0), depth(row))
                 for identity, increase in delta.items():
                     record = records[identity]
                     rows.extend(_Row(identity, record.sha256, record.grammar, record.grammar,
-                                     f"member derivation input {identity}") for _ in range(increase))
+                                     f"member derivation input {identity}", deepest.get(identity))
+                                for _ in range(increase))
         else:
             if recorded is None or not _AUTH.capability_complete():
                 return None
+            if getattr(recorded, "unrepresented", None) or (fill is not None and fill.rows_incomplete):
+                return None
+            if b"AuthenticationPath" in payload:
+                return None
             for row in recorded:
+                if str(getattr(row, "api", "")).startswith("session."):
+                    return None
                 if getattr(row, "identity", None) is None:
                     return None
-                rows.append(_Row(row.identity, row.sha256, row.grammar, row.caller_grammar, row.label))
+                rows.append(_Row(row.identity, row.sha256, row.grammar, row.caller_grammar, row.label, depth(row)))
         stored = []
         for row in rows:
             index, identity = -1, row.identity
@@ -1854,7 +1986,7 @@ class VerifiedStore:
             label = row.label
             if index >= 0:
                 label = label.replace(prepared.trees[index].root, _ROOT_MARK)
-            stored.append((index, identity, row.sha256, row.grammar, row.caller_grammar, label))
+            stored.append((index, identity, row.sha256, row.grammar, row.caller_grammar, label, row.depth))
         return tuple(stored)
 
     # -- insert-once, export, merge ------------------------------------------------
