@@ -36,7 +36,12 @@ counts the legacy side's ordinal for every refusal, tooling ones included, and t
 other side's step-codes ordinal and member are compared against it, never dropped.
 R1 records no identity for a refusing step-1/step-2 bundle, so when that member is
 all that could still differ the comparison fails closed:
-'COMPARATOR_ERROR stage=refusal-member side=<the legacy side>'.
+'COMPARATOR_ERROR stage=refusal-member side=<the legacy side>'. Step codes are written
+best-effort, so two legacy layouts from different analysis commits (an R1 reference
+and a candidate whose sidecar write failed) fail closed the same way (side=ref); R1
+against R1 (one commit) does not. A refusal outside any pack window (a driver-level
+stop inside a per-window step) also carries 'window_children', the per-window child
+log counts of its step, in every layout.
 
 Open mode prints every differing leaf with both exact tokens. It refuses unless both
 records' window_index_sha256 values are listed in equivalence_open_indices.json
@@ -944,11 +949,43 @@ def _legacy_member(row, refusal, other_row):
     return MEMBER_UNESTABLISHED if bearing else None
 
 
+def window_children(side: Side, row):
+    """Per-window runner invocations of a step that stopped outside any pack window.
+
+    Review of PR #640 (LOW finding): a driver-level stop inside a per-window step
+    (a re-authentication or custody refusal, or an exception, between bundle
+    children) is recorded with window None, so the (step, block) ordinal says
+    nothing about how many children of each window ran before it. Both layouts
+    name every child's log <counter>-<step>-<window>.stderr.log
+    (dry_run.STEP_CODES_LOG), so this is read from restricted logs on either side:
+    a sorted tuple of (window, count) over the windows with at least one log.
+    None for a row that is not a refusal or that names its own window (its
+    position is the invocation ordinal). Log-derived, so it is no stronger than
+    the logs; it can only add a difference, never hide one.
+    """
+    if row is None or row['status'] in ('ok', 'not_run') or row['window'] is not None:
+        return None
+    step, counts = str(row['step']), {}
+    try:
+        logs_fd = os.open('logs', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=side.restricted_fd)
+    except OSError:
+        return ()
+    try:
+        with os.scandir(logs_fd) as it:
+            for entry in it:
+                m = LOG_NAME.fullmatch(entry.name)
+                if m and m.group(2) == step and m.group(3) in WINDOWS and entry.is_file(follow_symlinks=False):
+                    counts[m.group(3)] = counts.get(m.group(3), 0) + 1
+    finally:
+        os.close(logs_fd)
+    return tuple((w, ('#i', str(counts[w]))) for w in WINDOWS if w in counts)
+
+
 def _first_refusal(side, i, row):
     return None if row is None else {
         'pos': ('#i', str(i)), 'step': row['step'], 'window': row['window'], 'status': row['status'],
         'exit_status': _int_token(row['exit_status']), 'registered_exit': row.get('registered_exit'),
-        **legacy_refusal(side, row)}
+        'window_children': window_children(side, row), **legacy_refusal(side, row)}
 
 
 def _mixed_first_refusals(ref: Side, cand: Side, codes_ref, codes_cand):
@@ -985,12 +1022,41 @@ def _mixed_first_refusals(ref: Side, cand: Side, codes_ref, codes_cand):
     return {label: first for label, (first, _, _) in firsts.items()}
 
 
+def _legacy_pair_first_refusals(ref: Side, cand: Side):
+    """First-refusal leaves when NEITHER side carries step codes but the analysis commits differ.
+
+    Review of PR #640 (MEDIUM finding): the runner writes step codes on a
+    best-effort basis (dry_run._commit_sidecars never fails a run over them), so a
+    candidate whose sidecar write failed is a legacy layout too. Against an R1
+    reference that must not silently drop the member comparison the step codes
+    would have made: unless both trees come from one analysis commit (R1 against
+    R1, where one code ran the same inputs in the same order), a refusing
+    step-1/step-2 bundle whose member neither layout establishes fails closed,
+    exactly as in a mixed comparison. A side with no refusal never fails closed.
+    """
+    firsts = {}
+    for side in (ref, cand):
+        i, row = _first_non_ok(side.record)
+        first = _first_refusal(side, i, row)
+        if first is not None:
+            first['member'] = _legacy_member(row, first, None)
+        firsts[side.label] = first
+    a, b = firsts[ref.label], firsts[cand.label]
+    if a is not None and a == b and a['member'] == MEMBER_UNESTABLISHED:
+        raise ComparatorError('refusal-member', ref.label,
+                              'neither legacy layout establishes the refusing bundle')
+    return firsts
+
+
 def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
     """Derived decision leaves: per-step result outputs and the raw refusal identity."""
     (codes_ref, auth_ref), (codes_cand, auth_cand) = read_step_codes(ref), read_step_codes(cand)
     mixed = None
     if prefix is None and (codes_ref is None) != (codes_cand is None):
         mixed = _mixed_first_refusals(ref, cand, codes_ref, codes_cand)
+    elif (prefix is None and codes_ref is None and codes_cand is None
+          and ref.record.get('analysis_commit') != cand.record.get('analysis_commit')):
+        mixed = _legacy_pair_first_refusals(ref, cand)
     if codes_ref is not None and codes_cand is not None:
         source = 'step-codes' if auth_ref and auth_cand else 'step-codes-unauthenticated'
     else:
@@ -1007,6 +1073,8 @@ def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
         if source.startswith('step-codes'):
             d['step_codes'] = [{k: r[k] for k in STEP_CODES_DECISION_KEYS} for r in codes[:limit]]
             audit['exception_class'] = [r['exception_class'] for r in codes[:limit]]
+            if prefix is None:
+                d['first_refusal'] = {'window_children': window_children(side, _first_non_ok(side.record)[1])}
         elif mixed is not None:
             d['first_refusal'] = mixed[side.label]
         elif prefix is None:

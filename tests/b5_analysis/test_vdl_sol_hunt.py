@@ -310,7 +310,11 @@ class StepCodePositionTests(unittest.TestCase):
             d._commit_sidecars(s, record, 'off', salted=False)
         raw = (s.restricted / d.STEP_CODES_NAME).read_bytes()
         artifact = SimpleNamespace(name=d.STEP_CODES_NAME, raw=raw, role='decisions-audit/step-codes')
-        return raw, SimpleNamespace(record=record, artifacts={'codes': artifact}, step_keys=[['codes']], label=label)
+        # The comparator reads restricted logs beneath this fd (window_children, review of PR #640).
+        fd = os.open(s.restricted, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, fd)
+        return raw, SimpleNamespace(record=record, artifacts={'codes': artifact}, step_keys=[['codes']], label=label,
+                                    restricted_fd=fd)
 
     def compare(self, ref_steps, cand_steps):
         (raw_ref, ref), (raw_cand, cand) = self.side('ref', ref_steps), self.side('cand', cand_steps)

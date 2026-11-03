@@ -449,6 +449,22 @@ def _invocation_refusal(step, count, window=None, code='kept_bundle_strict_valid
     return apply
 
 
+def _driver_stop(step, children, window='alpha', code='custody_path_invalid'):
+    """A driver-level refusal of ``step`` (window None) after ``children`` runner children of ``window``.
+
+    Review of PR #640 (LOW finding): a re-authentication or custody refusal between
+    bundle children is recorded with window None, so only the per-window child logs
+    say how far the step got. The step's own block log carries the error line.
+    """
+    def apply(model):
+        pos = POS[step]
+        _refused(pos, code=code, status='tooling_refusal')(model)
+        model['record']['steps'][pos]['window'] = None
+        for i in range(children):
+            model['logs'][f'{60 + i:04d}-{step}-{window}.stderr.log'] = 'child progress line\n'
+    return apply
+
+
 def _claim_labels(estimator, metric, terms):
     """Result labels under 'name' keys inside a registered claim-verdicts section (same numbers)."""
     def apply(model):
@@ -575,6 +591,29 @@ CASES = {
         _invocation_refusal('5', 2, code='floor_mint_inputs_invalid'),
         _chain(_invocation_refusal('5', 1, code='floor_mint_inputs_invalid'), _step_codes()),
         {'decisions': {'decisions:first_refusal'}}),
+    # Review of PR #640 (LOW finding): a driver-level stop inside a per-window step after k
+    # versus k+1 children, in every layout pairing (R1/R1, R1/step codes, step codes/step codes).
+    'refusal_driver_stop_r1_other_child_count': (_driver_stop('1', 2), _driver_stop('1', 3),
+                                                 {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_r1_same_child_count': (_driver_stop('1', 2), _driver_stop('1', 2), {'audit': 'MATCH'}),
+    'refusal_driver_stop_r1_other_window': (_driver_stop('2', 1, 'alpha'), _driver_stop('2', 1, 'beta'),
+                                            {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_r1_reference_other_child_count': (
+        _driver_stop('1', 2), _chain(_driver_stop('1', 3), _step_codes()),
+        {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_r1_reference_same_child_count': (
+        _driver_stop('1', 2), _chain(_driver_stop('1', 2), _step_codes()), {'audit': 'MATCH'}),
+    'refusal_driver_stop_step_codes_other_child_count': (
+        _chain(_driver_stop('1', 2), _step_codes()), _chain(_driver_stop('1', 3), _step_codes()),
+        {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_step_codes_same_child_count': (
+        _chain(_driver_stop('1', 2), _step_codes()), _chain(_driver_stop('1', 2), _step_codes()),
+        {'audit': 'MATCH'}),
+    # Review of PR #640 (MEDIUM finding): a sidecar-less tree from another analysis commit is
+    # compared like a mixed pair, so a different bundle is still a decision difference.
+    'refusal_r1_reference_sidecarless_other_bundle': (
+        _invocation_refusal('1', 1, 'alpha'), _chain(_invocation_refusal('1', 2, 'alpha'), _commit),
+        {'decisions': {'decisions:first_refusal'}, 'audit': 'DIFFER'}),
     'refusal_position': (_refused(REFUSED_POS), _refused(POS['6']),
                          {'decisions': {'record:steps', 'decisions:first_refusal', 'decisions:step_outputs',
                                         'outputs/claim-verdicts.json:presence'}, 'audit': 'DIFFER'}),

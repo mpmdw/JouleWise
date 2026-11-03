@@ -569,6 +569,66 @@ class LegacyReferencePositionTest(_TmpCase):
         self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT'))
         self.assertIn('decisions:first_refusal', got['decisions'])
 
+    def test_sidecarless_candidate_from_another_commit_fails_closed(self):
+        # Review of PR #640 (MEDIUM finding): the runner writes step codes best-effort
+        # (dry_run._commit_sidecars), so losing them must not turn the member
+        # comparison off. An R1 reference against a sidecar-less candidate built by
+        # another analysis commit, refusing at the same step-1 bundle ordinal: fail closed.
+        r1 = self._tree('r1', 2, codes=False)
+        model = corpus.base_model()
+        corpus._invocation_refusal('1', 2, 'alpha', self.BUNDLE_CODE)(model)
+        corpus._commit(model)
+        nosc = corpus.build(model, self.tmp / 'new-no-sidecar')
+        self.assertFalse((nosc / 'dry-run' / 'restricted' / 'decisions').exists())
+        for left, right in ((r1, nosc), (nosc, r1)):
+            for mode in ('blinded', 'open'):
+                args = ['--mode', mode] + (['--no-report'] if mode == 'open' else []) + [left, right]
+                rc, text = run_tool(args)
+                self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=refusal-member side=ref\n'))
+                self.assertIsNone(re.search(r'[0-9]', text))
+        # The same candidate WITH its step codes fails closed the same way (mixed path).
+        corpus._step_codes(member=corpus._h('member-two'))(model)
+        new = corpus.build(model, self.tmp / 'new-sidecar')
+        _commit_step_codes(new)
+        rc, text = run_tool(['--mode', 'blinded', r1, new])
+        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=refusal-member side=ref\n'))
+        # R1 against R1 (one analysis commit) is unchanged: the same ordinal is EQUIVALENT.
+        rc, text = run_tool(['--mode', 'blinded', r1, self._tree('r1-again', 2, codes=False)])
+        self.assertEqual(rc, 0, text)
+
+    def test_sidecarless_pair_from_another_commit_without_a_bundle_refusal(self):
+        # The fail-closed rule needs a refusing step-1/step-2 bundle: a clean pair, a
+        # member-free refusal and a refusal on only one side compare as before.
+        clean = corpus.base_model()
+        corpus._commit(clean)
+        rc, text = run_tool(['--mode', 'blinded', corpus.build(corpus.base_model(), self.tmp / 'clean-r1'),
+                             corpus.build(clean, self.tmp / 'clean-other')])
+        self.assertEqual(rc, 0, text)
+        code = 'floor_mint_inputs_invalid'
+        ref, cand = self.pair(corpus._invocation_refusal('5', 2, code=code),
+                              corpus._chain(corpus._invocation_refusal('5', 2, code=code), corpus._commit),
+                              name='mint-other-commit')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual(rc, 0, text)
+        ref, cand = self.pair(None, corpus._chain(corpus._invocation_refusal('1', 1, 'alpha'), corpus._commit),
+                              name='one-sided')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        got = parse_blinded(self, text, self.cfg)
+        self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT'))
+        self.assertIn('decisions:first_refusal', got['decisions'])
+
+    def test_driver_stop_child_counts_in_every_layout(self):
+        # Review of PR #640 (LOW finding): open mode names the per-window child counts.
+        for name, codes in (('r1', (False, False)), ('mixed', (False, True)), ('new', (True, True))):
+            muts = []
+            for count, with_codes in zip((2, 3), codes):
+                fns = [corpus._driver_stop('1', count)] + ([corpus._step_codes()] if with_codes else [])
+                muts.append(corpus._chain(*fns))
+            ref, cand = self.pair(*muts, name=f'stop-{name}')
+            rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+            self.assertEqual(rc, 1, text)
+            self.assertIn('$.first_refusal.window_children:', text)
+
     def test_r1_against_r1_compares_the_tooling_ordinal(self):
         one, two = self._tree('r1-one', 1, codes=False), self._tree('r1-two', 2, codes=False)
         again = self._tree('r1-one-again', 1, codes=False)
