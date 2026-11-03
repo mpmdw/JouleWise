@@ -18,6 +18,7 @@ import hashlib
 import json
 import math
 import statistics
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -69,6 +70,7 @@ from joulewise.campaign_provenance import (
 )
 # Read-only use of reduce's private envelope helpers by the analysis-side
 # clamp below; reduce.py itself stays byte-identical (L9-ENV-3).
+from joulewise.reduce import reduce_bundle as _GENUINE_REDUCE_BUNDLE
 from joulewise.reduce import (
     ANCHOR_SHIFT_METHOD,
     AXI_REDUCER_VERSION as _AXI_CURRENT_REDUCER_VERSION,
@@ -1455,9 +1457,11 @@ def _note_clock() -> None:
     nothing). Called immediately before each wall-clock read in this module.
     """
 
-    from joulewise.analysis_verified_store import note_clock
-
-    note_clock()
+    # A fill can be active only once the store module is imported; this never
+    # imports analysis code into a collection-time path.
+    store_module = sys.modules.get("joulewise.analysis_verified_store")
+    if store_module is not None:
+        store_module.note_clock()
 
 
 def _verified_store_for(*paths: Any) -> Any:
@@ -1651,7 +1655,6 @@ def _verified_reduce_dict(
     stays a consumer check outside the leaf (Sol #9).
     """
 
-    from joulewise import reduce as _reduce
     from joulewise.reduce import reduce_bundle
 
     store = _verified_store_for(bundle_path)
@@ -1660,7 +1663,7 @@ def _verified_reduce_dict(
         or set(physics) - {"_instrument_calibration_physics_cache"}
         # Only the genuine reducer is ever stored or served (a replaced one,
         # as tests install, runs directly).
-        or getattr(getattr(reduce_bundle, "__code__", None), "co_filename", None) != _reduce.__file__
+        or reduce_bundle is not _GENUINE_REDUCE_BUNDLE
     ):
         return reduce_bundle(bundle_path, reducer_version=reducer_version, **physics).to_dict()
     from joulewise.analysis_verified_store import reduce_bundle_dict
