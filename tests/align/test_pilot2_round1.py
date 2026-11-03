@@ -170,8 +170,8 @@ class Round1Tests(unittest.TestCase):
         self.assertEqual(result['unobserved_tool_names'],['mutate'])
 
     def test_sizing_uses_guard_decode_envelope_member_idle_and_measured_disk_tools(self):
-        sized=h.read(ROOT/kit.KIT/'registration/sizing_b5.json')['packs'][kit.PACK_ID]
-        evidence=h.read(ROOT/kit.KIT/'registration/sizing_evidence.json')
+        sized=h.read(ROOT/Path('configs/campaigns/align_pilot_v1')/'registration/sizing_b5.json')['packs']['align-pilot-v1']
+        evidence=h.read(ROOT/Path('configs/campaigns/align_pilot_v1')/'registration/sizing_evidence.json')
         self.assertEqual(evidence['smallest_first_prompt_tokens'],6347)
         for row in sized['blocks']:
             self.assertEqual(row['episode_prefill_tokens_upper'],row['max_turns']*(40960-row['max_tokens']))
@@ -190,23 +190,23 @@ class Round1Tests(unittest.TestCase):
         self.assertEqual(sized['programmed_span_s'],sized['scaffold_s']+math.fsum(r['block_upper_s'] for r in sized['blocks']))
 
     def test_measurement_venv_package_versions_are_recorded(self):
-        verification=h.read(ROOT/kit.KIT/'registration/local_file_verification.json')
+        verification=h.read(ROOT/Path('configs/campaigns/align_pilot_v1')/'registration/local_file_verification.json')
         self.assertTrue(verification['runtime_versions']['packages']['mlx'])
         self.assertTrue(verification['runtime_versions']['packages']['mlx-lm'])
 
     def test_disk_fit_uses_observed_bundle_sizes_at_each_member_bound(self):
-        sized=h.read(ROOT/kit.KIT/'registration/sizing_b5.json')['packs'][kit.PACK_ID]
+        sized=h.read(ROOT/Path('configs/campaigns/align_pilot_v1')/'registration/sizing_b5.json')['packs']['align-pilot-v1']
         self.assertEqual(sized['disk_member_law']['n'],12)
         for row in sized['blocks']:
             self.assertEqual(row['block_upper_bytes'],4*row['member_upper_bytes'])
         self.assertEqual(sized['disk_derivation']['B_bytes'],sum(r['block_upper_bytes'] for r in sized['blocks'])+sized['disk_derivation']['scaffold_bytes'])
 
     def test_tool_allowance_comes_from_pilot1_phase_windows(self):
-        evidence=h.read(ROOT/kit.KIT/'registration/sizing_evidence.json')
+        evidence=h.read(ROOT/Path('configs/campaigns/align_pilot_v1')/'registration/sizing_evidence.json')
         turns={}
         for w in evidence['tool_phase_windows']:
             turns.setdefault((w['run_id'],w['turn']),[]).append(w['duration_s'])
-        for row in h.read(ROOT/kit.KIT/'registration/sizing_b5.json')['packs'][kit.PACK_ID]['blocks']:
+        for row in h.read(ROOT/Path('configs/campaigns/align_pilot_v1')/'registration/sizing_b5.json')['packs']['align-pilot-v1']['blocks']:
             self.assertEqual(row['tool_s_per_turn'],max(math.fsum(v) for v in turns.values()))
 
 
@@ -229,7 +229,11 @@ class DeskRound1Tests(unittest.TestCase):
 
     def summary(self):
         return {'energy':{'mock:package':{'joules':1.,'half_width_j':1.,'segment_sum_j':1.,'per_turn_j':[]}},
-                'flags':[],**{'per_turn_'+k:[] for k in desk.TURN_COUNTS},
+                'flags':[],**{'per_turn_'+k:[1] if k == 'decode_tokens' else [0] for k in desk.TURN_COUNTS},
+                'per_turn_output_token_ids':[[1]], 'per_turn_prompt_token_ids':[[]],
+                'episode_start_ns':0,'episode_end_ns':1,'turn_starts_ns':[0],
+                'acted_beyond_read_marking':0,'bank_stage':{},'cache_statistics':{},'repetition_flags_per_turn':[],
+                'phase_window_reason_counts':{},
                 'window_evidence_precheck':{'eligible':True,'reasons':[],'windows':[], 'phase_windows':[], 'request_windows':[]},
                 'end_state':'returned_without_tool_call','state_changing_calls':0,'tool_names_per_turn':[],
                 'unknown_tool_names':[],'thermal_pressure_seconds':{},'active_gpu_clock_mhz':None,

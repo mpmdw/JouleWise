@@ -196,6 +196,38 @@ def _finite_json(value: Any, flags: list[str], flag: str) -> Any:
     return clean(value)
 
 
+class RepetitionObserver:
+    """Observe adjacent complete tool turns; run lengths are counts, never stops."""
+
+    def __init__(self):
+        self.previous = ()
+        self.call_run = self.output_run = 0
+
+    def observe(self, calls):
+        def canonical_args(args):
+            try:
+                return json.dumps(json.loads(args), sort_keys=True, separators=(",", ":"),
+                                  ensure_ascii=False, allow_nan=False)
+            except (ValueError, TypeError):
+                # Invalid tool arguments are still observations. Diagnosing them
+                # must not turn this observe-only path into an episode stop.
+                return args
+        canonical = tuple((name, canonical_args(args), output.encode("utf-8")) for name, args, output in calls)
+        identical = bool(canonical) and canonical == self.previous
+        outputs = tuple((c[0], c[2]) for c in canonical)
+        prior_outputs = tuple((c[0], c[2]) for c in self.previous)
+        same_output = bool(canonical) and outputs == prior_outputs
+        self.call_run = self.call_run + 1 if identical else 1 if canonical else 0
+        self.output_run = self.output_run + 1 if same_output else 1 if canonical else 0
+        flags = []
+        if identical:
+            flags.append(f"repetition.identical_call_and_output:{self.call_run}")
+        elif same_output:
+            flags.append(f"repetition.identical_output:{self.output_run}")
+        self.previous = canonical
+        return flags
+
+
 def tool_state_digest(task: AgentTask, flags: list[str]) -> str | None:
     """Observe supported environments without turning diagnostics into refusals."""
     observe = getattr(task, "environment_state_sha256", None)
@@ -239,6 +271,8 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     tags = task.scratchpad_tags
     tools: Sequence[Mapping[str, Any]] = ()
     ready = True
+    repetition = RepetitionObserver()
+    repetition_by_turn = {}
     try:
         task.reset(seed)
         transcript = [ChatMessage("system", task.system_prompt(condition)),
@@ -340,6 +374,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     content = _REASONING_TAGS[0] + result.reasoning_text + _REASONING_TAGS[1] + content
                 transcript.append(ChatMessage("assistant", content))
                 calls: list[ToolCall] = []
+                observed_calls = []
                 interrupted = False
                 for request in result.tool_calls:
                     transcript.append(ChatMessage("assistant", request.arguments_json,
@@ -360,6 +395,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     if not isinstance(output, str):
                         flags.append("tool.non_text_result")
                         output = _text_result(output)
+                    observed_calls.append((request.name, request.arguments_json, output))
                     calls.append(ToolCall(request.name, tool_start, tool_end,
                                           len(request.arguments_json.encode("utf-8")),
                                           len(output.encode("utf-8")),
@@ -370,6 +406,9 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     transcript.append(ChatMessage("tool", output, request.name, request.call_id))
                     if interrupted:
                         break
+                repetition_flags = repetition.observe(observed_calls)
+                flags.extend(repetition_flags)
+                repetition_by_turn[str(index)] = repetition_flags
                 end = max(end, t_end, now(), *(c.end_ns for c in calls))
                 if interrupted or "episode.interrupted" in flags:
                     break
@@ -396,6 +435,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     hardware["runner"] = {
         "matrix_id": matrix_id, "scratchpad_tokens": counts,
         "raw_usage": raw_usage, "failed_requests": failed_requests,
+        "repetition_flags": repetition_by_turn,
         "scoring_transcript_view": "endpoint_history",
         "scratchpad_counted_hidden": counted,
         "reasoning_history_policy": "strip_separated_reasoning",
