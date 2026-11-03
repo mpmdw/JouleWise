@@ -48,3 +48,28 @@
 ## Pilot-3 design consult (two blind seats)
 - Brief `~/night-archive/seats-e1308804/align-pilot3/BRIEF.md`: prompt-cache reuse across turns (with a pinned-file check for every touched file), thermal onset and schedule, greedy loops (sampling or a repetition guard, and what replaces I4), configurations and repeats, sizing, other pilot-2 defects (bank score 0.000, `get_unread_emails` counted as state-changing, window eligibility reasons).
 - Sol 6.1 xhigh (local `codex-run-v3`, `sol-report.md`, `sol.status`) and Fable 5.1 (`claude -p`, `fable-report.md`, `fable.stdout` ends `rc=`), launched about 17:40 PST, both read-only in `/Users/edr/code/jw-wt/align-pilot2` at `8510e77b2`.
+
+## Pilot-3 consult: both seats in, and the lead's ruling
+Reports: `~/night-archive/seats-e1308804/align-pilot3/sol-report.md` (Sol 6.1 xhigh, OK) and `fable-report.md` (Fable 5.1, rc 0).
+
+**Agreed by both (the lead adopts):**
+- Bank evaluator reachable and correct (Sol: offline positive control `BANK_PROBE_PASS`; Fable: `min(bank, email)` is 0 until a friend is paid and an email sent, which takes about 30-35 one-call turns). b-e12 is not a loop (ten distinct contacts); b-e05 is the real greedy loop. `get_unread_emails` really marks mail read.
+- Cache: a longest-common-prefix cache removes 4,193,984 of 4,515,513 prefill tokens on pilot 2's prompts (Sol's native-state figure is 93.4 %; A needs trims of 143-560 tokens at 3 transitions, B a 4-token suffix rewrite every turn, C is append-only). Qwen3-Next's cache is not trimmable, so the build needs a whole-cache rebuild fallback. No calibration-pinned file is touched (`powermetrics.py`, `reduce.py` untouched; `mlx_runtime.py` and the align files are absent from the acceptance and the preregistration).
+- Thermal: onset at 167-201 s in all 12 (Fable: after 6.5-8.3 kJ of GPU work at 40-47 W). The existing `thermal.os_level_nonzero` exclusion stays. Safe cached length and duty cycle: measure first, in the rehearsal.
+- Drop block B (thinking off). Keep the 40,960 cap, both judge-free pairs, both conditions, hint on, 300 s idle. Fix I4: it compares count tuples, so it passes vacuously with one repeat.
+- Use the pilot-2 member law (519.2 + 1.151 x episode s); freeze the span only after the rehearsal.
+
+**Found by one seat (adopted):**
+- Fable: `contention.request_overlap` on 9 of 12 members (corespotlightd, FPCKService, spindump, PerfPowerService, routined and others), hidden behind the thermal exclusion; `idle.busy_fraction_exceeded` on 3. Measure in the rehearsal's harvest. The desk prints every harvest flag per member.
+- Sol: the cache must reconcile against the token ledger the cache actually holds, not against the previous prompt; verify the trim count; keep the energy-model inputs for hidden-work prediction derived from the visible log only. The identity builder ignores unknown output-policy keys, so the execution policy goes into the hashed sampler projection, with a test proving the identity changes.
+- Sol: individual tool phases (12-92 ms) are all below the quarter-window bound (4 x 0.029 s = 0.116 s). Never pad tools; print the counts.
+
+**Where they differ, and the ruling:**
+1. *Greedy repeats (Fable) or seeded sampling (Sol, 16 members, 30B only).* **Ruled: greedy, 24 members** (A = Qwen3-30B-A3B thinking on, 12 x 4,096; C = Qwen3-Next-80B-Instruct, 20 x 2,048; 2 pairs x 2 conditions x 3 repeats, at pilot 2's exact specs). Reason: greedy at pilot 2's specs makes the night a token-for-token hardware check of the cache against pilot 2's bundles, which Sol's own build list (item 7) requires before any cached data are trusted. It also gives the instrument floor for identical work (16 df pooled). Sol's sampled cohort, with its design (per-turn seed derivation, temperature 1 reference, same-seed replay controls), becomes pilot 4. The seats differ on order, not on science, so no judge is convened. Sol's dissent (one architecture, residual spread as the estimand) is recorded and is pilot 4's design input.
+2. *Repetition guard: stop at K = 3 (Fable) or observe only (Sol).* **Ruled: observe only in pilot 3.** Flags per turn: `repetition.identical_call_and_output:<run>` and `repetition.identical_output:<run>`; no stop. Reason: in A and C no run of identical call-and-output reached 3 in pilot 2, so a stop could fire only if the cache changed the tokens, and the cross-pilot comparison must see that change rather than have it cut short. K = 3 from 12 episodes is not a derived threshold.
+3. *Next context cap:* both say 40,960. Kept.
+4. *Bank cells that cannot score in 12 or 20 turns:* **run them** (Fable): A/bank/sabotage is the costliest cached episode and so the onset measurement the roster depends on. The desk prints the stage reached (contacts, payments, emails).
+
+## Pilot-3 build lane
+- Launched about 18:25 PST: Sol 6.1 xhigh, local `codex-run-v3`, worktree `/Users/edr/code/jw-wt/align-pilot3`, branch `lane/2026-11-02-align-pilot3` from `8510e77b2` (unpushed). Brief `~/night-archive/seats-e1308804/align-pilot3/build/BRIEF.md` (cache, observe-only repetition flags, desk, kit v2 of 24 members, protocol v2, tests). Report `build/sol-build.md`, status `build/sol-build.status`.
+- Next, with a clean report: the lead commits, re-runs the touched modules and the synthetic chain, pushes and opens a draft PR for CI; a cold Fable + Opus pass (blind, executing); then the hardware rehearsal (a-e01, a-e03, b-e10 specs, cached) under an Interactive LaunchAgent; then the ledger-pin check, prepare, arm notice, install.
