@@ -846,6 +846,11 @@ def legacy_refusal(side: Side, row) -> dict:
     return {'raw_code': code, 'invocation': ('#i', str(len(stems)))}
 
 
+def _int_token(value):
+    # Exact token, so an int never compares equal to a bool (True == 1 in Python).
+    return ('#i', str(value)) if type(value) is int else value
+
+
 def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
     """Derived decision leaves: per-step result outputs and the raw refusal identity."""
     codes_ref, codes_cand = read_step_codes(ref), read_step_codes(cand)
@@ -865,7 +870,7 @@ def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
             i, row = _first_non_ok(side.record)
             d['first_refusal'] = None if row is None else {
                 'pos': ('#i', str(i)), 'step': row['step'], 'window': row['window'], 'status': row['status'],
-                'exit_status': row['exit_status'], 'registered_exit': row.get('registered_exit'),
+                'exit_status': _int_token(row['exit_status']), 'registered_exit': row.get('registered_exit'),
                 **legacy_refusal(side, row)}
         structures[side.label] = (d, audit)
     return structures, source
