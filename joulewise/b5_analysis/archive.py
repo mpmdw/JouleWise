@@ -1,7 +1,6 @@
 """Authenticated archive access and bounded, structural attempt histories."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import json
@@ -9,6 +8,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import threading
 from typing import Any, Callable, Iterable, Mapping
 
 from .windows import (AnalysisRefusal, AnalysedWindow, IndexEntry, PackTable, SealPins, VERDICTS,
@@ -57,11 +57,17 @@ def _read(root: Path, relative: str, expected: str | None, code: str, check: str
     return raw
 
 
-# D-188 small fixes: step 0's bulk reads use a few threads. Each worker only
-# checks containment, reads and hashes; the caller applies every comparison and
-# CensusRow registration in the original serial order and raises the first
-# failure in that order, exactly as the serial loop would.
+# D-188 small fixes: step 0's bulk reads use a few threads. A worker only
+# hashes a contained, regular, not oversized file ahead of the serial cursor;
+# for anything else it yields None and the caller takes the original serial
+# read at that position. The caller applies every comparison and CensusRow
+# registration in the original serial order and raises the first failure in
+# that order, exactly as the serial loop would.
 CENSUS_THREADS = 4
+# Read-ahead never runs more than this many entries past the serial cursor.
+READ_AHEAD_WINDOW = 8
+# Larger files are read only when the serial cursor reaches them.
+READ_AHEAD_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _lstat_signature(path: Path) -> tuple[int, ...] | None:
@@ -76,34 +82,80 @@ def _lstat_signature(path: Path) -> tuple[int, ...] | None:
             status.st_ctime_ns)
 
 
-def _contained_digest(root: Path, relative: str) -> tuple[str, Any]:
-    """Worker half of a read: ("escaped"|"error", exc) or ("ok", sha256). Never raises."""
+def _read_ahead_digest(root: Path, relative: str) -> str | None:
+    """Worker half of a read: the sha256 of a contained regular file, else None.
+
+    Never raises. None (escape, error, non-regular entry such as a FIFO or a
+    directory, oversized file) hands the entry to the serial read at its own
+    position, so every refusal and exception comes from the original code.
+    """
     try:
         target = root / relative
         if not target.resolve().is_relative_to(root.resolve()):
-            return ("escaped", None)
-        return ("ok", hashlib.sha256(target.read_bytes()).hexdigest())
-    except Exception as exc:  # re-raised (or mapped) by the caller in serial order
-        return ("error", exc)
+            return None
+        status = os.stat(target)
+        if not stat.S_ISREG(status.st_mode) or status.st_size > READ_AHEAD_MAX_BYTES:
+            return None
+        return hashlib.sha256(target.read_bytes()).hexdigest()
+    except BaseException:  # noqa: BLE001 - the serial read reproduces the outcome
+        return None
 
 
-def _ordered_results(work: Callable[[Any], Any], items: list, threads: int):
-    """Yield work(item) in item order, computed by up to ``threads`` threads.
+def _ordered_results(work: Callable[[Any], Any], items: list, threads: int, *,
+                     window: int = READ_AHEAD_WINDOW):
+    """Yield work(item) (or None) in item order, computed ahead by daemon threads.
 
-    The consumer stops at the first failure; leaving the generator cancels
-    every read not yet started (reads already running finish and are dropped).
+    Items are started strictly in order and never more than ``window`` past
+    the consumer, so the consumer only ever waits for the item it is at. On
+    leaving the generator nothing more starts and nothing is waited for: a
+    read stuck or slow on a later entry cannot delay a refusal at an earlier
+    one. With ``threads`` <= 1 every result is None (all reads serial).
     """
-    if threads <= 1 or len(items) <= 1:
-        for item in items:
-            yield work(item)
+    count = len(items)
+    if threads <= 1 or count <= 1:
+        for _item in items:
+            yield None
         return
-    executor = ThreadPoolExecutor(max_workers=min(threads, len(items)), thread_name_prefix="b5-census")
+    cond = threading.Condition()
+    slots: list[Any] = [None] * count
+    done = [False] * count
+    state = {"next": 0, "cursor": 0, "stop": False}
+
+    def run() -> None:
+        while True:
+            with cond:
+                while (not state["stop"] and state["next"] < count
+                       and state["next"] >= state["cursor"] + window):
+                    cond.wait()
+                if state["stop"] or state["next"] >= count:
+                    return
+                index = state["next"]
+                state["next"] += 1
+            try:
+                value = work(items[index])
+            except BaseException:  # noqa: BLE001 - None means: read serially
+                value = None
+            with cond:
+                slots[index] = value
+                done[index] = True
+                cond.notify_all()
+
+    for _ in range(min(threads, count)):
+        threading.Thread(target=run, name="b5-census", daemon=True).start()
     try:
-        futures = [executor.submit(work, item) for item in items]
-        for future in futures:
-            yield future.result()
+        for index in range(count):
+            with cond:
+                while not done[index]:
+                    cond.wait()
+                value = slots[index]
+                slots[index] = None
+                state["cursor"] = index + 1
+                cond.notify_all()
+            yield value
     finally:
-        executor.shutdown(wait=True, cancel_futures=True)
+        with cond:
+            state["stop"] = True
+            cond.notify_all()
 
 
 def _json(raw: bytes, code: str) -> dict:
@@ -398,19 +450,14 @@ class ArchiveHandle:
                     manifest = self._source_manifest or {}
                     ahead = [index for index in range(position, len(names)) if readable(names[index], manifest)]
                     admitted = set(ahead)
-                    results = _ordered_results(lambda name: _contained_digest(root, "sources/" + name),
+                    results = _ordered_results(lambda name: _read_ahead_digest(root, "sources/" + name),
                                                [names[index] for index in ahead], threads)
-                if position not in admitted:
-                    # Admitted only now (the inventory changed state): the serial read.
+                value = next(results) if position in admitted else None
+                if value is None:
+                    # Not read ahead (not admitted, escaped, unreadable, non-regular,
+                    # oversized, or threads <= 1): the original serial read here.
                     self.source_bytes(relative)
                     continue
-                kind, value = next(results)
-                if kind == "escaped":
-                    raise AnalysisRefusal("archive_path_invalid")
-                if kind == "error":
-                    if isinstance(value, (OSError, ValueError, RuntimeError)):
-                        raise AnalysisRefusal("archive_source_unauthenticated") from None
-                    raise value
                 if value != digest:
                     raise AnalysisRefusal("archive_source_unauthenticated")
                 row = CensusRow(relative, value, "sources_sha256sums")
@@ -443,15 +490,22 @@ class ArchiveHandle:
         # D-188 small fixes: reads and hashes run on CENSUS_THREADS threads; the
         # comparisons, census rows and the first failure follow manifest order.
         names = list(manifest)
-        results = _ordered_results(lambda name: _contained_digest(root, name), names, CENSUS_THREADS)
+        results = _ordered_results(lambda name: _read_ahead_digest(root, name), names, CENSUS_THREADS)
         try:
             for name in names:
                 digest = manifest[name]
-                kind, value = next(results)
-                if kind == "escaped" or (kind == "error" and isinstance(value, OSError)):
-                    raise AnalysisRefusal("runs_root_differs_from_archive") from None
-                if kind == "error":
-                    raise value
+                value = next(results)
+                if value is None:
+                    # Not read ahead: the original serial read, with its exact
+                    # refusal mapping (OSError only; anything else propagates).
+                    try:
+                        path = root / name
+                        if not path.resolve().is_relative_to(root.resolve()):
+                            raise OSError()
+                        raw = path.read_bytes()
+                    except OSError:
+                        raise AnalysisRefusal("runs_root_differs_from_archive") from None
+                    value = hashlib.sha256(raw).hexdigest()
                 if value != digest:
                     raise AnalysisRefusal("runs_root_differs_from_archive")
                 key = "original/claim-runs/" + name

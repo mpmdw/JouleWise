@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -351,6 +353,184 @@ class ThreadedCompareRunsRootTests(unittest.TestCase):
         reference, threaded = self._both(tree)
         self.assertEqual(reference[0], ("refusal", "runs_root_differs_from_archive"))
         self.assertEqual(threaded, reference)
+
+    def test_later_fifo_cannot_delay_an_earlier_refusal(self):
+        # Review of #632: a mismatch at k plus a FIFO later in the manifest. The
+        # serial loop refuses at k at once; read-ahead must neither block on the
+        # FIFO nor wait for it when the generator is closed.
+        for fifo_at in (3, 5, 9, 20):
+            with self.subTest(fifo_at=fifo_at):
+                tree = self._tree()
+                names = [name.removeprefix("claim-runs/") for name in tree.names()[:24]]
+                (tree.claim / names[2]).write_bytes(b"corrupt")
+                fifo = tree.claim / names[fifo_at]
+                fifo.unlink()
+                os.mkfifo(fifo)
+                reference = tree.handle()
+                expected = (_outcome(lambda: _reference_compare_runs_root(reference)), reference.census())
+                self.assertEqual(expected[0], ("refusal", "runs_root_differs_from_archive"))
+                handle = tree.handle()
+                got = _bounded(lambda: (_outcome(handle.compare_runs_root), handle.census()), self)
+                self.assertEqual(got, expected)
+
+    def test_non_regular_and_oversized_entries_take_the_serial_read(self):
+        def directory(tree, name):
+            (tree.claim / name).unlink()
+            (tree.claim / name).mkdir()
+
+        def oversized(tree, name):
+            (tree.claim / name).write_bytes(b"y" * 4096)
+
+        for label, change in (("directory", directory), ("oversized", oversized)):
+            for k in (0, 7, 23):
+                with self.subTest(case=label, k=k), mock.patch.object(archive, "READ_AHEAD_MAX_BYTES", 1024):
+                    tree = self._tree()
+                    name = tree.names()[k].removeprefix("claim-runs/")
+                    change(tree, name)
+                    self.assertIsNone(archive._read_ahead_digest(tree.claim, name))
+                    reference, threaded = self._both(tree)
+                    self.assertEqual(reference[0], ("refusal", "runs_root_differs_from_archive"))
+                    self.assertEqual(threaded, reference)
+
+    def test_oversized_matching_file_is_read_serially_and_passes(self):
+        with mock.patch.object(archive, "READ_AHEAD_MAX_BYTES", 64):
+            tree = self._tree()
+            name = tree.names()[9].removeprefix("claim-runs/")
+            self.assertIsNone(archive._read_ahead_digest(tree.claim, name))
+            reference, threaded = self._both(tree)
+        self.assertEqual(reference[0], ("ok", ()))
+        self.assertEqual(threaded, reference)
+
+    def test_non_oserror_exception_types_propagate_exactly(self):
+        # Review of #632: only OSError maps to runs_root_differs_from_archive;
+        # ValueError (embedded NUL), RuntimeError and others propagate unchanged.
+        def nul(tree):
+            tree.lines.insert(3, (_sha(b"x"), "claim-runs/a\x00b"))
+            tree.write_sums()
+
+        def loop(tree):
+            (tree.claim / "loop").symlink_to(tree.claim / "loop")
+            tree.lines.insert(3, (_sha(b"x"), "claim-runs/loop/x"))
+            tree.write_sums()
+
+        for label, change in (("nul", nul), ("loop", loop)):
+            with self.subTest(case=label):
+                tree = self._tree()
+                change(tree)
+                reference, threaded = self._both(tree)
+                if label == "nul":
+                    self.assertEqual(reference[0], ("exception", "ValueError"))
+                self.assertEqual(threaded, reference)
+
+        real = Path.read_bytes
+        for error in (ValueError, RuntimeError, MemoryError, PermissionError):
+            with self.subTest(error=error.__name__):
+                tree = self._tree()
+
+                def boom(path, error=error):
+                    if "run-004" in str(path):
+                        raise error()
+                    return real(path)
+
+                with mock.patch.object(Path, "read_bytes", boom):
+                    reference, threaded = self._both(tree)
+                expected = (("refusal", "runs_root_differs_from_archive") if error is PermissionError
+                            else ("exception", error.__name__))
+                self.assertEqual(reference[0], expected)
+                self.assertEqual(threaded, reference)
+
+
+def _bounded(call, case, seconds=20):
+    """Run call() on a daemon thread; fail (rather than hang) past ``seconds``."""
+    box = []
+    worker = threading.Thread(target=lambda: box.append(call()), daemon=True)
+    worker.start()
+    worker.join(seconds)
+    case.assertFalse(worker.is_alive(), f"call did not return within {seconds} s")
+    return box[0]
+
+
+class CensusSourcesReadAheadTests(unittest.TestCase):
+    def _serial(self, tree, names):
+        handle = tree.handle()
+
+        def run():
+            for name in names:
+                handle.source_bytes("sources/" + name)
+        return _outcome(run), handle.census()
+
+    def test_later_fifo_cannot_delay_an_earlier_refusal(self):
+        with tempfile.TemporaryDirectory(prefix="d188-fifo-") as base:
+            tree = _Tree(Path(base))
+            names = tree.names()
+            (tree.root / "sources" / names[2]).write_bytes(b"corrupt")
+            fifo = tree.root / "sources" / names[6]
+            fifo.unlink()
+            os.mkfifo(fifo)
+            expected = self._serial(tree, names)
+            self.assertEqual(expected[0], ("refusal", "archive_source_unauthenticated"))
+            handle = tree.handle()
+            got = _bounded(lambda: (_outcome(lambda: handle.census_sources(names, threads=4)), handle.census()),
+                           self)
+            self.assertEqual(got, expected)
+
+    def test_nul_name_matches_serial(self):
+        with tempfile.TemporaryDirectory(prefix="d188-nul-") as base:
+            tree = _Tree(Path(base), n=6)
+            tree.lines.insert(2, (_sha(b"x"), "repo/a\x00b"))
+            tree.write_sums()
+            names = tree.names()
+            expected = self._serial(tree, names)
+            handle = tree.handle()
+            self.assertEqual((_outcome(lambda: handle.census_sources(names, threads=4)), handle.census()),
+                             expected)
+
+
+class OrderedResultsTests(unittest.TestCase):
+    def test_single_thread_reads_everything_serially(self):
+        self.assertEqual(list(archive._ordered_results(lambda item: 1 // 0, [1, 2, 3], 1)), [None] * 3)
+
+    def test_read_ahead_is_bounded_by_the_window(self):
+        started, lock = [], threading.Lock()
+
+        def work(item):
+            with lock:
+                started.append(item)
+            return item
+
+        results = archive._ordered_results(work, list(range(60)), 4, window=5)
+        self.assertEqual([next(results), next(results)], [0, 1])
+        time.sleep(0.2)  # let the workers run as far as the window allows
+        with lock:
+            snapshot = sorted(started)
+        self.assertLessEqual(max(snapshot), 2 + 5 - 1)  # cursor 2, window 5
+        results.close()
+        time.sleep(0.1)
+        with lock:
+            self.assertEqual(sorted(started), snapshot)  # nothing starts after close
+
+    def test_blocked_later_item_does_not_delay_consumer_or_close(self):
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def work(item):
+            if item == 3:
+                release.wait()
+            return item
+
+        def consume():
+            results = archive._ordered_results(work, list(range(10)), 4)
+            got = [next(results) for _ in range(3)]
+            results.close()
+            return got
+        self.assertEqual(_bounded(consume, self, seconds=10), [0, 1, 2])
+
+    def test_worker_exception_means_serial_read(self):
+        def work(item):
+            if item == 2:
+                raise KeyError(item)
+            return item
+        self.assertEqual(list(archive._ordered_results(work, list(range(5)), 3)), [0, 1, None, 3, 4])
 
 
 # --------------------------------------------------------------------------
