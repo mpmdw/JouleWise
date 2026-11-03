@@ -55,10 +55,11 @@ class EpisodeSpec:
     schema: str = SPEC_SCHEMA
     enable_thinking: bool | None = None
     max_context_tokens: int | None = None
+    prompt_cache: str | None = None
 
     def to_text(self) -> str:
         value = asdict(self)
-        for key in ("enable_thinking", "max_context_tokens"):
+        for key in ("enable_thinking", "max_context_tokens", "prompt_cache"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -92,6 +93,8 @@ class EpisodeSpec:
             type(spec.max_context_tokens) is not int or spec.max_context_tokens <= 0
         ):
             raise ValueError("max_context_tokens must be a positive integer or null")
+        if spec.prompt_cache not in (None, "episode_prefix"):
+            raise ValueError("prompt_cache must be episode_prefix or null")
         if type(spec.temperature) not in (int, float) or not math.isfinite(spec.temperature):
             raise ValueError("temperature must be numeric and finite")
         return spec
@@ -205,6 +208,14 @@ class EpisodeRuntimeAdapter:
             "max_tokens": spec.max_tokens,
             **({"enable_thinking": spec.enable_thinking} if spec.enable_thinking is not None else {}),
         }
+        if spec.prompt_cache is not None:
+            metadata["sampler"]["execution_policy"] = {
+                "prompt_cache": spec.prompt_cache,
+                "fallback": "whole_cache_rebuild_on_untrimmable_rewrite",
+                "effective_context_cap": self.prepared.get("max_context_tokens", spec.max_context_tokens),
+                "accounting_version": "represented_ids_v1",
+                "repetition": "observe_only",
+            }
         metadata["output_policy"] = {
             "name": "agent_episode",
             "requested_tokens": spec.max_turns * spec.max_tokens,
@@ -254,9 +265,11 @@ class EpisodeRuntimeAdapter:
         endpoint = MlxEndpoint(
             self.runtime, config, self.clock, episode_domain=domain,
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
-            enable_thinking=spec.enable_thinking,
+            enable_thinking=spec.enable_thinking, prompt_cache=spec.prompt_cache,
         )
         task = self.task
+        from joulewise.align.runner import RepetitionObserver
+        repetition = RepetitionObserver()
         model_returned_tokens = False
         if spec is not None and task is not None and self._runtime_ready:
             try:
@@ -305,6 +318,7 @@ class EpisodeRuntimeAdapter:
                         "assistant", str(result.raw_usage.get("raw_text", result.content))
                     ))
                     calls: list[ToolCall] = []
+                    observed_calls = []
                     for call_index, call in enumerate(result.tool_calls):
                         tool_start = self.clock.stamp()
                         phase = f"align_tool_{index}_{call_index}"
@@ -322,6 +336,7 @@ class EpisodeRuntimeAdapter:
                         except Exception as exc:
                             output = json.dumps({"error": f"{type(exc).__name__}:{exc}"})
                             flags.append(f"tool_error:{index}:{call_index}")
+                        observed_calls.append((call.name, call.arguments_json, output))
                         state_after = tool_state_digest(task, flags)
                         tool_end = self.clock.stamp()
                         events.append(RuntimeEvent(
@@ -340,6 +355,9 @@ class EpisodeRuntimeAdapter:
                         transcript.append(ChatMessage(
                             "tool", output, name=call.name, tool_call_id=call.call_id
                         ))
+                    repetition_flags = repetition.observe(observed_calls)
+                    endpoint.turn_provenance[-1]["flags"].extend(repetition_flags)
+                    flags.extend(repetition_flags)
                     # Turn is the model-call interval per records.py. Tool
                     # intervals follow it but remain grouped under that turn;
                     # records.v1 does not require tool containment.
@@ -481,7 +499,7 @@ class EpisodeRuntimeAdapter:
                 ).hexdigest(),
                 "transcript_sha256": hashlib.sha256(transcript_text.encode("utf-8")).hexdigest(),
                 "endpoint_identity": endpoint.identity,
-                "cache_policy": "full_prompt_each_turn",
+                "cache_policy": endpoint.cache_policy,
                 "flags": list(episode.flags),
             },
             metadata={"align_episode": {"id": episode_id, "flags": list(episode.flags), **outcome}},

@@ -1,0 +1,25 @@
+{
+  "identity_pins_sha256": "7d01c78191c27419b4d1f9b00118bcfbe587ec16f43347c257572391ac284d66",
+  "inherited_from": "configs/campaigns/align_pilot_v1/registration/local_file_verification.json",
+  "inherited_sha256": "10857f06270322dfd3993e1af727abd9830b18e130b9837cec48aa7d3769b687",
+  "non_claim": true,
+  "runtime_python_observed": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+  "runtime_versions": {
+    "packages": {
+      "mlx": "0.31.2",
+      "mlx-lm": "0.31.3",
+      "mlx-metal": "0.31.2",
+      "numpy": "2.5.1",
+      "safetensors": "0.8.0",
+      "tokenizers": "0.22.2",
+      "transformers": "5.12.1"
+    },
+    "python": "3.13.1"
+  },
+  "scope": "Inherited pilot2 Mac file hashes and package observations; no new model hashing, no C4 stack identity",
+  "sources": {
+    "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57": "3f6468de52bbc126f2853eab947ea44c265dd6c5d88e8da599bd631745326d6f",
+    "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b": "5cc91648a8fe6268c370da36efc941d895f8833db4f0cae25e1a447b4477fa7a",
+    "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+  }
+}

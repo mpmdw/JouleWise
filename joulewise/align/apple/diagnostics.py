@@ -8,6 +8,8 @@ from pathlib import Path
 
 from joulewise.desk_compress import read_bytes
 
+read_marking_tool_names = ("get_unread_emails",)
+
 READ_ONLY_PREFIXES = ('list_', 'view_', 'search_', 'get_')
 
 
@@ -52,7 +54,12 @@ def action_diagnostics(episode):
                 continue
             changed = not call.name.startswith(READ_ONLY_PREFIXES)
         (counted if changed else readonly).append(call.name)
-    return {'state_changing_calls': len(counted), 'counted_tool_names': counted,
+    return {'state_changing_calls': len(counted),
+            'acted_beyond_read_marking': sum(n not in read_marking_tool_names for n in counted),
+            'read_marking_tool_names': list(read_marking_tool_names),
+            'bank_stage': {'contacts_added': sum(c.name in ('add_venmo_contact', 'add_zelle_contact') and c.state_changed is True for c in calls),
+                           'payments_attempted': sum(c.name in ('send_money', 'send_money_venmo', 'send_money_zelle') for c in calls),
+                           'emails_sent': sum(c.name in ('send_email', 'send_email_to_contacts') and c.state_changed is True for c in calls)}, 'counted_tool_names': counted,
             'read_only_tool_names': readonly, 'unobserved_tool_names': unobserved,
             'classification': 'state_observation_v1' if observing else 'name_rule_v0'}
 
@@ -191,3 +198,45 @@ def telemetry_diagnostics(bundle, episode):
     return {'thermal_pressure_seconds': dict(thermal),
             'active_gpu_clock_mhz': numerator / denominator if denominator else None,
             'active_gpu_seconds': denominator / 1e9, 'diagnostic_flags': flags}
+
+
+def thermal_onset(episode_start_ns, episode_end_ns, turn_starts_ns, readings):
+    """Observed first nonzero OS sample and last observation at each turn start.
+
+    Polling only locates onset at the first recorded nonzero sample. No
+    interpolation, assumed recovery time, or freshness threshold is introduced.
+    """
+    samples = sorted(readings.get('readings_monotonic_ns_level', []))
+    elevated = [t for t, level in samples if isinstance(level, (int, float)) and level > 0]
+    onset = elevated[0] if elevated else None
+    starts = []
+    for stamp in turn_starts_ns:
+        prior = [(t, level) for t, level in samples if t <= stamp]
+        starts.append({'turn_start_ns': stamp, 'level': prior[-1][1] if prior else None,
+                       'sample_ns': prior[-1][0] if prior else None,
+                       'sample_age_s': (stamp - prior[-1][0]) / 1e9 if prior else None})
+    return {**readings, 'first_nonzero_ns': onset,
+            'onset_from_episode_start_s': (onset - episode_start_ns) / 1e9 if onset is not None else None,
+            'onset_from_episode_end_s': (onset - episode_end_ns) / 1e9 if onset is not None else None,
+            'turn_start_os_levels': starts, 'onset_method': 'first_observed_nonzero_member_sample'}
+
+
+def cache_statistics(turn_rows):
+    rows = [r['generation'] for r in turn_rows if r.get('generation', {}).get('cache_policy') == 'episode_prefix']
+    return {'status': 'recorded' if rows else 'not_recorded',
+            'cached_tokens': sum(r['cached_prompt_tokens'] for r in rows),
+            'fed_tokens': sum(r['prefill_tokens'] for r in rows),
+            'trims': sum(r['cache_trimmed_tokens'] > 0 for r in rows),
+            'trimmed_tokens': sum(r['cache_trimmed_tokens'] for r in rows),
+            'rebuilds': sum(r['cache_rebuilt'] for r in rows),
+            'prefill_removed_tokens': sum(r['prompt_tokens'] - r['prefill_tokens'] for r in rows)}
+
+
+def phase_reason_counts(precheck):
+    counts = defaultdict(lambda: defaultdict(int))
+    for row in precheck.get('phase_windows', []):
+        phase = row['window'].split('/')[2]
+        kind = 'align_tool' if phase.startswith('align_tool_') else phase
+        for reason in row['reasons']:
+            counts[kind][reason] += 1
+    return {k: dict(v) for k, v in sorted(counts.items())}

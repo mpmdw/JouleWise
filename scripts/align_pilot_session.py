@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare, hand off, and desk one NON-CLAIM align pilot v0 session.
+"""Prepare, hand off, and desk one NON-CLAIM ALIGN pilot 3 session.
 
 prepare and install are the BYTES item-H runner's (scripts/bytes_h_session.py)
 with the align kit: the same measurement view, real window-plan writer,
@@ -22,8 +22,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts import bytes_h_session as h
 
-KIT = Path('configs/campaigns/align_pilot_v1')
-PACK_ID = 'align-pilot-v1'
+KIT = Path('configs/campaigns/align_pilot_v2')
+PACK_ID = 'align-pilot-v2'
 SCHEMA = 'joulewise.align_pilot_desk.v0'
 # Instrument flags whose presence makes a member's energy unusable for the
 # pilot's checks; each is emitted by joulewise.align (sampler/attribution).
@@ -96,7 +96,16 @@ def episode_summary(bundle, *, target_precheck_paths=None):
     calls = [[c.name for c in t.tool_calls] for t in episode.turns]
     totals = episode.totals()
     logged = episode.totals(logged_only=True)
-    return {'episode_id': episode.episode_id, 'task_pair': episode.task_pair,
+    from joulewise.align.apple.diagnostics import cache_statistics, phase_reason_counts
+    precheck = evidence_precheck(bundle, target_precheck_paths)
+    return {'episode_start_ns': episode.start_ns, 'episode_end_ns': episode.end_ns,
+            'turn_starts_ns': [t.start_ns for t in episode.turns],
+            'per_turn_output_token_ids': [r.get('generation', {}).get('output_token_ids') for r in turn_rows],
+            'per_turn_prompt_token_ids': [r.get('generation', {}).get('prompt_token_ids') for r in turn_rows],
+            'cache_statistics': cache_statistics(turn_rows),
+            'repetition_flags_per_turn': [r.get('flags', []) for r in turn_rows],
+            'phase_window_reason_counts': phase_reason_counts(precheck),
+            'episode_id': episode.episode_id, 'task_pair': episode.task_pair,
             'condition': episode.condition, 'seed': episode.seed,
             'duration_s': totals['duration_ns'] / 1e9, 'totals': totals, 'logged_totals': logged,
             **{'per_turn_' + name: [getattr(t, name) for t in episode.turns] for name in TURN_COUNTS},
@@ -109,20 +118,16 @@ def episode_summary(bundle, *, target_precheck_paths=None):
             'ended_in_unclosed_reasoning': bool(episode.turns and not episode.turns[-1].tool_calls and turn_rows
                 and 'unclosed_reasoning_span' in turn_rows[-1].get('flags', ())),
             'task_diagnostics': episode.hardware.get('task_diagnostics', {}),
-            'window_evidence_precheck': evidence_precheck(bundle, target_precheck_paths),
+            'window_evidence_precheck': precheck,
             **telemetry_diagnostics(bundle, episode)}
 
 
 def instrument_checks(members):
     """The pilot's success criteria as an instrument check; never a hypothesis test.
 
-    I1 every planned episode has a readable bundle; I2 each has energy on at
-    least one channel with no blocking flag; I3 attribution tiles the episode
-    (segment sum agrees within 1% of the smallest attribution half-width); I4 greedy
-    repeats of one cell generate identical per-turn (context, prefill, decode,
-    hidden) token counts. Repeat energy spreads are reported for the lead, with
-    no pass bar, only for cells whose repeats did identical work. A null
-    (nonfinite) estimate is never energy and never tiles.
+    I4 compares exact emitted token IDs. Fewer than two comparable repeats is
+    not_evaluated. Energy spreads additionally require equal accounting tuples
+    and prompt IDs, so equal output counts cannot certify identical work.
     """
     readable = [m for m in members if m.get('summary')]
     usable = [m for m in readable if any(e['joules'] is not None for e in m['summary']['energy'].values())
@@ -144,8 +149,12 @@ def instrument_checks(members):
     deterministic, spreads = {}, {}
     for (block, pair, condition), rows in sorted(cells.items(), key=lambda x: str(x[0])):
         key = (f'{block}/' if block else '') + f'{pair}/{condition}'
-        deterministic[key] = len({turn_counts(r) for r in rows}) == 1
-        if not deterministic[key]:
+        comparable = [r for r in rows if comparable_ids(r)]
+        deterministic[key] = ('not_evaluated' if len(comparable) < 2 else
+                              len({output_ids(r) for r in comparable}) == 1)
+        if deterministic[key] is not True or len(comparable) != len(rows):
+            continue
+        if len({turn_counts(r) for r in rows}) != 1 or len({prompt_ids(r) for r in rows}) != 1:
             continue
         for channel in sorted({c for r in rows for c in r['energy']}):
             values = [r['energy'][channel]['joules'] for r in rows
@@ -162,22 +171,81 @@ def instrument_checks(members):
     checks = {'I1_all_bundles_readable': len(readable) == len(members),
               'I2_energy_on_every_episode': len(usable) == len(members),
               'I3_attribution_tiles_episode': bool(usable) and tiled,
-              'I4_greedy_repeats_identical_tokens': bool(deterministic) and all(deterministic.values())}
+              'I4_greedy_repeats_identical_tokens': (False if any(v is False for v in deterministic.values()) else
+                  'not_evaluated' if not deterministic or any(v == 'not_evaluated' for v in deterministic.values()) else True)}
     prechecks = [m['summary'].get('window_evidence_precheck', {}) for m in readable]
     checks['chain_eligibility'] = len(readable) == len(members) and bool(prechecks) and all(p.get('eligible') is True for p in prechecks)
     checks['no_member_exclusions'] = not any(m.get('excluded') for m in members)
     return checks, deterministic, spreads
 
 
-def desk(session_root, *, run=subprocess.run, harvest=True):
+def comparable_ids(summary):
+    ids = summary.get('per_turn_output_token_ids')
+    return bool(ids) and len(ids) == len(summary['per_turn_decode_tokens']) and all(
+        isinstance(row, list) and len(row) == n and all(type(x) is int for x in row)
+        for row, n in zip(ids, summary['per_turn_decode_tokens'], strict=True))
+
+
+def output_ids(summary):
+    return tuple(tuple(t) for t in summary['per_turn_output_token_ids'])
+
+
+def prompt_ids(summary):
+    return tuple(tuple(t) if t is not None else None for t in summary.get('per_turn_prompt_token_ids', []))
+
+
+def cross_pilot_identity(members, compare_session):
+    """Read comparator bundles only; never harvest or alter the prior session."""
+    from joulewise.desk_compress import read_bytes
+    root = Path(compare_session).resolve()
+    state = h.read(root / 'session.json')
+    runs = Path(state['runs_roots']['claim'])
+    cells = defaultdict(list)
+    for row in _member_rows(state):
+        raw = read_bytes(runs / row['run_id'] / 'outputs/align_turns.jsonl')
+        turns = [json.loads(line)['generation'] for line in raw.splitlines() if line.strip()]
+        cells[(row.get('block'), row['task_pair'], row['condition'])].append((row['run_id'], turns))
+    result = defaultdict(list)
+    for member in members:
+        cell = (member.get('block'), member['task_pair'], member['condition'])
+        key = '/'.join(str(c) for c in cell if c is not None)
+        summary = member.get('summary')
+        references = cells.get(cell, [])
+        if not summary or not references or not comparable_ids(summary):
+            result[key].append({'run_id': member['run_id'], 'status': 'not_evaluated'})
+            continue
+        for reference_id, turns in references:
+            divergence = None
+            fields = []
+            current = list(zip(summary['per_turn_prompt_token_ids'], summary['per_turn_output_token_ids'], strict=True))
+            if any(t.get('prompt_token_ids') is None or t.get('output_token_ids') is None for t in turns):
+                result[key].append({'run_id': member['run_id'], 'reference_run_id': reference_id, 'status': 'not_evaluated'})
+                continue
+            for index in range(max(len(current), len(turns))):
+                if index >= len(current) or index >= len(turns):
+                    divergence, fields = index, ['turn_count']
+                    break
+                p, o = current[index]
+                fields = [name for name, a, b in (('prompt_token_ids', p, turns[index]['prompt_token_ids']),
+                           ('output_token_ids', o, turns[index]['output_token_ids'])) if a != b]
+                if fields:
+                    divergence = index
+                    break
+            result[key].append({'run_id': member['run_id'], 'reference_run_id': reference_id,
+                                'status': 'identical' if divergence is None else 'divergent',
+                                'first_divergent_turn': divergence, 'fields': fields})
+    return dict(result)
+
+
+def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None):
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():
         raise ValueError('terminal record is required before desk')
-    runs_root = Path(state['runs_roots'].get('claim') or Path(state['inputs']['runs_parent']) / 'runs_align_pilot_v0')
-    from joulewise.align.apple.diagnostics import member_thermal_readings
+    runs_root = Path(state['runs_roots'].get('claim') or Path(state['inputs']['runs_parent']) / 'runs_align_pilot_v2')
+    from joulewise.align.apple.diagnostics import member_thermal_readings, thermal_onset
     thermal = member_thermal_readings(custody)
     targets = {}
     pack_root = state.get('inputs', {}).get('pack_root')
@@ -195,7 +263,9 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
                 entry[key] = row[key]
         try:
             entry['summary'] = episode_summary(bundle, target_precheck_paths=targets.get(row['run_id']))
-            entry['summary']['os_thermal'] = thermal.get(row['run_id'], {})
+            summary = entry['summary']
+            summary['os_thermal'] = thermal_onset(summary['episode_start_ns'], summary['episode_end_ns'],
+                summary['turn_starts_ns'], thermal.get(row['run_id'], {}))
         except Exception as exc:
             entry['summary'] = None
             entry['unreadable'] = f'{type(exc).__name__}: {exc}'
@@ -224,6 +294,20 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
             summary.update(excluded=member['excluded'], exclusion_codes=codes)
             pre = summary['window_evidence_precheck']
             summary['chain_eligible'] = pre['eligible'] is True and not member['excluded']
+    from joulewise.desk_compress import read_bytes
+    flag_path = session / 'archive/derived/flags.jsonl'
+    harvest_flags = defaultdict(list)
+    if flag_path.is_file():
+        for line in read_bytes(flag_path).splitlines():
+            if line.strip():
+                flag = json.loads(line)
+                harvest_flags[flag.get('scope', {}).get('run_id')].append(flag)
+    battery_path = session / 'archive/withheld/battery-assist.json'
+    battery = h.read(battery_path).get('members', {}) if battery_path.is_file() else {}
+    for member in members:
+        member['harvest_flags'] = harvest_flags.get(member['run_id'], [])
+        member['battery_discharge'] = battery.get(member['run_id'])
+    comparison = cross_pilot_identity(members, compare_session) if compare_session else None
     checks, deterministic, spreads = instrument_checks(members)
     checks['chain_eligibility'] = checks['chain_eligibility'] and not excluded
     checks['harvest_exclusions_recorded'] = exclusions is not None
@@ -231,7 +315,9 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
              'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
              'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
              'exclusions_path': str(exclusion_path), 'members_excluded': (exclusions or {}).get('members_excluded', []),
-             'status': 'instrument_ok' if all(checks.values()) else 'instrument_incomplete'}
+             'cross_pilot_token_identity': comparison,
+             'harvest_flags_status': 'recorded' if flag_path.is_file() else 'not_recorded',
+             'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
     h.write(session / 'PILOT.json', pilot)
     status = {'schema_version': SCHEMA, 'non_claim': True, 'plan_id': state['session_id'],
               'pilot': str(session / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
@@ -242,8 +328,11 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
     h.write(session / 'desk.json', status)
     print('pilot_status: ' + pilot['status'])
     for name, ok in checks.items():
-        print(f'{name}: {"pass" if ok else "fail"}')
+        print(f'{name}: {"not_evaluated" if ok == "not_evaluated" else "pass" if ok is True else "fail"}')
+    print('model.identity_mismatch: under NON_CLAIM_FILE_IDENTITIES_ONLY pins the runtime identity is unsealed (null); this is expected and is not a claim identity pass.')
     for member in members:
+        print(member['run_id'] + ' harvest_flags: ' + json.dumps({'flags': member['harvest_flags'],
+              'battery_discharge': member['battery_discharge']}, sort_keys=True))
         summary = member.get('summary')
         if summary is None:
             print(member['run_id'] + ': unreadable ' + member['unreadable'] + ' ' + json.dumps({
@@ -252,16 +341,19 @@ def desk(session_root, *, run=subprocess.run, harvest=True):
         pre = summary['window_evidence_precheck']
         print(member['run_id'] + ': ' + json.dumps({
             'end_state': summary['end_state'], 'state_changing_calls': summary['state_changing_calls'],
+            **{k: summary[k] for k in ('acted_beyond_read_marking', 'bank_stage', 'cache_statistics', 'repetition_flags_per_turn', 'phase_window_reason_counts')},
             **{k: summary[k] for k in ('classification', 'counted_tool_names', 'read_only_tool_names', 'unobserved_tool_names', 'exclusion_codes', 'excluded', 'os_thermal')},
             'tool_names_per_turn': summary['tool_names_per_turn'], 'unknown_tool_names': summary['unknown_tool_names'],
             'thermal_pressure_seconds': summary['thermal_pressure_seconds'],
             'active_gpu_clock_mhz': summary['active_gpu_clock_mhz'],
             'chain_eligible': summary['chain_eligible'], 'chain_reasons': pre['reasons'] + summary['exclusion_codes'],
             'target_precheck_eligible': pre['eligible'],
-            'phase_window_diagnostics': pre['phase_windows'],
             'request_window_diagnostics': pre['request_windows'],
             'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
             'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}, sort_keys=True))
+    print('repeat_token_identity: ' + json.dumps(deterministic, sort_keys=True))
+    if comparison is not None:
+        print('cross_pilot_token_identity: ' + json.dumps(comparison, sort_keys=True))
     print('repeat_energy_spread: ' + json.dumps(spreads, sort_keys=True))
     print('harvest_exit: ' + str(result.returncode))
     print('harvest_status: ' + status['harvest_status'])
@@ -277,6 +369,7 @@ def main(argv=None):
     for name in ('install', 'desk'):
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract only; do not run archive/compression stages.')
+    commands.choices['desk'].add_argument('--compare-session', type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
@@ -284,7 +377,7 @@ def main(argv=None):
         elif args.command == 'install':
             install(args.session_root)
         else:
-            status = desk(args.session_root, harvest=not args.no_harvest)
+            status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session)
             return 0 if status['harvest_status'] in ('ok', 'not_run') and status['pilot_status'] == 'instrument_ok' else 2
         return 0
     except (OSError, ValueError, RuntimeError, KeyError) as exc:

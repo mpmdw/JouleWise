@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the non-claim align pilot v1 Mac session; never register it or edit loop.json.
+"""Generate the non-claim align pilot v2 Mac session; never register it or edit loop.json.
 
 The fixed tree reuses the block-6 composer's calibrated scaffold exactly as
 scripts/bytes_mac_kit.py does (bracket reservation, calibration captures,
@@ -29,14 +29,13 @@ from joulewise.b6.pack_registration import load
 from joulewise.schemas import BenchmarkConfig
 from scripts.generate_matrix import build_config
 
-KIT = Path("configs/campaigns/align_pilot_v1")
-PACK_ID = "align-pilot-v1"
+KIT = Path("configs/campaigns/align_pilot_v2")
+PACK_ID = "align-pilot-v2"
 SOURCE_KIT = Path("configs/campaigns/bytes_mac_check")
 # Model-specific BYTES configs retain their exact model/revision pins.
 SHADE_CACHE = "/Users/edr/.cache/joulewise/shade"
 BLOCKS = (
     {"block": "A", "model_id": "qwen3-30b-a3b", "enable_thinking": True, "max_tokens": 4096, "max_turns": 12},
-    {"block": "B", "model_id": "qwen3-30b-a3b", "enable_thinking": False, "max_tokens": 2048, "max_turns": 20},
     {"block": "C", "model_id": "qwen3-next-80b", "enable_thinking": None, "max_tokens": 2048, "max_turns": 20},
 )
 CONTEXT_CAP = 40960  # Lead ruling: same context regime for all blocks.
@@ -56,20 +55,25 @@ def sha(raw):
 
 
 def ordered_members():
-    """Pair adjacent ABBA / BAAB / ABBA blocks, one repeat, hint on."""
+    """Contiguous A/C; alternating pair order and matched condition order."""
     members = []
-    for index, block in enumerate(BLOCKS):
-        for pair_index, pair in enumerate(pilot.PILOT_V0_PAIRS):
-            conditions = pilot.PILOT_V0_CONDITIONS
-            if (index + pair_index) % 2:
-                conditions = tuple(reversed(conditions))
-            for condition in conditions:
-                spec = pilot.EpisodeSpec(
-                    task_factory=pilot.FACTORY, condition=condition, seed=1,
-                    max_turns=block["max_turns"], max_tokens=block["max_tokens"], temperature=0.0,
-                    enable_thinking=block["enable_thinking"], max_context_tokens=CONTEXT_CAP,
-                    task_kwargs={"cache_dir": SHADE_CACHE, "task_pair": pair, "give_hint": True})
-                members.append({**block, "base_config": base_config_path(block["model_id"]).as_posix(), "spec": spec})
+    for block in BLOCKS:
+        for repeat in range(1, 4):
+            pairs = pilot.PILOT_V0_PAIRS if repeat % 2 else tuple(reversed(pilot.PILOT_V0_PAIRS))
+            for pair in pairs:
+                pair_index = pilot.PILOT_V0_PAIRS.index(pair)
+                conditions = pilot.PILOT_V0_CONDITIONS
+                if (repeat - 1 + pair_index) % 2:
+                    conditions = tuple(reversed(conditions))
+                for condition in conditions:
+                    spec = pilot.EpisodeSpec(
+                        task_factory=pilot.FACTORY, condition=condition, seed=1,
+                        max_turns=block["max_turns"], max_tokens=block["max_tokens"], temperature=0.0,
+                        enable_thinking=block["enable_thinking"], max_context_tokens=CONTEXT_CAP,
+                        prompt_cache="episode_prefix",
+                        task_kwargs={"cache_dir": SHADE_CACHE, "task_pair": pair, "give_hint": True})
+                    members.append({**block, "repeat": repeat,
+                                    "base_config": base_config_path(block["model_id"]).as_posix(), "spec": spec})
     return members
 
 
@@ -77,14 +81,14 @@ def ordered_specs():
     return tuple(m["spec"] for m in ordered_members())
 
 
-def episode_config(base, spec, run_id, label, model_id):
+def episode_config(base, spec, run_id, label, model_id, repeat=1):
     value = build_config(base, model_id + "-mlx", WORKLOAD_KIND, spec.max_tokens, spec.max_tokens, 1)
     value["run_id"] = run_id
-    value["hardware_target"]["notes"] = "Align pilot v1 non-claim instrument check; never a registered pack."
+    value["hardware_target"]["notes"] = "ALIGN pilot 3 non-claim cache instrument check; never a registered pack."
     value["run_metadata"]["tags"] = [
-        "align-pilot-v1", "non-claim", "launch_lineage_required", "align", WORKLOAD_KIND,
+        "align-pilot-v2", "non-claim", "launch_lineage_required", "align", WORKLOAD_KIND,
         "align-model=" + model_id, "align-condition=" + spec.condition,
-        "align-task=" + spec.task_kwargs["task_pair"], f"align-repeat={spec.seed}", "align-stage=" + label]
+        "align-task=" + spec.task_kwargs["task_pair"], f"align-repeat={repeat}", "align-stage=" + label]
     value["sampling"]["idle_seconds"] = ALIGN_IDLE_S
     value["workload_profile"] = {"name": WORKLOAD_KIND, "prompt_text": spec.to_text(),
                                  "repetitions": 1, "warmup_runs": base["workload_profile"]["warmup_runs"]}
@@ -92,7 +96,7 @@ def episode_config(base, spec, run_id, label, model_id):
 
 
 def planning_sizing(tree, members, evidence):
-    """Guard arithmetic plus pilot-1 timing/disk observations; all transfers flagged."""
+    """Cache envelope with pilot-2 timing/disk laws; all transfers flagged."""
     import math
 
     def fit(x, y):
@@ -108,36 +112,27 @@ def planning_sizing(tree, members, evidence):
     observations = evidence["member_observations"]
     law = fit([r["episode_s"] for r in observations], [r["member_s"] for r in observations])
     disk = fit([r["member_s"] for r in observations], [r["bundle_bytes"] for r in observations])
-    factors = {phase: evidence["long_context_end"][phase + "_tok_s"] / evidence["long_context_start"][phase + "_tok_s"]
-               for phase in ("prefill", "decode")}
-    tool_turns = {}
-    for window in evidence["tool_phase_windows"]:
-        tool_turns.setdefault((window["run_id"], window["turn"]), []).append(window["duration_s"])
-    tool_s = max(math.fsum(v) for v in tool_turns.values())
-    calls_per_turn = max(len(v) for v in tool_turns.values())
-    observation_s = max(r["hash_pair_max_ms"] for r in evidence["state_observation_cost"]["results"]) / 1000
-    tool_allowance = tool_s + calls_per_turn * observation_s
+    factors = {"prefill": 1.0, "decode": 1.0}
+    tool_s = evidence["tool_s_per_turn"]
+    calls_per_turn = evidence["tool_calls_per_turn_observed_max"]
+    observation_s = evidence["state_observation_s_per_call"]
+    tool_allowance = evidence["tool_allowance_s_per_turn"]
     first_prompt = evidence["smallest_first_prompt_tokens"]
-    dwell_per_member = ALIGN_IDLE_S - evidence["pilot1_idle_s"]
+    dwell_per_member = ALIGN_IDLE_S - evidence["pilot2_idle_s"]
     # scripts/run_campaign.py: HAZARD_MEMBER_CAP_S + min(WAIT_CAP_S,
     # remaining session wait budget); no runner change.
     cap_unspent, cap_spent = 1800 + 1500, 1800
     rows = []
     for block in BLOCKS:
         model = block["model_id"]
-        rates = {phase: math.fsum(r[phase + "_tok_s"] for r in evidence["bytes_rates"][model]) / len(evidence["bytes_rates"][model])
+        rates = {phase: min(r[phase + "_tok_s"] for r in evidence["phase_rates"][block["block"]])
                  for phase in ("prefill", "decode")}
-        bound_rates = {phase: rates[phase] * factors[phase] for phase in rates}
+        bound_rates = rates
         prompt_bound = CONTEXT_CAP - block["max_tokens"]
 
         def bound(turns):
-            # B/C retain decoded text: total decode <= cap - first prompt.
-            # A uses the conservative per-turn bound even if reasoning is
-            # dropped. If retained, the same aggregate bound as B/C holds.
-            decode = turns * block["max_tokens"]
-            if block["block"] != "A":
-                decode = min(decode, CONTEXT_CAP - first_prompt)
-            prefill = turns * prompt_bound
+            decode = min(turns * block["max_tokens"], CONTEXT_CAP - first_prompt)
+            prefill = CONTEXT_CAP + turns * block["max_tokens"]
             episode = prefill / bound_rates["prefill"] + decode / bound_rates["decode"] + turns * tool_allowance
             return prefill, decode, episode, law["intercept"] + law["slope"] * episode + dwell_per_member
 
@@ -157,8 +152,8 @@ def planning_sizing(tree, members, evidence):
                      "episode_upper_s": episode_s, "idle_increase_s": dwell_per_member, "member_upper_s": member_s,
                      "member_cap_unspent_s": cap_unspent, "member_cap_spent_s": cap_spent,
                      "fits_unspent_cap": member_s <= cap_unspent, "fits_spent_cap": member_s <= cap_spent,
-                     "count": 4, "block_upper_s": 4 * member_s,
-                     "member_upper_bytes": member_bytes, "block_upper_bytes": 4 * member_bytes,
+                     "count": 12, "block_upper_s": 12 * member_s,
+                     "member_upper_bytes": member_bytes, "block_upper_bytes": 12 * member_bytes,
                      "flags": ["sizing.planning_bound_unmeasured"]})
     scaffold = sum(s["expected_count"] for s in tree["stage_graph"] if s["kind"] == "campaign_collection") - len(members)
     dwell = len(members) * dwell_per_member
@@ -166,8 +161,13 @@ def planning_sizing(tree, members, evidence):
     count = len(members) + scaffold
     scaffold_bytes = sum(r["bytes"] for r in evidence["scaffold_bundle_bytes"])
     B = sum(r["block_upper_bytes"] for r in rows) + scaffold_bytes
+    forecasts = [r for r in evidence["cache_trajectory_forecasts"] if r["block"] in {b["block"] for b in BLOCKS}]
+    expected_members = [law["intercept"] + law["slope"] * r["cached_episode_forecast_s"] for r in forecasts]
+    expected_align = 3 * math.fsum(expected_members)
+    expected_bytes = 3 * math.fsum(disk["intercept"] + disk["slope"] * t for t in expected_members) + scaffold_bytes
+    uncached_align = 3 * math.fsum(r["member_s"] for r in observations if r["block"] in {b["block"] for b in BLOCKS})
     return {"schema_version": "joulewise.b5_sizing.v1", "non_claim": True,
-        "derivation": "Every prompt <= cap-budget. Episode prefill <= turns*(cap-budget). B/C decode <= min(turns*budget,cap-smallest_first_prompt=40960-6347); A uses turns*budget conservatively (same aggregate bound holds if reasoning stays). Episode seconds = prefill/prefill_bound + decode/decode_bound + turns*(pilot1 max tool seconds per turn + observed max calls per turn * max measured hash-pair seconds). Member = OLS intercept+slope*episode+(300-57.6). Scaffold + sum(4*member) includes idle increase exactly once. Rates/factors/overhead/tool/disk transfers are planning, not hardware validation.",
+        "derivation": "Cache planning: prefill <= cap + turns*budget, conditional on each rewind <= one output budget (whole-cache rebuilds can exceed this transferred bound). Decode <= min(turns*budget,cap-smallest pilot2 first prompt). Rates are the slowest pilot2 prefill/decode phase for this block. Episode = prefill/rate + decode/rate + turns*pilot1 tool allowance. Member = pilot2 OLS intercept+slope*episode; idle 300 s already included. Scaffold added once. Rehearsal must replace transfers; not a physical worst-case guarantee.",
         "packs": {PACK_ID: {"pack_id": PACK_ID, "flags": ["sizing.planning_bound_unmeasured"],
             "member_law": {"intercept_s": law["intercept"], "slope": law["slope"], "n": law["n"],
                            "residual_sd_s": law["residual_sd"], "largest_abs_residual_s": law["largest_abs_residual"], "flags": []},
@@ -175,11 +175,16 @@ def planning_sizing(tree, members, evidence):
             "scaffold_flags": [], "dwell_increase_s": dwell,
             "member_cap": {"unspent_s": cap_unspent, "spent_s": cap_spent, "session_wait_budget_s": 7200,
                            "spent_corner": "Only repeated failed idle admissions spend the budget: a nonquiet Mac, already physics-flagged; lead accepts this corner."},
+            "expected_cached": {"align_s": expected_align, "collection_span_s": expected_align + evidence["scaffold_s"],
+                                "capture_bytes": expected_bytes, "peak_bytes": 2 * expected_bytes,
+                                "derivation": evidence["forecast_derivation"]},
+            "no_cache_savings": {"align_s": uncached_align, "collection_span_s": uncached_align + evidence["scaffold_s"],
+                                 "derivation": "three times measured pilot2 A/C member durations plus measured scaffold"},
             "member_count": count, "align_members": len(members), "scaffold_members": scaffold,
             "programmed_span_s": span, "T_stream_max_s": max(r["member_upper_s"] for r in rows),
             "estimated_footprint_bytes": 2 * B,
             "disk_member_law": disk,
-            "disk_derivation": {"formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot1 residual) per block member; sum + measured scaffold bytes; peak copies=2 (capture plus backup)",
+            "disk_derivation": {"formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot2 residual) per block member; sum + measured scaffold bytes; peak copies=2 (capture plus backup)",
                                 "peak_copies": 2, "B_bytes": B, "scaffold_bytes": scaffold_bytes,
                                 "extra_wait_peak_bytes": 0, "fixed_retained_bytes": 0}}}}
 
@@ -187,8 +192,8 @@ def planning_sizing(tree, members, evidence):
 def kit_identity_pins(root, tree, members, *, identity=None):
     """File identities for every unit this kit dispatches.
 
-    Without ``identity`` the hashes are copied from the BYTES kit's pins: the
-    same pinned model directories, so the same files. At the Mac,
+    Without ``identity`` reuse verified pilot-2 Mac file hashes, authenticated
+    against its receipt and the BYTES pins. At the Mac,
     registration/derive_identity_pins.py passes the real read-only hasher and
     local-file verification instead. Each align episode is its own identity unit
     (scripts/bytes_h_session.py align_unit_id): its spec is its workload.
@@ -197,6 +202,14 @@ def kit_identity_pins(root, tree, members, *, identity=None):
 
     source = json.loads((root / "configs/bytes/identity_pins.json").read_bytes())
     inventory = {"artifacts": source["model_artifact_inventory"]}
+    mac_dir = root / "configs/campaigns/align_pilot_v1/registration"
+    mac_verification = json.loads((mac_dir / "local_file_verification.json").read_bytes())
+    mac_raw = (mac_dir / "identity_pins.json").read_bytes()
+    if sha(mac_raw) != mac_verification["identity_pins_sha256"]:
+        raise ValueError("pilot2 Mac identity receipt does not match its pins")
+    mac_pins = json.loads(mac_raw)
+    mac_units = {u["model_source"]: u for u in mac_pins["units"].values()}
+
     names = {u["model_source"]: name for name, u in source["units"].items()}
     units, artifacts, hashed = {}, {}, {}
     for stage in tree["stage_graph"]:
@@ -213,7 +226,9 @@ def kit_identity_pins(root, tree, members, *, identity=None):
             name = (align_unit_id(model_id, row["run_id"])
                     if config["workload_profile"]["name"] == ALIGN_EPISODE else model_id)
             if name not in units:
-                pinned = source["units"][model_id]
+                pinned = mac_units[model["source"]]
+                if pinned["model_artifact_sha256"] != source["units"][model_id]["model_artifact_sha256"]:
+                    raise ValueError("Mac/BYTES artifact identities differ")
                 artifact = inventory["artifacts"][model_id]
                 if identity is not None:
                     if model["source"] not in hashed:
@@ -232,9 +247,12 @@ def kit_identity_pins(root, tree, members, *, identity=None):
     for unit in units.values():
         unit["config_count"] = len(unit["config_paths"])
     tree_raw = members.get(KIT / "plan_tree.json") or (root / KIT / "plan_tree.json").read_bytes()
-    document = {"schema": "joulewise.b5_identity_pins.v1", "status": "NON_CLAIM_FILE_IDENTITIES_ONLY", "non_claim": True, "units": units, "runtime_versions": source["runtime_versions"],
+    document = {"schema": "joulewise.b5_identity_pins.v1", "status": "NON_CLAIM_FILE_IDENTITIES_ONLY", "non_claim": True, "units": units, "runtime_versions": mac_pins["runtime_versions"],
                 "derivation": {"copied_from": "configs/bytes/identity_pins.json",
                                "source_sha256": sha((root / "configs/bytes/identity_pins.json").read_bytes()),
+                               "mac_pins": (mac_dir / "identity_pins.json").relative_to(root).as_posix(),
+                               "mac_pins_sha256": sha(mac_raw),
+                               "mac_verification_sha256": sha((mac_dir / "local_file_verification.json").read_bytes()),
                                "tree_path": (KIT / "plan_tree.json").as_posix(), "tree_sha256": sha(tree_raw)}}
     return document, {"non_claim": True, "artifacts": dict(sorted(artifacts.items()))}
 
@@ -247,8 +265,8 @@ def build_files(root=ROOT):
     files, members = {}, []
     roster = ordered_members()
     # Keep the two science stages and midpoint reference of pilot 1. Put the
-    # midpoint at a block boundary (A | B,C) so no configuration block is split.
-    half = 4
+    # midpoint at a block boundary (A | C) so no configuration block is split.
+    half = len(roster) // 2
 
     def collection(label, chunk, offset):
         stage = deepcopy(source_science)
@@ -260,11 +278,11 @@ def build_files(root=ROOT):
             model_id = member["model_id"]
             base = json.loads((root / member["base_config"]).read_bytes())
             run_id = f"{PACK_ID}-{label}-e{offset + index:02}"
-            raw = raw_json(episode_config(base, spec, run_id, label, model_id))
+            raw = raw_json(episode_config(base, spec, run_id, label, model_id, member["repeat"]))
             filename = run_id + ".json"
             files[directory / filename] = raw
             entry = {"run_id": run_id, "config": filename, "config_path": (directory / filename).as_posix(),
-                     "config_sha256": sha(raw), "index": index, "rep": index,
+                     "config_sha256": sha(raw), "index": index, "rep": member["repeat"],
                      "role": "absolute_repeat", "block_id": None, "block_index": index,
                      "position": None, "position_in_block": 1, "arm": None,
                      "model_tag": model_id + "-mlx", "workload": WORKLOAD_KIND,
@@ -272,7 +290,7 @@ def build_files(root=ROOT):
             rows.append(entry)
             members.append({"run_id": run_id, "stage_id": stage["stage_id"],
                             "task_pair": spec.task_kwargs["task_pair"], "condition": spec.condition,
-                            "repeat": spec.seed, "ordinal": offset + index, "non_claim": True,
+                            "repeat": member["repeat"], "ordinal": offset + index, "non_claim": True,
                             "model_id": model_id, "block": member["block"], "base_config": member["base_config"],
                             "config_path": entry["config_path"], "spec": json.loads(spec.to_text())})
         files[directory / "order_manifest.json"] = raw_json({
@@ -292,7 +310,7 @@ def build_files(root=ROOT):
         stage["stage_id"] = stage["stage_id"].replace("bytes-s1-p1", PACK_ID)
         stage.pop("spare_retry", None)
     layout = replace(seed, session_id=PACK_ID, packs=(PACK_ID,), stages=tuple(stages),
-                     fixed_bytes=None, campaign_id="align_pilot_v1")
+                     fixed_bytes=None, campaign_id="align_pilot_v2")
     tree, _ = compose.render(layout)
     for stage, source in zip(tree["stage_graph"], stages):
         entries = source["entries"]
@@ -321,14 +339,16 @@ def build_files(root=ROOT):
         tree.pop(key, None)
     tree.update(non_claim=True, draft_status="non-claim", arm_attachments={},
                 window_identity={"window_id": PACK_ID, "evidence_root_id": "evidence-" + PACK_ID},
-                roots={"claim_root_leaf": "runs_align_pilot_v1", "bound_root_leaf": "runs_align_pilot_v1_bound"},
+                roots={"claim_root_leaf": "runs_align_pilot_v2", "bound_root_leaf": "runs_align_pilot_v2_bound"},
                 generator={"path": "scripts/align_pilot_kit.py", "sha256": sha(Path(__file__).read_bytes())})
     collection_plan = {
         "schema_version": "joulewise.align_pilot.v1", "plan_id": PACK_ID, "non_claim": True,
-        "status": "DRAFT_FOR_LEAD", "protocol": "docs/align/pilot_protocol_v1.md",
+        "status": "DRAFT_FOR_LEAD", "protocol": "docs/align/pilot_protocol_v2.md",
+        "prompt_cache": "episode_prefix", "repetition_policy": "observe_only",
+        "pilot2_spec_differences": ["prompt_cache"],
         "blocks": list(BLOCKS), "max_context_tokens": CONTEXT_CAP, "idle_seconds": ALIGN_IDLE_S, "shade_cache": SHADE_CACHE,
         "task_pairs": list(pilot.PILOT_V0_PAIRS), "conditions": list(pilot.PILOT_V0_CONDITIONS),
-        "repeats": 1, "order_policy": "matched_condition_abba",
+        "repeats": 3, "order_policy": "matched_condition_abba",
         "members": members}
     raw = raw_json(collection_plan)
     files[KIT / "collection_plan.json"] = raw
@@ -350,6 +370,30 @@ def build_files(root=ROOT):
         files[registration / name] = (root / registration / name).read_bytes()
     files[KIT / "plan_tree.json"] = raw_json(tree)
     pins, inventory = kit_identity_pins(root, tree, files)
+    local = root / registration / "local_file_verification.json"
+    if local.is_file() and "inherited_from" not in json.loads(local.read_bytes()):
+        verified = json.loads(local.read_bytes())
+        pinned_raw = (root / registration / "identity_pins.json").read_bytes()
+        if verified["identity_pins_sha256"] != sha(pinned_raw):
+            raise ValueError("local identity verification digest mismatch")
+        local_pins = json.loads(pinned_raw)
+        local_inventory = json.loads((root / registration / "model_artifact_inventory.json").read_bytes())
+        if set(local_pins["units"]) != set(pins["units"]):
+            raise ValueError("local identity unit roster changed; rederive pins")
+        for name, unit in pins["units"].items():
+            if any(local_pins["units"][name][k] != unit[k] for k in ("model_source", "model_artifact_sha256", "config_paths")):
+                raise ValueError("local identity inputs changed; rederive pins")
+        if local_pins["derivation"]["tree_sha256"] != sha(files[KIT / "plan_tree.json"]):
+            raise ValueError("local identity tree changed; rederive pins")
+        pins, inventory = local_pins, local_inventory
+        files[registration / "local_file_verification.json"] = local.read_bytes()
+    if not local.is_file() or "inherited_from" in json.loads(local.read_bytes()):
+        inherited_path = root / "configs/campaigns/align_pilot_v1/registration/local_file_verification.json"
+        inherited = json.loads(inherited_path.read_bytes())
+        files[registration / "local_file_verification.json"] = raw_json({
+            **inherited, "identity_pins_sha256": sha(raw_json(pins)),
+            "scope": "Inherited pilot2 Mac file hashes and package observations; no new model hashing, no C4 stack identity",
+            "inherited_from": inherited_path.relative_to(root).as_posix(), "inherited_sha256": sha(inherited_path.read_bytes())})
     files[registration / "identity_pins.json"] = raw_json(pins)
     files[registration / "model_artifact_inventory.json"] = raw_json(inventory)
     files[registration / "sizing_b5.json"] = raw_json(planning_sizing(tree, members, json.loads((root / KIT / "registration/sizing_evidence.json").read_bytes())))
@@ -358,7 +402,7 @@ def build_files(root=ROOT):
     files[registration / "acceptance.json"] = raw_json(acceptance)
     files[registration / "registration.json"] = raw_json({
         "pack_id": PACK_ID, "non_claim": True,
-        "note": "Non-claim align pilot v1 archives; no grouped claim blinding or estimator registration."})
+        "note": "Non-claim ALIGN pilot 3 archives; no grouped claim blinding or estimator registration."})
     return files
 
 
@@ -375,27 +419,26 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
     return files
 
 
-README = """# ALIGN pilot 2: capability screen (non-claim)
+README = """# ALIGN pilot 3 (non-claim)
 
-Generate with `python3 scripts/align_pilot_kit.py`; check with `--check`.
-Protocol: `docs/align/pilot_protocol_v1.md`. Prepare/desk:
-`scripts/align_pilot_session.py`. No registration, loop.json entry or claim.
+Generate with `python3 scripts/align_pilot_kit.py`; verify with `--check`.
+Protocol: `docs/align/pilot_protocol_v2.md`. Prepare/desk:
+`scripts/align_pilot_session.py` (desk accepts `--compare-session <pilot2>`).
 
-Three four-member blocks: 30B-A3B thinking on (4096 x 12), thinking off
-(2048 x 20), Next-80B instruct (2048 x 20). Both judge-free task pairs,
-both conditions, hint on, one repeat, cap 40960. ABBA / BAAB / ABBA.
-Align idle 300 s from cooldown.cap_s. Scaffold unchanged; midpoint after A.
+24 members: A thinking-on 12 x 4096, then C template-default 20 x 2048;
+2 pairs x 2 conditions x 3 repeats, hint on, cap 40960, episode prefix cache
+on throughout. Pair order alternates each repeat; condition order alternates
+within each pair. Midpoint after A; idle 300 s. Fresh process per member.
 
-Models are contiguous in the roster. The current campaign still launches a
-fresh process and loads/cleans up MLX for each member; grouping does not
-implement one persistent load per block. That requires separate authority.
+Specs equal pilot2 A/C except prompt_cache; seed remains 1 in every repeat.
+Repetition flags observe only. Thermal/contention eligibility is unchanged.
+Sizing is a transferred planning bound, not hardware validation. Read its
+conditional cache derivation before freezing a span. Rehearse first.
 
-`registration/derive_identity_pins.py --runtime-python <measurement python>`
-reads local model files without loading MLX. `derive_sizing.py` records the
-pilot-1 timing, tool-window and bundle-byte observations plus BYTES rates.
-Sizing uses cap-minus-budget prompts, aggregate B/C decode bounds, and the
-300 s idle inside each member bound, beside the 3300/1800 s runner caps.
-Long-context, tool, model-overhead and disk transfers remain planning flags.
+`registration/derive_sizing.py --pilot-session <pilot2 root>` derives receipts
+without model work. `derive_identity_pins.py --runtime-python <measurement
+python>` hashes local files without loading MLX. Generation preserves verified
+Mac identity pins and refuses changed inputs instead of silently replacing them.
 """
 
 

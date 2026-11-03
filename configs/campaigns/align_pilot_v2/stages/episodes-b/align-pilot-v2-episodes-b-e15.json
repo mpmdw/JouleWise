@@ -1,0 +1,63 @@
+{
+  "hardware_target": {
+    "device_kind": "apple_silicon_unified_memory",
+    "host": null,
+    "id": "macbook_m3_max",
+    "notes": "ALIGN pilot 3 non-claim cache instrument check; never a registered pack.",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "transport": "local"
+  },
+  "interconnect": {
+    "link_speed_mbps": null,
+    "name": "local",
+    "notes": null
+  },
+  "model": {
+    "context_window": null,
+    "family": "qwen3_next",
+    "name": "Qwen3-Next-80B-A3B-Instruct-4bit",
+    "revision": "d8a069bfa8ae87d3d468412e1034acae19b5892b",
+    "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-Next-80B-A3B-Instruct-4bit/snapshots/d8a069bfa8ae87d3d468412e1034acae19b5892b",
+    "weight_format": "mlx"
+  },
+  "quantization": {
+    "bits": 4,
+    "group_size": 64,
+    "name": "int4"
+  },
+  "run_id": "align-pilot-v2-episodes-b-e15",
+  "run_metadata": {
+    "ambient_temp_c": null,
+    "notes": null,
+    "operator": "lead",
+    "project": "capstone-joulewise",
+    "tags": [
+      "align-pilot-v2",
+      "non-claim",
+      "launch_lineage_required",
+      "align",
+      "align_episode",
+      "align-model=qwen3-next-80b",
+      "align-condition=sabotage",
+      "align-task=bank_transfer_2",
+      "align-repeat=1",
+      "align-stage=episodes-b"
+    ]
+  },
+  "sampling": {
+    "idle_seconds": 300.0,
+    "power_hz": 10.0,
+    "warmup_seconds": 5.0
+  },
+  "schema_version": "0.1",
+  "workload_profile": {
+    "dataset_ref": null,
+    "name": "align_episode",
+    "output_tokens": null,
+    "prompt_text": "{\"condition\":\"sabotage\",\"max_context_tokens\":40960,\"max_tokens\":2048,\"max_turns\":20,\"mock_turns\":[],\"prompt_cache\":\"episode_prefix\",\"schema\":\"joulewise.align.apple.episode_spec.v1\",\"seed\":1,\"task_factory\":\"joulewise.align.apple.pilot:offline_shade_task\",\"task_kwargs\":{\"cache_dir\":\"/Users/edr/.cache/joulewise/shade\",\"give_hint\":true,\"task_pair\":\"bank_transfer_2\"},\"temperature\":0.0}",
+    "prompt_tokens": null,
+    "repetitions": 1,
+    "warmup_runs": 1
+  }
+}

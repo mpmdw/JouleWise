@@ -1,0 +1,146 @@
+{
+  "derivation": "Cache planning: prefill <= cap + turns*budget, conditional on each rewind <= one output budget (whole-cache rebuilds can exceed this transferred bound). Decode <= min(turns*budget,cap-smallest pilot2 first prompt). Rates are the slowest pilot2 prefill/decode phase for this block. Episode = prefill/rate + decode/rate + turns*pilot1 tool allowance. Member = pilot2 OLS intercept+slope*episode; idle 300 s already included. Scaffold added once. Rehearsal must replace transfers; not a physical worst-case guarantee.",
+  "non_claim": true,
+  "packs": {
+    "align-pilot-v2": {
+      "T_stream_max_s": 1723.621943940665,
+      "align_members": 24,
+      "blocks": [
+        {
+          "block": "A",
+          "block_upper_bytes": 12329899608,
+          "block_upper_s": 20683.46332728798,
+          "bound_rates_tok_s": {
+            "decode": 39.11435838865257,
+            "prefill": 561.909846129148
+          },
+          "count": 12,
+          "decode_if_reasoning_retained_upper": 34613,
+          "enable_thinking": true,
+          "episode_decode_tokens_upper": 34613,
+          "episode_prefill_tokens_upper": 90112,
+          "episode_upper_s": 1046.2834593089283,
+          "first_prompt_lower_tokens": 6347,
+          "fits_spent_cap": true,
+          "fits_unspent_cap": true,
+          "flags": [
+            "sizing.planning_bound_unmeasured"
+          ],
+          "idle_increase_s": 0,
+          "max_tokens": 4096,
+          "max_turns": 12,
+          "member_cap_spent_s": 1800,
+          "member_cap_unspent_s": 3300,
+          "member_upper_bytes": 1027491634,
+          "member_upper_s": 1723.621943940665,
+          "model_id": "qwen3-30b-a3b",
+          "prompt_tokens_per_turn_upper": 36864,
+          "short_context_rates_tok_s": {
+            "decode": 39.11435838865257,
+            "prefill": 561.909846129148
+          },
+          "state_observation_s_per_call": 0.061627457999999996,
+          "tool_allowance_s_per_turn": 0.0831742986677246,
+          "tool_calls_per_turn_observed_max": 1,
+          "tool_s_per_turn": 0.02154684066772461
+        },
+        {
+          "block": "C",
+          "block_upper_bytes": 10153505760,
+          "block_upper_s": 16059.516472918589,
+          "bound_rates_tok_s": {
+            "decode": 57.57170636285151,
+            "prefill": 753.9188427461245
+          },
+          "count": 12,
+          "decode_if_reasoning_retained_upper": 34613,
+          "enable_thinking": null,
+          "episode_decode_tokens_upper": 34613,
+          "episode_prefill_tokens_upper": 81920,
+          "episode_upper_s": 711.5378577175044,
+          "first_prompt_lower_tokens": 6347,
+          "fits_spent_cap": true,
+          "fits_unspent_cap": true,
+          "flags": [
+            "sizing.planning_bound_unmeasured"
+          ],
+          "idle_increase_s": 0,
+          "max_tokens": 2048,
+          "max_turns": 20,
+          "member_cap_spent_s": 1800,
+          "member_cap_unspent_s": 3300,
+          "member_upper_bytes": 846125480,
+          "member_upper_s": 1338.2930394098823,
+          "model_id": "qwen3-next-80b",
+          "prompt_tokens_per_turn_upper": 38912,
+          "short_context_rates_tok_s": {
+            "decode": 57.57170636285151,
+            "prefill": 753.9188427461245
+          },
+          "state_observation_s_per_call": 0.061627457999999996,
+          "tool_allowance_s_per_turn": 0.0831742986677246,
+          "tool_calls_per_turn_observed_max": 1,
+          "tool_s_per_turn": 0.02154684066772461
+        }
+      ],
+      "disk_derivation": {
+        "B_bytes": 26510193179,
+        "extra_wait_peak_bytes": 0,
+        "fixed_retained_bytes": 0,
+        "formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot2 residual) per block member; sum + measured scaffold bytes; peak copies=2 (capture plus backup)",
+        "peak_copies": 2,
+        "scaffold_bytes": 4026787811
+      },
+      "disk_member_law": {
+        "intercept": 212148182.41635215,
+        "largest_abs_residual": 5570679.136254311,
+        "largest_positive_residual": 4071110.0750020146,
+        "n": 12,
+        "residual_sd": 2806240.437368639,
+        "slope": 470678.8189675706
+      },
+      "dwell_increase_s": 0,
+      "estimated_footprint_bytes": 53020386358,
+      "expected_cached": {
+        "align_s": 14829.152723664176,
+        "capture_bytes": 16098112279.25644,
+        "collection_span_s": 19848.152723664178,
+        "derivation": "Keep pilot2 non-prefill episode time; replace each prefill duration by fed LCP delta / same-turn measured rate. Native-state ledger = prompt+emitted IDs, including EOS; conditional transfer, not hardware validation.",
+        "peak_bytes": 32196224558.51288
+      },
+      "flags": [
+        "sizing.planning_bound_unmeasured"
+      ],
+      "long_context_factors": {
+        "decode": 1.0,
+        "prefill": 1.0
+      },
+      "member_cap": {
+        "session_wait_budget_s": 7200,
+        "spent_corner": "Only repeated failed idle admissions spend the budget: a nonquiet Mac, already physics-flagged; lead accepts this corner.",
+        "spent_s": 1800,
+        "unspent_s": 3300
+      },
+      "member_count": 49,
+      "member_law": {
+        "flags": [],
+        "intercept_s": 519.2349190253362,
+        "largest_abs_residual_s": 13.716493088840139,
+        "n": 12,
+        "residual_sd_s": 6.517401088423136,
+        "slope": 1.1511096865765498
+      },
+      "no_cache_savings": {
+        "align_s": 26411.708760996815,
+        "collection_span_s": 31430.708760996815,
+        "derivation": "three times measured pilot2 A/C member durations plus measured scaffold"
+      },
+      "pack_id": "align-pilot-v2",
+      "programmed_span_s": 41761.979800206565,
+      "scaffold_flags": [],
+      "scaffold_members": 25,
+      "scaffold_s": 5019
+    }
+  },
+  "schema_version": "joulewise.b5_sizing.v1"
+}

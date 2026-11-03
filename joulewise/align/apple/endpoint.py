@@ -20,7 +20,7 @@ from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
 
-def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False):
+def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False, split_at=None):
     """Count reasoning content in the emitted IDs; delimiters/EOS are not content.
 
     Only the fixed delimiters are encoded to locate their ID sequences. The
@@ -42,6 +42,7 @@ def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False):
     # IDs is also exact evidence that the initial content was reasoning.
     active = reasoning_open or first(closing) < first(opening)
     count, index = 0, 0
+    cached_count = 0
     while index < len(ids):
         if opening and ids[index:index + len(opening)] == list(opening):
             active = True
@@ -51,8 +52,9 @@ def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False):
             index += len(closing)
         else:
             count += int(active)
+            cached_count += int(active and split_at is not None and index < split_at)
             index += 1
-    return count
+    return (cached_count, count - cached_count) if split_at is not None else count
 
 _TOOL_CALL = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
@@ -191,6 +193,7 @@ class MlxEndpoint:
         episode_domain: str, prepare_metadata: Mapping[str, Any] | None = None,
         mock_turns: Sequence[Mapping[str, Any]] = (),
         enable_thinking: bool | None = None,
+        prompt_cache: str | None = None,
     ) -> None:
         self.runtime = runtime
         self.config = config
@@ -198,6 +201,10 @@ class MlxEndpoint:
         self.episode_domain = episode_domain
         self.mock_turns = tuple(mock_turns)
         self.enable_thinking = enable_thinking
+        if prompt_cache not in (None, "episode_prefix"):
+            raise ValueError("unknown prompt cache policy")
+        self.cache_policy = prompt_cache or "full_prompt_each_turn"
+        self._episode_cache = None
         self.events: list[Any] = []
         self.turn_provenance: list[Mapping[str, Any]] = []
         self.flags: list[str] = []
@@ -266,7 +273,7 @@ class MlxEndpoint:
         if seed is not None:
             flags.append("seed_recorded_greedy_generation")
         text = ""
-        prompt_tokens = completion_tokens = reasoning_tokens = 0
+        prompt_tokens = completion_tokens = reasoning_tokens = cached_tokens = 0
         first_epoch: float | None = None
         provenance: dict[str, Any] = {}
         finish_reason: str | None = None
@@ -319,6 +326,7 @@ class MlxEndpoint:
                 elif prior_hidden:
                     flags.append("prior_hidden_prefill_count_unavailable:mock_scripted_prompt")
                 provenance = dict(result.workload_provenance or {})
+                provenance["output_token_ids"] = provenance.get("response", {}).get("emitted_token_ids")
                 actual_ids = self.runtime._prompt_token_ids(prompt_tokens)
                 self.prompt_token_ids.extend(actual_ids)
                 provenance["prompt_token_ids"] = actual_ids
@@ -331,6 +339,10 @@ class MlxEndpoint:
 
                 def render_prompt(chat: Sequence[ChatMessage]) -> str:
                     return self._render_prompt(chat, tools)
+
+                cache_metadata = {}
+                cache_setup_metadata = {}
+                stream_options = {}
 
                 def prepare_prompt():
                     nonlocal prior_hidden_prefill_tokens, reasoning_open_from_template
@@ -352,6 +364,27 @@ class MlxEndpoint:
                             flags.append("prior_hidden_prefill_token_delta_negative")
                     return ids, ids, rendered
 
+                def reconcile_prompt(ids):
+                    from joulewise.align.apple.prompt_cache import EpisodePromptCache
+                    if self._episode_cache is None:
+                        self._episode_cache = EpisodePromptCache(self.runtime._model)
+                    delta, observed = self._episode_cache.prepare(ids)
+                    cache_metadata.update(observed)
+                    cache_setup_metadata.update({k: v for k, v in observed.items() if k != "fed_delta_ids"})
+                    stream_options["prompt_cache"] = self._episode_cache.cache
+                    if observed["cache_rebuilt"]:
+                        flags.append(f"cache.rebuilt_untrimmable:{turn_index}")
+                    cached = observed["cached_prompt_tokens"]
+                    # Independent ID annotations; the legacy rendered
+                    # counterfactual above retains its original meaning.
+                    cached_hidden, fresh_hidden = reasoning_tokens_from_ids(tokenizer, ids, split_at=cached)
+                    cache_metadata.update(
+                        cached_hidden_context_tokens=cached_hidden,
+                        fresh_hidden_prefill_tokens=fresh_hidden,
+                        hidden_cache_accounting_method="prompt_ids_between_think_delimiters",
+                    )
+                    return delta
+
                 native = self.runtime._mlx_lm
                 observation = _StreamObservation(native)
                 # Sequential in-process turns own this prepared runtime. Restore
@@ -361,9 +394,15 @@ class MlxEndpoint:
                     record = self.runtime._generate(
                         None, [], None, max_tokens, suppress_eos=False,
                         prepare_prompt=prepare_prompt,
+                        **({"stream_options": stream_options, "cache_accounting": True,
+                            "setup_metadata": cache_setup_metadata, "reconcile_prompt": reconcile_prompt}
+                           if self.cache_policy == "episode_prefix" else {}),
                     )
                 finally:
                     self.runtime._mlx_lm = native
+                if self.cache_policy == "episode_prefix":
+                    self._episode_cache.finish(record.prompt_token_ids, record.output_token_ids, cache_metadata)
+                    cached_tokens = cache_metadata["cached_prompt_tokens"]
                 finish_reason = observation.finish_reason
                 text = record.text
                 prompt_tokens = record.prompt_tokens
@@ -381,6 +420,7 @@ class MlxEndpoint:
                     "stop_condition": finish_reason or record.stop_condition,
                     "runtime_stop_condition": record.stop_condition,
                 }
+                provenance.update(cache_metadata)
                 reasoning_tokens = reasoning_tokens_from_ids(
                     tokenizer, record.output_token_ids, reasoning_open=reasoning_open_from_template)
                 provenance["reasoning_token_accounting"] = "output_ids_between_think_delimiters_excluding_trailing_eos"
@@ -395,6 +435,7 @@ class MlxEndpoint:
                 if first_epoch is None and event.event_type == "phase_end" and event.phase == "prefill":
                     first_epoch = event.timestamp_s
         except Exception as exc:
+            self._episode_cache = None  # never reuse partial/unknown native state
             flags.append(f"endpoint_error:{type(exc).__name__}:{exc}")
         # A native stop is authoritative even at the exact integer budget.
         # With no finish reason, equality is the only available cut evidence.
@@ -450,9 +491,10 @@ class MlxEndpoint:
         })
         return ChatResult(
             content=visible, reasoning_text=reasoning, tool_calls=calls,
-            prompt_tokens=prompt_tokens, cached_prompt_tokens=0,
+            prompt_tokens=prompt_tokens, cached_prompt_tokens=cached_tokens,
             completion_tokens=completion_tokens, reasoning_tokens=reasoning_tokens,
             start_ns=start_ns, first_token_ns=first_ns, end_ns=end_ns,
             raw_usage={"joulewise": {"flags": list(dict.fromkeys([*self._prepare_flags, *flags])),
-                                     "finish_reason": finish_reason}, "cache_policy": "full_prompt_each_turn", "raw_text": text},
+                                     "finish_reason": finish_reason}, "cache_policy": self.cache_policy,
+                       **({"cache": cache_metadata} if self.cache_policy == "episode_prefix" and self.config.hardware_target.runtime_backend == RuntimeBackend.MLX else {}), "raw_text": text},
         )

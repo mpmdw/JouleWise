@@ -1,0 +1,210 @@
+{
+  "test_invocations": [
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-baseline.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.test_mlx_runtime tests.test_mlx_runtime_detokenizer tests.align.test_apple_pilot tests.test_align_pilot_session",
+      "cwd": ".",
+      "exit_code": 1,
+      "tail": [
+        "Ran 60 tests in 65.316s",
+        "FAILED (failures=1, errors=2)"
+      ],
+      "note": "Initial command used a nonexistent test_apple_pilot module; detokenizer tests require tests on PYTHONPATH. The existing session test also compared /tmp and /private/tmp lexically. Corrected invocation and resolved the synthetic test root; no legacy runtime tests edited."
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-runtime.XXXXXX) PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/Users/edr/code/jw-wt/align-pilot3/tests /opt/homebrew/bin/python3.13 -m unittest tests.test_mlx_runtime tests.test_mlx_runtime_detokenizer tests.align.test_runner",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 75 tests in 0.232s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-cache.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3_cache",
+      "cwd": ".",
+      "exit_code": 1,
+      "tail": [
+        "Ran 8 tests in 0.249s",
+        "FAILED (errors=1)"
+      ],
+      "note": "New identity fixture omitted required source stack metadata: ValueError: source stack identity fields are unavailable. Replaced it with governed metadata."
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-endpoint.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_apple_endpoint tests.align.test_apple_campaign",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 21 tests in 164.860s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-cache2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3_cache",
+      "cwd": ".",
+      "exit_code": 1,
+      "tail": [
+        "Ran 9 tests in 0.722s",
+        "FAILED (errors=1)"
+      ],
+      "note": "New identity fixture retained incompatible base prompt fields: ValueError: config cannot be normalized into scientific identity. Switched to the existing as_config helper."
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-cachedesk.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3_cache tests.align.test_pilot3",
+      "cwd": ".",
+      "exit_code": 1,
+      "tail": [
+        "Ran 15 tests in 2.784s",
+        "FAILED (errors=1)"
+      ],
+      "note": "New Mac-pin preservation fixture symlinked config inputs outside its temporary repository: ValueError: config escaped repository. It now copies the 49 MiB config inputs; the production confinement check remains intact."
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-session.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.test_align_pilot_session tests.align.test_pilot2 tests.align.test_pilot2_round1",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 43 tests in 73.409s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-cachedesk2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3_cache tests.align.test_pilot3",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 15 tests in 3.840s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-runner.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_runner tests.align.test_runner_review tests.align.test_runner_fixround tests.align.test_runner_matrix tests.align.test_apple_support_edges tests.align.test_apple_sampler tests.align.test_shade",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 98 tests in 16.139s",
+        "OK (skipped=8)"
+      ],
+      "note": "Existing optional/dependency skip gates; no model or hardware evidence supplied by this run."
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-runtime.XXXXXX) PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/Users/edr/code/jw-wt/align-pilot3/tests /opt/homebrew/bin/python3.13 -m unittest tests.test_mlx_runtime tests.test_mlx_runtime_detokenizer tests.align.test_pilot3_cache tests.align.test_pilot3",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 67 tests in 3.644s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-endpoint.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_apple_endpoint tests.align.test_apple_campaign",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 21 tests in 168.035s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-focused.XXXXXX) PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/Users/edr/code/jw-wt/align-pilot3/tests /opt/homebrew/bin/python3.13 -m unittest tests.test_mlx_runtime tests.test_mlx_runtime_detokenizer tests.align.test_pilot3_cache tests.align.test_pilot3 tests.align.test_apple_campaign",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 80 tests in 134.563s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-session.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.test_align_pilot_session tests.align.test_pilot2 tests.align.test_pilot2_round1",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 43 tests in 70.605s",
+        "OK"
+      ],
+      "note": ""
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-cache.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -m unittest tests.align.test_pilot3_cache tests.align.test_pilot3",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "Ran 18 tests in 3.622s",
+        "OK"
+      ],
+      "note": ""
+    }
+  ],
+  "cli_checks": [
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-sizing.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/configs/campaigns/align_pilot_v2/registration/derive_sizing.py --pilot-session /Users/edr/night-align/pilot-v1-20261102T183609Z",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "derived pilot2 sizing evidence (no model work)"
+      ]
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-generate.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "generated align pilot kit"
+      ]
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-generate2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "generated align pilot kit"
+      ]
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-generate.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "generated align pilot kit"
+      ]
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-generate2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "generated align pilot kit"
+      ]
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-check.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py --check",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "verified align pilot kit"
+      ]
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-final-check2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/scripts/align_pilot_kit.py --check",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "verified align pilot kit"
+      ]
+    },
+    {
+      "cmd": "TMPDIR=$(mktemp -d /tmp/align-p3-identityhelp.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 /Users/edr/code/jw-wt/align-pilot3/configs/campaigns/align_pilot_v2/registration/derive_identity_pins.py --help",
+      "cwd": ".",
+      "exit_code": 0,
+      "tail": [
+        "  --root ROOT"
+      ]
+    }
+  ]
+}

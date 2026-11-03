@@ -249,12 +249,15 @@ def review_tool_text(index: int) -> str:
     )
 
 
-def run_native_review(root: Path, scenario: str, clock: Clock):
+def run_native_review(root: Path, scenario: str, clock: Clock, *, prompt_cache=None):
     """Real registry/prepare/warmup/generation/controller/reducer, no runtime stub."""
     counter = 0
 
-    def stream_generate(model, tokenizer, prompt, *, max_tokens, sampler=None):
+    def stream_generate(model, tokenizer, prompt, *, max_tokens, sampler=None, prompt_cache=None):
         nonlocal counter
+        if prompt_cache is not None:
+            from tests.align.test_pilot3_cache import consume
+            consume(prompt_cache, list(prompt))
         clock.sleep(len(prompt) * 0.001)  # D-019, 1 ms per prefill token.
         if max_tokens == 4:  # Existing MLX warmup budget, outside the episode.
             for token in range(max_tokens):
@@ -299,6 +302,8 @@ def run_native_review(root: Path, scenario: str, clock: Clock):
             reason = "stop" if token == count - 1 and count == completion else None
             if scenario == "explicit_length" and index == 1 and token == count - 1:
                 reason = "length"
+            if prompt_cache is not None:
+                consume(prompt_cache, [ids[token]])
             yield SimpleNamespace(token=ids[token], text=piece, finish_reason=reason)
 
     mirror = root / "model"
@@ -316,6 +321,7 @@ def run_native_review(root: Path, scenario: str, clock: Clock):
         task_kwargs={"mode": scenario}, condition="benign", seed=7,
         max_turns=6, max_tokens=300, temperature=0.0,
         max_context_tokens=1 if scenario == "guard_zero" else None,
+        prompt_cache=prompt_cache,
     )
     config = replace(
         base, run_id="native-" + scenario,

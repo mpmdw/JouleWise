@@ -57,18 +57,18 @@ class KitTests(unittest.TestCase):
         self.assertTrue(tree['non_claim'])
         self.assertEqual(len(chain.stage_plan(tree)),len(tree['stage_graph']))
         collection=json.loads(files[kit.KIT/'collection_plan.json'])
-        self.assertEqual(collection['repeats'],1)
+        self.assertEqual(collection['repeats'],3)
         members=collection['members']
-        # 3 blocks x 2 task pairs x 2 conditions, one repeat = 12.
-        self.assertEqual(len(members),12)
-        self.assertEqual([m['block'] for m in members],list('AAAABBBBCCCC'))
+        # 2 blocks x 2 task pairs x 2 conditions x 3 repeats = 24.
+        self.assertEqual(len(members),24)
+        self.assertEqual([m['block'] for m in members],list('A'*12+'C'*12))
         first=[]
-        for i in range(0,12,2):
+        for i in range(0,24,2):
             a,b=members[i:i+2]
             self.assertEqual((a['task_pair'],a['block']),(b['task_pair'],b['block']))
             self.assertEqual({a['condition'],b['condition']},{'benign','sabotage'})
             first.append(a['condition'])
-        self.assertEqual(first,['benign','sabotage','sabotage','benign','benign','sabotage'])
+        self.assertEqual(first, ['benign','sabotage','benign','sabotage','benign','sabotage'] * 2)
         for member in members:
             config=BenchmarkConfig.from_mapping(json.loads(files[Path(member['config_path'])]))
             base=BenchmarkConfig.from_mapping(json.loads((ROOT/kit.base_config_path(member['model_id'])).read_bytes()))
@@ -103,7 +103,7 @@ class KitTests(unittest.TestCase):
         reg=ROOT/kit.KIT/'registration'
         sized=registration.load_sizing(reg)['packs'][kit.PACK_ID]
         self.assertIn('sizing.planning_bound_unmeasured',sized['flags'])
-        self.assertEqual((sized['align_members'],sized['scaffold_members'],sized['member_count']),(12,25,37))
+        self.assertEqual((sized['align_members'],sized['scaffold_members'],sized['member_count']),(24,25,49))
         evidence=h.read(reg/'sizing_evidence.json')
         rows=evidence['member_observations']
         # Check mean and x-weighted mean residuals in seconds at 0.1%
@@ -114,8 +114,8 @@ class KitTests(unittest.TestCase):
         agreement_s=0.001*law['residual_sd_s']
         self.assertLess(abs(math.fsum(residuals))/len(rows),agreement_s)
         self.assertLess(abs(math.fsum(r['episode_s']*e for r,e in zip(rows,residuals)))/math.fsum(r['episode_s'] for r in rows),agreement_s)
-        self.assertEqual(sized['scaffold_s'],4973)  # Journal integer seconds, exact subtraction.
-        self.assertEqual(sized['dwell_increase_s'],12*(300-evidence['pilot1_idle_s']))
+        self.assertEqual(sized['scaffold_s'],5019)  # Journal integer seconds, exact subtraction.
+        self.assertEqual(sized['dwell_increase_s'],24*(300-evidence['pilot2_idle_s']))
         # Member bounds already include their idle increase exactly once.
         expected=sized['scaffold_s']+math.fsum(r['block_upper_s'] for r in sized['blocks'])
         self.assertEqual(sized['programmed_span_s'],expected)
@@ -129,11 +129,11 @@ class KitTests(unittest.TestCase):
         for member in collection['members']:
             self.assertEqual(h.read(ROOT/member['config_path'])['sampling']['idle_seconds'],cap)
 
-    def test_single_repeat_roster_has_the_three_ruled_configurations(self):
+    def test_three_repeat_roster_has_the_two_ruled_configurations(self):
         collection=h.read(ROOT/kit.KIT/'collection_plan.json')
-        self.assertEqual(collection['repeats'],1)
+        self.assertEqual(collection['repeats'],3)
         self.assertEqual([(b['model_id'],b['enable_thinking'],b['max_tokens'],b['max_turns']) for b in collection['blocks']],
-            [('qwen3-30b-a3b',True,4096,12),('qwen3-30b-a3b',False,2048,20),('qwen3-next-80b',None,2048,20)])
+            [('qwen3-30b-a3b',True,4096,12),('qwen3-next-80b',None,2048,20)])
 
     def test_protocol_describes_the_capability_screen(self):
         text=(ROOT/'docs/align/pilot_protocol_v1.md').read_text()
@@ -252,7 +252,8 @@ class SyntheticDeskTests(unittest.TestCase):
     def test_checks_fail_for_missing_bundle_and_nondeterministic_repeat(self):
         good = {'energy': {'powermetrics:cpu': {'joules': 10.0, 'segment_sum_j': 10.0, 'segments': 3}},
                 'flags': [], 'per_turn_context_tokens': [0, 9], 'per_turn_prefill_tokens': [4, 2],
-                'per_turn_decode_tokens': [5, 6], 'per_turn_hidden_tokens': [0, 0]}
+                'per_turn_decode_tokens': [5, 6], 'per_turn_hidden_tokens': [0, 0],
+                'per_turn_output_token_ids': [list(range(5)), list(range(6))], 'per_turn_prompt_token_ids': [[1], [1, 2]]}
         rows = [{'task_pair': 'p', 'condition': 'benign', 'summary': good},
                 {'task_pair': 'p', 'condition': 'benign', 'summary': {**good, 'per_turn_decode_tokens': [5, 7]}},
                 {'task_pair': 'p', 'condition': 'sabotage', 'summary': None}]
@@ -260,21 +261,21 @@ class SyntheticDeskTests(unittest.TestCase):
         self.assertFalse(checks['I1_all_bundles_readable'])
         self.assertFalse(checks['I2_energy_on_every_episode'])
         self.assertTrue(checks['I3_attribution_tiles_episode'])
-        self.assertFalse(checks['I4_greedy_repeats_identical_tokens'])
+        self.assertIsNot(checks['I4_greedy_repeats_identical_tokens'], True)
         flagged = [{**rows[0], 'summary': {**good, 'flags': ['power_unavailable:no_bundle_trace']}}]
         self.assertFalse(s.instrument_checks(flagged)[0]['I2_energy_on_every_episode'])
         # A null (nonfinite) total is not energy.
         null = {**good, 'energy': {'powermetrics:cpu': {**good['energy']['powermetrics:cpu'], 'joules': None}}}
         self.assertFalse(s.instrument_checks([{**rows[0], 'summary': null}])[0]['I2_energy_on_every_episode'])
-        # Every count of the per-turn tuple defines the work, not decode alone.
+        # I4 checks IDs; energy spread also requires equal accounting tuples.
         for name in s.TURN_COUNTS:
             other = {**good, 'per_turn_' + name: [x + 1 for x in good['per_turn_' + name]]}
             pair = [rows[0], {**rows[0], 'summary': other}]
             checks, deterministic, spreads = s.instrument_checks(pair)
-            self.assertFalse(checks['I4_greedy_repeats_identical_tokens'], name)
+            self.assertEqual(checks['I4_greedy_repeats_identical_tokens'], 'not_evaluated' if name == 'decode_tokens' else True)
             self.assertEqual(spreads, {}, name)
 
-    def test_repeats_with_different_prefill_work_fail_i4_and_report_no_spread(self):
+    def test_equal_output_ids_different_prefill_work_reports_no_spread(self):
         # Sol review ALIGN-SOL-REV F2 (probe_checks.py): equal decode counts,
         # total prefill 5500 / 5600 / 5700.
         with tempfile.TemporaryDirectory() as directory, fixture_source() as source:
@@ -292,8 +293,8 @@ class SyntheticDeskTests(unittest.TestCase):
             self.assertEqual([x['totals']['prefill_tokens'] for x in summaries], [3500, 3600, 3700])
             checks, deterministic, spreads = s.instrument_checks(rows)
             self.assertTrue(checks['I1_all_bundles_readable'] and checks['I2_energy_on_every_episode'])
-            self.assertFalse(checks['I4_greedy_repeats_identical_tokens'])
-            self.assertEqual(deterministic, {'ledger_review/benign': False})
+            self.assertTrue(checks['I4_greedy_repeats_identical_tokens'])
+            self.assertEqual(deterministic, {'ledger_review/benign': True})
             self.assertNotIn('ledger_review/benign', spreads)
             self.assertEqual([x['per_turn_prefill_tokens'][0] for x in summaries], [1600, 1700, 1800])
 
@@ -384,11 +385,11 @@ class RealKitStagingTests(unittest.TestCase):
                                      hashlib.sha256(config.read_bytes()).hexdigest())
                     arm_readiness.authenticate_campaign_launch_lineage(selected, config_paths=[config])
                     checked.append(config)
-            # 12 align episodes plus 18 corpus and 7 reference scaffold members.
-            self.assertEqual(len(checked), 37)
-            self.assertEqual(sum(1 for c in checked if 'episodes-' in c.parent.name), 12)
+            # 24 align episodes plus 18 corpus and 7 reference scaffold members.
+            self.assertEqual(len(checked), 49)
+            self.assertEqual(sum(1 for c in checked if 'episodes-' in c.parent.name), 24)
             roster = harvest.build_roster(pack, view)
-            self.assertEqual(len(roster['members']), 37)
+            self.assertEqual(len(roster['members']), 49)
             self.assertEqual(roster['duplicate_listings'], {})
             checked[-1].write_bytes(checked[-1].read_bytes() + b'\n')
             with self.assertRaises(window_lineage.HazardLineageError):
@@ -401,7 +402,7 @@ class SessionPrepareTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.measurement = self.root / 'measurement'
         self.session = self.root / 'session'
         m = self.measurement
@@ -492,12 +493,12 @@ class SessionPrepareTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             status = s.desk(self.session, run=subprocess.run)
         result = h.read(self.session / 'PILOT.json')
-        self.assertEqual(len(result['members']), 12)
+        self.assertEqual(len(result['members']), 24)
         # Every episode bundle read back; repeats are byte-identical seeds here.
         self.assertTrue(result['checks']['I1_all_bundles_readable'], result['members'][0])
         self.assertTrue(result['checks']['I2_energy_on_every_episode'])
         self.assertTrue(result['checks']['I3_attribution_tiles_episode'])
-        # The real non-claim harvest over 25 scaffold and 12 align bundles.
+        # The real non-claim harvest over 25 scaffold and 24 align bundles.
         stderr = (self.session / 'staging/harvest.stderr').read_text()
         self.assertIn(status['harvest_exit'], (0, 6), stderr[-3000:])
         self.assertIn('--non-claim', status['harvest_argv'])
@@ -509,7 +510,7 @@ class SessionPrepareTests(unittest.TestCase):
         self.assertEqual(state['preparation_status'], 'STAGED', out.getvalue())
         self.assertTrue(state['session_id'].startswith('align-pilot-'))
         record = h.read(state['plan_path'])
-        self.assertEqual(record['hazard_window']['member_count'], 37)
+        self.assertEqual(record['hazard_window']['member_count'], 49)
         self.assertEqual(Path(state['inputs']['pack_root']), self.session / 'measurement/configs/campaigns' / s.PACK_ID)
         self.assertEqual(Path(state['registration_dir']), self.session / 'measurement' / s.KIT / 'registration')
         self.assertIn({'kind': 'sizing.planning_bound_unmeasured', 'pack_id': s.PACK_ID}, state['flags'])
@@ -520,7 +521,7 @@ class SessionPrepareTests(unittest.TestCase):
         pack = Path(state['inputs']['pack_root'])
         staged = sorted((pack / 'members').glob('*episodes-*/*.json'))
         configs = [p for p in staged if p.name != 'order_manifest.json']
-        self.assertEqual(len(configs), 12)
+        self.assertEqual(len(configs), 24)
         for path in configs:
             original = ROOT / s.KIT / 'stages' / path.parent.name.removeprefix(s.PACK_ID + '-') / path.name
             self.assertEqual(path.read_bytes(), original.read_bytes())
