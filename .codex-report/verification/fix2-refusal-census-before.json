@@ -1,0 +1,19 @@
+{
+ "unlisted": [
+  {
+   "file": "joulewise/adapters/mlx_runtime.py",
+   "function": "MlxRuntimeAdapter._generate",
+   "kind": "raise",
+   "detail": "ValueError|sampled generation requires",
+   "count": 1,
+   "guard": "ececd5bbf43ed1dc",
+   "lines": [
+    807
+   ]
+  }
+ ],
+ "stale": [],
+ "miscounted": [],
+ "guard_changed": [],
+ "scope_gaps": []
+}
