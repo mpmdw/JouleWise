@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/align_pilot_kit.py",
-    "sha256": "ecbed4676e23118aa20f512d9ce613fbe76922cd24a2e25eabdf7518d94cffbb"
+    "sha256": "883a1669cc11a1c3c6f0fb2f80f828b9b62dec02562d805862114d022ee4f6ef"
   },
   "module_order": [
     "bytes-qwen3-1p7b",
@@ -77,8 +77,8 @@
   ],
   "non_claim": true,
   "plan": {
-    "actual_sha256": "b9192290bba145af9967247abbd3c469c67f7034e55d186aed378e90a2566071",
-    "declared_sha256": "b9192290bba145af9967247abbd3c469c67f7034e55d186aed378e90a2566071",
+    "actual_sha256": "6ec71a5c37b4cebe7d2ab6a8882eed86b7913853af3485050e31c1508ad6d203",
+    "declared_sha256": "6ec71a5c37b4cebe7d2ab6a8882eed86b7913853af3485050e31c1508ad6d203",
     "path": "collection_plan.json",
     "plan_id": "align-pilot-v3"
   },

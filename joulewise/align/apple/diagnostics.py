@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 import json
+import math
 from pathlib import Path
 
 from joulewise.desk_compress import read_bytes
@@ -218,7 +219,11 @@ def thermal_onset(episode_start_ns, episode_end_ns, turn_starts_ns, readings):
     Polling only locates onset at the first recorded nonzero sample. No
     interpolation, assumed recovery time, or freshness threshold is introduced.
     """
-    samples = sorted(readings.get('readings_monotonic_ns_level', []))
+    samples = sorted((t, level) for t, level in readings.get('readings_monotonic_ns_level', [])
+                     if type(level) in (int, float) and math.isfinite(level) and level >= 0)
+    observed = (any(episode_start_ns <= t <= episode_end_ns for t, _ in samples)
+                or (any(t <= episode_start_ns for t, _ in samples)
+                    and any(t >= episode_end_ns for t, _ in samples)))
     elevated = [t for t, level in samples if isinstance(level, (int, float)) and level > 0]
     onset = elevated[0] if elevated else None
     starts = []
@@ -232,13 +237,14 @@ def thermal_onset(episode_start_ns, episode_end_ns, turn_starts_ns, readings):
         return {'at_or_before': next(([t, level] for t, level in reversed(samples) if t <= stamp), None),
                 'at_or_after': next(([t, level] for t, level in samples if t >= stamp), None)}
     return {**readings, 'first_nonzero_ns': onset,
-            'os_level_nonzero_in_episode': bool(in_episode),
+            'os_level_nonzero_in_episode': bool(in_episode) if observed else None,
+            'episode_scope_telemetry_reason': None if observed else 'no_valid_os_reading_inside_or_bracketing_episode',
             'first_in_episode_nonzero_ns': in_episode[0] if in_episode else None,
             'episode_bracketing_samples': {'start': bracket(episode_start_ns), 'end': bracket(episode_end_ns),
                                           'onset': {'previous_sample': next(([t, level] for t, level in reversed(samples) if t < in_episode[0]), None),
                                                     'first_nonzero_sample': next(([t, level] for t, level in samples if t == in_episode[0]), None)} if in_episode else None},
             'throttled_fraction': ((episode_end_ns - in_episode[0]) / (episode_end_ns - episode_start_ns)
-                                   if in_episode and episode_end_ns > episode_start_ns else 0),
+                                   if in_episode and episode_end_ns > episode_start_ns else 0) if observed else None,
             'onset_from_episode_start_s': (onset - episode_start_ns) / 1e9 if onset is not None else None,
             'onset_from_episode_end_s': (onset - episode_end_ns) / 1e9 if onset is not None else None,
             'turn_start_os_levels': starts, 'onset_method': 'first_observed_nonzero_member_sample'}

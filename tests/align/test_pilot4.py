@@ -154,6 +154,40 @@ class SamplingTests(unittest.TestCase):
 
 
 class KitTests(unittest.TestCase):
+    @unittest.skipUnless(Path(kit.SHADE_CACHE).is_dir(), 'pinned SHADE cache is not installed')
+    def test_real_offline_factory_seeds_equal_preregistration(self):
+        from joulewise.align.apple.pilot import offline_shade_task
+        plan = h.read(ROOT / kit.KIT / 'collection_plan.json')
+        tasks = {}
+        values = set()
+        for m in plan['members']:
+            spec = EpisodeSpec.from_text(json.dumps(m['spec']))
+            pair = spec.task_kwargs['task_pair']
+            if pair not in tasks:
+                tasks[pair] = offline_shade_task(**spec.task_kwargs)
+                self.assertFalse(tasks[pair].upstream.allow_fetch)
+                self.assertIsNotNone(tasks[pair].upstream.prepare())
+            config = BenchmarkConfig.from_mapping(h.read(ROOT / m['config_path']))
+            actual = episode_seed(*seed_inputs(config, spec.enable_thinking), tasks[pair].task_pair, spec.seed)
+            self.assertEqual(actual, m['expected_episode_seed'])
+            values.add(actual)
+        self.assertEqual(len(values), 12)
+
+    def test_planning_statistics_and_spans_are_source_derived(self):
+        evidence = h.read(ROOT / kit.KIT / 'registration/sizing_evidence.json')
+        inputs = evidence['planning_turn_observations']
+        rates = evidence['phase_rates']['A']
+        self.assertEqual(inputs['n_turns'], len(rates))
+        self.assertEqual(inputs['largest_fed_prefill']['prefill_s'], max(r['prefill_s'] for r in rates))
+        self.assertEqual(inputs['largest_fed_prefill']['prefill_tokens'], 9683)
+        self.assertEqual(inputs['largest_fed_prefill']['planning_s'], 16.842)
+        self.assertEqual(inputs['slowest_decode']['decode_tok_s'], min(r['decode_tok_s'] for r in rates))
+        self.assertEqual(inputs['slowest_decode']['planning_tok_s'], 41.95)
+        sizing = h.read(ROOT / kit.KIT / 'registration/sizing_b5.json')['packs'][kit.PACK_ID]
+        self.assertEqual(sizing['planning_case']['episode_s'], 120 + 4096 / 41.95 + 16.842)
+        self.assertEqual(sizing['harvest_and_desk_planned_s'], 90 * 60)
+        self.assertIn('sizing.planning_bound_unmeasured', sizing['flags'])
+
     def test_roster_order_replay_distance_specs_and_byte_stable_generation(self):
         members = kit.ordered_members()
         self.assertEqual(len(members), 28)
@@ -226,6 +260,35 @@ def coefficient_bundle(root, rid, pair, condition, seed, rows):
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_missing_and_error_only_thermal_are_null_and_ineligible(self):
+        for readings in ({}, {'readings_monotonic_ns_level': [[9, None], [15, None], [21, None]],
+                              'errors': ['sensor error']}):
+            with self.subTest(readings=readings):
+                thermal = thermal_onset(10, 20, [10], readings)
+                self.assertIsNone(thermal['os_level_nonzero_in_episode'])
+                self.assertIsNone(thermal['throttled_fraction'])
+                member = {'summary': {'os_thermal': thermal}}
+                self.assertFalse(pa.episode_eligible(member))
+                self.assertEqual(pa.episode_ineligibility_reasons(member),
+                                 ['no_valid_os_reading_inside_or_bracketing_episode'])
+        bracketed = thermal_onset(10, 20, [10], {'readings_monotonic_ns_level': [[9, 0], [21, 0]]})
+        self.assertIs(bracketed['os_level_nonzero_in_episode'], False)
+        self.assertEqual(bracketed['throttled_fraction'], 0)
+
+    def test_preregistered_seed_catches_bundle_consistent_mismatch(self):
+        with tempfile.TemporaryDirectory() as d:
+            bundle, _, _, _ = native(Path(d))
+            summary = desk.episode_summary(bundle)
+            base = summary['sampler_seed_inputs']['episode_seed']
+            good = desk.episode_summary(bundle, expected_episode_seed=base)
+            bad = desk.episode_summary(bundle, expected_episode_seed=base + 1)
+            self.assertEqual(good['sampler_check']['status'], 'pass')
+            self.assertEqual(bad['sampler_check']['status'], 'fail')
+            self.assertFalse(bad['sampler_seed_inputs']['preregistered_episode_seed_matches_bundle'])
+            for r in bad['sampler_check']['turns']:
+                self.assertEqual(r['actual']['per_turn_seed'], r['expected_per_turn_seed'])
+                self.assertNotEqual(r['actual']['per_turn_seed'], r['preregistered_per_turn_seed'])
+
     def test_replay_divergence_reports_exact_turn_and_token_index(self):
         import copy
         turns = [{'prompt_token_ids':[1,2], 'output_token_ids':[3,4],
@@ -292,6 +355,9 @@ class AnalysisTests(unittest.TestCase):
                     members.append({'run_id':rid,'block':'A','task_pair':pair,'condition':condition,'summary':summary})
         replay = {**members[0], 'run_id':'replay'}
         members.append(replay)
+        # An unrelated all-turn hidden ledger must not shift logged-row H.
+        # Simulate an unlogged leading turn; residual rows remain the witnesses.
+        members[6]['summary']['per_turn_hidden_tokens'].insert(0, 999999)
         out = pa.residual_analysis(members)[0]['scopes']['registered']
         fit = out['counts_logged_headline']
         self.assertEqual(fit['distinct_trajectories'],24)
@@ -351,7 +417,9 @@ class AnalysisTests(unittest.TestCase):
                     writer = csv.DictWriter(stream,fieldnames=fields)
                     writer.writeheader()
                     writer.writerows(samples)
-                rows.append({'run_id':label,'task_pair':pair,'condition':condition,'repeat':1,'ordinal':ordinal,'block':'A','bundle':bundle})
+                expected = desk.episode_summary(bundle)['sampler_seed_inputs']['episode_seed']
+                rows.append({'run_id':label,'task_pair':pair,'condition':condition,'repeat':1,'ordinal':ordinal,
+                             'block':'A','bundle':bundle,'expected_episode_seed':expected})
             runs = root / 'runs'
             for m in rows:
                 shutil.copytree(m['bundle'],runs/m['run_id'])
@@ -381,11 +449,32 @@ class AnalysisTests(unittest.TestCase):
             self.assertTrue(report['checks']['I4_sampler_provenance'])
             self.assertTrue(all(r['status']=='identical' for r in replays))
             self.assertEqual(len(report['repeat_energy_spread']),2)
+            self.assertEqual(report['repeat_token_identity'], {})
+            self.assertIn('greedy-only; sampled configurations skipped', printed.getvalue())
+            for pairs in report['repeat_energy_spread'].values():
+                for replay in pairs:
+                    refs = replay['identical_work_difference_sd_references']
+                    self.assertEqual([r['df'] for r in refs], [16, 12])
+                    self.assertEqual([r['difference_sd_j'] for r in refs],
+                                     [math.sqrt(2) * 4.511563, math.sqrt(2) * 4.029927])
             self.assertNotIn(rows[2]['run_id'],report['registered_eligible_members'])
             self.assertIn(rows[2]['run_id'],report['episode_scope_alternative_eligible_members'])
             self.assertNotIn(rows[3]['run_id'],report['episode_scope_alternative_eligible_members'])
             # Both clocks and missing evidence are disclosed per turn.
             self.assertIn('per_turn_active_gpu_clock_mhz',printed.getvalue())
+            # The fallback comes from the supplied kit, irrespective of version.
+            state = h.read(session / 'session.json')
+            state['runs_roots'] = {}
+            state['inputs'] = {'runs_parent': str(root)}
+            h.write(session / 'session.json', state)
+            h.write(measurement / desk.KIT / 'plan_tree.json', {'roots': {'claim_root_leaf': 'runs'}})
+            rows[0]['expected_episode_seed'] += 1
+            h.write(measurement / desk.KIT / 'collection_plan.json', {'members': rows})
+            with patch('joulewise.align.apple.diagnostics.member_thermal_readings',return_value=thermals),redirect_stdout(io.StringIO()):
+                changed = h.read(Path(desk.desk(session, harvest=False)['pilot']))
+            self.assertEqual(changed['runs_root'], str(runs))
+            self.assertTrue(all(m['summary'] for m in changed['members']))
+            self.assertFalse(changed['checks']['I4_sampler_provenance'])
 
 
 if __name__=='__main__':

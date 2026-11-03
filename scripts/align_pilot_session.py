@@ -71,7 +71,7 @@ def turn_counts(summary):
     return tuple(zip(*(summary['per_turn_' + name] for name in TURN_COUNTS), strict=True))
 
 
-def episode_summary(bundle, *, target_precheck_paths=None):
+def episode_summary(bundle, *, target_precheck_paths=None, expected_episode_seed=None):
     """One member's episode, energy per recorded power channel, and flags."""
     from joulewise.align.apple.workload import read_episode_bundle
     from joulewise.align.attribution import attribute_episode
@@ -122,7 +122,7 @@ def episode_summary(bundle, *, target_precheck_paths=None):
     controls = {k: getattr(spec, k) for k in ('enable_thinking', 'sampler', 'prompt_cache', 'max_context_tokens', 'max_episode_seconds')}
     controls['model'] = config.model.name
     return {'configuration': controls, 'residual_rows': residual_rows,
-            **check_turns(episode, turn_rows, spec, config, transcript),
+            **check_turns(episode, turn_rows, spec, config, transcript, expected_episode_seed=expected_episode_seed),
             'episode_start_ns': episode.start_ns, 'episode_end_ns': episode.end_ns,
             'turn_starts_ns': [t.start_ns for t in episode.turns],
             'per_turn_output_token_ids': [r.get('generation', {}).get('output_token_ids') for r in turn_rows],
@@ -169,6 +169,8 @@ def instrument_checks(members):
                 for m in usable for e in m['summary']['energy'].values())
     cells = defaultdict(list)
     for m in readable:
+        if m['summary'].get('configuration', {}).get('sampler') is not None:
+            continue  # repeat_token_identity is a legacy greedy-only diagnostic.
         # Configuration blocks are different work, never greedy repeats of each other.
         cell = (m.get('block'), m['task_pair'], m['condition'])
         cells[cell].append(m['summary'])
@@ -270,7 +272,12 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():
         raise ValueError('terminal record is required before desk')
-    runs_root = Path(state['runs_roots'].get('claim') or Path(state['inputs']['runs_parent']) / 'runs_align_pilot_v2')
+    claim_root = state.get('runs_roots', {}).get('claim')
+    if not claim_root:
+        registration = Path(state.get('registration_dir', Path(state['measurement_root']) / KIT / 'registration'))
+        tree = h.read(registration.parent / 'plan_tree.json')
+        claim_root = Path(state['inputs']['runs_parent']) / tree['roots']['claim_root_leaf']
+    runs_root = Path(claim_root)
     from joulewise.align.apple.diagnostics import member_thermal_readings, thermal_onset
     thermal = member_thermal_readings(custody)
     targets = {}
@@ -288,7 +295,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             if key in row:
                 entry[key] = row[key]
         try:
-            entry['summary'] = episode_summary(bundle, target_precheck_paths=targets.get(row['run_id']))
+            entry['summary'] = episode_summary(bundle, target_precheck_paths=targets.get(row['run_id']),
+                                               expected_episode_seed=row.get('expected_episode_seed'))
             summary = entry['summary']
             summary['os_thermal'] = thermal_onset(summary['episode_start_ns'], summary['episode_end_ns'],
                 summary['turn_starts_ns'], thermal.get(row['run_id'], {}))
@@ -340,7 +348,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         member['battery_discharge'] = battery.get(member['run_id'])
     comparison = cross_pilot_identity(members, compare_session) if compare_session else None
     checks, deterministic, _legacy_spreads = instrument_checks(members)
-    from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis, episode_eligible
+    from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis, episode_eligible, episode_ineligibility_reasons
     i4, spreads, raw_spread = sampling_checks(members)
     residuals = residual_analysis(members)
     # I4' replaces the greedy check for sampled cohorts. Collisions are
@@ -359,6 +367,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'I4_prime': i4, 'raw_within_cell_energy_sd': raw_spread, 'residual_analysis': residuals,
              'registered_eligible_members': [m['run_id'] for m in members if not m['excluded']],
              'episode_scope_alternative_eligible_members': [m['run_id'] for m in members if m.get('summary') and episode_eligible(m)],
+             'episode_scope_alternative_ineligible_reasons': {m['run_id']: episode_ineligibility_reasons(m)
+                 for m in members if m.get('summary') and not episode_eligible(m)},
              'exclusions_path': str(exclusion_path), 'members_excluded': (exclusions or {}).get('members_excluded', []),
              'cross_pilot_token_identity': comparison,
              'session_harvest_flags': harvest_flags.get(None, []),
@@ -404,10 +414,11 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             'request_window_diagnostics': pre['request_windows'],
             'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
             'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}, sort_keys=True))
-    print('repeat_token_identity: ' + json.dumps(deterministic, sort_keys=True))
+    print('repeat_token_identity (greedy-only; sampled configurations skipped): ' + json.dumps(deterministic, sort_keys=True))
     if comparison is not None:
         print('cross_pilot_token_identity: ' + json.dumps(comparison, sort_keys=True))
     for key in ('I4_prime', 'registered_eligible_members', 'episode_scope_alternative_eligible_members',
+                'episode_scope_alternative_ineligible_reasons',
                 'raw_within_cell_energy_sd', 'residual_analysis'):
         print(key + ': ' + json.dumps(pilot[key], sort_keys=True, allow_nan=False))
     print('repeat_energy_spread: ' + json.dumps(spreads, sort_keys=True))

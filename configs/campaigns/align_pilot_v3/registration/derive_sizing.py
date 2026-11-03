@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -72,6 +73,7 @@ def derive(session):
             n = min(n, len(p) - 1)
             rate = {'run_id': run_id, 'turn': t['index']}
             for phase, count in (('prefill', row['generation']['prefill_tokens']), ('decode', len(o))):
+                rate[phase + '_tokens'] = count
                 rate[phase + '_s'] = durations[(t['index'], phase)]
                 rate[phase + '_tok_s'] = count / rate[phase + '_s']
             rates[member['block']].append(rate)
@@ -92,10 +94,24 @@ def derive(session):
                 for p in sorted(root.iterdir()) if p.is_dir() and (p / 'config.json').is_file() and p.name not in align_ids]
     old_path = ROOT / 'configs/campaigns/align_pilot_v1/registration/sizing_b5.json'
     old = next(iter(read(old_path)['packs'].values()))['blocks'][0]
+    largest_prefill = max(rates['A'], key=lambda r: r['prefill_s'])
+    slowest_decode = min(rates['A'], key=lambda r: r['decode_tok_s'])
+    planning_turn_observations = {
+        'population': 'all measured turns of all 12 pilot3 A members, both task pairs and conditions, including all three greedy repeats per cell',
+        'n_turns': len(rates['A']),
+        'source': 'digested events.jsonl prefill/decode phase_start..phase_end markers and align_turns.jsonl generation token counts',
+        'largest_fed_prefill': {**largest_prefill, 'statistic': 'maximum fed-prefill phase duration',
+                               'planning_s': math.ceil(largest_prefill['prefill_s'] * 1000) / 1000,
+                               'rounding': 'up to 0.001 s'},
+        'slowest_decode': {**slowest_decode, 'statistic': 'minimum decode tokens / decode phase duration',
+                           'planning_tok_s': math.floor(slowest_decode['decode_tok_s'] * 100) / 100,
+                           'rounding': 'down to 0.01 tok/s'},
+    }
     return {'non_claim': True, 'source_session': str(session), 'session': digest(session / 'session.json'),
             'collection_plan': digest(Path(state['registration_dir']).parent / 'collection_plan.json'),
             'campaign_log': digest(log_path), 'member_observations': observations,
             'phase_rates': rates, 'cache_trajectory_forecasts': trajectories,
+            'planning_turn_observations': planning_turn_observations,
             'smallest_first_prompt_tokens': min(first_prompts), 'pilot3_idle_s': 300,
             'scaffold_s': end - start - sum(science), 'scaffold_bundle_bytes': scaffold,
             'scaffold_derivation': {'journal': digest(journal_path), 'start_s': start, 'end_s': end,

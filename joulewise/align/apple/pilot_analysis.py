@@ -84,10 +84,13 @@ def sampling_checks(members):
                                 spreads.setdefault(key, []).append({'channel': ch, **pair, 'n': 2,
                                     'sd_j': stdev(values), 'difference_j': values[1] - values[0],
                                     'range_j': abs(values[1] - values[0]),
-                                    # 3 SD of a pair difference, pilot-3 pooled
-                                    # identical-work SD 4.51 J, 16 residual df.
-                                    'reference_difference_j': 3 * 4.51 * math.sqrt(2),
-                                    'reference_derivation': '3 * 4.51 J * sqrt(2); pilot3 pooled identical-work SD, df=16; diagnostic only'})
+                                    'identical_work_difference_sd_references': [
+                                        {'pool': label, 'pooled_sd_j': sd, 'df': df,
+                                         'difference_sd_j': math.sqrt(2) * sd}
+                                        for label, sd, df in (
+                                            ('all_8_pilot3_cells_including_thermally_excluded_A_bank', 4.511563, 16),
+                                            ('6_pilot3_cells_without_thermally_excluded_A_bank', 4.029927, 12))],
+                                    'reference_derivation': 'SD of an identical-work difference = sqrt(2) * pooled SD; printed diagnostic only, never a bar or exclusion'})
                 elif s.get('seed') != other.get('seed') or not sampled(s):
                     if s.get('per_turn_output_token_ids') and s.get('per_turn_output_token_ids') == other.get('per_turn_output_token_ids'):
                         observations.append({'code': 'sampling.identical_independent_seeds' if sampled(s) else 'sampling.identical_greedy_trajectories',
@@ -103,7 +106,7 @@ def sampling_checks(members):
     return result, spreads, raw
 
 
-def check_turns(episode, rows, spec, config, transcript):
+def check_turns(episode, rows, spec, config, transcript, *, expected_episode_seed=None):
     """Witness the actual sampler and native cache, independently of spec requests."""
     from joulewise.align.apple.sampling import seed_inputs
     identities, accounting, samplers = [], [], []
@@ -131,25 +134,41 @@ def check_turns(episode, rows, spec, config, transcript):
                 | {k: getattr(t, k) for k in ('context_tokens', 'prefill_tokens', 'decode_tokens', 'hidden_tokens')}})
         actual = g.get('sampler', {})
         expected = turn_seed(base, t.index)
+        registered = turn_seed(expected_episode_seed, t.index) if expected_episode_seed is not None else None
         if spec.sampler is not None:
             kwargs = actual.get('constructor_kwargs', {})
             ok = (actual.get('kind') == 'categorical' and actual.get('per_turn_seed') == expected
+                  and (registered is None or actual.get('per_turn_seed') == registered)
                   and kwargs == {'temp': spec.sampler['temperature'], **{k: spec.sampler[k] for k in ('top_p', 'top_k', 'min_p')}})
-            samplers.append({'turn': t.index, 'status': 'pass' if ok else 'fail', 'expected_per_turn_seed': expected, 'actual': actual})
+            samplers.append({'turn': t.index, 'status': 'pass' if ok else 'fail', 'expected_per_turn_seed': expected,
+                             'preregistered_per_turn_seed': registered, 'actual': actual})
         else:
             samplers.append({'turn': t.index, 'status': 'not_evaluated', 'actual': actual})
     def status(checks):
         return 'fail' if any(r['status'] == 'fail' for r in checks) else 'pass' if checks and all(r['status'] == 'pass' for r in checks) else 'not_evaluated'
+    seed_matches = base == expected_episode_seed if expected_episode_seed is not None else None
     return {'identity_turns': identities, 'accounting_check': {'status': status(accounting), 'turns': accounting},
-            'sampler_check': {'status': status(samplers), 'turns': samplers},
-            'sampler_seed_inputs': {'model_id': model, 'thinking': thinking, 'episode_seed': base if spec.sampler else None}}
+            'sampler_check': {'status': 'fail' if spec.sampler and seed_matches is False else status(samplers),
+                              'preregistered_episode_seed_matches_bundle': seed_matches, 'turns': samplers},
+            'sampler_seed_inputs': {'model_id': model, 'thinking': thinking, 'task_pair': episode.task_pair,
+                'episode_seed': base if spec.sampler else None, 'expected_episode_seed': expected_episode_seed,
+                'preregistered_episode_seed_matches_bundle': seed_matches}}
 
 
 def episode_eligible(member):
+    return not episode_ineligibility_reasons(member)
+
+
+def episode_ineligibility_reasons(member):
     # Only replace this one registered exclusion for the labelled alternative.
     other = [c for c in member.get('exclusion_codes', []) if c != 'thermal.os_level_nonzero']
     s = member['summary']
-    return not other and not s.get('os_thermal', {}).get('os_level_nonzero_in_episode', False)
+    thermal = s.get('os_thermal', {}).get('os_level_nonzero_in_episode')
+    if thermal is None:
+        other.append('no_valid_os_reading_inside_or_bracketing_episode')
+    elif thermal:
+        other.append('thermal.os_level_nonzero_in_episode')
+    return other
 
 
 def residual_analysis(members):
@@ -216,7 +235,8 @@ def residual_analysis(members):
                         if m['condition'] != 'sabotage':
                             continue
                         rows, _ = data(m)
-                        hidden = m['summary']['per_turn_hidden_tokens']
+                        withheld = m['summary']['residual_rows']['False']
+                        hidden = [r.decode_tokens - w['decode_tokens'] for r, w in zip(rows, withheld, strict=True)]
                         for k in range(len(rows) + 1):
                             stripped = [replace(r, decode_tokens=r.decode_tokens - hidden[i]) if i < k else r for i, r in enumerate(rows)]
                             result = score(model, m, stripped)

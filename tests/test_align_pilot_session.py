@@ -115,7 +115,7 @@ class KitTests(unittest.TestCase):
         # Member bounds already include their idle increase exactly once.
         expected=sized['scaffold_s']+math.fsum(r['block_upper_s'] for r in sized['blocks'])
         self.assertEqual(sized['programmed_span_s'],expected)
-        self.assertEqual(sized['planning_case']['episode_s'],120+4096/41.96+11)
+        self.assertEqual(sized['planning_case']['episode_s'],120+4096/41.95+16.842)
 
     def test_align_idle_is_the_cooldown_cap_and_scaffold_is_unchanged(self):
         collection=h.read(ROOT/kit.KIT/'collection_plan.json')

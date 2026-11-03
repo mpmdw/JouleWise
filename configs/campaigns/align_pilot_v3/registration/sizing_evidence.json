@@ -3525,1104 +3525,1380 @@
       {
         "decode_s": 11.159741878509521,
         "decode_tok_s": 78.67565482771403,
+        "decode_tokens": 878,
         "prefill_s": 5.284668207168579,
         "prefill_tok_s": 1201.0214740426622,
+        "prefill_tokens": 6347,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 0
       },
       {
         "decode_s": 7.504221200942993,
         "decode_tok_s": 76.49028255295435,
+        "decode_tokens": 574,
         "prefill_s": 0.20697808265686035,
         "prefill_tok_s": 318.8743424076376,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 1
       },
       {
         "decode_s": 7.012772083282471,
         "decode_tok_s": 74.29301762736532,
+        "decode_tokens": 521,
         "prefill_s": 1.446742057800293,
         "prefill_tok_s": 817.699322157468,
+        "prefill_tokens": 1183,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 2
       },
       {
         "decode_s": 6.688921928405762,
         "decode_tok_s": 70.11593273473615,
+        "decode_tokens": 469,
         "prefill_s": 1.3698740005493164,
         "prefill_tok_s": 735.1041041703071,
+        "prefill_tokens": 1007,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 3
       },
       {
         "decode_s": 9.460963010787964,
         "decode_tok_s": 64.36976862773707,
+        "decode_tokens": 609,
         "prefill_s": 3.8347079753875732,
         "prefill_tok_s": 686.8841165757301,
+        "prefill_tokens": 2634,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 4
       },
       {
         "decode_s": 3.809581995010376,
         "decode_tok_s": 63.52402975364778,
+        "decode_tokens": 242,
         "prefill_s": 0.7180850505828857,
         "prefill_tok_s": 527.7926336056672,
+        "prefill_tokens": 379,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 5
       },
       {
         "decode_s": 6.247157096862793,
         "decode_tok_s": 62.74854208434348,
+        "decode_tokens": 392,
         "prefill_s": 0.19510984420776367,
         "prefill_tok_s": 143.50890450296328,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 6
       },
       {
         "decode_s": 5.041454076766968,
         "decode_tok_s": 62.28361802342648,
+        "decode_tokens": 314,
         "prefill_s": 0.19104695320129395,
         "prefill_tok_s": 130.85788378765244,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 7
       },
       {
         "decode_s": 4.5829081535339355,
         "decode_tok_s": 61.53298092665165,
+        "decode_tokens": 282,
         "prefill_s": 0.7033147811889648,
         "prefill_tok_s": 499.0652967745522,
+        "prefill_tokens": 351,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 8
       },
       {
         "decode_s": 8.395077228546143,
         "decode_tok_s": 59.796948417940435,
+        "decode_tokens": 502,
         "prefill_s": 1.726294994354248,
         "prefill_tok_s": 523.08556935704,
+        "prefill_tokens": 903,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 9
       },
       {
         "decode_s": 6.6217310428619385,
         "decode_tok_s": 58.896985920382605,
+        "decode_tokens": 390,
         "prefill_s": 1.19797682762146,
         "prefill_tok_s": 460.7768591784669,
+        "prefill_tokens": 552,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 10
       },
       {
         "decode_s": 3.2014219760894775,
         "decode_tok_s": 58.723905003501336,
+        "decode_tokens": 188,
         "prefill_s": 0.2608768939971924,
         "prefill_tok_s": 195.49450784456548,
+        "prefill_tokens": 51,
         "run_id": "align-pilot-v2-episodes-a-e01",
         "turn": 11
       },
       {
         "decode_s": 23.84077000617981,
         "decode_tok_s": 75.92036664633007,
+        "decode_tokens": 1810,
         "prefill_s": 6.024288892745972,
         "prefill_tok_s": 1178.8943270220213,
+        "prefill_tokens": 7102,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 0
       },
       {
         "decode_s": 4.667083024978638,
         "decode_tok_s": 74.77904252658918,
+        "decode_tokens": 349,
         "prefill_s": 0.22232985496520996,
         "prefill_tok_s": 296.8562184791945,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 1
       },
       {
         "decode_s": 3.1440629959106445,
         "decode_tok_s": 70.92733201912527,
+        "decode_tokens": 223,
         "prefill_s": 1.5658900737762451,
         "prefill_tok_s": 755.4808730264948,
+        "prefill_tokens": 1183,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 2
       },
       {
         "decode_s": 3.948270082473755,
         "decode_tok_s": 67.87782861908143,
+        "decode_tokens": 268,
         "prefill_s": 1.4601190090179443,
         "prefill_tok_s": 689.6698103240873,
+        "prefill_tokens": 1007,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 3
       },
       {
         "decode_s": 11.623646974563599,
         "decode_tok_s": 62.80300852197959,
+        "decode_tokens": 730,
         "prefill_s": 3.439896821975708,
         "prefill_tok_s": 648.2752580698619,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 4
       },
       {
         "decode_s": 8.398459911346436,
         "decode_tok_s": 61.67797494635592,
+        "decode_tokens": 518,
         "prefill_s": 0.2135779857635498,
         "prefill_tok_s": 159.1924367974941,
+        "prefill_tokens": 34,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 5
       },
       {
         "decode_s": 5.996328830718994,
         "decode_tok_s": 60.87057769916104,
+        "decode_tokens": 365,
         "prefill_s": 0.2179703712463379,
         "prefill_tok_s": 160.57228236972153,
+        "prefill_tokens": 35,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 6
       },
       {
         "decode_s": 7.221575975418091,
         "decode_tok_s": 60.23615918197355,
+        "decode_tokens": 435,
         "prefill_s": 0.21153783798217773,
         "prefill_tok_s": 141.81859985979213,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 7
       },
       {
         "decode_s": 3.937727928161621,
         "decode_tok_s": 59.933038621634694,
+        "decode_tokens": 236,
         "prefill_s": 0.2102668285369873,
         "prefill_tok_s": 142.67585718934646,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 8
       },
       {
         "decode_s": 5.231681823730469,
         "decode_tok_s": 59.44551111448142,
+        "decode_tokens": 311,
         "prefill_s": 0.2177410125732422,
         "prefill_tok_s": 142.37097381721983,
+        "prefill_tokens": 31,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 9
       },
       {
         "decode_s": 3.309580087661743,
         "decode_tok_s": 58.91986138270785,
+        "decode_tokens": 195,
         "prefill_s": 0.2143409252166748,
         "prefill_tok_s": 139.9639381498113,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 10
       },
       {
         "decode_s": 4.561205863952637,
         "decode_tok_s": 57.87943098258311,
+        "decode_tokens": 264,
         "prefill_s": 1.4496560096740723,
         "prefill_tok_s": 435.9654951122461,
+        "prefill_tokens": 632,
         "run_id": "align-pilot-v2-episodes-a-e02",
         "turn": 11
       },
       {
         "decode_s": 10.192549705505371,
         "decode_tok_s": 69.070058066015,
+        "decode_tokens": 704,
         "prefill_s": 10.74219012260437,
         "prefill_tok_s": 1026.2339312727884,
+        "prefill_tokens": 11024,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 0
       },
       {
         "decode_s": 16.716270923614502,
         "decode_tok_s": 51.20759312358106,
+        "decode_tokens": 856,
         "prefill_s": 16.7740638256073,
         "prefill_tok_s": 577.2602334574359,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 1
       },
       {
         "decode_s": 9.302419900894165,
         "decode_tok_s": 50.95448335485676,
+        "decode_tokens": 474,
         "prefill_s": 0.2509136199951172,
         "prefill_tok_s": 99.6358826614773,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 2
       },
       {
         "decode_s": 7.3884358406066895,
         "decode_tok_s": 50.619645087056696,
+        "decode_tokens": 374,
         "prefill_s": 0.25235509872436523,
         "prefill_tok_s": 99.0667520742517,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 3
       },
       {
         "decode_s": 6.165545225143433,
         "decode_tok_s": 50.11722219470243,
+        "decode_tokens": 309,
         "prefill_s": 0.2508859634399414,
         "prefill_tok_s": 99.64686607899708,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 4
       },
       {
         "decode_s": 7.924004316329956,
         "decode_tok_s": 50.22713064148554,
+        "decode_tokens": 398,
         "prefill_s": 0.2795898914337158,
         "prefill_tok_s": 89.41668052375532,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 5
       },
       {
         "decode_s": 7.101689100265503,
         "decode_tok_s": 49.002426758866385,
+        "decode_tokens": 348,
         "prefill_s": 1.264617919921875,
         "prefill_tok_s": 333.6976278385096,
+        "prefill_tokens": 422,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 6
       },
       {
         "decode_s": 7.2675769329071045,
         "decode_tok_s": 48.84709212950793,
+        "decode_tokens": 355,
         "prefill_s": 0.26961398124694824,
         "prefill_tok_s": 92.72516167142565,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 7
       },
       {
         "decode_s": 11.792973041534424,
         "decode_tok_s": 48.249071544215575,
+        "decode_tokens": 569,
         "prefill_s": 0.2671999931335449,
         "prefill_tok_s": 93.56287665585812,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 8
       },
       {
         "decode_s": 7.323204278945923,
         "decode_tok_s": 48.2029432136515,
+        "decode_tokens": 353,
         "prefill_s": 0.292813777923584,
         "prefill_tok_s": 85.37849611203843,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 9
       },
       {
         "decode_s": 12.020402908325195,
         "decode_tok_s": 47.41937556895239,
+        "decode_tokens": 570,
         "prefill_s": 0.2746469974517822,
         "prefill_tok_s": 91.02593595398423,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 10
       },
       {
         "decode_s": 7.544983148574829,
         "decode_tok_s": 46.918593856219154,
+        "decode_tokens": 354,
         "prefill_s": 0.2785310745239258,
         "prefill_tok_s": 89.75659194483345,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e03",
         "turn": 11
       },
       {
         "decode_s": 19.903749704360962,
         "decode_tok_s": 71.14237372517556,
+        "decode_tokens": 1416,
         "prefill_s": 9.12673282623291,
         "prefill_tok_s": 1076.179196543224,
+        "prefill_tokens": 9822,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 0
       },
       {
         "decode_s": 14.23363208770752,
         "decode_tok_s": 52.4110778895474,
+        "decode_tokens": 746,
         "prefill_s": 16.659876108169556,
         "prefill_tok_s": 581.2168072037292,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 1
       },
       {
         "decode_s": 9.17796015739441,
         "decode_tok_s": 50.33798274094493,
+        "decode_tokens": 462,
         "prefill_s": 2.365361213684082,
         "prefill_tok_s": 427.84163118316985,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 2
       },
       {
         "decode_s": 6.36958909034729,
         "decode_tok_s": 49.767731560642346,
+        "decode_tokens": 317,
         "prefill_s": 0.2617909908294678,
         "prefill_tok_s": 99.31586995266983,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 3
       },
       {
         "decode_s": 12.589477777481079,
         "decode_tok_s": 49.24747562674919,
+        "decode_tokens": 620,
         "prefill_s": 1.7861249446868896,
         "prefill_tok_s": 385.1914179053176,
+        "prefill_tokens": 688,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 4
       },
       {
         "decode_s": 9.58899712562561,
         "decode_tok_s": 48.38879331395435,
+        "decode_tokens": 464,
         "prefill_s": 0.7067911624908447,
         "prefill_tok_s": 299.94715730864294,
+        "prefill_tokens": 212,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 5
       },
       {
         "decode_s": 29.20689105987549,
         "decode_tok_s": 47.283361901439136,
+        "decode_tokens": 1381,
         "prefill_s": 0.2737441062927246,
         "prefill_tok_s": 87.67312043728869,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 6
       },
       {
         "decode_s": 41.51341795921326,
         "decode_tok_s": 45.79242311167256,
+        "decode_tokens": 1901,
         "prefill_s": 0.29059410095214844,
         "prefill_tok_s": 99.79555643070461,
+        "prefill_tokens": 29,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 7
       },
       {
         "decode_s": 16.696612119674683,
         "decode_tok_s": 42.4637043082854,
+        "decode_tokens": 709,
         "prefill_s": 9.294351816177368,
         "prefill_tok_s": 352.1493553001889,
+        "prefill_tokens": 3273,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 8
       },
       {
         "decode_s": 7.385947942733765,
         "decode_tok_s": 42.10698510351122,
+        "decode_tokens": 311,
         "prefill_s": 2.159062147140503,
         "prefill_tok_s": 340.8887516159599,
+        "prefill_tokens": 736,
         "run_id": "align-pilot-v2-episodes-a-e04",
         "turn": 9
       },
       {
         "decode_s": 19.822625637054443,
         "decode_tok_s": 71.43352378874928,
+        "decode_tokens": 1416,
         "prefill_s": 9.126148700714111,
         "prefill_tok_s": 1076.2480781440083,
+        "prefill_tokens": 9822,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 0
       },
       {
         "decode_s": 14.214845895767212,
         "decode_tok_s": 52.480343822942054,
+        "decode_tokens": 746,
         "prefill_s": 16.733144760131836,
         "prefill_tok_s": 578.6718598807909,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 1
       },
       {
         "decode_s": 9.170935153961182,
         "decode_tok_s": 50.376542004056084,
+        "decode_tokens": 462,
         "prefill_s": 2.37664794921875,
         "prefill_tok_s": 425.8098050797401,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 2
       },
       {
         "decode_s": 6.352967977523804,
         "decode_tok_s": 49.89793764450188,
+        "decode_tokens": 317,
         "prefill_s": 0.26163387298583984,
         "prefill_tok_s": 99.3755116769883,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 3
       },
       {
         "decode_s": 12.580111026763916,
         "decode_tok_s": 49.28414373139977,
+        "decode_tokens": 620,
         "prefill_s": 1.789851188659668,
         "prefill_tok_s": 384.3894980538631,
+        "prefill_tokens": 688,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 4
       },
       {
         "decode_s": 9.582635164260864,
         "decode_tok_s": 48.42091888570712,
+        "decode_tokens": 464,
         "prefill_s": 0.707118034362793,
         "prefill_tok_s": 299.8085039523,
+        "prefill_tokens": 212,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 5
       },
       {
         "decode_s": 29.16567873954773,
         "decode_tok_s": 47.35017526361929,
+        "decode_tokens": 1381,
         "prefill_s": 0.27080702781677246,
         "prefill_tok_s": 88.62399249194654,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 6
       },
       {
         "decode_s": 41.476858139038086,
         "decode_tok_s": 45.83278689112606,
+        "decode_tokens": 1901,
         "prefill_s": 0.2894909381866455,
         "prefill_tok_s": 100.1758472360286,
+        "prefill_tokens": 29,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 7
       },
       {
         "decode_s": 16.715807914733887,
         "decode_tok_s": 42.414940612895116,
+        "decode_tokens": 709,
         "prefill_s": 9.292418241500854,
         "prefill_tok_s": 352.22263085215644,
+        "prefill_tokens": 3273,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 8
       },
       {
         "decode_s": 7.365691900253296,
         "decode_tok_s": 42.22278154063234,
+        "decode_tokens": 311,
         "prefill_s": 2.15572190284729,
         "prefill_tok_s": 341.4169513367596,
+        "prefill_tokens": 736,
         "run_id": "align-pilot-v2-episodes-a-e05",
         "turn": 9
       },
       {
         "decode_s": 10.196994066238403,
         "decode_tok_s": 69.03995387531891,
+        "decode_tokens": 704,
         "prefill_s": 10.738590002059937,
         "prefill_tok_s": 1026.5779769863002,
+        "prefill_tokens": 11024,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 0
       },
       {
         "decode_s": 16.736506938934326,
         "decode_tok_s": 51.145678314073855,
+        "decode_tokens": 856,
         "prefill_s": 16.8416907787323,
         "prefill_tok_s": 574.9422743367132,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 1
       },
       {
         "decode_s": 9.294670104980469,
         "decode_tok_s": 50.99696865475744,
+        "decode_tokens": 474,
         "prefill_s": 0.24948596954345703,
         "prefill_tok_s": 100.20603581735823,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 2
       },
       {
         "decode_s": 7.371007919311523,
         "decode_tok_s": 50.73932955900729,
+        "decode_tokens": 374,
         "prefill_s": 0.2573418617248535,
         "prefill_tok_s": 97.14703947673179,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 3
       },
       {
         "decode_s": 6.153854846954346,
         "decode_tok_s": 50.21242906841225,
+        "decode_tokens": 309,
         "prefill_s": 0.2511601448059082,
         "prefill_tok_s": 99.5380856278751,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 4
       },
       {
         "decode_s": 7.91715407371521,
         "decode_tok_s": 50.27058919079924,
+        "decode_tokens": 398,
         "prefill_s": 0.28331589698791504,
         "prefill_tok_s": 88.24072445559376,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 5
       },
       {
         "decode_s": 7.095215797424316,
         "decode_tok_s": 49.0471340034971,
+        "decode_tokens": 348,
         "prefill_s": 1.2555546760559082,
         "prefill_tok_s": 336.1064301282638,
+        "prefill_tokens": 422,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 6
       },
       {
         "decode_s": 7.263752222061157,
         "decode_tok_s": 48.87281244558552,
+        "decode_tokens": 355,
         "prefill_s": 0.2686889171600342,
         "prefill_tok_s": 93.04440340987237,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 7
       },
       {
         "decode_s": 11.796050071716309,
         "decode_tok_s": 48.23648564906535,
+        "decode_tokens": 569,
         "prefill_s": 0.2646210193634033,
         "prefill_tok_s": 94.4747324310907,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 8
       },
       {
         "decode_s": 7.319478988647461,
         "decode_tok_s": 48.22747637468518,
+        "decode_tokens": 353,
         "prefill_s": 0.29874467849731445,
         "prefill_tok_s": 83.68349898565552,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 9
       },
       {
         "decode_s": 12.012660026550293,
         "decode_tok_s": 47.44994020809631,
+        "decode_tokens": 570,
         "prefill_s": 0.271259069442749,
         "prefill_tok_s": 92.1628170861082,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 10
       },
       {
         "decode_s": 7.536172866821289,
         "decode_tok_s": 46.973444778385904,
+        "decode_tokens": 354,
         "prefill_s": 0.276792049407959,
         "prefill_tok_s": 90.32051337266894,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e06",
         "turn": 11
       },
       {
         "decode_s": 23.806390047073364,
         "decode_tok_s": 76.0300069191932,
+        "decode_tokens": 1810,
         "prefill_s": 6.025429964065552,
         "prefill_tok_s": 1178.6710728288097,
+        "prefill_tokens": 7102,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 0
       },
       {
         "decode_s": 4.68086576461792,
         "decode_tok_s": 74.55885674783657,
+        "decode_tokens": 349,
         "prefill_s": 0.22270417213439941,
         "prefill_tok_s": 296.3572678834672,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 1
       },
       {
         "decode_s": 3.144423007965088,
         "decode_tok_s": 70.91921138953704,
+        "decode_tokens": 223,
         "prefill_s": 1.5708370208740234,
         "prefill_tok_s": 753.1016803651415,
+        "prefill_tokens": 1183,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 2
       },
       {
         "decode_s": 3.9507038593292236,
         "decode_tok_s": 67.83601341496217,
+        "decode_tokens": 268,
         "prefill_s": 1.458677053451538,
         "prefill_tok_s": 690.3515741316594,
+        "prefill_tokens": 1007,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 3
       },
       {
         "decode_s": 11.642297983169556,
         "decode_tok_s": 62.70239784751337,
+        "decode_tokens": 730,
         "prefill_s": 3.478276014328003,
         "prefill_tok_s": 641.1222084774179,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 4
       },
       {
         "decode_s": 8.40009331703186,
         "decode_tok_s": 61.66598160876542,
+        "decode_tokens": 518,
         "prefill_s": 0.2100520133972168,
         "prefill_tok_s": 161.86467080277222,
+        "prefill_tokens": 34,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 5
       },
       {
         "decode_s": 5.9991443157196045,
         "decode_tok_s": 60.84201025862766,
+        "decode_tokens": 365,
         "prefill_s": 0.22118306159973145,
         "prefill_tok_s": 158.2399653339571,
+        "prefill_tokens": 35,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 6
       },
       {
         "decode_s": 7.224787950515747,
         "decode_tok_s": 60.20937956648917,
+        "decode_tokens": 435,
         "prefill_s": 0.20838618278503418,
         "prefill_tok_s": 143.96347972335204,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 7
       },
       {
         "decode_s": 3.9411978721618652,
         "decode_tok_s": 59.880271850077634,
+        "decode_tokens": 236,
         "prefill_s": 0.21291804313659668,
         "prefill_tok_s": 140.899284804875,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 8
       },
       {
         "decode_s": 5.240140914916992,
         "decode_tok_s": 59.34954900061623,
+        "decode_tokens": 311,
         "prefill_s": 0.2204270362854004,
         "prefill_tok_s": 140.63610581717572,
+        "prefill_tokens": 31,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 9
       },
       {
         "decode_s": 3.3155901432037354,
         "decode_tok_s": 58.81305938844978,
+        "decode_tokens": 195,
         "prefill_s": 0.21597695350646973,
         "prefill_tok_s": 138.9037094603769,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 10
       },
       {
         "decode_s": 4.5559961795806885,
         "decode_tok_s": 57.94561487632706,
+        "decode_tokens": 264,
         "prefill_s": 1.4715116024017334,
         "prefill_tok_s": 429.49032747582737,
+        "prefill_tokens": 632,
         "run_id": "align-pilot-v2-episodes-a-e07",
         "turn": 11
       },
       {
         "decode_s": 11.111966133117676,
         "decode_tok_s": 79.01391972238312,
+        "decode_tokens": 878,
         "prefill_s": 5.283690929412842,
         "prefill_tok_s": 1201.2436164023168,
+        "prefill_tokens": 6347,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 0
       },
       {
         "decode_s": 7.542608976364136,
         "decode_tok_s": 76.10098863651989,
+        "decode_tokens": 574,
         "prefill_s": 0.2000441551208496,
         "prefill_tok_s": 329.92716013186407,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 1
       },
       {
         "decode_s": 7.036275148391724,
         "decode_tok_s": 74.04485882265202,
+        "decode_tokens": 521,
         "prefill_s": 1.4466190338134766,
         "prefill_tok_s": 817.7688612885576,
+        "prefill_tokens": 1183,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 2
       },
       {
         "decode_s": 6.67804217338562,
         "decode_tok_s": 70.23016444387433,
+        "decode_tokens": 469,
         "prefill_s": 1.3726449012756348,
         "prefill_tok_s": 733.6201803278973,
+        "prefill_tokens": 1007,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 3
       },
       {
         "decode_s": 9.467047214508057,
         "decode_tok_s": 64.32839999643394,
+        "decode_tokens": 609,
         "prefill_s": 3.837346076965332,
         "prefill_tok_s": 686.411896964746,
+        "prefill_tokens": 2634,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 4
       },
       {
         "decode_s": 3.8093183040618896,
         "decode_tok_s": 63.528427052670956,
+        "decode_tokens": 242,
         "prefill_s": 0.7216238975524902,
         "prefill_tok_s": 525.2043360612679,
+        "prefill_tokens": 379,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 5
       },
       {
         "decode_s": 6.24649977684021,
         "decode_tok_s": 62.755145121976305,
+        "decode_tokens": 392,
         "prefill_s": 0.19569706916809082,
         "prefill_tok_s": 143.07827970560896,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 6
       },
       {
         "decode_s": 5.0286829471588135,
         "decode_tok_s": 62.44179704696014,
+        "decode_tokens": 314,
         "prefill_s": 0.1916031837463379,
         "prefill_tok_s": 130.4779989099624,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 7
       },
       {
         "decode_s": 4.579020023345947,
         "decode_tok_s": 61.58522971339598,
+        "decode_tokens": 282,
         "prefill_s": 0.7296590805053711,
         "prefill_tok_s": 481.04657281437926,
+        "prefill_tokens": 351,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 8
       },
       {
         "decode_s": 8.40096402168274,
         "decode_tok_s": 59.755047004646954,
+        "decode_tokens": 502,
         "prefill_s": 1.803786039352417,
         "prefill_tok_s": 500.6136982433842,
+        "prefill_tokens": 903,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 9
       },
       {
         "decode_s": 6.624253034591675,
         "decode_tok_s": 58.87456260553911,
+        "decode_tokens": 390,
         "prefill_s": 1.2412121295928955,
         "prefill_tok_s": 444.7265594971668,
+        "prefill_tokens": 552,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 10
       },
       {
         "decode_s": 3.207846164703369,
         "decode_tok_s": 58.60630165766831,
+        "decode_tokens": 188,
         "prefill_s": 0.2562100887298584,
         "prefill_tok_s": 199.05539337981784,
+        "prefill_tokens": 51,
         "run_id": "align-pilot-v2-episodes-a-e08",
         "turn": 11
       },
       {
         "decode_s": 11.138950109481812,
         "decode_tok_s": 78.82250942596644,
+        "decode_tokens": 878,
         "prefill_s": 5.28566312789917,
         "prefill_tok_s": 1200.795405688797,
+        "prefill_tokens": 6347,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 0
       },
       {
         "decode_s": 7.528187036514282,
         "decode_tok_s": 76.24677724077573,
+        "decode_tokens": 574,
         "prefill_s": 0.2080707550048828,
         "prefill_tok_s": 317.1997909963424,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 1
       },
       {
         "decode_s": 7.050142049789429,
         "decode_tok_s": 73.89922023139393,
+        "decode_tokens": 521,
         "prefill_s": 1.4505760669708252,
         "prefill_tok_s": 815.538065832292,
+        "prefill_tokens": 1183,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 2
       },
       {
         "decode_s": 6.675848960876465,
         "decode_tok_s": 70.25323711614134,
+        "decode_tokens": 469,
         "prefill_s": 1.3729090690612793,
         "prefill_tok_s": 733.4790210749587,
+        "prefill_tokens": 1007,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 3
       },
       {
         "decode_s": 9.472482681274414,
         "decode_tok_s": 64.29148729972299,
+        "decode_tokens": 609,
         "prefill_s": 3.8315820693969727,
         "prefill_tok_s": 687.4444948048699,
+        "prefill_tokens": 2634,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 4
       },
       {
         "decode_s": 3.811945915222168,
         "decode_tok_s": 63.484636293927,
+        "decode_tokens": 242,
         "prefill_s": 0.7196221351623535,
         "prefill_tok_s": 526.66528929727,
+        "prefill_tokens": 379,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 5
       },
       {
         "decode_s": 6.2490081787109375,
         "decode_tok_s": 62.72995470472609,
+        "decode_tokens": 392,
         "prefill_s": 0.1931750774383545,
         "prefill_tok_s": 144.94623411726226,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 6
       },
       {
         "decode_s": 5.041329860687256,
         "decode_tok_s": 62.285152663506565,
+        "decode_tokens": 314,
         "prefill_s": 0.1924419403076172,
         "prefill_tok_s": 129.9093116606373,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 7
       },
       {
         "decode_s": 4.570597171783447,
         "decode_tok_s": 61.69872106448698,
+        "decode_tokens": 282,
         "prefill_s": 0.7288939952850342,
         "prefill_tok_s": 481.55150443068385,
+        "prefill_tokens": 351,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 8
       },
       {
         "decode_s": 8.410346984863281,
         "decode_tok_s": 59.68838157373129,
+        "decode_tokens": 502,
         "prefill_s": 1.796868085861206,
         "prefill_tok_s": 502.5410641467365,
+        "prefill_tokens": 903,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 9
       },
       {
         "decode_s": 6.634959936141968,
         "decode_tok_s": 58.77955613199579,
+        "decode_tokens": 390,
         "prefill_s": 1.2374720573425293,
         "prefill_tok_s": 446.0706783031689,
+        "prefill_tokens": 552,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 10
       },
       {
         "decode_s": 3.2075488567352295,
         "decode_tok_s": 58.61173388060373,
+        "decode_tokens": 188,
         "prefill_s": 0.2597661018371582,
         "prefill_tok_s": 196.33046667486587,
+        "prefill_tokens": 51,
         "run_id": "align-pilot-v2-episodes-a-e09",
         "turn": 11
       },
       {
         "decode_s": 23.789328813552856,
         "decode_tok_s": 76.08453412812712,
+        "decode_tokens": 1810,
         "prefill_s": 6.026381969451904,
         "prefill_tok_s": 1178.4848746728085,
+        "prefill_tokens": 7102,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 0
       },
       {
         "decode_s": 4.678709030151367,
         "decode_tok_s": 74.59322598411491,
+        "decode_tokens": 349,
         "prefill_s": 0.22492098808288574,
         "prefill_tok_s": 293.4363776477734,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 1
       },
       {
         "decode_s": 3.143843173980713,
         "decode_tok_s": 70.93229135779025,
+        "decode_tokens": 223,
         "prefill_s": 1.5652170181274414,
         "prefill_tok_s": 755.8057357536851,
+        "prefill_tokens": 1183,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 2
       },
       {
         "decode_s": 3.9539599418640137,
         "decode_tok_s": 67.78015051757374,
+        "decode_tokens": 268,
         "prefill_s": 1.4600310325622559,
         "prefill_tok_s": 689.7113674582539,
+        "prefill_tokens": 1007,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 3
       },
       {
         "decode_s": 11.646533250808716,
         "decode_tok_s": 62.67959608918903,
+        "decode_tokens": 730,
         "prefill_s": 3.4574389457702637,
         "prefill_tok_s": 644.9860821774224,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 4
       },
       {
         "decode_s": 8.397482872009277,
         "decode_tok_s": 61.685151121488076,
+        "decode_tokens": 518,
         "prefill_s": 0.21477007865905762,
         "prefill_tok_s": 158.3088305982054,
+        "prefill_tokens": 34,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 5
       },
       {
         "decode_s": 6.00376296043396,
         "decode_tok_s": 60.7952050081633,
+        "decode_tokens": 365,
         "prefill_s": 0.21720600128173828,
         "prefill_tok_s": 161.13735252923072,
+        "prefill_tokens": 35,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 6
       },
       {
         "decode_s": 7.229168176651001,
         "decode_tok_s": 60.17289809427548,
+        "decode_tokens": 435,
         "prefill_s": 0.21128106117248535,
         "prefill_tok_s": 141.99095665989978,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 7
       },
       {
         "decode_s": 3.9473049640655518,
         "decode_tok_s": 59.78762779882361,
+        "decode_tokens": 236,
         "prefill_s": 0.21197295188903809,
         "prefill_tok_s": 141.52749080790346,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 8
       },
       {
         "decode_s": 5.237284183502197,
         "decode_tok_s": 59.38192183263059,
+        "decode_tokens": 311,
         "prefill_s": 0.21834897994995117,
         "prefill_tok_s": 141.9745583748807,
+        "prefill_tokens": 31,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 9
       },
       {
         "decode_s": 3.314666986465454,
         "decode_tok_s": 58.829439215531984,
+        "decode_tokens": 195,
         "prefill_s": 0.2139890193939209,
         "prefill_tok_s": 140.1941094219167,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 10
       },
       {
         "decode_s": 4.56184720993042,
         "decode_tok_s": 57.8712937656732,
+        "decode_tokens": 264,
         "prefill_s": 1.4672720432281494,
         "prefill_tok_s": 430.7313036575924,
+        "prefill_tokens": 632,
         "run_id": "align-pilot-v2-episodes-a-e10",
         "turn": 11
       },
       {
         "decode_s": 10.183138847351074,
         "decode_tok_s": 69.13388990891846,
+        "decode_tokens": 704,
         "prefill_s": 10.73949408531189,
         "prefill_tok_s": 1026.4915565321853,
+        "prefill_tokens": 11024,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 0
       },
       {
         "decode_s": 16.717921018600464,
         "decode_tok_s": 51.202538823314754,
+        "decode_tokens": 856,
         "prefill_s": 16.792215824127197,
         "prefill_tok_s": 576.6362284414772,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 1
       },
       {
         "decode_s": 9.293132066726685,
         "decode_tok_s": 51.00540878969309,
+        "decode_tokens": 474,
         "prefill_s": 0.2493610382080078,
         "prefill_tok_s": 100.25623962611961,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 2
       },
       {
         "decode_s": 7.37328314781189,
         "decode_tok_s": 50.7236725489091,
+        "decode_tokens": 374,
         "prefill_s": 0.2522392272949219,
         "prefill_tok_s": 99.11226048424905,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 3
       },
       {
         "decode_s": 6.151911735534668,
         "decode_tok_s": 50.22828890979603,
+        "decode_tokens": 309,
         "prefill_s": 0.251781702041626,
         "prefill_tok_s": 99.29236238091225,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 4
       },
       {
         "decode_s": 7.913794040679932,
         "decode_tok_s": 50.291933041740485,
+        "decode_tokens": 398,
         "prefill_s": 0.281156063079834,
         "prefill_tok_s": 88.9185875138011,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 5
       },
       {
         "decode_s": 7.092660903930664,
         "decode_tok_s": 49.06480159049233,
+        "decode_tokens": 348,
         "prefill_s": 1.2606656551361084,
         "prefill_tok_s": 334.7437905369434,
+        "prefill_tokens": 422,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 6
       },
       {
         "decode_s": 7.24954080581665,
         "decode_tok_s": 48.96861877309066,
+        "decode_tokens": 355,
         "prefill_s": 0.2665688991546631,
         "prefill_tok_s": 93.78438399708068,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 7
       },
       {
         "decode_s": 11.771003246307373,
         "decode_tok_s": 48.33912522949124,
+        "decode_tokens": 569,
         "prefill_s": 0.2635362148284912,
         "prefill_tok_s": 94.8636225054304,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 8
       },
       {
         "decode_s": 7.319825172424316,
         "decode_tok_s": 48.225195504647125,
+        "decode_tokens": 353,
         "prefill_s": 0.291187047958374,
         "prefill_tok_s": 85.85546704527125,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 9
       },
       {
         "decode_s": 12.010656833648682,
         "decode_tok_s": 47.45785412860234,
+        "decode_tokens": 570,
         "prefill_s": 0.2698051929473877,
         "prefill_tok_s": 92.65944708808858,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 10
       },
       {
         "decode_s": 7.542762756347656,
         "decode_tok_s": 46.93240546404422,
+        "decode_tokens": 354,
         "prefill_s": 0.278853178024292,
         "prefill_tok_s": 89.65291404289519,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-a-e11",
         "turn": 11
       },
       {
         "decode_s": 19.865537881851196,
         "decode_tok_s": 71.27921772979691,
+        "decode_tokens": 1416,
         "prefill_s": 9.127124309539795,
         "prefill_tok_s": 1076.13303674783,
+        "prefill_tokens": 9822,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 0
       },
       {
         "decode_s": 14.222482919692993,
         "decode_tok_s": 52.45216353658333,
+        "decode_tokens": 746,
         "prefill_s": 16.742424964904785,
         "prefill_tok_s": 578.351106264317,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 1
       },
       {
         "decode_s": 9.181269884109497,
         "decode_tok_s": 50.31983656199972,
+        "decode_tokens": 462,
         "prefill_s": 2.384913921356201,
         "prefill_tok_s": 424.33397320458334,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 2
       },
       {
         "decode_s": 6.366344928741455,
         "decode_tok_s": 49.793092197828315,
+        "decode_tokens": 317,
         "prefill_s": 0.2594480514526367,
         "prefill_tok_s": 100.21273952310412,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 3
       },
       {
         "decode_s": 12.592174053192139,
         "decode_tok_s": 49.2369306031653,
+        "decode_tokens": 620,
         "prefill_s": 1.7940149307250977,
         "prefill_tok_s": 383.49736572255114,
+        "prefill_tokens": 688,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 4
       },
       {
         "decode_s": 9.587870121002197,
         "decode_tok_s": 48.394481166741045,
+        "decode_tokens": 464,
         "prefill_s": 0.7070267200469971,
         "prefill_tok_s": 299.8472249901787,
+        "prefill_tokens": 212,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 5
       },
       {
         "decode_s": 29.206461906433105,
         "decode_tok_s": 47.28405667294527,
+        "decode_tokens": 1381,
         "prefill_s": 0.2727510929107666,
         "prefill_tok_s": 87.99231469203261,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 6
       },
       {
         "decode_s": 41.51012110710144,
         "decode_tok_s": 45.79606007641308,
+        "decode_tokens": 1901,
         "prefill_s": 0.29532909393310547,
         "prefill_tok_s": 98.19554048599338,
+        "prefill_tokens": 29,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 7
       },
       {
         "decode_s": 16.748766899108887,
         "decode_tok_s": 42.33147456591101,
+        "decode_tokens": 709,
         "prefill_s": 9.28181791305542,
         "prefill_tok_s": 352.62488778155557,
+        "prefill_tokens": 3273,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 8
       },
       {
         "decode_s": 7.412620782852173,
         "decode_tok_s": 41.95547150063918,
+        "decode_tokens": 311,
         "prefill_s": 2.152700901031494,
         "prefill_tok_s": 341.8960802438166,
+        "prefill_tokens": 736,
         "run_id": "align-pilot-v2-episodes-a-e12",
         "turn": 9
       }
@@ -4632,1158 +4908,1477 @@
       {
         "decode_s": 0.9417519569396973,
         "decode_tok_s": 71.14399869974486,
+        "decode_tokens": 67,
         "prefill_s": 6.094849109649658,
         "prefill_tok_s": 1041.3711456697304,
+        "prefill_tokens": 6347,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 0
       },
       {
         "decode_s": 0.8931419849395752,
         "decode_tok_s": 71.65713971483478,
+        "decode_tokens": 64,
         "prefill_s": 0.17563796043395996,
         "prefill_tok_s": 375.77298117633325,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 1
       },
       {
         "decode_s": 0.6163620948791504,
         "decode_tok_s": 66.51934040174686,
+        "decode_tokens": 41,
         "prefill_s": 11.383220911026001,
         "prefill_tok_s": 954.4750194100122,
+        "prefill_tokens": 10865,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 2
       },
       {
         "decode_s": 0.6831631660461426,
         "decode_tok_s": 61.478724391828834,
+        "decode_tokens": 42,
         "prefill_s": 11.02137804031372,
         "prefill_tok_s": 810.334240176901,
+        "prefill_tokens": 8931,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 3
       },
       {
         "decode_s": 0.6518421173095703,
         "decode_tok_s": 61.364552761789945,
+        "decode_tokens": 40,
         "prefill_s": 0.4588449001312256,
         "prefill_tok_s": 499.07931838080367,
+        "prefill_tokens": 229,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 4
       },
       {
         "decode_s": 0.6893892288208008,
         "decode_tok_s": 62.37405257049263,
+        "decode_tokens": 43,
         "prefill_s": 0.12604498863220215,
         "prefill_tok_s": 134.8724783466466,
+        "prefill_tokens": 17,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 5
       },
       {
         "decode_s": 0.648076057434082,
         "decode_tok_s": 61.721150690817694,
+        "decode_tokens": 40,
         "prefill_s": 3.169901132583618,
         "prefill_tok_s": 703.4919723765786,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 6
       },
       {
         "decode_s": 0.6420478820800781,
         "decode_tok_s": 60.743133165784364,
+        "decode_tokens": 39,
         "prefill_s": 3.187272071838379,
         "prefill_tok_s": 677.3817707864254,
+        "prefill_tokens": 2159,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 7
       },
       {
         "decode_s": 0.7071480751037598,
         "decode_tok_s": 59.39350113317829,
+        "decode_tokens": 42,
         "prefill_s": 3.685720205307007,
         "prefill_tok_s": 650.890427478928,
+        "prefill_tokens": 2399,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 8
       },
       {
         "decode_s": 0.6534080505371094,
         "decode_tok_s": 59.687051556743945,
+        "decode_tokens": 39,
         "prefill_s": 2.96480393409729,
         "prefill_tok_s": 642.8755635675215,
+        "prefill_tokens": 1906,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 9
       },
       {
         "decode_s": 0.6263430118560791,
         "decode_tok_s": 59.07306268230841,
+        "decode_tokens": 37,
         "prefill_s": 3.2224581241607666,
         "prefill_tok_s": 619.4029287874217,
+        "prefill_tokens": 1996,
         "run_id": "align-pilot-v2-episodes-b-e13",
         "turn": 10
       },
       {
         "decode_s": 0.2184128761291504,
         "decode_tok_s": 73.25575434728029,
+        "decode_tokens": 16,
         "prefill_s": 6.696768045425415,
         "prefill_tok_s": 1060.5115709288154,
+        "prefill_tokens": 7102,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 0
       },
       {
         "decode_s": 0.24419307708740234,
         "decode_tok_s": 73.71216340239401,
+        "decode_tokens": 18,
         "prefill_s": 0.17846202850341797,
         "prefill_tok_s": 369.82657069112014,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 1
       },
       {
         "decode_s": 0.26413893699645996,
         "decode_tok_s": 68.14595456724065,
+        "decode_tokens": 18,
         "prefill_s": 11.449750661849976,
         "prefill_tok_s": 948.9289610647735,
+        "prefill_tokens": 10865,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 2
       },
       {
         "decode_s": 0.37826108932495117,
         "decode_tok_s": 63.4482390002912,
+        "decode_tokens": 24,
         "prefill_s": 11.135172128677368,
         "prefill_tok_s": 802.053160633164,
+        "prefill_tokens": 8931,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 3
       },
       {
         "decode_s": 0.2661900520324707,
         "decode_tok_s": 63.864144697361894,
+        "decode_tokens": 17,
         "prefill_s": 0.4675619602203369,
         "prefill_tok_s": 489.7746597950025,
+        "prefill_tokens": 229,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 4
       },
       {
         "decode_s": 0.377871036529541,
         "decode_tok_s": 63.51373267562871,
+        "decode_tokens": 24,
         "prefill_s": 0.1273810863494873,
         "prefill_tok_s": 133.45780356557952,
+        "prefill_tokens": 17,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 5
       },
       {
         "decode_s": 0.3683130741119385,
         "decode_tok_s": 62.44687364263858,
+        "decode_tokens": 23,
         "prefill_s": 3.2414968013763428,
         "prefill_tok_s": 687.9537869829579,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 6
       },
       {
         "decode_s": 0.3884899616241455,
         "decode_tok_s": 61.77765803693896,
+        "decode_tokens": 24,
         "prefill_s": 3.192633867263794,
         "prefill_tok_s": 676.2441575708597,
+        "prefill_tokens": 2159,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 7
       },
       {
         "decode_s": 0.3911440372467041,
         "decode_tok_s": 61.35847083068945,
+        "decode_tokens": 24,
         "prefill_s": 3.7134652137756348,
         "prefill_tok_s": 646.0273253942338,
+        "prefill_tokens": 2399,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 8
       },
       {
         "decode_s": 0.39725184440612793,
         "decode_tok_s": 60.415075066243745,
+        "decode_tokens": 24,
         "prefill_s": 2.9870998859405518,
         "prefill_tok_s": 638.0770890759334,
+        "prefill_tokens": 1906,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 9
       },
       {
         "decode_s": 0.433474063873291,
         "decode_tok_s": 59.9805205591264,
+        "decode_tokens": 26,
         "prefill_s": 3.229595184326172,
         "prefill_tok_s": 618.0341145190457,
+        "prefill_tokens": 1996,
         "run_id": "align-pilot-v2-episodes-b-e14",
         "turn": 10
       },
       {
         "decode_s": 0.25956201553344727,
         "decode_tok_s": 69.34758910315409,
+        "decode_tokens": 18,
         "prefill_s": 10.575569152832031,
         "prefill_tok_s": 1042.4025261134889,
+        "prefill_tokens": 11024,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 0
       },
       {
         "decode_s": 0.3186500072479248,
         "decode_tok_s": 65.90302690205498,
+        "decode_tokens": 21,
         "prefill_s": 10.84988808631897,
         "prefill_tok_s": 892.4516016169473,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 1
       },
       {
         "decode_s": 0.345714807510376,
         "decode_tok_s": 63.63626758839282,
+        "decode_tokens": 22,
         "prefill_s": 1.3511731624603271,
         "prefill_tok_s": 748.9787601740603,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 2
       },
       {
         "decode_s": 0.3500978946685791,
         "decode_tok_s": 65.69591063029098,
+        "decode_tokens": 23,
         "prefill_s": 0.13091588020324707,
         "prefill_tok_s": 213.87779661665158,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 3
       },
       {
         "decode_s": 0.33422374725341797,
         "decode_tok_s": 65.82416773431414,
+        "decode_tokens": 22,
         "prefill_s": 0.17138099670410156,
         "prefill_tok_s": 280.0777269540249,
+        "prefill_tokens": 48,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 4
       },
       {
         "decode_s": 0.3515458106994629,
         "decode_tok_s": 65.42532807953937,
+        "decode_tokens": 23,
         "prefill_s": 0.17443585395812988,
         "prefill_tok_s": 298.1038520468484,
+        "prefill_tokens": 52,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 5
       },
       {
         "decode_s": 0.33480405807495117,
         "decode_tok_s": 65.71007569769347,
+        "decode_tokens": 22,
         "prefill_s": 0.13107585906982422,
         "prefill_tok_s": 213.61675749219677,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 6
       },
       {
         "decode_s": 0.33602309226989746,
         "decode_tok_s": 65.47169080370631,
+        "decode_tokens": 22,
         "prefill_s": 0.25255703926086426,
         "prefill_tok_s": 332.59813405254977,
+        "prefill_tokens": 84,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 7
       },
       {
         "decode_s": 0.33522582054138184,
         "decode_tok_s": 65.62740293832532,
+        "decode_tokens": 22,
         "prefill_s": 0.13462495803833008,
         "prefill_tok_s": 215.41325191531865,
+        "prefill_tokens": 29,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 8
       },
       {
         "decode_s": 0.35134100914001465,
         "decode_tok_s": 65.46346541298331,
+        "decode_tokens": 23,
         "prefill_s": 0.22131919860839844,
         "prefill_tok_s": 298.2118154005257,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 9
       },
       {
         "decode_s": 0.3343007564544678,
         "decode_tok_s": 65.80900454228087,
+        "decode_tokens": 22,
         "prefill_s": 0.14311981201171875,
         "prefill_tok_s": 209.6145849992004,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 10
       },
       {
         "decode_s": 0.4164011478424072,
         "decode_tok_s": 64.84131981840387,
+        "decode_tokens": 27,
         "prefill_s": 0.12685203552246094,
         "prefill_tok_s": 189.19680635121114,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 11
       },
       {
         "decode_s": 0.2911837100982666,
         "decode_tok_s": 65.25090292169166,
+        "decode_tokens": 19,
         "prefill_s": 0.13193917274475098,
         "prefill_tok_s": 212.2190053000309,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 12
       },
       {
         "decode_s": 0.27520108222961426,
         "decode_tok_s": 65.40671953092715,
+        "decode_tokens": 18,
         "prefill_s": 0.9723970890045166,
         "prefill_tok_s": 707.5298844264685,
+        "prefill_tokens": 688,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 13
       },
       {
         "decode_s": 0.29250001907348633,
         "decode_tok_s": 64.95726072149941,
+        "decode_tokens": 19,
         "prefill_s": 0.4323890209197998,
         "prefill_tok_s": 490.29922070875637,
+        "prefill_tokens": 212,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 14
       },
       {
         "decode_s": 0.2837827205657959,
         "decode_tok_s": 63.428809069531226,
+        "decode_tokens": 18,
         "prefill_s": 0.12807798385620117,
         "prefill_tok_s": 187.38583539030301,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 15
       },
       {
         "decode_s": 0.29111289978027344,
         "decode_tok_s": 65.26677455496079,
+        "decode_tokens": 19,
         "prefill_s": 0.12877917289733887,
         "prefill_tok_s": 194.13077004252608,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 16
       },
       {
         "decode_s": 0.2434239387512207,
         "decode_tok_s": 65.72895041498775,
+        "decode_tokens": 16,
         "prefill_s": 0.13362383842468262,
         "prefill_tok_s": 194.57605997940973,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 17
       },
       {
         "decode_s": 0.6910502910614014,
         "decode_tok_s": 63.671198130051145,
+        "decode_tokens": 44,
         "prefill_s": 0.12591791152954102,
         "prefill_tok_s": 174.7170019956905,
+        "prefill_tokens": 22,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 18
       },
       {
         "decode_s": 0.7711820602416992,
         "decode_tok_s": 63.53882244698835,
+        "decode_tokens": 49,
         "prefill_s": 0.13236308097839355,
         "prefill_tok_s": 196.42939562765346,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-b-e15",
         "turn": 19
       },
       {
         "decode_s": 1.1014389991760254,
         "decode_tok_s": 69.90854696229466,
+        "decode_tokens": 77,
         "prefill_s": 9.290933847427368,
         "prefill_tok_s": 1057.159609711319,
+        "prefill_tokens": 9822,
         "run_id": "align-pilot-v2-episodes-b-e16",
         "turn": 0
       },
       {
         "decode_s": 0.7238638401031494,
         "decode_tok_s": 64.92933808283969,
+        "decode_tokens": 47,
         "prefill_s": 10.65080714225769,
         "prefill_tok_s": 909.1329765593201,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-b-e16",
         "turn": 1
       },
       {
         "decode_s": 0.8380270004272461,
         "decode_tok_s": 64.4370646440622,
+        "decode_tokens": 54,
         "prefill_s": 1.331031084060669,
         "prefill_tok_s": 760.3128222314849,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e16",
         "turn": 2
       },
       {
         "decode_s": 0.9319858551025391,
         "decode_tok_s": 64.37865947375207,
+        "decode_tokens": 60,
         "prefill_s": 0.4729800224304199,
         "prefill_tok_s": 492.62122912237083,
+        "prefill_tokens": 233,
         "run_id": "align-pilot-v2-episodes-b-e16",
         "turn": 3
       },
       {
         "decode_s": 0.9101212024688721,
         "decode_tok_s": 63.727775863988526,
+        "decode_tokens": 58,
         "prefill_s": 1.3447980880737305,
         "prefill_tok_s": 752.5293268743224,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e16",
         "turn": 4
       },
       {
         "decode_s": 1.6172170639038086,
         "decode_tok_s": 63.0713107576182,
+        "decode_tokens": 102,
         "prefill_s": 1.360243797302246,
         "prefill_tok_s": 743.9842784117718,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e16",
         "turn": 5
       },
       {
         "decode_s": 1.1130728721618652,
         "decode_tok_s": 69.17786061073143,
+        "decode_tokens": 77,
         "prefill_s": 9.28590703010559,
         "prefill_tok_s": 1057.7318907195986,
+        "prefill_tokens": 9822,
         "run_id": "align-pilot-v2-episodes-b-e17",
         "turn": 0
       },
       {
         "decode_s": 0.728557825088501,
         "decode_tok_s": 64.51100843545358,
+        "decode_tokens": 47,
         "prefill_s": 10.654790878295898,
         "prefill_tok_s": 908.7930594418833,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-b-e17",
         "turn": 1
       },
       {
         "decode_s": 0.8500847816467285,
         "decode_tok_s": 63.52307577533001,
+        "decode_tokens": 54,
         "prefill_s": 1.330057144165039,
         "prefill_tok_s": 760.8695644691991,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e17",
         "turn": 2
       },
       {
         "decode_s": 0.9390060901641846,
         "decode_tok_s": 63.89734915298477,
+        "decode_tokens": 60,
         "prefill_s": 0.4725630283355713,
         "prefill_tok_s": 493.05592276369237,
+        "prefill_tokens": 233,
         "run_id": "align-pilot-v2-episodes-b-e17",
         "turn": 3
       },
       {
         "decode_s": 0.9137101173400879,
         "decode_tok_s": 63.477462818124934,
+        "decode_tokens": 58,
         "prefill_s": 1.3440849781036377,
         "prefill_tok_s": 752.9285844916036,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e17",
         "turn": 4
       },
       {
         "decode_s": 1.628904104232788,
         "decode_tok_s": 62.61878752404635,
+        "decode_tokens": 102,
         "prefill_s": 1.3595142364501953,
         "prefill_tok_s": 744.3835252821009,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e17",
         "turn": 5
       },
       {
         "decode_s": 0.2585170269012451,
         "decode_tok_s": 69.62790890704501,
+        "decode_tokens": 18,
         "prefill_s": 10.569790124893188,
         "prefill_tok_s": 1042.9724592200832,
+        "prefill_tokens": 11024,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 0
       },
       {
         "decode_s": 0.31682896614074707,
         "decode_tok_s": 66.28181840757271,
+        "decode_tokens": 21,
         "prefill_s": 10.857566833496094,
         "prefill_tok_s": 891.8204371653047,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 1
       },
       {
         "decode_s": 0.3433670997619629,
         "decode_tok_s": 64.07136855933886,
+        "decode_tokens": 22,
         "prefill_s": 1.3529460430145264,
         "prefill_tok_s": 747.9973094456468,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 2
       },
       {
         "decode_s": 0.3490879535675049,
         "decode_tok_s": 65.88597447993111,
+        "decode_tokens": 23,
         "prefill_s": 0.13904786109924316,
         "prefill_tok_s": 201.36951247323,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 3
       },
       {
         "decode_s": 0.33368802070617676,
         "decode_tok_s": 65.92984654780797,
+        "decode_tokens": 22,
         "prefill_s": 0.16481518745422363,
         "prefill_tok_s": 291.23529658534466,
+        "prefill_tokens": 48,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 4
       },
       {
         "decode_s": 0.34973692893981934,
         "decode_tok_s": 65.7637158012493,
+        "decode_tokens": 23,
         "prefill_s": 0.17525291442871094,
         "prefill_tok_s": 296.7140385054907,
+        "prefill_tokens": 52,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 5
       },
       {
         "decode_s": 0.3346271514892578,
         "decode_tok_s": 65.7448144960414,
+        "decode_tokens": 22,
         "prefill_s": 0.13312005996704102,
         "prefill_tok_s": 210.33644371053074,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 6
       },
       {
         "decode_s": 0.33546900749206543,
         "decode_tok_s": 65.57982856440277,
+        "decode_tokens": 22,
         "prefill_s": 0.2542572021484375,
         "prefill_tok_s": 330.3741223069075,
+        "prefill_tokens": 84,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 7
       },
       {
         "decode_s": 0.33518004417419434,
         "decode_tok_s": 65.6363658349735,
+        "decode_tokens": 22,
         "prefill_s": 0.1338798999786377,
         "prefill_tok_s": 216.61205307613267,
+        "prefill_tokens": 29,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 8
       },
       {
         "decode_s": 0.3510138988494873,
         "decode_tok_s": 65.52447089812323,
+        "decode_tokens": 23,
         "prefill_s": 0.2220909595489502,
         "prefill_tok_s": 297.1755362489359,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 9
       },
       {
         "decode_s": 0.33362293243408203,
         "decode_tok_s": 65.94270915218578,
+        "decode_tokens": 22,
         "prefill_s": 0.14329814910888672,
         "prefill_tok_s": 209.353715917183,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 10
       },
       {
         "decode_s": 0.41274595260620117,
         "decode_tok_s": 65.41554152018679,
+        "decode_tokens": 27,
         "prefill_s": 0.12499713897705078,
         "prefill_tok_s": 192.00439463183514,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 11
       },
       {
         "decode_s": 0.2874901294708252,
         "decode_tok_s": 66.08922551522987,
+        "decode_tokens": 19,
         "prefill_s": 0.13618111610412598,
         "prefill_tok_s": 205.60853663874227,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 12
       },
       {
         "decode_s": 0.27360010147094727,
         "decode_tok_s": 65.78944928465738,
+        "decode_tokens": 18,
         "prefill_s": 0.9701030254364014,
         "prefill_tok_s": 709.2030247926532,
+        "prefill_tokens": 688,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 13
       },
       {
         "decode_s": 0.2904210090637207,
         "decode_tok_s": 65.42226425441297,
+        "decode_tokens": 19,
         "prefill_s": 0.4327819347381592,
         "prefill_tok_s": 489.8540881293111,
+        "prefill_tokens": 212,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 14
       },
       {
         "decode_s": 0.2822601795196533,
         "decode_tok_s": 63.7709507257884,
+        "decode_tokens": 18,
         "prefill_s": 0.1314868927001953,
         "prefill_tok_s": 182.5276992036207,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 15
       },
       {
         "decode_s": 0.2903101444244385,
         "decode_tok_s": 65.44724793433905,
+        "decode_tokens": 19,
         "prefill_s": 0.13095688819885254,
         "prefill_tok_s": 190.9025202403905,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 16
       },
       {
         "decode_s": 0.24135875701904297,
         "decode_tok_s": 66.29135896128938,
+        "decode_tokens": 16,
         "prefill_s": 0.13517308235168457,
         "prefill_tok_s": 192.34598743820078,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 17
       },
       {
         "decode_s": 0.6876649856567383,
         "decode_tok_s": 63.9846450201021,
+        "decode_tokens": 44,
         "prefill_s": 0.12733888626098633,
         "prefill_tok_s": 172.7673348336822,
+        "prefill_tokens": 22,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 18
       },
       {
         "decode_s": 0.7684822082519531,
         "decode_tok_s": 63.76204871607769,
+        "decode_tokens": 49,
         "prefill_s": 0.1296699047088623,
         "prefill_tok_s": 200.50913169386348,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-b-e18",
         "turn": 19
       },
       {
         "decode_s": 0.21926617622375488,
         "decode_tok_s": 72.97067096966408,
+        "decode_tokens": 16,
         "prefill_s": 6.689929962158203,
         "prefill_tok_s": 1061.5955682903534,
+        "prefill_tokens": 7102,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 0
       },
       {
         "decode_s": 0.24571013450622559,
         "decode_tok_s": 73.25705159118674,
+        "decode_tokens": 18,
         "prefill_s": 0.1789991855621338,
         "prefill_tok_s": 368.71676143515316,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 1
       },
       {
         "decode_s": 0.26537299156188965,
         "decode_tok_s": 67.82905786326822,
+        "decode_tokens": 18,
         "prefill_s": 11.451814889907837,
         "prefill_tok_s": 948.7579134356266,
+        "prefill_tokens": 10865,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 2
       },
       {
         "decode_s": 0.3816969394683838,
         "decode_tok_s": 62.87710882205786,
+        "decode_tokens": 24,
         "prefill_s": 11.124188899993896,
         "prefill_tok_s": 802.8450505730715,
+        "prefill_tokens": 8931,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 3
       },
       {
         "decode_s": 0.26481199264526367,
         "decode_tok_s": 64.19648834700936,
+        "decode_tokens": 17,
         "prefill_s": 0.46917009353637695,
         "prefill_tok_s": 488.09590200839295,
+        "prefill_tokens": 229,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 4
       },
       {
         "decode_s": 0.38022780418395996,
         "decode_tok_s": 63.12005522980754,
+        "decode_tokens": 24,
         "prefill_s": 0.127885103225708,
         "prefill_tok_s": 132.93182373240316,
+        "prefill_tokens": 17,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 5
       },
       {
         "decode_s": 0.3667292594909668,
         "decode_tok_s": 62.71656652628376,
+        "decode_tokens": 23,
         "prefill_s": 3.228715181350708,
         "prefill_tok_s": 690.6772120627552,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 6
       },
       {
         "decode_s": 0.3902709484100342,
         "decode_tok_s": 61.49573801938402,
+        "decode_tokens": 24,
         "prefill_s": 3.2269797325134277,
         "prefill_tok_s": 669.0466563043454,
+        "prefill_tokens": 2159,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 7
       },
       {
         "decode_s": 0.39466309547424316,
         "decode_tok_s": 60.811361070283574,
+        "decode_tokens": 24,
         "prefill_s": 3.7343931198120117,
         "prefill_tok_s": 642.4069247751734,
+        "prefill_tokens": 2399,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 8
       },
       {
         "decode_s": 0.3992178440093994,
         "decode_tok_s": 60.11755326105847,
+        "decode_tokens": 24,
         "prefill_s": 2.9954798221588135,
         "prefill_tok_s": 636.2920510765998,
+        "prefill_tokens": 1906,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 9
       },
       {
         "decode_s": 0.4355800151824951,
         "decode_tok_s": 59.69052549187035,
+        "decode_tokens": 26,
         "prefill_s": 3.239469051361084,
         "prefill_tok_s": 616.1503531454846,
+        "prefill_tokens": 1996,
         "run_id": "align-pilot-v2-episodes-b-e19",
         "turn": 10
       },
       {
         "decode_s": 0.9387938976287842,
         "decode_tok_s": 71.36816735731807,
+        "decode_tokens": 67,
         "prefill_s": 6.090402841567993,
         "prefill_tok_s": 1042.1313934573734,
+        "prefill_tokens": 6347,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 0
       },
       {
         "decode_s": 0.8868091106414795,
         "decode_tok_s": 72.16885712157959,
+        "decode_tokens": 64,
         "prefill_s": 0.17478179931640625,
         "prefill_tok_s": 377.6136889432101,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 1
       },
       {
         "decode_s": 0.6126711368560791,
         "decode_tok_s": 66.92007756459923,
+        "decode_tokens": 41,
         "prefill_s": 11.312378883361816,
         "prefill_tok_s": 960.4522719779286,
+        "prefill_tokens": 10865,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 2
       },
       {
         "decode_s": 0.6830759048461914,
         "decode_tok_s": 61.48657814164469,
+        "decode_tokens": 42,
         "prefill_s": 11.010392904281616,
         "prefill_tok_s": 811.1427155816573,
+        "prefill_tokens": 8931,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 3
       },
       {
         "decode_s": 0.650331974029541,
         "decode_tok_s": 61.507048088309155,
+        "decode_tokens": 40,
         "prefill_s": 0.4609520435333252,
         "prefill_tok_s": 496.79788431927,
+        "prefill_tokens": 229,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 4
       },
       {
         "decode_s": 0.6916489601135254,
         "decode_tok_s": 62.170266247406914,
+        "decode_tokens": 43,
         "prefill_s": 0.12707996368408203,
         "prefill_tok_s": 133.77403885841218,
+        "prefill_tokens": 17,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 5
       },
       {
         "decode_s": 0.6504478454589844,
         "decode_tok_s": 61.49609116127405,
+        "decode_tokens": 40,
         "prefill_s": 3.171010971069336,
         "prefill_tok_s": 703.2457535925819,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 6
       },
       {
         "decode_s": 0.6409809589385986,
         "decode_tok_s": 60.84424109037523,
+        "decode_tokens": 39,
         "prefill_s": 3.1551120281219482,
         "prefill_tok_s": 684.2863203450577,
+        "prefill_tokens": 2159,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 7
       },
       {
         "decode_s": 0.6968512535095215,
         "decode_tok_s": 60.27111207517707,
+        "decode_tokens": 42,
         "prefill_s": 3.6624839305877686,
         "prefill_tok_s": 655.019938781001,
+        "prefill_tokens": 2399,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 8
       },
       {
         "decode_s": 0.6552789211273193,
         "decode_tok_s": 59.51664053668282,
+        "decode_tokens": 39,
         "prefill_s": 2.959192991256714,
         "prefill_tok_s": 644.0945236189402,
+        "prefill_tokens": 1906,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 9
       },
       {
         "decode_s": 0.6242539882659912,
         "decode_tok_s": 59.27074667600602,
+        "decode_tokens": 37,
         "prefill_s": 3.2067887783050537,
         "prefill_tok_s": 622.4295199932017,
+        "prefill_tokens": 1996,
         "run_id": "align-pilot-v2-episodes-b-e20",
         "turn": 10
       },
       {
         "decode_s": 0.9353888034820557,
         "decode_tok_s": 71.62796876612958,
+        "decode_tokens": 67,
         "prefill_s": 6.094743728637695,
         "prefill_tok_s": 1041.38915147113,
+        "prefill_tokens": 6347,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 0
       },
       {
         "decode_s": 0.8901958465576172,
         "decode_tok_s": 71.89429185441347,
+        "decode_tokens": 64,
         "prefill_s": 0.17496895790100098,
         "prefill_tok_s": 377.20976790262074,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 1
       },
       {
         "decode_s": 0.6171770095825195,
         "decode_tok_s": 66.43150889196903,
+        "decode_tokens": 41,
         "prefill_s": 11.308193683624268,
         "prefill_tok_s": 960.8077385280312,
+        "prefill_tokens": 10865,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 2
       },
       {
         "decode_s": 0.6833841800689697,
         "decode_tok_s": 61.45884149053787,
+        "decode_tokens": 42,
         "prefill_s": 10.966987133026123,
         "prefill_tok_s": 814.3531027865506,
+        "prefill_tokens": 8931,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 3
       },
       {
         "decode_s": 0.6490862369537354,
         "decode_tok_s": 61.62509343554463,
+        "decode_tokens": 40,
         "prefill_s": 0.46264123916625977,
         "prefill_tok_s": 494.9839759479463,
+        "prefill_tokens": 229,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 4
       },
       {
         "decode_s": 0.6859841346740723,
         "decode_tok_s": 62.68366544720505,
+        "decode_tokens": 43,
         "prefill_s": 0.12242937088012695,
         "prefill_tok_s": 138.8555693604359,
+        "prefill_tokens": 17,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 5
       },
       {
         "decode_s": 0.6470818519592285,
         "decode_tok_s": 61.81598182500153,
+        "decode_tokens": 40,
         "prefill_s": 3.17231822013855,
         "prefill_tok_s": 702.9559600431907,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 6
       },
       {
         "decode_s": 0.6379899978637695,
         "decode_tok_s": 61.12948499284733,
+        "decode_tokens": 39,
         "prefill_s": 3.1837639808654785,
         "prefill_tok_s": 678.1281567904084,
+        "prefill_tokens": 2159,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 7
       },
       {
         "decode_s": 0.6953127384185791,
         "decode_tok_s": 60.404473669682645,
+        "decode_tokens": 42,
         "prefill_s": 3.6779136657714844,
         "prefill_tok_s": 652.2719721037232,
+        "prefill_tokens": 2399,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 8
       },
       {
         "decode_s": 0.6543982028961182,
         "decode_tok_s": 59.596740680828276,
+        "decode_tokens": 39,
         "prefill_s": 2.9641499519348145,
         "prefill_tok_s": 643.0174015845186,
+        "prefill_tokens": 1906,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 9
       },
       {
         "decode_s": 0.6228029727935791,
         "decode_tok_s": 59.408836528246994,
+        "decode_tokens": 37,
         "prefill_s": 3.216600179672241,
         "prefill_tok_s": 620.5309607995434,
+        "prefill_tokens": 1996,
         "run_id": "align-pilot-v2-episodes-b-e21",
         "turn": 10
       },
       {
         "decode_s": 0.21992921829223633,
         "decode_tok_s": 72.75067916960269,
+        "decode_tokens": 16,
         "prefill_s": 6.691679000854492,
         "prefill_tok_s": 1061.318093574589,
+        "prefill_tokens": 7102,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 0
       },
       {
         "decode_s": 0.2442169189453125,
         "decode_tok_s": 73.7049671977507,
+        "decode_tokens": 18,
         "prefill_s": 0.17851495742797852,
         "prefill_tok_s": 369.7169186880464,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 1
       },
       {
         "decode_s": 0.2649672031402588,
         "decode_tok_s": 67.93293579987636,
+        "decode_tokens": 18,
         "prefill_s": 11.45238184928894,
         "prefill_tok_s": 948.7109444114973,
+        "prefill_tokens": 10865,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 2
       },
       {
         "decode_s": 0.38008975982666016,
         "decode_tok_s": 63.14297972917027,
+        "decode_tokens": 24,
         "prefill_s": 11.142926931381226,
         "prefill_tok_s": 801.4949801786912,
+        "prefill_tokens": 8931,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 3
       },
       {
         "decode_s": 0.26458168029785156,
         "decode_tok_s": 64.25236993302912,
+        "decode_tokens": 17,
         "prefill_s": 0.47080492973327637,
         "prefill_tok_s": 486.4010241560866,
+        "prefill_tokens": 229,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 4
       },
       {
         "decode_s": 0.3793611526489258,
         "decode_tok_s": 63.26425315933824,
+        "decode_tokens": 24,
         "prefill_s": 0.1273341178894043,
         "prefill_tok_s": 133.507030808234,
+        "prefill_tokens": 17,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 5
       },
       {
         "decode_s": 0.3675539493560791,
         "decode_tok_s": 62.575847818514525,
+        "decode_tokens": 23,
         "prefill_s": 3.2030088901519775,
         "prefill_tok_s": 696.2203591930056,
+        "prefill_tokens": 2230,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 6
       },
       {
         "decode_s": 0.3890519142150879,
         "decode_tok_s": 61.68842543396809,
+        "decode_tokens": 24,
         "prefill_s": 3.1950080394744873,
         "prefill_tok_s": 675.7416486360738,
+        "prefill_tokens": 2159,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 7
       },
       {
         "decode_s": 0.39028096199035645,
         "decode_tok_s": 61.49416020090937,
+        "decode_tokens": 24,
         "prefill_s": 3.699747085571289,
         "prefill_tok_s": 648.4227014748938,
+        "prefill_tokens": 2399,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 8
       },
       {
         "decode_s": 0.3990147113800049,
         "decode_tok_s": 60.14815823956778,
+        "decode_tokens": 24,
         "prefill_s": 2.979698896408081,
         "prefill_tok_s": 639.6619478221822,
+        "prefill_tokens": 1906,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 9
       },
       {
         "decode_s": 0.4337031841278076,
         "decode_tok_s": 59.94883356064567,
+        "decode_tokens": 26,
         "prefill_s": 3.2199292182922363,
         "prefill_tok_s": 619.889402742407,
+        "prefill_tokens": 1996,
         "run_id": "align-pilot-v2-episodes-b-e22",
         "turn": 10
       },
       {
         "decode_s": 0.2582359313964844,
         "decode_tok_s": 69.70370042100598,
+        "decode_tokens": 18,
         "prefill_s": 10.577231884002686,
         "prefill_tok_s": 1042.2386613905119,
+        "prefill_tokens": 11024,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 0
       },
       {
         "decode_s": 0.3187088966369629,
         "decode_tok_s": 65.89084968004775,
+        "decode_tokens": 21,
         "prefill_s": 10.849589109420776,
         "prefill_tok_s": 892.4761944756214,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 1
       },
       {
         "decode_s": 0.34662508964538574,
         "decode_tok_s": 63.469150552566944,
+        "decode_tokens": 22,
         "prefill_s": 1.3530981540679932,
         "prefill_tok_s": 747.9132219325658,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 2
       },
       {
         "decode_s": 0.34990715980529785,
         "decode_tok_s": 65.73172155950769,
+        "decode_tokens": 23,
         "prefill_s": 0.13468408584594727,
         "prefill_tok_s": 207.8939009321905,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 3
       },
       {
         "decode_s": 0.33385610580444336,
         "decode_tok_s": 65.89665313141383,
+        "decode_tokens": 22,
         "prefill_s": 0.1656360626220703,
         "prefill_tok_s": 289.7919646250043,
+        "prefill_tokens": 48,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 4
       },
       {
         "decode_s": 0.348952054977417,
         "decode_tok_s": 65.91163362396156,
+        "decode_tokens": 23,
         "prefill_s": 0.1737520694732666,
         "prefill_tok_s": 299.277010959577,
+        "prefill_tokens": 52,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 5
       },
       {
         "decode_s": 0.33438587188720703,
         "decode_tok_s": 65.7922533504074,
+        "decode_tokens": 22,
         "prefill_s": 0.13196396827697754,
         "prefill_tok_s": 212.17913014885357,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 6
       },
       {
         "decode_s": 0.3346438407897949,
         "decode_tok_s": 65.74153568186902,
+        "decode_tokens": 22,
         "prefill_s": 0.2530231475830078,
         "prefill_tok_s": 331.98543612474276,
+        "prefill_tokens": 84,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 7
       },
       {
         "decode_s": 0.3339729309082031,
         "decode_tok_s": 65.87360221133308,
+        "decode_tokens": 22,
         "prefill_s": 0.13542389869689941,
         "prefill_tok_s": 214.14240971533903,
+        "prefill_tokens": 29,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 8
       },
       {
         "decode_s": 0.3503129482269287,
         "decode_tok_s": 65.65558057848568,
+        "decode_tokens": 23,
         "prefill_s": 0.223984956741333,
         "prefill_tok_s": 294.66264592143796,
+        "prefill_tokens": 66,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 9
       },
       {
         "decode_s": 0.3339669704437256,
         "decode_tok_s": 65.87477788827343,
+        "decode_tokens": 22,
         "prefill_s": 0.13773488998413086,
         "prefill_tok_s": 217.80973581535116,
+        "prefill_tokens": 30,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 10
       },
       {
         "decode_s": 0.414750337600708,
         "decode_tok_s": 65.09940451451463,
+        "decode_tokens": 27,
         "prefill_s": 0.12976312637329102,
         "prefill_tok_s": 184.95238725182173,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 11
       },
       {
         "decode_s": 0.28612494468688965,
         "decode_tok_s": 66.4045563059591,
+        "decode_tokens": 19,
         "prefill_s": 0.1349480152130127,
         "prefill_tok_s": 207.48730506189787,
+        "prefill_tokens": 28,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 12
       },
       {
         "decode_s": 0.27396130561828613,
         "decode_tok_s": 65.70270921792012,
+        "decode_tokens": 18,
         "prefill_s": 0.9701838493347168,
         "prefill_tok_s": 709.1439426370389,
+        "prefill_tokens": 688,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 13
       },
       {
         "decode_s": 0.2902059555053711,
         "decode_tok_s": 65.47074461967183,
+        "decode_tokens": 19,
         "prefill_s": 0.43197083473205566,
         "prefill_tok_s": 490.77387396188465,
+        "prefill_tokens": 212,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 14
       },
       {
         "decode_s": 0.282501220703125,
         "decode_tok_s": 63.71653883547586,
+        "decode_tokens": 18,
         "prefill_s": 0.1316971778869629,
         "prefill_tok_s": 182.23625126272228,
+        "prefill_tokens": 24,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 15
       },
       {
         "decode_s": 0.2901759147644043,
         "decode_tok_s": 65.47752254154595,
+        "decode_tokens": 19,
         "prefill_s": 0.12916135787963867,
         "prefill_tok_s": 193.55634231792993,
+        "prefill_tokens": 25,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 16
       },
       {
         "decode_s": 0.24032187461853027,
         "decode_tok_s": 66.57737680099764,
+        "decode_tokens": 16,
         "prefill_s": 0.13278889656066895,
         "prefill_tok_s": 195.7995033727918,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 17
       },
       {
         "decode_s": 0.6827220916748047,
         "decode_tok_s": 64.4478925415499,
+        "decode_tokens": 44,
         "prefill_s": 0.12657713890075684,
         "prefill_tok_s": 173.80705703301734,
+        "prefill_tokens": 22,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 18
       },
       {
         "decode_s": 0.7595899105072021,
         "decode_tok_s": 64.50849244071864,
+        "decode_tokens": 49,
         "prefill_s": 0.13221383094787598,
         "prefill_tok_s": 196.65113561568492,
+        "prefill_tokens": 26,
         "run_id": "align-pilot-v2-episodes-b-e23",
         "turn": 19
       },
       {
         "decode_s": 1.1070468425750732,
         "decode_tok_s": 69.55441905321032,
+        "decode_tokens": 77,
         "prefill_s": 9.287255048751831,
         "prefill_tok_s": 1057.578363945118,
+        "prefill_tokens": 9822,
         "run_id": "align-pilot-v2-episodes-b-e24",
         "turn": 0
       },
       {
         "decode_s": 0.7294657230377197,
         "decode_tok_s": 64.43071760010537,
+        "decode_tokens": 47,
         "prefill_s": 10.65069580078125,
         "prefill_tok_s": 909.1424805588507,
+        "prefill_tokens": 9683,
         "run_id": "align-pilot-v2-episodes-b-e24",
         "turn": 1
       },
       {
         "decode_s": 0.8454077243804932,
         "decode_tok_s": 63.87450509701777,
+        "decode_tokens": 54,
         "prefill_s": 1.3315000534057617,
         "prefill_tok_s": 760.0450314751905,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e24",
         "turn": 2
       },
       {
         "decode_s": 0.9433019161224365,
         "decode_tok_s": 63.60635865835797,
+        "decode_tokens": 60,
         "prefill_s": 0.46941590309143066,
         "prefill_tok_s": 496.36153880925787,
+        "prefill_tokens": 233,
         "run_id": "align-pilot-v2-episodes-b-e24",
         "turn": 3
       },
       {
         "decode_s": 0.9159212112426758,
         "decode_tok_s": 63.32422405777515,
+        "decode_tokens": 58,
         "prefill_s": 1.368412971496582,
         "prefill_tok_s": 739.5428288678187,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e24",
         "turn": 4
       },
       {
         "decode_s": 1.6313600540161133,
         "decode_tok_s": 62.52451734912502,
+        "decode_tokens": 102,
         "prefill_s": 1.3836021423339844,
         "prefill_tok_s": 731.42413489825,
+        "prefill_tokens": 1012,
         "run_id": "align-pilot-v2-episodes-b-e24",
         "turn": 5
       }
     ]
   },
   "pilot3_idle_s": 300,
+  "planning_turn_observations": {
+    "largest_fed_prefill": {
+      "decode_s": 16.736506938934326,
+      "decode_tok_s": 51.145678314073855,
+      "decode_tokens": 856,
+      "planning_s": 16.842,
+      "prefill_s": 16.8416907787323,
+      "prefill_tok_s": 574.9422743367132,
+      "prefill_tokens": 9683,
+      "rounding": "up to 0.001 s",
+      "run_id": "align-pilot-v2-episodes-a-e06",
+      "statistic": "maximum fed-prefill phase duration",
+      "turn": 1
+    },
+    "n_turns": 138,
+    "population": "all measured turns of all 12 pilot3 A members, both task pairs and conditions, including all three greedy repeats per cell",
+    "slowest_decode": {
+      "decode_s": 7.412620782852173,
+      "decode_tok_s": 41.95547150063918,
+      "decode_tokens": 311,
+      "planning_tok_s": 41.95,
+      "prefill_s": 2.152700901031494,
+      "prefill_tok_s": 341.8960802438166,
+      "prefill_tokens": 736,
+      "rounding": "down to 0.01 tok/s",
+      "run_id": "align-pilot-v2-episodes-a-e12",
+      "statistic": "minimum decode tokens / decode phase duration",
+      "turn": 9
+    },
+    "source": "digested events.jsonl prefill/decode phase_start..phase_end markers and align_turns.jsonl generation token counts"
+  },
   "scaffold_bundle_bytes": [
     {
       "bytes": 161302117,

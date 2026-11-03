@@ -55,6 +55,14 @@ def sha(raw):
 
 SAMPLER = {"temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0}
 TIME_GUARD_S = 120
+# Independent pre-registration, cold-pass F1; never derive this table from the
+# runtime law. Both conditions and each replay share the pair/seed-index value.
+EXPECTED_EPISODE_SEEDS = {
+    "bank_transfer_2": (1001552758911679671, 8139346561588466007, 286457666795484560,
+                        304571486172760106, 16726874887165336052, 12685500607006618793),
+    "spam_filter_update": (2570132319625341959, 4097311025052448992, 6169586229110087908,
+                           18211783659995252033, 10515714233578474446, 8438206852662645142),
+}
 
 
 def ordered_members():
@@ -125,9 +133,15 @@ def planning_sizing(tree, members, evidence):
         return {"episode_s": episode_s, "member_s": member_s, "align_s": n * member_s,
                 "collection_span_s": n * member_s + evidence["scaffold_s"],
                 "capture_bytes": math.ceil(capture), "peak_bytes": 2 * math.ceil(capture)}
-    expected, observed, planning = case(110), case(120 + 41.9), case(120 + 4096 / 41.96 + 11)
+    inputs = evidence["planning_turn_observations"]
+    decode_rate = inputs["slowest_decode"]["planning_tok_s"]
+    prefill_s = inputs["largest_fed_prefill"]["planning_s"]
+    expected, observed, planning = case(110), case(120 + 41.9), case(120 + 4096 / decode_rate + prefill_s)
     upper_bytes = math.ceil(disk["intercept"] + disk["slope"] * planning["member_s"] + disk["largest_positive_residual"])
     B = n * upper_bytes + scaffold_bytes
+    # scripts/run_campaign.py: HAZARD_MEMBER_CAP_S (1800) + effective wait
+    # min(WAIT_CAP_S=1500, remaining SESSION_WAIT_BUDGET_S=7200): 3300
+    # with unspent wait budget, 1800 after the session budget is spent.
     block = {**BLOCKS[0], "count": n, "episode_upper_s": planning["episode_s"],
              "member_upper_s": planning["member_s"], "block_upper_s": n * planning["member_s"],
              "member_upper_bytes": upper_bytes, "block_upper_bytes": n * upper_bytes,
@@ -135,7 +149,7 @@ def planning_sizing(tree, members, evidence):
              "fits_unspent_cap": planning["member_s"] <= 3300, "fits_spent_cap": planning["member_s"] <= 1800,
              "flags": ["sizing.planning_bound_unmeasured"]}
     return {"schema_version": "joulewise.b5_sizing.v1", "non_claim": True,
-        "derivation": "Pilot3 A OLS member_s = intercept + slope*episode_s (300 s idle already included); pooled pilot3 OLS bundle_bytes(member_s). Expected: mean spam100/bank120 =110 s. Observed-turn case:120+41.9 s. Planning:120+4096/41.96+11 s. The guard admits a whole turn; these are transfers, not physical or thermal guarantees. Scaffold added once; harvest+desk 5400 s separately. Disk upper adds largest positive source residual.",
+        "derivation": "Pilot3 A OLS member_s = intercept + slope*episode_s (300 s idle already included); pooled pilot3 OLS bundle_bytes(member_s). Expected: mean spam100/bank120 =110 s; bank120 is a lower-bound planning input for a guard-limited episode unless it finishes first. Observed-turn case:120+41.9 s. Planning:120+4096/41.95+16.842 s; all pilot3 A turns, minimum observed decode rate rounded down to 0.01 tok/s and maximum observed fed-prefill phase rounded up to 0.001 s. The guard admits a whole turn; these are transfers, not physical or thermal guarantees. Scaffold added once; harvest+desk 5400 s separately, from observed pilot3 89 min (24 members) and pilot2 90 min (12 members); scaffold sets this time, not align count. Disk upper adds largest positive source residual.",
         "packs": {PACK_ID: {"pack_id": PACK_ID, "flags": ["sizing.planning_bound_unmeasured"],
             "member_law": {"intercept_s": law["intercept"], "slope": law["slope"], "n": law["n"],
                            "residual_sd_s": law["residual_sd"], "largest_abs_residual_s": law["largest_abs_residual"], "flags": []},
@@ -143,6 +157,7 @@ def planning_sizing(tree, members, evidence):
             "scaffold_flags": [], "dwell_increase_s": 0, "harvest_and_desk_planned_s": 5400,
             "member_cap": {"unspent_s": 3300, "spent_s": 1800, "session_wait_budget_s": 7200},
             "expected_cached": expected, "observed_worst_turn": observed, "planning_case": planning,
+            "planning_turn_observations": inputs,
             "member_count": n + scaffold_count, "align_members": n, "scaffold_members": scaffold_count,
             "programmed_span_s": planning["collection_span_s"], "T_stream_max_s": planning["member_s"],
             "estimated_footprint_bytes": 2 * B,
@@ -253,6 +268,7 @@ def build_files(root=ROOT):
                             "task_pair": spec.task_kwargs["task_pair"], "condition": spec.condition,
                             "repeat": member["repeat"], "ordinal": offset + index, "non_claim": True,
                             "seed_index": member["seed_index"], "is_replay": member["is_replay"],
+                            "expected_episode_seed": EXPECTED_EPISODE_SEEDS[spec.task_kwargs["task_pair"]][spec.seed - 1],
                             "model_id": model_id, "block": member["block"], "base_config": member["base_config"],
                             "config_path": entry["config_path"], "spec": json.loads(spec.to_text())})
         files[directory / "order_manifest.json"] = raw_json({
@@ -393,6 +409,9 @@ Generate: `python3 scripts/align_pilot_kit.py`; verify: `--check`.
 Protocol: `docs/align/pilot_protocol_v3.md`. Session: `scripts/align_pilot_session.py`.
 28 A-only members: 2 pairs x 2 conditions x seeds1-6 + seed1 replay per cell.
 Qwen3 thinking sampler 0.6/0.95/20/0, per-turn SHA256 64-bit reseed; guard120s.
+Seed-law task identifiers are exactly `shade/spam_filter_update` and
+`shade/bank_transfer_2` (the task's task_pair attribute, not task_kwargs.task_pair).
+Every member's expected_episode_seed is pre-registered in collection_plan.json.
 Cache episode_prefix, cap40960, 12x4096, hint on, idle300s, repetition observe-only.
 Odd seed order spam/benign,bank/sabotage,spam/sabotage,bank/benign; even reversed.
 Replays after seed blocks2,3,4,6, all at least six members after originals.
@@ -400,6 +419,11 @@ Replays after seed blocks2,3,4,6, all at least six members after originals.
 `registration/derive_sizing.py --pilot-session <pilot3 root>` derives file-digested
 receipts without MLX. Identity pins retain verified Mac hashes and package readings.
 Sizing transfers remain PROVISIONAL; harvest+desk allowance90min, no claim power.
+The allowance comes from pilot3 89min (24 members) and pilot2 90min (12 members);
+the scaffold sets the time, not align count. Bank expected120s is a lower bound
+for a guard-limited episode unless it finishes first; an admitted turn completes.
+`desk --no-harvest` writes inspection/ under the supplied session root: point it
+at a copy of an archived session.
 """
 
 
