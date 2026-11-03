@@ -13,7 +13,7 @@ import sys
 import tempfile
 from collections.abc import Mapping
 from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -78,6 +78,36 @@ class CloseoutSources:
     floor_bytes: bytes
     sidecar_bytes: bytes
     window_index: Path | None = None
+    # D-188 small fixes: the claim-gate inputs built (and validated) above in
+    # this program, with the (window index, resolved prospective manifest,
+    # resolved runs root) they were built for. run_closeout reuses them only
+    # when the paper-source replay would build them for an equal triple.
+    built: Mapping | None = field(default=None, compare=False, repr=False)
+    built_key: tuple | None = field(default=None, compare=False, repr=False)
+
+
+def _block5_inputs_key(root: Path, manifest: Mapping, window_index) -> tuple | None:
+    """The finalized validator's (window index, prospective, runs root) triple, resolved now.
+
+    Mirrors analysis_manifest_v3's own derivation: the lineage prospective path
+    and the bracket binding under the custody root, the binding's bytes equal to
+    the digest the manifest records. Any problem returns None (no reuse).
+    """
+    try:
+        evidence = manifest["evidence"]
+        prospective = analysis_manifest_v3._safe_relative_file(root, manifest["lineage"]["prospective_manifest_path"])
+        binding_path = analysis_manifest_v3._safe_relative_file(root, evidence["bracket_binding"]["path"])
+        if window_index is None or prospective is None or binding_path is None:
+            return None
+        raw = binding_path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != evidence["bracket_binding"]["sha256"]:
+            return None
+        runs_root = json.loads(raw)["runs_root"]
+        if not isinstance(runs_root, str):
+            return None
+        return (Path(window_index), prospective.resolve(strict=True), Path(runs_root).resolve(strict=True))
+    except Exception:
+        return None
 
 
 def _read_attachment(root: Path, record: object) -> tuple[str, bytes]:
@@ -136,6 +166,7 @@ def resolve_closeout_sources(finalized_manifest_path, custody_root, *, window_in
     _check_attachment_digest(floor_bytes, floor_record, "floor_artifact_source_hash_mismatch")
     _check_attachment_digest(sidecar_bytes, sidecar_record, "replay_sidecar_digest_mismatch")
     built = None
+    built_key = None
     if window_index is not None and analysis_manifest_v3._BLOCK5_ROLES & set(evidence):
         _relative, bracket_bytes = _read_attachment(root, evidence.get("bracket_binding"))
         _check_attachment_digest(bracket_bytes, evidence["bracket_binding"], "d165_closeout_driver_manifest_invalid")
@@ -147,6 +178,7 @@ def resolve_closeout_sources(finalized_manifest_path, custody_root, *, window_in
         except (ValueError, KeyError, TypeError):
             raise CloseoutDriverRefusal("d165_closeout_driver_manifest_invalid") from None
         steps.require_primary_context(built["archive_contexts"])
+        built_key = _block5_inputs_key(root, manifest, window_index)
     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
         invalid = analysis_manifest_v3.validate_finalized_analysis_manifest_v3(
             manifest, manifest_path=manifest_path, custody_root=root, window_index=window_index,
@@ -155,7 +187,22 @@ def resolve_closeout_sources(finalized_manifest_path, custody_root, *, window_in
     if invalid != ():
         raise CloseoutDriverRefusal("d165_closeout_driver_manifest_invalid")
     return CloseoutSources(root, manifest_path, manifest_id, manifest_relative,
-                           floor_relative, sidecar_relative, manifest_bytes, floor_bytes, sidecar_bytes, window_index)
+                           floor_relative, sidecar_relative, manifest_bytes, floor_bytes, sidecar_bytes, window_index,
+                           built=built, built_key=built_key)
+
+
+def _reusable_block5_inputs(sources) -> Mapping | None:
+    """The built claim-gate inputs, only for an equal (index, prospective, runs root) triple now."""
+    built, key = getattr(sources, "built", None), getattr(sources, "built_key", None)
+    if built is None or key is None:
+        return None
+    try:
+        manifest = json.loads(sources.manifest_bytes)
+    except Exception:
+        return None
+    if not isinstance(manifest, Mapping):
+        return None
+    return built if _block5_inputs_key(sources.custody_root, manifest, sources.window_index) == key else None
 
 
 def default_output_path(sources) -> Path:
@@ -328,11 +375,13 @@ def run_closeout(sources, *, output: Path) -> int:
             code = _closeout_refusal_code(closeout)
             exit_status = _exit_for(code)
             if exit_status in {0, 3}:
+                reusable = _reusable_block5_inputs(sources)
                 if dominance_closeout.validate_d165_paper_sources(
                     closeout=closeout, finalized_manifest_bytes=sources.manifest_bytes,
                     finalized_manifest_path=sources.manifest_path, custody_root=sources.custody_root,
                     floor_artifact_bytes=sources.floor_bytes, replay_sidecar_bytes=sources.sidecar_bytes,
                     window_index=sources.window_index,
+                    **({"_block5_inputs": reusable} if reusable is not None else {}),
                 ) != ():
                     raise CloseoutDriverRefusal("d165_closeout_driver_paper_sources_invalid")
                 raw = _file_bytes(closeout)

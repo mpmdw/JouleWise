@@ -1,12 +1,15 @@
 """Authenticated archive access and bounded, structural attempt histories."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
-from typing import Any, Mapping
+import stat
+from typing import Any, Callable, Iterable, Mapping
 
 from .windows import (AnalysisRefusal, AnalysedWindow, IndexEntry, PackTable, SealPins, VERDICTS,
                       _SELECTION_TOKEN, freeze, sealed_pack_table, sealed_plan_tree_sha256, validate_entry)
@@ -52,6 +55,55 @@ def _read(root: Path, relative: str, expected: str | None, code: str, check: str
         raise AnalysisRefusal("archive_input_changed")
     census[relative] = row
     return raw
+
+
+# D-188 small fixes: step 0's bulk reads use a few threads. Each worker only
+# checks containment, reads and hashes; the caller applies every comparison and
+# CensusRow registration in the original serial order and raises the first
+# failure in that order, exactly as the serial loop would.
+CENSUS_THREADS = 4
+
+
+def _lstat_signature(path: Path) -> tuple[int, ...] | None:
+    """The lead-ruled within-program identity: (dev, ino, mode, size, mtime_ns, ctime_ns)."""
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return None
+    if not stat.S_ISREG(status.st_mode):
+        return None
+    return (status.st_dev, status.st_ino, status.st_mode, status.st_size, status.st_mtime_ns,
+            status.st_ctime_ns)
+
+
+def _contained_digest(root: Path, relative: str) -> tuple[str, Any]:
+    """Worker half of a read: ("escaped"|"error", exc) or ("ok", sha256). Never raises."""
+    try:
+        target = root / relative
+        if not target.resolve().is_relative_to(root.resolve()):
+            return ("escaped", None)
+        return ("ok", hashlib.sha256(target.read_bytes()).hexdigest())
+    except Exception as exc:  # re-raised (or mapped) by the caller in serial order
+        return ("error", exc)
+
+
+def _ordered_results(work: Callable[[Any], Any], items: list, threads: int):
+    """Yield work(item) in item order, computed by up to ``threads`` threads.
+
+    The consumer stops at the first failure; leaving the generator cancels
+    every read not yet started (reads already running finish and are dropped).
+    """
+    if threads <= 1 or len(items) <= 1:
+        for item in items:
+            yield work(item)
+        return
+    executor = ThreadPoolExecutor(max_workers=min(threads, len(items)), thread_name_prefix="b5-census")
+    try:
+        futures = [executor.submit(work, item) for item in items]
+        for future in futures:
+            yield future.result()
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
 def _json(raw: bytes, code: str) -> dict:
@@ -233,6 +285,7 @@ class ArchiveHandle:
         self.shape = window.record.record_shape
         self._census = census
         self._source_manifest: dict[str, str] | None = None
+        self._source_manifest_signature: tuple[int, ...] | None = None
         self._seal_pins = seal_pins
         if synthetic_plan_tree_sha256 is not None and any(
                 window.pack_id in ids for ids in sealed_pack_table(seal_pins=seal_pins).values()):
@@ -268,9 +321,19 @@ class ArchiveHandle:
         return _output(self.record, self.window.archive_root, relative, self._census)
 
     def _sources(self) -> dict[str, str]:
-        # Re-read on every call: a changed manifest cannot silently use a cached list.
+        # Re-read whenever the file may have changed: a changed manifest cannot
+        # silently use a cached list. D-188 small fixes: within this handle (one
+        # program scope) an unchanged lstat signature (dev, inode, mode, size,
+        # mtime_ns, ctime_ns of a regular file) stands for the already checked
+        # bytes; any other state takes the original read, digest and census check.
+        path = self.window.archive_root / "sources" / "SHA256SUMS"
+        if (self._source_manifest is not None and self._source_manifest_signature is not None
+                and _lstat_signature(path) == self._source_manifest_signature):
+            return self._source_manifest
+        before = _lstat_signature(path)
         raw = _read(self.window.archive_root, "sources/SHA256SUMS", None, "archive_source_unauthenticated",
                     "input_census", self._census)
+        after = _lstat_signature(path)
         if self._source_manifest is None:
             manifest = {}
             try:
@@ -285,6 +348,7 @@ class ArchiveHandle:
             except (ValueError, UnicodeError):
                 raise AnalysisRefusal("archive_source_manifest_invalid") from None
             self._source_manifest = manifest
+        self._source_manifest_signature = before if before is not None and before == after else None
         return self._source_manifest
 
     def source_bytes(self, relative: str) -> bytes:
@@ -297,6 +361,65 @@ class ArchiveHandle:
             raise AnalysisRefusal("archive_source_unauthenticated")
         return _read(self.window.archive_root, relative, digest, "archive_source_unauthenticated",
                      "sources_sha256sums", self._census)
+
+    def census_sources(self, names: Iterable[str], *, threads: int = CENSUS_THREADS) -> None:
+        """Bulk ``source_bytes("sources/" + name)`` for each name, discarding the bytes.
+
+        Same checks, refusal codes and census rows as the serial loop, applied
+        in name order; the first failure in that order is the one raised.
+        Only names that pass the pure path and inventory checks are read ahead.
+        """
+        names = list(names)
+        root = self.window.archive_root
+
+        def readable(name: str, manifest: Mapping[str, str]) -> bool:
+            # Pure pre-filter on the already checked inventory; no census side effect.
+            relative = "sources/" + name
+            try:
+                _relative(relative)
+            except AnalysisRefusal:
+                return False
+            return relative != "sources/SHA256SUMS" and name in manifest
+
+        results = None
+        admitted: set[int] = set()
+        try:
+            for position, name in enumerate(names):
+                relative = "sources/" + name
+                _relative(relative)
+                if not relative.startswith("sources/") or relative == "sources/SHA256SUMS":
+                    raise AnalysisRefusal("archive_path_invalid")
+                digest = self._sources().get(name)
+                if digest is None:
+                    raise AnalysisRefusal("archive_source_unauthenticated")
+                if results is None:
+                    # Start reading ahead only once the serial order has reached its
+                    # first inventory lookup, so nothing is read or censused earlier.
+                    manifest = self._source_manifest or {}
+                    ahead = [index for index in range(position, len(names)) if readable(names[index], manifest)]
+                    admitted = set(ahead)
+                    results = _ordered_results(lambda name: _contained_digest(root, "sources/" + name),
+                                               [names[index] for index in ahead], threads)
+                if position not in admitted:
+                    # Admitted only now (the inventory changed state): the serial read.
+                    self.source_bytes(relative)
+                    continue
+                kind, value = next(results)
+                if kind == "escaped":
+                    raise AnalysisRefusal("archive_path_invalid")
+                if kind == "error":
+                    if isinstance(value, (OSError, ValueError, RuntimeError)):
+                        raise AnalysisRefusal("archive_source_unauthenticated") from None
+                    raise value
+                if value != digest:
+                    raise AnalysisRefusal("archive_source_unauthenticated")
+                row = CensusRow(relative, value, "sources_sha256sums")
+                if relative in self._census and self._census[relative] != row:
+                    raise AnalysisRefusal("archive_input_changed")
+                self._census[relative] = row
+        finally:
+            if results is not None:
+                results.close()
 
     def withheld_bytes(self, relative: str) -> bytes:
         _relative(relative)
@@ -317,21 +440,27 @@ class ArchiveHandle:
                     if name.startswith(prefix)}
         if not manifest:
             raise AnalysisRefusal("runs_root_differs_from_archive")
-        for name, digest in manifest.items():
-            try:
-                path = root / name
-                if not path.resolve().is_relative_to(root.resolve()):
-                    raise OSError()
-                raw = path.read_bytes()
-            except OSError:
-                raise AnalysisRefusal("runs_root_differs_from_archive") from None
-            if hashlib.sha256(raw).hexdigest() != digest:
-                raise AnalysisRefusal("runs_root_differs_from_archive")
-            key = "original/claim-runs/" + name
-            row = CensusRow(key, digest, "sources_sha256sums")
-            if key in self._census and self._census[key] != row:
-                raise AnalysisRefusal("archive_input_changed")
-            self._census[key] = row
+        # D-188 small fixes: reads and hashes run on CENSUS_THREADS threads; the
+        # comparisons, census rows and the first failure follow manifest order.
+        names = list(manifest)
+        results = _ordered_results(lambda name: _contained_digest(root, name), names, CENSUS_THREADS)
+        try:
+            for name in names:
+                digest = manifest[name]
+                kind, value = next(results)
+                if kind == "escaped" or (kind == "error" and isinstance(value, OSError)):
+                    raise AnalysisRefusal("runs_root_differs_from_archive") from None
+                if kind == "error":
+                    raise value
+                if value != digest:
+                    raise AnalysisRefusal("runs_root_differs_from_archive")
+                key = "original/claim-runs/" + name
+                row = CensusRow(key, digest, "sources_sha256sums")
+                if key in self._census and self._census[key] != row:
+                    raise AnalysisRefusal("archive_input_changed")
+                self._census[key] = row
+        finally:
+            results.close()
         extra = sum(path.relative_to(root).as_posix() not in manifest for path in root.rglob("*") if path.is_file())
         return (freeze({"code": "runs_root_has_unlisted_file", "count": extra}),) if extra else ()
 

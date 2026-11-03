@@ -329,11 +329,37 @@ def archived_verdict_row(archive: ArchiveHandle) -> Mapping[str, Any]:
                                          "whole-window verdict")
 
 
+def _reusable_bracket(brackets: Mapping[str, Any] | None, pack: str, window: Any, archive: Any) -> Any:
+    """Return a caller's already evaluated bracket for this exact window, else None."""
+    from joulewise.b5_analysis.bracket import WindowBracket
+    if brackets is None or pack not in brackets:
+        return None
+    bracket = brackets[pack]
+    if type(bracket) is not WindowBracket or bracket.window != window:
+        return None
+    try:
+        archive._sources()
+        manifest = next(row.sha256 for row in archive.census() if row.path == "sources/SHA256SUMS")
+    except Exception:
+        return None
+    return bracket if bracket.sources_sha256sums_sha256 == manifest else None
+
+
 def block5_claim_gate_inputs(window_index_path: Path, manifest_path: Path,
                              runs_root: Path, evidence_roots: Mapping[str, Path] | None = None, *,
                              _test_pack_table: Mapping[str, Mapping[str, str]] | None = None,
-                             _test_synthetic_plan_tree_sha256: str | None = None) -> dict:
-    """Build one fixed archive context per indexed root for the claim gate and replay."""
+                             _test_synthetic_plan_tree_sha256: str | None = None,
+                             _brackets: Mapping[str, Any] | None = None) -> dict:
+    """Build one fixed archive context per indexed root for the claim gate and replay.
+
+    ``_brackets`` (private, D-188 small fixes) lets a caller in the same program
+    pass window brackets it has already evaluated, keyed by pack.  One is used
+    only when it is a ``WindowBracket`` for exactly this function's selected
+    window (the full ``AnalysedWindow``, including its authenticated attempt
+    record) and for the same ``sources/SHA256SUMS`` digest as this function's
+    own authenticated handle.  Anything else, or a missing pack, evaluates the
+    bracket afresh, as without the argument.
+    """
     from joulewise.b5_analysis.windows import SealPins, load_window_index, select_analysed_attempts
     from joulewise.b5_analysis.archive import open_attempt_record, open_archive
     from joulewise.b5_analysis.bracket import evaluate_window_bracket
@@ -377,7 +403,9 @@ def block5_claim_gate_inputs(window_index_path: Path, manifest_path: Path,
         units = load_kept_units(archive, sealed_catalog_sha256=pins.sealed["catalog_sha256"], planned_units=planned)
         if pack == "gamma":
             require_contrast_attempt_keeps_midpoint(archive)
-        bracket = evaluate_window_bracket(archive, repo_root=Path(__file__).resolve().parents[2])
+        bracket = _reusable_bracket(_brackets, pack, window, archive)
+        if bracket is None:
+            bracket = evaluate_window_bracket(archive, repo_root=Path(__file__).resolve().parents[2])
         row = archived_verdict_row(archive)
         contexts[root_key] = build_context(archive, units, bracket, row,
             **({"test_only_allow_synthetic_binding": True}
@@ -4457,6 +4485,37 @@ def _consumer_recording_key(config: Mapping[str, Any]) -> str:
     return canonical_json_sha256(identity)
 
 
+_UNCOMPUTED = object()
+
+
+def _declared_recording_matches(
+    configs: Sequence[Mapping[str, Any]],
+    declared_keys: dict[int, str],
+    row_config: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    """Declaration records whose recording key equals the row's (D-188 small fixes).
+
+    The same value as ``[c for c in configs if key(c) == key(row_config)]``,
+    with each declaration key computed once per call site (``declared_keys``,
+    by position) and the row key once per row.  ``_consumer_recording_key`` is
+    pure, so the first computation that raises is the same one, in the same
+    order, as in the original comprehension: c0, row, c1, c2, ... for the first
+    row, and row first for every later row.  An empty declaration still never
+    computes the row key.
+    """
+
+    row_key: object = _UNCOMPUTED
+    matches = []
+    for position, config in enumerate(configs):
+        if position not in declared_keys:
+            declared_keys[position] = _consumer_recording_key(config)
+        if row_key is _UNCOMPUTED:
+            row_key = _consumer_recording_key(row_config)
+        if declared_keys[position] == row_key:
+            matches.append(config)
+    return matches
+
+
 def _consumer_measurement_identity(config: Mapping[str, Any]) -> str:
     identity = copy.deepcopy(dict(scientific_config_identity(config) or {}))
     for section, field_name in _CONSUMER_RECORDING_FIELDS:
@@ -4752,9 +4811,9 @@ def _floor_request_or_refusal(
             matched_identities = set()
             declared_reference_identities = set()
             recording_difference = False
+            declared_keys: dict[int, str] = {}
             for row in evidence:
-                matches = [config for config in declaration.configs
-                    if _consumer_recording_key(config) == _consumer_recording_key(row.raw_config)]
+                matches = _declared_recording_matches(declaration.configs, declared_keys, row.raw_config)
                 if not matches:
                     return ("consumer_identity_undeclared",)
                 observed = scientific_config_identity_sha256(row.raw_config)

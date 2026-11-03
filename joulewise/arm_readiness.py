@@ -3074,6 +3074,63 @@ def _repository_and_pack_relative(pack_root: Path) -> tuple[Path, bytes, str]:
     return repo, relative.encode("utf-8"), relative
 
 
+_GIT_OID_PATTERN = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+
+
+def _pack_blob_batch(root: Path, oids: Sequence[str]) -> dict[str, bytes]:
+    """Read committed blobs with one ``git cat-file --batch`` (D-188 small fixes).
+
+    The process is ``_run_git``'s exact invocation: the same ``git -C root``
+    argv prefix, the same inherited environment (``GIT_DIR``, replace objects,
+    ``safe.directory``) and the same 20 s timeout.  ``cat-file --batch`` applies
+    replace refs exactly as ``cat-file blob`` does and applies no filters or
+    text conversion.  This helper never refuses: it returns only the blobs it
+    parsed without any anomaly.  A missing object, a non-blob, a malformed or
+    truncated header, an unexpected oid, or a failed or timed-out process
+    leaves that oid, and every oid after the first anomaly, out of the result.
+    The caller then makes the original per-oid ``_run_git`` call for it, with
+    the original refusal mapping.  No result outlives the caller's call.
+    """
+
+    requested = list(dict.fromkeys(oid for oid in oids if _GIT_OID_PATTERN.fullmatch(oid) is not None))
+    if not requested:
+        return {}
+    try:
+        completed = subprocess.run(
+            ("git", "-C", str(root), "cat-file", "--batch"),
+            input=b"".join(oid.encode("ascii") + b"\n" for oid in requested),
+            check=False,
+            capture_output=True,
+            timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if completed.returncode != 0:
+        return {}
+    output = completed.stdout
+    blobs: dict[str, bytes] = {}
+    offset = 0
+    for oid in requested:
+        newline = output.find(b"\n", offset)
+        if newline < 0:
+            break
+        header = output[offset:newline].split(b" ")
+        if (
+            len(header) != 3
+            or header[0] != oid.encode("ascii")
+            or header[1] != b"blob"
+            or re.fullmatch(rb"[0-9]+", header[2]) is None
+        ):
+            break
+        start = newline + 1
+        end = start + int(header[2])
+        if end + 1 > len(output) or output[end : end + 1] != b"\n":
+            break
+        blobs[oid] = output[start:end]
+        offset = end + 1
+    return blobs
+
+
 def committed_pack_tree_sha256(pack_root: Path | str) -> str:
     """Hash every committed pack blob using D-134's exact framing."""
 
@@ -3174,12 +3231,18 @@ def committed_pack_tree_sha256(pack_root: Path | str) -> str:
             "readiness_pack_unreadable", f"committed pack entry is missing: {missing!r}"
         )
     framed = bytearray(PACK_DIGEST_DOMAIN)
-    for relative_raw in sorted(committed, key=lambda value: value):
+    ordered = sorted(committed, key=lambda value: value)
+    # One batched read; any blob it did not return cleanly takes the original
+    # per-oid call below, so every refusal keeps its code and serial position.
+    batched = _pack_blob_batch(repository, [committed[relative][1] for relative in ordered])
+    for relative_raw in ordered:
         mode, oid = committed[relative_raw]
         path = disk[relative_raw]
         try:
             raw = path.read_bytes()
-            blob = _run_git(repository, "cat-file", "blob", oid)
+            blob = batched.get(oid)
+            if blob is None:
+                blob = _run_git(repository, "cat-file", "blob", oid)
             disk_mode = "100755" if path.stat().st_mode & 0o111 else "100644"
         except OSError as exc:
             raise ArmReadinessError(
