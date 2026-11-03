@@ -749,11 +749,12 @@ def _audit(event: str, args: tuple) -> None:
                 for fill in fills:
                     fill.relative_opens.append(path)
                 return
-            # The leaf's own pathname, made absolute without lexical
-            # normalization (a ``..`` after a symlink is the kernel's to resolve).
-            absolute = path if os.path.isabs(path) else os.path.join(os.getcwd(), path)
+            # The leaf's own pathname, exactly as spelled: no lexical
+            # normalization (a ``..`` after a symlink is the kernel's to
+            # resolve), and a relative spelling stays relative so that a hit
+            # re-resolves it against the cwd of the hit (review of #639).
             for fill in fills:
-                fill.reads.append(absolute)
+                fill.reads.append(path)
         elif event in ("os.listdir", "os.scandir"):
             path = args[0] if args else None
             if path is None:
@@ -763,9 +764,8 @@ def _audit(event: str, args: tuple) -> None:
             if not isinstance(path, str):
                 _mark(fills, "unattributable_listing")
                 return
-            absolute = path if os.path.isabs(path) else os.path.join(os.getcwd(), path)
             for fill in fills:
-                fill.listings.append(absolute)
+                fill.listings.append(path)
         elif event in _WRITE_EVENTS:
             _mark(fills, "write")
         elif event in _PROCESS_EVENTS or event.startswith("os.exec") or event.startswith("os.spawn"):
@@ -2015,8 +2015,10 @@ class VerifiedStore:
                 raise _Bypass("unattributable relative open")
         # Sol wave-2 #2: a read is bound to the pathname the leaf used, not
         # only to its target. A pathname that is not its own target is kept
-        # as an alias (re-resolved on every hit); a read into a tree is
-        # covered by the tree only through one of that tree's own spellings.
+        # as an alias (re-resolved on every hit); a relative pathname is
+        # always kept, so a hit re-resolves it against its own cwd; a read
+        # into a tree is covered by the tree only through one of that tree's
+        # own absolute spellings (a relative read into a tree is unstorable).
         spellings = [tuple(dict.fromkeys([tree.root] + [os.path.normpath(spelling) for spelling in tree.spellings
                                                        if os.path.isabs(spelling)]))
                      for tree in prepared.trees]
@@ -2041,6 +2043,10 @@ class VerifiedStore:
             if in_tree(path, resolved) or is_code(resolved):
                 continue
             if os.path.isdir(resolved):
+                # Review of #639: a directory opened by pathname (the no-follow
+                # route reads a row relative to it) is bound like a file read,
+                # so retargeting any component of that pathname is a miss.
+                bind(path, resolved)
                 continue
             if any(within(resolved, parent) or within(os.path.normpath(path), parent) for parent in parents):
                 raise _Bypass("path-free leaf read beside its tree")

@@ -269,6 +269,96 @@ class PathnameBinding(_Synthetic):
             self.assertEqual(caches.vdl._entries, {})
 
 
+    # Review of #639 (LOW, latent): a no-follow read opens its directory by the
+    # caller's pathname and reads the row relative to it; that directory
+    # pathname must be bound too, or retargeting a component serves the old row.
+    def _directory_route(self, session):
+        from joulewise.authentication_io import V2AuthenticationReadSession
+
+        good, bad = self.tmp / "good", self.tmp / "bad"
+        for directory, value in ((good, "1"), (bad, "2")):
+            (directory / "sub").mkdir(parents=True)
+            (directory / "sub" / "p.json").write_text(value)
+        alias = self.tmp / "link"
+        alias.symlink_to(good, target_is_directory=True)
+        directory = str(alias / "sub")
+        spec = vdl.LeafSpec("W_nofollow", (f"{MODULE}:{read_nofollow_through.__qualname__}",),
+                            (("path", vdl.TREE), ("directory", vdl.SCALAR)))
+
+        def call(fn):
+            with V2AuthenticationReadSession() if session else contextlib.nullcontext():
+                return fn()
+
+        with vdl._registered(spec), run() as caches:
+            served = lambda: call(lambda: vdl.call("W_nofollow", read_nofollow_through, self.tree, directory))
+            self.assertEqual(served(), "1")
+            entry, = caches.vdl._entries.values()
+            self.assertIn((directory, str((good / "sub").resolve())), entry.aliases)
+            self.assertEqual(served(), "1")
+            self.assertEqual(caches.vdl.restricted_counters().get("W_nofollow:hit"), 1)
+            alias.unlink()
+            alias.symlink_to(bad, target_is_directory=True)
+            fresh = call(lambda: read_nofollow_through(self.tree, directory))
+            self.assertEqual(fresh, "2")
+            self.assertEqual(served(), fresh)
+            self.assertEqual(caches.vdl.restricted_counters().get("W_nofollow:hit"), 1)
+
+    def test_nofollow_directory_through_a_retargeted_component_is_a_miss(self):
+        self._directory_route(session=False)
+
+    def test_nofollow_directory_through_a_retargeted_component_is_a_miss_in_a_session(self):
+        self._directory_route(session=True)
+
+    # Review of #639 (LOW, latent): a relative pathname is bound to the cwd of
+    # each hit, not to the cwd of the fill.
+    def test_relative_read_is_resolved_against_the_cwd_of_the_hit(self):
+        import os
+
+        good, bad = self.tmp / "good", self.tmp / "bad"
+        for directory, value in ((good, "1"), (bad, "2")):
+            directory.mkdir()
+            (directory / "p.json").write_text(value)
+        self.addCleanup(os.chdir, os.getcwd())
+        spec = vdl.LeafSpec("W_relative", (f"{MODULE}:{read_relative.__qualname__}",),
+                            (("path", vdl.TREE), ("name", vdl.SCALAR)))
+        with vdl._registered(spec), run() as caches:
+            os.chdir(good)
+            self.assertEqual(vdl.call("W_relative", read_relative, self.tree, "p.json"), "1")
+            entry, = caches.vdl._entries.values()
+            self.assertIn(("p.json", str((good / "p.json").resolve())), entry.aliases)
+            self.assertEqual(vdl.call("W_relative", read_relative, self.tree, "p.json"), "1")
+            self.assertEqual(caches.vdl.restricted_counters().get("W_relative:hit"), 1)
+            os.chdir(bad)
+            fresh = read_relative(self.tree, "p.json")
+            self.assertEqual(fresh, "2")
+            self.assertEqual(vdl.call("W_relative", read_relative, self.tree, "p.json"), fresh)
+            self.assertEqual(caches.vdl.restricted_counters().get("W_relative:hit"), 1)
+
+    def test_relative_read_into_the_tree_is_unstorable(self):
+        import os
+
+        self.addCleanup(os.chdir, os.getcwd())
+        spec = vdl.LeafSpec("W_relative_tree", (f"{MODULE}:{read_relative.__qualname__}",),
+                            (("path", vdl.TREE), ("name", vdl.SCALAR)))
+        with vdl._registered(spec), run() as caches:
+            os.chdir(self.tree)
+            vdl.call("W_relative_tree", read_relative, self.tree, "fit.txt")
+            self.assertEqual(caches.vdl._entries, {})
+
+
+def read_nofollow_through(path, directory):
+    from joulewise.authentication_io import read_authentication_input_nofollow
+
+    _fit(path)
+    return read_authentication_input_nofollow(directory, "p.json", grammar="raw", label="x").decode()
+
+
+def read_relative(path, name):
+    _fit(path)
+    with open(name, "rb") as handle:
+        return handle.read().decode()
+
+
 def read_through(path, directory):
     return [(Path(directory) / name).read_text() for name in sorted(p.name for p in Path(directory).glob("*.json"))]
 
