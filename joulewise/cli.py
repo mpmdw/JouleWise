@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import contextvars
 import copy
 import json
 import shlex
@@ -439,6 +440,114 @@ def _cmd_run_body(args: argparse.Namespace) -> int:
 # Phase 5 dataset publication later reuse it without the CLI shell.
 
 
+# D-188 LEAF-CLI: the verified derivation store's leaves in this module (L1, and
+# L3 at its two cli sites). Nothing changes outside an analysis run whose
+# activation created a store (``analysis_run_cache.analysis_run_caches(...,
+# vdl_mode=...)``): every helper below is then the unchanged serial code.
+_L1_STRICT_VALIDATION = "L1_strict_validation"
+_L3_REDUCE_DICT = "L3_reduce_dict"
+# True while ``validate_bundle`` runs as the store's own L1 leaf computation
+# (a fill or a shadow recompute): that call is the body, never a second store
+# call. The ContextVar name is dotted so it is no snake_case literal.
+_STRICT_LEAF_BODY: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "joulewise.cli.strict_leaf_body", default=False
+)
+
+
+def _verified_store() -> Any:
+    """The active analysis run's verified derivation store, or ``None``."""
+    from joulewise import analysis_run_cache  # noqa: PLC0415
+
+    caches = analysis_run_cache.current()
+    return None if caches is None else getattr(caches, "vdl", None)
+
+
+def _strict_reduce_dict(
+    path: Path,
+    *,
+    reducer_version: str | None,
+    physics_cache: dict[str, float] | None,
+) -> dict[str, Any]:
+    """``reduce_bundle(path, ...).to_dict()`` for ``_strict_problems`` (D-188 L3).
+
+    With a store active this is the L3 leaf (``reduce_bundle_dict``): a
+    verified earlier value of the identical call on the identical bytes, or
+    the call itself, here (so a step-1 strict validation deposits what the
+    step-2 ``reduce`` and the NEG-8 reference re-reduction later reuse). Both
+    stages raise exactly as before: an exception is never stored, and every
+    ``_strict_problems`` site handles the two stages alike.
+    """
+    store = _verified_store()
+    if store is None:
+        return reduce_bundle(
+            path,
+            reducer_version=reducer_version,
+            _instrument_calibration_physics_cache=physics_cache,
+        ).to_dict()
+    from joulewise.analysis_verified_store import reduce_bundle_dict  # noqa: PLC0415
+
+    return store.call(
+        _L3_REDUCE_DICT,
+        reduce_bundle_dict,
+        path,
+        reducer_version=reducer_version,
+        physics_cache=physics_cache,
+    )
+
+
+def _served_reduction(
+    bundle_path: Path,
+    *,
+    reducer_version: str | None,
+    physics_cache: dict[str, float] | None,
+) -> dict[str, Any] | None:
+    """A verified ``reduce_bundle(...).to_dict()`` for ``reduce``, or ``None`` (D-188 L3).
+
+    ``_cmd_reduce`` keeps two failure stages apart (Sol #9): a reduction that
+    raises escapes the verb, while a summary whose serialization raises
+    ``SchemaError`` is reported and exits 3. The combined L3 leaf cannot tell
+    the two apart, so only a hit is served here (a stored entry is always a
+    normal return of both stages); on a miss this returns ``None`` and the
+    caller runs its own unchanged two-stage code.
+    """
+    store = _verified_store()
+    if store is None:
+        return None
+    from joulewise.analysis_verified_store import reduce_bundle_dict  # noqa: PLC0415
+
+    if (
+        store.probe(
+            _L3_REDUCE_DICT,
+            reduce_bundle_dict,
+            bundle_path,
+            reducer_version=reducer_version,
+            physics_cache=physics_cache,
+        )
+        is None
+    ):
+        return None
+    # The probe found a verified entry; ``call`` serves it at this position
+    # (registration, physics admission, shadow sampling). It computes the
+    # leaf only if the entry stopped verifying in between (custody bytes
+    # changed under a running analysis) or as a shadow recompute, whose
+    # raising is a store defect, never a study refusal.
+    return store.call(
+        _L3_REDUCE_DICT,
+        reduce_bundle_dict,
+        bundle_path,
+        reducer_version=reducer_version,
+        physics_cache=physics_cache,
+    )
+
+
+def _payload_bundle_line(bundle_path: Path, payload: Mapping[str, Any]) -> str:
+    """``_bundle_line`` from a summary's ``to_dict()`` payload (status and reason values)."""
+    line = f"bundle: {shlex.quote(str(bundle_path))} status={payload['status']}"
+    if payload.get("failure_reason") is not None:
+        line += f" reason={payload['failure_reason']}"
+    return line
+
+
 def validate_bundle(
     path: Path,
     strict: bool = False,
@@ -466,7 +575,28 @@ def validate_bundle(
     calibration refit it once per process.  The reducer reads it only after
     its own manifest, evidence, plist and events hash checks.  ``None`` keeps
     today's behaviour (the active V2 authentication session's cache, if any).
+
+    D-188 L1: inside an analysis run with a verified derivation store, a
+    strict call is the store's ``L1_strict_validation`` leaf: this same
+    function, served from a hash-verified earlier computation of it on the
+    same bundle bytes (and the same policy files and listings it read beside
+    the bundle), or computed here. An exception is never stored, so a raising
+    validation raises from this code at this position.
     """
+    if strict and not _STRICT_LEAF_BODY.get():
+        store = _verified_store()
+        if store is not None:
+            token = _STRICT_LEAF_BODY.set(True)
+            try:
+                return store.call(
+                    _L1_STRICT_VALIDATION,
+                    validate_bundle,
+                    path,
+                    strict,
+                    physics_cache=physics_cache,
+                )
+            finally:
+                _STRICT_LEAF_BODY.reset(token)
     reader = BundleReader(Path(path))
     problems = reader.problems()
     if strict:
@@ -475,6 +605,13 @@ def validate_bundle(
             if physics_cache is None
             else _strict_problems(reader, physics_cache=physics_cache)
         )
+        if problems and _STRICT_LEAF_BODY.get():
+            # A problem list is not stored at all: the L1 entry is path-free
+            # (relative name plus content), and problem text can quote the
+            # bundle's location in ways a location search cannot see.
+            from joulewise.analysis_verified_store import note_unstorable  # noqa: PLC0415
+
+            note_unstorable("strict problems are location-bearing")
     return problems
 
 
@@ -550,11 +687,11 @@ def _strict_problems(
             else AXI_REDUCER_VERSION
         )
         try:
-            fresh = reduce_bundle(
+            fresh = _strict_reduce_dict(
                 reader.path,
                 reducer_version=comparison_axi_version,
-                _instrument_calibration_physics_cache=physics_cache,
-            ).to_dict()
+                physics_cache=physics_cache,
+            )
         except (ValueError, SchemaError) as exc:
             return [
                 f"axi:event_semantics_invalid: strict reducer {comparison_axi_version} "
@@ -635,17 +772,17 @@ def _strict_problems(
     # object; semantic re-reduction remains applicable to valid summaries.
     if not version_problems and not summary_validation_problems(summary):
         fresh = (
-            reduce_bundle(
+            _strict_reduce_dict(
                 reader.path,
                 reducer_version=SUMMARY_REDUCER_VERSION,
-                _instrument_calibration_physics_cache=physics_cache,
-            ).to_dict()
+                physics_cache=physics_cache,
+            )
             if comparison_reducer_version is None
-            else reduce_bundle(
+            else _strict_reduce_dict(
                 reader.path,
                 reducer_version=comparison_reducer_version,
-                _instrument_calibration_physics_cache=physics_cache,
-            ).to_dict()
+                physics_cache=physics_cache,
+            )
         )
         # The fresh current derivation is the raw/metadata authority. Inspect it
         # before legacy additive-absence projection can hide the governed
@@ -2022,17 +2159,28 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     if requested_version is None and stored_path.is_file():
         requested_version = recorded_version
     run_physics_cache = _run_reduce_physics_cache(bundle_path)
-    summary = reduce_bundle(
+    # D-188 L3: a verified earlier reduction of these bytes, or None (then the
+    # two stages below run exactly as before).
+    served = _served_reduction(
         bundle_path,
         reducer_version=requested_version,
-        **(
-            {"_instrument_calibration_physics_cache": run_physics_cache}
-            if run_physics_cache is not None
-            else {}
-        ),
+        physics_cache=run_physics_cache,
+    )
+    summary = (
+        reduce_bundle(
+            bundle_path,
+            reducer_version=requested_version,
+            **(
+                {"_instrument_calibration_physics_cache": run_physics_cache}
+                if run_physics_cache is not None
+                else {}
+            ),
+        )
+        if served is None
+        else None
     )
     try:
-        payload = summary.to_dict()
+        payload = summary.to_dict() if served is None else served
     except SchemaError as exc:
         print(f"reduced summary is not admissible: {exc}", file=sys.stderr)
         return 3
@@ -2086,7 +2234,11 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     except FileExistsError:
         print(f"error: refusing to overwrite existing reduction artifact: {output_path}", file=sys.stderr)
         return 2
-    print(_bundle_line(bundle_path, summary))
+    print(
+        _bundle_line(bundle_path, summary)
+        if served is None
+        else _payload_bundle_line(bundle_path, payload)
+    )
     print(f"reduction artifact: {output_path}")
     return 0 if is_admissible_succeeded_summary(payload) else 3
 
