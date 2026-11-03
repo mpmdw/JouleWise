@@ -472,7 +472,11 @@ class StructureLogSchemaT3bTests(unittest.TestCase):
         # Nothing new in custody outside restricted/logs/runtime-*.
         timed_files = sorted(p.relative_to(timed[4]).as_posix() for p in timed[4].rglob('*') if p.is_file())
         plain_files = sorted(p.relative_to(plain[4]).as_posix() for p in plain[4].rglob('*') if p.is_file())
-        self.assertEqual([n for n in timed_files if '/logs/runtime-' not in n], plain_files)
+        # D-188 SHIP: the restricted tier (runtime-phases, runtime-vdl-counters) is
+        # written with or without --phase-log, so both sides drop runtime-* names.
+        self.assertEqual([n for n in timed_files if '/logs/runtime-' not in n],
+                         [n for n in plain_files if '/logs/runtime-' not in n])
+        self.assertIn('dry-run/restricted/logs/runtime-phases.jsonl', timed_files)
 
     def test_env_fallback_and_invalid_paths_refuse_before_anything(self):
         log = self.harness.root / 'env-phases.jsonl'

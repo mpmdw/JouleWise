@@ -506,12 +506,14 @@ class StepFourMemberTests(unittest.TestCase):
         self.assertEqual(fe._scheduled_strict_bundle_ids([{'cell_id': 'A'}], {}), [])
 
     def test_children_get_their_share_of_the_workers(self):
+        # D-188: the leftover workers go to the last child (beta gets 4 at 7);
+        # with more children than workers each keeps 1, never 0 (Sol #1).
         tasks = [('m:main', [], '4', pack) for pack in ('alpha', 'beta')]
-        for workers, expected in ((1, 1), (3, 1), (4, 2), (7, 3)):
+        for workers, expected in ((1, [1, 1]), (2, [1, 1]), (3, [1, 2]), (4, [2, 2]), (7, [3, 4])):
             with self.subTest(workers=workers):
                 results, _ = parallel.dispatch(tasks, restricted=self.root, first_counter=1, workers=workers,
                                                physics_store={}, worker=member_workers_worker)
-                self.assertEqual([r.exit_status for r in results], [expected, expected])
+                self.assertEqual([r.exit_status for r in results], expected)
         results, _ = parallel.dispatch([('m:main', [], '1', 'alpha')] * 5, restricted=self.root, first_counter=1,
                                        workers=3, physics_store={}, worker=member_workers_worker)
         self.assertEqual({r.exit_status for r in results}, {1})
