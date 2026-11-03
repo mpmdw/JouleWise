@@ -14,6 +14,12 @@ on the committed synthetic S10 ALPHA members only:
 * a bridged hit re-runs the strict grammar check under the consumer's own
   grammar and vocabulary flag, so a duplicate-key or forbidden-key JSON that
   session-less parsing accepted refuses exactly as the serial in-session read;
+* a bridged hit decides that grammar verdict for the depth the serial read
+  would parse at (review of #638): a consumer near the recursion limit, a
+  self-deepening leaf, bytes the memo marks stack-dependent, a forwarded inner
+  hit and a replayed registration all recompute exactly as the serial session;
+  every API's recorded ``parse_headroom`` bounds the session parse's headroom;
+* an escaped recording twin is keyed as a plain path inside a session;
 * tracers: for every real leaf (L1, L2, L3, L5, L6) on S10 members, and for a
   floor-extraction replay over two cells (strict validation, reduction,
   calibration verification and environment refusals through the whole-window
@@ -305,14 +311,14 @@ class Bridging(_Tmp):
         expected, records, order = self.serial(self.tree)
         CALLS.clear()
         verdicts = []
-        original = aio.V2AuthenticationReadSession.ensure_grammar_verdict
+        original = aio.V2AuthenticationReadSession.bridged_grammar_verdict
 
         def spy(session, identity, raw, **kwargs):
             grammar = original(session, identity, raw, **kwargs)
             verdicts.append((identity, kwargs["caller_grammar"], grammar))
             return grammar
 
-        with run() as caches, mock.patch.object(aio.V2AuthenticationReadSession, "ensure_grammar_verdict", spy):
+        with run() as caches, mock.patch.object(aio.V2AuthenticationReadSession, "bridged_grammar_verdict", spy):
             self.assertEqual(vdl.call("T_cap", capability_leaf, self.tree, 1), expected[1])  # session-less fill
             with aio.V2AuthenticationReadSession() as consumer:
                 value = vdl.call("T_cap", capability_leaf, self.tree, 1)
@@ -423,6 +429,327 @@ class Bridging(_Tmp):
             self.assertIsInstance(twin, aio._RecordedAuthenticationPath)
             self.assertEqual(key(twin), key(aio.V2AuthenticationPath(self.tree)))
             self.assertNotEqual(key(twin), key(Path(self.tree)))
+            # In a session the twin reads as a plain path (it registers nothing): keyed as one.
+            with aio.V2AuthenticationReadSession():
+                self.assertEqual(key(twin), key(Path(self.tree)))
+                self.assertNotEqual(key(twin), key(aio.V2AuthenticationPath(self.tree)))
+
+    def test_an_escaped_twin_argument_in_a_session_is_not_bridged(self):
+        """Review of #638, LOW 1: a twin inside a session registers nothing; no rows are bridged."""
+
+        with aio.recording_authentication_reads():
+            twin = aio.v2_authentication_path(self.tree)
+        self.assertIsInstance(twin, aio._RecordedAuthenticationPath)
+        with aio.V2AuthenticationReadSession() as serial_session:
+            serial = argument_leaf(twin, 1)
+        self.assertEqual(dict(serial_session.records), {})
+        with run() as caches:
+            self.assertEqual(vdl.call("T_arg", argument_leaf, twin, 1), serial)  # session-less fill (rows)
+            with aio.V2AuthenticationReadSession() as consumer:
+                served = vdl.call("T_arg", argument_leaf, twin, 1)
+            counters = caches.vdl.restricted_counters()
+        self.assertEqual(served, serial)
+        self.assertEqual(dict(consumer.records), dict(serial_session.records))
+        self.assertNotIn("T_arg:hit", counters)
+        self.assertEqual(CALLS["argument_leaf"], 3)
+
+
+# --------------------------------------------------- the serial read's stack depth
+
+
+def deep_json(levels: int) -> bytes:
+    """Nested JSON whose strict parse needs about ``levels`` Python frames (plus a few)."""
+
+    return ("{\"a\":" * levels + "1" + "}" * levels).encode()
+
+
+def at_headroom(target: int, fn):
+    """``fn()`` called once the stack headroom is at most ``target`` frames."""
+
+    if aio._python_stack_headroom() > target:
+        return at_headroom(target, fn)
+    return fn()
+
+
+def _read_deep(path, factor):
+    try:
+        raw = (aio.v2_authentication_path(path) / "deep.json").read_bytes()
+    except RecursionError:
+        return ["refused", "recursion"]
+    return ["ok", len(raw), factor]
+
+
+def self_deepening_leaf(path, factor):
+    """Descends to a fixed absolute headroom, then reads (the reviewer's repro of #638)."""
+
+    _called("self_deepening_leaf")
+    return at_headroom(120, lambda: _read_deep(path, factor))
+
+
+def deep_read_leaf(path, factor):
+    """Reads a nested JSON through its capability a fixed few frames below its entry."""
+
+    _called("deep_read_leaf")
+    return _read_deep(path, factor)
+
+
+def inner_deep_leaf(path, factor):
+    _called("inner_deep_leaf")
+    return _read_deep(path, factor)
+
+
+def outer_deep_leaf(path, factor):
+    _called("outer_deep_leaf")
+    return [vdl.call("T_inner_deep", inner_deep_leaf, path, factor), factor]
+
+
+def replaying_leaf(path, factor):
+    """Reads, then registers the same input again directly (as a member replay does)."""
+
+    _called("replaying_leaf")
+    value = _read_deep(path, factor)
+    session = aio.active_v2_authentication_session()
+    if session is not None and value[0] == "ok":
+        target = Path(path) / "deep.json"
+        raw = target.read_bytes()
+        session._register(str(target.resolve()), hashlib.sha256(raw).hexdigest(), "json", "replayed input")
+    return value
+
+
+def register_only_leaf(path, factor):
+    """Registers an input without reading it here (a replay of a worker's read)."""
+
+    _called("register_only_leaf")
+    session = aio.active_v2_authentication_session()
+    target = Path(path) / "deep.json"
+    if session is not None:
+        session._register(str(target.resolve()), hashlib.sha256(target.read_bytes()).hexdigest(), "json",
+                          "replayed input")
+    return [factor]
+
+
+def outer_register_leaf(path, factor):
+    _called("outer_register_leaf")
+    return [vdl.call("T_register", register_only_leaf, path, factor), factor]
+
+
+def argument_leaf(path, factor):
+    """Reads through its own argument."""
+
+    _called("argument_leaf")
+    return [(path / "data.txt").read_bytes().decode(), factor]
+
+
+SPECS += (_spec("T_self_deep", self_deepening_leaf), _spec("T_deep", deep_read_leaf),
+          _spec("T_inner_deep", inner_deep_leaf), _spec("T_outer_deep", outer_deep_leaf),
+          _spec("T_replay", replaying_leaf), _spec("T_register", register_only_leaf),
+          _spec("T_outer_register", outer_register_leaf), _spec("T_arg", argument_leaf))
+
+
+class SerialReadDepth(_Tmp):
+    """Review of #638, MEDIUM: a bridged verdict is decided at the serial read's depth."""
+
+    # 200 levels: the pushed-down memo parse succeeds (it needs about 206 frames),
+    # a read with under about 206 frames of headroom raises RecursionError.
+    # 300 levels: more than the memo's 256-frame reserve (stack-dependent bytes).
+    LEVELS, DEPENDENT_LEVELS, LOW = 200, 300, 150
+
+    def setUp(self):
+        super().setUp()
+        self.deep = make_tree(self.tmp, "deep", **{"deep.json": deep_json(self.LEVELS)})
+        self.dependent = make_tree(self.tmp, "dependent", **{"deep.json": deep_json(self.DEPENDENT_LEVELS)})
+
+    def serial(self, fn, tree, *, low=False):
+        """The leaf in a session with the run's memo active, called directly (VDL off)."""
+
+        with run(vdl.OFF), aio.V2AuthenticationReadSession() as session:
+            value = at_headroom(self.LOW, lambda: fn(tree, 1)) if low else fn(tree, 1)
+        return value, dict(session.records), list(session.records)
+
+    def consume(self, leaf_id, fn, tree, caches, *, low=False):
+        with aio.V2AuthenticationReadSession() as consumer:
+            call = lambda: vdl.call(leaf_id, fn, tree, 1)  # noqa: E731
+            value = at_headroom(self.LOW, call) if low else call()
+        return value, dict(consumer.records), list(consumer.records), caches.vdl.restricted_counters()
+
+    def test_a_self_deepening_leaf_refuses_as_in_the_serial_session(self):
+        expected, records, order = self.serial(self_deepening_leaf, self.deep)
+        self.assertEqual(expected, ["refused", "recursion"])
+        CALLS.clear()
+        with run() as caches:
+            self.assertEqual(vdl.call("T_self_deep", self_deepening_leaf, self.deep, 1)[0], "ok")  # session-less
+            value, served_records, served_order, counters = self.consume(
+                "T_self_deep", self_deepening_leaf, self.deep, caches)
+        self.assertEqual(value, expected)
+        self.assertEqual(served_records, records)
+        self.assertEqual(served_order, order)
+        self.assertNotIn("T_self_deep:hit", counters)
+        self.assertEqual(CALLS["self_deepening_leaf"], 2)
+
+    def assert_low_consumer_recomputes(self, fill_in_session: bool):
+        expected, records, _ = self.serial(deep_read_leaf, self.deep, low=True)
+        shallow, shallow_records, shallow_order = self.serial(deep_read_leaf, self.deep)
+        self.assertEqual(expected, ["refused", "recursion"])
+        self.assertEqual(shallow[0], "ok")
+        CALLS.clear()
+        with run() as caches:
+            if fill_in_session:
+                with aio.V2AuthenticationReadSession():
+                    self.assertEqual(vdl.call("T_deep", deep_read_leaf, self.deep, 1), shallow)
+            else:
+                self.assertEqual(vdl.call("T_deep", deep_read_leaf, self.deep, 1), shallow)
+            entry, = [entry for entry in caches.vdl._entries.values() if entry.leaf_id == "T_deep"]
+            self.assertTrue(entry.rows)
+            self.assertTrue(all(type(row[6]) is int and row[6] > 0 for row in entry.rows))
+            low = self.consume("T_deep", deep_read_leaf, self.deep, caches, low=True)
+            high = self.consume("T_deep", deep_read_leaf, self.deep, caches)
+        self.assertEqual(low[:2], (expected, records))
+        self.assertEqual(low[3]["T_deep:hit_discarded"], 1)
+        # The same entry still serves a consumer with room for the read.
+        self.assertEqual(high[:3], (shallow, shallow_records, shallow_order))
+        self.assertEqual(high[3]["T_deep:hit"], 1)
+        self.assertEqual(CALLS["deep_read_leaf"], 2)
+
+    def test_a_consumer_near_the_limit_recomputes_a_sessionless_fill(self):
+        self.assert_low_consumer_recomputes(fill_in_session=False)
+
+    def test_a_consumer_near_the_limit_recomputes_an_in_session_fill(self):
+        self.assert_low_consumer_recomputes(fill_in_session=True)
+
+    def test_bytes_the_memo_marks_stack_dependent_are_recomputed(self):
+        expected, records, order = self.serial(deep_read_leaf, self.dependent)
+        self.assertEqual(expected[0], "ok")  # enough headroom at the serial read itself
+        CALLS.clear()
+        with run() as caches:
+            vdl.call("T_deep", deep_read_leaf, self.dependent, 1)
+            value, served_records, served_order, counters = self.consume(
+                "T_deep", deep_read_leaf, self.dependent, caches)
+            digest = hashlib.sha256(deep_json(self.DEPENDENT_LEVELS)).hexdigest()
+            memo = dict(arc.memo(vdl.GRAMMAR_VERDICT_MEMO))
+        self.assertEqual((value, served_records, served_order), (expected, records, order))
+        self.assertIs(memo.get((digest, "json", False)), False)
+        self.assertEqual(counters["T_deep:hit_discarded"], 1)
+        self.assertEqual(CALLS["deep_read_leaf"], 2)
+        # With the memo already marking the bytes, the bridge still never serves.
+        with run() as caches:
+            vdl.call("T_deep", deep_read_leaf, self.dependent, 1)
+            arc.memo(vdl.GRAMMAR_VERDICT_MEMO)[(digest, "json", False)] = False
+            again = self.consume("T_deep", deep_read_leaf, self.dependent, caches)
+        self.assertEqual(again[:3], (expected, records, order))
+        self.assertNotIn("T_deep:hit", again[3])
+        self.assertEqual(again[3]["T_deep:hit_discarded"], 1)
+
+    def test_replayed_registrations_take_the_reads_depth(self):
+        expected, records, _ = self.serial(replaying_leaf, self.deep, low=True)
+        self.assertEqual((expected, records), (["refused", "recursion"], {}))
+        CALLS.clear()
+        with run() as caches:
+            with aio.V2AuthenticationReadSession():
+                self.assertEqual(vdl.call("T_replay", replaying_leaf, self.deep, 1)[0], "ok")
+            entry, = [entry for entry in caches.vdl._entries.values() if entry.leaf_id == "T_replay"]
+            self.assertEqual(len(entry.rows), 2)  # from the session's record delta
+            self.assertEqual(len({row[6] for row in entry.rows}), 1)
+            self.assertIs(type(entry.rows[0][6]), int)
+            low = self.consume("T_replay", replaying_leaf, self.deep, caches, low=True)
+        self.assertEqual(low[:2], (expected, records))
+        self.assertEqual(low[3]["T_replay:hit_discarded"], 1)
+
+    def test_forwarded_rows_carry_the_inner_read_depth(self):
+        expected, records, _ = self.serial(outer_deep_leaf, self.deep, low=True)
+        self.assertEqual(expected, [["refused", "recursion"], 1])
+        CALLS.clear()
+        with run() as caches:
+            vdl.call("T_inner_deep", inner_deep_leaf, self.deep, 1)
+            vdl.call("T_outer_deep", outer_deep_leaf, self.deep, 1)  # the inner call is a hit inside it
+            entries = {entry.leaf_id: entry for entry in caches.vdl._entries.values()}
+            low = self.consume("T_outer_deep", outer_deep_leaf, self.deep, caches, low=True)
+        inner_depth = entries["T_inner_deep"].rows[0][6]
+        outer_depth = entries["T_outer_deep"].rows[0][6]
+        self.assertGreater(outer_depth, inner_depth)
+        self.assertEqual(low[:2], (expected, records))
+        self.assertEqual(low[3]["T_outer_deep:hit_discarded"], 1)
+
+    def test_a_forwarded_replayed_registration_keeps_no_depth(self):
+        expected, records, order = self.serial(outer_register_leaf, self.deep, low=True)
+        CALLS.clear()
+        with run() as caches:
+            with aio.V2AuthenticationReadSession():
+                vdl.call("T_register", register_only_leaf, self.deep, 1)
+            with aio.V2AuthenticationReadSession():
+                vdl.call("T_outer_register", outer_register_leaf, self.deep, 1)  # inner hit inside the fill
+            entries = {entry.leaf_id: entry for entry in caches.vdl._entries.values()}
+            low = self.consume("T_outer_register", outer_register_leaf, self.deep, caches, low=True)
+        self.assertEqual([row[6] for row in entries["T_register"].rows], [None])
+        self.assertEqual([row[6] for row in entries["T_outer_register"].rows], [None])
+        # No parse ran at the serial position: the replayed registration is served at any depth.
+        self.assertEqual(low[:3], (expected, records, order))
+        self.assertEqual(low[3]["T_outer_register:hit"], 1)
+        self.assertEqual(CALLS["outer_register_leaf"], 1)
+
+    def test_bridged_verdict_refuses_to_decide_below_the_memo_floor(self):
+        raw = deep_json(10)
+        digest = hashlib.sha256(raw).hexdigest()
+        floor = aio._VERDICT_STACK_RESERVE + aio._VERDICT_STACK_SLACK
+        with run():
+            self.assertFalse(aio.bridged_grammar_verdict(raw, digest, "json", False, "x", read_headroom=floor - 1))
+            self.assertTrue(aio.bridged_grammar_verdict(raw, digest, "json", False, "x", read_headroom=floor))
+            self.assertTrue(aio.bridged_grammar_verdict(raw, digest, "json", False, "x", read_headroom=None))
+            self.assertFalse(aio.bridged_grammar_verdict(raw, "0" * 64, "json", False, "x", read_headroom=floor))
+            with self.assertRaises(aio.V2AuthenticationInputError):
+                aio.bridged_grammar_verdict(b'{"a": 1, "a": 2}', hashlib.sha256(b'{"a": 1, "a": 2}').hexdigest(),
+                                            "json", False, "x", read_headroom=floor)
+
+
+class ParseHeadroomBounds(_Tmp):
+    """Each API's recorded ``parse_headroom``: exact in a session, a lower bound session-less."""
+
+    def apis(self):
+        metadata = self.tree / "metadata.json"
+        raw = metadata.read_bytes()
+        return {
+            "read_authentication_input": lambda: aio.read_authentication_input(metadata, grammar="json", label="l"),
+            "read_authentication_text": lambda: aio.read_authentication_text(metadata, grammar="json", label="l"),
+            "open_authentication_input": lambda: aio.open_authentication_input(
+                metadata, grammar="json", label="l").read(),
+            "read_authentication_input_nofollow": lambda: aio.read_authentication_input_nofollow(
+                self.tree, "metadata.json", grammar="json", label="l"),
+            "sha256_authentication_input": lambda: aio.sha256_authentication_input(metadata, label="l"),
+            "ingest_git_authentication_input": lambda: aio.ingest_git_authentication_input(
+                "configs/x.json", raw, label="l"),
+            "capability.read_bytes": lambda: aio.v2_authentication_path(self.tree).joinpath("metadata.json")
+            .read_bytes(),
+            "capability.read_text": lambda: (aio.v2_authentication_path(self.tree) / "metadata.json").read_text(),
+            "capability.open": lambda: (aio.v2_authentication_path(self.tree) / "metadata.json").open("rb").read(),
+            "capability_instance.read_bytes": lambda: aio.V2AuthenticationPath(metadata).read_bytes(),
+            "capability_instance.read_text": lambda: aio.V2AuthenticationPath(metadata).read_text(),
+            "capability_instance.open": lambda: aio.V2AuthenticationPath(metadata).open("r").read(),
+        }
+
+    def test_sessionless_headroom_bounds_the_session_parse_headroom(self):
+        original = aio._parse_strict_memoized
+        for name, api in self.apis().items():
+            with self.subTest(api=name):
+                parsed: list[int] = []
+
+                def spy(*args):
+                    # Called where the real function would be: this frame's headroom is the parse's.
+                    parsed.append(aio._python_stack_headroom())
+                    return original(*args)
+
+                with run(vdl.OFF), mock.patch.object(aio, "_parse_strict_memoized", spy):
+                    with aio.V2AuthenticationReadSession(), aio.recording_authentication_reads() as session_rows:
+                        api()
+                with run(vdl.OFF), aio.recording_authentication_reads() as sessionless_rows:
+                    api()
+                session_parsed = [row for row in session_rows if row.grammar == "json"]
+                self.assertEqual(len(session_parsed), 1)
+                self.assertEqual(len(parsed), 1)
+                self.assertEqual(session_parsed[0].parse_headroom, parsed[0])
+                self.assertEqual(len(sessionless_rows), 1)
+                bound = sessionless_rows[0].parse_headroom
+                self.assertIs(type(bound), int)
+                self.assertLessEqual(bound, parsed[0])
+                self.assertGreaterEqual(bound, parsed[0] - 2 * aio._SESSIONLESS_PARSE_MARGIN)
 
 
 # ------------------------------------------------------- tracers on synthetic S10 data

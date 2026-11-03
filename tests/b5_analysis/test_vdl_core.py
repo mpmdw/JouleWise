@@ -58,7 +58,9 @@ def _read(path: Path, grammar: str = "raw") -> bytes:
                               grammar=aio._forced_grammar(identity, grammar), caller_grammar=grammar,
                               label=f"test input {path}",
                               in_session=aio.active_v2_authentication_session() is not None,
-                              relative=None))
+                              relative=None,
+                              # A lower bound on the read's parse headroom (AUTH-IO-2's row shape).
+                              parse_headroom=aio._python_stack_headroom() - aio._SESSIONLESS_PARSE_MARGIN))
     return raw
 
 

@@ -88,6 +88,13 @@ class AuthenticationReadRow:
     grammar check under ``(grammar, vocabulary_flag)`` and it succeeded (an
     in-session read); a session-less read never parses, so it is false there.
     ``relative`` carries the contained relative name of a no-follow read.
+    ``parse_headroom`` is a lower bound on the Python stack headroom
+    (:func:`_python_stack_headroom`) at which a v2 session's strict parse of
+    this read ran (in a session: exactly that headroom) or would run had the
+    same code run in a session (session-less: measured at least as deep as
+    that parse, minus ``_SESSIONLESS_PARSE_MARGIN``); ``None`` when unknown.
+    A consumer that serves the read elsewhere uses it to decide the grammar
+    verdict at the depth of the serial read (D-188 AUTH-IO-2).
     """
 
     api: str
@@ -100,6 +107,7 @@ class AuthenticationReadRow:
     grammar_verified: bool
     vocabulary_flag: bool
     relative: str | None = None
+    parse_headroom: int | None = None
 
 
 # A passive recorder: a tuple of row sinks (one per nested recording scope),
@@ -300,7 +308,11 @@ def _record_read(
     grammar_verified: bool,
     vocabulary_flag: bool,
     relative: str | None = None,
+    headroom_margin: int = 0,
 ) -> None:
+    # In a session, every caller calls this from the frame that just ran
+    # ``_parse_strict_memoized``, so this is that parse's exact headroom.
+    parse_headroom = _python_stack_headroom() - headroom_margin
     row = AuthenticationReadRow(
         api=api,
         identity=identity,
@@ -312,6 +324,7 @@ def _record_read(
         grammar_verified=grammar_verified,
         vocabulary_flag=vocabulary_flag,
         relative=relative,
+        parse_headroom=parse_headroom,
     )
     for sink in sinks:
         sink.append(row)
@@ -348,6 +361,7 @@ def _record_sessionless(
         grammar_verified=False,
         vocabulary_flag=False,
         relative=relative,
+        headroom_margin=_SESSIONLESS_PARSE_MARGIN,
     )
 
 
@@ -742,6 +756,16 @@ def forced_grammar(
 _VERDICT_STACK_RESERVE = 256
 _VERDICT_STACK_SLACK = 64
 
+# A session-less recorded read is measured in ``_record_read`` (API ->
+# ``_record_sessionless`` -> ``_record_read``, or capability method ->
+# ``_record`` -> ``_record_sessionless`` -> ``_record_read``).  The same code
+# in a session parses in ``_parse_strict_memoized`` at most a few frames
+# deeper (API -> ``session.read`` -> parse; ``sha256_authentication_input`` ->
+# ``sha256_streaming_raw`` -> ``read`` -> parse); this margin keeps the
+# recorded ``parse_headroom`` a lower bound (tests/b5_analysis/
+# test_auth_capability_bridge.py checks every API).
+_SESSIONLESS_PARSE_MARGIN = 8
+
 
 def _python_stack_headroom() -> int:
     """Python frames this thread may still push before ``RecursionError``.
@@ -891,6 +915,78 @@ def ensure_grammar_verdict(
     _parse_strict_memoized(raw, digest, grammar, label, bool(vocabulary_flag))
 
 
+def bridged_grammar_verdict(
+    raw: bytes,
+    sha256: str,
+    grammar: AuthenticationGrammar,
+    vocabulary_flag: bool,
+    label: str,
+    *,
+    read_headroom: int | None,
+) -> bool:
+    """The grammar verdict a serial read at ``read_headroom`` would reach, if knowable here.
+
+    For a consumer serving a recorded read away from its serial position
+    (D-188 AUTH-IO-2).  ``read_headroom`` is a lower bound on the stack
+    headroom at which the serial read's ``_parse_strict_memoized`` would run,
+    or ``None`` when the serial computation runs no parse at this position
+    (a registration replayed from elsewhere).
+
+    Returns ``True`` when the serial parse would succeed: the run's memo
+    holds a success for (``sha256``, ``grammar``, flag), or the parse pushed
+    down to ``_VERDICT_STACK_RESERVE`` frames of headroom succeeds now (and
+    is memoized).  Raises the parse's own grammar refusal, which does not
+    depend on the stack, exactly as the read would.  Returns ``False``
+    (serve nothing; the caller computes at its serial position) whenever the
+    outcome may depend on the stack: ``read_headroom`` below
+    ``_VERDICT_STACK_RESERVE + _VERDICT_STACK_SLACK`` (a serial read there
+    parses at its own depth, without the memo), too little headroom here to
+    run the pushed-down parse, a memo entry marking the bytes as
+    stack-dependent, or a pushed-down parse that raised ``RecursionError`` or
+    ``MemoryError``.  It never re-parses at its own depth, which need not be
+    the serial read's.  ``sha256`` must match ``raw``; otherwise ``False``.
+    """
+
+    if grammar != "json" and grammar != "jsonl":
+        _parse_strict(
+            raw,
+            grammar,
+            label,
+            allow_governed_spec_vocabulary=bool(vocabulary_flag),
+        )
+        return True
+    if hashlib.sha256(raw).hexdigest() != sha256:
+        return False
+    floor = _VERDICT_STACK_RESERVE + _VERDICT_STACK_SLACK
+    if read_headroom is not None and read_headroom < floor:
+        return False
+    table = _run_cache.memo(GRAMMAR_VERDICT_MEMO)
+    key = (sha256, grammar, bool(vocabulary_flag))
+    verdict = None if table is None else table.get(key)
+    if verdict is True:
+        return True
+    if verdict is not None:
+        return False
+    headroom = _python_stack_headroom()
+    if headroom < floor:
+        return False
+    try:
+        _parse_strict_below(
+            headroom - _VERDICT_STACK_RESERVE,
+            raw,
+            grammar,
+            label,
+            bool(vocabulary_flag),
+        )
+    except (RecursionError, MemoryError):
+        if table is not None:
+            table[key] = False
+        return False
+    if table is not None:
+        table[key] = True
+    return True
+
+
 def _read_nofollow_bytes(directory: Path | str, relative: str) -> bytes:
     root = Path(directory)
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
@@ -998,6 +1094,36 @@ class V2AuthenticationReadSession:
             label,
         )
         return effective
+
+    def bridged_grammar_verdict(
+        self,
+        identity: str,
+        raw: bytes,
+        *,
+        caller_grammar: AuthenticationGrammar,
+        label: str,
+        sha256: str,
+        read_headroom: int | None,
+    ) -> AuthenticationGrammar | None:
+        """:func:`bridged_grammar_verdict` under this session's grammar and flag.
+
+        Returns the effective grammar when the serial read at
+        ``read_headroom`` would pass its strict parse, ``None`` when that
+        cannot be decided here (the consumer must not serve), and raises the
+        read's own grammar refusal.  It registers nothing.
+        """
+
+        effective = _forced_grammar(identity, caller_grammar)
+        if bridged_grammar_verdict(
+            raw,
+            sha256,
+            effective,
+            self.vocabulary_flag(identity),
+            label,
+            read_headroom=read_headroom,
+        ):
+            return effective
+        return None
 
     def allow_governed_extraction_spec(self, path: Path | str) -> None:
         """Allow registration declarations only for one named governed spec."""
@@ -1426,6 +1552,7 @@ def ingest_git_authentication_input(
                 in_session=False,
                 grammar_verified=False,
                 vocabulary_flag=False,
+                headroom_margin=_SESSIONLESS_PARSE_MARGIN,
             )
         return raw
     return session.ingest(
