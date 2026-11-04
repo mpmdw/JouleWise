@@ -236,7 +236,10 @@ def _located_as_recorded(entry: Any) -> bool:
         return False
 
 
-def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any, **kwargs: Any):
+def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any, *, mode: Any,
+                           ledger_snapshot: Any, bracket_binding: Any, bracket_window_id: Any,
+                           bracket_plan_id: Any, bracket_plan_sha256: Any,
+                           bracket_evidence_root_id: Any, trigger_scope: Any):
     """Leaf L4 (D-188): the frozen calibration_bracket_for_bundles, served from the VDL store.
 
     Outside an analysis run with a store, for a relative runs root (Sol #6:
@@ -250,30 +253,53 @@ def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any,
     out-of-tree path it read still resolves to itself (``_located_as_recorded``); a probe is
     side-effect free, so a non-servable entry costs one key computation and the
     call then runs the frozen code directly, never through the store.
+
+    The keyword parameters are exactly the ones the one caller passes (the r1
+    call at this site), each forwarded by name: the custody-mode census
+    (tests/test_custody_mode_inventory.py) then sees ``mode`` as this wrapper's
+    own scalar parameter, censused at the issuing caller, never as forwarded
+    ``**kwargs``. Every direct frozen call (each bypass) passes the caller's
+    own arguments; the renamed ledger snapshot below is handed only to the
+    store (which keys on it and, on a miss, fills with it).
     """
     fn = calibration.calibration_bracket_for_bundles
     store = vdl.active_store()
     if store is None or not isinstance(runs_root, (str, PurePath)) or not Path(runs_root).is_absolute():
-        return fn(runs_root, paths, policy, **kwargs)
-    snapshot = kwargs.get("ledger_snapshot")
-    if not isinstance(snapshot, ledger.CalibrationLedgerSnapshot) or not isinstance(snapshot.ledger_path, PurePath):
-        return fn(runs_root, paths, policy, **kwargs)
+        return fn(runs_root, paths, policy, mode=mode, ledger_snapshot=ledger_snapshot,
+                  bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
+                  bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
+                  bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
+    if (not isinstance(ledger_snapshot, ledger.CalibrationLedgerSnapshot)
+            or not isinstance(ledger_snapshot.ledger_path, PurePath)):
+        return fn(runs_root, paths, policy, mode=mode, ledger_snapshot=ledger_snapshot,
+                  bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
+                  bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
+                  bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
     # _snapshot loads the authenticated prefix from a per-evaluation temporary
     # file, deleted before this call, so the snapshot's ledger_path would make
     # every evaluation's key distinct. Nothing reads that field
     # (calibration_bracketing.py never names it, and no snapshot method does;
     # test_leaf_bracket checks both): key and pass its final name only, like
     # the path-free copies.
-    kwargs = dict(kwargs, ledger_snapshot=dataclasses.replace(snapshot, ledger_path=Path(snapshot.ledger_path.name)))
-    hit = store.probe(L4, fn, runs_root, paths, policy, **kwargs)
+    keyed = dataclasses.replace(ledger_snapshot, ledger_path=Path(ledger_snapshot.ledger_path.name))
+    hit = store.probe(L4, fn, runs_root, paths, policy, mode=mode, ledger_snapshot=keyed,
+                      bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
+                      bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
+                      bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
     if hit is not None:
         try:
             servable = _storable_value(pickle.loads(hit.entry.value)) and _located_as_recorded(hit.entry)
         except Exception:  # noqa: BLE001 - an unreadable entry is never served
             servable = False
         if not servable:
-            return fn(runs_root, paths, policy, **kwargs)
-    return store.call(L4, fn, runs_root, paths, policy, **kwargs)
+            return fn(runs_root, paths, policy, mode=mode, ledger_snapshot=ledger_snapshot,
+                      bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
+                      bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
+                      bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
+    return store.call(L4, fn, runs_root, paths, policy, mode=mode, ledger_snapshot=keyed,
+                      bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
+                      bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
+                      bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
 
 
 def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):

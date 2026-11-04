@@ -361,10 +361,12 @@ class LeafBracketTests(_Base):
     def test_store_absent_is_exactly_the_frozen_call(self):
         sentinel = (({"status": "x"}), ())
         with mock.patch.object(calibration, "calibration_bracket_for_bundles", return_value=sentinel) as frozen:
-            snapshot = object()
-            self.assertIs(br._calibration_assessment("/abs", ["p"], "policy", ledger_snapshot=snapshot,
-                                                     mode="issuing"), sentinel)
-        frozen.assert_called_once_with("/abs", ["p"], "policy", ledger_snapshot=snapshot, mode="issuing")
+            # The caller's keywords (the r1 call at this site), each an opaque stand-in.
+            given = dict(mode="issuing", ledger_snapshot=object(), bracket_binding=object(),
+                         bracket_window_id=object(), bracket_plan_id=object(), bracket_plan_sha256=object(),
+                         bracket_evidence_root_id=object(), trigger_scope=object())
+            self.assertIs(br._calibration_assessment("/abs", ["p"], "policy", **given), sentinel)
+        frozen.assert_called_once_with("/abs", ["p"], "policy", **given)
 
     def test_servable_is_exactly_what_the_caller_accepts(self):
         good = {"status": "passed", "b_fiducial_s": 0.03}
