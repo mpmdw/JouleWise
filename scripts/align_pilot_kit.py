@@ -61,15 +61,19 @@ EXPECTED_EPISODE_SEEDS = {
     "bank_transfer_2": (1001552758911679671, 8139346561588466007, 286457666795484560,
                         304571486172760106, 16726874887165336052, 12685500607006618793,
                         9590288282068465104, 14994728377087409958, 10452994169483960014,
-                        5212558227230803783, 12699264629597988571, 11636965341270972789),
+                        5212558227230803783, 12699264629597988571, 11636965341270972789,
+                        18253662798353926632, 14709000170216792543, 7699749620054696321,
+                        14391847153820844903, 64101551862339147, 14103990616903134865),
     "spam_filter_update": (2570132319625341959, 4097311025052448992, 6169586229110087908,
                            18211783659995252033, 10515714233578474446, 8438206852662645142,
                            10900152454805747463, 2618380097672501688, 5842603386054999094,
-                           2294347453123286324, 10022564881829687868, 3030301297807311119),
+                           2294347453123286324, 10022564881829687868, 3030301297807311119,
+                           2387602866340824655, 8158640411307706161, 11880471321531920545,
+                           7655467588542005630, 1008689895933592083, 650340283923250499),
 }
 # Seed block k runs seed index SEED_BLOCKS[k-1]; block 1 and the four seed-1
-# replays are the cross-session anchors shared with pilots 4 and 5.
-SEED_BLOCKS = (1, 7, 8, 9, 10, 11)
+# replays are the cross-session anchors shared with pilots 4, 5 and 6.
+SEED_BLOCKS = (1, 12, 13, 14, 15, 16)
 ANCHOR_SEED_INDEX = 1
 
 
@@ -337,7 +341,8 @@ def build_files(root=ROOT):
         "blocks": list(BLOCKS), "max_context_tokens": CONTEXT_CAP, "idle_seconds": ALIGN_IDLE_S, "shade_cache": SHADE_CACHE,
         "task_pairs": list(pilot.PILOT_V0_PAIRS), "conditions": list(pilot.PILOT_V0_CONDITIONS),
         "seeds_per_cell": 6, "seed_indices": list(SEED_BLOCKS), "replays_per_cell": 1, "anchor_seed_index": ANCHOR_SEED_INDEX,
-        "cross_session_anchor_of": ["align-pilot-20261103T134903416190Z", "align-pilot-20261103T224628898457Z"],
+        "cross_session_anchor_of": ["align-pilot-20261103T134903416190Z", "align-pilot-20261103T224628898457Z",
+                                    "align-pilot-20261104T074612673532Z"],
         "order_policy": "alternating_four_cells_per_seed_block_replays_after_seed_blocks_2_3_4_6",
         "members": members}
     originals = {(m["task_pair"], m["condition"], m["seed_index"]): m["run_id"] for m in members if not m["is_replay"]}
@@ -417,9 +422,9 @@ README = """# ALIGN pilot 4 (non-claim)
 
 Generate: `python3 scripts/align_pilot_kit.py`; verify: `--check`.
 Protocol: `docs/align/pilot_protocol_v3.md`. Session: `scripts/align_pilot_session.py`.
-28 A-only members: 2 pairs x 2 conditions x seed blocks 1,7,8,9,10,11 + seed1 replay per cell.
-Pilot-6 anchors: the seed-1 block (ordinals 1-4) and the four seed-1 replays (9,14,19,28)
-repeat pilots 4-5 at the same ordinals; seeds 7-11 are new trajectories.
+28 A-only members: 2 pairs x 2 conditions x seed blocks 1,12,13,14,15,16 + seed1 replay per cell.
+Pilot-7 anchors: the seed-1 block (ordinals 1-4) and the four seed-1 replays (9,14,19,28)
+repeat pilots 4-6 at the same ordinals; seeds 12-16 are new trajectories.
 Qwen3 thinking sampler 0.6/0.95/20/0, per-turn SHA256 64-bit reseed; guard120s.
 Seed-law task identifiers are exactly `shade/spam_filter_update` and
 `shade/bank_transfer_2` (the task's task_pair attribute, not task_kwargs.task_pair).

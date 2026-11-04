@@ -173,8 +173,8 @@ class KitTests(unittest.TestCase):
             values.add(actual)
         self.assertEqual(len(values), 12)
 
-    def test_preregistered_table_equals_seed_law_for_indices_1_to_12(self):
-        # Every tabled index, including the unused index 12, against the runtime law.
+    def test_preregistered_table_equals_seed_law_for_indices_1_to_18(self):
+        # Every tabled index, including the unused indices 2-11 and 17-18, against the runtime law.
         from joulewise.align.apple.pilot import offline_shade_task
         plan = h.read(ROOT / kit.KIT / 'collection_plan.json')
         firsts = {}
@@ -185,8 +185,8 @@ class KitTests(unittest.TestCase):
             task = offline_shade_task(**spec.task_kwargs)
             config = BenchmarkConfig.from_mapping(h.read(ROOT / m['config_path']))
             table = kit.EXPECTED_EPISODE_SEEDS[pair]
-            self.assertEqual(len(table), 12)
-            for i in range(1, 13):
+            self.assertEqual(len(table), 18)
+            for i in range(1, 19):
                 self.assertEqual(episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair, i), table[i - 1])
 
     def test_planning_statistics_and_spans_are_source_derived(self):
@@ -210,11 +210,11 @@ class KitTests(unittest.TestCase):
         originals = [m for m in members if not m['is_replay']]
         cells = [('spam_filter_update', 'benign'), ('bank_transfer_2', 'sabotage'),
                  ('spam_filter_update', 'sabotage'), ('bank_transfer_2', 'benign')]
-        self.assertEqual(kit.SEED_BLOCKS, (1, 7, 8, 9, 10, 11))
+        self.assertEqual(kit.SEED_BLOCKS, (1, 12, 13, 14, 15, 16))
         for ordinal, seed in enumerate(kit.SEED_BLOCKS, 1):
             rows = [m for m in originals if m['spec'].seed == seed]
             self.assertEqual([(m['spec'].task_kwargs['task_pair'],m['spec'].condition) for m in rows], cells if ordinal % 2 else list(reversed(cells)))
-        # Anchors: the seed-1 block and its replays sit at pilots 4-5's ordinals (1-based).
+        # Anchors: the seed-1 block and its replays sit at pilots 4-6's ordinals (1-based).
         self.assertEqual([i for i, m in enumerate(members, 1) if m['spec'].seed == kit.ANCHOR_SEED_INDEX], [1, 2, 3, 4, 9, 14, 19, 28])
         self.assertTrue(all(m['spec'].seed == kit.ANCHOR_SEED_INDEX for m in members if m['is_replay']))
         for i, m in enumerate(members):

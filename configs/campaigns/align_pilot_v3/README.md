@@ -2,9 +2,9 @@
 
 Generate: `python3 scripts/align_pilot_kit.py`; verify: `--check`.
 Protocol: `docs/align/pilot_protocol_v3.md`. Session: `scripts/align_pilot_session.py`.
-28 A-only members: 2 pairs x 2 conditions x seed blocks 1,7,8,9,10,11 + seed1 replay per cell.
-Pilot-6 anchors: the seed-1 block (ordinals 1-4) and the four seed-1 replays (9,14,19,28)
-repeat pilots 4-5 at the same ordinals; seeds 7-11 are new trajectories.
+28 A-only members: 2 pairs x 2 conditions x seed blocks 1,12,13,14,15,16 + seed1 replay per cell.
+Pilot-7 anchors: the seed-1 block (ordinals 1-4) and the four seed-1 replays (9,14,19,28)
+repeat pilots 4-6 at the same ordinals; seeds 12-16 are new trajectories.
 Qwen3 thinking sampler 0.6/0.95/20/0, per-turn SHA256 64-bit reseed; guard120s.
 Seed-law task identifiers are exactly `shade/spam_filter_update` and
 `shade/bank_transfer_2` (the task's task_pair attribute, not task_kwargs.task_pair).
