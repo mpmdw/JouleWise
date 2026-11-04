@@ -30,3 +30,7 @@
 
 ## Ledger pin
 - `advance_b5_ledger_pin.py --plan .../pilot-v5-20261104T074612Z/custody/night_plan.json --harvest-archive .../archive --operator-identity magistrate-7e06863b`: ADVANCED, `ledger_matched_harvest_archive`, pin-only commit `6eda5e2ab` (sequence 600) in the measurement checkout, pushed to `lane/2026-11-04-align-pilot6-seeds` (fast-forward). Working `calibration_ledger_head.json` restored to HEAD.
+- Ed emailed the pilot-6 outcome (Gmail `1a1a7545a9687711`, thread `1a198fafa8fc12ba`).
+
+## Next-window design consult (two blind seats)
+- Brief `~/night-archive/seats-7e06863b/pilot7/BRIEF.md` (read-only, worktree `jw-wt/align-pilot6` at `6eda5e2ab`). Sol 6.1 xhigh (local `codex-run-v3`, `sol-report.md`) and Fable 5.1 (`claude -p --model fable` from the worktree, `fable-report.md`), launched 08:27 PST.
