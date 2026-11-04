@@ -114,7 +114,7 @@ model, so it is not amended mid-analysis.
    and F6 before anything is deleted.
 
 **Phase 2: prune.** These run as reviewed PRs grouped by area. Each deletion cites the tag that preserves the code.
-- The repo-trim NEEDS-ED list (`TRIM_REPORT.md`): the arm / T-0 chain, the never-live NVIDIA and remote stack, and
+- The repo-trim NEEDS-ED list ([`TRIM_REPORT.md`](TRIM_REPORT.md) §6): the arm / T-0 chain, the never-live NVIDIA and remote stack, and
   unreachable sealed scripts.
 - Frozen reducer versions not needed to *read* data (F5), and analysis manifest v2.
 - The L9-ENV-3 `whole_window.py` mirror, which is superseded once main's `reduce.py` carries the clamp.

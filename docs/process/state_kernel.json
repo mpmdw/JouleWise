@@ -3809,7 +3809,7 @@
       "acceptance": {
         "evidence": [
           "Phase 1 (after the block-5 release): freeze tests check the b5/collection and b5/analysis tag trees rather than main's bytes; step-5 identity accepts HEAD equal to the registered analysis commit or a ruled descendant; calibration acceptance is commit-scoped and lands with the D-138 reissue carrying A178 and the L9-ENV-2 clamp (RUN_STATE item 145); line-number test pins are retired",
-          "Phase 2: prune per TRIM_REPORT once phase 1 has landed",
+          "Phase 2: prune per docs/process/TRIM_REPORT.md section 6 (the NEEDS-ED list) once phase 1 has landed; each deletion PR cites the tag that preserves the code",
           "Block 6 and BYTES get clerical freeze-by-commit addenda (F1 commit plus tree hash, F4 commit-scoped acceptance, F6 environment lock) beside their unedited registrations, per Ed's 2026-10-30 ruling (RUN_STATE item 146, seat FBC-B6)"
         ],
         "pointer": {
@@ -3827,13 +3827,13 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Freeze each block by commit rather than on main: phase 1 moves freeze tests, the step-5 identity check and calibration acceptance onto the registered commits right after the block-5 release; phase 2 prunes per TRIM_REPORT.",
+      "goal": "FIRST TASK AFTER THE BLOCK-5 RELEASE. Freeze each block by commit rather than on main: phase 1 moves freeze tests, the step-5 identity check and calibration acceptance onto the registered commits right after the block-5 release; phase 2 prunes per docs/process/TRIM_REPORT.md section 6 (about 31k code lines of retired arm/T-0 chain, about 115k test lines naming it, the never-live NVIDIA/remote stack, frozen reducer versions, the whole_window mirror and about 1.6k lines of duplicated verification helpers).",
       "id": "FREEZE-BY-COMMIT-01",
       "lane": "agent",
-      "priority": "p2_next_slice",
+      "priority": "p1_phase_gate",
       "rank": 346,
       "status": "queued",
-      "status_note": "Registered 2026-10-30 from RUN_STATE item 146. Starts after the block-5 release (not a kernel dependency: the release is not a kernel task). Phase 0 is done: annotated tag b5/collection at c27485347; b5/analysis is tagged at attempt C's merged commit.",
+      "status_note": "Registered 2026-10-30 from RUN_STATE item 146. Ed 2026-11-04: this is the first task to start once block 5 is released; it is blocked only by that release (not a kernel dependency: the release is not a kernel task). The trim inventory was committed to docs/process/TRIM_REPORT.md on 2026-11-04 (RUN_STATE item 167). Phase 0 is done: annotated tag b5/collection at c27485347; b5/analysis is tagged at attempt C's merged commit; the release runs at b5/analysis-r2.",
       "stop_card": null
     },
     "FULL-SUITE-EVERY-FIX-HEAD-RULE-01": {
