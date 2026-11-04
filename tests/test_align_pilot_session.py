@@ -63,7 +63,7 @@ class KitTests(unittest.TestCase):
         self.assertEqual([m['block'] for m in members], ['A'] * 28)
         originals = [m for m in members if not m['is_replay']]
         self.assertEqual(len(originals),24)
-        for seed in range(1,7):
+        for seed in kit.SEED_BLOCKS:
             self.assertEqual(len([m for m in originals if m['seed_index'] == seed]),4)
         for member in members:
             config=BenchmarkConfig.from_mapping(json.loads(files[Path(member['config_path'])]))

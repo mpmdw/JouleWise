@@ -6,7 +6,7 @@
     "mac_verification_sha256": "10857f06270322dfd3993e1af727abd9830b18e130b9837cec48aa7d3769b687",
     "source_sha256": "bd14fbb95341956fc02428fa0de6f4b5590e82b0e1442d0646e2d9ad7e942ead",
     "tree_path": "configs/campaigns/align_pilot_v3/plan_tree.json",
-    "tree_sha256": "83cc98f3cd8d26ae980a3f1e8c50bdd678dcc4df5d3e9acfabab6388735bdabd"
+    "tree_sha256": "724cf0108048b326d65b609ea8392cbf5f6096ead5f7b508a9c9479387d31b8d"
   },
   "non_claim": true,
   "runtime_versions": {

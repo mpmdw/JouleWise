@@ -1,4 +1,5 @@
 {
+  "anchor_seed_index": 1,
   "blocks": [
     {
       "block": "A",
@@ -11,6 +12,10 @@
   "conditions": [
     "benign",
     "sabotage"
+  ],
+  "cross_session_anchor_of": [
+    "align-pilot-20261103T134903416190Z",
+    "align-pilot-20261103T224628898457Z"
   ],
   "idle_seconds": 300,
   "max_context_tokens": 40960,
@@ -185,14 +190,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e05.json",
-      "expected_episode_seed": 8139346561588466007,
+      "expected_episode_seed": 9590288282068465104,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 5,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e05",
-      "seed_index": 2,
+      "seed_index": 7,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -209,7 +214,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 2,
+        "seed": 7,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -226,14 +231,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e06.json",
-      "expected_episode_seed": 4097311025052448992,
+      "expected_episode_seed": 10900152454805747463,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 6,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e06",
-      "seed_index": 2,
+      "seed_index": 7,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -250,7 +255,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 2,
+        "seed": 7,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -267,14 +272,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e07.json",
-      "expected_episode_seed": 8139346561588466007,
+      "expected_episode_seed": 9590288282068465104,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 7,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e07",
-      "seed_index": 2,
+      "seed_index": 7,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -291,7 +296,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 2,
+        "seed": 7,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -308,14 +313,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e08.json",
-      "expected_episode_seed": 4097311025052448992,
+      "expected_episode_seed": 10900152454805747463,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 8,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e08",
-      "seed_index": 2,
+      "seed_index": 7,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -332,7 +337,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 2,
+        "seed": 7,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -391,14 +396,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e10.json",
-      "expected_episode_seed": 6169586229110087908,
+      "expected_episode_seed": 2618380097672501688,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 10,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e10",
-      "seed_index": 3,
+      "seed_index": 8,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -415,7 +420,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 3,
+        "seed": 8,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -432,14 +437,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e11.json",
-      "expected_episode_seed": 286457666795484560,
+      "expected_episode_seed": 14994728377087409958,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 11,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e11",
-      "seed_index": 3,
+      "seed_index": 8,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -456,7 +461,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 3,
+        "seed": 8,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -473,14 +478,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e12.json",
-      "expected_episode_seed": 6169586229110087908,
+      "expected_episode_seed": 2618380097672501688,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 12,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e12",
-      "seed_index": 3,
+      "seed_index": 8,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -497,7 +502,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 3,
+        "seed": 8,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -514,14 +519,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e13.json",
-      "expected_episode_seed": 286457666795484560,
+      "expected_episode_seed": 14994728377087409958,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 13,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-a-e13",
-      "seed_index": 3,
+      "seed_index": 8,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -538,7 +543,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 3,
+        "seed": 8,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -597,14 +602,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e15.json",
-      "expected_episode_seed": 304571486172760106,
+      "expected_episode_seed": 10452994169483960014,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 15,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e15",
-      "seed_index": 4,
+      "seed_index": 9,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -621,7 +626,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 4,
+        "seed": 9,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -638,14 +643,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e16.json",
-      "expected_episode_seed": 18211783659995252033,
+      "expected_episode_seed": 5842603386054999094,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 16,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e16",
-      "seed_index": 4,
+      "seed_index": 9,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -662,7 +667,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 4,
+        "seed": 9,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -679,14 +684,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e17.json",
-      "expected_episode_seed": 304571486172760106,
+      "expected_episode_seed": 10452994169483960014,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 17,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e17",
-      "seed_index": 4,
+      "seed_index": 9,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -703,7 +708,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 4,
+        "seed": 9,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -720,14 +725,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e18.json",
-      "expected_episode_seed": 18211783659995252033,
+      "expected_episode_seed": 5842603386054999094,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 18,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e18",
-      "seed_index": 4,
+      "seed_index": 9,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -744,7 +749,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 4,
+        "seed": 9,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -803,14 +808,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e20.json",
-      "expected_episode_seed": 10515714233578474446,
+      "expected_episode_seed": 2294347453123286324,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 20,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e20",
-      "seed_index": 5,
+      "seed_index": 10,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -827,7 +832,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 5,
+        "seed": 10,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -844,14 +849,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e21.json",
-      "expected_episode_seed": 16726874887165336052,
+      "expected_episode_seed": 5212558227230803783,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 21,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e21",
-      "seed_index": 5,
+      "seed_index": 10,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -868,7 +873,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 5,
+        "seed": 10,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -885,14 +890,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e22.json",
-      "expected_episode_seed": 10515714233578474446,
+      "expected_episode_seed": 2294347453123286324,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 22,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e22",
-      "seed_index": 5,
+      "seed_index": 10,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -909,7 +914,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 5,
+        "seed": 10,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -926,14 +931,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e23.json",
-      "expected_episode_seed": 16726874887165336052,
+      "expected_episode_seed": 5212558227230803783,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 23,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e23",
-      "seed_index": 5,
+      "seed_index": 10,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -950,7 +955,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 5,
+        "seed": 10,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -967,14 +972,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e24.json",
-      "expected_episode_seed": 12685500607006618793,
+      "expected_episode_seed": 12699264629597988571,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 24,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e24",
-      "seed_index": 6,
+      "seed_index": 11,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -991,7 +996,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 6,
+        "seed": 11,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -1008,14 +1013,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e25.json",
-      "expected_episode_seed": 8438206852662645142,
+      "expected_episode_seed": 10022564881829687868,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 25,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e25",
-      "seed_index": 6,
+      "seed_index": 11,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -1032,7 +1037,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 6,
+        "seed": 11,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -1049,14 +1054,14 @@
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e26.json",
-      "expected_episode_seed": 12685500607006618793,
+      "expected_episode_seed": 12699264629597988571,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 26,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e26",
-      "seed_index": 6,
+      "seed_index": 11,
       "spec": {
         "condition": "sabotage",
         "enable_thinking": true,
@@ -1073,7 +1078,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 6,
+        "seed": 11,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -1090,14 +1095,14 @@
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_pilot_v3/stages/episodes-b/align-pilot-v3-episodes-b-e27.json",
-      "expected_episode_seed": 8438206852662645142,
+      "expected_episode_seed": 10022564881829687868,
       "is_replay": false,
       "model_id": "qwen3-30b-a3b",
       "non_claim": true,
       "ordinal": 27,
       "repeat": 1,
       "run_id": "align-pilot-v3-episodes-b-e27",
-      "seed_index": 6,
+      "seed_index": 11,
       "spec": {
         "condition": "benign",
         "enable_thinking": true,
@@ -1114,7 +1119,7 @@
           "top_p": 0.95
         },
         "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 6,
+        "seed": 11,
         "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
@@ -1170,7 +1175,7 @@
     }
   ],
   "non_claim": true,
-  "order_policy": "alternating_four_cells_per_seed_replays_after_seed_blocks_2_3_4_6",
+  "order_policy": "alternating_four_cells_per_seed_block_replays_after_seed_blocks_2_3_4_6",
   "pilot3_spec_differences": [
     "sampler",
     "temperature",
@@ -1190,6 +1195,14 @@
   },
   "schema_version": "joulewise.align_pilot.v1",
   "seed_bits": 64,
+  "seed_indices": [
+    1,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
   "seed_law": "align-p4-v1",
   "seeds_per_cell": 6,
   "shade_cache": "/Users/edr/.cache/joulewise/shade",
