@@ -222,6 +222,9 @@ def F(step, template, body, window=None):
 
 
 def _resolve(value, names, shas, commit):
+    if callable(value):
+        # A body derived from earlier outputs (fixtures/equivalence/derived.py: digests, ids, embedded copies).
+        return value(names, shas, commit)
     if isinstance(value, Num):
         return value
     if isinstance(value, str):

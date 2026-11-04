@@ -7,6 +7,7 @@ set JW_B5_EQ_SYNTHETIC_PAIRS="REF::CAND[;REF::CAND...]" (open-listed synthetic o
 from __future__ import annotations
 
 import ast
+import contextlib
 import dataclasses
 import hashlib
 import importlib.util
@@ -1428,6 +1429,188 @@ class SyntheticTreeAcceptanceTest(unittest.TestCase):
                 for line in audit:
                     self.assertIn('validator_source_sha256', line)
 
+
+derived = _load('jw_b5_equivalence_derived', Path(__file__).resolve().parent / 'fixtures' / 'equivalence' / 'derived.py')
+REFERENCE_KINDS = ('canonical', 'identity', 'manifest-id', 'file', 'embedded', 'path', 'component', 'producer-pin',
+                   'producer-set')
+E_PATTERN = {'registered': {'finalized/outputs/closeout.json:sources'},
+             'intermediate': {'outputs/claim-verdicts.json:inputs'}, 'audit': 'DIFFER'}
+
+
+class DerivedReferenceTest(_TmpCase):
+    """REFERENCE SITES: commit-derived digests, ids, paths and copies compare by verified referent.
+
+    The E-against-candidate blinded verdict (lead diagnosis 2026-11-04) was NOT_EQUIVALENT
+    with only closeout.json:sources (registered) and claim-verdicts.json:inputs
+    (intermediate) differing: every difference was the analysis commit propagating through
+    composite digests. derived.py reproduces that structure.
+    """
+
+    def blinded(self, ref, cand):
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        return rc, text, (parse_blinded(self, text, self.cfg) if rc != 2 else None)
+
+    def assert_expected(self, rc, got, expected, text):
+        failing = {t for t, v in expected.items() if t in TIER_KEYS and isinstance(v, set)}
+        self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT') if failing else (0, 'EQUIVALENT'), text)
+        for tier in TIER_KEYS:
+            self.assertEqual(got[tier], expected.get(tier, 'MATCH'), f'{tier}\n{text}')
+        if 'audit' in expected:
+            self.assertEqual(got['audit'], expected['audit'], text)
+
+    def test_commit_only_is_the_e_pattern_without_resolution_and_equivalent_with_it(self):
+        ref, cand = derived.build_pair(None, derived._commit, self.tmp, 'commit')
+        saved = cmp.resolve_references
+        cmp.resolve_references = lambda *args: None      # the comparator before REFERENCE SITES
+        try:
+            rc, text, got = self.blinded(ref, cand)
+        finally:
+            cmp.resolve_references = saved
+        self.assert_expected(rc, got, E_PATTERN, text)
+        rc, text, got = self.blinded(ref, cand)
+        self.assert_expected(rc, got, {'audit': 'DIFFER'}, text)
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertEqual(rc, 0, text)
+        # The only remaining difference is the record's own commit (audit).
+        self.assertEqual([line.split(':')[0] for line in text.splitlines() if line.startswith('  ')],
+                         ['  record $.analysis_commit'])
+
+    def test_identical_derived_trees_match(self):
+        ref, cand = derived.build_pair(None, None, self.tmp, 'same')
+        rc, text, got = self.blinded(ref, cand)
+        self.assert_expected(rc, got, {'audit': 'MATCH'}, text)
+
+    def test_every_hidden_change_is_caught(self):
+        self.assertEqual({rule for *_x, rule in derived.CASES.values()} - {'all'}, set(REFERENCE_KINDS))
+        for name, (ref_mut, cand_mut, expected, _rule) in derived.CASES.items():
+            with self.subTest(case=name):
+                ref, cand = derived.build_pair(ref_mut, cand_mut, self.tmp, name)
+                rc, text, got = self.blinded(ref, cand)
+                self.assertIsNotNone(got, text)
+                self.assert_expected(rc, got, expected, text)
+                orc, otext = run_tool(['--mode', 'open', '--no-report', ref, cand])
+                self.assertEqual(orc, rc, otext)
+                # Each hidden change also rides along with a commit change: still caught, same fields.
+                ref, cand = derived.build_pair(ref_mut, corpus._chain(cand_mut, derived._commit), self.tmp,
+                                               name + '-commit')
+                rc, text, got = self.blinded(ref, cand)
+                self.assert_expected(rc, got, {**expected, 'audit': 'DIFFER'}, text)
+
+    def test_every_site_is_verified_and_tokenized(self):
+        ref, _cand = derived.build_pair(None, None, self.tmp, 'sites')
+        side = cmp.load_side(ref, 'blind-dry-run', 'ref', self.cfg)
+        try:
+            flat = cmp.Flattener(self.cfg, side)
+            kinds, rebuilt = {}, 0
+            for art in side.artifacts.values():
+                for path, (_tier, token) in flat.artifact_leaves(art).items():
+                    if cmp.REBUILT in path:
+                        rebuilt += 1
+                    elif isinstance(token, str) and re.match(r'@([a-z\-]+):', token):
+                        kind = re.match(r'@([a-z\-]+):', token).group(1)
+                        if kind in REFERENCE_KINDS:
+                            kinds.setdefault(kind, set()).add((art.key, re.sub(r'\[\d+\]', '[*]', path)))
+        finally:
+            os.close(side.restricted_fd)
+        self.assertEqual(set(kinds), set(REFERENCE_KINDS))
+        # closeout 6, claim verdicts 5, finalized manifest 3, two pinsets 4 each, two aggregates 1 each.
+        self.assertEqual(sum(len(v) for v in kinds.values()), 24)
+        self.assertGreater(rebuilt, 0)
+
+    def test_every_forged_reference_is_a_comparator_error(self):
+        for name, (forge, site) in derived.FORGERIES.items():
+            with self.subTest(case=name):
+                ref, cand = derived.build_pair(None, forge, self.tmp, name)
+                rc, text = run_tool(['--mode', 'blinded', ref, cand])
+                self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=reference side=cand\n'))
+                errors = list((cand / 'equivalence' / 'restricted').glob('comparator-error*.txt'))
+                self.assertEqual(len(errors), 1)
+                self.assertIn(f'{site} is not self-consistent', errors[0].read_text())
+                self.assertEqual((cand / 'equivalence' / 'BLINDED-VERDICT.txt').read_text(), text)
+        ref, cand = derived.build_pair(derived.FORGERIES['forged_component_digest'][0], None, self.tmp, 'ref-forged')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=reference side=ref\n'))
+
+    def test_a_reference_without_its_referent_is_refused(self):
+        ref, cand = derived.build_pair(None, None, self.tmp, 'orphan')
+        record = json.loads((cand / 'dry-run' / corpus.RECORD).read_bytes())
+        for row in record['steps']:
+            row['outputs'] = [o for o in row['outputs'] if not o['name'].endswith('dominance-replay.json')
+                              or not o['name'].startswith('finalized/')]
+        (cand / 'dry-run' / corpus.RECORD).write_text(json.dumps(record, sort_keys=True, separators=(',', ':')))
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=reference side=cand\n'))
+
+    def test_rules_are_the_producers_rules(self):
+        sys.path.insert(0, str(ROOT))
+        try:
+            from joulewise.analysis_manifest_v3 import calculate_manifest_id
+            from joulewise.dominance_closeout import canonical_json_sha256
+            from scripts import mint_floor_artifact_generalized as mint
+        finally:
+            sys.path.remove(str(ROOT))
+        self.assertEqual((derived.MINT_TOOL_VERSION, derived.ASSURANCE), (mint.V2_MINT_TOOL_VERSION,
+                                                                         mint.V2_ASSURANCE_PROFILE))
+        for name, mutation in (('plain', None), ('variant', derived._variant), ('commit', derived._commit)):
+            with self.subTest(case=name):
+                ref, _ = derived.build_pair(mutation, None, self.tmp, f'rules-{name}')
+                restricted = ref / 'dry-run' / 'restricted'
+                fm = json.loads(next(restricted.glob('finalized/am-*.finalized.json')).read_bytes())
+                agg = json.loads(next(restricted.glob('finalized/mint/*-aggregate-floor.json')).read_bytes())
+                pinset = json.loads((restricted / 'finalized/mint/floor-mint-pinset.json').read_bytes())
+                self.assertEqual(cmp.derived_manifest_id(fm), calculate_manifest_id(fm))
+                self.assertEqual(fm['manifest_id'], calculate_manifest_id(fm))
+                for value in (fm, agg, pinset['producer_plans']):
+                    self.assertEqual(cmp.canonical_json_sha256(value), canonical_json_sha256(value))
+                self.assertEqual(cmp.floor_artifact_sha256(agg), mint._artifact_sha256(agg))
+                self.assertEqual(pinset['aggregate']['producer_set_sha256'],
+                                 mint._canonical_json_sha256(pinset['producer_plans']))
+                # The mint's own component check accepts the pinned component digests ...
+                errors = mint._validate_v2_artifact_binding(agg, mint.V2Pinset(pinset))
+                self.assertEqual([e for e in errors if 'hash' in e], [], errors)
+                # ... and the comparator's rebuild hits the same digests.
+                for i in range(2):
+                    rebuilt = cmp.rebuild_component(agg, pinset, i)
+                    variants = [v for v in cmp.containment_variants(rebuilt)
+                                if mint._artifact_sha256(cmp._with_variant(rebuilt, v))
+                                == pinset['aggregate']['component_artifacts'][i]['sha256']]
+                    self.assertEqual(len(variants), 1)
+                # A commit change the pinset does not follow is a component mismatch for the mint too.
+                agg['provenance']['implementation']['project_commit'] = 'f' * 40
+                errors = mint._validate_v2_artifact_binding(agg, mint.V2Pinset(pinset))
+                self.assertEqual(len([e for e in errors if 'component artifact hash mismatch' in e]), 2, errors)
+
+
+@unittest.skipUnless(os.environ.get('JW_B5_EQ_REMINT_SOURCE'), 'set JW_B5_EQ_REMINT_SOURCE to a synthetic S10 tree')
+class S10RemintAcceptanceTest(unittest.TestCase):
+    """A synthetic S10 tree re-minted at another commit (fixtures/equivalence/s10_remint.py)."""
+
+    def test_commit_only_is_equivalent_and_hidden_changes_are_caught(self):
+        remint = _load('jw_b5_equivalence_s10_remint',
+                       Path(__file__).resolve().parent / 'fixtures' / 'equivalence' / 's10_remint.py')
+        cfg = cmp.load_config()
+        with tempfile.TemporaryDirectory(prefix='jw-b5-remint-') as tmp:
+            src = Path(tmp) / 'ref'
+            shutil.copytree(os.environ['JW_B5_EQ_REMINT_SOURCE'], src, symlinks=True)
+            shutil.rmtree(src / 'equivalence', ignore_errors=True)
+            pinsets = {'mint/floor-mint-pinset.json', 'finalized/mint/floor-mint-pinset.json'}
+            want = {None: {},
+                    'floor': {'registered': {'mint/aggregate-floor.json:cells', 'finalized/mint/aggregate-floor.json:cells'}
+                              | {f'{p}:aggregate' for p in pinsets}},
+                    'manifest': {'intermediate': {'finalized/am.finalized.json:design'}},
+                    'producer': {'intermediate': {f'{p}:producer_plans' for p in pinsets}}}
+            for mutation, expected in want.items():
+                with self.subTest(mutation=mutation):
+                    cand = Path(tmp) / f'cand-{mutation}'
+                    args = [str(src), str(cand), corpus.OTHER_COMMIT] + (['--mutate', mutation] if mutation else [])
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(remint.main(args), 0)
+                    rc, text = run_tool(['--mode', 'blinded', src, cand])
+                    got = parse_blinded(self, text, cfg)
+                    self.assertEqual(rc, 1 if expected else 0, text)
+                    for tier in TIER_KEYS:
+                        self.assertEqual(got[tier], expected.get(tier, 'MATCH'), text)
+                    self.assertEqual(got['audit'], 'DIFFER', text)
 
 if __name__ == '__main__':
     unittest.main()

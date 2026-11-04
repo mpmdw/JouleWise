@@ -16,6 +16,19 @@ never from either tree. Run it from a separate clone at a comparator tag so the
 candidate cannot alter its judge. The header prints this file's sha256 and the
 config digests.
 
+Reference fields: a field that names another artifact by a digest, a content-derived
+id, a hex-named path or an embedded copy carries the analysis commit of everything it
+covers, so it is compared by VERIFIED REFERENT, not by value (REFERENCE SITES below).
+On each side it must be self-consistent with its referent (recomputed canonical-JSON
+and file digests, ids derived with the producer's own rule, embedded bytes equal to the
+stored artifact, pinset digests recomputed from that side's producers, and the
+unstored per-producer component floor artifacts rebuilt from the stored aggregate and
+pinset exactly as the mint's own validator rebuilds them, then matched to their pinned
+digest). A verified field becomes a fixed '@<kind>:<referent role>' token; its referent
+is still compared leaf by leaf under the ordinary rules (a rebuilt component under the
+aggregate floor's rules, as part of the pinset field that pins it). A field that is not
+self-consistent is 'COMPARATOR_ERROR stage=reference side=<side>', never equivalent.
+
 Blinded mode (default) prints only fixed grammar: tier MATCH/DIFFER lines and
 sorted 'field <role>:<section>' names drawn from the tracked vocabulary V. It never
 prints values, counts, list indices, ids, refusal codes or exception text. The full
@@ -59,8 +72,12 @@ records' window_index_sha256 values are listed in equivalence_open_indices.json
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import copy
 import fnmatch
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -684,6 +701,7 @@ class Flattener:
     def __init__(self, cfg: Config, side: Side):
         self.cfg, self.side = cfg, side
         commit = side.commit
+        self.references = {}    # referent key -> plain JSON value (resolve_references)
         self._commit = re.compile(rf'(?<![0-9a-f]){commit}(?![0-9a-f])') if commit else None
 
     def canon(self, text: str) -> str:
@@ -754,9 +772,329 @@ class Flattener:
                 value = exact_json(art.raw)
             except ValueError:
                 raise ComparatorError('parse', self.side.label, f'{art.name} is not strict JSON') from None
-            return self.flatten(value, art.role, {})
+            leaves = self.flatten(value, art.role, {})
+            resolve_references(self, art, value, leaves)
+            return leaves
         text = art.raw.decode('utf-8', 'surrogateescape')
         return {'$text': (cfg.tier(art.role, '$text', None), self.canon(text))}
+
+
+# ---------------------------------------------------------------------------
+# REFERENCE SITES: fields that name another artifact (D-188 result equivalence).
+#
+# The analysis commit is embedded in the floor artifacts (provenance.implementation),
+# so every field that digests, derives an id from, path-names or embeds one of them
+# differs between two analysis commits although nothing it covers differs once the
+# commit is canonicalized. Such a field is equivalent iff on EACH side it is
+# self-consistent with the artifact it references, and the referents compare
+# equivalent under the ordinary rules. Each site below is verified on its own side and
+# its token replaced by '@<kind>:<referent key>'; anything that does not verify raises
+# ComparatorError('reference'). The referents are stored artifacts, compared as such,
+# except the per-producer component floor artifacts, which custody does not store:
+# those are rebuilt from the stored aggregate floor and pinset by the mint's own
+# reconstruction (scripts/mint_floor_artifact_generalized.py
+# _validate_v2_artifact_binding), matched to their pinned digest, and compared as
+# extra leaves of the pinset field that pins them, under the aggregate floor's rules.
+#
+# Sites (producer in brackets; every rule is restated here, the judge imports nothing):
+#   finalized/outputs/closeout.json $.sources.<name>.canonical_json_sha256 and .identity
+#     [joulewise/dominance_closeout.py _validate_source_reference]
+#   outputs/claim-verdicts.json $.inputs.analysis_manifest.{manifest_id,file_sha256},
+#     $.inputs.floor_artifact.{artifact_id,file_sha256,embedded_bytes_base64}
+#     [joulewise/analysis_engine/__init__.py claim-verdict body]
+#   finalized/am.finalized.json $.manifest_id, $.evidence.aggregate_floor_artifact.{path,sha256}
+#     [joulewise/analysis_manifest_v3.py calculate_manifest_id; the finalizer's evidence rows]
+#   *mint/floor-mint-pinset.json $.aggregate.producer_set_sha256,
+#     $.aggregate.component_artifacts[*].{sha256,producer_pin_sha256},
+#     $.producer_plans[*].component_artifact.sha256 [scripts/emit_floor_mint_pinset.py _aggregate]
+#   *mint/aggregate-floor.json (v2) $.provenance.calibration_plan.sha256
+#     [scripts/mint_floor_artifact_generalized.py _build_v2_artifacts]
+# ---------------------------------------------------------------------------
+
+FINALIZED_MANIFEST_ROLE = 'finalized/am.finalized.json'
+FINALIZED_FLOOR_ROLE = 'finalized/mint/aggregate-floor.json'
+FINALIZED_REPLAY_ROLE = 'finalized/mint/dominance-replay.json'
+CLOSEOUT_ROLE = 'finalized/outputs/closeout.json'
+CLAIM_VERDICTS_ROLE = 'outputs/claim-verdicts.json'
+PINSET_SUFFIX = 'mint/floor-mint-pinset.json'
+AGGREGATE_SUFFIX = 'mint/aggregate-floor.json'
+# closeout.sources.<name>: (referent role, the referent's identity key)
+CLOSEOUT_SOURCES = {'finalized_manifest': (FINALIZED_MANIFEST_ROLE, 'manifest_id'),
+                    'floor_artifact': (FINALIZED_FLOOR_ROLE, 'artifact_id'),
+                    'replay_sidecar': (FINALIZED_REPLAY_ROLE, 'sidecar_id')}
+CONTAINMENT_KEYS = ('mint_commit_contained_in_origin_main', 'head_pin_commit_contained_in_origin_main')
+REBUILT = '<rebuilt>'
+
+
+def canonical_json_sha256(value) -> str:
+    """dominance_closeout.canonical_json_sha256 / mint._canonical_json_sha256 / the v3 manifest's canonical bytes."""
+    return sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False,
+                             allow_nan=False).encode('utf-8'))
+
+
+def derived_manifest_id(value) -> str:
+    """analysis_manifest_v3.calculate_manifest_id: 'am-' + canonical sha256 of the body without manifest_id."""
+    body = dict(value)
+    body.pop('manifest_id', None)
+    return 'am-' + canonical_json_sha256(body)
+
+
+def floor_artifact_sha256(value) -> str:
+    """mint._artifact_sha256: the floor-artifact file payload (indent 2, sorted keys, trailing newline)."""
+    return sha256((json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n').encode('utf-8'))
+
+
+def rebuild_component(aggregate, pinset, index: int):
+    """The index-th producer's component floor artifact, as mint._validate_v2_artifact_binding rebuilds it.
+
+    The aggregate is component 0 with its artifact id, scope, provenance, cells and
+    transport groups replaced (mint._build_v2_artifacts), so each component is the
+    aggregate with that producer's own plan pin, config set and launch lineage, and
+    only that producer's cells and groups. The mint-tool and assurance constants are
+    taken from the aggregate's provenance (the mint writes the same constants into
+    both); any deviation fails the pinned digest. Works on plain and exact JSON values.
+    """
+    producer = pinset['producer_plans'][index]
+    pin = pinset['aggregate']['component_artifacts'][index]
+    provenance = aggregate['provenance']
+    plan = producer['plan']
+    component = copy.deepcopy(aggregate)
+    component['artifact_id'] = pin['artifact_id']
+    rebuilt = {'calibration_plan': {k: plan[k] for k in ('plan_id', 'declared_calibration_scope', 'relative_path',
+                                                          'sha256')},
+               'mint_tool_version': provenance['mint_tool_version'],
+               'assurance': copy.deepcopy(provenance['assurance']),
+               'implementation': copy.deepcopy(provenance['implementation'])}
+    cells = producer['cells']
+    present = ['scientific_config_identity_sha256' in c for c in cells]
+    if any(present):   # detection_floor.floor_mint_producer_config_set
+        if not all(present):
+            raise ValueError('partial per-cell config pins')
+        rebuilt['producer_config_sets'] = [{
+            'plan_id': plan['plan_id'], 'config_set_sha256': producer['model_runtime_config']['config_set_sha256'],
+            'cells': [{'cell_id': c['cell_id'], 'scientific_config_identity_sha256': c['scientific_config_identity_sha256']}
+                      for c in cells]}]
+    if provenance.get('calibration_custody_store') is not None:
+        rebuilt['calibration_custody_store'] = copy.deepcopy(provenance['calibration_custody_store'])
+    lineage = provenance.get('launch_lineage')
+    if 'producer_launch_lineages' in provenance:
+        inventory = provenance['producer_launch_lineages']
+        if [row['plan_id'] for row in inventory] != [p['plan']['plan_id'] for p in pinset['producer_plans']]:
+            raise ValueError('producer lineage inventory')
+        lineage = inventory[index].get('launch_lineage')
+    if lineage is not None:
+        rebuilt['launch_lineage'] = copy.deepcopy(lineage)
+    component['provenance'] = rebuilt
+    by_cell = {c['cell_id']: c for c in aggregate['cells']}
+    by_group = {g['transport_group_id']: g for g in aggregate['transport_groups']}
+    component['cells'] = [copy.deepcopy(by_cell[c['cell_id']]) for c in cells]
+    component['transport_groups'] = [copy.deepcopy(by_group[c['transport_group_id']]) for c in cells]
+    return component
+
+
+def containment_variants(component):
+    """mint._artifact_sha256_containment_variants: the two non-gating containment observations, every value."""
+    implementation = component.get('provenance', {}).get('implementation')
+    if not isinstance(implementation, dict) or any(k not in implementation for k in CONTAINMENT_KEYS):
+        yield None
+        return
+    yield from itertools.product((False, True, None), repeat=len(CONTAINMENT_KEYS))
+
+
+def _with_variant(component, variant):
+    if variant is None:
+        return component
+    out = copy.deepcopy(component)
+    for key, value in zip(CONTAINMENT_KEYS, variant):
+        out['provenance']['implementation'][key] = value
+    return out
+
+
+class _References:
+    """Verification of one artifact's reference sites against its own side."""
+
+    def __init__(self, flat: 'Flattener', art: Artifact, leaves: dict):
+        self.flat, self.side, self.art, self.leaves = flat, flat.side, art, leaves
+        self.cache = flat.references
+
+    def fail(self, detail: str):
+        raise ComparatorError('reference', self.side.label, f'{self.art.key}: {detail}')
+
+    def referent(self, role: str) -> Artifact:
+        art = self.side.artifacts.get(role)
+        if art is None or art.role != role:
+            self.fail(f'referent {role} is not a committed output')
+        return art
+
+    def plain(self, art: Artifact):
+        if art.key not in self.cache:
+            try:
+                self.cache[art.key] = plain_json(art.raw)
+            except ValueError:
+                self.fail(f'referent {art.key} is not strict JSON')
+        return self.cache[art.key]
+
+    def verified(self, path: str, value, expected, kind: str, referent: str):
+        """Replace the leaf at ``path`` by '@kind:referent' when ``value`` is the string ``expected``."""
+        self.require(isinstance(value, str) and value == expected, path, referent)
+        self.token(path, kind, referent)
+
+    def require(self, consistent: bool, path: str, referent: str):
+        if not consistent:
+            self.fail(f'{path} is not self-consistent with {referent}')
+
+    def token(self, path: str, kind: str, referent: str):
+        if path not in self.leaves:
+            self.fail(f'{path} is not a scalar reference')
+        tier, _token = self.leaves[path]
+        self.leaves[path] = (tier, f'@{kind}:{referent}')
+
+    def manifest_id(self, art: Artifact) -> str:
+        value = self.plain(art)
+        if not isinstance(value, dict) or value.get('manifest_id') != derived_manifest_id(value):
+            self.fail(f'referent {art.key} manifest_id is not derived from its content')
+        return value['manifest_id']
+
+
+def _sub(value, *keys):
+    for k in keys:
+        if not isinstance(value, dict) or k not in value:
+            return None
+        value = value[k]
+    return value
+
+
+def resolve_references(flat: 'Flattener', art: Artifact, exact, leaves: dict):
+    """Verify and canonicalize every reference site of ``art`` (see REFERENCE SITES)."""
+    if not isinstance(exact, dict):
+        return
+    refs = _References(flat, art, leaves)
+    try:
+        value = refs.plain(art)
+        if art.role == CLOSEOUT_ROLE:
+            _closeout_sources(refs, value)
+        elif art.role == CLAIM_VERDICTS_ROLE:
+            _claim_verdict_inputs(refs, value)
+        elif art.role == FINALIZED_MANIFEST_ROLE:
+            _finalized_manifest(refs, value)
+        elif art.role.endswith(PINSET_SUFFIX) and isinstance(_sub(value, 'aggregate', 'component_artifacts'), list):
+            _pinset(refs, value, exact)
+        elif (art.role.endswith(AGGREGATE_SUFFIX)
+              and isinstance(_sub(value, 'provenance', 'producer_calibration_plans'), list)):
+            _aggregate_floor(refs, value)
+    except ComparatorError:
+        raise
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError, binascii.Error) as exc:
+        refs.fail(f'reference site is malformed: {type(exc).__name__}')
+
+
+def _closeout_sources(refs: _References, value):
+    sources = value.get('sources')
+    if sources is None:
+        return
+    for name, (role, identity_key) in CLOSEOUT_SOURCES.items():
+        ref = sources.get(name)
+        if ref is None:
+            continue
+        target = refs.referent(role)
+        body = refs.plain(target)
+        base = f'$.sources.{name}'
+        if 'canonical_json_sha256' in ref:
+            refs.verified(f'{base}.canonical_json_sha256', ref['canonical_json_sha256'], canonical_json_sha256(body),
+                          'canonical', target.key)
+        if 'identity' in ref:
+            identity = refs.manifest_id(target) if identity_key == 'manifest_id' else body.get(identity_key)
+            refs.verified(f'{base}.identity', ref['identity'], identity, 'identity', target.key)
+
+
+def _claim_verdict_inputs(refs: _References, value):
+    manifest = _sub(value, 'inputs', 'analysis_manifest')
+    if manifest is not None:
+        target = refs.referent(FINALIZED_MANIFEST_ROLE)
+        if 'manifest_id' in manifest:
+            refs.verified('$.inputs.analysis_manifest.manifest_id', manifest['manifest_id'], refs.manifest_id(target),
+                          'manifest-id', target.key)
+        if 'file_sha256' in manifest:
+            refs.verified('$.inputs.analysis_manifest.file_sha256', manifest['file_sha256'], sha256(target.raw),
+                          'file', target.key)
+    floor = _sub(value, 'inputs', 'floor_artifact')
+    if floor is not None:
+        target = refs.referent(FINALIZED_FLOOR_ROLE)
+        base = '$.inputs.floor_artifact'
+        if 'artifact_id' in floor:
+            refs.verified(f'{base}.artifact_id', floor['artifact_id'], refs.plain(target).get('artifact_id'),
+                          'identity', target.key)
+        if 'file_sha256' in floor:
+            refs.verified(f'{base}.file_sha256', floor['file_sha256'], sha256(target.raw), 'file', target.key)
+        if 'embedded_bytes_base64' in floor:
+            embedded = floor['embedded_bytes_base64']
+            decoded = base64.b64decode(embedded, validate=True) if isinstance(embedded, str) else None
+            # The embedded copy IS the referent (equal bytes), so it is compared as that artifact.
+            refs.require(decoded == target.raw, f'{base}.embedded_bytes_base64', target.key)
+            refs.token(f'{base}.embedded_bytes_base64', 'embedded', target.key)
+
+
+def _finalized_manifest(refs: _References, value):
+    if 'manifest_id' in value:
+        refs.verified('$.manifest_id', value['manifest_id'], derived_manifest_id(value), 'manifest-id', refs.art.key)
+    floor = _sub(value, 'evidence', 'aggregate_floor_artifact')
+    if floor is None:
+        return
+    target = refs.referent(FINALIZED_FLOOR_ROLE)
+    base = '$.evidence.aggregate_floor_artifact'
+    if 'path' in floor:
+        # Evidence paths are relative to the finalized manifest's own directory.
+        directory = refs.art.name.rsplit('/', 1)[0]
+        path = floor['path']
+        refs.verified(f'{base}.path', f'{directory}/{path}' if isinstance(path, str) else None, target.name,
+                      'path', target.key)
+    if 'sha256' in floor:
+        refs.verified(f'{base}.sha256', floor['sha256'], sha256(target.raw), 'file', target.key)
+
+
+def _pinset(refs: _References, value, exact):
+    producers = value['producer_plans']
+    aggregate = value['aggregate']
+    pins = aggregate['component_artifacts']
+    if not isinstance(producers, list) or len(pins) != len(producers) or not producers:
+        refs.fail('component pins do not match the producer plans')
+    me = refs.art.key
+    if 'producer_set_sha256' in aggregate:
+        refs.verified('$.aggregate.producer_set_sha256', aggregate['producer_set_sha256'],
+                      canonical_json_sha256(producers), 'producer-set', me)
+    target = refs.referent(refs.art.role[:-len(PINSET_SUFFIX)] + AGGREGATE_SUFFIX)
+    floor_plain = refs.plain(target)
+    floor_exact = exact_json(target.raw)
+    for i, (producer, pin) in enumerate(zip(producers, pins)):
+        if pin.get('plan_id') != producer['plan']['plan_id']:
+            refs.fail('component pin order differs from the producer plans')
+        base = f'$.aggregate.component_artifacts[{i}]'
+        if 'producer_pin_sha256' in pin:
+            refs.verified(f'{base}.producer_pin_sha256', pin['producer_pin_sha256'], canonical_json_sha256(producer),
+                          'producer-pin', me)
+        component = rebuild_component(floor_plain, value, i)
+        matched = [v for v in containment_variants(component)
+                   if floor_artifact_sha256(_with_variant(component, v)) == pin['sha256']]
+        refs.require(len(matched) == 1, f'{base}.sha256', f'{target.key}{REBUILT}')
+        # The token keeps the matched containment observation (the only rebuilt bytes not in the aggregate).
+        token = f'{target.key}{REBUILT}' + ('' if matched[0] is None else json.dumps(list(matched[0])))
+        refs.token(f'{base}.sha256', 'component', token)
+        refs.verified(f'$.producer_plans[{i}].component_artifact.sha256', producer['component_artifact']['sha256'],
+                      pin['sha256'], 'component', token)
+        # Compare the rebuilt component itself (commit canonicalized), under the aggregate's rules.
+        rebuilt = _with_variant(rebuild_component(floor_exact, exact, i), matched[0])
+        for path, leaf in refs.flat.flatten(rebuilt, target.role, {}).items():
+            refs.leaves[f'{base}.sha256{REBUILT}{path[1:]}'] = leaf
+
+
+def _aggregate_floor(refs: _References, value):
+    plan = _sub(value, 'provenance', 'calibration_plan')
+    if plan is None or 'sha256' not in plan:
+        refs.fail('v2 aggregate without a plan-set pin')
+    pinset = refs.referent(refs.art.role[:-len(AGGREGATE_SUFFIX)] + PINSET_SUFFIX)
+    producers = refs.plain(pinset)['producer_plans']
+    refs.verified('$.provenance.calibration_plan.sha256', plan['sha256'], canonical_json_sha256(producers),
+                  'producer-set', pinset.key)
 
 
 def section_of(path: str) -> str:
