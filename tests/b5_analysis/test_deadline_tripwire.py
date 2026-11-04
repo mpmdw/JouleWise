@@ -48,6 +48,7 @@ class StepState:
     record = d.RunState.record
     invoke = d.RunState.invoke
     rehash = d.RunState.rehash
+    note_member = d.RunState.note_member
 
     def __init__(self, restricted, bundles):
         self.restricted = restricted
@@ -55,6 +56,12 @@ class StepState:
         self.classes = d.refusal_classes()
         self.contexts = ()
         self.bundles = bundles
+        # D-188 SHIP state the copied methods use, initialised as RunState does:
+        # record() keeps each raw code (and the runner's exception class), and
+        # note_member() maps a step-2 invocation's stderr log to its bundle.
+        self._runner = None
+        self._raw_codes = []
+        self._members = {}
 
     def kept_bundles(self):
         return list(self.bundles)

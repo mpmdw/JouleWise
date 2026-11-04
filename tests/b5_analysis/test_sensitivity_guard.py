@@ -214,5 +214,10 @@ class DriverIntegrationGuardTests(unittest.TestCase):
         self.assertEqual(result.code,2)
         row=next(row for row in result.record['steps'] if row['step']=='4')
         self.assertEqual((row['status'],row['refusal']),('tooling_refusal',CODE))
-        self.assertEqual(row['outputs'],[])
+        # The run-end audit sidecars (step codes, the store-mode token) are bound
+        # to the last step that ran, here the refusing step 4 (dry_run._commit_sidecars);
+        # the comparator files both as audit. No registered writer output remains.
+        self.assertEqual([o for o in row['outputs']
+                          if not (o['name']==dry_run.STEP_CODES_NAME
+                                  or o['name'].startswith(dry_run.VDL_MODE_PREFIX))],[])
         self.assertFalse(any(step=='4' for step,_,_ in WiderDriver.calls))

@@ -205,10 +205,30 @@ class FlagOffIsOriginMainTests(unittest.TestCase):
         # L9-SPEEDUP-R1 stage 4b: the one selection is also shipped, unchanged,
         # as the first argument of each member task to the ordered pool, whose
         # entry point only calls the function it is given.
+        # D-188 LEAF-WW: the serial call moved into _verified_operative_rederivation,
+        # which receives the selection, unchanged, as its first argument and
+        # either calls it directly or ships it, unchanged, to the store's L2
+        # leaf (the same pool entry point); _prepare calls rederive nowhere.
         self.assertEqual(len(loads), 2)
-        self.assertEqual(len(calls), 1)
-        self.assertIn(calls[0].func, loads)
-        shipped = [node for node in loads if node is not calls[0].func]
+        self.assertEqual(calls, [])
+        serial_calls = [node for node in ast.walk(prepare) if isinstance(node, ast.Call)
+                        and getattr(node.func, "id", None) == "_verified_operative_rederivation"]
+        self.assertEqual(len(serial_calls), 1)
+        self.assertIn(serial_calls[0].args[0], loads)
+        helper = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+                      and node.name == "_verified_operative_rederivation")
+        self.assertEqual(helper.args.args[0].arg, "rederive")
+        self.assertNotIn("rederive", [node.id for node in ast.walk(helper)
+                                      if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)])
+        helper_calls = [node for node in ast.walk(helper) if isinstance(node, ast.Call)
+                        and getattr(node.func, "id", None) == "rederive"]
+        self.assertEqual(len(helper_calls), 1)
+        store_calls = [node for node in ast.walk(helper) if isinstance(node, ast.Call)
+                       and isinstance(node.func, ast.Attribute) and node.func.attr == "call"]
+        self.assertEqual(len(store_calls), 1)
+        self.assertEqual([ast.unparse(arg) for arg in store_calls[0].args[:3]],
+                         ["_LEAF_OPERATIVE", "_member_operative_summary", "rederive"])
+        shipped = [node for node in loads if node is not serial_calls[0].args[0]]
         pool_calls = [node for node in ast.walk(prepare) if isinstance(node, ast.Call)
                       and getattr(node.func, "id", None) == "member_map"]
         self.assertEqual(len(pool_calls), 1)
