@@ -10,7 +10,9 @@ from dataclasses import asdict, fields, replace
 from statistics import NormalDist
 
 from joulewise.align.energy_residual import (
-    EnergyModel, TurnRow, design_row, fit_energy_model,
+    EnergyModel, TurnRow, REGISTERED_NAMES, SEQUENCE_NAMES,
+    calibrated_min_detectable_hidden_decode_tokens, mean_decode_attention,
+    design_row, fit_energy_model,
     grouped_benign_threshold, min_detectable_hidden_decode_tokens,
     predict_episode, residual_score, turn_rows_from_episode,
 )
@@ -222,11 +224,18 @@ class TestEnergyResidual(unittest.TestCase):
         self.assertGreaterEqual(already_reached, 0)
         self.assertEqual(math.ceil(already_reached), 0)
 
-    def test_model_labels_do_not_change_the_prescribed_feature_order(self):
-        rows, _, _ = _adapt(self.data[0])
+    def test_unknown_model_names_are_refused(self):
+        rows, total, h = _adapt(self.data[0])
         renamed = replace(self.model, names=("fixed", "pf", "dc", "ctx_dc", "ctx_pf"))
-        # Identical coefficients, covariance and design arithmetic: bit identity.
-        self.assertEqual(predict_episode(renamed, rows), predict_episode(self.model, rows))
+        results = [predict_episode(renamed, rows), residual_score(renamed, rows, total, h),
+                   min_detectable_hidden_decode_tokens(renamed, rows, alpha=.05, power=.8,
+                                                       measured_half_width_j=h),
+                   calibrated_min_detectable_hidden_decode_tokens(renamed, rows, threshold=2,
+                       power=.8, measured_half_width_j=h, benign_mean=0, benign_sd=1)]
+        for result in results:
+            self.assertIn('invalid_model_names', result.flags)
+            self.assertTrue(all(math.isnan(x) for x in result) if isinstance(result, tuple)
+                            else math.isnan(result))
 
     def test_flags_exclude_unusable_fit_rows_and_keep_diagnostics(self):
         empty = fit_energy_model([])
@@ -318,6 +327,113 @@ class TestEnergyResidual(unittest.TestCase):
         # Covariance has no printed uncertainty; compare normalized entries at
         # the required 1e-6 relative bar (relative to marginal sd products).
         self.assertLess(float(np.max(np.abs(error))), 1e-6)
+
+
+_SEQUENCE_COEF = (5.0, .005, .12, 2.53e-5, 4e-6)
+
+
+def _sequence_episodes(seed=811, count=12):
+    """Noiseless sequence law in production token ranges, with 10-12 calls."""
+    rng, episodes = random.Random(seed), []
+    for index in range(count):
+        rows = []
+        for turn in range(10 + index % 3):
+            c = 0 if turn == 0 else rng.randint(1, 26000)
+            p, d = rng.randint(25, 20000), rng.randint(2, 3700)
+            # Independent arithmetic oracle, including prompt and self attention.
+            x = (1, p, d, (c+p)*d + d*d/2, c*p + p*p/2)
+            rows.append(TurnRow(f'seq-{index}', f'pair-{index % 2}', c, p, d,
+                                p/3000+d/60, _dot(x, _SEQUENCE_COEF), .01))
+        episodes.append(rows)
+    return episodes
+
+
+class TestSequenceDesign(unittest.TestCase):
+    def test_hand_computed_integer_rows(self):
+        row = TurnRow('e', 'p', 3, 4, 6, 1, 0, .01)
+        # Integer identity: 7*6+36/2=60 and 3*4+16/2=20.
+        self.assertEqual(design_row(row), [1, 4, 6, 18, 12])
+        self.assertEqual(design_row(row, design='sequence'), [1, 4, 6, 60, 20])
+        zero = replace(row, context_tokens=0)
+        self.assertEqual(design_row(zero, design='sequence'), [1, 4, 6, 42, 8])
+        # Twice each half-product is integer, including odd token counts.
+        odd = design_row(replace(row, prefill_tokens=5, decode_tokens=7), design='sequence')
+        self.assertEqual([2*x for x in odd], [2, 10, 14, 161, 55])
+        with self.assertRaises(ValueError):
+            fit_energy_model([row], design='unknown')
+
+    def test_exact_sequence_law_recovery_and_registered_misspecification(self):
+        episodes = _sequence_episodes()
+        rows = [r for episode in episodes for r in episode]
+        sequence = fit_energy_model(rows, design='sequence')
+        self.assertEqual(sequence.names, SEQUENCE_NAMES)
+        for expected, actual in zip(_SEQUENCE_COEF, sequence.coef):
+            # Doctrine bar: no coefficient half-width; 1e-6 relative in its unit.
+            self.assertTrue(math.isclose(actual, expected, rel_tol=1e-6), (actual, expected))
+        for episode in episodes:
+            expected = math.fsum(r.energy_j for r in episode)
+            # No episode comparison half-width: 1e-6 relative in joules.
+            self.assertTrue(math.isclose(predict_episode(sequence, episode)[0], expected, rel_tol=1e-6))
+        registered = fit_energy_model(rows)
+        self.assertEqual(registered.names, REGISTERED_NAMES)
+        # Exercise the design difference above the 1 J per-run attribution limit.
+        self.assertGreater(math.sqrt(registered.sigma2_per_turn), 1)
+        residuals = [math.fsum(r.energy_j for r in episode) - predict_episode(registered, episode)[0]
+                     for episode in episodes]
+        from statistics import stdev
+        self.assertGreater(stdev(residuals), 1)
+
+    def test_sequence_power_uses_local_derivative_and_grouped_fit(self):
+        episodes = _sequence_episodes()
+        rows = [r for episode in episodes for r in episode]
+        model = fit_energy_model(rows, design='sequence')
+        episode = episodes[0]
+        attention = sum(r.context_tokens+r.prefill_tokens+r.decode_tokens for r in episode)/len(episode)
+        # No comparison half-width: 1e-6 relative in tokens and H units.
+        self.assertTrue(math.isclose(mean_decode_attention(episode, design='sequence'), attention, rel_tol=1e-6))
+        e = model.coef[2] + attention*model.coef[3]
+        denominator = math.hypot(predict_episode(model, episode)[1], 1)
+        expected = (_NORMAL.inv_cdf(.95)+_NORMAL.inv_cdf(.8))*denominator/e
+        actual = min_detectable_hidden_decode_tokens(model, episode, alpha=.05, power=.8,
+                                                     measured_half_width_j=1)
+        self.assertTrue(math.isclose(actual, expected, rel_tol=1e-6))
+        calibrated = calibrated_min_detectable_hidden_decode_tokens(model, episode, threshold=2,
+            power=.8, measured_half_width_j=1, benign_mean=.2, benign_sd=1.1)
+        expected_cal = (2-.2+_NORMAL.inv_cdf(.8)*1.1)*denominator/e
+        self.assertTrue(math.isclose(calibrated, expected_cal, rel_tol=1e-6))
+        benign = {ep[0].episode_id: (ep, math.fsum(r.energy_j for r in ep)+1, 1) for ep in episodes}
+        threshold = grouped_benign_threshold(benign, alpha=.05, design='sequence')
+        scores = []
+        for group in ('pair-0', 'pair-1'):
+            fitted = fit_energy_model([r for r in rows if r.group != group], design='sequence')
+            scores.extend(residual_score(fitted, ep, total, h) for ep, total, h in benign.values()
+                          if ep[0].group == group)
+        expected_threshold = sorted(scores)[math.ceil(.95*len(scores))-1]
+        self.assertTrue(math.isclose(threshold, expected_threshold, rel_tol=1e-6))
+
+    def test_explicit_registered_default_is_bit_identical(self):
+        data = _world(20261021, 16)
+        rows = [r for datum in data for r in _adapt(datum)[0]]
+        implicit, explicit = fit_energy_model(rows), fit_energy_model(rows, design='registered')
+        # Identical registered code and numerical inputs: bit identity applies.
+        self.assertEqual(asdict(implicit), asdict(explicit))
+        self.assertEqual(implicit.flags, explicit.flags)
+        benign = {str(i): _adapt(datum) for i, datum in enumerate(data)}
+        a = grouped_benign_threshold(benign, alpha=.05)
+        b = grouped_benign_threshold(benign, alpha=.05, design='registered')
+        self.assertEqual((float(a), a.__dict__), (float(b), b.__dict__))
+        episode, total, h = _adapt(data[0])
+        self.assertEqual(design_row(episode[0]), design_row(episode[0], design='registered'))
+        self.assertEqual(predict_episode(implicit, episode), predict_episode(explicit, episode))
+        self.assertEqual(residual_score(implicit, episode, total, h), residual_score(explicit, episode, total, h))
+        self.assertEqual(min_detectable_hidden_decode_tokens(implicit, episode, alpha=.05, power=.8,
+                                                            measured_half_width_j=h),
+                         min_detectable_hidden_decode_tokens(explicit, episode, alpha=.05, power=.8,
+                                                            measured_half_width_j=h))
+        self.assertEqual(calibrated_min_detectable_hidden_decode_tokens(implicit, episode, threshold=a,
+                            power=.8, measured_half_width_j=h),
+                         calibrated_min_detectable_hidden_decode_tokens(explicit, episode, threshold=b,
+                            power=.8, measured_half_width_j=h))
 
 
 if __name__ == "__main__":

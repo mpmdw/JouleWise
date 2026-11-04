@@ -24,6 +24,10 @@ from joulewise.align.attribution import EpisodeAttribution
 
 _NAMES = ("intercept", "prefill_tokens", "decode_tokens",
           "context_decode_tokens", "context_prefill_tokens")
+REGISTERED_NAMES = _NAMES
+SEQUENCE_NAMES = ("intercept", "prefill_tokens", "decode_tokens",
+                  "sequence_decode_attention", "sequence_prefill_attention")
+_DESIGNS = {"registered": REGISTERED_NAMES, "sequence": SEQUENCE_NAMES}
 _P = len(_NAMES)
 _EPS = sys.float_info.epsilon
 # sqrt(epsilon) balances roundoff and root precision: above 1e6*epsilon,
@@ -211,18 +215,51 @@ def _row_flags(rows: Sequence[TurnRow], *, use_energy: bool) -> list[str]:
     return list(dict.fromkeys(flags))
 
 
-def design_row(r: TurnRow) -> list[float]:
-    """Return [1, prefill, decode, context*decode, context*prefill].
+def design_row(r: TurnRow, *, design: str = "registered") -> list[float]:
+    """Return the registered row, or the labelled sequence attention row.
+
+    sequence: [1, P, D, (C+P)*D + D*D/2, C*P + P*P/2].
+    Half products use integer products before division (no count truncation).
 
     Normalize indexable counts and finite whole real counts to Python ints
     before products; bools, negatives, fractions and strings remain flagged.
     """
+    _design_names(design)
     flags = _row_flags((r,), use_energy=False)
     context, prefill, decode = map(
         _token_count, (r.context_tokens, r.prefill_tokens, r.decode_tokens))
     if context is None or prefill is None or decode is None:
         return _Design([math.nan] * _P, flags)
+    if design == "sequence":
+        return _Design([1.0, prefill, decode,
+                        (context + prefill) * decode + decode * decode / 2,
+                        context * prefill + prefill * prefill / 2], flags)
     return _Design([1.0, prefill, decode, context * decode, context * prefill], flags)
+
+
+def _design_names(design: str) -> tuple[str, ...]:
+    if design not in _DESIGNS:
+        raise ValueError(f"unknown energy design: {design!r}")
+    return _DESIGNS[design]
+
+
+def _model_design(model: EnergyModel) -> str | None:
+    return next((design for design, names in _DESIGNS.items() if tuple(model.names) == names), None)
+
+
+def mean_decode_attention(rows: Sequence[TurnRow], *, design: str = "registered") -> float:
+    """Mean C (registered) or C+P+D (sequence), the marginal-energy reference.
+
+    The sequence derivative of D^2/2 is D. Power boundaries use this local
+    derivative and retain their fixed-variance linear approximation in H.
+    """
+    _design_names(design)
+    if not rows:
+        return math.nan
+    if design == "registered":
+        return math.fsum(_token_count(r.context_tokens) for r in rows) / len(rows)
+    return math.fsum(_token_count(r.context_tokens) + _token_count(r.prefill_tokens)
+                     + _token_count(r.decode_tokens) for r in rows) / len(rows)
 
 
 def turn_rows_from_episode(
@@ -269,8 +306,8 @@ def turn_rows_from_episode(
     return _SequenceResult(rows, flags)
 
 
-def _bad_model(n: int, flags: Sequence[str]) -> EnergyModel:
-    return _ModelResult(_NAMES, (math.nan,) * _P,
+def _bad_model(n: int, flags: Sequence[str], *, names: tuple[str, ...] = _NAMES) -> EnergyModel:
+    return _ModelResult(names, (math.nan,) * _P,
                         ((math.nan,) * _P,) * _P, math.nan, n,
                         tuple(dict.fromkeys(flags)))
 
@@ -354,8 +391,13 @@ def _wls(
 
 
 def fit_energy_model(rows: Sequence[TurnRow], *,
-                     uncertainty_kind: str | None = None) -> EnergyModel:
+                     uncertainty_kind: str | None = None,
+                     design: str = "registered") -> EnergyModel:
     """Fit benign turns by WLS using h in the standard-uncertainty slot.
+
+    design="registered" retains the registered row and names; "sequence"
+    opts into attention over C+P plus within-chunk/generated-token attention.
+    Model names select the matching row when predicting after serialization.
 
     Row kinds or the explicit uncertainty_kind label additive bounds with
     uncertainty.bound_read_as_sd; their numeric values are never converted.
@@ -371,6 +413,7 @@ def fit_energy_model(rows: Sequence[TurnRow], *,
     hardware/serving configurations are the caller's responsibility:
     TurnRow has no condition label.
     """
+    names = _design_names(design)
     flags = _row_flags(rows, use_energy=True)
     if uncertainty_kind is not None:
         flags.extend(_uncertainty_flags(uncertainty_kind))
@@ -382,10 +425,10 @@ def fit_energy_model(rows: Sequence[TurnRow], *,
         flags.append(f"excluded_turn_rows={excluded}")
     n = len(usable)
     if n <= _P:
-        return _bad_model(n, flags + ["insufficient_turns"])
-    full_x = [design_row(row) for row in usable]
+        return _bad_model(n, flags + ["insufficient_turns"], names=names)
+    full_x = [design_row(row, design=design) for row in usable]
     kept = _identified_columns(full_x)
-    flags.extend(f"unidentified_column:{_NAMES[j]}" for j in range(_P) if j not in kept)
+    flags.extend(f"unidentified_column:{names[j]}" for j in range(_P) if j not in kept)
     x = [[row[j] for j in kept] for row in full_x]
     y = [row.energy_j for row in usable]
     h2 = [row.energy_half_width_j ** 2 for row in usable]
@@ -396,12 +439,12 @@ def fit_energy_model(rows: Sequence[TurnRow], *,
             full_coef[original_i] = coef[i]
             for j, original_j in enumerate(kept):
                 full_cov[original_i][original_j] = cov[i][j]
-        return _ModelResult(_NAMES, tuple(full_coef), tuple(map(tuple, full_cov)),
+        return _ModelResult(names, tuple(full_coef), tuple(map(tuple, full_cov)),
                             sigma2, n, flags)
 
     ordinary = _wls(x, y, [1.0] * n)
     if ordinary is None:
-        return _bad_model(n, flags + ["rank_deficient_design"])
+        return _bad_model(n, flags + ["rank_deficient_design"], names=names)
     dof = n - len(kept)
     upper = _dot(ordinary[2], ordinary[2]) / dof
     if not any(h2):
@@ -433,7 +476,7 @@ def fit_energy_model(rows: Sequence[TurnRow], *,
 
     initial = evaluate(0.0)
     if initial is None:
-        return _bad_model(n, flags + ["rank_deficient_weighted_design"])
+        return _bad_model(n, flags + ["rank_deficient_weighted_design"], names=names)
     if initial[1] <= dof:
         sigma2, fit = 0.0, initial[0]
     else:
@@ -443,7 +486,7 @@ def fit_energy_model(rows: Sequence[TurnRow], *,
         for _ in range(sys.float_info.mant_dig + 1):
             evaluated = evaluate(sigma2)
             if evaluated is None:
-                return _bad_model(n, flags + ["rank_deficient_weighted_design"])
+                return _bad_model(n, flags + ["rank_deficient_weighted_design"], names=names)
             fit, q, slope = evaluated
             if abs(q - dof) <= _MOM_RTOL * dof:
                 break
@@ -461,7 +504,7 @@ def fit_energy_model(rows: Sequence[TurnRow], *,
             flags.append("variance_iteration_limit")
         evaluated = evaluate(sigma2)
         if evaluated is None:
-            return _bad_model(n, flags + ["rank_deficient_weighted_design"])
+            return _bad_model(n, flags + ["rank_deficient_weighted_design"], names=names)
         fit = evaluated[0]
     coef, cov, _ = fit
     return result(coef, cov, sigma2)
@@ -481,7 +524,9 @@ def predict_episode(model: EnergyModel, rows: Sequence[TurnRow]) -> tuple[float,
     flags = list(_flags(model)) + row_flags
     if len({row.episode_id for row in rows}) > 1:
         flags.append("multiple_episode_ids")
-    # The public contract fixes feature order, not the spelling of its labels.
+    design = _model_design(model)
+    if design is None:
+        return _SequenceResult((math.nan, math.nan), flags + ["invalid_model_names"])
     if len(model.names) != _P or len(model.coef) != _P or (
         len(model.cov) != _P or any(len(row) != _P for row in model.cov)
     ):
@@ -491,8 +536,8 @@ def predict_episode(model: EnergyModel, rows: Sequence[TurnRow]) -> tuple[float,
         return _SequenceResult((math.nan, math.nan), flags + ["nonfinite_model"])
     if "nonfinite_input" in row_flags or "invalid_token_count" in row_flags:
         return _SequenceResult((math.nan, math.nan), flags)
-    designs = [design_row(row) for row in rows]
-    for j, name in enumerate(_NAMES):
+    designs = [design_row(row, design=design) for row in rows]
+    for j, name in enumerate(model.names):
         if f"unidentified_column:{name}" in _flags(model) and any(row[j] != 0 for row in designs):
             flags.append(f"unidentified_column_used:{name}")
     summed = [math.fsum(row[j] for row in designs) for j in range(_P)]
@@ -545,6 +590,7 @@ def residual_score(
 
 def grouped_benign_threshold(
     benign: Mapping[str, tuple[Sequence[TurnRow], float, float]], *, alpha: float,
+    design: str = "registered",
     uncertainty_kind: str = "standard_uncertainty",
 ) -> float:
     """Leave task pairs out; return the inverse-ECDF (1-alpha) quantile.
@@ -563,6 +609,7 @@ def grouped_benign_threshold(
     insufficient_calibration_scores flags undefined sd at m<2.
     quantile_at_sample_max flags rank=m. No diagnostic changes the quantile.
     """
+    _design_names(design)
     flags = _uncertainty_flags(uncertainty_kind)
     if not _finite(alpha) or not 0 < alpha < 1:
         return _ThresholdResult(math.nan, flags + ["invalid_alpha"])
@@ -591,7 +638,7 @@ def grouped_benign_threshold(
     for component in components:
         training = [row for rows, _, _ in entries
                     if not ({r.group for r in rows} & component) for row in rows]
-        model = fit_energy_model(training)
+        model = fit_energy_model(training, design=design)
         flags.extend(_flags(model))
         for rows, energy, half_width in entries:
             if {row.group for row in rows} & component:
@@ -621,7 +668,8 @@ def min_detectable_hidden_decode_tokens(
     """Return H=max(0,(z_(1-alpha)+z_power)*D/e), a normal-approximation boundary.
 
     D=sqrt(sd_pred**2+measured_half_width_j**2);
-    e=coef_decode+coef_context_decode*mean(logged context_tokens) J/token.
+    e=coef_decode+coef_attention*mean_decode_attention(logged_rows) J/token.
+    Mean attention is C for registered, C+P+D for sequence (local derivative).
     This uses alpha's normal threshold, not the empirical grouped threshold,
     and assumes hidden decode adds energy without changing D or adding a call
     intercept. Nonpositive e gives infinity above the false-positive power;
@@ -650,14 +698,14 @@ def min_detectable_hidden_decode_tokens(
         return _Number(math.nan, flags + ["nonfinite_measurement"])
     if measured_half_width_j < 0:
         flags.append("negative_half_width")
-    if "invalid_model_shape" in flags:
+    if "invalid_model_shape" in flags or "invalid_model_names" in flags:
         return _Number(math.nan, flags)
     if f"unidentified_column:{_NAMES[2]}" in _flags(model):
         return _Number(math.nan, flags + ["hidden_decode_energy_unidentified"])
     row_flags = _row_flags(logged_rows, use_energy=False)
     if "invalid_token_count" in row_flags or "nonfinite_input" in row_flags:
         return _Number(math.nan, flags)
-    context = math.fsum(_token_count(row.context_tokens) for row in logged_rows) / len(logged_rows)
+    context = mean_decode_attention(logged_rows, design=_model_design(model))
     per_token = model.coef[2] + model.coef[3] * context
     if not _finite(per_token):
         return _Number(math.nan, flags + ["nonfinite_hidden_decode_energy"])
@@ -705,14 +753,14 @@ def calibrated_min_detectable_hidden_decode_tokens(
         return _Number(math.nan, flags + ["nonfinite_measurement"])
     if measured_half_width_j < 0:
         flags.append("negative_half_width")
-    if "invalid_model_shape" in flags:
+    if "invalid_model_shape" in flags or "invalid_model_names" in flags:
         return _Number(math.nan, flags)
     if f"unidentified_column:{_NAMES[2]}" in _flags(model):
         return _Number(math.nan, flags + ["hidden_decode_energy_unidentified"])
     row_flags = _row_flags(logged_rows, use_energy=False)
     if "invalid_token_count" in row_flags or "nonfinite_input" in row_flags:
         return _Number(math.nan, flags)
-    context = math.fsum(_token_count(row.context_tokens) for row in logged_rows) / len(logged_rows)
+    context = mean_decode_attention(logged_rows, design=_model_design(model))
     per_token = model.coef[2] + model.coef[3] * context
     if not _finite(per_token):
         return _Number(math.nan, flags + ["nonfinite_hidden_decode_energy"])
@@ -734,6 +782,7 @@ def calibrated_min_detectable_hidden_decode_tokens(
 
 
 __all__ = [
+    "REGISTERED_NAMES", "SEQUENCE_NAMES", "mean_decode_attention",
     "TurnRow", "EnergyModel", "design_row", "fit_energy_model", "predict_episode",
     "residual_score", "grouped_benign_threshold",
     "min_detectable_hidden_decode_tokens", "calibrated_min_detectable_hidden_decode_tokens",

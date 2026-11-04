@@ -212,3 +212,45 @@ observed-turn case. Compare member seconds and bundle bytes with both OLS laws
 and their observed residuals (2.318 s member SD, 2.124 MB disk SD). Measure rather
 than promote those residuals into new exclusion bars. Only then may the lead
 freeze collection span and disk reservation.
+
+## Pilot 7 desk addendum: frozen labelled attention-length alternative
+
+Before pilot 7's desk, freeze the alternative implemented in SOURCE_FREEZE_COMMIT
+(the final freeze pin is recorded with the builder's report). Print it beside
+the registered **per-pair** headline for pilot 7. Pilots 4–6 selected the design;
+pilot 7 is its out-of-sample test. This addendum changes neither the registered
+row/defaults nor any existing desk output or eligibility rule.
+
+The alternative row is `[1, P, D, (C+P)*D + D*D/2, C*P + P*P/2]`, with C measured
+before prefill. The separate desk prints both registered and sequence designs,
+both count conventions, each pair separately and a pooled diagnostic, under the
+existing eligibility views. See [the residual design section](energy_residual.md#labelled-attention-length-alternative-pilot-7-desk)
+for the historical motivation, derivative convention, s_r df, support semantics
+and the known-H path (counts logged to withheld under either benign-fit
+convention).
+
+The alternative per-pair threshold is the type-1 95% quantile of benign
+leave-one-trajectory-out scores, rank ceil(0.95 m), flagged
+`quantile_at_sample_max` at rank m. A strict crossing at k=0 is `above_at_H0`,
+never counted as a detection. Every scored episode reports support against the
+actual benign fit's per-turn P/C/D maxima, listing every exceeding turn with
+its values, and the benign training turn-count range. `out_of_support` is printed
+beside scores; it is a report, never an exclusion or numeric adjustment.
+
+Desk-only invocation, requiring no raw bundles, model or hardware:
+
+```sh
+python3 scripts/align_pilot_alt_desk.py \
+  --pilot /path/to/reference-session/inspection/PILOT.json \
+  --pilot /path/to/later-session/inspection/PILOT.json --out /tmp/alternative.json
+```
+
+Supply reference members first: the first eligible member per existing
+trajectory key is kept in each eligibility view. Input reads only `members[*]`,
+not precomputed residual summaries. Run IDs are prefixed by session label;
+`PILOT.json` uses its containing session directory's name (the directory above
+`inspection` for normal desk paths), and other JSON filenames use their stem.
+Labels must be unique. Trajectory identity and seeds are unchanged by prefixing. The first stdout line is
+`LABELLED ALTERNATIVE (frozen <commit>) - not the registered headline`.
+JSON preserves training membership, support witnesses, scores and full tamper
+curves; stdout prints plain tables by scope × pair × design × convention.
