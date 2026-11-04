@@ -33,6 +33,10 @@ SENTINEL_MEAN_MUTANT = '27182.818284'
 SENTINEL_BUNDLE = 'bundle-sentinel-qx'
 SENTINEL_CODE = 'claim_family_underpowered'
 SENTINEL_CODE_MUTANT = 'claim_family_unbalanced'
+# The one outcome-class code of configs/analysis/b5/dry_run_refusal_classes.json: a
+# real outcome_class row carries exactly this raw code (the SENTINEL codes above are
+# stand-ins that only same-layout comparisons may use).
+OUTCOME_CODE = 'dominance_ratio_zero_denominator'
 SENTINEL_PLAN = 'v5-b5-alpha-a1-s10-synthetic'
 
 
@@ -206,6 +210,8 @@ def base_model() -> dict:
         'refused_at': None,     # serial position of an outcome-class refusal, if any
         'refusal_code': SENTINEL_CODE,
         'refusal_status': 'outcome_class',   # or 'tooling_refusal' (code then public in the record)
+                                             # or 'unclassified_refusal' (exit status 'refusal_exit')
+        'refusal_exit': 2,
         'indent': None,
     }
 
@@ -251,6 +257,9 @@ def build(model: dict, root: Path) -> Path:
         row = steps[refused]
         if model['refusal_status'] == 'tooling_refusal':
             row.update(status='tooling_refusal', exit_status=2, registered_exit=None, refusal=model['refusal_code'])
+        elif model['refusal_status'] == 'unclassified_refusal':
+            row.update(status='unclassified_refusal', exit_status=model['refusal_exit'], registered_exit=None,
+                       refusal=f'unclassified refusal at step {row["step"]}')
         else:
             row.update(status='outcome_class', exit_status=2, registered_exit=None,
                        refusal=f'outcome-class refusal at step {row["step"]}')
@@ -413,11 +422,12 @@ def _logs_noise(model):
         model['logs'][name] += 'timing: 12 s\n'
 
 
-def _refused(pos, code=SENTINEL_CODE, status='outcome_class'):
+def _refused(pos, code=SENTINEL_CODE, status='outcome_class', exit_status=2):
     def apply(model):
         model['refused_at'] = pos
         model['refusal_code'] = code
         model['refusal_status'] = status
+        model['refusal_exit'] = exit_status
     return apply
 
 
@@ -664,7 +674,10 @@ CASES = {
     'audit_exception_class': (_chain(_refused(REFUSED_POS), _step_codes()),
                               _chain(_refused(REFUSED_POS), _step_codes(exception_class='PaperCustodyRefusal')),
                               {'audit': 'DIFFER'}),
-    'audit_step_codes_one_side_only': (_refused(REFUSED_POS), _chain(_refused(REFUSED_POS), _step_codes()),
+    # Review 2 of PR #640: a mixed pair compares the legacy side's ESTABLISHED raw code; an
+    # outcome-class row establishes the one outcome code, so the pair uses the real one.
+    'audit_step_codes_one_side_only': (_refused(REFUSED_POS, OUTCOME_CODE),
+                                       _chain(_refused(REFUSED_POS, OUTCOME_CODE), _step_codes(raw_code=OUTCOME_CODE)),
                                        {'audit': 'MATCH'}),
 }
 

@@ -42,6 +42,15 @@ and a candidate whose sidecar write failed) fail closed the same way (side=ref);
 against R1 (one commit) does not. A refusal outside any pack window (a driver-level
 stop inside a per-window step) also carries 'window_children', the per-window child
 log counts of its step, in every layout.
+In those same comparisons (mixed, or legacy pairs from different commits) a
+step-codes side's raw code is always its authenticated step-codes value, and a
+legacy side's raw code is what its record and logs ESTABLISH under the driver's own
+rules (_legacy_decode: a public tooling code, the one outcome-class code, an
+escaped exception read from the runner's own traceback, or a program's own exit
+other than 2). An exit-2 refusal without such a traceback could be a program exit,
+a successful program missing a promised output or a driver-raised refusal that R1
+records nowhere; when that raw code is all that could still differ the comparison
+fails closed: 'COMPARATOR_ERROR stage=refusal-code side=<the legacy side>'.
 
 Open mode prints every differing leaf with both exact tokens. It refuses unless both
 records' window_index_sha256 values are listed in equivalence_open_indices.json
@@ -835,6 +844,21 @@ def read_step_codes(side: Side):
 DRIVER_TOKEN = re.compile(r'[A-Za-z][A-Za-z0-9_.]*')   # joulewise/b5_analysis/dry_run.py _TOKEN
 MINT_CONSUMPTION_REFUSED = 'mint_consumption_session_refused'
 DOMINANCE_ZERO_DENOMINATOR = 'dominance_ratio_zero_denominator'
+# configs/analysis/b5/dry_run_refusal_classes.json 'outcome_class', identical at
+# b5/analysis-r1 and on this branch (the two files differ by one tooling code). A
+# record row whose status is outcome_class therefore carries exactly this raw code
+# (steps.step_record maps a code to outcome_class only when it is listed there).
+# Embedded, not read, so the judge depends on no file the analysis may change.
+OUTCOME_CODES = (DOMINANCE_ZERO_DENOMINATOR,)
+CODE_UNESTABLISHED = '<raw-code-not-established-in-legacy-layout>'
+_ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+_TRACEBACK_HEAD = re.compile(r'(  \+ )?(?:Exception Group )?Traceback \(most recent call last\):')
+_DRIVER_RUN_FRAME = re.compile(r'  File "[^"\n]*[/\\]joulewise[/\\]b5_analysis[/\\]dry_run\.py", line [0-9]+, in run')
+# The outermost frame of a traceback printed by dry_run (r1 and this branch alike):
+# StepRunner.run's catch of an exception that escaped the program, or the module
+# run() loop's exception program (def fail: traceback.print_exc(); return 2).
+RUNNER_ESCAPE_SOURCE = 'value = main(list(argv))'
+DRIVER_FAIL_SOURCE = 'records=function(s,runner)'
 
 
 def _driver_token(text: str):
@@ -854,31 +878,90 @@ def _last_json_line(text: str):
     return value if isinstance(value, dict) else None
 
 
-def legacy_refusal(side: Side, row) -> dict:
-    """R1 layout: re-derive the driver's raw code for a refusing step from restricted logs.
+def runner_traceback(stderr: str):
+    """'escape', 'driver' or None: whether a stderr log carries a traceback printed by dry_run itself.
 
-    The record redacts outcome-class and unclassified codes (steps.step_record), so
-    this replays the driver's own derivation on the step's LAST runner invocation:
-    RunnerResult.token (stderr 'error:' line, else last stdout line), plus the step-5
-    mint consumption label, the step-8 stdout REFUSE message and the step-6 stdout
-    StepRecord. The invocation ordinal within the step pins which program stopped
-    (step 5 runs two) and which bundle of a pack (steps 1 and 2). A tooling code is
-    public in the record and is taken from it; its invocation ordinal is still
-    counted from the logs (review of PR #640, finding S1: step 1 refusing its first
-    and its second bundle carry the same tooling code). The ordinal is counted as
-    the runner names its logs (dry_run.STEP_CODES_LOG, dry_run._refusal_position):
-    the number of <counter>-<step>-<window|block>.stderr.log regular files, None
-    when there are none. Driver-raised codes outside any runner program are
-    persisted nowhere in R1; for those the derived value is whatever the last
-    program left, identically derived on both sides.
+    traceback.print_exc() starts a traceback at the frame that caught the exception.
+    A traceback whose outermost frame is dry_run.StepRunner.run at its
+    'value = main(list(argv))' call was printed by the runner's own
+    'except BaseException' (the program raised: RunnerResult.exception, so
+    RunnerResult.token() is None and RunState.invoke records no code). One whose
+    outermost frame is dry_run.run at 'records=function(s,runner)' is the driver's
+    exception program (a step function raised; the record carries no code). A
+    program that prints its own traceback starts it at its own frame, so neither
+    shape can come from a program. The text is identical at b5/analysis-r1 and on
+    this branch; the worker pool (parallel.run_child) runs the same StepRunner.run.
+    """
+    lines = [_ANSI_ESCAPE.sub('', line) for line in stderr.splitlines()]
+    found = None
+    for i, line in enumerate(lines[:-2]):
+        head = _TRACEBACK_HEAD.fullmatch(line)
+        if head is None:
+            continue
+        prefix = '  | ' if head.group(1) else ''
+        frame, source = lines[i + 1], lines[i + 2]
+        if not (frame.startswith(prefix) and source.startswith(prefix)):
+            continue
+        if _DRIVER_RUN_FRAME.fullmatch(frame[len(prefix):]):
+            text = source[len(prefix):].strip()
+            if text == RUNNER_ESCAPE_SOURCE:
+                found = 'escape'
+            elif text == DRIVER_FAIL_SOURCE:
+                found = 'driver'
+    return found
+
+
+def _legacy_decode(side: Side, row) -> dict:
+    """R1 layout: the refusing step's raw code, replayed and as far as the logs establish it.
+
+    Returns {'raw_code', 'established', 'invocation'}. 'raw_code' replays the
+    driver's own derivation on the step's LAST runner invocation (the value an R1
+    against R1 comparison uses, where one code ran on both sides). 'established' is
+    the raw code only when the record and logs fix it, else CODE_UNESTABLISHED
+    (review 2 of PR #640, T1/T2). The rules are the driver's, and they are the same
+    at b5/analysis-r1 and on this branch (RunnerResult.token, refusal_token,
+    RunState.invoke, mint_refusal_code, step_8, step_6, the run() exception
+    program), so one decoder serves every analysis_commit:
+
+    * RunnerResult.token(): an escaped exception is None; else the last stderr
+      'error: ' line, else the last stdout line. An escape is read from the
+      runner's own traceback (runner_traceback), never guessed from text.
+    * RunState.invoke(): a code only for a nonzero exit or an exception; an
+      exception or a successful program missing a promised output records no
+      code and exit 2.
+    * step 5: mint_refusal_code on the second program (the mint) only, never after
+      an exception; step 8: the stdout REFUSE message of the second program (the
+      finalizer; the first is the staging helper), never after an exception;
+      step 6: the stdout StepRecord (also after an exception, as step_6 reads it).
+
+    Establishment: a tooling code is public in the record. An outcome-class row
+    carries the one outcome code (OUTCOME_CODES). Otherwise the logs establish the
+    code only when no other driver path can have produced the row: a runner
+    traceback (escape or driver exception program: no code), or an exit status
+    other than 2 (the program's own nonzero exit; every driver-decided code, a
+    missing promised output and an exception record exit 2; step 4's exit-1
+    classification is a registered tooling or outcome code, so it never decides an
+    unclassified row). An exit-2 row without
+    a runner traceback is the program's exit 2, a successful program missing a
+    promised output (no code), or a driver refusal raised after a successful
+    program (a code no restricted R1 file records); its raw code is not
+    established. So is any refusal with no runner log.
+    The invocation ordinal is counted as the runner names its logs
+    (dry_run.STEP_CODES_LOG, dry_run._refusal_position): the number of
+    <counter>-<step>-<window|block>.stderr.log regular files, None when there are none.
     """
     tooling = row['status'] == 'tooling_refusal'
-    none = {'raw_code': row['refusal'] if tooling else None, 'invocation': None}
     want = (str(row['step']), row['window'] or 'block')
+    if tooling:
+        public = {'raw_code': row['refusal'], 'established': row['refusal'], 'invocation': None}
+    else:
+        public = {'raw_code': None, 'invocation': None,
+                  'established': OUTCOME_CODES[0] if row['status'] == 'outcome_class' and len(OUTCOME_CODES) == 1
+                  else CODE_UNESTABLISHED}
     try:
         logs_fd = os.open('logs', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=side.restricted_fd)
     except OSError:
-        return none
+        return public
     try:
         stems = []
         with os.scandir(logs_fd) as it:
@@ -887,9 +970,10 @@ def legacy_refusal(side: Side, row) -> dict:
                 if m and (m.group(2), m.group(3)) == want and entry.is_file(follow_symlinks=False):
                     stems.append((int(m.group(1)), entry.name[:-len('.stderr.log')]))
         if not stems:
-            return none
+            return public
+        invocation = ('#i', str(len(stems)))
         if tooling:
-            return {'raw_code': row['refusal'], 'invocation': ('#i', str(len(stems)))}
+            return {**public, 'invocation': invocation}
         stems.sort()
         stem = stems[-1][1]
         stderr = _read_beneath(logs_fd, stem + '.stderr.log', side.label, 'refusal').decode('utf-8', 'replace')
@@ -899,25 +983,49 @@ def legacy_refusal(side: Side, row) -> dict:
             stdout = ''
     finally:
         os.close(logs_fd)
+    step, exit_status, ordinal = str(row['step']), row['exit_status'], len(stems)
+    traced = runner_traceback(stderr)
+    escaped = traced == 'escape'
     error_lines = [line for line in stderr.splitlines() if line.startswith('error: ')]
-    code = _driver_token(stderr) if error_lines else _driver_token(stdout)
-    step = str(row['step'])
-    if step == '5' and any('authenticated whole-window consumption refused' in line for line in error_lines):
-        code = MINT_CONSUMPTION_REFUSED
-    elif step == '8':
-        message = _last_json_line(stdout)
-        if message is not None and set(message) == {'status', 'reason', 'detail'} and message['status'] == 'REFUSE' \
-                and isinstance(message['reason'], str):
-            code = _driver_token(message['reason'])
-    elif step == '6':
-        child = _last_json_line(stdout)
-        closeout = sum(1 for o in row['outputs'] if re.fullmatch(r'finalized/outputs/closeout(\.ratio-table)?\.json',
-                                                                 o['name']))
-        if child is not None and child.get('status') == 'outcome_class' and row['exit_status'] == 3 and closeout == 2:
-            code = DOMINANCE_ZERO_DENOMINATOR
-        elif child is not None and child.get('status') == 'tooling_refusal' and isinstance(child.get('refusal'), str):
-            code = _driver_token(child['refusal'])
-    return {'raw_code': code, 'invocation': ('#i', str(len(stems)))}
+    if traced == 'driver':
+        code = None                      # dry_run.run: s.record(step, exit_status=2) after the program
+    else:
+        if escaped or not exit_status:
+            code = None                  # RunnerResult.token() / RunState.invoke()
+        else:
+            code = _driver_token(stderr) if error_lines else _driver_token(stdout)
+        if step == '5' and ordinal == 2 and exit_status and not escaped \
+                and any('authenticated whole-window consumption refused' in line for line in error_lines):
+            code = MINT_CONSUMPTION_REFUSED
+        elif step == '8' and ordinal == 2 and exit_status and not escaped:
+            message = _last_json_line(stdout)
+            if message is not None and set(message) == {'status', 'reason', 'detail'} \
+                    and message['status'] == 'REFUSE' and isinstance(message['reason'], str):
+                code = _driver_token(message['reason'])
+        elif step == '6':
+            child = _last_json_line(stdout)
+            closeout = sum(1 for o in row['outputs']
+                           if re.fullmatch(r'finalized/outputs/closeout(\.ratio-table)?\.json', o['name']))
+            if child is not None and child.get('status') == 'outcome_class' and exit_status == 3 and closeout == 2:
+                code = DOMINANCE_ZERO_DENOMINATOR
+            elif child is not None and child.get('status') == 'tooling_refusal' \
+                    and isinstance(child.get('refusal'), str):
+                code = _driver_token(child['refusal'])
+    established = public['established']
+    if row['status'] != 'outcome_class':
+        fixed = traced is not None or (type(exit_status) is int and exit_status != 2)
+        established = code if fixed and code not in OUTCOME_CODES else CODE_UNESTABLISHED
+    return {'raw_code': code, 'established': established, 'invocation': invocation}
+
+
+def legacy_refusal(side: Side, row) -> dict:
+    """R1 layout: {'raw_code', 'invocation'} of a refusing step, replayed from restricted logs (_legacy_decode).
+
+    'raw_code' is the replayed derivation (R1 against R1, one analysis commit); a
+    comparison with any other layout or commit uses _legacy_decode's 'established' value.
+    """
+    decoded = _legacy_decode(side, row)
+    return {'raw_code': decoded['raw_code'], 'invocation': decoded['invocation']}
 
 
 def _int_token(value):
@@ -930,6 +1038,7 @@ def _int_token(value):
 # step-codes 'member'.
 MEMBER_STEPS = frozenset({'1', '2'})
 MEMBER_UNESTABLISHED = '<member-not-established-in-legacy-layout>'
+UNESTABLISHED = {'member': MEMBER_UNESTABLISHED, 'raw_code': CODE_UNESTABLISHED}
 
 
 def _legacy_member(row, refusal, other_row):
@@ -981,29 +1090,55 @@ def window_children(side: Side, row):
     return tuple((w, ('#i', str(counts[w]))) for w in WINDOWS if w in counts)
 
 
-def _first_refusal(side, i, row):
-    return None if row is None else {
+def _first_refusal(side, i, row, *, established=False):
+    if row is None:
+        return None
+    decoded = _legacy_decode(side, row)
+    return {
         'pos': ('#i', str(i)), 'step': row['step'], 'window': row['window'], 'status': row['status'],
         'exit_status': _int_token(row['exit_status']), 'registered_exit': row.get('registered_exit'),
-        'window_children': window_children(side, row), **legacy_refusal(side, row)}
+        'window_children': window_children(side, row),
+        'raw_code': decoded['established' if established else 'raw_code'], 'invocation': decoded['invocation']}
+
+
+def _fail_closed_if_undecided(legacy_label, legacy, other):
+    """Raise when a refusal pair agrees on every established field and the rest is unestablished.
+
+    A legacy field equal to its UNESTABLISHED marker could hold any value, so it is
+    left out of the check; the pair then cannot be decided and fails closed with a
+    digit-free stage (refusal-member when the member is among the unestablished
+    fields, else refusal-code). A side with no refusal never fails closed, and an
+    established difference is an ordinary NOT_EQUIVALENT (the marker itself differs
+    from every real value, so it is reported as a difference too).
+    """
+    if legacy is None or other is None:
+        return
+    open_keys = {k for k, marker in UNESTABLISHED.items() if legacy.get(k) == marker or other.get(k) == marker}
+    if not open_keys:
+        return
+    if {k: v for k, v in legacy.items() if k not in open_keys} == {k: v for k, v in other.items() if k not in open_keys}:
+        if 'member' in open_keys:
+            raise ComparatorError('refusal-member', legacy_label, 'the legacy layout does not establish the refusing bundle')
+        raise ComparatorError('refusal-code', legacy_label, 'the legacy layout does not establish the raw refusal code')
 
 
 def _mixed_first_refusals(ref: Side, cand: Side, codes_ref, codes_cand):
     """First-refusal leaves when exactly one side carries step codes (an R1 reference).
 
-    Both sides keep the log-derived raw code (one derivation for both). The
-    step-codes side's invocation and member come from its step codes instead of
-    being discarded (review of PR #640, finding S1); the legacy side's invocation
-    is its log-counted ordinal and its member is _legacy_member. When everything
-    but the member agrees and the legacy side cannot establish the member, the
-    comparison cannot be decided: it fails closed (ComparatorError, digit-free
-    stage). A side with no refusal never fails closed.
+    The step-codes side's raw code, invocation and member come from its step codes
+    (review of PR #640, finding S1; review 2, T1: its authenticated raw code is never
+    replaced by a log guess). The legacy side's raw code is _legacy_decode's
+    established value, its invocation its log-counted ordinal and its member
+    _legacy_member. When everything established agrees and the legacy side cannot
+    establish its member or raw code, the comparison cannot be decided: it fails
+    closed (ComparatorError, digit-free stage). A side with no refusal never fails closed.
     """
     firsts, legacy_label = {}, None
     for side, codes in ((ref, codes_ref), (cand, codes_cand)):
         i, row = _first_non_ok(side.record)
-        first = _first_refusal(side, i, row)
+        first = _first_refusal(side, i, row, established=codes is None)
         if first is not None and codes is not None:
+            first['raw_code'] = codes[i]['raw_code']
             first['invocation'], first['member'] = codes[i]['invocation'], codes[i]['member']
         if codes is None:
             legacy_label = side.label
@@ -1014,11 +1149,7 @@ def _mixed_first_refusals(ref: Side, cand: Side, codes_ref, codes_cand):
         other_row = other_codes[i] if i < len(other_codes) else None
         legacy['member'] = _legacy_member(row, legacy, other_row)
         other = firsts[cand.label if legacy_label == ref.label else ref.label][0]
-        if (legacy['member'] == MEMBER_UNESTABLISHED and other is not None
-                and {k: v for k, v in legacy.items() if k != 'member'}
-                == {k: v for k, v in other.items() if k != 'member'}):
-            raise ComparatorError('refusal-member', legacy_label,
-                                  'the legacy layout does not establish the refusing bundle')
+        _fail_closed_if_undecided(legacy_label, legacy, other)
     return {label: first for label, (first, _, _) in firsts.items()}
 
 
@@ -1028,23 +1159,21 @@ def _legacy_pair_first_refusals(ref: Side, cand: Side):
     Review of PR #640 (MEDIUM finding): the runner writes step codes on a
     best-effort basis (dry_run._commit_sidecars never fails a run over them), so a
     candidate whose sidecar write failed is a legacy layout too. Against an R1
-    reference that must not silently drop the member comparison the step codes
-    would have made: unless both trees come from one analysis commit (R1 against
-    R1, where one code ran the same inputs in the same order), a refusing
-    step-1/step-2 bundle whose member neither layout establishes fails closed,
-    exactly as in a mixed comparison. A side with no refusal never fails closed.
+    reference that must not silently drop the member or raw-code comparison the
+    step codes would have made: unless both trees come from one analysis commit (R1
+    against R1, where one code ran the same inputs in the same order), each side's
+    raw code is its established value and a refusal pair that agrees on everything
+    established fails closed when a member or raw code is unestablished, exactly as
+    in a mixed comparison. A side with no refusal never fails closed.
     """
     firsts = {}
     for side in (ref, cand):
         i, row = _first_non_ok(side.record)
-        first = _first_refusal(side, i, row)
+        first = _first_refusal(side, i, row, established=True)
         if first is not None:
             first['member'] = _legacy_member(row, first, None)
         firsts[side.label] = first
-    a, b = firsts[ref.label], firsts[cand.label]
-    if a is not None and a == b and a['member'] == MEMBER_UNESTABLISHED:
-        raise ComparatorError('refusal-member', ref.label,
-                              'neither legacy layout establishes the refusing bundle')
+    _fail_closed_if_undecided(ref.label, firsts[ref.label], firsts[cand.label])
     return firsts
 
 

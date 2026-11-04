@@ -446,6 +446,9 @@ class LegacyRefusalDecoderTest(_TmpCase):
     def test_step8_stdout_refuse_message(self):
         ref, cand = self._refused_pair('8', 'finalize')
         for root, reason in ((ref, 'finalization_lineage_invalid: x'), (cand, 'finalization_plan_tree_mismatch: y')):
+            # step_8 reads the REFUSE message of its second program (the finalizer); the
+            # first is the staging helper (review 2 of PR #640, T2: the driver's own rule).
+            (self._logs(root) / '0007-8-block.stderr.log').write_text('staged\n')
             (self._logs(root) / '0008-8-block.stdout.log').write_text(
                 'progress\n' + json.dumps({'status': 'REFUSE', 'reason': reason, 'detail': 'd'}) + '\n')
         rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
@@ -655,6 +658,330 @@ class LegacyReferencePositionTest(_TmpCase):
                              {'raw_code': self.BUNDLE_CODE, 'invocation': ('#i', '2')})
         finally:
             os.close(side.restricted_fd)
+
+
+# Review 2 of PR #640 (T1/T2). The traceback dry_run.StepRunner.run prints when a
+# program raises (traceback.print_exc() in its 'except BaseException'), as both
+# drivers write it to the program's stderr log.
+RUNNER_ESCAPE = ('Traceback (most recent call last):\n'
+                 '  File "/checkout/joulewise/b5_analysis/dry_run.py", line 144, in run\n'
+                 '    value = main(list(argv))\n'
+                 '  File "/checkout/scripts/program.py", line 41, in main\n'
+                 '    raise RuntimeError(\'synthetic child failure\')\n'
+                 'RuntimeError: synthetic child failure\n')
+STEP5 = corpus.POS['5']
+STEP5_LOG = f'{STEP5 + 1:04d}-5-block'
+
+
+def _unclassified(code=None, exit_status=2, codes=False, raw_code=None, commit=False):
+    """An unclassified step-5 refusal (one program); optionally with step codes or another commit."""
+    fns = [corpus._refused(STEP5, code, status='unclassified_refusal', exit_status=exit_status)]
+    if codes:
+        fns.append(corpus._step_codes(raw_code=raw_code, exception_class=None))
+    if commit:
+        fns.append(corpus._commit)
+    return corpus._chain(*fns)
+
+
+class MixedRawCodeStubTest(_TmpCase):
+    """Review 2 of PR #640: the Sol probes as faithful stub trees (no driver run).
+
+    Each tree mirrors what the real r1/HEAD driver writes for the probe (see
+    MixedRawCodeDriverTest, which runs the drivers): the record row, the step-5
+    program's stdout/stderr logs and, on a HEAD-driver side, the step codes. The
+    reference is the R1 layout (no step codes); the candidate is a HEAD tree with
+    committed step codes, or (sidecar-less) a legacy tree from another commit.
+    """
+
+    def _tree(self, name, mut, stdout, stderr, commit_codes=False):
+        model = corpus.base_model()
+        mut(model)
+        root = corpus.build(model, self.tmp / name)
+        logs = root / 'dry-run' / 'restricted' / 'logs'
+        (logs / (STEP5_LOG + '.stdout.log')).write_text(stdout)
+        (logs / (STEP5_LOG + '.stderr.log')).write_text(stderr)
+        if commit_codes:
+            _commit_step_codes(root)
+        return root
+
+    def _ref(self, name, stdout, stderr):
+        return self._tree(name + '-ref', _unclassified(), stdout, stderr)
+
+    def _cand(self, name, stdout, stderr, raw_code=None):
+        return self._tree(name + '-cand', _unclassified(codes=True, raw_code=raw_code), stdout, stderr,
+                          commit_codes=True)
+
+    def _verdict(self, ref, cand, side_of_legacy='ref'):
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        if rc == 2:
+            self.assertIsNone(re.search(r'[0-9]', text))
+            return rc, text.strip()
+        return rc, parse_blinded(self, text, self.cfg)['verdict']
+
+    def test_exception_code_is_not_equivalent(self):
+        # T1 'exception-code': r1 child prints the error line and returns 2 (raw
+        # hypothetical_refusal); HEAD child prints it and raises (raw None, from its
+        # authenticated step codes). Was EQUIVALENT (the candidate's code was a log guess).
+        ref = self._ref('exc-code', 'error: hypothetical_refusal\n', '')
+        cand = self._cand('exc-code', 'error: hypothetical_refusal\n', RUNNER_ESCAPE, raw_code=None)
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        self.assertEqual(self._verdict(cand, ref), (2, 'COMPARATOR_ERROR stage=refusal-code side=cand'))
+
+    def test_driver_code_is_not_equivalent(self):
+        # T1 'driver-code': both children succeed silently; the drivers then raise
+        # different refusals. R1 records the driver code nowhere: not established.
+        ref = self._ref('drv-code', '', '')
+        cand = self._cand('drv-code', '', '', raw_code='unknown_refusal_b')
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_exception_audit_is_equivalent(self):
+        # T2 'exception-audit': both children print a different progress line, then
+        # raise. The runner's traceback establishes the escape: raw None on both
+        # sides. Was NOT_EQUIVALENT (progress lines read as codes).
+        ref = self._ref('exc-audit', 'audit_reference\n', RUNNER_ESCAPE)
+        cand = self._cand('exc-audit', 'audit_candidate\n', RUNNER_ESCAPE, raw_code=None)
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(cand, ref), (0, 'EQUIVALENT'))
+        # The same escape against a HEAD code: an established difference.
+        cand = self._cand('exc-audit-other', 'audit_candidate\n', '', raw_code='audit_candidate')
+        self.assertEqual(self._verdict(ref, cand), (1, 'NOT_EQUIVALENT'))
+
+    def test_missing_output_is_never_a_log_guess(self):
+        # T2 'missing-output': a successful child without its promised output records
+        # no code (exit 2). R1's logs cannot tell it from a program exit 2: fail
+        # closed, never NOT_EQUIVALENT over a progress line.
+        ref = self._ref('missing', 'audit_reference\n', '')
+        cand = self._cand('missing', 'audit_candidate\n', '', raw_code=None)
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_sidecarless_candidate_from_another_commit(self):
+        # The same probes against a legacy candidate of another commit (its sidecar lost).
+        def legacy(name, stdout, stderr):
+            return self._tree(name + '-legacy', _unclassified(commit=True), stdout, stderr)
+        ref = self._ref('pair-audit', 'audit_reference\n', RUNNER_ESCAPE)
+        self.assertEqual(self._verdict(ref, legacy('pair-audit', 'audit_candidate\n', RUNNER_ESCAPE)),
+                         (0, 'EQUIVALENT'))
+        ref = self._ref('pair-code', 'error: hypothetical_refusal\n', '')
+        self.assertEqual(self._verdict(ref, legacy('pair-code', 'error: hypothetical_refusal\n', RUNNER_ESCAPE)),
+                         (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        ref = self._ref('pair-miss', 'audit_reference\n', '')
+        self.assertEqual(self._verdict(ref, legacy('pair-miss', 'audit_candidate\n', '')),
+                         (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_program_exit_other_than_two_establishes_the_code(self):
+        # A program's own nonzero exit (not 2) is never a driver-decided row: its token is the code.
+        ref = self._tree('exit3-ref', _unclassified(exit_status=3), '', 'error: closeout_branch_broken\n')
+        same = self._tree('exit3-same', _unclassified(exit_status=3, codes=True, raw_code='closeout_branch_broken'),
+                          '', 'error: closeout_branch_broken\n', commit_codes=True)
+        other = self._tree('exit3-other', _unclassified(exit_status=3, codes=True, raw_code='closeout_other'),
+                           '', 'error: closeout_branch_broken\n', commit_codes=True)
+        self.assertEqual(self._verdict(ref, same), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(ref, other), (1, 'NOT_EQUIVALENT'))
+
+    def test_outcome_class_row_establishes_the_outcome_code(self):
+        def tree(name, codes, raw_code=corpus.OUTCOME_CODE):
+            fns = [corpus._refused(STEP5, corpus.OUTCOME_CODE)]
+            if codes:
+                fns.append(corpus._step_codes(raw_code=raw_code))
+            model = corpus.base_model()
+            corpus._chain(*fns)(model)
+            root = corpus.build(model, self.tmp / name)
+            if codes:
+                _commit_step_codes(root)
+            return root
+        ref = tree('outcome-ref', False)
+        self.assertEqual(self._verdict(ref, tree('outcome-same', True)), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(ref, tree('outcome-other', True, corpus.SENTINEL_CODE)), (1, 'NOT_EQUIVALENT'))
+
+    def test_no_refusal_never_fails_closed(self):
+        ref = corpus.build(corpus.base_model(), self.tmp / 'clean-ref')
+        model = corpus.base_model()
+        corpus._step_codes()(model)
+        cand = corpus.build(model, self.tmp / 'clean-cand')
+        _commit_step_codes(cand)
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+        # Only one side refusing (unestablished code included) is a difference, never an error.
+        refusing = self._ref('one-sided', 'audit_reference\n', '')
+        self.assertEqual(self._verdict(refusing, cand), (1, 'NOT_EQUIVALENT'))
+        self.assertEqual(self._verdict(cand, refusing), (1, 'NOT_EQUIVALENT'))
+
+
+class RunnerTracebackTest(unittest.TestCase):
+    """runner_traceback reads only tracebacks dry_run itself printed (review 2 of PR #640, T2)."""
+
+    def test_shapes(self):
+        rt = cmp.runner_traceback
+        self.assertEqual(rt(RUNNER_ESCAPE), 'escape')
+        self.assertEqual(rt('progress\n' + RUNNER_ESCAPE), 'escape')
+        driver = RUNNER_ESCAPE.replace('value = main(list(argv))', 'records=function(s,runner)')
+        self.assertEqual(rt(driver), 'driver')
+        # A program's own traceback starts at the program's frame: not the runner's.
+        own = RUNNER_ESCAPE.replace('joulewise/b5_analysis/dry_run.py', 'scripts/program.py')
+        self.assertIsNone(rt(own))
+        self.assertIsNone(rt(RUNNER_ESCAPE.replace(', in run\n', ', in main\n')))
+        self.assertIsNone(rt('Traceback (most recent call last):\n  boom\n'))
+        self.assertIsNone(rt(''))
+        # Colour (FORCE_COLOR) and the exception-group layout are the same traceback.
+        coloured = RUNNER_ESCAPE.replace('  File "', '  File \x1b[35m"').replace('", line', '"\x1b[0m, line')
+        self.assertEqual(rt(coloured), 'escape')
+        group = ('  + Exception Group Traceback (most recent call last):\n'
+                 '  |   File "/c/joulewise/b5_analysis/dry_run.py", line 144, in run\n'
+                 '  |     value = main(list(argv))\n'
+                 '  | ExceptionGroup: g (1 sub-exception)\n')
+        self.assertEqual(rt(group), 'escape')
+
+    def test_the_driver_prints_this_shape(self):
+        # The current driver's real traceback (no stub text): StepRunner.run on a raising program.
+        from joulewise.b5_analysis import dry_run
+        with tempfile.TemporaryDirectory(prefix='jw-b5-eq-runner-') as tmp:
+            runner = dry_run.StepRunner(Path(tmp))
+
+            def program(argv):
+                print('audit_progress')
+                raise RuntimeError('synthetic')
+            result = runner.run(program, [], step='5')
+            self.assertTrue(result.exception)
+            self.assertIsNone(result.token())
+            self.assertEqual(cmp.runner_traceback(result.stderr_path.read_text()), 'escape')
+
+    def test_one_decoder_serves_r1_and_this_branch(self):
+        # The rules legacy decoding replays are textually identical at b5/analysis-r1;
+        # the outcome-class list is the embedded one.
+        from joulewise.b5_analysis import dry_run
+        import inspect
+        classes = json.loads((CONFIG / 'dry_run_refusal_classes.json').read_bytes())
+        self.assertEqual(tuple(classes['outcome_class']), cmp.OUTCOME_CODES)
+        source = inspect.getsource(dry_run)
+        self.assertIn(cmp.RUNNER_ESCAPE_SOURCE, source)
+        self.assertIn(cmp.DRIVER_FAIL_SOURCE, source)
+        r1 = _git_show(R1_TAG, 'joulewise/b5_analysis/dry_run.py')
+        if r1 is None:
+            self.skipTest('tag b5/analysis-r1 is not available')
+        r1_classes = json.loads(_git_show(R1_TAG, 'configs/analysis/b5/dry_run_refusal_classes.json'))
+        self.assertEqual(tuple(r1_classes['outcome_class']), cmp.OUTCOME_CODES)
+        self.assertIn(cmp.RUNNER_ESCAPE_SOURCE, r1)
+        self.assertIn(cmp.DRIVER_FAIL_SOURCE, r1)
+        for name in ('refusal_token', 'mint_refusal_code'):
+            self.assertEqual(_function_source(r1, name), _function_source(source, name), name)
+        for cls, name in (('RunnerResult', 'token'), ('RunState', 'invoke')):
+            self.assertEqual(_method_source(r1, cls, name), _method_source(source, cls, name), name)
+
+
+R1_TAG = 'b5/analysis-r1'
+
+
+def _git_show(rev, path):
+    try:
+        proc = subprocess.run(['git', '-C', str(ROOT), 'show', f'{rev}:{path}'], capture_output=True, text=True)
+    except OSError:
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _function_source(source, name):
+    tree = ast.parse(source)
+    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    return ast.dump(node, include_attributes=False)
+
+
+def _method_source(source, cls, name):
+    tree = ast.parse(source)
+    klass = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls)
+    node = next(n for n in klass.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    return ast.dump(node, include_attributes=False)
+
+
+class MixedRawCodeDriverTest(unittest.TestCase):
+    """Review 2 of PR #640: the four Sol probes through the ACTUAL r1 and HEAD drivers.
+
+    The reference runs b5/analysis-r1's dry_run (joulewise/ and configs/analysis/ of
+    the tag, extracted by git archive into a temporary directory and removed after);
+    the candidate runs this checkout's. Each run is one synthetic driver run whose
+    step 5 executes a stub program (fixtures/equivalence/driver_probe.py). Skipped
+    when the tag is not available.
+    """
+
+    PROBE = Path(__file__).resolve().parent / 'fixtures' / 'equivalence' / 'driver_probe.py'
+
+    @classmethod
+    def setUpClass(cls):
+        commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', '--verify', '-q', R1_TAG + '^{commit}'],
+                                capture_output=True, text=True)
+        if commit.returncode != 0:
+            raise unittest.SkipTest('tag b5/analysis-r1 is not available')
+        cls.r1_commit = commit.stdout.strip()
+        cls._tmp = tempfile.TemporaryDirectory(prefix='jw-b5-eq-drivers-')
+        cls.tmp = Path(cls._tmp.name)
+        cls.r1 = cls.tmp / 'r1-tree'
+        cls.r1.mkdir()
+        archive = subprocess.run(['git', '-C', str(ROOT), 'archive', R1_TAG, 'joulewise', 'configs/analysis'],
+                                 capture_output=True, check=True).stdout
+        subprocess.run(['tar', '-x', '-C', str(cls.r1)], input=archive, check=True)
+        cls.head_commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True,
+                                         text=True, check=True).stdout.strip()
+        cls.cfg = cmp.load_config()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _run(self, checkout, commit, scenario, variant):
+        target = self.tmp / scenario / variant
+        env = {**os.environ, 'TMPDIR': str(self.tmp), 'JOULEWISE_CUSTODY_PARENT': str(self.tmp)}
+        env.pop('PYTHONPATH', None)
+        proc = subprocess.run([sys.executable, '-B', str(self.PROBE), str(checkout), commit, str(target),
+                               scenario, variant], cwd=checkout, capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        observed = json.loads(proc.stdout)
+        self.assertTrue(Path(observed['driver']).is_relative_to(Path(checkout).resolve()), observed)
+        return target / 'custody', observed
+
+    def _pair(self, scenario):
+        ref, r1 = self._run(self.r1, self.r1_commit, scenario, 'ref')
+        cand, head = self._run(ROOT, self.head_commit, scenario, 'cand')
+        self.assertFalse((ref / 'dry-run' / 'restricted' / 'decisions').exists(), 'r1 writes no step codes')
+        self.assertTrue((cand / 'dry-run' / 'restricted' / 'decisions' / 'step-codes.jsonl').is_file())
+        return ref, cand, r1['raw_refusals'], head['raw_refusals']
+
+    def _verdict(self, left, right):
+        rc, text = run_tool(['--mode', 'blinded', left, right])
+        if rc == 2:
+            self.assertIsNone(re.search(r'[0-9]', text))
+            return rc, text.strip()
+        return rc, parse_blinded(self, text, self.cfg)['verdict']
+
+    def test_no_refusal(self):
+        ref, cand, r1, head = self._pair('no-refusal')
+        self.assertEqual((r1, head), ([], []))
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+
+    def test_exception_code(self):
+        # T1: the drivers record different raw codes; was EQUIVALENT.
+        ref, cand, r1, head = self._pair('exception-code')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': 'hypothetical_refusal'}], [{'step': '5', 'code': None}]))
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        self.assertEqual(self._verdict(cand, ref), (2, 'COMPARATOR_ERROR stage=refusal-code side=cand'))
+
+    def test_driver_code(self):
+        # T1: distinct driver-raised raw codes after identical child logs; was EQUIVALENT.
+        ref, cand, r1, head = self._pair('driver-code')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': 'unknown_refusal_a'}],
+                                      [{'step': '5', 'code': 'unknown_refusal_b'}]))
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_exception_audit(self):
+        # T2: the same unclassified refusal (raw None) on both; was NOT_EQUIVALENT.
+        ref, cand, r1, head = self._pair('exception-audit')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': None}],) * 2)
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(cand, ref), (0, 'EQUIVALENT'))
+
+    def test_missing_output(self):
+        # T2: raw None on both, but R1's logs cannot tell a missing output from a
+        # program exit 2: fail closed instead of NOT_EQUIVALENT over progress lines.
+        ref, cand, r1, head = self._pair('missing-output')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': None}],) * 2)
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
 
 
 class TimingClassTest(_TmpCase):
