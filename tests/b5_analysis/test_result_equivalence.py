@@ -820,6 +820,147 @@ class MixedRawCodeStubTest(_TmpCase):
         self.assertEqual(self._verdict(cand, refusing), (1, 'NOT_EQUIVALENT'))
 
 
+class ClaimSideBoundNonIssuanceTest(_TmpCase):
+    """D-189 (ruling A): step 9b's claim-side-bound non-issuance, a non-stopping outcome.
+
+    The record row (outcome_class at exit 3, no output) and the absent sidecar are
+    decisions, never audit; the raw code is compared in every layout; the first
+    refusal is the first row that STOPPED the run, so a later refusal is never hidden.
+    """
+
+    LATER = corpus.POS['11']
+
+    def _tree(self, name, *, nonissued=True, codes=False, commit=True, nonissuance_code=corpus.NOT_ISSUABLE_CODE,
+              later=None, other_commit=False):
+        model = corpus.base_model()
+        fns = []
+        if nonissued:
+            fns.append(corpus._nonissuance_9b)
+        if later is not None:
+            fns.append(corpus._refused(self.LATER, later[0], status='unclassified_refusal', exit_status=3))
+        if codes:
+            fns.append(corpus._step_codes(raw_code=later[1] if later else corpus.SENTINEL_CODE, exception_class=None,
+                                          nonissuance_code=nonissuance_code))
+        if other_commit:
+            fns.append(corpus._commit)
+        corpus._chain(*fns)(model)
+        root = corpus.build(model, self.tmp / name)
+        if later is not None:
+            # The program's stdout log beside its stderr (the driver's token() reads both).
+            (root / 'dry-run' / 'restricted' / 'logs' / f'{self.LATER + 1:04d}-11-block.stdout.log').write_text('')
+        if codes and commit:
+            _commit_step_codes(root)
+        return root
+
+    def _blinded(self, left, right):
+        rc, text = run_tool(['--mode', 'blinded', left, right])
+        self.assertNotEqual(rc, 2, text)
+        got = parse_blinded(self, text, self.cfg)
+        self.assertNotIn(corpus.NOT_ISSUABLE_CODE, text)
+        return rc, got
+
+    def test_the_record_row_is_the_drivers_shape(self):
+        record = json.loads((self._tree('shape') / 'dry-run' / corpus.RECORD).read_bytes())
+        row = record['steps'][corpus.POS['9b']]
+        self.assertEqual({k: row[k] for k in ('step', 'window', 'status', 'exit_status', 'outputs', 'refusal')},
+                         {'step': '9b', 'window': None, 'status': 'outcome_class', 'exit_status': 3, 'outputs': [],
+                          'refusal': 'outcome-class refusal at step 9b'})
+        self.assertTrue(all(r['status'] == 'ok' for r in record['steps'][corpus.POS['9b'] + 1:]))
+        self.assertTrue(cmp._nonstopping_outcome(row))
+        self.assertEqual(cmp._first_non_ok(record), (None, None))
+        self.assertFalse(cmp._nonstopping_outcome({**row, 'exit_status': 2}))
+        self.assertFalse(cmp._nonstopping_outcome({**row, 'step': '6'}))
+
+    def test_issued_against_not_issued_is_a_decision_difference(self):
+        issued = self._tree('issued', nonissued=False)
+        for codes in (False, True):
+            with self.subTest(codes=codes):
+                left = self._tree(f'issued-{codes}', nonissued=False, codes=codes)
+                right = self._tree(f'not-issued-{codes}', codes=codes)
+                for a, b in ((left, right), (right, left), (issued, right)):
+                    rc, got = self._blinded(a, b)
+                    self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT'))
+                    self.assertIsInstance(got['decisions'], set)
+                    # The absent sidecar and the 9b row: decisions, never audit only.
+                    self.assertLessEqual({'custody/claim_side_bound:presence', 'record:steps'}, got['decisions'])
+                    self.assertEqual(got['registered'], 'MATCH')
+
+    def test_both_not_issued_is_equivalent_in_every_layout(self):
+        legacy = self._tree('legacy')
+        pairs = {
+            'r1 against r1': (legacy, self._tree('legacy-2')),
+            'step codes': (self._tree('codes-1', codes=True), self._tree('codes-2', codes=True)),
+            'mixed (r1 reference)': (legacy, self._tree('mixed', codes=True)),
+            'legacy pair from another commit': (legacy, self._tree('other-commit', other_commit=True)),
+        }
+        for name, (ref, cand) in pairs.items():
+            for a, b in ((ref, cand), (cand, ref)):
+                with self.subTest(name):
+                    rc, got = self._blinded(a, b)
+                    self.assertEqual((rc, got['verdict']), (0, 'EQUIVALENT'))
+                    self.assertEqual([got[t] for t in TIER_KEYS], ['MATCH'] * 4)
+
+    def test_another_9b_raw_code_is_a_decision_difference_in_every_layout(self):
+        legacy = self._tree('legacy')
+        other = 'claim_side_bound_other_state'
+        for name, (ref, cand) in {
+                'mixed (r1 reference)': (legacy, self._tree('mixed-other', codes=True, nonissuance_code=other)),
+                'step codes': (self._tree('codes', codes=True),
+                               self._tree('codes-other', codes=True, nonissuance_code=other))}.items():
+            with self.subTest(name):
+                rc, got = self._blinded(ref, cand)
+                self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT'))
+                self.assertTrue(got['decisions'] & {'decisions:nonstopping_outcomes', 'decisions:step_codes'},
+                                got['decisions'])
+                self.assertNotIn('decisions:first_refusal', got['decisions'])
+                rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+                self.assertIn(other, text)
+
+    def test_a_later_stopping_refusal_is_the_first_refusal(self):
+        # Both runs issue no side bound, then step 11 refuses (a program's own exit 3).
+        ref = self._tree('later-ref', later=('code_reference', None))
+        same = self._tree('later-same', codes=True, later=('code_reference', 'code_reference'))
+        other = self._tree('later-other', codes=True, later=('code_reference', 'code_candidate'))
+        record = json.loads((ref / 'dry-run' / corpus.RECORD).read_bytes())
+        self.assertEqual(cmp._first_non_ok(record)[0], self.LATER)
+        rc, got = self._blinded(ref, same)
+        self.assertEqual((rc, got['verdict']), (0, 'EQUIVALENT'))
+        rc, got = self._blinded(ref, other)
+        self.assertEqual((rc, got['verdict'], got['decisions']), (1, 'NOT_EQUIVALENT', {'decisions:first_refusal'}))
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, other])
+        self.assertIn('$.first_refusal.raw_code: "code_reference" -> "code_candidate"', text)
+
+    def test_legacy_decoder_establishes_the_9b_outcome_code(self):
+        root = self._tree('decode')
+        side = cmp.load_side(root, 'blind-dry-run', 'ref', self.cfg)
+        try:
+            row = side.record['steps'][corpus.POS['9b']]
+            self.assertEqual(cmp._legacy_decode(side, row), {'raw_code': corpus.NOT_ISSUABLE_CODE,
+                                                             'established': corpus.NOT_ISSUABLE_CODE,
+                                                             'invocation': ('#i', '1')})
+            self.assertEqual(cmp.nonstopping_outcomes(side, None, established=True),
+                             [{'pos': ('#i', str(corpus.POS['9b'])), 'raw_code': corpus.NOT_ISSUABLE_CODE}])
+        finally:
+            os.close(side.restricted_fd)
+        self.assertEqual(cmp._outcome_code('9b'), cmp.CLAIM_SIDE_BOUND_NOT_ISSUABLE)
+        self.assertEqual(cmp._outcome_code('6'), cmp.DOMINANCE_ZERO_DENOMINATOR)
+        self.assertEqual(cmp.OUTCOME_CODES, tuple(sorted(cmp.OUTCOME_CODES)))
+
+    def test_only_the_step9b_helper_prints_the_code(self):
+        # _outcome_code rests on this: no program, and no other driver step, emits the code.
+        found = set()
+        for top in ('joulewise', 'scripts'):
+            for path in (ROOT / top).rglob('*.py'):
+                if cmp.CLAIM_SIDE_BOUND_NOT_ISSUABLE in path.read_text(encoding='utf-8', errors='replace'):
+                    found.add(path.relative_to(ROOT).as_posix())
+        self.assertEqual(found, {'joulewise/b5_analysis/dry_run.py'})
+        source = (ROOT / 'joulewise/b5_analysis/dry_run.py').read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        users = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+                 and any(isinstance(n, ast.Name) and n.id == 'CLAIM_SIDE_BOUND_NOT_ISSUABLE' for n in ast.walk(node))}
+        self.assertEqual(users, {'_claim_open'})
+
+
 class RunnerTracebackTest(unittest.TestCase):
     """runner_traceback reads only tracebacks dry_run itself printed (review 2 of PR #640, T2)."""
 
@@ -872,7 +1013,13 @@ class RunnerTracebackTest(unittest.TestCase):
         if r1 is None:
             self.skipTest('tag b5/analysis-r1 is not available')
         r1_classes = json.loads(_git_show(R1_TAG, 'configs/analysis/b5/dry_run_refusal_classes.json'))
-        self.assertEqual(tuple(r1_classes['outcome_class']), cmp.OUTCOME_CODES)
+        # D-189: the tag predates step 9b's one outcome code; the reference commit
+        # (lane/b5-r1-9b-fix, the tag plus the same driver change) carries it.
+        self.assertEqual(tuple(sorted({*r1_classes['outcome_class'], cmp.CLAIM_SIDE_BOUND_NOT_ISSUABLE})),
+                         cmp.OUTCOME_CODES)
+        backport = _git_show(R1_FIX_BRANCH, 'configs/analysis/b5/dry_run_refusal_classes.json')
+        if backport is not None:
+            self.assertEqual(tuple(json.loads(backport)['outcome_class']), cmp.OUTCOME_CODES)
         self.assertIn(cmp.RUNNER_ESCAPE_SOURCE, r1)
         self.assertIn(cmp.DRIVER_FAIL_SOURCE, r1)
         for name in ('refusal_token', 'mint_refusal_code'):
@@ -888,6 +1035,8 @@ class RunnerTracebackTest(unittest.TestCase):
 
 
 R1_TAG = 'b5/analysis-r1'
+# D-189: the equivalence-reference commit, b5/analysis-r1 plus the step-9b driver change.
+R1_FIX_BRANCH = 'origin/lane/b5-r1-9b-fix'
 
 
 def _git_show(rev, path):

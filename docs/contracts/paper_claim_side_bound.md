@@ -152,6 +152,18 @@ No supply role is promoted from fixture mode and no renderer is added here.
 `paper_claim_side_bound_arithmetic_diagnostic` is diagnostic-only, not a
 refusal. These private codes are not professor-facing empirical sentences.
 
+### Block-5 driver, step 9b (D-189)
+
+The block-5 driver (`joulewise/b5_analysis/dry_run.py` `_claim_open`) checks step 9's
+verdict bytes before it calls the producer. The check reads structure only. It looks
+for the producer's legitimate non-issuable states: a resolution outside
+`exact`/`transported`, a null `metrology_aware_CI95` or `decision_interval`, empty
+`terms`, or no anchor term. If it finds one, the driver issues no sidecar, opens no
+claim-evidence custody and records the blinded, non-stopping outcome class
+`claim_side_bound_not_issuable`. Steps 10 and 11 still run. Past that check, any
+producer refusal above is a provenance defect, and the dry-run record carries it as a
+tooling refusal under its own code. Neither function in this module changes.
+
 ## Clause-to-test map and counterfactuals
 
 Tests are `tests.test_claim_side_bound.ClaimSideBoundTests` unless noted.

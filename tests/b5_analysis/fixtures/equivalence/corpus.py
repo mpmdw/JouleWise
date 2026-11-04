@@ -37,6 +37,8 @@ SENTINEL_CODE_MUTANT = 'claim_family_unbalanced'
 # real outcome_class row carries exactly this raw code (the SENTINEL codes above are
 # stand-ins that only same-layout comparisons may use).
 OUTCOME_CODE = 'dominance_ratio_zero_denominator'
+# D-189: the one step-9b outcome-class code (claim-side-bound non-issuance; it stops nothing).
+NOT_ISSUABLE_CODE = 'claim_side_bound_not_issuable'
 SENTINEL_PLAN = 'v5-b5-alpha-a1-s10-synthetic'
 
 
@@ -208,6 +210,7 @@ def base_model() -> dict:
         'step_codes': None,     # None: no step-codes.jsonl; otherwise {'raw_code', 'exception_class',
                                 # 'invocation' (None: count the step's logs), 'member'}
         'refused_at': None,     # serial position of an outcome-class refusal, if any
+        'nonissuance_9b': False,  # D-189: step 9b's non-stopping claim-side-bound non-issuance
         'refusal_code': SENTINEL_CODE,
         'refusal_status': 'outcome_class',   # or 'tooling_refusal' (code then public in the record)
                                              # or 'unclassified_refusal' (exit status 'refusal_exit')
@@ -266,10 +269,17 @@ def build(model: dict, root: Path) -> Path:
         for later in steps[refused + 1:]:
             later.update(status='not_run', exit_status=None, registered_exit=None, schema_valid=None,
                          refusal=None, flags=[])
+    nonissued = POS['9b'] if model.get('nonissuance_9b') else None
+    if nonissued is not None:
+        # As the driver writes it: outcome_class at the helper's exit 3, no output, nothing stopped.
+        steps[nonissued].update(status='outcome_class', exit_status=3, registered_exit=None, schema_valid=None,
+                                refusal='outcome-class refusal at step 9b', flags=[])
     for row in steps:
         row['outputs'] = []
     for f in model['files']:
         if refused is not None and f['pos'] > refused:
+            continue
+        if f['pos'] == nonissued:
             continue
         body = _resolve(f['body'], names, shas, commit)
         template = f['template'].split('#', 1)[0]
@@ -292,6 +302,8 @@ def build(model: dict, root: Path) -> Path:
         step, window = STEPS[refused]
         (logs / f'{refused + 1:04d}-{step}-{window or "block"}.stderr.log').write_text(
             f'step {step} progress line\nerror: {model["refusal_code"]}\n')
+    if nonissued is not None:
+        (logs / f'{nonissued + 1:04d}-9b-block.stderr.log').write_text(f'error: {NOT_ISSUABLE_CODE}\n')
     if model['step_codes'] is not None:
         rows = []
         for i, row in enumerate(steps):
@@ -300,6 +312,8 @@ def build(model: dict, root: Path) -> Path:
             invocation = member = None
             if row['status'] == 'tooling_refusal':
                 code = row['refusal']
+            elif i == nonissued:
+                code = model['step_codes'].get('nonissuance_code', NOT_ISSUABLE_CODE)
             elif row['status'] in ('outcome_class', 'unclassified_refusal'):
                 code, exc = model['step_codes']['raw_code'], model['step_codes']['exception_class']
             elif row['exit_status'] not in (None, 0):
@@ -431,11 +445,17 @@ def _refused(pos, code=SENTINEL_CODE, status='outcome_class', exit_status=2):
     return apply
 
 
-def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal', invocation=None, member=None):
+def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal', invocation=None, member=None,
+                nonissuance_code=NOT_ISSUABLE_CODE):
     def apply(model):
         model['step_codes'] = {'raw_code': raw_code, 'exception_class': exception_class,
-                               'invocation': invocation, 'member': member}
+                               'invocation': invocation, 'member': member, 'nonissuance_code': nonissuance_code}
     return apply
+
+
+def _nonissuance_9b(model):
+    """D-189: step 9b issues no claim-side bound (no sidecar, no receipt); steps 10 and 11 still run."""
+    model['nonissuance_9b'] = True
 
 
 def _invocation_refusal(step, count, window=None, code='kept_bundle_strict_validation_failed'):

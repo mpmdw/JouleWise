@@ -485,6 +485,11 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
             'outcome-class refusal at step '+row['step'] if row['status'] == 'outcome_class' else
             'unclassified refusal at step '+row['step'] if row['status'] == 'unclassified_refusal' else row['refusal'])
         need(row['refusal'] == expected)
+        # D-189: a step-9b outcome class is the claim-side-bound non-issuance, in
+        # exactly its one shape, and it is the only refusing row that does not stop.
+        nonstopping = is_nonstopping_outcome(row)
+        if row['step'] == '9b' and row['status'] == 'outcome_class':
+            need(nonstopping)
         if row['status'] == 'tooling_refusal':
             need(type(row['refusal']) is str and row['refusal'] in classes and _TOKEN.fullmatch(row['refusal']) is not None)
         if row['status'] == 'not_run':
@@ -497,7 +502,7 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
         if row['status']=='ok':
             need(row['exit_status']==0 or (row['step']=='4' and row['exit_status']==1
                  and row['registered_exit']=='p42_floor_cells_only'))
-        if row['status'] not in ('ok','not_run'):stopped=True
+        if row['status'] not in ('ok','not_run') and not nonstopping:stopped=True
     boolean(record['completed_without_tooling_refusal'])
     need(record['completed_without_tooling_refusal'] == (bool(record['steps']) and not any(
         s['status'] in ('tooling_refusal','unclassified_refusal') for s in record['steps'])))
@@ -1344,12 +1349,124 @@ def _custody_documents(s, *, pack, family, role, inputs, census_name):
                                                'expected_sha256':item['sha256']},'receipt':receipt_binding})
 
 
+# D-189 (ruling A, Ed 2026-11-04; the attempt-E step-9b refusal). Step 9 can
+# legitimately leave a verdict contrast in a registered state from which
+# claim_side_bound.produce_claim_side_bound cannot issue the D-178 sidecar (a refused
+# floor resolution, a null interval, no deterministic term, no anchor term). That is
+# not an empirical negative result and not a tooling defect (paper_claim_side_bound.md):
+# step 9b then writes no sidecar, opens no claim-evidence custody and records this one
+# outcome-class code, which never says which state. It does not stop steps 10 and 11
+# (they read nothing 9b writes); a paper fill that needs the side bound has no
+# VerifiedClaimEvidence and refuses downstream. Any other producer refusal after this
+# check is a provenance defect: a tooling refusal under its own code.
+CLAIM_SIDE_BOUND_NOT_ISSUABLE = 'claim_side_bound_not_issuable'
+CLAIM_SIDE_BOUND_NOT_ISSUABLE_EXIT = 3
+_CLAIM_SIDE_BOUND_ANCHOR = 'E_clock_anchor_shift_bound_j'   # claim_side_bound._ANCHOR
+_ISSUABLE_RESOLUTIONS = frozenset({'exact', 'transported'})   # claim_side_bound._project
+
+
+class _StructureNumber:
+    """A JSON number read as structure only: its value is never parsed."""
+    __slots__ = ()
+
+
+_STRUCTURE_NUMBER = _StructureNumber()
+
+
+def _structure_number(token):
+    return _STRUCTURE_NUMBER
+
+
+def _structure_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate JSON key')
+        result[key] = value
+    return result
+
+
+def _contrast_not_issuable(contrast):
+    if not isinstance(contrast, dict):
+        return False
+    floor = contrast.get('floor')
+    resolutions = floor.get('resolutions') if isinstance(floor, dict) else None
+    if isinstance(resolutions, list) and any(
+            isinstance(row, dict) and type(row.get('status')) is str and row['status'] not in _ISSUABLE_RESOLUTIONS
+            for row in resolutions):
+        return True
+    estimator, bounds = contrast.get('estimator'), contrast.get('deterministic_bounds')
+    if isinstance(estimator, dict) and 'metrology_aware_CI95' in estimator and estimator['metrology_aware_CI95'] is None:
+        return True
+    if not isinstance(bounds, dict):
+        return False
+    if 'decision_interval' in bounds and bounds['decision_interval'] is None:
+        return True
+    terms = bounds.get('terms')
+    if not isinstance(terms, list):
+        return False
+    if not terms:
+        return True
+    if all(isinstance(term, dict) and type(term.get('name')) is str for term in terms):
+        return _CLAIM_SIDE_BOUND_ANCHOR not in {term['name'] for term in terms}
+    return False
+
+
+def claim_side_bound_not_issuable(verdicts_raw) -> bool:
+    """Whether step 9's verdict bytes leave a contrast in a registered non-issuable state (D-189).
+
+    Exactly the producer's legitimate-state conditions (claim_side_bound._project):
+    a floor resolution whose status is outside {exact, transported}, a null
+    estimator.metrology_aware_CI95 or deterministic_bounds.decision_interval, an
+    empty deterministic_bounds.terms list, or terms without the anchor term.
+    Structure only: every JSON number is an opaque marker, never a value. Bytes the
+    producer refuses before any contrast (not JSON, a duplicate key, no contrast
+    list) are not such a state; the producer then refuses as before.
+    """
+    if type(verdicts_raw) is not bytes:
+        return False
+    try:
+        verdicts = json.loads(verdicts_raw.decode('utf-8'), object_pairs_hook=_structure_object,
+                              parse_int=_structure_number, parse_float=_structure_number,
+                              parse_constant=_structure_number)
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        return False
+    contrasts = verdicts.get('contrasts') if isinstance(verdicts, dict) else None
+    return isinstance(contrasts, list) and any(_contrast_not_issuable(contrast) for contrast in contrasts)
+
+
+def is_nonstopping_outcome(row) -> bool:
+    """The one refusing row that does not stop the run: step 9b's claim-side-bound non-issuance (D-189).
+
+    Exactly this shape: step 9b, no window, outcome_class at the helper's exit 3,
+    no output, no flag. step_record maps only listed codes to outcome_class, and
+    the 9b helper's only listed code is CLAIM_SIDE_BOUND_NOT_ISSUABLE.
+    """
+    if isinstance(row, StepRecord):
+        row = row.as_dict()
+    return (type(row) is dict and row.get('step') == '9b' and row.get('window') is None
+            and row.get('status') == 'outcome_class' and row.get('exit_status') == CLAIM_SIDE_BOUND_NOT_ISSUABLE_EXIT
+            and type(row.get('exit_status')) is int
+            and row.get('registered_exit') is None and row.get('schema_valid') is None
+            and row.get('outputs') == [] and row.get('flags') == []
+            and row.get('refusal') == 'outcome-class refusal at step 9b')
+
+
 def _claim_open(s,argv):
     from joulewise import paper_custody as c
-    from joulewise.analysis_engine.claim_side_bound import produce_claim_side_bound
+    from joulewise.analysis_engine.claim_side_bound import ClaimSideBoundRefusal, produce_claim_side_bound
     before=set(s.outputs)
     manifest,floor=s.read('finalized_manifest'),s.read('floor_artifact')
-    raw=produce_claim_side_bound(s.output('claim_verdicts').read_bytes(),finalized_manifest=manifest,floor_artifact=floor)
+    verdicts_raw=s.output('claim_verdicts').read_bytes()
+    if claim_side_bound_not_issuable(verdicts_raw):
+        # D-189: the registered outcome; nothing is written and no custody is opened.
+        print('error: '+CLAIM_SIDE_BOUND_NOT_ISSUABLE,file=sys.stderr)
+        return CLAIM_SIDE_BOUND_NOT_ISSUABLE_EXIT
+    try:
+        raw=produce_claim_side_bound(verdicts_raw,finalized_manifest=manifest,floor_artifact=floor)
+    except ClaimSideBoundRefusal as exc:
+        # D-189: past the check above, a producer refusal is a provenance defect (tooling).
+        raise AnalysisRefusal(exc.code) from None
     s.write('claim_side_bound','custody/claim-side-bound.json',raw=raw,addressed=True)
     owners={str(root):pack for pack,window in s.windows.items() for root in (window.claim_runs_root,)}
     request=c.claim_replay_request(claim_verdicts_sha256=s.outputs['claim_verdicts']['sha256'],
@@ -1870,7 +1987,9 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
                 s.step_records.append(record)
                 if record.step!='11':
                     print('step '+record.step+' '+(record.window or '-')+' '+record.status,file=sys.stderr)
-            if any(record.status!='ok' for record in records):stopped=True
+            # D-189: step 9b's claim-side-bound non-issuance is the one refusing row that
+            # does not stop the steps after it.
+            if any(record.status!='ok' and not is_nonstopping_outcome(record) for record in records):stopped=True
         attempts,windows,census=_record_parts(s)
         sealed={key:s.pins.sealed[{'flag_catalog_sha256':'catalog_sha256'}.get(key,key)] for key in SEAL_KEYS}
         record=build_dry_run_record(mode=mode,analysis_commit=commit,window_index_sha256=s.index.sha256 if s.index else _index_digest(index),

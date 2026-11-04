@@ -382,6 +382,7 @@
   "custody/registered-inputs/beta/prompt_pin:selection_record",
   "custody/registered-inputs/beta/prompt_pin:special_token_policy",
   "decisions:first_refusal",
+  "decisions:nonstopping_outcomes",
   "decisions:step_codes",
   "decisions:step_outputs",
   "disclosures/artifact.json:block_lines",
