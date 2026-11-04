@@ -1,0 +1,209 @@
+{
+  "purpose": "Read-only archived pilot-2/3 shape census; no live validation.",
+  "archives": [
+    {
+      "label": "pilot-2",
+      "root": "/Users/edr/night-align/pilot-v1-20261102T183609Z",
+      "pilot_sha256": "7cb4eba6c97029c56ff20ad4c09772dde4b58776484f7d432f1960dc1ba50206",
+      "member_count": 12,
+      "readable_summary_count": 12,
+      "summary_missing": {
+        "seed": 0,
+        "duration_s": 0
+      },
+      "summary_seed_values": [
+        1
+      ],
+      "episode_count": 12,
+      "episode_missing": {
+        "seed": 0,
+        "turns": 0,
+        "start_ns": 0,
+        "end_ns": 0
+      },
+      "turn_count_range": [
+        11,
+        20
+      ],
+      "greedy_config_count": 12,
+      "summary_configuration_missing": 12,
+      "summary_per_turn_clock_missing": 12,
+      "episode_files": [
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-a-e01/outputs/align_episode.json",
+          "sha256": "d28ccb5ce3942a6778da445693f13a376a111aff3a78c680e555ad3982dcaf8d"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-a-e02/outputs/align_episode.json",
+          "sha256": "3971922713943ad7fee14c72c30eacf20b17337dcd5940fba8767dbf6c9ba1cd"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-a-e03/outputs/align_episode.json",
+          "sha256": "6989a883f1155dbaa402d0760b43fb4130d0c2ccfd9cd74cbe025bbe23261369"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-a-e04/outputs/align_episode.json",
+          "sha256": "f082e16dcdc8ed0129b02d5c05670ecf5fbe0cc2ae6e0b04e960ed90fd360f36"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e05/outputs/align_episode.json",
+          "sha256": "d559c93085379795db4eaf8c80ae3125b02deeda6db3a63e9e1331b044761a95"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e06/outputs/align_episode.json",
+          "sha256": "0a3798cd88b46b10c5e3255d42fb059e5f77fcdb68bbdf08dfc00303b85cb9da"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e07/outputs/align_episode.json",
+          "sha256": "4853c12360be2f9446ff80fde158a68a33f8e6e2956d08427562d9070a3d6544"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e08/outputs/align_episode.json",
+          "sha256": "20ff0541a62b980951d3be27effbc194c3f5f823818daea697ae0a479be57cfc"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e09/outputs/align_episode.json",
+          "sha256": "ad0a8e004380e27e359aeb348b2d6eaaf6362a07c649dd99da11fcdfc553d8c4"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e10/outputs/align_episode.json",
+          "sha256": "6f215295db1bde40aea48db7fddc11a1a142786d3f4d0c64a68e1dfddea218c6"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e11/outputs/align_episode.json",
+          "sha256": "e85d6c2686ca00bc8d1ebef37e8d5b2e964b4ee1139b4568b311a40bdb2a4cfe"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v1/align-pilot-v1-episodes-b-e12/outputs/align_episode.json",
+          "sha256": "05a2a4d686db0c52b021ff657e48a808cadb8d3736e5952b2f3fcd6b7817e05c"
+        }
+      ]
+    },
+    {
+      "label": "pilot-3",
+      "root": "/Users/edr/night-align/pilot-v2-20261103T035512Z",
+      "pilot_sha256": "13a12d89b9bdb6a682443f575d755cf6e3cf7a58e66911127c5767bbaa276cf1",
+      "member_count": 24,
+      "readable_summary_count": 24,
+      "summary_missing": {
+        "seed": 0,
+        "duration_s": 0
+      },
+      "summary_seed_values": [
+        1
+      ],
+      "episode_count": 24,
+      "episode_missing": {
+        "seed": 0,
+        "turns": 0,
+        "start_ns": 0,
+        "end_ns": 0
+      },
+      "turn_count_range": [
+        6,
+        20
+      ],
+      "greedy_config_count": 24,
+      "summary_configuration_missing": 24,
+      "summary_per_turn_clock_missing": 24,
+      "episode_files": [
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e01/outputs/align_episode.json",
+          "sha256": "3ca28aceff5de3c79318f76d1aa31531ef6dc6cc06b34c4ca173cf76af059495"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e02/outputs/align_episode.json",
+          "sha256": "d78805ad15a6a218a5a96141140259df6169a62ad8f2e13237232a8d2598406f"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e03/outputs/align_episode.json",
+          "sha256": "1c47ba73e522a346558866e667ca5d467daa9da8f621e53148306004039bb2a6"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e04/outputs/align_episode.json",
+          "sha256": "6f1664ddbebeaf63003a774a63f1e775079ce0302045592b4dac8b21edac8550"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e05/outputs/align_episode.json",
+          "sha256": "fa6ea2869c132458481412609a70c79ff2c965d0f194959590cf1610c9937f26"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e06/outputs/align_episode.json",
+          "sha256": "9b29415990a8244affca72807913d3fa789c477617c93e28d8febb1e32a6d0c2"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e07/outputs/align_episode.json",
+          "sha256": "6306e5ee404ae703334c7e08a598fb9efb890f95462e19d9f0e765807668d54b"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e08/outputs/align_episode.json",
+          "sha256": "7b14e929c2d52013cae39f98a86663beb5485196c3f3206931e5b0afcab764c7"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e09/outputs/align_episode.json",
+          "sha256": "ce0183545487d79d668a49db96c1de7fc3f563fde44a1df1a2d00dd3789ed203"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e10/outputs/align_episode.json",
+          "sha256": "6aa919a67d11f45e79d5974af5d73eeffd57cd82f07e2018d59a60867c32319a"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e11/outputs/align_episode.json",
+          "sha256": "d4b2bb8fad90b9b3af3a969d18bb5d4e382190fd5f1d35bea21909f2e987b82e"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e12/outputs/align_episode.json",
+          "sha256": "d698a7788eea0ffcbe508f02176762c4c3516d7738672016ef8c26f24dd16f49"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e13/outputs/align_episode.json",
+          "sha256": "ed4ca30901d3d6357afabfde07ac8ae19294b6754478a6f7bb8b3a95cc7cbe7b"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e14/outputs/align_episode.json",
+          "sha256": "f009ad06bf36b1e8bcb070b0f4f2b0fe82d7c67c515fb0081de3af075d36f5d9"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e15/outputs/align_episode.json",
+          "sha256": "afdcf0997bdb1dec1262c1fa58364fad4f0b45d497942551e7e521513f840bfb"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e16/outputs/align_episode.json",
+          "sha256": "08f2cb9c6be5861c7370a28faecd2f618afe4e567df79773f3d65728189c53e0"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e17/outputs/align_episode.json",
+          "sha256": "867f4386aec7cc3c1aad17ca9748cdf5bd982eff24d8a340c7caa5611ce69efc"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e18/outputs/align_episode.json",
+          "sha256": "85dc78110a18a5ca5fa84782fb981932c12ce827da24588043ae1417e170a091"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e19/outputs/align_episode.json",
+          "sha256": "e0cfb2df29ec1f2f2e6a7b183ad6d0f5d359624de2e29f26f724d3275ae3ac63"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e20/outputs/align_episode.json",
+          "sha256": "036db36d0cdcf4eade96bfc14afe485c7d2968cf4adcaf43c81a2ca965dfe97e"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e21/outputs/align_episode.json",
+          "sha256": "de5f7d952cd82b051983b0612b1f08d535cea2a541872e8032c4e03f7a7a7de6"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e22/outputs/align_episode.json",
+          "sha256": "feea30ce24947e69a8ac6a142901e28cde834c80644f96f7609d3c6b8bbe85d2"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e23/outputs/align_episode.json",
+          "sha256": "f5108091c2ec1738a436326a742e81b49c034ddc80bf64c43df10a9b05c3bc9d"
+        },
+        {
+          "path": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-b-e24/outputs/align_episode.json",
+          "sha256": "a82157a6001596e486fca4153678d1a71bf1fe1b91e71dc8701db8b3b3ab257b"
+        }
+      ]
+    }
+  ]
+}
