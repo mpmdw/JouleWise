@@ -219,6 +219,19 @@ def nofollow_first(path, directories):
     return None
 
 
+def nofollow_relative(path, directory, relative):
+    """One no-follow read of ``relative`` under ``directory``; a failure is reported by its errno."""
+
+    import errno
+
+    from joulewise.authentication_io import read_authentication_input_nofollow
+
+    try:
+        return "ok:" + read_authentication_input_nofollow(directory, relative, grammar="raw", label="x").decode()
+    except OSError as exc:
+        return "err:" + errno.errorcode.get(exc.errno, str(exc.errno))
+
+
 def open_first(path, candidates):
     for candidate in candidates:
         try:
@@ -386,6 +399,49 @@ class HC1Synthetic(unittest.TestCase):
                           entry.directories)
             self.assertEqual(vdl.call("W_nofollow_ok", nofollow_first, self.tree, directories), "2")
             self.assertEqual(caches.vdl.restricted_counters().get("W_nofollow_ok:hit"), 1)
+
+    def test_middle_component_swapped_for_a_symlink_is_a_miss(self):
+        """Review of #641 (LOW): a hit re-checks the resolved identity (symlinks followed); the serial read does not."""
+
+        from joulewise.authentication_io import V2AuthenticationReadSession
+
+        for sessioned in (False, True):
+            for swap in ("symlink", "mode"):
+                with self.subTest(session=sessioned, swap=swap):
+                    root = Path(tempfile.mkdtemp(prefix="nofollow-middle-", dir=self.tmp))
+                    (root / "sub" / "deeper").mkdir(parents=True)
+                    (root / "sub" / "deeper" / "p.json").write_text("2")
+                    leaf = f"W_nofollow_middle_{int(sessioned)}_{swap}"
+                    spec = vdl.LeafSpec(leaf, (f"{MODULE}:nofollow_relative",),
+                                        (("path", vdl.TREE), ("directory", vdl.SCALAR), ("relative", vdl.SCALAR)))
+                    session = V2AuthenticationReadSession if sessioned else contextlib.nullcontext
+                    args = (self.tree, str(root), "sub/deeper/p.json")
+                    with vdl._registered(spec), run() as caches:
+                        with session():
+                            self.assertEqual(vdl.call(leaf, nofollow_relative, *args), "ok:2")
+                        entry, = caches.vdl._entries.values()
+                        bound = dict(entry.directories)
+                        resolved = root.resolve()
+                        self.assertIn(str(resolved / "sub"), bound)
+                        self.assertIn(str(resolved / "sub" / "deeper"), bound)
+                        with session():
+                            self.assertEqual(vdl.call(leaf, nofollow_relative, *args), "ok:2")
+                        self.assertEqual(caches.vdl.restricted_counters().get(f"{leaf}:hit"), 1)
+                        if swap == "symlink":
+                            copy_of = self.tmp / f"copy-{int(sessioned)}"
+                            shutil.copytree(root / "sub", copy_of)
+                            shutil.rmtree(root / "sub")
+                            (root / "sub").symlink_to(copy_of, target_is_directory=True)
+                        else:
+                            (root / "sub" / "deeper").chmod(0o500)
+                            self.addCleanup((root / "sub" / "deeper").chmod, 0o700)
+                        with session():
+                            fresh = nofollow_relative(*args)
+                        if swap == "symlink":
+                            self.assertTrue(fresh.startswith("err:"), fresh)
+                        with session():
+                            self.assertEqual(vdl.call(leaf, nofollow_relative, *args), fresh)
+                        self.assertEqual(caches.vdl.restricted_counters().get(f"{leaf}:hit"), 1)
 
     def test_opened_directory_must_stay_a_directory_with_its_mode(self):
         candidate = self.tmp / "candidate.json"

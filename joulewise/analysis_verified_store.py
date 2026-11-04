@@ -2095,14 +2095,27 @@ class VerifiedStore:
         # no-follow read, which leaves no row to re-verify, so the fill is
         # unstorable rather than silently omitting that dependency.
         nofollow: dict[str, int] = {}
+        # Review of #641 (LOW): a hit re-checks a no-follow row through its
+        # resolved identity, which follows symlinks, while the serial read
+        # opens every component with O_NOFOLLOW|O_DIRECTORY. Each middle
+        # component is therefore bound as a real directory with its mode
+        # (lstat), so swapping one for a symlink (to an identical copy) is a
+        # miss. The read succeeded, so no component was a symlink and the
+        # resolved identity ends in exactly the row's relative parts.
+        middles: list[str] = []
         for row in recorded or ():
             relative = getattr(row, "relative", None)
             identity = getattr(row, "identity", None)
             if relative:
-                for part in Path(relative).parts:
+                parts = Path(relative).parts
+                for part in parts:
                     nofollow[part] = nofollow.get(part, 0) + 1
-                if identity:
-                    fill.reads.append(identity)
+                if not identity or identity.startswith("git:"):
+                    raise _Bypass("no-follow read without a filesystem identity")
+                if Path(identity).parts[-len(parts):] != parts:
+                    raise _Bypass("no-follow identity does not end in its relative path")
+                middles.extend(os.fspath(parent) for parent in Path(identity).parents[:len(parts) - 1])
+                fill.reads.append(identity)
             elif getattr(row, "identity", None) is None:
                 raise _Bypass("unattributable authentication read")
         for name in fill.relative_opens:
@@ -2143,6 +2156,9 @@ class VerifiedStore:
             if directories.setdefault(resolved, mode) != mode:
                 raise _Bypass("opened directory changed during the fill")
 
+        for middle in middles:
+            if not (in_tree(middle, middle) or is_code(middle)):
+                directory(middle)
         for path in fill.reads:
             resolved = os.path.realpath(path)
             if in_tree(path, resolved) or is_code(resolved):
