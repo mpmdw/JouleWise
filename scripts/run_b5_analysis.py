@@ -59,8 +59,11 @@ where the status is one of ok, tooling_refusal, outcome_class, unclassified_refu
 standard output one line, the record's path and its SHA-256. A refusal code reaches the record only
 if the tracked table configs/analysis/b5/dry_run_refusal_classes.json lists it as a tooling refusal;
 an outcome-class refusal prints only "outcome-class refusal at step N" and any code in neither list
-only "unclassified refusal at step N". Exit status: 0 when every step completed (step 4's registered
-p42 outcome counts as completed), 3 when the run ended at an outcome-class refusal, 2 otherwise.
+only "unclassified refusal at step N". A refusal stops every later step, with one exception (D-189):
+step 9b's claim-side-bound non-issuance (a registered not-resolvable or not-estimable verdict contrast)
+is an outcome-class refusal after which steps 10 and 11 still run. Exit status: 0 when every step
+completed (step 4's registered p42 outcome counts as completed), 3 when the record carries an
+outcome-class refusal and no tooling or unclassified refusal, 2 otherwise.
 """
 from __future__ import annotations
 import argparse
