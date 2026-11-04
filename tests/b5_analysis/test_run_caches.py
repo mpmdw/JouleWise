@@ -158,6 +158,54 @@ class ContentKeyTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises((TypeError, ValueError)):
                 key(bad)
 
+    def test_canonical_key_never_exhausts_the_recursion_budget(self):
+        # Review of PR #640 (finding S2): the encoder is iterative, so nesting depth
+        # alone never raises RecursionError (an uncaught crash in every memo caller).
+        key = arc.canonical_key
+        for depth in (600, 5000):
+            with self.subTest(depth=depth):
+                listed, mapped = None, None
+                for _ in range(depth):
+                    listed, mapped = [listed], {'k': mapped}
+                self.assertRegex(key(listed), r'^[0-9a-f]{64}$')
+                self.assertRegex(key(mapped), r'^[0-9a-f]{64}$')
+                self.assertNotEqual(key(listed), key([listed]))
+        cyclic = []
+        cyclic.append(cyclic)
+        with self.assertRaises(TypeError):
+            key(cyclic)
+        shared = [1.5]
+        self.assertEqual(key([shared, shared]), key([[1.5], [1.5]]), 'a shared (acyclic) value is not a cycle')
+
+    def test_iterative_encoding_is_the_framed_encoding(self):
+        # The framed, type-tagged bytes of 4d6c575da's recursive encoder (finding A), restated.
+        def frame(tag, payload):
+            return tag + str(len(payload)).encode() + b':' + payload
+
+        def ref(item):
+            if item is None:
+                return b'N'
+            if item is True or item is False:
+                return b'T' if item else b'F'
+            kind = type(item)
+            name = f'{kind.__module__}.{kind.__qualname__}'.encode() + b'\0'
+            if kind is int:
+                return frame(b'i', str(item).encode())
+            if kind is float:
+                return frame(b'f', item.hex().encode())
+            if kind is str:
+                return frame(b's', item.encode('utf-8', 'surrogatepass'))
+            if isinstance(item, (list, tuple)):
+                return frame(b'l', name + b''.join(frame(b'm', ref(e)) for e in item))
+            pairs = sorted((ref(k), ref(v)) for k, v in item.items())
+            return frame(b'd', name + b''.join(frame(b'k', k) + frame(b'v', v) for k, v in pairs))
+
+        values = [None, True, 0, -7, 2 ** 80, -0.0, 1e300, 'é', [], (), {}, [1, (2.5, None)],
+                  {'b': [{'a': ()}], 'a': 'x', '': [[], [[]]]}, [{'float': (0.1).hex()}, 0.1]]
+        for value in values:
+            with self.subTest(value=value):
+                self.assertEqual(arc._canonical_bytes(value), ref(value))
+
 
 class ThermalScanMemoTests(_Member):
     def scan(self, member=None):

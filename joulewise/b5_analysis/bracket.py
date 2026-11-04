@@ -5,15 +5,19 @@ handled by the frozen evaluator (and by finalization), never by B_max.
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import math
-from pathlib import Path
+import os
+from pathlib import Path, PurePath
+import pickle
 import tempfile
 from typing import Any, Mapping, Sequence
 
+from joulewise import analysis_verified_store as vdl
 from joulewise import calibration_bracketing as calibration
 from joulewise import calibration_ledger as ledger
 from joulewise.bundle_read import BundleReadError, BundleReader
@@ -161,6 +165,117 @@ def _scheduled_candidate(target: Path) -> bool:
         return False
 
 
+L4 = "L4_calibration_bracket"
+
+
+def _seed_copy(target: Path, digests: Mapping[str, str]) -> None:
+    """D-188 L4/L1: hand the store this copy's authenticated digests (no re-hash).
+
+    Only digests the copy-out just authenticated against SHA256SUMS are
+    seeded, as the content-only (path-free) form both bracket leaves use. The
+    seed is lstat-guarded; a copy that changes afterwards is simply re-hashed.
+    A seed the store does not take changes nothing but the hashing cost.
+    """
+    try:
+        vdl.seed_verified(target, digests, content_only=True)
+    except Exception:  # noqa: BLE001 - a seed is only a hashing shortcut, never a decision input
+        pass
+
+
+def _servable(assessment: Any, reasons: Any) -> bool:
+    """Whether a stored L4 value may be served: exactly the outcome this caller accepts.
+
+    Sol #5 (D-188 detail critique): the frozen discovery probes every
+    candidate locator with probe_custody (calibration_ledger.py:5476-5566), a
+    daemon-thread exists/is_dir check bounded by a two-second timeout. Absence,
+    a probe exception and a timeout all return "absent" without opening
+    anything, so the fill's read set cannot bind them. Discovery is all or
+    nothing (calibration_bracketing.py:1986-1988: one absent candidate returns
+    no candidates), and no bracket passes without candidates. So a passed,
+    reason-free assessment implies that every probe was positive and every
+    candidate's manifest and artifacts were read (and are re-verified on a hit
+    as recorded extras), while any other outcome may rest on an unrecorded
+    negative or timed-out probe. Only the former is ever served; every other
+    outcome is recomputed here, live, by the frozen code, so a timeout or
+    absence decision is always the serial one at the serial position.
+    """
+    bound = assessment.get("b_fiducial_s") if isinstance(assessment, Mapping) else None
+    return (isinstance(assessment, Mapping) and assessment.get("status") == "passed"
+            and isinstance(reasons, tuple) and not reasons
+            and type(bound) in (int, float) and math.isfinite(bound) and bound >= 0)
+
+
+def _storable_value(value: Any) -> bool:
+    """Whether an L4 return value is the servable shape (a LeafSpec value predicate).
+
+    Today a non-servable fill is still stored (and exported), only never
+    served. The store has no per-leaf value predicate yet; this is the one the
+    L4 spec should reference (review of PR #634, finding 1: deferred to
+    AUTH-IO-2, which owns analysis_verified_store.py) so that a fill resting on
+    a negative or timed-out custody probe is never stored, exported or merged.
+    """
+    return isinstance(value, tuple) and len(value) == 2 and _servable(*value)
+
+
+def _located_as_recorded(entry: Any) -> bool:
+    """Whether every out-of-tree path a stored L4 value read still resolves to itself.
+
+    The store records extras and listings at their realpaths and re-verifies
+    them with lstat on the full path, which follows a symlink in any ancestor.
+    A candidate directory moved out of the claim runs root and replaced by a
+    symlink keeps its inodes, so the hit would verify, while the frozen loader
+    (calibration_bracketing.py:1678-1682) resolves the locator and refuses it
+    as outside the runs root. A recorded path whose realpath is no longer
+    itself is never served (review of PR #634, finding 2); the frozen code
+    then runs live. Anything unreadable falls closed.
+    """
+    try:
+        paths = [path for path, _ in entry.extras] + [path for path, _ in entry.listings]
+        return all(isinstance(path, str) and os.path.realpath(path) == path for path in paths)
+    except Exception:  # noqa: BLE001 - an unreadable entry is never served
+        return False
+
+
+def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any, **kwargs: Any):
+    """Leaf L4 (D-188): the frozen calibration_bracket_for_bundles, served from the VDL store.
+
+    Outside an analysis run with a store, for a relative runs root (Sol #6:
+    the frozen evaluator spells it with Path.absolute(), which a relative
+    spelling would make depend on the working directory, which no key
+    carries), or without a ledger snapshot, this is exactly the frozen call. Otherwise the store keys the
+    runs root as given (a scalar), every other argument, and the copies by
+    content only (path-free: each evaluation copies into a fresh temporary
+    root; the store relocates in-tree reads, Sol #4). A stored value is served
+    only when it is the passed, reason-free outcome (``_servable``) and every
+    out-of-tree path it read still resolves to itself (``_located_as_recorded``); a probe is
+    side-effect free, so a non-servable entry costs one key computation and the
+    call then runs the frozen code directly, never through the store.
+    """
+    fn = calibration.calibration_bracket_for_bundles
+    store = vdl.active_store()
+    if store is None or not isinstance(runs_root, (str, PurePath)) or not Path(runs_root).is_absolute():
+        return fn(runs_root, paths, policy, **kwargs)
+    snapshot = kwargs.get("ledger_snapshot")
+    if not isinstance(snapshot, ledger.CalibrationLedgerSnapshot) or not isinstance(snapshot.ledger_path, PurePath):
+        return fn(runs_root, paths, policy, **kwargs)
+    # _snapshot loads the authenticated prefix from a per-evaluation temporary
+    # file, deleted before this call, so the snapshot's ledger_path would make
+    # every evaluation's key distinct. Nothing reads that field
+    # (calibration_bracketing.py never names it, and no snapshot method does;
+    # test_leaf_bracket checks both): key and pass its final name only, like
+    # the path-free copies.
+    kwargs = dict(kwargs, ledger_snapshot=dataclasses.replace(snapshot, ledger_path=Path(snapshot.ledger_path.name)))
+    hit = store.probe(L4, fn, runs_root, paths, policy, **kwargs)
+    if hit is not None:
+        try:
+            servable = _storable_value(pickle.loads(hit.entry.value)) and _located_as_recorded(hit.entry)
+        except Exception:  # noqa: BLE001 - an unreadable entry is never served
+            servable = False
+        if not servable:
+            return fn(runs_root, paths, policy, **kwargs)
+    return store.call(L4, fn, runs_root, paths, policy, **kwargs)
+
+
 def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
     """Recompute the harvest's selection from authenticated complete bundles.
 
@@ -208,19 +323,27 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
                           if name.endswith("/metadata.json")
                           and str(Path(name).parent) in registered_ids})
         copies, failed = [], None
+        seeding = vdl.active_store() is not None
         for relative in bundles:
             try:
                 target = directory / relative
                 target.mkdir()
+                digests = {}
                 for name in sorted(inventory):
                     if not name.startswith(relative + "/"):
                         continue
                     output = target / Path(name).relative_to(relative)
                     output.parent.mkdir(parents=True, exist_ok=True)
                     output.write_bytes(inputs.source(f"{source_root}/{name}"))
+                    # inputs.source returned exactly these bytes only after
+                    # checking them against this SHA256SUMS digest.
+                    digests[Path(name).relative_to(relative).as_posix()] = inputs.manifest[
+                        f"{source_root}/{name}".removeprefix("sources/")]
             except Exception as exc:  # noqa: BLE001 - raised after the bundles before it
                 failed = exc
                 break
+            if seeding:
+                _seed_copy(target, digests)
             copies.append((relative, target, len(census)))
         pooled = pool_active() and is_genuine(validate_bundle, "joulewise.cli:validate_bundle")
         scheduled = [target for _, target, _ in copies if pooled and _scheduled_candidate(target)]
@@ -318,7 +441,7 @@ def evaluate_window_bracket(archive: ArchiveHandle, *, repo_root: Path) -> Windo
         raise AnalysisRefusal("window_bracket_not_passed")
     with tempfile.TemporaryDirectory(prefix="l9-bracket-members-") as directory:
         paths = _window_inputs(archive, inputs, Path(directory))
-        assessment, reasons = calibration.calibration_bracket_for_bundles(
+        assessment, reasons = _calibration_assessment(
             archive.window.claim_runs_root, paths, policy, mode="issuing",
             ledger_snapshot=snapshot, bracket_binding=binding,
             bracket_window_id=window_id, bracket_plan_id=plan_id, bracket_plan_sha256=plan_sha256,

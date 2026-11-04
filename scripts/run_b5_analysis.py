@@ -44,6 +44,16 @@ The arguments, each the only thing of its kind the run takes:
                        own subdirectory (dry-run/ or release/) already exists, so a dry run that
                        must be repeated after a blind repair takes a new custody root.
 
+Environment (D-188, not an argument): JOULEWISE_B5_VDL selects the verified derivation store
+(joulewise/analysis_verified_store.py). On this command's run (real data) an unset value, "on" or a
+shadow request all run the store serving with no new refusal path (a store defect is only counted in
+restricted/logs/runtime-vdl-counters.json and the store stops serving); "off" or a malformed value
+runs without it, exactly as before. The resolved mode is a fixed token (off, on, blind_on,
+shadow_<permille>) that names restricted/logs/run-vdl-mode-<token>.json, which the record binds
+beside restricted/decisions/step-codes.jsonl (one row per record step with its raw refusal code,
+for the D-188 result-equivalence comparator, then one random whitespace-only salt line so the
+record's digest of it reveals no redacted code) in the outputs of the last step that ran.
+
 What the run prints: on standard error one line per step as it ends, "step <id> <pack or -> <status>",
 where the status is one of ok, tooling_refusal, outcome_class, unclassified_refusal, not_run; on
 standard output one line, the record's path and its SHA-256. A refusal code reaches the record only

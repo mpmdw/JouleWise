@@ -382,10 +382,20 @@ def _window_thermal_pressure_refusals(
             grammar="raw",
             label=f"bundle {bundle_path.name} idle powermetrics evidence",
         )
-        idle_records = parse_powermetrics_records(
-            idle_raw,
-            timestamp_anchor_s=admission_start_s,
-        )
+        # D-188 (memo-first, Sol #10): the idle parse precedes the measured
+        # plist read, and a failing idle parse refuses before that read. Only
+        # when this run already parsed these exact idle bytes under this
+        # anchor successfully is the parse deferred past the read and the
+        # scan memo below (it is a pure function of both, so it succeeds
+        # again); every other call parses here, in the original order.
+        idle_table, idle_key = _idle_parse_success_key(idle_raw, admission_start_s)
+        idle_records = None
+        if idle_key is None or idle_key not in idle_table:
+            idle_records = parse_powermetrics_records(
+                idle_raw,
+                timestamp_anchor_s=admission_start_s,
+            )
+            _note_idle_parse_success(idle_table, idle_key)
         raw = read_authentication_input(
             bundle_path / "raw" / "powermetrics.plist",
             grammar="raw",
@@ -408,6 +418,11 @@ def _window_thermal_pressure_refusals(
 
             analysis_run_cache.note(_THERMAL_SCAN_MEMO, True)
             return memo_table[memo_key]
+        if idle_records is None:
+            idle_records = parse_powermetrics_records(
+                idle_raw,
+                timestamp_anchor_s=admission_start_s,
+            )
         native = parse_powermetrics_records(raw)
         uncertainty = metadata.get("uncertainty_evidence")
         clock_anchor = (
@@ -452,6 +467,34 @@ def _window_thermal_pressure_refusals(
 
 
 _THERMAL_SCAN_MEMO = "environment_admission.window_thermal_pressure"
+# D-188: (sha256 of idle plist bytes, idle timestamp anchor) pairs whose idle
+# parse succeeded in this run. Successes only: a failing parse is never
+# recorded, so it always runs (and refuses) in its original position.
+_IDLE_PARSE_SUCCESS_MEMO = "environment_admission.idle_parse.succeeded"
+
+
+def _idle_parse_success_key(
+    idle_raw: bytes, admission_start_s: float
+) -> tuple[dict | None, str | None]:
+    """The run's idle-parse success set and this parse's key, or (None, None) outside a run."""
+
+    from joulewise import analysis_run_cache  # noqa: PLC0415
+
+    table = analysis_run_cache.memo(_IDLE_PARSE_SUCCESS_MEMO)
+    if table is None:
+        return None, None
+    try:
+        key = analysis_run_cache.canonical_key(
+            [analysis_run_cache.sha256(idle_raw), admission_start_s]
+        )
+    except (TypeError, ValueError):
+        return table, None
+    return table, key
+
+
+def _note_idle_parse_success(table: dict | None, key: str | None) -> None:
+    if table is not None and key is not None:
+        table[key] = True
 
 
 def _thermal_scan_memo_key(

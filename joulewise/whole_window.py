@@ -18,6 +18,7 @@ import hashlib
 import json
 import math
 import statistics
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -69,6 +70,7 @@ from joulewise.campaign_provenance import (
 )
 # Read-only use of reduce's private envelope helpers by the analysis-side
 # clamp below; reduce.py itself stays byte-identical (L9-ENV-3).
+from joulewise.reduce import reduce_bundle as _GENUINE_REDUCE_BUNDLE
 from joulewise.reduce import (
     ANCHOR_SHIFT_METHOD,
     AXI_REDUCER_VERSION as _AXI_CURRENT_REDUCER_VERSION,
@@ -1414,6 +1416,267 @@ def _member_operative_summary(
     )
 
 
+# --------------------------------------------------------------------------
+# D-188 LEAF-WW: whole-window verified-derivation leaves.
+#
+# Four pure, expensive leaves are served from the run's verified derivation
+# store (joulewise/analysis_verified_store.py) when one is active: the
+# operative re-derivation (L2), the NEG-8 reference reduction (L3), the
+# current environment refusals (L5) and the instrument-calibration
+# verification (L6). Every decision stays here, in the unchanged serial code:
+# a leaf call returns, at the caller's own position, either the value a
+# verified earlier computation of the same leaf on the same bytes returned or
+# the value of calling the leaf itself, there and then; exceptions are never
+# stored. Outside an active store each helper is exactly the original call.
+#
+# The physics cache. L2 and L6 consult the instrument-calibration physics
+# cache through ``physics_cache_for(local, metadata)``, where ``local`` is a
+# call-local dict shared by one preparation's members. The store tracks only
+# what a view shows for the call's own calibration key, so a call goes through
+# the store only when doing so provably leaves ``local`` exactly as the direct
+# call would and every read of the key agrees (``_l6_local_exact``,
+# ``_l2_local_exact``); otherwise the original call runs. The only key either
+# leaf reads or writes is the bundle's own ``instrument_calibration``
+# ``artifact_sha256`` (reduce._verify_instrument_calibration).
+
+_LEAF_OPERATIVE = "L2_operative_summary"
+_LEAF_REDUCE = "L3_reduce_dict"
+_LEAF_ENVIRONMENT = "L5_environment_refusals"
+_LEAF_CALIBRATION = "L6_verify_instrument_calibration"
+# Temporary bundle copies (b5_analysis/bracket.py and b5_analysis/context.py
+# write them with write_bytes under these TemporaryDirectory prefixes; their
+# modes come from the umask) are never routed through the store, so no copy
+# is ever served as a hit.
+_COPY_ROOT_PREFIXES = ("l9-bracket-", "b5-roster-")
+
+
+def _note_clock() -> None:
+    """D-188 clock guard: the wall clock is consulted here.
+
+    No enclosing verified-store fill may be stored (outside a fill this does
+    nothing). Called immediately before each wall-clock read in this module.
+    """
+
+    # A fill can be active only once the store module is imported; this never
+    # imports analysis code into a collection-time path.
+    store_module = sys.modules.get("joulewise.analysis_verified_store")
+    if store_module is not None:
+        store_module.note_clock()
+
+
+def _verified_store_for(*paths: Any) -> Any:
+    """The run's active verified store, or None (no run, off, or a bundle copy)."""
+
+    from joulewise import analysis_run_cache
+
+    caches = analysis_run_cache.current()
+    store = None if caches is None else getattr(caches, "vdl", None)
+    if store is None or not getattr(getattr(store, "mode", None), "active", False):
+        return None
+    for path in paths:
+        if not isinstance(path, (str, Path)):
+            return None
+        if any(part.startswith(_COPY_ROOT_PREFIXES) for part in Path(path).parts):
+            return None
+    return store
+
+
+def _same_float(left: Any, right: Any) -> bool:
+    return type(left) is type(right) is float and left.hex() == right.hex()
+
+
+def _calibration_artifact_key(calibration: Any) -> str | None:
+    key = calibration.get("artifact_sha256") if isinstance(calibration, Mapping) else None
+    return key if isinstance(key, str) else None
+
+
+def _l6_local_exact(view: Any, local: dict[str, float], key: str | None) -> bool:
+    """Whether calling L6 through the store with ``view`` leaves ``local`` as the direct call would.
+
+    ``view`` is exactly the direct call's ``physics_cache_for(local, ...)``.
+    It is ``local`` itself (the store then peeks and inserts into the very
+    dict the direct call would), or a run view over ``local``. For a run view
+    the direct call's only effect on ``local`` is copying or writing ``key``.
+    That is exactly reproduced when ``key`` is already in ``local`` (read
+    first, never rewritten) or absent from the run partition too (then a
+    write lands in both, as a served hit's insert does). The remaining case,
+    a partition entry not yet copied into ``local``, runs the direct call.
+    """
+
+    if view is None or view is local or key is None:
+        return True
+    if not isinstance(view, _RunPhysicsCacheView) or view._local is not local:
+        return False
+    if key in local:
+        return True
+    partition = view._store.get(view._key)
+    return not (isinstance(partition, dict) and key in partition)
+
+
+def _l2_local_exact(view: Any, local: dict[str, float], key: str | None, metadata: Any) -> bool:
+    """Whether L2's own view (``physics_cache_for_call({}, metadata)``) reads exactly as ``view``.
+
+    ``view`` is the direct call's ``physics_cache_for(local, metadata)``. The
+    leaf reads ``key`` from the run partition instead of ``local`` first.
+    Both read the same value, and neither changes ``local``, exactly when
+    ``key`` is already in ``local`` (the member's successful verification put
+    it there) and the leaf's partition holds the identical float: the direct
+    call then reads ``local[key]`` and writes nothing, and the leaf reads the
+    same float from the partition and writes nothing.
+    """
+
+    from joulewise.analysis_run_cache import physics_cache_for_call
+
+    if key is None or key not in local:
+        return False
+    own = physics_cache_for_call({}, metadata)
+    if not isinstance(own, _RunPhysicsCacheView):
+        return False
+    if not (view is local or (isinstance(view, _RunPhysicsCacheView) and view._local is local
+                              and view._store is own._store and view._key == own._key)):
+        return False
+    partition = own._store.get(own._key)
+    return isinstance(partition, dict) and _same_float(partition.get(key), local[key])
+
+
+def _verified_instrument_calibration(
+    path: Path,
+    metadata: dict[str, Any],
+    calibration: dict[str, Any],
+    *,
+    physics_cache: dict[str, float] | None,
+    local: dict[str, float],
+) -> tuple[float | None, str | None]:
+    """L6: ``_verify_instrument_calibration(BundleReader(path), ...)``, through the store when exact.
+
+    Sol #8: the leaf body (``analysis_verified_store.verify_instrument_calibration_at``)
+    builds its reader itself, so no mutable reader is a leaf argument.
+    """
+
+    from joulewise import bundle_read, reduce as _reduce
+
+    store = _verified_store_for(path)
+    if (
+        store is None
+        or _verify_instrument_calibration is not _reduce._verify_instrument_calibration
+        or BundleReader is not bundle_read.BundleReader
+        or not _l6_local_exact(physics_cache, local, _calibration_artifact_key(calibration))
+    ):
+        return _verify_instrument_calibration(
+            BundleReader(path),
+            metadata,
+            calibration,
+            strict_physics=True,
+            physics_cache=physics_cache,
+        )
+    from joulewise.analysis_verified_store import verify_instrument_calibration_at
+
+    return store.call(
+        _LEAF_CALIBRATION,
+        verify_instrument_calibration_at,
+        path,
+        metadata,
+        calibration,
+        strict_physics=True,
+        physics_cache=physics_cache,
+    )
+
+
+def _verified_operative_rederivation(
+    rederive: Any,
+    path: Path,
+    authenticated_fiducial_bound_s: float,
+    metadata: Mapping[str, Any],
+    local: dict[str, float],
+) -> Mapping[str, Any]:
+    """L2: the session's serial re-derivation of one dominated member, through the store when exact."""
+
+    view = physics_cache_for(local, metadata)
+    store = _verified_store_for(path)
+    calibration = metadata.get("instrument_calibration") if isinstance(metadata, Mapping) else None
+    if store is not None and _l2_local_exact(view, local, _calibration_artifact_key(calibration), metadata):
+        return store.call(
+            _LEAF_OPERATIVE,
+            _member_operative_summary,
+            rederive,
+            path,
+            authenticated_fiducial_bound_s,
+            metadata,
+        )
+    return rederive(
+        path,
+        authenticated_fiducial_bound_s=authenticated_fiducial_bound_s,
+        _instrument_calibration_physics_cache=view,
+    )
+
+
+def _verified_environment_refusals(
+    metadata: Any,
+    *,
+    bundle_path: Path,
+    measured_window_start_s: Any,
+    measured_window_end_s: Any,
+    post_run_collector_raised_unmeasured: bool,
+) -> tuple[str, ...]:
+    """L5: ``current_environment_refusals``, through the store when one is active.
+
+    Bound-independent: the key holds no fiducial bound, so a pass at another
+    bound reuses the entry.
+    """
+
+    store = _verified_store_for(bundle_path)
+    if store is None:
+        return current_environment_refusals(
+            metadata,
+            bundle_path=bundle_path,
+            measured_window_start_s=measured_window_start_s,
+            measured_window_end_s=measured_window_end_s,
+            post_run_collector_raised_unmeasured=post_run_collector_raised_unmeasured,
+        )
+    return store.call(
+        _LEAF_ENVIRONMENT,
+        current_environment_refusals,
+        metadata,
+        bundle_path=bundle_path,
+        measured_window_start_s=measured_window_start_s,
+        measured_window_end_s=measured_window_end_s,
+        post_run_collector_raised_unmeasured=post_run_collector_raised_unmeasured,
+    )
+
+
+def _verified_reduce_dict(
+    bundle_path: Path, reducer_version: str | None, physics: Mapping[str, Any]
+) -> dict[str, Any]:
+    """L3: ``reduce_bundle(bundle_path, ...).to_dict()``, through the store when one is active.
+
+    ``physics`` is ``run_reduce_physics_kwargs(bundle_path)``, evaluated by the
+    caller exactly where the original call evaluated it; its view's local
+    layer is fresh, so no caller state depends on it. ``require_idle_subtracted``
+    stays a consumer check outside the leaf (Sol #9).
+    """
+
+    from joulewise.reduce import reduce_bundle
+
+    store = _verified_store_for(bundle_path)
+    if (
+        store is None
+        or set(physics) - {"_instrument_calibration_physics_cache"}
+        # Only the genuine reducer is ever stored or served (a replaced one,
+        # as tests install, runs directly).
+        or reduce_bundle is not _GENUINE_REDUCE_BUNDLE
+    ):
+        return reduce_bundle(bundle_path, reducer_version=reducer_version, **physics).to_dict()
+    from joulewise.analysis_verified_store import reduce_bundle_dict
+
+    return store.call(
+        _LEAF_REDUCE,
+        reduce_bundle_dict,
+        bundle_path,
+        reducer_version=reducer_version,
+        physics_cache=physics.get("_instrument_calibration_physics_cache"),
+    )
+
+
 class AuthenticatedConsumptionSession:
     """One collection-scoped authenticated max-bracket consumption session.
 
@@ -1825,12 +2088,12 @@ class AuthenticatedConsumptionSession:
             detail: str | None = "instrument_calibration_invalid"
             if isinstance(calibration, Mapping) and isinstance(metadata, Mapping):
                 try:
-                    authenticated, detail = _verify_instrument_calibration(
-                        BundleReader(path),
+                    authenticated, detail = _verified_instrument_calibration(
+                        path,
                         dict(metadata),
                         dict(calibration),
-                        strict_physics=True,
                         physics_cache=physics_cache_for(physics_cache, metadata),
+                        local=physics_cache,
                     )
                 except (BundleReadError, OSError, TypeError, ValueError):
                     authenticated = None
@@ -1916,12 +2179,12 @@ class AuthenticatedConsumptionSession:
                 try:
                     operative_summary = consume(
                         outcome,
-                        lambda path=path, _metadata=_metadata: rederive(
+                        lambda path=path, _metadata=_metadata: _verified_operative_rederivation(
+                            rederive,
                             path,
-                            authenticated_fiducial_bound_s=operative_bound,
-                            _instrument_calibration_physics_cache=physics_cache_for(
-                                physics_cache, _metadata
-                            ),
+                            operative_bound,
+                            _metadata,
+                            physics_cache,
                         ),
                     )
                 except (
@@ -2346,6 +2609,8 @@ def build_neg8_freshness_observation(
 ) -> dict[str, Any]:
     """Build the current binding observation used by the freshness gate."""
 
+    if evaluated_at_s is None:
+        _note_clock()
     timestamp = _finite_number(
         time.time() if evaluated_at_s is None else evaluated_at_s
     )
@@ -5184,17 +5449,17 @@ def _reference_energy_evidence_detail(
         # returns an in-memory summary.  Minutes-scale claim verification cost
         # is accepted for primary-evidence NEG-8 re-derivation.
         from joulewise.analysis_run_cache import run_reduce_physics_kwargs
-        from joulewise.reduce import reduce_bundle
 
         # Inside an analysis run the refit shares the run's verified-fit store
         # (keyed by the calibration artifact's sha256 and the exact metadata
         # bound; read only after the reducer's own hash checks). Outside one
         # the call is unchanged and does no extra read (L9-SPEEDUP-R1 stage 4).
-        reduced = reduce_bundle(
+        # D-188 L3: through the run's verified store when one is active.
+        reduced = _verified_reduce_dict(
             bundle_path,
-            reducer_version=reducer_version,
-            **run_reduce_physics_kwargs(bundle_path),
-        ).to_dict()
+            reducer_version,
+            run_reduce_physics_kwargs(bundle_path),
+        )
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)
@@ -5428,6 +5693,7 @@ def mint_neg8_drift_bound_artifact(
         raise ValueError(
             "launch_lineage_conflict: NEG-8 reference members do not share one lineage"
         )
+    _note_clock()
     artifact = build_neg8_drift_bound_artifact(
         corpus_id=manifest.get("corpus_id"),
         condition_id=manifest.get("condition_id"),
@@ -6559,7 +6825,7 @@ def _current_core_rederivation_reasons(
             if window is None:
                 member_reason(bundle_id, "environment_admission_missing")
                 continue
-            for reason in current_environment_refusals(
+            for reason in _verified_environment_refusals(
                     metadata,
                     bundle_path=path,
                     measured_window_start_s=window.start_s,
@@ -6713,12 +6979,12 @@ def _current_core_rederivation_reasons(
                 detail: str | None = "instrument_calibration_invalid"
                 if isinstance(member_calibration, Mapping):
                     try:
-                        authenticated, detail = _verify_instrument_calibration(
-                            BundleReader(_path),
+                        authenticated, detail = _verified_instrument_calibration(
+                            _path,
                             dict(member_metadata),
                             dict(member_calibration),
-                            strict_physics=True,
                             physics_cache=physics_cache_for(physics_cache, member_metadata),
+                            local=physics_cache,
                         )
                     except (BundleReadError, OSError, TypeError, ValueError):
                         authenticated = None
