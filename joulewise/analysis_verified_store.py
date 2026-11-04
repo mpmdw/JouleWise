@@ -20,10 +20,16 @@ exact spelling when that differs (a leaf may build a value from the
 spelling it was given), its tree digest, and whether a V2 session is active.
 D-188 VDL-FIX round 3 (Sol vf3 V1): a tree argument is served or stored only
 when its spelling is absolute and lexically normal (no ``..``, ``.``, empty or
-trailing component), so the kernel resolves it exactly as ``realpath`` does;
-a relative spelling, or one like ``missing/..`` (which the kernel resolves by
-traversing ``missing``), runs the leaf unchanged. The realpath is recomputed
-on every call, checked again after a fill and before a deferred hit applies.
+trailing component); a relative spelling, or one like ``missing/..`` (which
+the kernel resolves by traversing ``missing``), runs the leaf unchanged. Review
+of #641 (round 4): lexical normality is not enough, because a symlink on the
+way can hold ``passage/..``, which the non-strict ``realpath`` drops while the
+kernel traverses ``passage`` (missing, a file, or not searchable). So the
+kernel's own resolution of the spelling (``os.stat``) must also reach the
+realpath root itself (same device and inode as its ``lstat``), or the call
+runs the leaf unchanged. Both are recomputed on every call, checked again
+after a fill and before a deferred hit applies; an extra read or listing kept
+under an alias is held to the same rule on its fill and on every hit.
 
 Tree digest. An lstat walk that follows no symlink: per file (relpath, kind,
 mode, size, sha256), per directory (relpath, mode, sorted listing). A path-free
@@ -1480,9 +1486,17 @@ class VerifiedStore:
                 # symlinked ancestor is allowed: the realpath is recomputed on
                 # every call (it is the tree the key's digest covers) and checked
                 # again after a fill.
+                # Review of #641 (round 4): a symlink on the way whose target
+                # holds ``passage/..`` keeps the spelling normal, and the
+                # non-strict realpath drops ``passage`` lexically while the
+                # kernel traverses it (ENOENT, ENOTDIR, or EACCES even where
+                # ``realpath(strict=True)`` succeeds). The kernel's own
+                # resolution of the spelling must reach the realpath root.
                 if not os.path.isabs(raw) or os.path.normpath(raw) != raw:
                     raise _Bypass("tree spelling is not absolute and normal")
                 root = os.path.realpath(raw)
+                if not _kernel_resolves_to(raw, root):
+                    raise _Bypass("tree spelling does not resolve to its realpath")
                 if spec.path_free:
                     spelled_name, root_name = os.path.basename(raw), os.path.basename(root)
                     name = root_name if spelled_name == root_name else f"{spelled_name}\0{root_name}"
@@ -1732,8 +1746,10 @@ class VerifiedStore:
                 self._prefetch_siblings(scope, prepared)
             # Sol wave-2 #2: every extra read and listing reached through a
             # pathname that is not its own target must still reach that target.
+            # Review of #641 (round 4): and the kernel's own resolution of the
+            # pathname reaches it too (a ``passage/..`` behind a symlink).
             for original, resolved in entry.aliases:
-                if os.path.realpath(original) != resolved:
+                if os.path.realpath(original) != resolved or not _kernel_resolves_to(original, resolved):
                     return None
             # HC1 (Sol): a pathname the fill opened that was a directory (a
             # failed file open, or the no-follow route's root) must still be
@@ -1819,7 +1835,8 @@ class VerifiedStore:
             scope = _current_scope()
             with _suspended():
                 for tree, verdict in zip(prepared.trees, prepared.verdicts):
-                    if tree.spelling and os.path.realpath(tree.spelling) != tree.root:
+                    if tree.spelling and (os.path.realpath(tree.spelling) != tree.root
+                                          or not _kernel_resolves_to(tree.spelling, tree.root)):
                         raise _Bypass("tree spelling retargeted since the probe")
                     current = scope.verify_tree(tree.root, tree.content_only)
                     if current is None or current.digest != verdict.digest:
@@ -2081,8 +2098,10 @@ class VerifiedStore:
                 if walk is None or walk.signature != verdict.signature:
                     return None
                 # Round 3 (V1): the caller's spelling still resolves to the tree
-                # the key covers (a retargeted ancestor link during the fill).
-                if tree.spelling and os.path.realpath(tree.spelling) != tree.root:
+                # the key covers (a retargeted ancestor link during the fill),
+                # by realpath and by the kernel (round 4).
+                if tree.spelling and (os.path.realpath(tree.spelling) != tree.root
+                                      or not _kernel_resolves_to(tree.spelling, tree.root)):
                     return None
             allowed = {key for _, key in views}
             for item, copy in physics_before:
@@ -2182,8 +2201,16 @@ class VerifiedStore:
         aliases: dict[str, str] = {}
 
         def bind(original: str, resolved: str) -> None:
-            if original != resolved and aliases.setdefault(original, resolved) != resolved:
+            if original == resolved:
+                return
+            if aliases.setdefault(original, resolved) != resolved:
                 raise _Bypass("a pathname reached two targets during the fill")
+            # Review of #641 (round 4): the realpath of an alias is only its
+            # target if the kernel resolves the pathname there too; a failed
+            # open through ``passage/..`` behind a symlink would otherwise be
+            # stored as a successful read of the realpath's file.
+            if not _kernel_resolves_to(original, resolved):
+                raise _Bypass("an alias does not resolve to its realpath")
 
         def in_tree(original: str, resolved: str) -> bool:
             lexical = os.path.normpath(original)
@@ -2475,6 +2502,23 @@ def _value_strings(value: Any, depth: int = 0) -> Iterator[str]:
             yield from _value_strings(getattr(value, item.name), depth + 1)
     elif hasattr(value, "__dict__") and not isinstance(value, type):
         yield from _value_strings(vars(value), depth + 1)
+
+
+def _kernel_resolves_to(spelling: str, root: str) -> bool:
+    """Whether the kernel resolves ``spelling`` to the object at ``root`` itself.
+
+    Review of #641 (round 4): ``os.path.realpath`` (non-strict) drops a
+    component before ``..`` lexically when it is missing or not a directory,
+    and even the strict form succeeds through a directory the caller cannot
+    search, while the kernel fails in each case. ``os.stat`` is the kernel's
+    resolution; ``root`` is a realpath, so its ``lstat`` is that object.
+    """
+
+    try:
+        kernel, own = os.stat(spelling), os.lstat(root)
+    except (OSError, ValueError):
+        return False
+    return (kernel.st_dev, kernel.st_ino) == (own.st_dev, own.st_ino)
 
 
 def _decision_kind(leaf_id: str, value: Any) -> tuple:
