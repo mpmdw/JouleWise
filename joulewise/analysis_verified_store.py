@@ -1944,9 +1944,12 @@ class VerifiedStore:
         its value, its physics post-values, the physics the caller now sees or
         the session's records (identity, sha256, grammar, read count, strict
         parse) differ from what serving the hit would have produced. A
-        recompute that is not storable is compared only by its decision
-        (``_decision_kind``); a different decision is a defect. The caller
-        always gets the freshly computed value.
+        recompute that is not storable is compared by its value: a different
+        decision (``_decision_kind``) is a ``shadow_decision_mismatch`` defect,
+        the same decision with any other difference a ``shadow_value_mismatch``
+        defect, unless every difference is in a leaf's enumerated audit-only
+        text (``_AUDIT_ONLY_TEXT``), which is only counted. The caller always
+        gets the freshly computed value.
         """
 
         leaf_id = hit.prepared.spec.leaf_id
@@ -1968,22 +1971,31 @@ class VerifiedStore:
             raise
         if not outcome.get("comparable"):
             # D-188 VDL-FIX round 3 (Sol vf3 V2): the recompute could not be
-            # stored, so its audit-bearing parts (a clock read, a failure
-            # message quoting a path) are not compared. Its decision still is:
-            # a served value whose decision differs from the serial one (value
-            # vs refusal, or another refusal) is a defect, never incomparable.
+            # stored, so the store's full comparison (payload bytes, physics,
+            # records) is not available. Its value still is compared: a served
+            # value whose decision differs from the serial one (value vs
+            # refusal, or another refusal) is a defect, never incomparable.
+            # Round 5 (lead ruling K1): so is the same decision with any other
+            # difference (a registered number, a status, a reason, a refusal
+            # tuple, a bound); only a difference confined to a leaf's
+            # enumerated audit-only text (_AUDIT_ONLY_TEXT) is merely counted.
             try:
                 served = pickle.loads(hit.entry.value)
                 same_kind = _decision_kind(leaf_id, served) == _decision_kind(leaf_id, value)
                 identical = same_kind and _strict_equal(served, value)
+                audit_only = (same_kind and not identical
+                              and _differs_only_in_audit_text(leaf_id, served, value))
             except Exception:  # noqa: BLE001 - a decision that cannot be compared is not proven equal
-                same_kind = identical = False
+                same_kind = identical = audit_only = False
             if not same_kind:
                 self._shadow_defect(hit, "shadow_decision_mismatch")
                 return value
+            if not (identical or audit_only):
+                self._shadow_defect(hit, "shadow_value_mismatch")
+                return value
             self._count(f"{leaf_id}:shadow_incomparable")
             if not identical:
-                # Same decision, other audit-bearing text: counted (restricted tier) only.
+                # Same decision, other audit-only text: counted (restricted tier) only.
                 self._count(f"{leaf_id}:shadow_incomparable_differs")
             return value
         stored_physics = {key: after for key, _, after in hit.entry.physics}
@@ -2551,6 +2563,59 @@ def _decision_kind(leaf_id: str, value: Any) -> tuple:
             return ("calibration", value[0] is None, value[1])
         return ("other", type(value).__qualname__)
     return ("other", type(value).__qualname__)
+
+
+# D-188 VDL-FIX round 5 (lead ruling K1): the only leaf-value fields an
+# unstorable shadow recompute may differ in without a defect, per leaf. Each
+# entry is justified from its consumers; every other field of every leaf (and
+# every field of a leaf not listed) is compared exactly.
+#
+# L2_operative_summary.failure_message, only on a non-succeeded summary (equal
+#   status on both sides) and only text against text: L2's one consumer is
+#   whole_window.AuthenticatedConsumptionSession's dominated-member loop
+#   (directly, or through analysis_member_pool.consume of the same leaf). It
+#   reads ``status`` first; a summary that did not succeed adds
+#   ``instrument_calibration_invalid`` and ``continue``s, so no other field of
+#   it (failure_message included) reaches a number, a refusal or a later read.
+#   A succeeded summary is not exempt (the reducer sets failure_message only on
+#   FAILED, so a difference there is not audit text).
+#
+# Not exempt, with the reason:
+#   L1_strict_validation: a problem list is stored only when empty; the
+#     problem text of a non-empty list is not proven decision-free.
+#   L3_reduce_dict.failure_message: cli._strict_problems' AXI branch compares
+#     the whole fresh L3 dict, failure_message included, against the stored
+#     summary (_strict_summary_differences), so its text can decide whether
+#     L1's problem list is empty; cli._cmd_reduce writes the dict as the verb's
+#     output; and round 3 (V1 a) already treats a served message spelled for
+#     another path as a serial-equivalence bug.
+#   L4_calibration_bracket, L5_environment_refusals,
+#     L6_verify_instrument_calibration: statuses, reason codes, refusal tuples
+#     and bounds only; none carries free text.
+_AUDIT_ONLY_TEXT: dict[str, frozenset[str]] = {
+    "L2_operative_summary": frozenset({"failure_message"}),
+}
+
+
+def _differs_only_in_audit_text(leaf_id: str, served: Any, value: Any) -> bool:
+    """True iff ``served`` and ``value`` differ only in ``leaf_id``'s audit-only text fields."""
+
+    audit = _AUDIT_ONLY_TEXT.get(leaf_id)
+    if not audit or type(served) is not type(value) or not isinstance(served, Mapping):
+        return False
+    if list(served) != list(value):
+        return False
+    status = served.get("status")
+    if not isinstance(status, str) or status == "succeeded" or not _strict_equal(status, value.get("status")):
+        return False
+    for key in served:
+        left, right = served[key], value[key]
+        if _strict_equal(left, right):
+            continue
+        if key in audit and type(left) is str and type(right) is str:
+            continue
+        return False
+    return True
 
 
 def _scratch_session(session: Any) -> Any:

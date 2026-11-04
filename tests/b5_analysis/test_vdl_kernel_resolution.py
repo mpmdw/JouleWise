@@ -245,8 +245,20 @@ class TraversabilityChangesUnderTheSameSpelling(_Fixture):
                         bad_serial = outcome(fn, *args, **kwargs)
                         first = outcome(vdl.call, L6, fn, *args, **kwargs)
                         self.assertEqual(first, bad_serial)
-                        if kind == "locked":  # serial raises EACCES here
-                            self.assertEqual(first[:2], ("raise", "PermissionError"))
+                        if kind == "locked":
+                            # Serial's own outcome is version-dependent: through
+                            # 3.13 pathlib's is_file lets EACCES escape (a
+                            # PermissionError); 3.14 returns False instead, so
+                            # serial refuses (instrument_calibration_stale). Either
+                            # way the store gives serial's outcome (asserted just
+                            # above) and the bad state never yields a verified bound.
+                            if first[0] == "raise":
+                                self.assertEqual(first[1], "PermissionError")
+                            else:
+                                self.assertEqual(first[0], "value")
+                                bound, reason = first[1]
+                                self.assertIsNone(bound)
+                                self.assertIsInstance(reason, str)
                         else:
                             self.assertEqual(first, ("value", (None, "instrument_calibration_invalid")))
                         payload = pickle.loads(pickle.dumps(caches.vdl.export_entries()))

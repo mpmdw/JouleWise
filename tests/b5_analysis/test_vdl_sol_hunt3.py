@@ -18,7 +18,10 @@ realpath is recomputed on every call.
 V2: shadow mode recorded each of these as ``shadow_incomparable`` (the
 recompute was not storable) with no defect. A recompute that cannot be stored
 is now compared by its decision (value vs refusal, which refusal); a different
-decision is a defect, an audit-only difference is only counted.
+decision is a defect, an audit-only difference is only counted. Round 5 (lead
+ruling K1): the same decision with any other difference (a number, a bound, a
+reason) is a ``shadow_value_mismatch`` defect too; the only audit-only field is
+L2's failure_message on a non-succeeded summary (``vdl._AUDIT_ONLY_TEXT``).
 
 Synthetic data only: the committed S10 ALPHA fixture member, extracted into a
 temporary directory.
@@ -283,19 +286,124 @@ class V2ShadowComparesDecisions(_Fixture):
             vdl.call(L3, vdl.reduce_bundle_dict, self.path)
             self.assertTrue(consumer.vdl.defect_pending())
 
-    def test_an_audit_only_difference_is_counted_not_a_defect(self):
+    def _assert_value_defect(self, consumer, leaf, counters, key):
+        self.assertTrue(consumer.vdl.defect_pending())
+        self.assertEqual(consumer.vdl._defects, [f"{leaf}:shadow_value_mismatch"])
+        self.assertEqual(counters.get(f"{leaf}:shadow_mismatch"), 1)
+        self.assertNotIn(f"{leaf}:shadow_incomparable", counters)
+        self.assertNotIn(key, consumer.vdl._entries, "the key is poisoned")
+        self.assertIn(key, consumer.vdl._poisoned)
+        with self.assertRaises(vdl.VerifiedStoreDefect):
+            consumer.vdl.check_defects()
+
+    def l2(self):
+        from joulewise.reduce import _rederive_summary_for_authenticated_fiducial_bound as rederive
+
+        return ww._member_operative_summary, (rederive, self.path, self.bound, self.metadata), {}
+
+    def test_same_decision_other_number_is_a_defect(self):
+        """Round 5 K1: the cold reviewer's check_shadow_same_kind_number.py, now a defect.
+
+        A stored L6 bound that differs from serial (same decision kind: a bound,
+        not a refusal), served against an unstorable recompute (no deadline).
+        Before round 5 this counted ``shadow_incomparable_differs`` and the
+        entry stayed live.
+        """
+
+        fn, args, kwargs = self.l6(self.path)
+        payload = self._tampered(L6, fn, args, kwargs, lambda value: (value[0] * 1.5, value[1]))
+        (key,) = payload["entries"]
+        with run(SHADOW, entries=payload) as consumer:
+            consumer.deadline = None  # recompute unstorable -> not comparable in full
+            served = vdl.call(L6, fn, *args, **kwargs)
+            counters = consumer.vdl.restricted_counters()
+            self.assertEqual(served, fn(*args, **kwargs))
+            self.assertIsNotNone(served[0])
+            self._assert_value_defect(consumer, L6, counters, key)
+
+    def test_a_blind_run_counts_the_value_defect_and_stops_serving(self):
+        fn, args, kwargs = self.l6(self.path)
+        payload = self._tampered(L6, fn, args, kwargs, lambda value: (value[0] * 1.5, value[1]))
+        blind = vdl.Mode("shadow", 1000, blind=True)
+        with run(blind, entries=payload) as consumer:
+            consumer.deadline = None
+            served = vdl.call(L6, fn, *args, **kwargs)
+            counters = consumer.vdl.restricted_counters()
+            self.assertEqual(served, fn(*args, **kwargs))
+            self.assertFalse(consumer.vdl.defect_pending(), "a blind run never raises a defect")
+            self.assertEqual(counters.get(f"defect:{L6}:shadow_value_mismatch"), 1)
+            self.assertTrue(consumer.vdl._serving_disabled)
+            consumer.vdl.check_defects()
+
+    def test_l3_failure_message_is_not_audit_only(self):
+        """L3's failure_message can decide L1 (cli AXI strict comparison): a defect."""
+
         (self.path / "config.json").unlink()
         (self.path / "config.json").mkdir()
         payload = self._tampered(L3, vdl.reduce_bundle_dict, (self.path,), {},
                                  lambda value: dict(value, failure_message="elsewhere"))
+        (key,) = payload["entries"]
         with run(SHADOW, entries=payload) as consumer:
             consumer.deadline = None
             served = vdl.call(L3, vdl.reduce_bundle_dict, self.path)
             counters = consumer.vdl.restricted_counters()
-        self.assertEqual(served, vdl.reduce_bundle_dict(self.path))
+            self.assertEqual(served, vdl.reduce_bundle_dict(self.path))
+            self._assert_value_defect(consumer, L3, counters, key)
+
+    def test_an_audit_only_difference_is_counted_not_a_defect(self):
+        """L2's failure_message on a failed summary is the one enumerated audit-only field."""
+
+        (self.path / "config.json").unlink()
+        (self.path / "config.json").mkdir()
+        fn, args, kwargs = self.l2()
+        payload = self._tampered(L2, fn, args, kwargs, lambda value: dict(value, failure_message="elsewhere"))
+        with run(SHADOW, entries=payload) as consumer:
+            consumer.deadline = None
+            served = vdl.call(L2, fn, *args, **kwargs)
+            counters = consumer.vdl.restricted_counters()
+        self.assertEqual(served["status"], "failed")
+        self.assertEqual(served, fn(*args, **kwargs))
         self.assertFalse(consumer.vdl.defect_pending())
-        self.assertEqual(counters.get(f"{L3}:shadow_incomparable"), 1)
-        self.assertEqual(counters.get(f"{L3}:shadow_incomparable_differs"), 1)
+        self.assertEqual(counters.get(f"{L2}:shadow_incomparable"), 1)
+        self.assertEqual(counters.get(f"{L2}:shadow_incomparable_differs"), 1)
+
+    def test_l2_other_differences_are_defects(self):
+        fn, args, kwargs = self.l2()
+        cases = {
+            "succeeded, number": (False, lambda value: dict(value, gross_energy_j=value["gross_energy_j"] * 2)),
+            "succeeded, message": (False, lambda value: dict(value, failure_message="elsewhere")),
+            "failed, message and number": (True, lambda value: dict(value, failure_message="elsewhere",
+                                                                    gross_energy_j=1.0)),
+            "failed, message None": (True, lambda value: dict(value, failure_message=None)),
+        }
+        for name, (broken, replacement) in cases.items():
+            with self.subTest(case=name):
+                if broken and (self.path / "config.json").is_file():
+                    (self.path / "config.json").unlink()
+                    (self.path / "config.json").mkdir()
+                payload = self._tampered(L2, fn, args, kwargs, replacement)
+                (key,) = payload["entries"]
+                with run(SHADOW, entries=payload) as consumer:
+                    consumer.deadline = None
+                    served = vdl.call(L2, fn, *args, **kwargs)
+                    counters = consumer.vdl.restricted_counters()
+                    self.assertEqual(served["status"], "failed" if broken else "succeeded")
+                    self._assert_value_defect(consumer, L2, counters, key)
+
+    def test_audit_only_fields(self):
+        only = vdl._differs_only_in_audit_text
+        failed = {"status": "failed", "failure_reason": "unknown_error", "failure_message": "x", "gross_energy_j": None}
+        self.assertEqual(dict(vdl._AUDIT_ONLY_TEXT), {L2: frozenset({"failure_message"})})
+        self.assertTrue(only(L2, failed, dict(failed, failure_message="y")))
+        for leaf in ("L1_strict_validation", L3, "L4_calibration_bracket", L5, L6, "synthetic"):
+            self.assertFalse(only(leaf, failed, dict(failed, failure_message="y")))
+        self.assertFalse(only(L2, failed, dict(failed, failure_message=None)))
+        self.assertFalse(only(L2, failed, dict(failed, failure_message="y", gross_energy_j=1.0)))
+        self.assertFalse(only(L2, failed, dict(failed, failure_message="y", extra=None)))
+        self.assertFalse(only(L2, failed, {key: failed[key] for key in reversed(list(failed))}))
+        succeeded = dict(failed, status="succeeded", failure_reason=None)
+        self.assertFalse(only(L2, succeeded, dict(succeeded, failure_message="y")))
+        self.assertFalse(only(L2, (0.25, None), (0.5, None)))
 
     def test_decision_kinds(self):
         kind = vdl._decision_kind
