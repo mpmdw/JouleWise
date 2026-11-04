@@ -13,9 +13,9 @@ if str(ROOT) not in sys.path:
 
 from joulewise.align.apple.pilot_analysis import alternative_residual_analysis
 
-# Set to the source-freeze commit after implementation verification. This pin
-# identifies the implementation, not the later report/metadata-only commit.
-FROZEN_COMMIT = 'PENDING_SOURCE_FREEZE'
+# Implementation source freeze; the following metadata commit only pins this
+# revision and records the verification report.
+FROZEN_COMMIT = '4d54cb47bb7ba0c267138a57de747a7183ca23ff'
 
 
 def load_members(pilots):

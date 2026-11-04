@@ -215,9 +215,9 @@ freeze collection span and disk reservation.
 
 ## Pilot 7 desk addendum: frozen labelled attention-length alternative
 
-Before pilot 7's desk, freeze the alternative implemented in SOURCE_FREEZE_COMMIT
-(the final freeze pin is recorded with the builder's report). Print it beside
-the registered **per-pair** headline for pilot 7. Pilots 4–6 selected the design;
+The alternative is frozen before pilot 7's desk at commit
+`4d54cb47bb7ba0c267138a57de747a7183ca23ff`. Print it beside the registered
+**per-pair** headline for pilot 7. Pilots 4–6 selected the design;
 pilot 7 is its out-of-sample test. This addendum changes neither the registered
 row/defaults nor any existing desk output or eligibility rule.
 
