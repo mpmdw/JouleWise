@@ -12,8 +12,8 @@ that any artifact was uploaded or deployed.
 |---|---|---|
 | Source | Work from the intended commit in a clean clone; `git status --porcelain` must be empty. | Release operator records the commit and clean status. |
 | Corpus | The retained six-bundle corpus may be used only to check the historical report-building path. Its energy values are permanently barred from claim use by D-078 because the power trace and workload events were joined through a defective time anchor. The future publication corpus is the admitted `_v5` transaction. | An authorized internal operator labels any six-bundle output `plumbing evidence only`; a claim-bearing release requires the `_v5` corpus and its governed admission artifacts. |
-| Network | The release checker itself is offline. A fresh public clone and `npm ci` require network access, but no repository or deployment credential. | CI log or release operator records dependency installation from the two lockfiles. |
-| Node / Marked | Exact rendered-site smoke requires the root lockfile's pinned Marked. If absent, `release_check.py` loudly identifies the boundary and exercises the built-in offline renderer without claiming the Marked seam. | CI supplies `JOULEWISE_MARKED_BIN` after `npm ci`. |
+| Network | The release checker itself is offline. A fresh public clone and `npm ci` require network access, but no repository or deployment credential. | CI log or release operator records dependency installation from the capsule lockfile. |
+| Node / Marked | Exact rendered-site smoke requires the capsule lockfile's pinned Marked. If absent, `release_check.py` loudly identifies the boundary and exercises the built-in offline renderer without claiming the Marked seam. | CI supplies `JOULEWISE_MARKED_BIN` after `npm ci`. |
 | Node / Lakebed | Exact capsule postcondition requires `site_capsule/package-lock.json` and Lakebed 0.0.29. If absent, the checker loudly identifies the boundary and exercises the estimator-only capsule path without claiming a measured Lakebed artifact. | CI supplies `JOULEWISE_LAKEBED_BIN` after the capsule `npm ci`. |
 | Release credentials | Tag pushes and release-asset uploads require the repository host credential. No check, build, or packaging command reads it. | Ed performs or explicitly authorizes the manual publication and retains the URL/hash record. |
 | Lakebed credentials | Lakebed deployment requires Ed's credential and network access. It is never automated and is never an agent action. | Ed alone records the deployment result. |
@@ -96,14 +96,13 @@ that any artifact was uploaded or deployed.
    In that Ed-controlled credentialed window only:
 
    ```sh
-   npm ci --ignore-scripts --no-audit --no-fund
    npm --prefix site_capsule ci --ignore-scripts --no-audit --no-fund
    python3 scripts/build_site.py
    JOULEWISE_LAKEBED_BIN="$PWD/site_capsule/node_modules/.bin/lakebed" python3 scripts/pack_capsule.py
    (cd site_capsule && npx --no-install lakebed deploy)
    ```
 
-   The two `npm ci` commands cross the network boundary without deployment
+   The `npm ci` command crosses the network boundary without deployment
    credentials. The final command crosses both the Lakebed network and Ed-only
    credential boundaries. Record the reviewed drift report, source commit,
    measured capsule size, deployment identifier/URL, and post-deploy route
