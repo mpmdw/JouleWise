@@ -169,6 +169,10 @@ def _validate_sensitivity(value):
                         if key == "outcome":
                             if not isinstance(row[side][key], str):
                                 raise ValueError()
+                        elif (name == "contrasts" and row["primary"][key] is None
+                              and row["sensitivity"][key] is None):
+                            # D-190: a refused floor or a not-estimable D is null on both sides.
+                            continue
                         elif not _finite(row[side][key]):
                             raise ValueError()
                 if any(type(row[k]) is not bool for k in booleans[name]):
@@ -375,7 +379,19 @@ def _energy_lines(result, windows, archives, kept, projections, extraction_repor
     # All descriptive contrast lines, including cross-window lines, must use
     # the same primary observations as the verdict before any line is built.
     for cid, rows in primary_observations.items():
-        est = verdict_by_id[cid]["estimator"]
+        verdict = verdict_by_id[cid]
+        est = verdict["estimator"]
+        intervals = (est["metrology_aware_CI95"], verdict["deterministic_bounds"]["decision_interval"])
+        if est["estimate"] is None:
+            # D-190: the engine's not-estimable contrast (fewer than two complete
+            # blocks) has no estimate and no interval; nothing is computed for it.
+            if any(value is not None for value in intervals):
+                raise AnalysisRefusal("disclosure_input_invalid")
+            if len(rows) != est["n"] or len(rows) >= 2:
+                raise AnalysisRefusal("contrast_observations_differ_from_verdict")
+            continue
+        if any(value is None for value in intervals):
+            raise AnalysisRefusal("disclosure_input_invalid")
         value = _paired_values(rows)
         if (len(rows) != est["n"]
                 or float(value["mean_j"]).hex() != float(est["estimate"]).hex()
@@ -475,12 +491,18 @@ def _energy_lines(result, windows, archives, kept, projections, extraction_repor
         cell = kept["gamma"].for_contrast(cid)
         verdict = verdict_by_id[cid]
         est = verdict["estimator"]
-        primary = {"status": "computed", "n": est["n"], "mean_j": est["estimate"],
-                   "s_d": est["s_d"], "se": est["SE_total"], "t_star": est["t_critical_95"],
-                   "lower_j": est["metrology_aware_CI95"]["lower"],
-                   "upper_j": est["metrology_aware_CI95"]["upper"]}
+        estimable = est["estimate"] is not None
+        if estimable:
+            primary = {"status": "computed", "n": est["n"], "mean_j": est["estimate"],
+                       "s_d": est["s_d"], "se": est["SE_total"], "t_star": est["t_critical_95"],
+                       "lower_j": est["metrology_aware_CI95"]["lower"],
+                       "upper_j": est["metrology_aware_CI95"]["upper"]}
+            primary_text = _paired_text(primary)
+        else:
+            # D-190: the verdict's not-estimable contrast prints as itself.
+            primary_text = f"not estimable (n = {est['n']}; fewer than 2 complete quads)"
         result["contrasts"].append(_item("primary_contrast", True,
-            f"{cid}: {_paired_text(primary)}", contrast_id=cid,
+            f"{cid}: {primary_text}", contrast_id=cid,
             estimator=_plain(verdict["estimator"]), decision_interval=_plain(verdict["deterministic_bounds"]["decision_interval"])))
         units, counts = _assist_units(cell, flags["gamma"])
         changed = kept["gamma"].without_units(cid, units, label="battery-assist") if units else kept["gamma"]
@@ -525,24 +547,38 @@ def _energy_lines(result, windows, archives, kept, projections, extraction_repor
         est = verdict["estimator"]
         decision = verdict["deterministic_bounds"]["decision_interval"]
         metrology = est["metrology_aware_CI95"]
-        value = est["estimate"] / denom
-        result["contrasts"].append(_item("magnitude_per_token", True,
-            f"{cid}: registered descriptive estimates: {value:.6f} J per "
-            f"{'output' if denom == 512 else 'prompt'} token; metrology interval "
-            f"[{metrology['lower']/denom:.6f}, {metrology['upper']/denom:.6f}]; decision interval "
-            f"[{decision['lower']/denom:.6f}, {decision['upper']/denom:.6f}]", contrast_id=cid,
-            value_j=value, denominator=denom, metrology={k:v/denom for k,v in metrology.items()},
-            decision={k:v/denom for k,v in decision.items()}))
         n = est["n"]
-        result["contrasts"].append(_item("contrast_interval", True,
-            f"{cid}: the rounded t* ({_ci_t_critical(n-1):.3f} for {T975[n-1]:.6f}); "
-            "no metrology term is added for the phase metrics, and errors common to all members are carried by D "
-            "and the attribution floor.", contrast_id=cid, n=n, rounded_t=_ci_t_critical(n-1), exact_t=T975[n-1]))
         floor = verdict["floor"]["active_floor_j"]
-        near = decision["lower"] if est["estimate"] >= 0 else -decision["upper"]
-        text = f"{cid}: decision interval near end {near:.5f} J; floor {floor:.5f} J"
-        if abs(est["estimate"]) > floor and near <= floor:
-            text += "; " + DECISION_SENTENCE
+        if floor is None and verdict["floor"]["status"] != "refused":
+            raise AnalysisRefusal("disclosure_input_invalid")
+        # D-190: a refused floor (the registered not-resolvable outcome) prints as itself.
+        floor_text = f"floor {floor:.5f} J" if floor is not None else "floor not resolvable"
+        if estimable:
+            value = est["estimate"] / denom
+            result["contrasts"].append(_item("magnitude_per_token", True,
+                f"{cid}: registered descriptive estimates: {value:.6f} J per "
+                f"{'output' if denom == 512 else 'prompt'} token; metrology interval "
+                f"[{metrology['lower']/denom:.6f}, {metrology['upper']/denom:.6f}]; decision interval "
+                f"[{decision['lower']/denom:.6f}, {decision['upper']/denom:.6f}]", contrast_id=cid,
+                value_j=value, denominator=denom, metrology={k:v/denom for k,v in metrology.items()},
+                decision={k:v/denom for k,v in decision.items()}))
+            result["contrasts"].append(_item("contrast_interval", True,
+                f"{cid}: the rounded t* ({_ci_t_critical(n-1):.3f} for {T975[n-1]:.6f}); "
+                "no metrology term is added for the phase metrics, and errors common to all members are carried by D "
+                "and the attribution floor.", contrast_id=cid, n=n, rounded_t=_ci_t_critical(n-1), exact_t=T975[n-1]))
+            near = decision["lower"] if est["estimate"] >= 0 else -decision["upper"]
+            text = f"{cid}: decision interval near end {near:.5f} J; {floor_text}"
+            if floor is not None and abs(est["estimate"]) > floor and near <= floor:
+                text += "; " + DECISION_SENTENCE
+        else:
+            # D-190: null stays null; no per-token value, t* or decision end exists.
+            result["contrasts"].append(_item("magnitude_per_token", True,
+                f"{cid}: registered descriptive estimates: per-token value not estimable", contrast_id=cid,
+                value_j=None, denominator=denom, metrology=None, decision=None))
+            result["contrasts"].append(_item("contrast_interval", True,
+                f"{cid}: no interval (not estimable; n = {n})", contrast_id=cid, n=n,
+                rounded_t=None, exact_t=None))
+            text = f"{cid}: decision interval not available (not estimable); {floor_text}"
         result["contrasts"].append(_item("decision_floor", True, text, contrast_id=cid,
             decision_interval=decision, floor_j=floor, estimate_j=est["estimate"]))
         loo = verdict["loo"]["rows"]
@@ -1258,7 +1294,8 @@ def _ruling_lines(result,windows,brackets,sensitivity,steps,catalog,flags):
             else:
                 for side in ("primary","sensitivity"):
                     text+=f"; {side}: "+", ".join(
-                        f"{key} "+(value if isinstance(value,str) else f"{value:.5f} J")
+                        f"{key} "+(value if isinstance(value,str) else "not available" if value is None
+                                   else f"{value:.5f} J")
                         for key,value in sorted(row[side].items()))
                 if name=="contrasts":
                     text+="; sensitivity outcome equals primary: "+("yes" if row["outcome_equals_primary"] else "no")

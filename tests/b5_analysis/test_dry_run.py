@@ -76,6 +76,11 @@ def _verdict_bytes(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
 
 
+def _not_issuable(raw, manifest=None, floor=None):
+    return d.claim_side_bound_not_issuable(raw, finalized_manifest=manifest or SIDE_BOUND_MANIFEST,
+                                           floor_artifact=floor or SIDE_BOUND_FLOOR)
+
+
 # Provenance defects the eligibility check passes on (the producer then refuses): raw
 # verdict bytes and the expected tooling code.
 def provenance_defects():
@@ -514,12 +519,15 @@ class DriverDouble(d.StepRunner):
                     'cell_id':pack+'-target','provenance':{kind:{'calibration_cell_id':pack+'-target',
                         'evidence_root_id':pack+'-root'} for kind in ('absolute','comparative')}}
                     for pack in ('alpha','beta')])
+                if self.real_9b:value['artifact_id']=SIDE_BOUND_FLOOR['artifact_id']
                 write(option('--out'),value);write(option('--single-count-out'),{'schema_version':'joulewise.single_count.v1'})
                 write(option('--d165-replay-out'),{'schema_version':'joulewise.d165_dominance_replay.v1',**{'marker':12.3457331}})
             elif step=='8':
                 from joulewise.analysis_manifest_v3 import FINALIZED_BASENAME_SUFFIX
+                # The real step 9b reads the registered contrast ids (D-189).
                 write(Path(option('--output-dir'))/('am-'+'c'*64+FINALIZED_BASENAME_SUFFIX),
-                      {'schema_version':'joulewise.analysis_manifest.v3',**value})
+                      {'schema_version':'joulewise.analysis_manifest.v3',**value,
+                       **({'contrasts':SIDE_BOUND_MANIFEST['contrasts']} if self.real_9b else {})})
             elif step=='6':
                 output=Path(option('--output'));write(output,{'schema_version':'joulewise.d165_dominance_closeout.v1',**value})
                 write(output.with_name(output.stem+'.ratio-table.json'),{'schema_version':'joulewise.b5_d165_ratio_table.v1',**value})
@@ -876,13 +884,14 @@ class DriverAcceptanceTests(unittest.TestCase):
         d.require_release_equality(before.record,after.record)
 
     def test_T23_step9b_provenance_defect_is_a_tooling_refusal_and_stops(self):
-        # An issuable-looking verdict whose parents the producer refuses (the double's
-        # manifest registers no contrast): a provenance defect, never the outcome.
-        DriverDouble.real_9b=True;DriverDouble.verdicts=side_bound_verdicts()
+        # A verdict contrast the finalized manifest does not register, even beside a
+        # null interval (the producer's earlier clause): a provenance defect, never the outcome.
+        contrast=side_bound_contrast('ctr-unregistered');NON_ISSUABLE['null_metrology_interval'](contrast)
+        DriverDouble.real_9b=True;DriverDouble.verdicts=side_bound_verdicts(contrast)
         result=self.execute();self.assertEqual(result.code,2,result.stderr)
         row=next(r for r in result.record['steps'] if r['step']=='9b')
         self.assertEqual((row['status'],row['refusal'],row['exit_status']),
-                         ('tooling_refusal','paper_claim_side_bound_shape_invalid',2))
+                         ('tooling_refusal','paper_claim_side_bound_contrast_mismatch',2))
         self.assertEqual([r['status'] for r in result.record['steps'] if r['step'] in ('10','11')],['not_run']*2)
         self.assertFalse(result.record['completed_without_tooling_refusal'])
         self.assertFalse(any(step in ('10','11') for step,_,_ in DriverDouble.calls))
@@ -900,6 +909,8 @@ class DriverAcceptanceTests(unittest.TestCase):
             for row in steps[pos+1:]:
                 row.update(status='not_run',exit_status=None,schema_valid=None,outputs=[],refusal=None,flags=[])
         output={'name':'custody/'+'a'*64+'.json','sha256':'a'*64}
+        def ok_9b(row):
+            return {**deepcopy(row),'status':'ok','exit_status':0,'refusal':None}
         def outcome_at_6(steps):
             row=next(r for r in steps if r['step']=='6')
             row.update(status='outcome_class',exit_status=3,refusal='outcome-class refusal at step 6')
@@ -909,6 +920,10 @@ class DriverAcceptanceTests(unittest.TestCase):
                           ('9b with a window',lambda steps:steps[pos].update(window='gamma')),
                           ('9b schema_valid',lambda steps:steps[pos].update(schema_valid=True)),
                           ('9b followed by not_run',stop_after),
+                          # Only the one 9b row the driver writes (review LOW 1).
+                          ('two non-stopping 9b rows',lambda steps:steps.insert(pos,deepcopy(steps[pos]))),
+                          ('a 9b ok row before it',lambda steps:steps.insert(pos,ok_9b(steps[pos]))),
+                          ('a 9b ok row after it',lambda steps:steps.insert(pos+1,ok_9b(steps[pos]))),
                           ('step 6 outcome followed by ok rows',outcome_at_6)):
             with self.subTest(name),self.assertRaisesRegex(AnalysisRefusal,'^dry_run_record_invalid$'):
                 d.validate_dry_run_record(mutated(edit),index=index,kept_units=kept)
@@ -1539,7 +1554,7 @@ class ClaimSideBoundStep9bTests(unittest.TestCase):
                                                          side_bound_contrast('ctr-prefill',('beta-target','gamma-target'))))):
             raw=_verdict_bytes(verdicts)
             with self.subTest(name),self.state(documents=self.documents(raw),stub_producer=False) as (s,projections):
-                self.assertFalse(d.claim_side_bound_not_issuable(raw))
+                self.assertFalse(_not_issuable(raw))
                 contexts=[];gate=self.gate(contexts,projections)
                 with mock.patch.dict(c._ISSUANCE_GATES,{('claim_evidence','claim-evidence.v1'):gate}), \
                      mock.patch.object(c,'open_paper_input',wraps=c.open_paper_input) as opener:
@@ -1565,7 +1580,7 @@ class ClaimSideBoundStep9bTests(unittest.TestCase):
                 # The producer cannot issue it: the registered not-resolvable / not-estimable outcome.
                 self.assert_producer_refuses(raw,{'paper_claim_side_bound_cell_mismatch','paper_claim_side_bound_shape_invalid',
                                                   'paper_claim_side_bound_anchor_missing'})
-                self.assertTrue(d.claim_side_bound_not_issuable(raw))
+                self.assertTrue(_not_issuable(raw))
                 before=set(s.outputs)
                 with mock.patch.object(c,'open_paper_input') as opener, \
                      mock.patch('joulewise.analysis_engine.claim_side_bound.produce_claim_side_bound') as producer:
@@ -1591,7 +1606,7 @@ class ClaimSideBoundStep9bTests(unittest.TestCase):
         for name,(raw,code) in provenance_defects().items():
             with self.subTest(name),self.state(documents=self.documents(raw),stub_producer=False) as (s,_):
                 self.assert_producer_refuses(raw,{code})
-                self.assertFalse(d.claim_side_bound_not_issuable(raw))
+                self.assertFalse(_not_issuable(raw))
                 with mock.patch.object(c,'open_paper_input') as opener:
                     records=d.step_9b(s,d.StepRunner(s.restricted))
                 opener.assert_not_called()
@@ -1602,14 +1617,67 @@ class ClaimSideBoundStep9bTests(unittest.TestCase):
                 self.assertNotIn('claim_side_bound',s.outputs)
                 self.assertNotIn('Traceback',self.logs(s))
 
+    def test_the_check_follows_the_producer_order(self):
+        # Review LOW 2: a registered state counts only when it is the first condition the
+        # producer fails; an earlier provenance defect stays a tooling refusal.
+        from joulewise.analysis_engine.claim_side_bound import ClaimSideBoundRefusal
+        def refused(contrast_id='ctr-decode',cells=('alpha-target','beta-target')):
+            value=side_bound_contrast(contrast_id,cells);NON_ISSUABLE['refused_resolution'](value);return value
+        def with_edit(edit,value=None):
+            value=value or side_bound_contrast();edit(value);return value
+        unregistered_null=with_edit(NON_ISSUABLE['null_metrology_interval'],side_bound_contrast('ctr-unregistered'))
+        nan=_verdict_bytes(non_issuable_verdicts('no_anchor_term')).replace(b'"total":0.5',b'"total":NaN')
+        bad_then_refused=side_bound_contrast()
+        bad_then_refused['floor']['resolutions'][0]['source_cell_ids']=['delta-target']
+        bad_then_refused['floor']['resolutions'][1]['status']='refused'
+        refused_then_bad=side_bound_contrast()
+        refused_then_bad['floor']['resolutions'][0]['status']='refused'
+        refused_then_bad['floor']['resolutions'][1]['source_cell_ids']=['delta-target']
+        no_cells_key=refused();del no_cells_key['floor']['resolutions'][1]['source_cell_ids']
+        cases={
+            'nan_total_beside_no_anchor':(nan,False),
+            'unregistered_beside_null_interval':(_verdict_bytes(side_bound_verdicts(unregistered_null)),False),
+            'unregistered_then_refused':(_verdict_bytes(side_bound_verdicts(side_bound_contrast('ctr-unregistered'),
+                                                                            refused('ctr-prefill'))),False),
+            'refused_then_unregistered':(_verdict_bytes(side_bound_verdicts(refused(),
+                                                                            side_bound_contrast('ctr-unregistered'))),True),
+            'bad_cells_then_refused_resolution':(_verdict_bytes(side_bound_verdicts(bad_then_refused)),False),
+            'refused_then_bad_cells_resolution':(_verdict_bytes(side_bound_verdicts(refused_then_bad)),True),
+            'refused_without_source_cells_key':(_verdict_bytes(side_bound_verdicts(no_cells_key)),False),
+            'join_collision_then_null_interval':(_verdict_bytes(side_bound_verdicts(side_bound_contrast(),
+                with_edit(NON_ISSUABLE['null_decision_interval'],side_bound_contrast('ctr-prefill')))),False),
+            'malformed_term_then_null_interval':(_verdict_bytes(side_bound_verdicts(with_edit(
+                NON_ISSUABLE['null_metrology_interval'],
+                with_edit(_edit(('deterministic_bounds','terms',1,'bound'),'x'))))),False),
+        }
+        legit={'paper_claim_side_bound_cell_mismatch','paper_claim_side_bound_shape_invalid',
+               'paper_claim_side_bound_anchor_missing'}
+        for name,(raw,expected) in cases.items():
+            with self.subTest(name):
+                self.assertIs(_not_issuable(raw),expected)
+                with self.assertRaises(ClaimSideBoundRefusal) as refusal:
+                    self.produce(raw)
+                if expected:self.assertIn(refusal.exception.code,legit)
+        # Parents the producer refuses before any contrast are not a state either.
+        raw=_verdict_bytes(non_issuable_verdicts('refused_resolution'))
+        self.assertTrue(_not_issuable(raw))
+        for manifest,floor in (({'contrasts':[]},None),({'contrasts':[{'contrast_id':'ctr-decode'}]*2},None),
+                               (None,{'cells':SIDE_BOUND_FLOOR['cells']}),({},None)):
+            with self.subTest(manifest=manifest,floor=floor):
+                self.assertFalse(d.claim_side_bound_not_issuable(raw,
+                    finalized_manifest=SIDE_BOUND_MANIFEST if manifest is None else manifest,
+                    floor_artifact=SIDE_BOUND_FLOOR if floor is None else floor))
+
     def test_the_check_is_structure_only(self):
-        # Numbers are opaque markers: the check never reads a numeral (an unparseable
-        # one beside a null interval is still that state), and non-bytes are not a state.
+        # Numbers are opaque markers: the check never reads a numeral. The producer's
+        # value-level clauses (finite, non-negative, ordered) are therefore not evaluated:
+        # an unparseable numeral beside a null interval is still that state. Non-bytes
+        # are not a state.
         raw=_verdict_bytes(non_issuable_verdicts('null_decision_interval')).replace(b'"total":0.5',b'"total":1e-9999999999999999999')
-        self.assertTrue(d.claim_side_bound_not_issuable(raw))
-        self.assertFalse(d.claim_side_bound_not_issuable(json.loads(raw)))
+        self.assertTrue(_not_issuable(raw))
+        self.assertFalse(_not_issuable(json.loads(raw)))
         with mock.patch('json.loads',wraps=json.loads) as loads:
-            d.claim_side_bound_not_issuable(raw)
+            _not_issuable(raw)
         kwargs=loads.call_args.kwargs
         self.assertIs(kwargs['parse_float']('0.5'),kwargs['parse_int']('3'))
         self.assertNotIsInstance(kwargs['parse_float']('0.5'),(int,float,str))
@@ -1617,7 +1685,7 @@ class ClaimSideBoundStep9bTests(unittest.TestCase):
         for edit in (_edit(('floor','resolutions',0,'status'),3),_edit(('deterministic_bounds','terms'),[3]),
                      _edit(('estimator',),None),_edit(('deterministic_bounds','terms'),None)):
             contrast=side_bound_contrast();edit(contrast)
-            self.assertFalse(d.claim_side_bound_not_issuable(_verdict_bytes(side_bound_verdicts(contrast))))
+            self.assertFalse(_not_issuable(_verdict_bytes(side_bound_verdicts(contrast))))
 
 
 class ReferenceParityTests(unittest.TestCase):

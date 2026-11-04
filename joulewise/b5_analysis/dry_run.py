@@ -377,6 +377,7 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
     for row in record['steps']:
         if not order or order[-1]!=row.get('step'):order.append(row.get('step'))
     need(tuple(order)==STEP_IDS)
+    nine_b_rows=sum(1 for row in record['steps'] if type(row) is dict and row.get('step')=='9b')
     stopped=False
     for row in record['steps']:
         keys(row, ('step','window','status','exit_status','registered_exit','schema_valid','outputs','refusal','flags'))
@@ -401,6 +402,9 @@ def _validate_dry_run_record(record, *, index=None, kept_units=None):
         nonstopping = is_nonstopping_outcome(row)
         if row['step'] == '9b' and row['status'] == 'outcome_class':
             need(nonstopping)
+        if nonstopping:
+            # The driver writes exactly one step-9b row; no other 9b row may sit beside it.
+            need(nine_b_rows == 1)
         if row['status'] == 'tooling_refusal':
             need(type(row['refusal']) is str and row['refusal'] in classes and _TOKEN.fullmatch(row['refusal']) is not None)
         if row['status'] == 'not_run':
@@ -1198,53 +1202,128 @@ def _structure_object(pairs):
     return result
 
 
-def _contrast_not_issuable(contrast):
-    if not isinstance(contrast, dict):
+def _structure_constant(token):
+    # The producer refuses NaN and Infinity at parse (claim_side_bound._parse), before any contrast.
+    raise ValueError('non-JSON number')
+
+
+def _structure_interval(value):
+    return (type(value) is dict and set(value) == {'lower', 'upper'}
+            and all(item is _STRUCTURE_NUMBER for item in value.values()))
+
+
+def _first_condition_is_outcome(verdicts, registered, floor_cells):
+    """Walk claim_side_bound._project in its own order; True when the first condition it fails is a registered state.
+
+    Each provenance clause below implies the producer's clause at the same point, so
+    the producer refuses there (a tooling refusal). The producer's value-level
+    clauses (a finite, non-negative number; lower <= upper) are not evaluated:
+    reading a value would break the structure-only rule. Step 9's verdict validator
+    already refuses those values.
+    """
+    from joulewise.analysis_engine.ratio import validate_metric_unit_and_ratio
+    contrasts = verdicts.get('contrasts') if type(verdicts) is dict else None
+    if not isinstance(contrasts, list) or not contrasts:
         return False
-    floor = contrast.get('floor')
-    resolutions = floor.get('resolutions') if isinstance(floor, dict) else None
-    if isinstance(resolutions, list) and any(
-            isinstance(row, dict) and type(row.get('status')) is str and row['status'] not in _ISSUABLE_RESOLUTIONS
-            for row in resolutions):
-        return True
-    estimator, bounds = contrast.get('estimator'), contrast.get('deterministic_bounds')
-    if isinstance(estimator, dict) and 'metrology_aware_CI95' in estimator and estimator['metrology_aware_CI95'] is None:
-        return True
-    if not isinstance(bounds, dict):
-        return False
-    if 'decision_interval' in bounds and bounds['decision_interval'] is None:
-        return True
-    terms = bounds.get('terms')
-    if not isinstance(terms, list):
-        return False
-    if not terms:
-        return True
-    if all(isinstance(term, dict) and type(term.get('name')) is str for term in terms):
-        return _CLAIM_SIDE_BOUND_ANCHOR not in {term['name'] for term in terms}
+    seen, joins = set(), set()
+    for contrast in contrasts:
+        if type(contrast) is not dict:
+            return False
+        subject = contrast.get('contrast_id')
+        if type(subject) is not str or subject in seen or subject not in registered:
+            return False                                   # contrast_mismatch
+        seen.add(subject)
+        floor = contrast.get('floor')
+        resolutions = floor.get('resolutions') if type(floor) is dict else None
+        if not isinstance(resolutions, list) or not resolutions:
+            return False                                   # cell_mismatch (no resolution)
+        sources = []
+        for resolution in resolutions:
+            # The producer reads source_cell_ids, then status, in one clause.
+            if type(resolution) is not dict or not {'source_cell_ids', 'status'} <= set(resolution):
+                return False
+            status = resolution['status']
+            if type(status) is not str:
+                return False
+            if status not in _ISSUABLE_RESOLUTIONS:
+                return True                                # the registered not-resolvable floor
+            cells = resolution['source_cell_ids']
+            if (not isinstance(cells, list) or not cells
+                    or any(type(cell) is not str or cell not in floor_cells for cell in cells)
+                    or len(set(cells)) != len(cells) or (status == 'exact' and len(cells) != 1)):
+                return False                               # cell_mismatch (provenance)
+            sources.extend(cells)
+        metric, estimator = contrast.get('metric'), contrast.get('estimator')
+        if type(metric) is not dict or type(estimator) is not dict or not {'unit', 'ratio_estimand'} <= set(metric):
+            return False
+        try:
+            # The producer's own validator over manifest strings; a number is never equal to one.
+            validate_metric_unit_and_ratio(metric['unit'], metric['ratio_estimand'])
+        except (TypeError, ValueError):
+            return False                                   # unit_mismatch
+        ratio = metric['ratio_estimand']
+        join = (ratio['form'] if ratio is not None else None, tuple(sources))
+        if join in joins:
+            return False                                   # join_not_injective
+        joins.add(join)
+        if type(estimator.get('name')) is not str or not estimator['name']:
+            return False
+        bounds = contrast.get('deterministic_bounds')
+        if type(bounds) is not dict or not isinstance(bounds.get('terms'), list):
+            return False
+        terms = bounds['terms']
+        if not terms:
+            return True                                    # no deterministic term
+        if (any(type(term) is not dict or set(term) != {'name', 'bound'} or type(term['name']) is not str
+                or not term['name'] or term['bound'] is not _STRUCTURE_NUMBER for term in terms)
+                or len({term['name'] for term in terms}) != len(terms)
+                or bounds.get('total') is not _STRUCTURE_NUMBER or 'metrology_aware_CI95' not in estimator):
+            return False
+        if estimator['metrology_aware_CI95'] is None:
+            return True                                    # not estimable: no interval
+        if not _structure_interval(estimator['metrology_aware_CI95']) or 'decision_interval' not in bounds:
+            return False
+        if bounds['decision_interval'] is None:
+            return True                                    # not estimable: no decision interval
+        if not _structure_interval(bounds['decision_interval']):
+            return False
+        if _CLAIM_SIDE_BOUND_ANCHOR not in {term['name'] for term in terms}:
+            return True                                    # no anchor term
     return False
 
 
-def claim_side_bound_not_issuable(verdicts_raw) -> bool:
+def claim_side_bound_not_issuable(verdicts_raw, *, finalized_manifest, floor_artifact) -> bool:
     """Whether step 9's verdict bytes leave a contrast in a registered non-issuable state (D-189).
 
     Exactly the producer's legitimate-state conditions (claim_side_bound._project):
     a floor resolution whose status is outside {exact, transported}, a null
     estimator.metrology_aware_CI95 or deterministic_bounds.decision_interval, an
-    empty deterministic_bounds.terms list, or terms without the anchor term.
-    Structure only: every JSON number is an opaque marker, never a value. Bytes the
-    producer refuses before any contrast (not JSON, a duplicate key, no contrast
-    list) are not such a state; the producer then refuses as before.
+    empty deterministic_bounds.terms list, or terms without the anchor term. They
+    count only when one of them is the first condition the producer fails, in the
+    producer's own order (contrasts in order; within one contrast, its clause
+    order). An earlier provenance defect is not such a state, and the producer then
+    refuses as before. Structure only: every JSON number is an opaque marker, never
+    a value; NaN, Infinity, non-JSON bytes and duplicate keys, which the producer
+    refuses at parse, are not such a state.
     """
     if type(verdicts_raw) is not bytes:
         return False
     try:
+        registered = [row['contrast_id'] for row in finalized_manifest['contrasts']]
+        floor_cells = {row['cell_id'] for row in floor_artifact['cells']}
+        floor_id = floor_artifact['artifact_id']
+    except (KeyError, TypeError):
+        return False
+    if (not registered or any(type(item) is not str or not item for item in registered)
+            or len(set(registered)) != len(registered) or type(floor_id) is not str or not floor_id):
+        return False
+    try:
         verdicts = json.loads(verdicts_raw.decode('utf-8'), object_pairs_hook=_structure_object,
                               parse_int=_structure_number, parse_float=_structure_number,
-                              parse_constant=_structure_number)
-    except (UnicodeDecodeError, ValueError, RecursionError):
+                              parse_constant=_structure_constant)
+        return _first_condition_is_outcome(verdicts, registered, floor_cells)
+    except (UnicodeDecodeError, ValueError, TypeError, RecursionError):
         return False
-    contrasts = verdicts.get('contrasts') if isinstance(verdicts, dict) else None
-    return isinstance(contrasts, list) and any(_contrast_not_issuable(contrast) for contrast in contrasts)
 
 
 def is_nonstopping_outcome(row) -> bool:
@@ -1270,7 +1349,7 @@ def _claim_open(s,argv):
     before=set(s.outputs)
     manifest,floor=s.read('finalized_manifest'),s.read('floor_artifact')
     verdicts_raw=s.output('claim_verdicts').read_bytes()
-    if claim_side_bound_not_issuable(verdicts_raw):
+    if claim_side_bound_not_issuable(verdicts_raw,finalized_manifest=manifest,floor_artifact=floor):
         # D-189: the registered outcome; nothing is written and no custody is opened.
         print('error: '+CLAIM_SIDE_BOUND_NOT_ISSUABLE,file=sys.stderr)
         return CLAIM_SIDE_BOUND_NOT_ISSUABLE_EXIT
