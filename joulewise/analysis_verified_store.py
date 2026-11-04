@@ -16,8 +16,20 @@ commit (if the driver supplies one) and a content digest of the ``joulewise``
 package sources, a digest of every ``JOULEWISE_*`` environment variable, the
 leaf id, the leaf's scalar arguments, for every tree argument its resolved
 path (or, for a path-free leaf, its final name) together with the caller's
-absolute spelling when that differs (a leaf may build a value from the
+exact spelling when that differs (a leaf may build a value from the
 spelling it was given), its tree digest, and whether a V2 session is active.
+D-188 VDL-FIX round 3 (Sol vf3 V1): a tree argument is served or stored only
+when its spelling is absolute and lexically normal (no ``..``, ``.``, empty or
+trailing component); a relative spelling, or one like ``missing/..`` (which
+the kernel resolves by traversing ``missing``), runs the leaf unchanged. Review
+of #641 (round 4): lexical normality is not enough, because a symlink on the
+way can hold ``passage/..``, which the non-strict ``realpath`` drops while the
+kernel traverses ``passage`` (missing, a file, or not searchable). So the
+kernel's own resolution of the spelling (``os.stat``) must also reach the
+realpath root itself (same device and inode as its ``lstat``), or the call
+runs the leaf unchanged. Both are recomputed on every call, checked again
+after a fill and before a deferred hit applies; an extra read or listing kept
+under an alias is held to the same rule on its fill and on every hit.
 
 Tree digest. An lstat walk that follows no symlink: per file (relpath, kind,
 mode, size, sha256), per directory (relpath, mode, sorted listing). A path-free
@@ -45,8 +57,18 @@ makes, is attributed only through an authentication_io no-follow row); the
 scalar arguments are unchanged by the call; every tree's lstat signature is
 unchanged across the call; the physics view behaves as the J2 premise needs.
 Reads outside the leaf's trees and outside the Python installation and the
-``joulewise`` sources are kept as (path, sha256) extras, and listings as name
-digests; both are re-verified on every hit (cached per scope, lstat-guarded). A path-free leaf's value must
+``joulewise`` sources are kept as (path, sha256) extras, and listings as
+digests of every entry's name and own lstat type; both are re-verified on
+every hit (cached per scope, lstat-guarded). D-188 VDL-FIX round 2 (Sol HC1):
+an open outside the trees that found a directory (a file open that failed, or
+a no-follow root) is kept as (path, mode) and must still be a directory with
+that mode on every hit; any other failed open (nothing hashable there) makes
+the fill unstorable, and so does a no-follow component opened more often than
+successful rows account for (a failed no-follow read).
+Each is bound to the pathname the leaf used (Sol wave-2 #2): a pathname that
+is not its own target is kept as an alias and re-resolved on every hit, and a
+read into a tree through any pathname but one of that tree's spellings is
+unstorable. A path-free leaf's value must
 not contain any spelling of its tree's location or parent (searched in the
 pickled bytes and in every string and path inside the value).
 
@@ -85,14 +107,26 @@ serial there, because a worker process's reads are invisible to this recorder.
 Physics. A leaf's probe names the physics-cache entries it may read or insert;
 which entries a call consults (not their values) is part of the key.
 A fill records the visible value before (V0) and after (P). A lookup is
-admitted only if the caller's visible value V is ABSENT or equals P exactly;
-P is inserted where V is ABSENT.
+admitted only if the caller's visible value V equals P exactly, or V is ABSENT
+and the fill itself started cold for the key or never consulted it (kinds
+``absent``, ``set``, ``noconsult``; Sol HB: a warm fill is no proof of what a
+cold refit returns).
+D-188 VDL-FIX (Sol wave-2 #1): a fill also records, per key, what its leaf
+provably did to every caller-visible layer (a run view's local dict and its
+run partition, or a plain dict; ``_PHYSICS_KINDS``), and a hit replays
+exactly the serial effect for the caller's current layers: a partition entry
+promoted into an empty local dict, P written where nothing is visible only
+after a fill that fitted P itself, nothing otherwise; where the serial effect
+is not determined by the fill, the hit is declined and the leaf runs.
 
 Shadow. A sampled hit is first served by the identical ``_apply`` into a
 scratch copy of the consumer's session (no real registration, no insert); if
 that refuses, the call is a plain miss, exactly as in ``on`` mode. Otherwise the
 leaf runs in the real session and its value, physics and resulting session
-records are compared with what serving the hit produced.
+records are compared with what serving the hit produced. A recompute that
+cannot be stored (so is not compared in full) is still compared by its
+decision (``_decision_kind``: value vs refusal, and which refusal); a
+different decision is a defect (round 3, Sol vf3 V2).
 
 Defects. Nothing in this module raises into a caller's ``except`` clauses: a
 hit anomaly falls through to the leaf, a poisoned key (two fills disagree) falls
@@ -114,7 +148,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 import contextvars
 import copy
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 import enum
 import hashlib
 import importlib
@@ -465,20 +499,51 @@ def _file_signature(path: str) -> str | None:
     return repr(_signature_row(st))
 
 
+def _entry_kind(entry: os.DirEntry) -> str:
+    """An entry's own type, following no symlink: d(irectory), f(ile), l(ink) or o(ther)."""
+
+    if entry.is_symlink():
+        return "l"
+    if entry.is_dir(follow_symlinks=False):
+        return "d"
+    if entry.is_file(follow_symlinks=False):
+        return "f"
+    return "o"
+
+
 def _listing(path: str) -> tuple[str, str] | None:
-    """(names digest, signature) of a directory listing, following no symlink."""
+    """(digest of names and entry kinds, signature) of a directory listing, following no symlink.
+
+    D-188 VDL-FIX round 2 (HC1, Sol): a listing binds each entry's own lstat
+    type as well as its name. A caller that tries every listed candidate and
+    skips the ones it cannot read (``environment_admission``'s registered
+    policies) answers differently when a same-named entry changes type (a
+    directory becomes a file, a file a symlink), so a names-only digest would
+    keep serving a stale value.
+    """
 
     try:
         st = os.lstat(path)
         if not stat.S_ISDIR(st.st_mode):
             return None
-        names = sorted(os.listdir(path))
+        with os.scandir(path) as entries:
+            rows = sorted((entry.name, _entry_kind(entry)) for entry in entries)
         after = os.lstat(path)
     except OSError:
         return None
     if _signature_row(st) != _signature_row(after):
         return None
-    return canonical_digest(tuple(names)), repr(_signature_row(st))
+    return canonical_digest(("kinds", tuple(rows))), repr(_signature_row(st))
+
+
+def _directory_mode(path: str) -> int | None:
+    """The permission bits of the directory at ``path`` (no symlink followed), or None."""
+
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    return stat.S_IMODE(st.st_mode) if stat.S_ISDIR(st.st_mode) else None
 
 
 # ------------------------------------------------------------ verification scope
@@ -674,6 +739,8 @@ class _Fill:
         self.forwarded_trees: list[tuple[str, bool, str]] = []
         self.forwarded_extras: list[tuple[str, str]] = []
         self.forwarded_listings: list[tuple[str, str]] = []
+        self.forwarded_aliases: list[tuple[str, str]] = []
+        self.forwarded_directories: list[tuple[str, int]] = []
         # A hit served inside this fill carried no session rows: this fill's
         # rows cannot stand for a session's either.
         self.rows_incomplete = False
@@ -738,9 +805,12 @@ def _audit(event: str, args: tuple) -> None:
                 for fill in fills:
                     fill.relative_opens.append(path)
                 return
-            absolute = os.path.abspath(path)
+            # The leaf's own pathname, exactly as spelled: no lexical
+            # normalization (a ``..`` after a symlink is the kernel's to
+            # resolve), and a relative spelling stays relative so that a hit
+            # re-resolves it against the cwd of the hit (review of #639).
             for fill in fills:
-                fill.reads.append(absolute)
+                fill.reads.append(path)
         elif event in ("os.listdir", "os.scandir"):
             path = args[0] if args else None
             if path is None:
@@ -750,9 +820,8 @@ def _audit(event: str, args: tuple) -> None:
             if not isinstance(path, str):
                 _mark(fills, "unattributable_listing")
                 return
-            absolute = os.path.abspath(path)
             for fill in fills:
-                fill.listings.append(absolute)
+                fill.listings.append(path)
         elif event in _WRITE_EVENTS:
             _mark(fills, "write")
         elif event in _PROCESS_EVENTS or event.startswith("os.exec") or event.startswith("os.spawn"):
@@ -1016,6 +1085,12 @@ class LeafSpec:
     params: tuple[tuple[str, str], ...]  # (parameter, role): every parameter, exactly once
     path_free: bool = False
     physics_probe: Callable[[Mapping[str, Any]], list[tuple[Any, str]]] | None = None
+    # D-188 VDL-FIX round 2 (RL): the leaf body's first and only use of each
+    # tree argument is ``Path(argument)``, which drops any capability
+    # subclass; a capability path and a plain path of the same spelling then
+    # yield the same value and the same reads, and the key does not tell them
+    # apart (see ``reduce_bundle_dict``).
+    plain_trees: bool = False
 
     def roles(self) -> dict[str, str]:
         return dict(self.params)
@@ -1048,7 +1123,11 @@ def _probe_strict(arguments: Mapping[str, Any]) -> list[tuple[Any, str]]:
         session = _AUTH.session()
         view = session.instrument_calibration_physics_cache if session is not None else None
         if view is None:
-            view = physics_cache_for_call(None, metadata)
+            # The leaf builds its own view over a fresh local dict: only the
+            # run partition is caller-visible (VDL-FIX: a private local layer).
+            view = physics_cache_for_call(_PrivateLocal(), metadata)
+            if not hasattr(view, "_store"):
+                view = None  # no run partition: the leaf's own cache is None, as before
     else:
         view = physics_cache_for_call(explicit, metadata)
     return [] if view is None else [(view, key)]
@@ -1069,7 +1148,7 @@ def _probe_operative(arguments: Mapping[str, Any]) -> list[tuple[Any, str]]:
     from joulewise.analysis_run_cache import physics_cache_for_call
 
     key = _calibration_key(arguments["metadata"])
-    view = physics_cache_for_call({}, arguments["metadata"])
+    view = physics_cache_for_call(_PrivateLocal(), arguments["metadata"])
     return [] if view is None or key is None else [(view, key)]
 
 
@@ -1084,10 +1163,22 @@ def reduce_bundle_dict(
     Both stages raise exactly as before; a caller whose serial code separates
     the reduction and serialization failures (``cli._cmd_reduce``) must keep
     them separate around this leaf.
+
+    D-188 VDL-FIX round 2 (RL): the body uses ``path`` only as ``Path(path)``,
+    exactly as ``reduce_bundle`` itself does first (``BundleReader(Path(path))``,
+    its only use of the argument; a test pins this). A capability path (a
+    session's ``V2AuthenticationPath`` or a recorder's
+    ``_RecordedAuthenticationPath``) therefore computes exactly what the plain
+    path of the same spelling computes: the reader re-derives its own
+    capability from the session or recorder in force (``BundleReader.path``),
+    not from the argument's type. So the spec keys the argument as a plain
+    path (``plain_trees``): step 1's strict validation (``reader.path``, a
+    capability) and step 2's ``reduce`` verb (a plain path) share one entry.
     """
 
     from joulewise.reduce import reduce_bundle
 
+    path = Path(path)
     if physics_cache is None:
         return reduce_bundle(path, reducer_version=reducer_version).to_dict()
     return reduce_bundle(path, reducer_version=reducer_version,
@@ -1136,6 +1227,7 @@ LEAVES: tuple[LeafSpec, ...] = (
         (("path", TREE), ("reducer_version", SCALAR), ("physics_cache", PHYSICS)),
         physics_probe=_probe_explicit(
             "physics_cache", lambda arguments: _calibration_key(_bundle_metadata(arguments["path"]))),
+        plain_trees=True,
     ),
     LeafSpec(
         "L4_calibration_bracket",
@@ -1196,6 +1288,8 @@ class _TreeRef:
     name: str
     content_only: bool
     spellings: tuple[str, ...] = ()  # every spelling a value could embed (leak guard)
+    # The caller's exact (absolute, lexically normal) spelling (round 3).
+    spelling: str = ""
 
 
 def _identity_root(identity: str) -> str:
@@ -1215,6 +1309,46 @@ class Entry:
     physics: tuple[tuple[str, Any, Any], ...]  # (cache key, V0, P)
     # (tree index or -1, identity, sha, grammar, caller grammar, label, parse depth below the fill or None)
     rows: tuple[tuple[int, str, str, str, str, str, int | None], ...] | None
+    # D-188 VDL-FIX (Sol wave-2 #1): per physics key, what the fill's leaf
+    # provably did to the caller-visible layers (``_PHYSICS_KINDS``). A key
+    # with no kind is ``opaque``.
+    physics_kinds: tuple[tuple[str, str], ...] = ()
+    # D-188 VDL-FIX (Sol wave-2 #2): (original absolute pathname, resolved
+    # target) of every extra read or listing whose pathname is not its own
+    # target; each binding is re-checked on every hit.
+    aliases: tuple[tuple[str, str], ...] = ()
+    # D-188 VDL-FIX round 2 (HC1, Sol): (resolved path, permission bits) of
+    # every pathname outside the trees that the fill opened and found to be a
+    # directory (an attempted file open that failed with IsADirectoryError, or
+    # the no-follow route's root). Each must still be a directory with those
+    # bits on every hit.
+    directories: tuple[tuple[str, int], ...] = ()
+
+
+# What a fill's leaf did to one physics key, from the caller-visible layers
+# (a run view's own local dict and its run partition; a plain dict) before
+# and after it. The reducer's only operations on a physics cache are
+# ``get(key)`` (a run view copies a partition entry into its local dict) and,
+# after a ``get`` that found nothing and a successful fresh fit, ``cache[key] =
+# bound`` (a run view writes local and partition).
+#   absent    nothing visible before or after: nothing to replay.
+#   set       nothing visible before, P after: the leaf consulted the key and
+#             fitted P on these very bytes. A hit promotes a partition entry
+#             into an empty local layer, or writes P where nothing is visible.
+#   promote   local empty, partition P: the leaf consulted and promoted. A hit
+#             promotes where the local layer is empty and the partition holds
+#             P; with nothing visible it is declined (no fit was observed).
+#   noconsult local empty, partition P, unchanged: the leaf never consulted
+#             the key. A hit changes nothing.
+#   opaque    a visible value nothing changed, consulting unknown. A hit is
+#             served only where a caller-visible value is already in front
+#             (the serial ``get`` then changes nothing); otherwise declined.
+_PHYSICS_KINDS = ("absent", "set", "promote", "noconsult", "opaque")
+_KIND_RANK = {"opaque": 0, "promote": 1, "set": 2, "noconsult": 2, "absent": 2}
+
+
+class _PrivateLocal(dict):
+    """A probe's own local layer for a view the leaf rebuilds itself: no caller sees it."""
 
 
 @dataclass
@@ -1341,15 +1475,35 @@ class VerifiedStore:
                 raw = os.fspath(value)
                 if not isinstance(raw, str):
                     raise _Bypass("tree argument is not a text path")
-                root = os.fspath(Path(raw).resolve(strict=False))
-                spelled = os.path.abspath(raw)
+                # D-188 VDL-FIX round 3 (Sol vf3 V1): the key binds the caller's
+                # exact spelling, and only a spelling whose POSIX resolution is
+                # its realpath is served or stored: absolute (a relative one
+                # resolves against the cwd, and its failure text quotes it as
+                # given) and lexically normal (no ``..``, ``.``, empty or
+                # trailing component: ``missing/..`` makes the kernel traverse
+                # ``missing``, which a lexical or non-strict resolution never
+                # checks). Any other spelling runs the leaf unchanged. A
+                # symlinked ancestor is allowed: the realpath is recomputed on
+                # every call (it is the tree the key's digest covers) and checked
+                # again after a fill.
+                # Review of #641 (round 4): a symlink on the way whose target
+                # holds ``passage/..`` keeps the spelling normal, and the
+                # non-strict realpath drops ``passage`` lexically while the
+                # kernel traverses it (ENOENT, ENOTDIR, or EACCES even where
+                # ``realpath(strict=True)`` succeeds). The kernel's own
+                # resolution of the spelling must reach the realpath root.
+                if not os.path.isabs(raw) or os.path.normpath(raw) != raw:
+                    raise _Bypass("tree spelling is not absolute and normal")
+                root = os.path.realpath(raw)
+                if not _kernel_resolves_to(raw, root):
+                    raise _Bypass("tree spelling does not resolve to its realpath")
                 if spec.path_free:
-                    spelled_name, root_name = os.path.basename(spelled), os.path.basename(root)
+                    spelled_name, root_name = os.path.basename(raw), os.path.basename(root)
                     name = root_name if spelled_name == root_name else f"{spelled_name}\0{root_name}"
                 else:
-                    name = root if spelled == root else f"{spelled}\0{root}"
-                spellings = tuple(dict.fromkeys((raw, str(Path(raw)), spelled, root)))
-                trees.append(_TreeRef(root, name, spec.path_free, spellings))
+                    name = root if raw == root else f"{raw}\0{root}"
+                spellings = tuple(dict.fromkeys((raw, root)))
+                trees.append(_TreeRef(root, name, spec.path_free, spellings, raw))
         scope = _current_scope()
         verdicts: list[TreeVerdict] = []
         with _suspended():
@@ -1369,7 +1523,8 @@ class VerifiedStore:
         capabilities = tuple(kind for kind in (getattr(module, name, None) for name in kinds)
                              if isinstance(kind, type))
         tree_types = tuple(
-            "v2-capability" if capabilities and isinstance(arguments[name], capabilities) else "path"
+            "v2-capability" if (capabilities and not spec.plain_trees
+                                and isinstance(arguments[name], capabilities)) else "path"
             for name, role in spec.params if role == TREE)
         prepared = _Prepared(spec, "", arguments, scalars, tuple(trees), tuple(verdicts))
         prepared.views = self._views(prepared)
@@ -1409,6 +1564,100 @@ class VerifiedStore:
         if left is ABSENT or right is ABSENT:
             return left is right
         return type(left) is type(right) is float and left.hex() == right.hex()
+
+    @staticmethod
+    def _layers(view: Any, key: str) -> tuple[Any, Any]:
+        """(local layer, partition layer) for ``key``: a value, ABSENT, or None (no such visible layer).
+
+        A run view has both (its local layer is None when it is a probe's
+        ``_PrivateLocal``); a plain dict is a local layer only (None when private).
+        """
+
+        local = getattr(view, "_local", None)
+        store = getattr(view, "_store", None)
+        if isinstance(local, dict) and isinstance(store, dict):
+            partition = store.get(getattr(view, "_key", None))
+            shared = partition.get(key, ABSENT) if isinstance(partition, dict) else ABSENT
+            return (None if isinstance(local, _PrivateLocal) else local.get(key, ABSENT)), shared
+        if isinstance(view, dict):
+            return (None if isinstance(view, _PrivateLocal) else dict.get(view, key, ABSENT)), None
+        raise _Bypass("unknown physics view")
+
+    @classmethod
+    def _layer_same(cls, left: Any, right: Any) -> bool:
+        if left is None or right is None:
+            return left is right
+        return cls._same(left, right)
+
+    @classmethod
+    def _kind(cls, before: tuple[Any, Any], after: tuple[Any, Any], visible_before: Any,
+              visible_after: Any) -> str:
+        """The fill's ``_PHYSICS_KINDS`` for one key; raises ``_Bypass`` for any other pattern."""
+
+        (local_before, shared_before), (local_after, shared_after) = before, after
+        if visible_before is ABSENT and visible_after is ABSENT:
+            if cls._layer_same(local_before, local_after) and cls._layer_same(shared_before, shared_after):
+                return "absent"
+            raise _Bypass("physics layers changed while nothing was visible")
+        if visible_before is ABSENT:
+            if ((local_before is None or cls._same(local_after, visible_after))
+                    and (shared_before is None or cls._same(shared_after, visible_after))):
+                return "set"
+            raise _Bypass("physics write outside the reducer's pattern")
+        if local_before is ABSENT:
+            if cls._same(local_after, visible_after) and cls._layer_same(shared_after, shared_before):
+                return "promote"
+            if local_after is ABSENT and cls._layer_same(shared_after, shared_before):
+                return "noconsult"
+            raise _Bypass("physics promotion outside the reducer's pattern")
+        if cls._layer_same(local_after, local_before) and cls._layer_same(shared_after, shared_before):
+            return "opaque"
+        raise _Bypass("a visible physics value changed")
+
+    def _physics_plan(self, entry: Entry, views: list[tuple[Any, str]]) -> list[tuple[Any, str, str, Any]]:
+        """What serving ``entry`` must do to each view so its layers end as the serial call's would.
+
+        Returns (view, key, operation, value) with operation ``promote`` (copy
+        the partition entry into the empty local layer, as ``get`` does) or
+        ``write`` (``view[key] = P``, as the reducer's insert does); raises
+        ``_Bypass`` where the serial effect is not determined by the fill.
+        """
+
+        posts = {key: after for key, _, after in entry.physics}
+        kinds = dict(entry.physics_kinds)
+        plan: list[tuple[Any, str, str, Any]] = []
+        for view, key in views:
+            kind = kinds.get(key, "opaque")
+            if kind not in _PHYSICS_KINDS:
+                raise _Bypass("unknown physics kind")
+            post = posts[key]
+            if kind in ("absent", "noconsult"):
+                continue
+            local, shared = self._layers(view, key)
+            if local is not None and local is not ABSENT:
+                continue  # the serial get reads the local layer and changes nothing
+            if shared is not None and shared is not ABSENT:
+                if local is None:
+                    continue  # no caller-visible local layer to promote into
+                if kind == "opaque":
+                    raise _Bypass("promotion depends on whether the leaf consulted the key")
+                plan.append((view, key, "promote", shared))
+                continue
+            if local is None and shared is None:
+                continue  # nothing caller-visible
+            if kind != "set":
+                raise _Bypass("nothing visible and no fit observed")
+            plan.append((view, key, "write", post))
+        return plan
+
+    @staticmethod
+    def _planned_layers(layers: tuple[Any, Any], operation: str | None, value: Any) -> tuple[Any, Any]:
+        local, shared = layers
+        if operation == "promote":
+            return value, shared
+        if operation == "write":
+            return (None if local is None else value), (None if shared is None else value)
+        return layers
 
     def _views(self, prepared: _Prepared) -> list[tuple[Any, str]]:
         probe = prepared.spec.physics_probe
@@ -1495,6 +1744,20 @@ class VerifiedStore:
             if not scope.prefetched:
                 scope.prefetched = True
                 self._prefetch_siblings(scope, prepared)
+            # Sol wave-2 #2: every extra read and listing reached through a
+            # pathname that is not its own target must still reach that target.
+            # Review of #641 (round 4): and the kernel's own resolution of the
+            # pathname reaches it too (a ``passage/..`` behind a symlink).
+            for original, resolved in entry.aliases:
+                if os.path.realpath(original) != resolved or not _kernel_resolves_to(original, resolved):
+                    return None
+            # HC1 (Sol): a pathname the fill opened that was a directory (a
+            # failed file open, or the no-follow route's root) must still be
+            # one, with the same mode: a file, symlink or unreadable entry
+            # there now could make the serial open succeed or fail differently.
+            for path, mode in entry.directories:
+                if _directory_mode(path) != mode:
+                    return None
             for path, digest in entry.extras:
                 if scope.verify_file(path) != digest:
                     return None
@@ -1509,10 +1772,29 @@ class VerifiedStore:
         stored = {key: (before, after) for key, before, after in entry.physics}
         if set(stored) != {key for _, key in views}:
             return None
+        kinds = dict(entry.physics_kinds)
         for view, key in views:
             visible = self._peek(view, key)
-            if not (visible is ABSENT or self._same(visible, stored[key][1])):
+            if visible is ABSENT:
+                # D-188 VDL-FIX round 2 (HB, Sol): a cold consumer (nothing
+                # visible) is served only by a fill that itself started cold
+                # for this key (``absent``/``set``: it fitted, or never wrote,
+                # P on these very bytes), or by one that provably never
+                # consulted the key (``noconsult``: the reducer's only consult
+                # is a promoting ``get``, and nothing was promoted). A fill
+                # that read a value already in front of it (``opaque``,
+                # ``promote``: e.g. another member's bound in a shared local
+                # dict) is no proof of what a cold refit returns, so it never
+                # serves a cold consumer. ``_physics_plan`` declines the same
+                # cases; this is the admission rule stated where it applies.
+                if kinds.get(key, "opaque") not in ("absent", "set", "noconsult"):
+                    return None
+            elif not self._same(visible, stored[key][1]):
                 return None
+        try:
+            self._physics_plan(entry, views)
+        except _Bypass:
+            return None  # Sol wave-2 #1: the serial layer effect is not replayable here
         if _AUTH.session() is not None and entry.rows is None:
             return None
         return views
@@ -1539,7 +1821,7 @@ class VerifiedStore:
 
         ``dry`` (shadow mode) runs the identical admission, bridge and
         registration against ``session`` (a scratch copy of the consumer's
-        session, or None) and returns ``(value, physics inserts)`` without
+        session, or None) and returns ``(value, {key: (operation, value)})`` without
         touching the real session, the views or any recorder.
         """
 
@@ -1553,6 +1835,9 @@ class VerifiedStore:
             scope = _current_scope()
             with _suspended():
                 for tree, verdict in zip(prepared.trees, prepared.verdicts):
+                    if tree.spelling and (os.path.realpath(tree.spelling) != tree.root
+                                          or not _kernel_resolves_to(tree.spelling, tree.root)):
+                        raise _Bypass("tree spelling retargeted since the probe")
                     current = scope.verify_tree(tree.root, tree.content_only)
                     if current is None or current.digest != verdict.digest:
                         raise _Bypass("tree changed since the probe")
@@ -1568,21 +1853,22 @@ class VerifiedStore:
             for index, identity, digest, grammar, caller_grammar, label, depth in entry.rows:
                 identity, label = self._relocate(prepared, index, identity, label)
                 rows.append(_Row(identity, digest, grammar, caller_grammar, label, depth))
+        # Sol wave-2 #1: leave every caller-visible layer exactly as the
+        # serial call would (a promotion into an empty local layer included).
+        # Planned before any registration: a plan that refuses touches nothing.
+        plan = self._physics_plan(entry, hit.views)
         if session is not None:
             if entry.rows is None:
                 raise _Bypass("rows incomplete for a session")
             self._bridge(session, rows, prepared, headroom)
         value = pickle.loads(entry.value)
-        inserts: dict[str, Any] = {}
-        for view, key in hit.views:
-            stored = {k: after for k, _, after in entry.physics}[key]
-            if self._peek(view, key) is ABSENT and stored is not ABSENT:
-                if dry:
-                    inserts[key] = stored
-                else:
-                    view[key] = stored
         if dry:
-            return value, inserts
+            return value, {key: (operation, stored) for _, key, operation, stored in plan}
+        for view, key, operation, stored in plan:
+            if operation == "promote":
+                view._local[key] = stored
+            else:
+                view[key] = stored
         with self._lock:
             self._served[hit.key] = self._served.get(hit.key, 0) + 1
         self._forward(entry, prepared, rows, headroom)
@@ -1639,6 +1925,8 @@ class VerifiedStore:
             fill.forwarded_trees.extend(entry.extra_trees)
             fill.forwarded_extras.extend(entry.extras)
             fill.forwarded_listings.extend(entry.listings)
+            fill.forwarded_aliases.extend(entry.aliases)
+            fill.forwarded_directories.extend(entry.directories)
         if rows:
             _AUTH.forward_rows(rows, headroom)
 
@@ -1655,20 +1943,22 @@ class VerifiedStore:
         runs in the real session, and a defect is recorded if it raises, or if
         its value, its physics post-values, the physics the caller now sees or
         the session's records (identity, sha256, grammar, read count, strict
-        parse) differ from what serving the hit would have produced. The
-        caller always gets the freshly computed value.
+        parse) differ from what serving the hit would have produced. A
+        recompute that is not storable is compared only by its decision
+        (``_decision_kind``); a different decision is a defect. The caller
+        always gets the freshly computed value.
         """
 
         leaf_id = hit.prepared.spec.leaf_id
         session = _AUTH.session()
         try:
             scratch = None if session is None else _scratch_session(session)
-            _, inserts = self._apply(hit, dry=True, session=scratch)
+            _, planned = self._apply(hit, dry=True, session=scratch)
         except Exception:  # noqa: BLE001 - not admissible here: exactly an on-mode discarded hit
             self._count(f"{leaf_id}:hit_discarded")
             return self._fill(hit.prepared, fn, args, kwargs)
         self._count(f"{leaf_id}:shadow")
-        visible_before = {key: self._peek(view, key) for view, key in hit.views}
+        layers_before = {key: self._layers(view, key) for view, key in hit.views}
         outcome: dict[str, Any] = {}
         try:
             value = self._fill(hit.prepared, fn, args, kwargs, outcome=outcome)
@@ -1677,14 +1967,37 @@ class VerifiedStore:
                 self._shadow_defect(hit, "shadow_raised")
             raise
         if not outcome.get("comparable"):
+            # D-188 VDL-FIX round 3 (Sol vf3 V2): the recompute could not be
+            # stored, so its audit-bearing parts (a clock read, a failure
+            # message quoting a path) are not compared. Its decision still is:
+            # a served value whose decision differs from the serial one (value
+            # vs refusal, or another refusal) is a defect, never incomparable.
+            try:
+                served = pickle.loads(hit.entry.value)
+                same_kind = _decision_kind(leaf_id, served) == _decision_kind(leaf_id, value)
+                identical = same_kind and _strict_equal(served, value)
+            except Exception:  # noqa: BLE001 - a decision that cannot be compared is not proven equal
+                same_kind = identical = False
+            if not same_kind:
+                self._shadow_defect(hit, "shadow_decision_mismatch")
+                return value
             self._count(f"{leaf_id}:shadow_incomparable")
+            if not identical:
+                # Same decision, other audit-bearing text: counted (restricted tier) only.
+                self._count(f"{leaf_id}:shadow_incomparable_differs")
             return value
         stored_physics = {key: after for key, _, after in hit.entry.physics}
         same_physics = all(self._same(stored_physics.get(key, ABSENT), after)
                            for key, after in outcome.get("physics", {}).items())
         try:
-            same_visible = all(self._same(inserts.get(key, visible_before[key]), self._peek(view, key))
-                               for view, key in hit.views)
+            # Every caller-visible layer (not only the visible value): an
+            # omitted promotion into a local layer is a mismatch (Sol wave-2 #1).
+            same_visible = True
+            for view, key in hit.views:
+                expected = self._planned_layers(layers_before[key], *planned.get(key, (None, None)))
+                actual = self._layers(view, key)
+                same_visible = same_visible and all(self._layer_same(left, right)
+                                                    for left, right in zip(expected, actual))
         except Exception:  # noqa: BLE001 - an unreadable view after the recompute is a mismatch
             same_visible = False
         same_records = scratch is None or _record_map(scratch) == _record_map(session)
@@ -1717,10 +2030,11 @@ class VerifiedStore:
         try:
             views = prepared.views
             before = [self._peek(view, key) for view, key in views]
+            layers_before = [self._layers(view, key) for view, key in views]
             dicts = _physics_dicts(prepared, views)
             physics_before = [(item, dict(item)) for item in dicts]
         except Exception:  # noqa: BLE001 - an unprobeable call is computed, never stored
-            views, before, physics_before, storable = [], [], [], False
+            views, before, layers_before, physics_before, storable = [], [], [], [], False
         session = _AUTH.session()
         snapshot = None
         if session is not None:
@@ -1747,7 +2061,7 @@ class VerifiedStore:
             return value
         try:
             entry = self._entry(prepared, fill, value, views, before, session, snapshot, recorded,
-                                caches, deadline, firings_before, physics_before)
+                                caches, deadline, firings_before, physics_before, layers_before)
         except _Bypass:
             entry = None
         except Exception:  # noqa: BLE001 - a store failure never changes the leaf's value
@@ -1767,7 +2081,8 @@ class VerifiedStore:
     def _entry(self, prepared: _Prepared, fill: _Fill, value: Any, views: list[tuple[Any, str]],
                before: list[Any], session: Any, snapshot: dict[str, int] | None, recorded: Any,
                caches: Any, deadline: Any, firings_before: int,
-               physics_before: list[tuple[dict, dict]]) -> Entry | None:
+               physics_before: list[tuple[dict, dict]],
+               layers_before: list[tuple[Any, Any]]) -> Entry | None:
         if fill.clock or fill.unstorable:
             return None
         if getattr(deadline, "firings", None) != firings_before or getattr(caches, "deadline", None) is not deadline:
@@ -1782,6 +2097,12 @@ class VerifiedStore:
                 walk = _walk(tree.root)
                 if walk is None or walk.signature != verdict.signature:
                     return None
+                # Round 3 (V1): the caller's spelling still resolves to the tree
+                # the key covers (a retargeted ancestor link during the fill),
+                # by realpath and by the kernel (round 4).
+                if tree.spelling and (os.path.realpath(tree.spelling) != tree.root
+                                      or not _kernel_resolves_to(tree.spelling, tree.root)):
+                    return None
             allowed = {key for _, key in views}
             for item, copy in physics_before:
                 changed = {key for key in set(item) | set(copy)
@@ -1795,14 +2116,16 @@ class VerifiedStore:
                     if isinstance(created, dict) and not set(created) <= allowed:
                         return None
             physics: list[tuple[str, Any, Any]] = []
-            for (view, key), visible_before in zip(views, before):
+            kinds: list[tuple[str, str]] = []
+            for (view, key), visible_before, layers in zip(views, before, layers_before):
                 after = self._peek(view, key)
                 if after is not ABSENT and type(after) is not float:
                     return None
                 if visible_before is not ABSENT and not self._same(visible_before, after):
                     return None
                 physics.append((key, visible_before, after))
-            extras, listings, extra_trees = self._classify(prepared, fill, recorded)
+                kinds.append((key, self._kind(layers, self._layers(view, key), visible_before, after)))
+            extras, listings, extra_trees, aliases, directories = self._classify(prepared, fill, recorded)
             try:
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception:  # noqa: BLE001 - an unpicklable value is not stored
@@ -1814,6 +2137,7 @@ class VerifiedStore:
             prepared.spec.leaf_id, payload,
             tuple((tree.name, verdict.digest) for tree, verdict in zip(prepared.trees, prepared.verdicts)),
             extras, listings, extra_trees, tuple(physics), rows,
+            physics_kinds=tuple(kinds), aliases=aliases, directories=directories,
         )
 
     def _classify(self, prepared: _Prepared, fill: _Fill, recorded: Any):
@@ -1832,49 +2156,130 @@ class VerifiedStore:
                                               or os.path.isdir(path))
 
         parents = {os.path.dirname(root) for root in roots} if prepared.spec.path_free else set()
-        nofollow: set[str] = set()
+        # HC1 (Sol): every relative open is one component of a successful
+        # no-follow read (its row's relative parts), counted: a component
+        # opened more often than successful rows account for is a failed
+        # no-follow read, which leaves no row to re-verify, so the fill is
+        # unstorable rather than silently omitting that dependency.
+        nofollow: dict[str, int] = {}
+        # Review of #641 (LOW): a hit re-checks a no-follow row through its
+        # resolved identity, which follows symlinks, while the serial read
+        # opens every component with O_NOFOLLOW|O_DIRECTORY. Each middle
+        # component is therefore bound as a real directory with its mode
+        # (lstat), so swapping one for a symlink (to an identical copy) is a
+        # miss. The read succeeded, so no component was a symlink and the
+        # resolved identity ends in exactly the row's relative parts.
+        middles: list[str] = []
         for row in recorded or ():
             relative = getattr(row, "relative", None)
             identity = getattr(row, "identity", None)
             if relative:
-                nofollow.update(Path(relative).parts)
-                if identity:
-                    fill.reads.append(identity)
-                    nofollow.add(os.fspath(Path(identity).parent))
+                parts = Path(relative).parts
+                for part in parts:
+                    nofollow[part] = nofollow.get(part, 0) + 1
+                if not identity or identity.startswith("git:"):
+                    raise _Bypass("no-follow read without a filesystem identity")
+                if Path(identity).parts[-len(parts):] != parts:
+                    raise _Bypass("no-follow identity does not end in its relative path")
+                middles.extend(os.fspath(parent) for parent in Path(identity).parents[:len(parts) - 1])
+                fill.reads.append(identity)
             elif getattr(row, "identity", None) is None:
                 raise _Bypass("unattributable authentication read")
         for name in fill.relative_opens:
-            if name not in nofollow:
+            if nofollow.get(name, 0) <= 0:
                 raise _Bypass("unattributable relative open")
+            nofollow[name] -= 1
+        # Sol wave-2 #2: a read is bound to the pathname the leaf used, not
+        # only to its target. A pathname that is not its own target is kept
+        # as an alias (re-resolved on every hit); a relative pathname is
+        # always kept, so a hit re-resolves it against its own cwd; a read
+        # into a tree is covered by the tree only through one of that tree's
+        # own absolute spellings (a relative read into a tree is unstorable).
+        spellings = [tuple(dict.fromkeys([tree.root] + [os.path.normpath(spelling) for spelling in tree.spellings
+                                                       if os.path.isabs(spelling)]))
+                     for tree in prepared.trees]
+        aliases: dict[str, str] = {}
+
+        def bind(original: str, resolved: str) -> None:
+            if original == resolved:
+                return
+            if aliases.setdefault(original, resolved) != resolved:
+                raise _Bypass("a pathname reached two targets during the fill")
+            # Review of #641 (round 4): the realpath of an alias is only its
+            # target if the kernel resolves the pathname there too; a failed
+            # open through ``passage/..`` behind a symlink would otherwise be
+            # stored as a successful read of the realpath's file.
+            if not _kernel_resolves_to(original, resolved):
+                raise _Bypass("an alias does not resolve to its realpath")
+
+        def in_tree(original: str, resolved: str) -> bool:
+            lexical = os.path.normpath(original)
+            direct = os.pardir not in Path(original).parts
+            if direct and any(within(lexical, spelling) for spelled in spellings for spelling in spelled):
+                return True
+            if any(within(resolved, root) for root in roots):
+                raise _Bypass("tree read through an alias")
+            return False
+
         extras: dict[str, str] = {}
+        directories: dict[str, int] = {}
+
+        def directory(resolved: str) -> None:
+            mode = _directory_mode(resolved)
+            if mode is None:
+                raise _Bypass("opened directory not stable")
+            if directories.setdefault(resolved, mode) != mode:
+                raise _Bypass("opened directory changed during the fill")
+
+        for middle in middles:
+            if not (in_tree(middle, middle) or is_code(middle)):
+                directory(middle)
         for path in fill.reads:
             resolved = os.path.realpath(path)
-            if any(within(path, root) or within(resolved, root) for root in roots) or is_code(resolved):
+            if in_tree(path, resolved) or is_code(resolved):
                 continue
             if os.path.isdir(resolved):
+                # Review of #639: a directory opened by pathname (the no-follow
+                # route reads a row relative to it) is bound like a file read,
+                # so retargeting any component of that pathname is a miss.
+                # HC1 (Sol): an open that found a directory (a file open that
+                # failed, as a caller trying every listed candidate does, or
+                # the no-follow root) also binds that it is a directory with
+                # these bits: a file there would read, or fail, differently.
+                bind(path, resolved)
+                directory(resolved)
                 continue
-            if any(within(resolved, parent) for parent in parents):
+            if any(within(resolved, parent) or within(os.path.normpath(path), parent) for parent in parents):
                 raise _Bypass("path-free leaf read beside its tree")
             digest = scope.verify_file(resolved)
             if digest is None:
                 raise _Bypass("extra read not hashable")
             extras[resolved] = digest
+            bind(path, resolved)
         for row in recorded or ():
             identity = getattr(row, "identity", None)
-            if identity and not identity.startswith("git:") and identity in extras:
-                if getattr(row, "sha256", None) != extras[identity]:
+            if identity and not identity.startswith("git:"):
+                target = identity if identity in extras else os.path.realpath(identity)
+                if target in extras and getattr(row, "sha256", None) != extras[target]:
                     raise _Bypass("extra read changed during the fill")
         listings: dict[str, str] = {}
         for path in fill.listings:
             resolved = os.path.realpath(path)
-            if any(within(resolved, root) for root in roots) or is_code(resolved):
+            if in_tree(path, resolved) or is_code(resolved):
                 continue
-            if any(within(resolved, parent) or resolved == parent for parent in parents):
+            if any(within(resolved, parent) or resolved == parent or within(os.path.normpath(path), parent)
+                   for parent in parents):
                 raise _Bypass("path-free leaf listed beside its tree")
             digest = scope.verify_listing(resolved)
             if digest is None:
                 raise _Bypass("listing not hashable")
             listings[resolved] = digest
+            bind(path, resolved)
+        for original, resolved in fill.forwarded_aliases:
+            bind(original, resolved)
+        for path, mode in fill.forwarded_directories:
+            if directories.setdefault(path, mode) != mode:
+                raise _Bypass("forwarded directory disagrees")
         for path, digest in fill.forwarded_extras:
             if extras.setdefault(path, digest) != digest:
                 raise _Bypass("forwarded extra disagrees")
@@ -1890,7 +2295,8 @@ class VerifiedStore:
             if extra_trees.setdefault((root, content_only), digest) != digest:
                 raise _Bypass("forwarded tree disagrees")
         return (tuple(sorted(extras.items())), tuple(sorted(listings.items())),
-                tuple(sorted((root, content_only, digest) for (root, content_only), digest in extra_trees.items())))
+                tuple(sorted((root, content_only, digest) for (root, content_only), digest in extra_trees.items())),
+                tuple(sorted(aliases.items())), tuple(sorted(directories.items())))
 
     def _rows(self, prepared: _Prepared, session: Any, snapshot: dict[str, int] | None, recorded: Any,
               *, fill: _Fill | None = None, payload: bytes = b""):
@@ -2004,8 +2410,10 @@ class VerifiedStore:
             if not same_post:
                 return  # a different physics post-value: a different computation, keep the first
             if _same_value(current.value, entry.value):
-                if current.rows is None and entry.rows is not None:
-                    self._entries[key] = entry
+                base = entry if current.rows is None and entry.rows is not None else current
+                kinds = _merged_kinds(current, entry)
+                if base is not current or kinds != dict(current.physics_kinds):
+                    self._entries[key] = replace(base, physics_kinds=tuple(sorted(kinds.items())))
                     self._new.add(key)
                 return
             self._poison(key)
@@ -2096,6 +2504,55 @@ def _value_strings(value: Any, depth: int = 0) -> Iterator[str]:
         yield from _value_strings(vars(value), depth + 1)
 
 
+def _kernel_resolves_to(spelling: str, root: str) -> bool:
+    """Whether the kernel resolves ``spelling`` to the object at ``root`` itself.
+
+    Review of #641 (round 4): ``os.path.realpath`` (non-strict) drops a
+    component before ``..`` lexically when it is missing or not a directory,
+    and even the strict form succeeds through a directory the caller cannot
+    search, while the kernel fails in each case. ``os.stat`` is the kernel's
+    resolution; ``root`` is a realpath, so its ``lstat`` is that object.
+    """
+
+    try:
+        kernel, own = os.stat(spelling), os.lstat(root)
+    except (OSError, ValueError):
+        return False
+    return (kernel.st_dev, kernel.st_ino) == (own.st_dev, own.st_ino)
+
+
+def _decision_kind(leaf_id: str, value: Any) -> tuple:
+    """The decision a leaf value carries, without its audit-only text (round 3, Sol vf3 V2).
+
+    Value vs refusal and which refusal: L1 a problem list (stored only when
+    empty; problem text is location-bearing), L2/L3 a summary's status and
+    failure reason (not its failure message, which quotes the path as
+    spelled), L4 the assessment status and refusal reasons, L5 the refusal
+    reasons, L6 whether a bound was verified and the refusal reason. Any
+    other leaf (tests' synthetic leaves) is compared by its value's type.
+    """
+
+    if leaf_id == "L1_strict_validation":
+        return ("problems", bool(value)) if isinstance(value, list) else ("other", type(value).__qualname__)
+    if leaf_id in ("L2_operative_summary", "L3_reduce_dict"):
+        if isinstance(value, Mapping):
+            return ("summary", value.get("status"), value.get("failure_reason"))
+        return ("other", type(value).__qualname__)
+    if leaf_id == "L4_calibration_bracket":
+        if isinstance(value, tuple) and len(value) == 2:
+            assessment, reasons = value
+            status = assessment.get("status") if isinstance(assessment, Mapping) else type(assessment).__qualname__
+            return ("bracket", status, tuple(reasons) if isinstance(reasons, (list, tuple)) else repr(type(reasons)))
+        return ("other", type(value).__qualname__)
+    if leaf_id == "L5_environment_refusals":
+        return ("refusals", tuple(value)) if isinstance(value, (list, tuple)) else ("other", type(value).__qualname__)
+    if leaf_id == "L6_verify_instrument_calibration":
+        if isinstance(value, tuple) and len(value) == 2:
+            return ("calibration", value[0] is None, value[1])
+        return ("other", type(value).__qualname__)
+    return ("other", type(value).__qualname__)
+
+
 def _scratch_session(session: Any) -> Any:
     """A detached copy of a V2 session: same records and vocabulary, own lock, never active."""
 
@@ -2151,6 +2608,16 @@ def _unchanged(before: Any, after: Any) -> bool:
     if before is after:
         return True
     return type(before) is type(after) is float and before.hex() == after.hex()
+
+
+def _merged_kinds(current: Entry, entry: Entry) -> dict[str, str]:
+    """Per physics key, the more informative kind of two agreeing fills (a tie keeps ``current``'s)."""
+
+    merged = dict(current.physics_kinds)
+    for key, kind in entry.physics_kinds:
+        if _KIND_RANK.get(kind, 0) > _KIND_RANK.get(merged.get(key, "opaque"), 0):
+            merged[key] = kind
+    return merged
 
 
 def _posts(entry: Entry) -> dict[str, str]:
