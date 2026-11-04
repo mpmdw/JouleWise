@@ -1318,7 +1318,9 @@ class TreeSpellings(_ReviewBase):
         self.addCleanup(os.chdir, cwd)
         with run() as caches:
             vdl.call("R_spelled_free", spelled_path_leaf, "bundle", 1)
-            self.assertEqual(caches.vdl.restricted_counters()["R_spelled_free:unstorable"], 1)
+            # D-188 VDL-FIX round 3 (Sol vf3 V1): a relative spelling now never
+            # reaches the store at all (it was searched for, and unstorable).
+            self.assertEqual(caches.vdl.restricted_counters(), {"R_spelled_free:bypass": 1})
 
 
 class BlindRunDefects(_ReviewBase):

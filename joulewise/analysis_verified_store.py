@@ -16,8 +16,14 @@ commit (if the driver supplies one) and a content digest of the ``joulewise``
 package sources, a digest of every ``JOULEWISE_*`` environment variable, the
 leaf id, the leaf's scalar arguments, for every tree argument its resolved
 path (or, for a path-free leaf, its final name) together with the caller's
-absolute spelling when that differs (a leaf may build a value from the
+exact spelling when that differs (a leaf may build a value from the
 spelling it was given), its tree digest, and whether a V2 session is active.
+D-188 VDL-FIX round 3 (Sol vf3 V1): a tree argument is served or stored only
+when its spelling is absolute and lexically normal (no ``..``, ``.``, empty or
+trailing component), so the kernel resolves it exactly as ``realpath`` does;
+a relative spelling, or one like ``missing/..`` (which the kernel resolves by
+traversing ``missing``), runs the leaf unchanged. The realpath is recomputed
+on every call, checked again after a fill and before a deferred hit applies.
 
 Tree digest. An lstat walk that follows no symlink: per file (relpath, kind,
 mode, size, sha256), per directory (relpath, mode, sorted listing). A path-free
@@ -111,7 +117,10 @@ Shadow. A sampled hit is first served by the identical ``_apply`` into a
 scratch copy of the consumer's session (no real registration, no insert); if
 that refuses, the call is a plain miss, exactly as in ``on`` mode. Otherwise the
 leaf runs in the real session and its value, physics and resulting session
-records are compared with what serving the hit produced.
+records are compared with what serving the hit produced. A recompute that
+cannot be stored (so is not compared in full) is still compared by its
+decision (``_decision_kind``: value vs refusal, and which refusal); a
+different decision is a defect (round 3, Sol vf3 V2).
 
 Defects. Nothing in this module raises into a caller's ``except`` clauses: a
 hit anomaly falls through to the leaf, a poisoned key (two fills disagree) falls
@@ -1273,6 +1282,8 @@ class _TreeRef:
     name: str
     content_only: bool
     spellings: tuple[str, ...] = ()  # every spelling a value could embed (leak guard)
+    # The caller's exact (absolute, lexically normal) spelling (round 3).
+    spelling: str = ""
 
 
 def _identity_root(identity: str) -> str:
@@ -1458,15 +1469,27 @@ class VerifiedStore:
                 raw = os.fspath(value)
                 if not isinstance(raw, str):
                     raise _Bypass("tree argument is not a text path")
-                root = os.fspath(Path(raw).resolve(strict=False))
-                spelled = os.path.abspath(raw)
+                # D-188 VDL-FIX round 3 (Sol vf3 V1): the key binds the caller's
+                # exact spelling, and only a spelling whose POSIX resolution is
+                # its realpath is served or stored: absolute (a relative one
+                # resolves against the cwd, and its failure text quotes it as
+                # given) and lexically normal (no ``..``, ``.``, empty or
+                # trailing component: ``missing/..`` makes the kernel traverse
+                # ``missing``, which a lexical or non-strict resolution never
+                # checks). Any other spelling runs the leaf unchanged. A
+                # symlinked ancestor is allowed: the realpath is recomputed on
+                # every call (it is the tree the key's digest covers) and checked
+                # again after a fill.
+                if not os.path.isabs(raw) or os.path.normpath(raw) != raw:
+                    raise _Bypass("tree spelling is not absolute and normal")
+                root = os.path.realpath(raw)
                 if spec.path_free:
-                    spelled_name, root_name = os.path.basename(spelled), os.path.basename(root)
+                    spelled_name, root_name = os.path.basename(raw), os.path.basename(root)
                     name = root_name if spelled_name == root_name else f"{spelled_name}\0{root_name}"
                 else:
-                    name = root if spelled == root else f"{spelled}\0{root}"
-                spellings = tuple(dict.fromkeys((raw, str(Path(raw)), spelled, root)))
-                trees.append(_TreeRef(root, name, spec.path_free, spellings))
+                    name = root if raw == root else f"{raw}\0{root}"
+                spellings = tuple(dict.fromkeys((raw, root)))
+                trees.append(_TreeRef(root, name, spec.path_free, spellings, raw))
         scope = _current_scope()
         verdicts: list[TreeVerdict] = []
         with _suspended():
@@ -1796,6 +1819,8 @@ class VerifiedStore:
             scope = _current_scope()
             with _suspended():
                 for tree, verdict in zip(prepared.trees, prepared.verdicts):
+                    if tree.spelling and os.path.realpath(tree.spelling) != tree.root:
+                        raise _Bypass("tree spelling retargeted since the probe")
                     current = scope.verify_tree(tree.root, tree.content_only)
                     if current is None or current.digest != verdict.digest:
                         raise _Bypass("tree changed since the probe")
@@ -1901,8 +1926,10 @@ class VerifiedStore:
         runs in the real session, and a defect is recorded if it raises, or if
         its value, its physics post-values, the physics the caller now sees or
         the session's records (identity, sha256, grammar, read count, strict
-        parse) differ from what serving the hit would have produced. The
-        caller always gets the freshly computed value.
+        parse) differ from what serving the hit would have produced. A
+        recompute that is not storable is compared only by its decision
+        (``_decision_kind``); a different decision is a defect. The caller
+        always gets the freshly computed value.
         """
 
         leaf_id = hit.prepared.spec.leaf_id
@@ -1923,7 +1950,24 @@ class VerifiedStore:
                 self._shadow_defect(hit, "shadow_raised")
             raise
         if not outcome.get("comparable"):
+            # D-188 VDL-FIX round 3 (Sol vf3 V2): the recompute could not be
+            # stored, so its audit-bearing parts (a clock read, a failure
+            # message quoting a path) are not compared. Its decision still is:
+            # a served value whose decision differs from the serial one (value
+            # vs refusal, or another refusal) is a defect, never incomparable.
+            try:
+                served = pickle.loads(hit.entry.value)
+                same_kind = _decision_kind(leaf_id, served) == _decision_kind(leaf_id, value)
+                identical = same_kind and _strict_equal(served, value)
+            except Exception:  # noqa: BLE001 - a decision that cannot be compared is not proven equal
+                same_kind = identical = False
+            if not same_kind:
+                self._shadow_defect(hit, "shadow_decision_mismatch")
+                return value
             self._count(f"{leaf_id}:shadow_incomparable")
+            if not identical:
+                # Same decision, other audit-bearing text: counted (restricted tier) only.
+                self._count(f"{leaf_id}:shadow_incomparable_differs")
             return value
         stored_physics = {key: after for key, _, after in hit.entry.physics}
         same_physics = all(self._same(stored_physics.get(key, ABSENT), after)
@@ -2035,6 +2079,10 @@ class VerifiedStore:
             for tree, verdict in zip(prepared.trees, prepared.verdicts):
                 walk = _walk(tree.root)
                 if walk is None or walk.signature != verdict.signature:
+                    return None
+                # Round 3 (V1): the caller's spelling still resolves to the tree
+                # the key covers (a retargeted ancestor link during the fill).
+                if tree.spelling and os.path.realpath(tree.spelling) != tree.root:
                     return None
             allowed = {key for _, key in views}
             for item, copy in physics_before:
@@ -2427,6 +2475,38 @@ def _value_strings(value: Any, depth: int = 0) -> Iterator[str]:
             yield from _value_strings(getattr(value, item.name), depth + 1)
     elif hasattr(value, "__dict__") and not isinstance(value, type):
         yield from _value_strings(vars(value), depth + 1)
+
+
+def _decision_kind(leaf_id: str, value: Any) -> tuple:
+    """The decision a leaf value carries, without its audit-only text (round 3, Sol vf3 V2).
+
+    Value vs refusal and which refusal: L1 a problem list (stored only when
+    empty; problem text is location-bearing), L2/L3 a summary's status and
+    failure reason (not its failure message, which quotes the path as
+    spelled), L4 the assessment status and refusal reasons, L5 the refusal
+    reasons, L6 whether a bound was verified and the refusal reason. Any
+    other leaf (tests' synthetic leaves) is compared by its value's type.
+    """
+
+    if leaf_id == "L1_strict_validation":
+        return ("problems", bool(value)) if isinstance(value, list) else ("other", type(value).__qualname__)
+    if leaf_id in ("L2_operative_summary", "L3_reduce_dict"):
+        if isinstance(value, Mapping):
+            return ("summary", value.get("status"), value.get("failure_reason"))
+        return ("other", type(value).__qualname__)
+    if leaf_id == "L4_calibration_bracket":
+        if isinstance(value, tuple) and len(value) == 2:
+            assessment, reasons = value
+            status = assessment.get("status") if isinstance(assessment, Mapping) else type(assessment).__qualname__
+            return ("bracket", status, tuple(reasons) if isinstance(reasons, (list, tuple)) else repr(type(reasons)))
+        return ("other", type(value).__qualname__)
+    if leaf_id == "L5_environment_refusals":
+        return ("refusals", tuple(value)) if isinstance(value, (list, tuple)) else ("other", type(value).__qualname__)
+    if leaf_id == "L6_verify_instrument_calibration":
+        if isinstance(value, tuple) and len(value) == 2:
+            return ("calibration", value[0] is None, value[1])
+        return ("other", type(value).__qualname__)
+    return ("other", type(value).__qualname__)
 
 
 def _scratch_session(session: Any) -> Any:
