@@ -20,9 +20,20 @@ artifacts is re-derived with the producers' own functions:
 * every file digest and hex-named path that names a changed file, to a fixed point,
   and the record's committed output digests.
 
---mutate hides one result change behind those recomputed digests: 'floor' (a floor
-value of the aggregate floor artifact), 'manifest' (a finalized-manifest field) or
-'producer' (an extraction pin of a pinset producer row). Synthetic data only.
+--mutate hides one result change behind those recomputed digests:
+
+* 'floor': a floor value of the aggregate floor artifact (cells[0].floor_gate_j);
+* 'manifest': a finalized-manifest field (design.synthetic_mutation);
+* 'producer-drift': a drift allowance value of a pinset producer row;
+* audit-keyed leaves of a referent (PR #643 review), each audit tier where it is stored:
+  'floor-audit' (floor cell model identity, source_regime.stack_identity.model_artifact_sha256),
+  'producer-audit' (producer row model_runtime_config.model_artifact_sha256),
+  'producer-extraction-pin' (producer row extraction_spec.sha256 and its per-cell copies),
+  'manifest-lineage' (finalized-manifest lineage.finalized_semantics_sha256) and
+  'manifest-evidence' (the whole-window-verdict evidence pin set to a digest of no artifact,
+  which the comparator must refuse as unverifiable).
+
+Synthetic data only.
 """
 from __future__ import annotations
 
@@ -50,6 +61,9 @@ RECORD = 'dry-run/B5-BLIND-DRY-RUN-RECORD.json'
 HEX = re.compile(r'(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])')
 OPEN_S10_INDEX = '6e76ce7a2e31ea5e851875618f88e40864d73920aeed61520baa9f6d6047f2bc'
 CONTAINMENT = ('mint_commit_contained_in_origin_main', 'head_pin_commit_contained_in_origin_main')
+MUTATIONS = ('floor', 'manifest', 'producer-drift', 'floor-audit', 'producer-audit', 'producer-extraction-pin',
+             'manifest-lineage', 'manifest-evidence')
+FAKE = 'f' * 8 + '0123456789abcdef' * 3 + 'e' * 8      # a digest of no artifact
 
 
 def sha(raw: bytes) -> str:
@@ -121,7 +135,7 @@ def main(argv=None) -> int:
     ap.add_argument('src', type=Path)
     ap.add_argument('dst', type=Path)
     ap.add_argument('commit')
-    ap.add_argument('--mutate', choices=('floor', 'manifest', 'producer'))
+    ap.add_argument('--mutate', choices=MUTATIONS)
     a = ap.parse_args(argv)
     if not re.fullmatch(r'[0-9a-f]{40}', a.commit):
         raise SystemExit('commit must be 40 lowercase hex')
@@ -162,9 +176,17 @@ def main(argv=None) -> int:
     if a.mutate == 'floor':
         cell = agg['cells'][0]
         cell['floor_gate_j'] = cell['floor_gate_j'] * 2 + 1
-    elif a.mutate == 'producer':
+    elif a.mutate == 'producer-drift':
         pins = pin['producer_plans'][0]['cells'][0]['absolute']
         pins['drift_allowance_j'] = pins['drift_allowance_j'] * 2 + 1
+    elif a.mutate == 'floor-audit':
+        agg['cells'][0]['source_regime']['stack_identity']['model_artifact_sha256'] = FAKE
+    elif a.mutate == 'producer-audit':
+        pin['producer_plans'][0]['model_runtime_config']['model_artifact_sha256'] = FAKE
+    elif a.mutate == 'producer-extraction-pin':
+        # The extraction-spec pin of producer 0, everywhere the row states it (the mint requires them equal).
+        old = pin['producer_plans'][0]['extraction_spec']['sha256']
+        pin['producer_plans'][0] = json.loads(json.dumps(pin['producer_plans'][0]).replace(old, FAKE))
     remint_floor(agg, pin, variants)
     for name in floors:
         files[name] = mint._artifact_payload(agg)
@@ -201,6 +223,10 @@ def main(argv=None) -> int:
             ev['path'] = re.sub(r'[0-9a-f]{64}', ev['sha256'], ev['path'])
             if a.mutate == 'manifest':
                 value['design']['synthetic_mutation'] = 'hidden behind a recomputed manifest_id'
+            elif a.mutate == 'manifest-lineage':
+                value['lineage']['finalized_semantics_sha256'] = FAKE
+            elif a.mutate == 'manifest-evidence':
+                value['evidence']['whole_window_verdict']['sha256'] = FAKE
             value['manifest_id'] = calculate_manifest_id(value)
             return render_manifest(value)
         if n == closeout:

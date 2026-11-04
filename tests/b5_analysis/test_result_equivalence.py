@@ -1513,9 +1513,60 @@ class DerivedReferenceTest(_TmpCase):
         finally:
             os.close(side.restricted_fd)
         self.assertEqual(set(kinds), set(REFERENCE_KINDS))
-        # closeout 6, claim verdicts 5, finalized manifest 3, two pinsets 4 each, two aggregates 1 each.
-        self.assertEqual(sum(len(v) for v in kinds.values()), 24)
+        # closeout 6, claim verdicts 5, finalized manifest 7 (id + three evidence rows), two pinsets 4 each,
+        # two aggregates 1 each.
+        self.assertEqual(sum(len(v) for v in kinds.values()), 28)
         self.assertGreater(rebuilt, 0)
+        # Every token that names another artifact (or a pinset subtree) carries the digest of its leaves.
+        for kind, sites in kinds.items():
+            for key, path in sites:
+                if (key, path) != ('finalized/am.finalized.json', '$.manifest_id'):
+                    token = flat.artifact_leaves(side.artifacts[key])[path.replace('[*]', '[0]')][1]
+                    self.assertRegex(token, r'#[0-9a-f]{64}$', (kind, key, path))
+
+    def test_an_audit_leaf_of_a_referent_still_fails_at_the_referencing_tier(self):
+        """PR #643 review: tokenizing a composite must not drop its coverage of the referent's audit leaves."""
+        saved = cmp.resolve_references
+        for name in derived.AUDIT_LEAF_CASES:
+            ref_mut, cand_mut, expected, _rule = derived.CASES[name]
+            with self.subTest(case=name):
+                self.assertEqual(expected['registered'], derived.REFS['registered'])
+                ref, cand = derived.build_pair(ref_mut, cand_mut, self.tmp, name)
+                # The changed leaf is audit tier wherever it is stored ...
+                rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+                self.assertEqual(rc, 1, text)
+                # ... and the comparator before REFERENCE SITES caught it through the raw composites, as this one does.
+                cmp.resolve_references = lambda *args: None
+                try:
+                    rc0, text0, got0 = self.blinded(ref, cand)
+                finally:
+                    cmp.resolve_references = saved
+                self.assertEqual((rc0, got0['verdict']), (1, 'NOT_EQUIVALENT'), text0)
+                rc, text, got = self.blinded(ref, cand)
+                self.assert_expected(rc, got, expected, text)
+                for tier in ('registered', 'intermediate'):
+                    self.assertLessEqual(got0[tier] if isinstance(got0[tier], set) else set(),
+                                         got[tier] if isinstance(got[tier], set) else set(), (tier, text0, text))
+
+    def test_failing_fields_never_shrink_against_the_raw_comparator(self):
+        """On every same-commit corpus case the failing-tier fields include the raw comparator's, except
+        those that differed only through a file digest the comparator already reads as @role."""
+        saved = cmp.resolve_references
+        for name, (ref_mut, cand_mut, _expected, _rule) in derived.CASES.items():
+            if name in ('commit_only', 'hidden_extraction_cell'):
+                continue
+            with self.subTest(case=name):
+                ref, cand = derived.build_pair(ref_mut, cand_mut, self.tmp, name + '-raw')
+                cmp.resolve_references = lambda *args: None
+                try:
+                    _rc0, _t0, got0 = self.blinded(ref, cand)
+                finally:
+                    cmp.resolve_references = saved
+                _rc, text, got = self.blinded(ref, cand)
+                for tier in TIER_KEYS:
+                    raw = got0[tier] if isinstance(got0[tier], set) else set()
+                    now = got[tier] if isinstance(got[tier], set) else set()
+                    self.assertLessEqual(raw, now, (tier, text))
 
     def test_every_forged_reference_is_a_comparator_error(self):
         for name, (forge, site) in derived.FORGERIES.items():
@@ -1594,11 +1645,19 @@ class S10RemintAcceptanceTest(unittest.TestCase):
             shutil.copytree(os.environ['JW_B5_EQ_REMINT_SOURCE'], src, symlinks=True)
             shutil.rmtree(src / 'equivalence', ignore_errors=True)
             pinsets = {'mint/floor-mint-pinset.json', 'finalized/mint/floor-mint-pinset.json'}
+            closeout = {'finalized/outputs/closeout.json:sources'}
+            refs = {'registered': closeout, 'intermediate': {'outputs/claim-verdicts.json:inputs'}}
             want = {None: {},
                     'floor': {'registered': {'mint/aggregate-floor.json:cells', 'finalized/mint/aggregate-floor.json:cells'}
-                              | {f'{p}:aggregate' for p in pinsets}},
-                    'manifest': {'intermediate': {'finalized/am.finalized.json:design'}},
-                    'producer': {'intermediate': {f'{p}:producer_plans' for p in pinsets}}}
+                              | {f'{p}:aggregate' for p in pinsets} | closeout, 'intermediate': refs['intermediate']},
+                    'manifest': {'registered': closeout, 'intermediate': {'finalized/am.finalized.json:design'}},
+                    'producer-drift': {'registered': closeout,
+                                       'intermediate': {f'{p}:producer_plans' for p in pinsets} | refs['intermediate']},
+                    # Audit-keyed leaves of a referent: caught only through the composites that cover them.
+                    'floor-audit': refs, 'producer-audit': refs, 'producer-extraction-pin': refs,
+                    'manifest-lineage': {'registered': closeout},
+                    'manifest-evidence': 'COMPARATOR_ERROR'}
+            self.assertEqual(set(want) - {None}, set(remint.MUTATIONS))
             for mutation, expected in want.items():
                 with self.subTest(mutation=mutation):
                     cand = Path(tmp) / f'cand-{mutation}'
@@ -1606,6 +1665,9 @@ class S10RemintAcceptanceTest(unittest.TestCase):
                     with contextlib.redirect_stdout(io.StringIO()):
                         self.assertEqual(remint.main(args), 0)
                     rc, text = run_tool(['--mode', 'blinded', src, cand])
+                    if expected == 'COMPARATOR_ERROR':
+                        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=reference side=cand\n'))
+                        continue
                     got = parse_blinded(self, text, cfg)
                     self.assertEqual(rc, 1 if expected else 0, text)
                     for tier in TIER_KEYS:

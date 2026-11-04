@@ -12,7 +12,10 @@ producers: analysis_manifest_v3.calculate_manifest_id, dominance_closeout.canoni
 mint._artifact_sha256 and the mint's own component check _validate_v2_artifact_binding).
 
 A model edit therefore hides behind recomputed digests: every reference to the edited
-content is re-derived. ``spec['forge']`` is the exception: it overwrites one reference
+content is re-derived. The model carries audit-keyed leaves (*sha256 pins, paths) inside
+every referent (floor cells, finalized-manifest lineage and evidence rows, pinset producer
+rows), because a reference token that dropped its referent's coverage would let exactly
+those changes through (PR #643 review). ``spec['forge']`` is the exception: it overwrites one reference
 site after derivation (everything downstream is still derived from the forged bytes),
 which the comparator must refuse as self-inconsistent.
 """
@@ -49,6 +52,7 @@ PINSET, PINSET_FINAL = 'mint/floor-mint-pinset.json', 'finalized/mint/floor-mint
 REPLAY, REPLAY_FINAL = 'mint/{H}-dominance-replay.json', 'finalized/mint/{H}-dominance-replay.json'
 CLOSEOUT, VERDICTS = 'finalized/outputs/closeout.json', 'outputs/{H}-claim-verdicts.json'
 EXTRACTION = 'mint/{H}-extraction-alpha.json'
+PLAN_TREE = 'finalized/inputs/gamma-pack/plan_tree.json'
 # scripts/mint_floor_artifact_generalized.py V2_MINT_TOOL_VERSION / V2_ASSURANCE_PROFILE (a test pins them).
 MINT_TOOL_VERSION = 'joulewise.floor_mint.generalized.v2'
 ASSURANCE = {
@@ -213,7 +217,10 @@ def _b_manifest(spec, names, shas):
                                      'artifact_id': spec['floor']['artifact_id']},
         'dominance_replay_sidecar': {'path': replay_name.removeprefix('finalized/'), 'sha256': shas[REPLAY_FINAL],
                                      'schema_version': 'joulewise.d165_dominance_replay.v1',
-                                     'sidecar_id': spec['replay']['sidecar_id']}}
+                                     'sidecar_id': spec['replay']['sidecar_id']},
+        # An evidence row naming an input copy (the real finalizer pins the bracket binding, ledger and verdict).
+        'plan_tree': {'path': PLAN_TREE.removeprefix('finalized/'), 'sha256': shas[PLAN_TREE],
+                      'schema_version': 'joulewise.plan_tree.v1'}}
     body = _forge(spec, 'manifest-evidence', body)
     body['manifest_id'] = manifest_id(plain(body))
     return body
@@ -254,7 +261,11 @@ BUILDERS = {'aggregate': _b_aggregate, 'pinset': _b_pinset, 'manifest': _b_manif
 def _cell(cell_id, group, gate):
     return {'cell_id': cell_id, 'transport_group_id': group, 'floor_abs_j': Num('0.5'), 'floor_cmp_j': Num(gate),
             'floor_gate_j': Num(gate), 'eligibility': {'status': 'claim_ready', 'minimum_claim_n': 9},
-            'key': {'metric': 'phase_energy_j.decode', 'window_class': 'phase'}}
+            'key': {'metric': 'phase_energy_j.decode', 'window_class': 'phase'},
+            # Audit-keyed leaves the floor's numbers depend on (the real floor's model identity and
+            # extraction-report pin): audit tier in the floor, covered by every reference to it.
+            'source_regime': {'stack_identity': {'model_artifact_sha256': _h(f'model-{cell_id}')}},
+            'provenance': {'decode': {'extraction_report': {'sha256': '<<sha:' + EXTRACTION + '>>'}}}}
 
 
 def _producer(n, cells):
@@ -265,7 +276,8 @@ def _producer(n, cells):
                  'sidecar_sha256': _h(f'plan-sidecar-{n}'), 'relative_path': f'p{n}/calibration_plan.json',
                  'declared_calibration_scope': 'production_window', 'artifact_calibration_scope': 'production_window'},
         'evidence_root_id': f'evidence-syn-{n}', 'component_artifact_id': f'syn-floor-component-{n}',
-        'model_runtime_config': {'config_set_sha256': config_set_sha256(config), 'runtime_identity_sha256': _h(f'rt-{n}')},
+        'model_runtime_config': {'config_set_sha256': config_set_sha256(config),
+                                 'runtime_identity_sha256': _h(f'rt-{n}'), 'model_artifact_sha256': _h(f'model-{n}')},
         'extraction_spec': {'sha256': '<<sha:' + EXTRACTION + '>>', 'member_count': 100},
         'calibration_acceptance': {'acceptance_id': 'syn-acceptance-v2', 'artifact_sha256': _h('acceptance'),
                                    'derivation_sha256': _h('derivation'), 'derivation_rule_id': 'syn.bound.v2'},
@@ -303,7 +315,9 @@ def derived_spec() -> dict:
                    'rule_id': 'syn.replay.v1', 'cells': [{'cell_id': 'syn-cell-a-decode', 'ratio': Num('1.731')}]},
         'manifest': {'schema_version': 'joulewise.analysis_manifest.v3.finalized', 'manifest_id': '',
                      'freeze_status': 'finalized',
-                     'lineage': {'prospective_manifest_id': f'am-{PROSPECTIVE_ID}'},
+                     'lineage': {'prospective_manifest_id': f'am-{PROSPECTIVE_ID}',
+                                 'prospective_semantics_sha256': _h('semantics'),
+                                 'finalized_semantics_sha256': _h('semantics')},
                      'contrasts': [{'contrast_id': 'ctr-decode', 'estimand': 'difference_j'}],
                      'design': {'blocks': 5}},
         'closeout': corpus.file_body(corpus.base_model(), CLOSEOUT),
@@ -374,38 +388,76 @@ def _both(names, section):
     return {n.format(section) for n in names}
 
 
+# The composite references that fail on any referent change (closeout sources: registered;
+# claim-verdict input pins and embedded copy: intermediate), as the raw digests did.
+REFS = {'registered': {'finalized/outputs/closeout.json:sources'},
+        'intermediate': {'outputs/claim-verdicts.json:inputs'}}
+
+
+def _with_refs(expected):
+    out = {tier: set(fields) for tier, fields in REFS.items()}
+    for tier, fields in expected.items():
+        out[tier] = out.get(tier, set()) | fields
+    return out
+
+
 # name -> (reference mutation, candidate mutation, expected blinded result, the reference rule the change hides behind)
 CASES = {
     # The real E-vs-candidate pattern: only the analysis commit differs.
     'commit_only': (None, _commit, {'audit': 'DIFFER'}, 'all'),
     'hidden_replay_value': (None, _spec('replay', 'cells', 0, 'ratio', value=Num('1.732')),
-                            {'intermediate': {'mint/dominance-replay.json:cells',
+                            {'registered': REFS['registered'],
+                             'intermediate': {'mint/dominance-replay.json:cells',
                                               'finalized/mint/dominance-replay.json:cells'}}, 'canonical'),
     'hidden_floor_identity': (None, _spec('floor', 'artifact_id', value='syn-floor-set-v6'),
-                              {'intermediate': _both(AGGREGATES, 'artifact_id') | _both(PINSETS, 'aggregate')
-                               | {'finalized/am.finalized.json:evidence'}}, 'identity'),
+                              _with_refs({'intermediate': _both(AGGREGATES, 'artifact_id') | _both(PINSETS, 'aggregate')
+                                          | {'finalized/am.finalized.json:evidence'}}), 'identity'),
     'hidden_manifest_field': (None, _spec('manifest', 'contrasts', 0, 'estimand', value='ratio_j'),
-                              {'intermediate': {'finalized/am.finalized.json:contrasts'}}, 'manifest-id'),
+                              {'registered': REFS['registered'],
+                               'intermediate': {'finalized/am.finalized.json:contrasts'}}, 'manifest-id'),
     'hidden_floor_guard': (None, _spec('floor', 'idle_drift_guard', 'bound_j', value=Num('0.26')),
-                           {'intermediate': _both(AGGREGATES, 'idle_drift_guard') | _both(PINSETS, 'aggregate')},
+                           _with_refs({'intermediate': _both(AGGREGATES, 'idle_drift_guard')
+                                       | _both(PINSETS, 'aggregate')}),
                            'file'),
     'hidden_floor_value': (None, _spec('floor', 'cells', 0, 'floor_gate_j', value=Num('1.26')),
-                           {'registered': _both(AGGREGATES, 'cells') | _both(PINSETS, 'aggregate')}, 'embedded'),
+                           _with_refs({'registered': _both(AGGREGATES, 'cells') | _both(PINSETS, 'aggregate')}),
+                           'embedded'),
     'hidden_floor_method': (None, _spec('floor', 'method', 'rule', value='sum-envelope'),
-                            {'registered': _both(AGGREGATES, 'method') | _both(PINSETS, 'aggregate')}, 'path'),
+                            _with_refs({'registered': _both(AGGREGATES, 'method') | _both(PINSETS, 'aggregate')}),
+                            'path'),
     'hidden_transport_floor': (None, _spec('floor', 'transport_groups', 3, 'composed_floor_gate_j', value=Num('2.6')),
-                               {'registered': _both(AGGREGATES, 'transport_groups') | _both(PINSETS, 'aggregate')},
+                               _with_refs({'registered': _both(AGGREGATES, 'transport_groups')
+                                           | _both(PINSETS, 'aggregate')}),
                                'component'),
-    'hidden_component_only': (None, _variant, {'intermediate': _both(PINSETS, 'aggregate')}, 'component'),
-    'hidden_producer_extraction_pin': (None, _spec('producers', 0, 'cells', 0, 'absolute', 'drift_allowance_j',
-                                                   value=Num('1.0440031334189258')),
-                                       {'intermediate': _both(PINSETS, 'producer_plans')}, 'producer-pin'),
+    # Only a containment observation of the rebuilt components differs (the aggregate's plan-set pin covers it).
+    'hidden_component_only': (None, _variant, _with_refs({'intermediate': _both(PINSETS, 'aggregate')}), 'component'),
+    'hidden_producer_drift_allowance': (None, _spec('producers', 0, 'cells', 0, 'absolute', 'drift_allowance_j',
+                                                    value=Num('1.0440031334189258')),
+                                        _with_refs({'intermediate': _both(PINSETS, 'producer_plans')}), 'producer-pin'),
     'hidden_producer_acceptance': (None, _spec('producers', 1, 'calibration_acceptance', 'acceptance_id',
                                                value='syn-acceptance-v3'),
-                                   {'intermediate': _both(PINSETS, 'producer_plans')}, 'producer-set'),
+                                   _with_refs({'intermediate': _both(PINSETS, 'producer_plans')}), 'producer-set'),
+    # The extraction artifact is compared itself; its digest is @role wherever it is pinned.
     'hidden_extraction_cell': (None, _extraction_cell, {'decisions': {'mint/extraction-alpha.json:cells'}},
                                'producer-pin'),
+    # Audit-keyed leaves of a referent (review of PR #643): audit tier in the referent itself,
+    # so only the referencing composite's coverage catches them.
+    'hidden_floor_model_pin': (None, _spec('floor', 'cells', 0, 'source_regime', 'stack_identity',
+                                           'model_artifact_sha256', value=_h('other-model')), REFS, 'identity'),
+    'hidden_floor_extraction_pin': (None, _spec('floor', 'cells', 1, 'provenance', 'decode', 'extraction_report',
+                                                'sha256', value=_h('other-extraction-report')), REFS, 'embedded'),
+    'hidden_manifest_lineage_pin': (None, _spec('manifest', 'lineage', 'finalized_semantics_sha256',
+                                                value=_h('other-semantics')),
+                                    {'registered': REFS['registered']}, 'manifest-id'),
+    'hidden_producer_model_pin': (None, _spec('producers', 0, 'model_runtime_config', 'model_artifact_sha256',
+                                              value=_h('other-model')), REFS, 'producer-set'),
+    'hidden_producer_extraction_pin': (None, _spec('producers', 1, 'cells', 0, 'absolute', 'extraction_spec_sha256',
+                                                   value=_h('other-extraction-spec')), REFS, 'producer-pin'),
 }
+
+# The cases whose change is an audit-keyed leaf of a referent (each must still fail).
+AUDIT_LEAF_CASES = ('hidden_floor_model_pin', 'hidden_floor_extraction_pin', 'hidden_manifest_lineage_pin',
+                    'hidden_producer_model_pin', 'hidden_producer_extraction_pin')
 
 FORGED = '0' * 63 + 'f'
 # name -> (candidate forgery, the site path the comparator must name)
@@ -426,6 +478,11 @@ FORGERIES = {
     'forged_manifest_id': (_forged('manifest', ('manifest_id',), 'am-' + FORGED), '$.manifest_id'),
     'forged_manifest_path': (_forged('manifest-evidence', ('evidence', 'aggregate_floor_artifact', 'path'),
                                      f'mint/{FORGED}-aggregate-floor.json'), '$.evidence.aggregate_floor_artifact.path'),
+    # An evidence pin to no committed artifact, hidden behind a recomputed manifest_id and everything downstream.
+    'forged_manifest_evidence_pin': (_forged('manifest-evidence', ('evidence', 'dominance_replay_sidecar', 'sha256'),
+                                             FORGED), '$.evidence.dominance_replay_sidecar.sha256'),
+    'forged_manifest_evidence_input': (_forged('manifest-evidence', ('evidence', 'plan_tree', 'path'),
+                                               'inputs/gamma-pack/plan_tree.v2.json'), '$.evidence.plan_tree.path'),
     'forged_component_digest': (_forged('pinset', ('aggregate', 'component_artifacts', 1, 'sha256'), FORGED),
                                 '$.aggregate.component_artifacts[1].sha256'),
     'forged_producer_pin': (_forged('pinset', ('aggregate', 'component_artifacts', 0, 'producer_pin_sha256'), FORGED),

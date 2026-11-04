@@ -24,10 +24,16 @@ and file digests, ids derived with the producer's own rule, embedded bytes equal
 stored artifact, pinset digests recomputed from that side's producers, and the
 unstored per-producer component floor artifacts rebuilt from the stored aggregate and
 pinset exactly as the mint's own validator rebuilds them, then matched to their pinned
-digest). A verified field becomes a fixed '@<kind>:<referent role>' token; its referent
-is still compared leaf by leaf under the ordinary rules (a rebuilt component under the
-aggregate floor's rules, as part of the pinset field that pins it). A field that is not
-self-consistent is 'COMPARATOR_ERROR stage=reference side=<side>', never equivalent.
+digest). A verified field becomes the token '@<kind>:<referent key>#<referent digest>',
+where the referent digest covers EVERY canonical leaf of the referent (commit as
+@analysis_commit, file digests as @role, its own reference sites as their verified
+tokens). The token is therefore invariant under exactly the canonicalizations the
+comparator already applies and nothing else: a change to any referent leaf, at any of
+the referent's own tiers, still differs at the referencing site's tier, as the raw
+digest did. The referent is also compared leaf by leaf under the ordinary rules (a
+rebuilt component under the aggregate floor's rules, as part of the pinset field that
+pins it). A field that is not self-consistent is 'COMPARATOR_ERROR stage=reference
+side=<side>', never equivalent.
 
 Blinded mode (default) prints only fixed grammar: tier MATCH/DIFFER lines and
 sorted 'field <role>:<section>' names drawn from the tracked vocabulary V. It never
@@ -702,6 +708,10 @@ class Flattener:
         self.cfg, self.side = cfg, side
         commit = side.commit
         self.references = {}    # referent key -> plain JSON value (resolve_references)
+        self._leaves = {}       # artifact key -> resolved canonical leaves (referents are flattened once)
+        self._resolving = set()
+        self._by_name = None
+        self.digests = {}       # (referent key, subtree prefix) -> leaf_digest of its resolved leaves
         self._commit = re.compile(rf'(?<![0-9a-f]){commit}(?![0-9a-f])') if commit else None
 
     def canon(self, text: str) -> str:
@@ -764,6 +774,26 @@ class Flattener:
             raise ComparatorError('exemptions', 'both', f'unordered exemption covers a {tier} leaf {role} {gpath}')
 
     def artifact_leaves(self, art: Artifact):
+        """The artifact's canonical leaves with its reference sites resolved (cached: a referent's digest uses them)."""
+        cached = self._leaves.get(art.key)
+        if cached is not None:
+            return cached
+        if art.key in self._resolving:
+            raise ComparatorError('reference', self.side.label, f'{art.key}: reference cycle')
+        self._resolving.add(art.key)
+        try:
+            leaves = self._artifact_leaves(art)
+        finally:
+            self._resolving.discard(art.key)
+        self._leaves[art.key] = leaves
+        return leaves
+
+    def by_name(self, name: str):
+        if self._by_name is None:
+            self._by_name = {a.name: a for a in self.side.artifacts.values()}
+        return self._by_name.get(name)
+
+    def _artifact_leaves(self, art: Artifact):
         cfg = self.cfg
         if cfg.is_input_role(art.role):
             return {'$bytes': ('P', ('#sha256', sha256(art.raw)))}
@@ -788,7 +818,10 @@ class Flattener:
 # commit is canonicalized. Such a field is equivalent iff on EACH side it is
 # self-consistent with the artifact it references, and the referents compare
 # equivalent under the ordinary rules. Each site below is verified on its own side and
-# its token replaced by '@<kind>:<referent key>'; anything that does not verify raises
+# its token replaced by '@<kind>:<referent key>#<digest of the referent's resolved
+# canonical leaves>' (leaf_digest), so the token keeps the composite's coverage of every
+# referent leaf at the referencing site's tier while the analysis commit (canonicalized
+# inside the referent) no longer reaches it; anything that does not verify raises
 # ComparatorError('reference'). The referents are stored artifacts, compared as such,
 # except the per-producer component floor artifacts, which custody does not store:
 # those are rebuilt from the stored aggregate floor and pinset by the mint's own
@@ -802,7 +835,9 @@ class Flattener:
 #   outputs/claim-verdicts.json $.inputs.analysis_manifest.{manifest_id,file_sha256},
 #     $.inputs.floor_artifact.{artifact_id,file_sha256,embedded_bytes_base64}
 #     [joulewise/analysis_engine/__init__.py claim-verdict body]
-#   finalized/am.finalized.json $.manifest_id, $.evidence.aggregate_floor_artifact.{path,sha256}
+#   finalized/am.finalized.json $.manifest_id, $.evidence.<row>.{path,sha256} for every evidence row
+#     that names a file (aggregate floor, bracket binding, ledger, whole-window verdict, replay
+#     sidecar, attempt exclusions: each must be a committed output on the same side)
 #     [joulewise/analysis_manifest_v3.py calculate_manifest_id; the finalizer's evidence rows]
 #   *mint/floor-mint-pinset.json $.aggregate.producer_set_sha256,
 #     $.aggregate.component_artifacts[*].{sha256,producer_pin_sha256},
@@ -824,6 +859,19 @@ CLOSEOUT_SOURCES = {'finalized_manifest': (FINALIZED_MANIFEST_ROLE, 'manifest_id
                     'replay_sidecar': (FINALIZED_REPLAY_ROLE, 'sidecar_id')}
 CONTAINMENT_KEYS = ('mint_commit_contained_in_origin_main', 'head_pin_commit_contained_in_origin_main')
 REBUILT = '<rebuilt>'
+
+
+def _under(path: str, prefix: str) -> bool:
+    return path == prefix or path.startswith(prefix + '.') or path.startswith(prefix + '[')
+
+
+def leaf_digest(leaves: dict, prefix: str | None = None) -> str:
+    """sha256 over the (path, tier, token) rows of a canonical leaf map, or of the subtree at ``prefix``."""
+    rows = [[path, tier, token] for path, (tier, token) in sorted(leaves.items(), key=lambda kv: kv[0])
+            if prefix is None or _under(path, prefix)]
+    if not rows:
+        raise ValueError('empty referent')
+    return sha256(json.dumps(rows, separators=(',', ':'), default=list).encode('ascii'))
 
 
 def canonical_json_sha256(value) -> str:
@@ -934,6 +982,15 @@ class _References:
                 self.fail(f'referent {art.key} is not strict JSON')
         return self.cache[art.key]
 
+    def covers(self, art: Artifact, prefix: str | None = None) -> str:
+        """'<key>#<digest>' of a referent's resolved canonical leaves (the subtree at ``prefix``)."""
+        if art is self.art:
+            return f'{art.key}#{leaf_digest(self.leaves, prefix)}'
+        digests = self.flat.digests
+        if (art.key, prefix) not in digests:
+            digests[art.key, prefix] = leaf_digest(self.flat.artifact_leaves(art), prefix)
+        return f'{art.key}#{digests[art.key, prefix]}'
+
     def verified(self, path: str, value, expected, kind: str, referent: str):
         """Replace the leaf at ``path`` by '@kind:referent' when ``value`` is the string ``expected``."""
         self.require(isinstance(value, str) and value == expected, path, referent)
@@ -1001,10 +1058,10 @@ def _closeout_sources(refs: _References, value):
         base = f'$.sources.{name}'
         if 'canonical_json_sha256' in ref:
             refs.verified(f'{base}.canonical_json_sha256', ref['canonical_json_sha256'], canonical_json_sha256(body),
-                          'canonical', target.key)
+                          'canonical', refs.covers(target))
         if 'identity' in ref:
             identity = refs.manifest_id(target) if identity_key == 'manifest_id' else body.get(identity_key)
-            refs.verified(f'{base}.identity', ref['identity'], identity, 'identity', target.key)
+            refs.verified(f'{base}.identity', ref['identity'], identity, 'identity', refs.covers(target))
 
 
 def _claim_verdict_inputs(refs: _References, value):
@@ -1013,43 +1070,61 @@ def _claim_verdict_inputs(refs: _References, value):
         target = refs.referent(FINALIZED_MANIFEST_ROLE)
         if 'manifest_id' in manifest:
             refs.verified('$.inputs.analysis_manifest.manifest_id', manifest['manifest_id'], refs.manifest_id(target),
-                          'manifest-id', target.key)
+                          'manifest-id', refs.covers(target))
         if 'file_sha256' in manifest:
             refs.verified('$.inputs.analysis_manifest.file_sha256', manifest['file_sha256'], sha256(target.raw),
-                          'file', target.key)
+                          'file', refs.covers(target))
     floor = _sub(value, 'inputs', 'floor_artifact')
     if floor is not None:
         target = refs.referent(FINALIZED_FLOOR_ROLE)
         base = '$.inputs.floor_artifact'
         if 'artifact_id' in floor:
             refs.verified(f'{base}.artifact_id', floor['artifact_id'], refs.plain(target).get('artifact_id'),
-                          'identity', target.key)
+                          'identity', refs.covers(target))
         if 'file_sha256' in floor:
-            refs.verified(f'{base}.file_sha256', floor['file_sha256'], sha256(target.raw), 'file', target.key)
+            refs.verified(f'{base}.file_sha256', floor['file_sha256'], sha256(target.raw), 'file', refs.covers(target))
         if 'embedded_bytes_base64' in floor:
             embedded = floor['embedded_bytes_base64']
             decoded = base64.b64decode(embedded, validate=True) if isinstance(embedded, str) else None
-            # The embedded copy IS the referent (equal bytes), so it is compared as that artifact.
+            # The embedded copy IS the referent (equal bytes), so it compares as that artifact: by its leaf digest.
             refs.require(decoded == target.raw, f'{base}.embedded_bytes_base64', target.key)
-            refs.token(f'{base}.embedded_bytes_base64', 'embedded', target.key)
+            refs.token(f'{base}.embedded_bytes_base64', 'embedded', refs.covers(target))
 
 
 def _finalized_manifest(refs: _References, value):
     if 'manifest_id' in value:
+        # Self-reference: the body it is derived from is this artifact's own leaves, compared here.
         refs.verified('$.manifest_id', value['manifest_id'], derived_manifest_id(value), 'manifest-id', refs.art.key)
-    floor = _sub(value, 'evidence', 'aggregate_floor_artifact')
-    if floor is None:
+    evidence = value.get('evidence')
+    if evidence is None:
         return
-    target = refs.referent(FINALIZED_FLOOR_ROLE)
-    base = '$.evidence.aggregate_floor_artifact'
-    if 'path' in floor:
-        # Evidence paths are relative to the finalized manifest's own directory.
+    if not isinstance(evidence, dict):
+        refs.fail('evidence is not an object')
+    if 'aggregate_floor_artifact' in evidence:
+        _evidence_row(refs, 'aggregate_floor_artifact', evidence['aggregate_floor_artifact'],
+                      refs.referent(FINALIZED_FLOOR_ROLE))
+    for name, row in evidence.items():
+        if name != 'aggregate_floor_artifact' and isinstance(row, dict) and 'path' in row:
+            _evidence_row(refs, name, row, None)
+
+
+def _evidence_row(refs: _References, name: str, row, target):
+    """An evidence row naming a file: its path (relative to the manifest's directory) and sha256 must name a
+    committed output on this side (``target`` when the row's referent role is fixed); both become tokens that
+    cover that output's leaves."""
+    if not isinstance(row, dict) or not SAFE_KEY.fullmatch(name):
+        refs.fail(f'evidence row {name} is malformed')
+    base = f'$.evidence.{name}'
+    if 'path' in row:
+        path = row['path']
         directory = refs.art.name.rsplit('/', 1)[0]
-        path = floor['path']
-        refs.verified(f'{base}.path', f'{directory}/{path}' if isinstance(path, str) else None, target.name,
-                      'path', target.key)
-    if 'sha256' in floor:
-        refs.verified(f'{base}.sha256', floor['sha256'], sha256(target.raw), 'file', target.key)
+        named = refs.flat.by_name(f'{directory}/{path}') if isinstance(path, str) else None
+        target = named if target is None else target
+        refs.require(named is not None and named is target, f'{base}.path',
+                     target.key if target is not None else 'a committed output')
+        refs.token(f'{base}.path', 'path', refs.covers(target))
+    if 'sha256' in row:
+        refs.verified(f'{base}.sha256', row['sha256'], sha256(target.raw), 'file', refs.covers(target))
 
 
 def _pinset(refs: _References, value, exact):
@@ -1058,33 +1133,36 @@ def _pinset(refs: _References, value, exact):
     pins = aggregate['component_artifacts']
     if not isinstance(producers, list) or len(pins) != len(producers) or not producers:
         refs.fail('component pins do not match the producer plans')
-    me = refs.art.key
-    if 'producer_set_sha256' in aggregate:
-        refs.verified('$.aggregate.producer_set_sha256', aggregate['producer_set_sha256'],
-                      canonical_json_sha256(producers), 'producer-set', me)
+    me = refs.art
     target = refs.referent(refs.art.role[:-len(PINSET_SUFFIX)] + AGGREGATE_SUFFIX)
     floor_plain = refs.plain(target)
     floor_exact = exact_json(target.raw)
+    # Components first: the producer pins and the producer-set digest cover their tokens.
     for i, (producer, pin) in enumerate(zip(producers, pins)):
         if pin.get('plan_id') != producer['plan']['plan_id']:
             refs.fail('component pin order differs from the producer plans')
         base = f'$.aggregate.component_artifacts[{i}]'
-        if 'producer_pin_sha256' in pin:
-            refs.verified(f'{base}.producer_pin_sha256', pin['producer_pin_sha256'], canonical_json_sha256(producer),
-                          'producer-pin', me)
         component = rebuild_component(floor_plain, value, i)
         matched = [v for v in containment_variants(component)
                    if floor_artifact_sha256(_with_variant(component, v)) == pin['sha256']]
         refs.require(len(matched) == 1, f'{base}.sha256', f'{target.key}{REBUILT}')
-        # The token keeps the matched containment observation (the only rebuilt bytes not in the aggregate).
-        token = f'{target.key}{REBUILT}' + ('' if matched[0] is None else json.dumps(list(matched[0])))
+        # Compare the rebuilt component itself (commit canonicalized), under the aggregate's rules ...
+        rebuilt = refs.flat.flatten(_with_variant(rebuild_component(floor_exact, exact, i), matched[0]),
+                                    target.role, {})
+        for path, leaf in rebuilt.items():
+            refs.leaves[f'{base}.sha256{REBUILT}{path[1:]}'] = leaf
+        # ... and let its digest cover every rebuilt leaf (the matched containment observation included).
+        token = f'{target.key}{REBUILT}#{leaf_digest(rebuilt)}'
         refs.token(f'{base}.sha256', 'component', token)
         refs.verified(f'$.producer_plans[{i}].component_artifact.sha256', producer['component_artifact']['sha256'],
                       pin['sha256'], 'component', token)
-        # Compare the rebuilt component itself (commit canonicalized), under the aggregate's rules.
-        rebuilt = _with_variant(rebuild_component(floor_exact, exact, i), matched[0])
-        for path, leaf in refs.flat.flatten(rebuilt, target.role, {}).items():
-            refs.leaves[f'{base}.sha256{REBUILT}{path[1:]}'] = leaf
+    for i, (producer, pin) in enumerate(zip(producers, pins)):
+        if 'producer_pin_sha256' in pin:
+            refs.verified(f'$.aggregate.component_artifacts[{i}].producer_pin_sha256', pin['producer_pin_sha256'],
+                          canonical_json_sha256(producer), 'producer-pin', refs.covers(me, f'$.producer_plans[{i}]'))
+    if 'producer_set_sha256' in aggregate:
+        refs.verified('$.aggregate.producer_set_sha256', aggregate['producer_set_sha256'],
+                      canonical_json_sha256(producers), 'producer-set', refs.covers(me, '$.producer_plans'))
 
 
 def _aggregate_floor(refs: _References, value):
@@ -1094,7 +1172,7 @@ def _aggregate_floor(refs: _References, value):
     pinset = refs.referent(refs.art.role[:-len(AGGREGATE_SUFFIX)] + PINSET_SUFFIX)
     producers = refs.plain(pinset)['producer_plans']
     refs.verified('$.provenance.calibration_plan.sha256', plan['sha256'], canonical_json_sha256(producers),
-                  'producer-set', pinset.key)
+                  'producer-set', refs.covers(pinset, '$.producer_plans'))
 
 
 def section_of(path: str) -> str:
