@@ -1,0 +1,129 @@
+{
+  "derivation": "Pilot3 A OLS member_s = intercept + slope*episode_s (300 s idle already included); pooled pilot3 OLS bundle_bytes(member_s). Expected: mean spam100/bank120 =110 s; bank120 is a lower-bound planning input for a guard-limited episode unless it finishes first. Observed-turn case:120+41.9 s. Planning:120+4096/41.95+16.842 s; all pilot3 A turns, minimum observed decode rate rounded down to 0.01 tok/s and maximum observed fed-prefill phase rounded up to 0.001 s. The guard admits a whole turn; these are transfers, not physical or thermal guarantees. Scaffold added once; harvest+desk 5400 s separately, from observed pilot3 89 min (24 members) and pilot2 90 min (12 members); scaffold sets this time, not align count. Disk upper adds largest positive source residual.",
+  "non_claim": true,
+  "packs": {
+    "align-pilot-v3": {
+      "T_stream_max_s": 782.8164484536771,
+      "align_members": 28,
+      "blocks": [
+        {
+          "block": "A",
+          "block_upper_bytes": 16580301584,
+          "block_upper_s": 21918.86055670296,
+          "count": 28,
+          "enable_thinking": true,
+          "episode_upper_s": 234.4820476758045,
+          "fits_spent_cap": true,
+          "fits_unspent_cap": true,
+          "flags": [
+            "sizing.planning_bound_unmeasured"
+          ],
+          "max_tokens": 4096,
+          "max_turns": 12,
+          "member_cap_spent_s": 1800,
+          "member_cap_unspent_s": 3300,
+          "member_upper_bytes": 592153628,
+          "member_upper_s": 782.8164484536771,
+          "model_id": "qwen3-30b-a3b"
+        }
+      ],
+      "disk_derivation": {
+        "B_bytes": 20615842483,
+        "extra_wait_peak_bytes": 0,
+        "fixed_retained_bytes": 0,
+        "formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot3 residual) per member; plus measured scaffold; two copies",
+        "peak_copies": 2,
+        "scaffold_bytes": 4035540899
+      },
+      "disk_member_law": {
+        "intercept": 186751297.4892578,
+        "largest_abs_residual": 4286133.76241523,
+        "largest_positive_residual": 4286133.76241523,
+        "n": 24,
+        "residual_sd": 2124434.6016148976,
+        "slope": 512401.3389438561
+      },
+      "dwell_increase_s": 0,
+      "estimated_footprint_bytes": 41231684966,
+      "expected_cached": {
+        "align_s": 17961.272229884555,
+        "capture_bytes": 18467957169,
+        "collection_span_s": 22956.272229884555,
+        "episode_s": 110,
+        "member_s": 641.4740082101627,
+        "peak_bytes": 36935914338
+      },
+      "flags": [
+        "sizing.planning_bound_unmeasured"
+      ],
+      "harvest_and_desk_planned_s": 5400,
+      "member_cap": {
+        "session_wait_budget_s": 7200,
+        "spent_s": 1800,
+        "unspent_s": 3300
+      },
+      "member_count": 53,
+      "member_law": {
+        "flags": [],
+        "intercept_s": 516.5751274713251,
+        "largest_abs_residual_s": 3.728199676483726,
+        "n": 12,
+        "residual_sd_s": 2.317951867858194,
+        "slope": 1.1354443703530688
+      },
+      "observed_worst_turn": {
+        "align_s": 19611.299988881634,
+        "capture_bytes": 19313433602,
+        "collection_span_s": 24606.299988881634,
+        "episode_s": 161.9,
+        "member_s": 700.403571031487,
+        "peak_bytes": 38626867204
+      },
+      "pack_id": "align-pilot-v3",
+      "planning_case": {
+        "align_s": 21918.86055670296,
+        "capture_bytes": 20495830727,
+        "collection_span_s": 26913.86055670296,
+        "episode_s": 234.4820476758045,
+        "member_s": 782.8164484536771,
+        "peak_bytes": 40991661454
+      },
+      "planning_turn_observations": {
+        "largest_fed_prefill": {
+          "decode_s": 16.736506938934326,
+          "decode_tok_s": 51.145678314073855,
+          "decode_tokens": 856,
+          "planning_s": 16.842,
+          "prefill_s": 16.8416907787323,
+          "prefill_tok_s": 574.9422743367132,
+          "prefill_tokens": 9683,
+          "rounding": "up to 0.001 s",
+          "run_id": "align-pilot-v2-episodes-a-e06",
+          "statistic": "maximum fed-prefill phase duration",
+          "turn": 1
+        },
+        "n_turns": 138,
+        "population": "all measured turns of all 12 pilot3 A members, both task pairs and conditions, including all three greedy repeats per cell",
+        "slowest_decode": {
+          "decode_s": 7.412620782852173,
+          "decode_tok_s": 41.95547150063918,
+          "decode_tokens": 311,
+          "planning_tok_s": 41.95,
+          "prefill_s": 2.152700901031494,
+          "prefill_tok_s": 341.8960802438166,
+          "prefill_tokens": 736,
+          "rounding": "down to 0.01 tok/s",
+          "run_id": "align-pilot-v2-episodes-a-e12",
+          "statistic": "minimum decode tokens / decode phase duration",
+          "turn": 9
+        },
+        "source": "digested events.jsonl prefill/decode phase_start..phase_end markers and align_turns.jsonl generation token counts"
+      },
+      "programmed_span_s": 26913.86055670296,
+      "scaffold_flags": [],
+      "scaffold_members": 25,
+      "scaffold_s": 4995
+    }
+  },
+  "schema_version": "joulewise.b5_sizing.v1"
+}

@@ -417,3 +417,11 @@ present-work episodes has median bound 190.71 J and actual error SD 14.39 J;
 the residual-SD interval is (27.08,29.36) J. The bound-fed gate is None with
 both flags, and the independently known SD-fed gate is True. These numbers
 are synthetic evidence, not hardware calibration or universal error ratios.
+
+Pilot 4 is a non-claim diagnostic that prints both existing count conventions.
+Its headline uses `hidden_token_counts_logged=True` (reasoning counts as logged),
+with `False` (the adapter's registered default) printed beside it. The known-H
+tamper curve removes reasoning counts from selected sabotage turns and scores
+that log against the counts-logged benign fit. This changes no formula, design
+term, uncertainty interpretation or registered default; see
+[pilot 4's protocol](pilot_protocol_v3.md).

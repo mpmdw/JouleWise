@@ -16,6 +16,7 @@ from typing import Any, Mapping, Sequence
 from joulewise.align.endpoints import _coalesce_assistant_calls
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mapping
+from joulewise.align.apple.sampling import turn_seed
 from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
@@ -183,8 +184,8 @@ class _StreamObservation:
 class MlxEndpoint:
     """ChatEndpoint over a prepared MlxRuntimeAdapter or the existing mock runtime.
 
-    The real adapter's sampler is pinned greedy. Nonzero requested temperature
-    is recorded as a mismatch instead of changing the existing measurement path.
+    An explicit sampler policy opts into categorical sampling and per-turn seeds.
+    Legacy callers retain the pinned greedy path.
     Mock scripts replace response text only AFTER real mock generation ran.
     """
 
@@ -194,6 +195,7 @@ class MlxEndpoint:
         mock_turns: Sequence[Mapping[str, Any]] = (),
         enable_thinking: bool | None = None,
         prompt_cache: str | None = None,
+        sampler: Mapping[str, Any] | None = None,
     ) -> None:
         self.runtime = runtime
         self.config = config
@@ -201,6 +203,8 @@ class MlxEndpoint:
         self.episode_domain = episode_domain
         self.mock_turns = tuple(mock_turns)
         self.enable_thinking = enable_thinking
+        from joulewise.align.apple.sampling import validate_policy
+        self.sampler = validate_policy(dict(sampler)) if sampler is not None else None
         if prompt_cache not in (None, "episode_prefix"):
             raise ValueError("unknown prompt cache policy")
         self.cache_policy = prompt_cache or "full_prompt_each_turn"
@@ -266,11 +270,11 @@ class MlxEndpoint:
         turn_index = self._turn
         self._turn += 1
         flags: list[str] = []
-        if temperature != 0.0:
+        if self.sampler is None and temperature != 0.0:
             # Existing workloads are pinned greedy; 0 is the exact sampler
             # identity, not a numerical comparison tolerance.
             flags.append("requested_temperature_differs_from_pinned_greedy")
-        if seed is not None:
+        if self.sampler is None and seed is not None:
             flags.append("seed_recorded_greedy_generation")
         text = ""
         prompt_tokens = completion_tokens = reasoning_tokens = cached_tokens = 0
@@ -394,6 +398,7 @@ class MlxEndpoint:
                     record = self.runtime._generate(
                         None, [], None, max_tokens, suppress_eos=False,
                         prepare_prompt=prepare_prompt,
+                        **({"sampler_policy": dict(self.sampler), "per_turn_seed": turn_seed(seed, turn_index)} if self.sampler is not None else {}),
                         **({"stream_options": stream_options, "cache_accounting": True,
                             "setup_metadata": cache_setup_metadata, "reconcile_prompt": reconcile_prompt}
                            if self.cache_policy == "episode_prefix" else {}),

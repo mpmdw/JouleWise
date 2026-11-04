@@ -56,10 +56,12 @@ class EpisodeSpec:
     enable_thinking: bool | None = None
     max_context_tokens: int | None = None
     prompt_cache: str | None = None
+    sampler: Mapping[str, Any] | None = None
+    max_episode_seconds: float | None = None
 
     def to_text(self) -> str:
         value = asdict(self)
-        for key in ("enable_thinking", "max_context_tokens", "prompt_cache"):
+        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -97,6 +99,18 @@ class EpisodeSpec:
             raise ValueError("prompt_cache must be episode_prefix or null")
         if type(spec.temperature) not in (int, float) or not math.isfinite(spec.temperature):
             raise ValueError("temperature must be numeric and finite")
+        if spec.sampler is not None:
+            from joulewise.align.apple.sampling import validate_policy
+            validate_policy(spec.sampler)
+            if spec.temperature != spec.sampler["temperature"]:
+                raise ValueError("temperature and sampler.temperature must agree")
+        elif spec.temperature != 0:
+            raise ValueError("nonzero EpisodeSpec.temperature requires an explicit sampler policy")
+        if spec.max_episode_seconds is not None and (
+            type(spec.max_episode_seconds) not in (float, int)
+            or not math.isfinite(spec.max_episode_seconds) or spec.max_episode_seconds <= 0
+        ):
+            raise ValueError("max_episode_seconds must be finite and positive")
         return spec
 
 
@@ -216,6 +230,21 @@ class EpisodeRuntimeAdapter:
                 "accounting_version": "represented_ids_v1",
                 "repetition": "observe_only",
             }
+        if spec.sampler is not None or spec.max_episode_seconds is not None:
+            from joulewise.align.apple.sampling import SEED_LAW, TURN_SEED_LAW, SEED_BITS, seed_inputs
+            policy = metadata["sampler"].setdefault("execution_policy", {})
+            if spec.sampler is not None:
+                # Read the same constructor path as measured turns; identity
+                # cannot claim categorical sampling when the runtime is greedy.
+                _, actual = self.runtime._sampler_for_generation(dict(spec.sampler))
+                metadata["sampler"].update(actual)
+                model_id, thinking = seed_inputs(config, spec.enable_thinking)
+                policy.update(sampler=dict(spec.sampler), seed_law=SEED_LAW,
+                              turn_seed_law=TURN_SEED_LAW, seed_bits=SEED_BITS,
+                              seed_model_id=model_id, seed_thinking=thinking, seed_index=spec.seed,
+                              seed_task_pair=self.task.task_pair if self.task is not None else spec.task_kwargs.get("task_pair"))
+            if spec.max_episode_seconds is not None:
+                policy["max_episode_seconds"] = spec.max_episode_seconds
         metadata["output_policy"] = {
             "name": "agent_episode",
             "requested_tokens": spec.max_turns * spec.max_tokens,
@@ -266,6 +295,7 @@ class EpisodeRuntimeAdapter:
             self.runtime, config, self.clock, episode_domain=domain,
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
             enable_thinking=spec.enable_thinking, prompt_cache=spec.prompt_cache,
+            sampler=spec.sampler,
         )
         task = self.task
         from joulewise.align.runner import RepetitionObserver
@@ -278,7 +308,14 @@ class EpisodeRuntimeAdapter:
                     ChatMessage("system", task.system_prompt(spec.condition)),
                     ChatMessage("user", task.user_prompt()),
                 ]
+                from joulewise.align.apple.sampling import episode_seed, seed_inputs
+                measured_seed = episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair, spec.seed) if spec.sampler is not None else spec.seed
                 for index in range(spec.max_turns):
+                    if spec.max_episode_seconds is not None and (
+                        monotonic_ns(self.clock.stamp()) - monotonic_ns(start)
+                    ) / NS_PER_SECOND >= spec.max_episode_seconds:
+                        flags.append(f"episode.time_guard:{index}")
+                        break
                     tools = task.tool_schemas()
                     limit = self.prepared.get("max_context_tokens")
                     if limit is not None:
@@ -309,7 +346,7 @@ class EpisodeRuntimeAdapter:
                     event_start = len(endpoint.events)
                     result = endpoint.chat(
                         transcript, tools=tools, max_tokens=spec.max_tokens,
-                        temperature=spec.temperature, seed=spec.seed,
+                        temperature=spec.temperature, seed=measured_seed,
                     )
                     # Integer token counts establish that a model call returned work.
                     model_returned_tokens |= result.completion_tokens > 0
@@ -382,7 +419,7 @@ class EpisodeRuntimeAdapter:
             except Exception as exc:
                 flags.append(f"episode_error:{type(exc).__name__}:{exc}")
         flags.extend(endpoint.flags)
-        if not model_returned_tokens and not any(f.startswith("episode.context_limit:") for f in flags):
+        if not model_returned_tokens and not any(f.startswith(("episode.context_limit:", "episode.time_guard:")) for f in flags):
             # UNKNOWN_ERROR maps to failed; RUNTIME_UNAVAILABLE maps to unsupported
             # and is reserved here for configurations rejected during prepare.
             raise AdapterFailure(
@@ -459,6 +496,8 @@ class EpisodeRuntimeAdapter:
             stop = "turn_budget_reached"
         if any(flag.startswith("episode.context_limit:") for flag in flags):
             stop = "episode.context_limit"
+        if any(flag.startswith("episode.time_guard:") for flag in flags):
+            stop = "episode.time_guard"
         if any(flag.startswith("episode.end_task:") for flag in flags):
             stop = "episode.end_task"
         if any(flag.startswith("episode_error:") for flag in flags):

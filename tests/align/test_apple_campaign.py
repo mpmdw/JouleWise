@@ -407,7 +407,7 @@ class AppleCampaignTests(unittest.TestCase):
         at_turn_budget[-1] = {**at_turn_budget[-1], "content": at_turn_budget[0]["content"]}
         specs = (
             base, replace(base, mock_turns=tuple(at_turn_budget)),
-            replace(base, temperature=0.7),
+            replace(base, max_episode_seconds=120),
         )
         stacks = []
         policies = []
@@ -455,11 +455,7 @@ class AppleCampaignTests(unittest.TestCase):
             self.assertEqual(outcomes[1]["stop_condition"], "turn_budget_reached")
             self.assertEqual(stacks[0], stacks[1])  # same governed identity, different outcomes
             self.assertEqual(policies[0], policies[1])
-            self.assertNotEqual(stacks[0], stacks[2])  # requested temperature is registered
-            self.assertIn(
-                "requested_temperature_differs_from_pinned_greedy",
-                read_episode_bundle(Path(directory) / "apple-identity-2").flags,
-            )
+            self.assertNotEqual(stacks[0], stacks[2])  # time guard is registered
 
     def test_order_manifest_counterbalances_cells_and_pack_ids_do_not_collide(self) -> None:
         from scripts.run_campaign import apply_order_manifest, load_order_entries

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare, hand off, and desk one NON-CLAIM ALIGN pilot 3 session.
+"""Prepare, hand off, and desk one NON-CLAIM ALIGN pilot 4 session.
 
 prepare and install are the BYTES item-H runner's (scripts/bytes_h_session.py)
 with the align kit: the same measurement view, real window-plan writer,
@@ -24,9 +24,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts import bytes_h_session as h
 
-KIT = Path('configs/campaigns/align_pilot_v2')
-PACK_ID = 'align-pilot-v2'
-SCHEMA = 'joulewise.align_pilot_desk.v0'
+KIT = Path('configs/campaigns/align_pilot_v3')
+PACK_ID = 'align-pilot-v3'
+SCHEMA = 'joulewise.align_pilot_desk.v3'
 # Instrument flags whose presence makes a member's energy unusable for the
 # pilot's checks; each is emitted by joulewise.align (sampler/attribution).
 ENERGY_BLOCKING = ('power_unavailable', 'trace.missing', 'trace.ambiguous', 'clock_anchor_unresolved')
@@ -71,15 +71,22 @@ def turn_counts(summary):
     return tuple(zip(*(summary['per_turn_' + name] for name in TURN_COUNTS), strict=True))
 
 
-def episode_summary(bundle, *, target_precheck_paths=None):
+def episode_summary(bundle, *, target_precheck_paths=None, expected_episode_seed=None):
     """One member's episode, energy per recorded power channel, and flags."""
     from joulewise.align.apple.workload import read_episode_bundle
     from joulewise.align.attribution import attribute_episode
 
     episode = read_episode_bundle(bundle)
     energy = {}
+    residual_rows = {}
     for trace in episode.power_traces:
         result = attribute_episode(episode, source=trace.source, channel=trace.channel)
+        if trace.source == 'powermetrics' and trace.channel == 'gpu_power':
+            from dataclasses import asdict
+            from joulewise.align import energy_residual as er
+            for logged in (True, False):
+                residual_rows[str(logged)] = [asdict(r) for r in er.turn_rows_from_episode(
+                    episode, er.turn_energy_from_attribution(result), hidden_token_counts_logged=logged)]
         energy[f'{trace.source}:{trace.channel}'] = {
             **_estimate({'joules': result.total.joules, 'half_width_j': result.total.half_width_j,
                          'segment_sum_j': math.fsum(s.energy.joules for s in result.segments)}),
@@ -100,7 +107,23 @@ def episode_summary(bundle, *, target_precheck_paths=None):
     logged = episode.totals(logged_only=True)
     from joulewise.align.apple.diagnostics import cache_statistics, phase_reason_counts
     precheck = evidence_precheck(bundle, target_precheck_paths)
-    return {'episode_start_ns': episode.start_ns, 'episode_end_ns': episode.end_ns,
+    from joulewise.align.apple.workload import EpisodeSpec
+    from joulewise.schemas import BenchmarkConfig
+    from joulewise.align.apple.pilot_analysis import check_turns
+    config = BenchmarkConfig.from_mapping(json.loads(read_bytes(Path(bundle) / 'config.json')))
+    spec = EpisodeSpec.from_text(config.workload_profile.prompt_text)
+    messages = [json.loads(line) for line in read_bytes(Path(bundle) / 'outputs/align_transcript.jsonl').splitlines() if line.strip()]
+    transcript = []
+    for message in messages:
+        if message['role'] == 'assistant':
+            transcript.append([message])
+        elif transcript:
+            transcript[-1].append(message)
+    controls = {k: getattr(spec, k) for k in ('enable_thinking', 'sampler', 'prompt_cache', 'max_context_tokens', 'max_episode_seconds')}
+    controls['model'] = config.model.name
+    return {'configuration': controls, 'residual_rows': residual_rows,
+            **check_turns(episode, turn_rows, spec, config, transcript, expected_episode_seed=expected_episode_seed),
+            'episode_start_ns': episode.start_ns, 'episode_end_ns': episode.end_ns,
             'turn_starts_ns': [t.start_ns for t in episode.turns],
             'per_turn_output_token_ids': [r.get('generation', {}).get('output_token_ids') for r in turn_rows],
             'per_turn_prompt_token_ids': [r.get('generation', {}).get('prompt_token_ids') for r in turn_rows],
@@ -135,17 +158,19 @@ def instrument_checks(members):
     readable = [m for m in members if m.get('summary')]
     usable = [m for m in readable if any(e['joules'] is not None for e in m['summary']['energy'].values())
               and not any(f.startswith(ENERGY_BLOCKING) for f in m['summary']['flags'])]
-    # Agreement allowance: 1% of the smallest recorded attribution half-width
+    # Agreement allowance: 0.5% of the smallest recorded attribution half-width
     # (about 1 J per real run), far above 1e6 x double summation roundoff.
     # Minimal synthetic dictionaries without uncertainty use that 1 J scale.
     widths = [e.get('half_width_j', 1.0) for m in usable for e in m['summary']['energy'].values()
               if e.get('half_width_j', 1.0) is not None and e.get('half_width_j', 1.0) > 0]
-    agreement_j = 0.01 * min(widths) if widths else 0.01
+    agreement_j = 0.005 * min(widths) if widths else 0.005
     tiled = all(e['joules'] is not None and e['segment_sum_j'] is not None
                 and abs(e['segment_sum_j'] - e['joules']) <= agreement_j
                 for m in usable for e in m['summary']['energy'].values())
     cells = defaultdict(list)
     for m in readable:
+        if m['summary'].get('configuration', {}).get('sampler') is not None:
+            continue  # repeat_token_identity is a legacy greedy-only diagnostic.
         # Configuration blocks are different work, never greedy repeats of each other.
         cell = (m.get('block'), m['task_pair'], m['condition'])
         cells[cell].append(m['summary'])
@@ -247,7 +272,12 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():
         raise ValueError('terminal record is required before desk')
-    runs_root = Path(state['runs_roots'].get('claim') or Path(state['inputs']['runs_parent']) / 'runs_align_pilot_v2')
+    claim_root = state.get('runs_roots', {}).get('claim')
+    if not claim_root:
+        registration = Path(state.get('registration_dir', Path(state['measurement_root']) / KIT / 'registration'))
+        tree = h.read(registration.parent / 'plan_tree.json')
+        claim_root = Path(state['inputs']['runs_parent']) / tree['roots']['claim_root_leaf']
+    runs_root = Path(claim_root)
     from joulewise.align.apple.diagnostics import member_thermal_readings, thermal_onset
     thermal = member_thermal_readings(custody)
     targets = {}
@@ -265,7 +295,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             if key in row:
                 entry[key] = row[key]
         try:
-            entry['summary'] = episode_summary(bundle, target_precheck_paths=targets.get(row['run_id']))
+            entry['summary'] = episode_summary(bundle, target_precheck_paths=targets.get(row['run_id']),
+                                               expected_episode_seed=row.get('expected_episode_seed'))
             summary = entry['summary']
             summary['os_thermal'] = thermal_onset(summary['episode_start_ns'], summary['episode_end_ns'],
                 summary['turn_starts_ns'], thermal.get(row['run_id'], {}))
@@ -316,17 +347,35 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         member['harvest_flags'] = harvest_flags.get(member['run_id'], [])
         member['battery_discharge'] = battery.get(member['run_id'])
     comparison = cross_pilot_identity(members, compare_session) if compare_session else None
-    checks, deterministic, spreads = instrument_checks(members)
+    checks, deterministic, _legacy_spreads = instrument_checks(members)
+    from joulewise.align.apple.pilot_analysis import sampling_checks, residual_analysis, episode_eligible, episode_ineligibility_reasons
+    i4, spreads, raw_spread = sampling_checks(members)
+    residuals = residual_analysis(members)
+    # I4' replaces the greedy check for sampled cohorts. Collisions are
+    # observations; they never alter instrument pass/fail.
+    checks.pop('I4_greedy_repeats_identical_tokens')
+    replay_results = [r for cell in i4.values() if isinstance(cell['replay_identity'], list) for r in cell['replay_identity']]
+    checks['I4_replay_identity'] = (all(r['status'] == 'identical' for r in replay_results) if replay_results else 'not_evaluated')
+    for field in ('accounting', 'sampler_provenance'):
+        values = [r['status'] for cell in i4.values() for r in cell[field]]
+        checks['I4_' + field] = (False if 'fail' in values else True if values and all(v == 'pass' for v in values) else 'not_evaluated')
     checks['chain_eligibility'] = checks['chain_eligibility'] and not excluded
     checks['harvest_exclusions_recorded'] = exclusions is not None
     pilot = {'schema_version': SCHEMA, 'non_claim': True, 'session_id': state['session_id'],
              'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
              'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
+             'I4_prime': i4, 'raw_within_cell_energy_sd': raw_spread, 'residual_analysis': residuals,
+             'registered_eligible_members': [m['run_id'] for m in members if not m['excluded']],
+             'episode_scope_alternative_eligible_members': [m['run_id'] for m in members if m.get('summary') and episode_eligible(m)],
+             'episode_scope_alternative_ineligible_reasons': {m['run_id']: episode_ineligibility_reasons(m)
+                 for m in members if m.get('summary') and not episode_eligible(m)},
              'exclusions_path': str(exclusion_path), 'members_excluded': (exclusions or {}).get('members_excluded', []),
              'cross_pilot_token_identity': comparison,
              'session_harvest_flags': harvest_flags.get(None, []),
              'harvest_flags_status': 'recorded' if flag_path.is_file() else 'not_recorded',
              'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
+    from joulewise.align.apple.pilot_analysis import finite_json
+    pilot = finite_json(pilot)
     h.write(output / 'PILOT.json', pilot)
     status = {'schema_version': SCHEMA, 'non_claim': True, 'plan_id': state['session_id'],
               'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
@@ -352,19 +401,26 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         pre = summary['window_evidence_precheck']
         print(member['run_id'] + ': ' + json.dumps({
             'end_state': summary['end_state'], 'state_changing_calls': summary['state_changing_calls'],
+            'episode_seconds': summary['duration_s'], 'sampler_policy': summary['configuration']['sampler'],
+            'cap_hits': sum(f.startswith('turn_token_budget_reached:') for f in summary['flags']),
             **{k: summary[k] for k in ('acted_beyond_read_marking', 'bank_stage', 'cache_statistics', 'repetition_flags_per_turn', 'phase_window_reason_counts')},
             **{k: summary[k] for k in ('classification', 'counted_tool_names', 'read_only_tool_names', 'unobserved_tool_names', 'exclusion_codes', 'excluded', 'os_thermal')},
             'tool_names_per_turn': summary['tool_names_per_turn'], 'unknown_tool_names': summary['unknown_tool_names'],
             'thermal_pressure_seconds': summary['thermal_pressure_seconds'],
             'active_gpu_clock_mhz': summary['active_gpu_clock_mhz'],
+            'per_turn_active_gpu_clock_mhz': summary['per_turn_active_gpu_clock_mhz'],
             'chain_eligible': summary['chain_eligible'], 'chain_reasons': pre['reasons'] + summary['exclusion_codes'],
             'target_precheck_eligible': pre['eligible'],
             'request_window_diagnostics': pre['request_windows'],
             'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
             'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}, sort_keys=True))
-    print('repeat_token_identity: ' + json.dumps(deterministic, sort_keys=True))
+    print('repeat_token_identity (greedy-only; sampled configurations skipped): ' + json.dumps(deterministic, sort_keys=True))
     if comparison is not None:
         print('cross_pilot_token_identity: ' + json.dumps(comparison, sort_keys=True))
+    for key in ('I4_prime', 'registered_eligible_members', 'episode_scope_alternative_eligible_members',
+                'episode_scope_alternative_ineligible_reasons',
+                'raw_within_cell_energy_sd', 'residual_analysis'):
+        print(key + ': ' + json.dumps(pilot[key], sort_keys=True, allow_nan=False))
     print('repeat_energy_spread: ' + json.dumps(spreads, sort_keys=True))
     print('harvest_exit: ' + str(result.returncode))
     print('harvest_status: ' + status['harvest_status'])

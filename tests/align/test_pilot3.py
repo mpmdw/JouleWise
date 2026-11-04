@@ -21,24 +21,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class KitTests(unittest.TestCase):
-    def test_specs_only_add_cache_control_and_order_is_matched(self):
+    def test_frozen_pilot3_specs_only_add_cache_control(self):
         old = h.read(ROOT / 'configs/campaigns/align_pilot_v1/collection_plan.json')
         previous = {(m['block'], m['task_pair'], m['condition']): m['spec'] for m in old['members']}
-        members = kit.ordered_members()
+        members = h.read(ROOT / 'configs/campaigns/align_pilot_v2/collection_plan.json')['members']
         self.assertEqual(len(members), 24)
         for member in members:
-            spec = json.loads(member['spec'].to_text())
+            spec = dict(member['spec'])
             self.assertEqual(spec.pop('prompt_cache'), 'episode_prefix')
             self.assertEqual(spec, previous[(member['block'], spec['task_kwargs']['task_pair'], spec['condition'])])
-        self.assertEqual([m['block'] for m in members], ['A'] * 12 + ['C'] * 12)
-        for chunk in (members[:12], members[12:]):
-            pairs = [chunk[i]['spec'].task_kwargs['task_pair'] for i in range(0, 12, 2)]
-            self.assertEqual(pairs, ['spam_filter_update', 'bank_transfer_2', 'bank_transfer_2',
-                                     'spam_filter_update', 'spam_filter_update', 'bank_transfer_2'])
-            for pair in set(pairs):
-                first = [chunk[i]['spec'].condition for i in range(0, 12, 2) if pairs[i // 2] == pair]
-                self.assertNotEqual(first[0], first[1])
-                self.assertEqual(first[0], first[2])
 
     def test_fresh_mac_identity_pins_survive_generate_and_check(self):
         files = kit.build_files(ROOT)
@@ -85,7 +76,7 @@ class KitTests(unittest.TestCase):
         members = kit.ordered_members()
         members = [m for i, m in enumerate(members) if i not in (0, 12, 13)]
         sizing = kit.planning_sizing(tree, members, evidence)['packs'][kit.PACK_ID]
-        self.assertEqual([r['count'] for r in sizing['blocks']], [11, 10])
+        self.assertEqual([r['count'] for r in sizing['blocks']], [25])
         for row in sizing['blocks']:
             self.assertEqual(row['block_upper_s'], row['count'] * row['member_upper_s'])
             self.assertEqual(row['block_upper_bytes'], row['count'] * row['member_upper_bytes'])
@@ -202,7 +193,9 @@ class DeskTests(unittest.TestCase):
             self.assertEqual(report['session_harvest_flags'], session_flags)
             session_line, = [line for line in output.getvalue().splitlines() if line.startswith('session harvest_flags: ')]
             self.assertEqual(json.loads(session_line.removeprefix('session harvest_flags: ')), session_flags)
-            self.assertTrue(report['checks']['I4_greedy_repeats_identical_tokens'])
+            self.assertEqual(report['checks']['I4_replay_identity'], 'not_evaluated')
+            self.assertTrue(report['checks']['I4_accounting'])
+            self.assertEqual(report['checks']['I4_sampler_provenance'],'not_evaluated')
             self.assertTrue(all(r['status'] == 'identical' for rows in report['cross_pilot_token_identity'].values() for r in rows))
             for member in report['members']:
                 summary = member['summary']

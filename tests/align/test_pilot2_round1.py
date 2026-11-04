@@ -229,6 +229,9 @@ class DeskRound1Tests(unittest.TestCase):
 
     def summary(self):
         return {'energy':{'mock:package':{'joules':1.,'half_width_j':1.,'segment_sum_j':1.,'per_turn_j':[]}},
+                # Real greedy pilot-2/3 summaries retain the task seed and duration;
+                # the current desk also emits configuration and per-turn clocks.
+                'seed':1,'duration_s':1e-9,'configuration':{'sampler':None},
                 'flags':[],**{'per_turn_'+k:[1] if k == 'decode_tokens' else [0] for k in desk.TURN_COUNTS},
                 'per_turn_output_token_ids':[[1]], 'per_turn_prompt_token_ids':[[]],
                 'episode_start_ns':0,'episode_end_ns':1,'turn_starts_ns':[0],
@@ -237,7 +240,42 @@ class DeskRound1Tests(unittest.TestCase):
                 'window_evidence_precheck':{'eligible':True,'reasons':[],'windows':[], 'phase_windows':[], 'request_windows':[]},
                 'end_state':'returned_without_tool_call','state_changing_calls':0,'tool_names_per_turn':[],
                 'unknown_tool_names':[],'thermal_pressure_seconds':{},'active_gpu_clock_mhz':None,
+                'per_turn_active_gpu_clock_mhz':[None],
                 'ended_in_unclosed_reasoning':False,'classification':'state_observation_v1','counted_tool_names':[],'read_only_tool_names':[],'unobserved_tool_names':[]}
+
+    def test_archived_pilot3_shape_runs_sampling_and_telemetry_diagnostics(self):
+        from joulewise.align.apple.diagnostics import telemetry_diagnostics
+        from joulewise.align.apple.pilot_analysis import sampling_checks
+        shape=h.read(Path(__file__).with_name('fixtures')/'pilot3_member_shape.json')
+        # Preserve every archived summary key, including the absence of pilot-4
+        # configuration/sampler fields. Token IDs and telemetry are synthetic.
+        summary={key:None for key in shape['summary_keys']}
+        summary.update(shape['summary_values'])
+        summary.update(energy={},per_turn_prompt_token_ids=[[3]],per_turn_output_token_ids=[[1,2]])
+        members=[{'run_id':f'greedy-{i}','task_pair':'p','condition':'benign','summary':summary}
+                 for i in (1,2)]
+        checks,spreads,raw=sampling_checks(members)
+        self.assertEqual(checks['p/benign']['distinct_trajectories'],1)
+        self.assertEqual(checks['p/benign']['replay_identity'],'not_evaluated')
+        self.assertEqual(checks['p/benign']['independent_seed_distinct']['observations'],[
+            {'code':'sampling.identical_greedy_trajectories','members':['greedy-1','greedy-2'],
+             'seeds':[1,1]}])
+        self.assertEqual(spreads,{})
+        self.assertEqual(raw,{})
+        # Use the archived episode's actual timing projection alongside its
+        # summary shape. A single synthetic support spans the full episode.
+        record=shape['episode_timing']
+        episode=SimpleNamespace(**{**record,'turns':tuple(SimpleNamespace(**t) for t in record['turns'])})
+        stamps=episode.hardware['paired_clock_stamps_ns']
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/'rich_telemetry.jsonl').write_text(json.dumps({'timestamp_s':stamps[-1]['epoch_ns']/1e9,
+                'elapsed_ns':stamps[-1]['epoch_ns']-stamps[0]['epoch_ns'],
+                'gpu':{'dvfm_states':[{'freq':512,'used_ns':1_000_000_000}]}})+'\n')
+            diagnostics=telemetry_diagnostics(root,episode)
+        self.assertEqual(diagnostics['active_gpu_clock_mhz'],512.)
+        self.assertEqual(diagnostics['per_turn_active_gpu_clock_mhz'],[512.]*len(episode.turns))
+        self.assertEqual(diagnostics['diagnostic_flags'],['diagnostic.thermal_pressure_unavailable'])
 
     def test_harvest_exclusions_are_read_after_harvest_and_status_never_ok(self):
         with tempfile.TemporaryDirectory() as d:
@@ -249,7 +287,11 @@ class DeskRound1Tests(unittest.TestCase):
             self.assertTrue(first['summary']['chain_eligible'])
             self.assertFalse(last['summary']['chain_eligible'])
             self.assertEqual(last['exclusion_codes'],['thermal.os_level_nonzero'])
-            self.assertTrue(pilot['repeat_energy_spread']['p/benign']['mock:package']['thermal_ineligible'])
+            # Pilot 4 prints sampled replay spreads only; retain the legacy
+            # greedy diagnostic's thermal assertion at its owning API.
+            self.assertEqual(pilot['repeat_energy_spread'],{})
+            _,_,greedy_spreads=desk.instrument_checks(pilot['members'])
+            self.assertTrue(greedy_spreads['p/benign']['mock:package']['thermal_ineligible'])
             self.assertIn('thermal.os_level_nonzero',output)
 
     def test_arbitrary_member_exception_keeps_later_member_readable(self):

@@ -145,7 +145,10 @@ class DiagnosticTests(unittest.TestCase):
                              'gpu':{'dvfm_states':[{'freq':mhz,'used_ns':active_ns}]}})
             (root/'raw/powermetrics.plist').write_bytes(b'\0'.join(documents))
             (root/'rich_telemetry.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in rich))
-            episode=SimpleNamespace(hardware={'paired_clock_stamps_ns':[{'epoch_ns':10_025_000_000},{'epoch_ns':10_175_000_000}]})
+            # Archived pilot-2/3 episodes always carry monotonic turn stamps.
+            episode=SimpleNamespace(start_ns=25_000_000,
+                turns=(SimpleNamespace(start_ns=25_000_000,end_ns=175_000_000),),
+                hardware={'paired_clock_stamps_ns':[{'epoch_ns':10_025_000_000},{'epoch_ns':10_175_000_000}]})
             result=telemetry_diagnostics(root,episode)
             # 1 us exceeds 1e6 x float roundoff at this small epoch and is
             # below 1% of the 100 ms sample interval (1 ms).
@@ -154,6 +157,7 @@ class DiagnosticTests(unittest.TestCase):
             # The rational expectation is 2000/3 MHz. 1e-6 MHz is above
             # 1e6 x summation noise, below 1% of the 1 MHz printed unit.
             self.assertAlmostEqual(result['active_gpu_clock_mhz'],2000/3,delta=1e-6)
+            self.assertEqual(result['per_turn_active_gpu_clock_mhz'],[result['active_gpu_clock_mhz']])
 
     def test_chain_ineligibility_is_printed_beside_instrument_checks_and_repeat_turn_energies(self):
         from scripts import align_pilot_session as s

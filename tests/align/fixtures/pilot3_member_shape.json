@@ -1,0 +1,132 @@
+{
+  "source": {
+    "archive_root": "/Users/edr/night-align/pilot-v2-20261103T035512Z",
+    "summary": "PILOT.json",
+    "run_id": "align-pilot-v2-episodes-a-e01",
+    "episode": "runs-parent/runs_align_pilot_v2/align-pilot-v2-episodes-a-e01/outputs/align_episode.json",
+    "note": "Exact archived summary keys, seed, duration and episode timing projection; tests supply synthetic IDs and telemetry."
+  },
+  "summary_keys": [
+    "acted_beyond_read_marking",
+    "active_gpu_clock_mhz",
+    "active_gpu_seconds",
+    "bank_stage",
+    "cache_statistics",
+    "chain_eligible",
+    "classification",
+    "condition",
+    "counted_tool_names",
+    "diagnostic_flags",
+    "duration_s",
+    "end_state",
+    "ended_in_unclosed_reasoning",
+    "energy",
+    "episode_end_ns",
+    "episode_id",
+    "episode_start_ns",
+    "excluded",
+    "exclusion_codes",
+    "flags",
+    "logged_totals",
+    "main_task_score",
+    "os_thermal",
+    "per_turn_context_tokens",
+    "per_turn_decode_tokens",
+    "per_turn_hidden_tokens",
+    "per_turn_output_token_ids",
+    "per_turn_prefill_tokens",
+    "per_turn_prompt_token_ids",
+    "phase_window_reason_counts",
+    "read_marking_tool_names",
+    "read_only_tool_names",
+    "repetition_flags_per_turn",
+    "seed",
+    "side_task_success",
+    "state_changing_calls",
+    "task_diagnostics",
+    "task_pair",
+    "thermal_pressure_seconds",
+    "tool_inventory",
+    "tool_names_per_turn",
+    "totals",
+    "turn_starts_ns",
+    "unknown_tool_names",
+    "unobserved_tool_names",
+    "window_evidence_precheck"
+  ],
+  "summary_values": {
+    "seed": 1,
+    "duration_s": 97.959493084
+  },
+  "episode_timing": {
+    "start_ns": 1667678056740062,
+    "turns": [
+      {
+        "start_ns": 1667678460503208,
+        "end_ns": 1667694915573146
+      },
+      {
+        "start_ns": 1667694941574042,
+        "end_ns": 1667702670241312
+      },
+      {
+        "start_ns": 1667702697553042,
+        "end_ns": 1667711177055479
+      },
+      {
+        "start_ns": 1667711205634792,
+        "end_ns": 1667719286715875
+      },
+      {
+        "start_ns": 1667719317177270,
+        "end_ns": 1667732639473229
+      },
+      {
+        "start_ns": 1667732670043042,
+        "end_ns": 1667737225017666
+      },
+      {
+        "start_ns": 1667737256133292,
+        "end_ns": 1667743725656708
+      },
+      {
+        "start_ns": 1667743757192812,
+        "end_ns": 1667749018649104
+      },
+      {
+        "start_ns": 1667749052509813,
+        "end_ns": 1667754369497896
+      },
+      {
+        "start_ns": 1667754403716416,
+        "end_ns": 1667764558142688
+      },
+      {
+        "start_ns": 1667764595589833,
+        "end_ns": 1667772451589125
+      },
+      {
+        "start_ns": 1667772491112729,
+        "end_ns": 1667775994149729
+      }
+    ],
+    "hardware": {
+      "paired_clock_stamps_ns": [
+        {
+          "epoch_ns": 1793683341072956928,
+          "monotonic_after_ns": 1667678056740208,
+          "monotonic_before_ns": 1667678056739916,
+          "monotonic_resolution_ns": 42,
+          "wall_resolution_ns": 1001
+        },
+        {
+          "epoch_ns": 1793683439032450048,
+          "monotonic_after_ns": 1667776016233208,
+          "monotonic_before_ns": 1667776016233083,
+          "monotonic_resolution_ns": 42,
+          "wall_resolution_ns": 1001
+        }
+      ]
+    }
+  }
+}

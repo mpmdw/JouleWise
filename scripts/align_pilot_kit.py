@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the non-claim align pilot v2 Mac session; never register it or edit loop.json.
+"""Generate the non-claim align pilot v3 Mac session; never register it or edit loop.json.
 
 The fixed tree reuses the block-6 composer's calibrated scaffold exactly as
 scripts/bytes_mac_kit.py does (bracket reservation, calibration captures,
@@ -29,14 +29,13 @@ from joulewise.b6.pack_registration import load
 from joulewise.schemas import BenchmarkConfig
 from scripts.generate_matrix import build_config
 
-KIT = Path("configs/campaigns/align_pilot_v2")
-PACK_ID = "align-pilot-v2"
+KIT = Path("configs/campaigns/align_pilot_v3")
+PACK_ID = "align-pilot-v3"
 SOURCE_KIT = Path("configs/campaigns/bytes_mac_check")
 # Model-specific BYTES configs retain their exact model/revision pins.
 SHADE_CACHE = "/Users/edr/.cache/joulewise/shade"
 BLOCKS = (
     {"block": "A", "model_id": "qwen3-30b-a3b", "enable_thinking": True, "max_tokens": 4096, "max_turns": 12},
-    {"block": "C", "model_id": "qwen3-next-80b", "enable_thinking": None, "max_tokens": 2048, "max_turns": 20},
 )
 CONTEXT_CAP = 40960  # Lead ruling: same context regime for all blocks.
 ALIGN_IDLE_S = 300  # quiet_mac_exploratory cooldown.cap_s; align members only.
@@ -54,26 +53,41 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+SAMPLER = {"temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0}
+TIME_GUARD_S = 120
+# Independent pre-registration, cold-pass F1; never derive this table from the
+# runtime law. Both conditions and each replay share the pair/seed-index value.
+EXPECTED_EPISODE_SEEDS = {
+    "bank_transfer_2": (1001552758911679671, 8139346561588466007, 286457666795484560,
+                        304571486172760106, 16726874887165336052, 12685500607006618793),
+    "spam_filter_update": (2570132319625341959, 4097311025052448992, 6169586229110087908,
+                           18211783659995252033, 10515714233578474446, 8438206852662645142),
+}
+
+
 def ordered_members():
-    """Contiguous A/C; alternating pair order and matched condition order."""
+    """Six balanced four-cell seed blocks, four replays spread away from originals."""
+    cells = (("spam_filter_update", "benign"), ("bank_transfer_2", "sabotage"),
+             ("spam_filter_update", "sabotage"), ("bank_transfer_2", "benign"))
     members = []
-    for block in BLOCKS:
-        for repeat in range(1, 4):
-            pairs = pilot.PILOT_V0_PAIRS if repeat % 2 else tuple(reversed(pilot.PILOT_V0_PAIRS))
-            for pair in pairs:
-                pair_index = pilot.PILOT_V0_PAIRS.index(pair)
-                conditions = pilot.PILOT_V0_CONDITIONS
-                if (repeat - 1 + pair_index) % 2:
-                    conditions = tuple(reversed(conditions))
-                for condition in conditions:
-                    spec = pilot.EpisodeSpec(
-                        task_factory=pilot.FACTORY, condition=condition, seed=1,
-                        max_turns=block["max_turns"], max_tokens=block["max_tokens"], temperature=0.0,
-                        enable_thinking=block["enable_thinking"], max_context_tokens=CONTEXT_CAP,
-                        prompt_cache="episode_prefix",
-                        task_kwargs={"cache_dir": SHADE_CACHE, "task_pair": pair, "give_hint": True})
-                    members.append({**block, "repeat": repeat,
-                                    "base_config": base_config_path(block["model_id"]).as_posix(), "spec": spec})
+    block = BLOCKS[0]
+    # Replay seed 1 after seed blocks 2,3,4,6. The earliest replay is eight
+    # positions after its original; all later ones are further away.
+    replay_after = {2: cells[0], 3: cells[1], 4: cells[2], 6: cells[3]}
+    def member(pair, condition, seed, replay=False):
+        spec = pilot.EpisodeSpec(
+            task_factory=pilot.FACTORY, condition=condition, seed=seed,
+            max_turns=block["max_turns"], max_tokens=block["max_tokens"], temperature=SAMPLER["temperature"],
+            enable_thinking=True, max_context_tokens=CONTEXT_CAP, prompt_cache="episode_prefix",
+            sampler=SAMPLER, max_episode_seconds=TIME_GUARD_S,
+            task_kwargs={"cache_dir": SHADE_CACHE, "task_pair": pair, "give_hint": True})
+        return {**block, "repeat": 2 if replay else 1, "seed_index": seed, "is_replay": replay,
+                "base_config": base_config_path(block["model_id"]).as_posix(), "spec": spec}
+    for seed in range(1, 7):
+        for pair, condition in cells if seed % 2 else reversed(cells):
+            members.append(member(pair, condition, seed))
+        if seed in replay_after:
+            members.append(member(*replay_after[seed], 1, replay=True))
     return members
 
 
@@ -84,9 +98,9 @@ def ordered_specs():
 def episode_config(base, spec, run_id, label, model_id, repeat=1):
     value = build_config(base, model_id + "-mlx", WORKLOAD_KIND, spec.max_tokens, spec.max_tokens, 1)
     value["run_id"] = run_id
-    value["hardware_target"]["notes"] = "ALIGN pilot 3 non-claim cache instrument check; never a registered pack."
+    value["hardware_target"]["notes"] = "ALIGN pilot 4 non-claim cache instrument check; never a registered pack."
     value["run_metadata"]["tags"] = [
-        "align-pilot-v2", "non-claim", "launch_lineage_required", "align", WORKLOAD_KIND,
+        "align-pilot-v3", "non-claim", "launch_lineage_required", "align", WORKLOAD_KIND,
         "align-model=" + model_id, "align-condition=" + spec.condition,
         "align-task=" + spec.task_kwargs["task_pair"], f"align-repeat={repeat}", "align-stage=" + label]
     value["sampling"]["idle_seconds"] = ALIGN_IDLE_S
@@ -96,98 +110,59 @@ def episode_config(base, spec, run_id, label, model_id, repeat=1):
 
 
 def planning_sizing(tree, members, evidence):
-    """Cache envelope with pilot-2 timing/disk laws; all transfers flagged."""
+    """Pilot-3 A member law, pooled disk law, and explicit guarded cases."""
     import math
-
-    def fit(x, y):
+    def fit(rows, xkey, ykey):
+        x, y = [r[xkey] for r in rows], [r[ykey] for r in rows]
         mx, my = math.fsum(x) / len(x), math.fsum(y) / len(y)
         slope = math.fsum((a-mx)*(b-my) for a,b in zip(x,y)) / math.fsum((a-mx)**2 for a in x)
         intercept = my - slope * mx
-        residuals = [b - intercept - slope*a for a,b in zip(x,y)]
+        residual = [b - intercept - slope*a for a,b in zip(x,y)]
         return {"intercept": intercept, "slope": slope, "n": len(x),
-                "residual_sd": math.sqrt(math.fsum(r*r for r in residuals)/(len(x)-2)),
-                "largest_abs_residual": max(map(abs, residuals)),
-                "largest_positive_residual": max(residuals)}
-
+                "residual_sd": math.sqrt(math.fsum(r*r for r in residual)/(len(x)-2)),
+                "largest_abs_residual": max(map(abs, residual)), "largest_positive_residual": max(residual)}
     observations = evidence["member_observations"]
-    law = fit([r["episode_s"] for r in observations], [r["member_s"] for r in observations])
-    disk = fit([r["member_s"] for r in observations], [r["bundle_bytes"] for r in observations])
-    factors = {"prefill": 1.0, "decode": 1.0}
-    tool_s = evidence["tool_s_per_turn"]
-    calls_per_turn = evidence["tool_calls_per_turn_observed_max"]
-    observation_s = evidence["state_observation_s_per_call"]
-    tool_allowance = evidence["tool_allowance_s_per_turn"]
-    first_prompt = evidence["smallest_first_prompt_tokens"]
-    dwell_per_member = ALIGN_IDLE_S - evidence["pilot2_idle_s"]
-    # scripts/run_campaign.py: HAZARD_MEMBER_CAP_S + min(WAIT_CAP_S,
-    # remaining session wait budget); no runner change.
-    cap_unspent, cap_spent = 1800 + 1500, 1800
-    rows = []
-    for block in BLOCKS:
-        block_count = sum(m['block'] == block['block'] for m in members)
-        model = block["model_id"]
-        rates = {phase: min(r[phase + "_tok_s"] for r in evidence["phase_rates"][block["block"]])
-                 for phase in ("prefill", "decode")}
-        bound_rates = rates
-        prompt_bound = CONTEXT_CAP - block["max_tokens"]
-
-        def bound(turns):
-            decode = min(turns * block["max_tokens"], CONTEXT_CAP - first_prompt)
-            prefill = CONTEXT_CAP + turns * block["max_tokens"]
-            episode = prefill / bound_rates["prefill"] + decode / bound_rates["decode"] + turns * tool_allowance
-            return prefill, decode, episode, law["intercept"] + law["slope"] * episode + dwell_per_member
-
-        turns = block["max_turns"]
-        while turns and bound(turns)[3] > cap_unspent:
-            turns -= 1
-        if turns != block["max_turns"]:
-            raise ValueError(f"block {block['block']} needs max_turns={turns}; update BLOCKS and regenerate")
-        prefill, decode, episode_s, member_s = bound(turns)
-        member_bytes = math.ceil(disk["intercept"] + disk["slope"] * member_s + disk["largest_positive_residual"])
-        rows.append({**block, "short_context_rates_tok_s": rates, "bound_rates_tok_s": bound_rates,
-                     "prompt_tokens_per_turn_upper": prompt_bound, "first_prompt_lower_tokens": first_prompt,
-                     "episode_prefill_tokens_upper": prefill, "episode_decode_tokens_upper": decode,
-                     "decode_if_reasoning_retained_upper": min(turns * block["max_tokens"], CONTEXT_CAP - first_prompt),
-                     "tool_s_per_turn": tool_s, "tool_calls_per_turn_observed_max": calls_per_turn,
-                     "state_observation_s_per_call": observation_s, "tool_allowance_s_per_turn": tool_allowance,
-                     "episode_upper_s": episode_s, "idle_increase_s": dwell_per_member, "member_upper_s": member_s,
-                     "member_cap_unspent_s": cap_unspent, "member_cap_spent_s": cap_spent,
-                     "fits_unspent_cap": member_s <= cap_unspent, "fits_spent_cap": member_s <= cap_spent,
-                     "count": block_count, "block_upper_s": block_count * member_s,
-                     "member_upper_bytes": member_bytes, "block_upper_bytes": block_count * member_bytes,
-                     "flags": ["sizing.planning_bound_unmeasured"]})
-    scaffold = sum(s["expected_count"] for s in tree["stage_graph"] if s["kind"] == "campaign_collection") - len(members)
-    dwell = len(members) * dwell_per_member
-    span = evidence["scaffold_s"] + math.fsum(r["block_upper_s"] for r in rows)
-    count = len(members) + scaffold
+    law = fit([r for r in observations if r["block"] == "A"], "episode_s", "member_s")
+    disk = fit(observations, "member_s", "bundle_bytes")
+    n = len(members)
+    scaffold_count = sum(s["expected_count"] for s in tree["stage_graph"] if s["kind"] == "campaign_collection") - n
     scaffold_bytes = sum(r["bytes"] for r in evidence["scaffold_bundle_bytes"])
-    B = sum(r["block_upper_bytes"] for r in rows) + scaffold_bytes
-    forecasts = [r for r in evidence["cache_trajectory_forecasts"] if r["block"] in {b["block"] for b in BLOCKS}]
-    expected_members = [law["intercept"] + law["slope"] * r["cached_episode_forecast_s"] for r in forecasts]
-    expected_align = 3 * math.fsum(expected_members)
-    expected_bytes = 3 * math.fsum(disk["intercept"] + disk["slope"] * t for t in expected_members) + scaffold_bytes
-    uncached_align = 3 * math.fsum(r["member_s"] for r in observations if r["block"] in {b["block"] for b in BLOCKS})
+    def case(episode_s):
+        member_s = law["intercept"] + law["slope"] * episode_s
+        capture = n * (disk["intercept"] + disk["slope"] * member_s) + scaffold_bytes
+        return {"episode_s": episode_s, "member_s": member_s, "align_s": n * member_s,
+                "collection_span_s": n * member_s + evidence["scaffold_s"],
+                "capture_bytes": math.ceil(capture), "peak_bytes": 2 * math.ceil(capture)}
+    inputs = evidence["planning_turn_observations"]
+    decode_rate = inputs["slowest_decode"]["planning_tok_s"]
+    prefill_s = inputs["largest_fed_prefill"]["planning_s"]
+    expected, observed, planning = case(110), case(120 + 41.9), case(120 + 4096 / decode_rate + prefill_s)
+    upper_bytes = math.ceil(disk["intercept"] + disk["slope"] * planning["member_s"] + disk["largest_positive_residual"])
+    B = n * upper_bytes + scaffold_bytes
+    # scripts/run_campaign.py: HAZARD_MEMBER_CAP_S (1800) + effective wait
+    # min(WAIT_CAP_S=1500, remaining SESSION_WAIT_BUDGET_S=7200): 3300
+    # with unspent wait budget, 1800 after the session budget is spent.
+    block = {**BLOCKS[0], "count": n, "episode_upper_s": planning["episode_s"],
+             "member_upper_s": planning["member_s"], "block_upper_s": n * planning["member_s"],
+             "member_upper_bytes": upper_bytes, "block_upper_bytes": n * upper_bytes,
+             "member_cap_unspent_s": 3300, "member_cap_spent_s": 1800,
+             "fits_unspent_cap": planning["member_s"] <= 3300, "fits_spent_cap": planning["member_s"] <= 1800,
+             "flags": ["sizing.planning_bound_unmeasured"]}
     return {"schema_version": "joulewise.b5_sizing.v1", "non_claim": True,
-        "derivation": "Cache planning: prefill <= cap + turns*budget, conditional on each rewind <= one output budget (whole-cache rebuilds can exceed this transferred bound). Decode <= min(turns*budget,cap-smallest pilot2 first prompt) assumes reasoning stays in context, including A; with dropped-token slack D the context term is cap-first_prompt+D. Pilot2 ID replay (tests.align.test_pilot3_cache, test_recorded_pilot2_prompts_cover_exact_rewinds_and_B_suffix) reproduces A rewinds a-e01 turn 11=143 and a-e03 turns 8=560,10=257; the cold all-member replays found no others in A (960 tokens total). Largest member D is a-e03: 817 tokens / 39.114358 tok/s * OLS slope 1.151110 = about 24 s member time, inside the 76.4 s spent-cap margin (1800-1723.6). This observed slack is evidence, not a guarantee for changed trajectories. Rates are the slowest pilot2 full-prompt prefill/decode phase for this block. Transferring full-prompt prefill rates to cached fed deltas is unmeasured; rehearsal records per-turn fed-token prefill rates (fed tokens / measured prefill seconds, with cached context) to replace that transfer in both the envelope and expected forecast. Episode = prefill/rate + decode/rate + turns*pilot1 tool allowance. Member = pilot2 OLS intercept+slope*episode; idle 300 s already included. Scaffold added once. Rehearsal must replace transfers; not a physical worst-case guarantee.",
+        "derivation": "Pilot3 A OLS member_s = intercept + slope*episode_s (300 s idle already included); pooled pilot3 OLS bundle_bytes(member_s). Expected: mean spam100/bank120 =110 s; bank120 is a lower-bound planning input for a guard-limited episode unless it finishes first. Observed-turn case:120+41.9 s. Planning:120+4096/41.95+16.842 s; all pilot3 A turns, minimum observed decode rate rounded down to 0.01 tok/s and maximum observed fed-prefill phase rounded up to 0.001 s. The guard admits a whole turn; these are transfers, not physical or thermal guarantees. Scaffold added once; harvest+desk 5400 s separately, from observed pilot3 89 min (24 members) and pilot2 90 min (12 members); scaffold sets this time, not align count. Disk upper adds largest positive source residual.",
         "packs": {PACK_ID: {"pack_id": PACK_ID, "flags": ["sizing.planning_bound_unmeasured"],
             "member_law": {"intercept_s": law["intercept"], "slope": law["slope"], "n": law["n"],
                            "residual_sd_s": law["residual_sd"], "largest_abs_residual_s": law["largest_abs_residual"], "flags": []},
-            "long_context_factors": factors, "blocks": rows, "scaffold_s": evidence["scaffold_s"],
-            "scaffold_flags": [], "dwell_increase_s": dwell,
-            "member_cap": {"unspent_s": cap_unspent, "spent_s": cap_spent, "session_wait_budget_s": 7200,
-                           "spent_corner": "Only repeated failed idle admissions spend the budget: a nonquiet Mac, already physics-flagged; lead accepts this corner."},
-            "expected_cached": {"align_s": expected_align, "collection_span_s": expected_align + evidence["scaffold_s"],
-                                "capture_bytes": expected_bytes, "peak_bytes": 2 * expected_bytes,
-                                "derivation": evidence["forecast_derivation"]},
-            "no_cache_savings": {"align_s": uncached_align, "collection_span_s": uncached_align + evidence["scaffold_s"],
-                                 "derivation": "three times measured pilot2 A/C member durations plus measured scaffold"},
-            "member_count": count, "align_members": len(members), "scaffold_members": scaffold,
-            "programmed_span_s": span, "T_stream_max_s": max(r["member_upper_s"] for r in rows),
+            "disk_member_law": disk, "blocks": [block], "scaffold_s": evidence["scaffold_s"],
+            "scaffold_flags": [], "dwell_increase_s": 0, "harvest_and_desk_planned_s": 5400,
+            "member_cap": {"unspent_s": 3300, "spent_s": 1800, "session_wait_budget_s": 7200},
+            "expected_cached": expected, "observed_worst_turn": observed, "planning_case": planning,
+            "planning_turn_observations": inputs,
+            "member_count": n + scaffold_count, "align_members": n, "scaffold_members": scaffold_count,
+            "programmed_span_s": planning["collection_span_s"], "T_stream_max_s": planning["member_s"],
             "estimated_footprint_bytes": 2 * B,
-            "disk_member_law": disk,
-            "disk_derivation": {"formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot2 residual) per block member; sum + measured scaffold bytes; peak copies=2 (capture plus backup)",
-                                "peak_copies": 2, "B_bytes": B, "scaffold_bytes": scaffold_bytes,
-                                "extra_wait_peak_bytes": 0, "fixed_retained_bytes": 0}}}}
+            "disk_derivation": {"formula": "ceil(OLS bundle_bytes(member_s) + largest positive pilot3 residual) per member; plus measured scaffold; two copies", "peak_copies": 2, "B_bytes": B,
+                                "scaffold_bytes": scaffold_bytes, "extra_wait_peak_bytes": 0, "fixed_retained_bytes": 0}}}}
 
 
 def kit_identity_pins(root, tree, members, *, identity=None):
@@ -292,6 +267,8 @@ def build_files(root=ROOT):
             members.append({"run_id": run_id, "stage_id": stage["stage_id"],
                             "task_pair": spec.task_kwargs["task_pair"], "condition": spec.condition,
                             "repeat": member["repeat"], "ordinal": offset + index, "non_claim": True,
+                            "seed_index": member["seed_index"], "is_replay": member["is_replay"],
+                            "expected_episode_seed": EXPECTED_EPISODE_SEEDS[spec.task_kwargs["task_pair"]][spec.seed - 1],
                             "model_id": model_id, "block": member["block"], "base_config": member["base_config"],
                             "config_path": entry["config_path"], "spec": json.loads(spec.to_text())})
         files[directory / "order_manifest.json"] = raw_json({
@@ -311,7 +288,7 @@ def build_files(root=ROOT):
         stage["stage_id"] = stage["stage_id"].replace("bytes-s1-p1", PACK_ID)
         stage.pop("spare_retry", None)
     layout = replace(seed, session_id=PACK_ID, packs=(PACK_ID,), stages=tuple(stages),
-                     fixed_bytes=None, campaign_id="align_pilot_v2")
+                     fixed_bytes=None, campaign_id="align_pilot_v3")
     tree, _ = compose.render(layout)
     for stage, source in zip(tree["stage_graph"], stages):
         entries = source["entries"]
@@ -340,17 +317,23 @@ def build_files(root=ROOT):
         tree.pop(key, None)
     tree.update(non_claim=True, draft_status="non-claim", arm_attachments={},
                 window_identity={"window_id": PACK_ID, "evidence_root_id": "evidence-" + PACK_ID},
-                roots={"claim_root_leaf": "runs_align_pilot_v2", "bound_root_leaf": "runs_align_pilot_v2_bound"},
+                roots={"claim_root_leaf": "runs_align_pilot_v3", "bound_root_leaf": "runs_align_pilot_v3_bound"},
                 generator={"path": "scripts/align_pilot_kit.py", "sha256": sha(Path(__file__).read_bytes())})
     collection_plan = {
         "schema_version": "joulewise.align_pilot.v1", "plan_id": PACK_ID, "non_claim": True,
-        "status": "DRAFT_FOR_LEAD", "protocol": "docs/align/pilot_protocol_v2.md",
+        "status": "DRAFT_FOR_LEAD", "protocol": "docs/align/pilot_protocol_v3.md",
         "prompt_cache": "episode_prefix", "repetition_policy": "observe_only",
-        "pilot2_spec_differences": ["prompt_cache"],
+        "pilot3_spec_differences": ["sampler", "temperature", "seed", "max_episode_seconds"],
+        "sampler": SAMPLER, "seed_law": "align-p4-v1", "turn_seed_law": "align-p4-turn-v1",
+        "seed_bits": 64, "max_episode_seconds": TIME_GUARD_S,
         "blocks": list(BLOCKS), "max_context_tokens": CONTEXT_CAP, "idle_seconds": ALIGN_IDLE_S, "shade_cache": SHADE_CACHE,
         "task_pairs": list(pilot.PILOT_V0_PAIRS), "conditions": list(pilot.PILOT_V0_CONDITIONS),
-        "repeats": 3, "order_policy": "matched_condition_abba",
+        "seeds_per_cell": 6, "replays_per_cell": 1, "order_policy": "alternating_four_cells_per_seed_replays_after_seed_blocks_2_3_4_6",
         "members": members}
+    originals = {(m["task_pair"], m["condition"], m["seed_index"]): m["run_id"] for m in members if not m["is_replay"]}
+    for m in members:
+        if m["is_replay"]:
+            m["replay_of"] = originals[m["task_pair"], m["condition"], m["seed_index"]]
     raw = raw_json(collection_plan)
     files[KIT / "collection_plan.json"] = raw
     tree["plan"] = {"path": "collection_plan.json", "plan_id": PACK_ID,
@@ -403,7 +386,7 @@ def build_files(root=ROOT):
     files[registration / "acceptance.json"] = raw_json(acceptance)
     files[registration / "registration.json"] = raw_json({
         "pack_id": PACK_ID, "non_claim": True,
-        "note": "Non-claim ALIGN pilot 3 archives; no grouped claim blinding or estimator registration."})
+        "note": "Non-claim ALIGN pilot 4 archives; no grouped claim blinding or estimator registration."})
     return files
 
 
@@ -420,26 +403,27 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
     return files
 
 
-README = """# ALIGN pilot 3 (non-claim)
+README = """# ALIGN pilot 4 (non-claim)
 
-Generate with `python3 scripts/align_pilot_kit.py`; verify with `--check`.
-Protocol: `docs/align/pilot_protocol_v2.md`. Prepare/desk:
-`scripts/align_pilot_session.py` (desk accepts `--compare-session <pilot2>`).
-
-24 members: A thinking-on 12 x 4096, then C template-default 20 x 2048;
-2 pairs x 2 conditions x 3 repeats, hint on, cap 40960, episode prefix cache
-on throughout. Pair order alternates each repeat; condition order alternates
-within each pair. Midpoint after A; idle 300 s. Fresh process per member.
-
-Specs equal pilot2 A/C except prompt_cache; seed remains 1 in every repeat.
-Repetition flags observe only. Thermal/contention eligibility is unchanged.
-Sizing is a transferred planning bound, not hardware validation. Read its
-conditional cache derivation before freezing a span. Rehearse first.
-
-`registration/derive_sizing.py --pilot-session <pilot2 root>` derives receipts
-without model work. `derive_identity_pins.py --runtime-python <measurement
-python>` hashes local files without loading MLX. Generation preserves verified
-Mac identity pins and refuses changed inputs instead of silently replacing them.
+Generate: `python3 scripts/align_pilot_kit.py`; verify: `--check`.
+Protocol: `docs/align/pilot_protocol_v3.md`. Session: `scripts/align_pilot_session.py`.
+28 A-only members: 2 pairs x 2 conditions x seeds1-6 + seed1 replay per cell.
+Qwen3 thinking sampler 0.6/0.95/20/0, per-turn SHA256 64-bit reseed; guard120s.
+Seed-law task identifiers are exactly `shade/spam_filter_update` and
+`shade/bank_transfer_2` (the task's task_pair attribute, not task_kwargs.task_pair).
+Every member's expected_episode_seed is pre-registered in collection_plan.json.
+Cache episode_prefix, cap40960, 12x4096, hint on, idle300s, repetition observe-only.
+Odd seed order spam/benign,bank/sabotage,spam/sabotage,bank/benign; even reversed.
+Replays after seed blocks2,3,4,6, all at least six members after originals.
+25 scaffold members and calibration bracket unchanged. Hardware rehearsal required.
+`registration/derive_sizing.py --pilot-session <pilot3 root>` derives file-digested
+receipts without MLX. Identity pins retain verified Mac hashes and package readings.
+Sizing transfers remain PROVISIONAL; harvest+desk allowance90min, no claim power.
+The allowance comes from pilot3 89min (24 members) and pilot2 90min (12 members);
+the scaffold sets the time, not align count. Bank expected120s is a lower bound
+for a guard-limited episode unless it finishes first; an admitted turn completes.
+`desk --no-harvest` writes inspection/ under the supplied session root: point it
+at a copy of an archived session.
 """
 
 
