@@ -114,6 +114,13 @@
     "neg8_harvest_archive_required",
     "neg8_screen_record_invalid",
     "operative_bound_not_the_window_bracket",
+    "paper_claim_side_bound_anchor_missing",
+    "paper_claim_side_bound_cell_mismatch",
+    "paper_claim_side_bound_contrast_mismatch",
+    "paper_claim_side_bound_join_not_injective",
+    "paper_claim_side_bound_numeral_unparseable",
+    "paper_claim_side_bound_shape_invalid",
+    "paper_claim_side_bound_unit_mismatch",
     "paper_custody_anchor_mismatch",
     "paper_custody_anchor_unavailable",
     "paper_custody_binding_mismatch",
@@ -186,6 +193,7 @@
     "window_index_required"
   ],
   "outcome_class": [
+    "claim_side_bound_not_issuable",
     "dominance_ratio_zero_denominator"
   ]
 }

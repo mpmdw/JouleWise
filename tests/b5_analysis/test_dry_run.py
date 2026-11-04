@@ -17,6 +17,103 @@ MARKER = '12.3457331'
 # L9-STEP4-3: a tooling-detail sentinel no hex digest can contain.
 SENTINEL = 'Q7331Z'
 
+# D-189 (ruling A): the producer refusals (claim_side_bound.produce_claim_side_bound)
+# that are provenance defects once step 9b's eligibility check has passed.
+SIDE_BOUND_PRODUCER_CODES = tuple('paper_claim_side_bound_'+name for name in (
+    'anchor_missing', 'cell_mismatch', 'contrast_mismatch', 'join_not_injective', 'numeral_unparseable',
+    'shape_invalid', 'unit_mismatch'))
+SIDE_BOUND_ANCHOR = 'E_clock_anchor_shift_bound_j'
+SIDE_BOUND_MANIFEST = {'contrasts': [{'contrast_id': 'ctr-decode'}, {'contrast_id': 'ctr-prefill'}]}
+SIDE_BOUND_FLOOR = {'artifact_id': 'floor-synthetic',
+                    'cells': [{'cell_id': 'alpha-target'}, {'cell_id': 'beta-target'}, {'cell_id': 'gamma-target'}]}
+
+
+def side_bound_contrast(contrast_id='ctr-decode', cells=('alpha-target', 'beta-target')):
+    """One issuable synthetic verdict contrast (the D-178 copy shape)."""
+    return {'contrast_id': contrast_id,
+            'floor': {'resolutions': [{'status': 'exact', 'source_cell_ids': [cells[0]]},
+                                      {'status': 'transported', 'source_cell_ids': list(cells)}]},
+            'metric': {'unit': 'J', 'ratio_estimand': None},
+            'estimator': {'name': 'abba_block_arm_mean_difference_t_v1',
+                          'metrology_aware_CI95': {'lower': -1.5, 'upper': 2.25}},
+            'deterministic_bounds': {'terms': [{'name': SIDE_BOUND_ANCHOR, 'bound': 0},
+                                               {'name': 'E_idle_drift_bound_j', 'bound': 0.5}],
+                                     'total': 0.5, 'decision_interval': {'lower': -2.0, 'upper': 2.75}}}
+
+
+def side_bound_verdicts(*contrasts):
+    return {'schema_version': 'joulewise.claim_verdicts.v1',
+            'contrasts': list(contrasts) or [side_bound_contrast()]}
+
+
+def _edit(path, value):
+    def apply(contrast):
+        target = contrast
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+    return apply
+
+
+# Each registered state in which the producer cannot issue the sidecar (D-189, D-178).
+NON_ISSUABLE = {
+    'refused_resolution': _edit(('floor', 'resolutions', 1, 'status'), 'refused'),
+    'not_resolvable_resolution': _edit(('floor', 'resolutions', 0, 'status'), 'not_resolvable'),
+    'null_metrology_interval': _edit(('estimator', 'metrology_aware_CI95'), None),
+    'null_decision_interval': _edit(('deterministic_bounds', 'decision_interval'), None),
+    'no_deterministic_terms': _edit(('deterministic_bounds', 'terms'), []),
+    'no_anchor_term': _edit(('deterministic_bounds', 'terms'), [{'name': 'E_idle_drift_bound_j', 'bound': 0.5}]),
+}
+
+
+def non_issuable_verdicts(state):
+    contrast = side_bound_contrast()
+    NON_ISSUABLE[state](contrast)
+    return side_bound_verdicts(contrast)
+
+
+def _verdict_bytes(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
+
+
+# Provenance defects the eligibility check passes on (the producer then refuses): raw
+# verdict bytes and the expected tooling code.
+def provenance_defects():
+    def contrast(edit):
+        value = side_bound_contrast()
+        edit(value)
+        return value
+    cases = {
+        'unregistered_contrast': (side_bound_verdicts(side_bound_contrast('ctr-unregistered')),
+                                  'paper_claim_side_bound_contrast_mismatch'),
+        'cell_not_in_floor': (side_bound_verdicts(side_bound_contrast(cells=('alpha-target', 'delta-target'))),
+                              'paper_claim_side_bound_cell_mismatch'),
+        'no_resolution': (side_bound_verdicts(contrast(_edit(('floor', 'resolutions'), []))),
+                          'paper_claim_side_bound_cell_mismatch'),
+        'exact_with_two_cells': (side_bound_verdicts(contrast(_edit(('floor', 'resolutions', 0, 'source_cell_ids'),
+                                                                    ['alpha-target', 'beta-target']))),
+                                 'paper_claim_side_bound_cell_mismatch'),
+        'per_token_unit_without_ratio': (side_bound_verdicts(contrast(_edit(('metric', 'unit'), 'J/token'))),
+                                         'paper_claim_side_bound_unit_mismatch'),
+        'join_not_injective': (side_bound_verdicts(side_bound_contrast(), side_bound_contrast('ctr-prefill')),
+                               'paper_claim_side_bound_join_not_injective'),
+        'empty_estimator_name': (side_bound_verdicts(contrast(_edit(('estimator', 'name'), ''))),
+                                 'paper_claim_side_bound_shape_invalid'),
+        'reversed_interval': (side_bound_verdicts(contrast(_edit(('estimator', 'metrology_aware_CI95'),
+                                                                 {'lower': 3, 'upper': 2}))),
+                              'paper_claim_side_bound_shape_invalid'),
+        'no_contrast': ({'schema_version': 'joulewise.claim_verdicts.v1', 'contrasts': []},
+                        'paper_claim_side_bound_shape_invalid'),
+    }
+    out = {name: (_verdict_bytes(value), code) for name, (value, code) in cases.items()}
+    huge = _verdict_bytes(side_bound_verdicts()).replace(b'"total":0.5', b'"total":1e-9999999999999999999')
+    out['numeral_unparseable'] = (huge, 'paper_claim_side_bound_numeral_unparseable')
+    out['duplicate_key'] = (_verdict_bytes(side_bound_verdicts(contrast(_edit(('estimator', 'metrology_aware_CI95'), None))))
+                            .replace(b'"metrology_aware_CI95":null', b'"metrology_aware_CI95":null,"metrology_aware_CI95":null'),
+                            'paper_claim_side_bound_shape_invalid')
+    out['not_json'] = (b'{"contrasts": [', 'paper_claim_side_bound_shape_invalid')
+    return out
+
 
 class JoinedRunTests(unittest.TestCase):
     @classmethod
@@ -153,7 +250,10 @@ class DriverPrimitiveTests(unittest.TestCase):
         self.assertLessEqual(closeout.TOOLING_REFUSAL_CODES,set(tooling))
         # Step 6 owns its closeout outcomes; step 4 has none (L9-STEP4-3: plan section 3.1
         # registers only the p42 exit, so floor_cell_not_extractable is no longer registered).
-        self.assertEqual(closeout.OUTCOME_CLASS_CODES,set(outcome))
+        # D-189: step 9b owns exactly one more, its claim-side-bound non-issuance; the
+        # producer's seven refusal codes past that check are provenance defects (tooling).
+        self.assertEqual(closeout.OUTCOME_CLASS_CODES|{'claim_side_bound_not_issuable'},set(outcome))
+        self.assertLessEqual(set(SIDE_BOUND_PRODUCER_CODES),set(tooling))
         self.assertNotIn('floor_cell_not_extractable',set(tooling)|set(outcome))
         self.assertLessEqual({'extraction_cell_r3_refusal','extraction_cell_tooling_refusal'},set(tooling))
         remaining=owner.D165_CLOSEOUT_REFUSAL_CODES-closeout.TOOLING_REFUSAL_CODES-closeout.OUTCOME_CLASS_CODES
@@ -301,6 +401,9 @@ class DriverDouble(d.StepRunner):
     bad_projection=False
     release_change=None
     source_case=None
+    # D-189: run the real guarded step-9b helper (not the double's), on these step-9 verdicts.
+    real_9b=False
+    verdicts=None
 
     def _initial(self,s):
         s.index=load_window_index(s.index_path,seal_pins=s.pins,pack_table=s.pack_table)
@@ -332,6 +435,8 @@ class DriverDouble(d.StepRunner):
         s=self.state
         if self.change_at==step:
             s.output('extraction_alpha').write_text('changed')
+        if self.real_9b and step=='9b' and state is not None:
+            return super().run(main,argv,step=step,window=window,stdout_path=stdout_path)
         name=getattr(main,'_operation',None)
         def program(argv):
             # Reader outputs and logs carry only structure (T19).
@@ -420,7 +525,7 @@ class DriverDouble(d.StepRunner):
                 write(output.with_name(output.stem+'.ratio-table.json'),{'schema_version':'joulewise.b5_d165_ratio_table.v1',**value})
                 if self.outcome:
                     print(json.dumps({'status':'outcome_class','refusal':'outcome-class refusal at step 6'}));return 3
-            elif step=='9':write(option('--output'),{'schema_version':'joulewise.claim_verdicts.v1',**value})
+            elif step=='9':write(option('--output'),self.verdicts or {'schema_version':'joulewise.claim_verdicts.v1',**value})
             elif step=='10':
                 value.update(schema_version='joulewise.paper_reported_energy_projection.v1',
                     window={'harvest_pin':binding['harvest_pin']},exclusions_sha256='f'*64 if self.bad_projection else binding['exclusions_sha256'])
@@ -464,7 +569,7 @@ class DriverAcceptanceTests(unittest.TestCase):
     def setUp(self):
         for key,value in {'calls':[],'refusal':None,'outcome':False,'exception_at':None,'change_at':None,
                 'fail_bundle':False,'p42':False,'target_refusal':False,'target_reasons':('marker_self_digest_mismatch',),
-                'bad_projection':False,'release_change':None}.items():
+                'bad_projection':False,'release_change':None,'real_9b':False,'verdicts':None}.items():
             setattr(DriverDouble,key,value)
 
     def execute(self,*,mode='blind-dry-run',custody=None,runner=DriverDouble,git=None):
@@ -729,6 +834,94 @@ class DriverAcceptanceTests(unittest.TestCase):
         self.assertFalse(any('results-fills.md' in str(argv) or '--validate-rendered' in argv
                              for _, _, argv in DriverDouble.calls))
         self.assertNotIn(MARKER,result.stdout+result.stderr)
+
+
+    def non_issuance_run(self,*,state='refused_resolution',**kwargs):
+        DriverDouble.real_9b=True;DriverDouble.verdicts=non_issuable_verdicts(state)
+        return self.execute(**kwargs)
+
+    def test_T21_step9b_non_issuance_is_a_blinded_outcome_and_steps_10_11_run(self):
+        # D-189 (ruling A). Attempt E's shape before it: an escaped ClaimSideBoundRefusal,
+        # step 9b unclassified_refusal (exit 2), steps 10 and 11 not_run.
+        texts=set()
+        for state in NON_ISSUABLE:
+            with self.subTest(state):
+                DriverDouble.calls=[]
+                result=self.non_issuance_run(state=state)
+                self.assertEqual(result.code,3,result.stderr)
+                self.assertIs(result.record['completed_without_tooling_refusal'],True)
+                row=next(r for r in result.record['steps'] if r['step']=='9b')
+                self.assertEqual(row,{'step':'9b','window':None,'status':'outcome_class','exit_status':3,
+                    'registered_exit':None,'schema_valid':None,'outputs':[],'refusal':'outcome-class refusal at step 9b',
+                    'flags':[]})
+                self.assertEqual([(r['step'],r['window'],r['status']) for r in result.record['steps'] if r['step'] in ('10','11')],
+                                 [('10','alpha','ok'),('10','beta','ok'),('11',None,'ok')])
+                self.assertTrue(any(step=='11' for step,_,_ in DriverDouble.calls))
+                self.assertIn('step 9b - outcome_class',result.stderr.splitlines())
+                # No sidecar and no claim-evidence custody (the double's step 10 writes none either).
+                self.assertFalse((result.path.parent/'restricted'/'custody').exists())
+                public=result.path.read_text()+result.stdout+result.stderr
+                for word in ('claim_side_bound_not_issuable','not_resolvable','refused','anchor','metrology','decision_interval'):
+                    self.assertNotIn(word,public)
+                texts.add(json.dumps(row,sort_keys=True))
+        self.assertEqual(len(texts),1)
+
+    def test_T22_release_after_a_non_issuance_dry_run_matches_it(self):
+        before=self.non_issuance_run()
+        after=self.non_issuance_run(mode='release',custody=before.custody)
+        self.assertEqual((before.code,after.code),(3,3),after.stderr)
+        self.assertTrue(after.record['completed_without_tooling_refusal'])
+        self.assertNotIn('release_difference',after.record)
+        self.assertEqual(before.record['steps'],after.record['steps'])
+        d.require_release_equality(before.record,after.record)
+
+    def test_T23_step9b_provenance_defect_is_a_tooling_refusal_and_stops(self):
+        # An issuable-looking verdict whose parents the producer refuses (the double's
+        # manifest registers no contrast): a provenance defect, never the outcome.
+        DriverDouble.real_9b=True;DriverDouble.verdicts=side_bound_verdicts()
+        result=self.execute();self.assertEqual(result.code,2,result.stderr)
+        row=next(r for r in result.record['steps'] if r['step']=='9b')
+        self.assertEqual((row['status'],row['refusal'],row['exit_status']),
+                         ('tooling_refusal','paper_claim_side_bound_shape_invalid',2))
+        self.assertEqual([r['status'] for r in result.record['steps'] if r['step'] in ('10','11')],['not_run']*2)
+        self.assertFalse(result.record['completed_without_tooling_refusal'])
+        self.assertFalse(any(step in ('10','11') for step,_,_ in DriverDouble.calls))
+
+    def test_T24_validator_accepts_only_the_exact_non_stopping_shape(self):
+        result=self.non_issuance_run();self.assertEqual(result.code,3,result.stderr)
+        index=load_window_index(self.index,seal_pins=self.pins,pack_table=self.table)
+        kept={p:SimpleNamespace(cells={'cell':None}) for p in d.PACKS}
+        valid=result.record
+        d.validate_dry_run_record(valid,index=index,kept_units=kept)
+        pos=next(i for i,r in enumerate(valid['steps']) if r['step']=='9b')
+        def mutated(edit):
+            bad=deepcopy(valid);edit(bad['steps']);return bad
+        def stop_after(steps):
+            for row in steps[pos+1:]:
+                row.update(status='not_run',exit_status=None,schema_valid=None,outputs=[],refusal=None,flags=[])
+        output={'name':'custody/'+'a'*64+'.json','sha256':'a'*64}
+        def outcome_at_6(steps):
+            row=next(r for r in steps if r['step']=='6')
+            row.update(status='outcome_class',exit_status=3,refusal='outcome-class refusal at step 6')
+        for name,edit in (('9b exit 2',lambda steps:steps[pos].update(exit_status=2)),
+                          ('9b exit 0',lambda steps:steps[pos].update(exit_status=0)),
+                          ('9b with an output',lambda steps:steps[pos].update(outputs=[output])),
+                          ('9b with a window',lambda steps:steps[pos].update(window='gamma')),
+                          ('9b schema_valid',lambda steps:steps[pos].update(schema_valid=True)),
+                          ('9b followed by not_run',stop_after),
+                          ('step 6 outcome followed by ok rows',outcome_at_6)):
+            with self.subTest(name),self.assertRaisesRegex(AnalysisRefusal,'^dry_run_record_invalid$'):
+                d.validate_dry_run_record(mutated(edit),index=index,kept_units=kept)
+        # A stopping refusal after the non-stopping row still stops everything after it.
+        def refused_10(steps):
+            first=next(i for i,r in enumerate(steps) if r['step']=='10')
+            steps[first].update(status='tooling_refusal',exit_status=2,refusal='step_input_digest_mismatch',outputs=[])
+            for row in steps[first+1:]:
+                row.update(status='not_run',exit_status=None,schema_valid=None,outputs=[],refusal=None,flags=[])
+        bad=mutated(refused_10);bad['completed_without_tooling_refusal']=False
+        d.validate_dry_run_record(bad,index=index,kept_units=kept)
+        self.assertTrue(d.is_nonstopping_outcome(valid['steps'][pos]))
+        self.assertFalse(d.is_nonstopping_outcome({**valid['steps'][pos],'step':'9'}))
 
 
 class ArgumentCensusDouble(DriverDouble):
@@ -1213,7 +1406,10 @@ class DriverProductionCensusTests(unittest.TestCase):
         return '\n'.join(path.read_text() for path in sorted((s.restricted/'logs').glob('*.stderr.log')))
 
     @contextmanager
-    def state(self):
+    def state(self,*,documents=None,stub_producer=True):
+        # documents: raw bytes for finalized_manifest, floor_artifact and claim_verdicts
+        # (D-189 tests); stub_producer=False runs the real claim-side-bound producer.
+        from contextlib import nullcontext
         from joulewise import paper_custody as c
         with tempfile.TemporaryDirectory(prefix='s10-production-census-') as tmp:
             root=Path(tmp);repo=root/'repo';repo.mkdir()
@@ -1227,7 +1423,8 @@ class DriverProductionCensusTests(unittest.TestCase):
                 s.rows[pack]={'evaluation_basis':{'sha256':{'alpha':'a','beta':'b','gamma':'c'}[pack]*64}}
             s.evidence_roots=lambda:{pack+'-evidence':s.windows[pack].claim_runs_root for pack in ('alpha','beta')}
             for role in ('finalized_manifest','floor_artifact','claim_verdicts'):
-                s.write(role,'inputs/'+role+'.json',{'schema_version':'synthetic'})
+                if documents is not None:s.write(role,'inputs/'+role+'.json',raw=documents[role])
+                else:s.write(role,'inputs/'+role+'.json',{'schema_version':'synthetic'})
             # Step 5's pinset beside the floor, which the claim-evidence census binds.
             s.write('pinset','mint/floor-mint-pinset.json',{'schema_version':'synthetic pinset'})
             binding={'exclusions_sha256':'e'*64,'harvest_pin':'a'*40}
@@ -1247,8 +1444,8 @@ class DriverProductionCensusTests(unittest.TestCase):
                 return supply if relative==c._SUPPLY_MAP_PATH else (repo/relative).read_bytes()
             with mock.patch.object(c,'_mint_git_anchor',return_value=(repo,s.commit)), \
                  mock.patch.object(c,'_git_blob',side_effect=blob), \
-                 mock.patch('joulewise.analysis_engine.claim_side_bound.produce_claim_side_bound',
-                            new=lambda *args,**kwargs:b'{}\n'), \
+                 (mock.patch('joulewise.analysis_engine.claim_side_bound.produce_claim_side_bound',
+                             new=lambda *args,**kwargs:b'{}\n') if stub_producer else nullcontext()), \
                  mock.patch('scripts.issue_reported_energy.issue_pack',side_effect=lambda index,pack:projections[pack]), \
                  mock.patch('joulewise.paper_reported_energy._verify_gate_ordering'):
                 yield s,projections
@@ -1311,6 +1508,116 @@ class DriverProductionCensusTests(unittest.TestCase):
             records=d.step_9b(s,d.StepRunner(s.restricted))
             self.assertEqual((records[0].status,records[0].refusal),('tooling_refusal','paper_custody_binding_mismatch'),self.logs(s))
             self.assertTrue(s.output('role_census_gamma').is_file())
+
+
+class ClaimSideBoundStep9bTests(unittest.TestCase):
+    """D-189 (ruling A): step 9b on synthetic verdicts, the real producer and the real helper."""
+
+    state=DriverProductionCensusTests.state
+    gate=DriverProductionCensusTests.gate
+    logs=DriverProductionCensusTests.logs
+
+    @staticmethod
+    def documents(verdicts_raw):
+        return {'finalized_manifest':_verdict_bytes(SIDE_BOUND_MANIFEST),'floor_artifact':_verdict_bytes(SIDE_BOUND_FLOOR),
+                'claim_verdicts':verdicts_raw}
+
+    def produce(self,verdicts_raw):
+        from joulewise.analysis_engine.claim_side_bound import produce_claim_side_bound
+        return produce_claim_side_bound(verdicts_raw,finalized_manifest=SIDE_BOUND_MANIFEST,floor_artifact=SIDE_BOUND_FLOOR)
+
+    def assert_producer_refuses(self,verdicts_raw,codes):
+        from joulewise.analysis_engine.claim_side_bound import ClaimSideBoundRefusal
+        with self.assertRaises(ClaimSideBoundRefusal) as refusal:
+            self.produce(verdicts_raw)
+        self.assertIn(refusal.exception.code,codes)
+
+    def test_eligible_verdict_issues_the_sidecar_as_before(self):
+        from joulewise import paper_custody as c
+        for name,verdicts in (('one',side_bound_verdicts()),
+                              ('two',side_bound_verdicts(side_bound_contrast(),
+                                                         side_bound_contrast('ctr-prefill',('beta-target','gamma-target'))))):
+            raw=_verdict_bytes(verdicts)
+            with self.subTest(name),self.state(documents=self.documents(raw),stub_producer=False) as (s,projections):
+                self.assertFalse(d.claim_side_bound_not_issuable(raw))
+                contexts=[];gate=self.gate(contexts,projections)
+                with mock.patch.dict(c._ISSUANCE_GATES,{('claim_evidence','claim-evidence.v1'):gate}), \
+                     mock.patch.object(c,'open_paper_input',wraps=c.open_paper_input) as opener:
+                    records=d.step_9b(s,d.StepRunner(s.restricted))
+                self.assertEqual((records[0].status,records[0].exit_status),('ok',0),self.logs(s))
+                self.assertEqual(s.output('claim_side_bound').read_bytes(),self.produce(raw))
+                opener.assert_called_once()
+                self.assertEqual(len(contexts),1)
+                for role in ('claim_request','floor_acceptance','receipt_gamma','inventory_gamma','role_census_gamma'):
+                    self.assertTrue(s.output(role).is_file())
+
+    def test_each_non_issuable_state_is_one_blinded_outcome_with_no_sidecar(self):
+        from joulewise import paper_custody as c
+        rows=set()
+        cases=[(state,non_issuable_verdicts(state)) for state in NON_ISSUABLE]
+        # A non-issuable contrast after an issuable one: the whole sidecar is not issuable.
+        late=side_bound_contrast('ctr-prefill',('beta-target','gamma-target'))
+        NON_ISSUABLE['null_metrology_interval'](late)
+        cases.append(('second_contrast',side_bound_verdicts(side_bound_contrast(),late)))
+        for state,verdicts in cases:
+            raw=_verdict_bytes(verdicts)
+            with self.subTest(state),self.state(documents=self.documents(raw),stub_producer=False) as (s,_):
+                # The producer cannot issue it: the registered not-resolvable / not-estimable outcome.
+                self.assert_producer_refuses(raw,{'paper_claim_side_bound_cell_mismatch','paper_claim_side_bound_shape_invalid',
+                                                  'paper_claim_side_bound_anchor_missing'})
+                self.assertTrue(d.claim_side_bound_not_issuable(raw))
+                before=set(s.outputs)
+                with mock.patch.object(c,'open_paper_input') as opener, \
+                     mock.patch('joulewise.analysis_engine.claim_side_bound.produce_claim_side_bound') as producer:
+                    records=d.step_9b(s,d.StepRunner(s.restricted))
+                opener.assert_not_called();producer.assert_not_called()
+                self.assertEqual(len(records),1)
+                row=records[0].as_dict()
+                self.assertEqual((row['status'],row['exit_status'],row['refusal'],row['outputs']),
+                                 ('outcome_class',3,'outcome-class refusal at step 9b',[]),self.logs(s))
+                self.assertTrue(d.is_nonstopping_outcome(records[0]))
+                self.assertEqual(set(s.outputs),before)
+                self.assertFalse((s.restricted/'custody').exists())
+                # The restricted log and the raw code name only the one registered code.
+                self.assertEqual(self.logs(s),'error: claim_side_bound_not_issuable\n')
+                if hasattr(s,'_raw_codes'):  # D-188 step codes (absent at b5/analysis-r1)
+                    self.assertEqual(s._raw_codes[-1][1],'claim_side_bound_not_issuable')
+                rows.add(json.dumps(row,sort_keys=True))
+        self.assertEqual(len(rows),1,'the record row must not reveal which state')
+
+    def test_a_provenance_defect_is_a_tooling_refusal_under_its_own_code(self):
+        from joulewise import paper_custody as c
+        classes=d.refusal_classes()['tooling_refusal']
+        for name,(raw,code) in provenance_defects().items():
+            with self.subTest(name),self.state(documents=self.documents(raw),stub_producer=False) as (s,_):
+                self.assert_producer_refuses(raw,{code})
+                self.assertFalse(d.claim_side_bound_not_issuable(raw))
+                with mock.patch.object(c,'open_paper_input') as opener:
+                    records=d.step_9b(s,d.StepRunner(s.restricted))
+                opener.assert_not_called()
+                row=records[0].as_dict()
+                self.assertEqual((row['status'],row['refusal'],row['exit_status']),('tooling_refusal',code,2),self.logs(s))
+                self.assertIn(code,classes)
+                self.assertFalse(d.is_nonstopping_outcome(records[0]))
+                self.assertNotIn('claim_side_bound',s.outputs)
+                self.assertNotIn('Traceback',self.logs(s))
+
+    def test_the_check_is_structure_only(self):
+        # Numbers are opaque markers: the check never reads a numeral (an unparseable
+        # one beside a null interval is still that state), and non-bytes are not a state.
+        raw=_verdict_bytes(non_issuable_verdicts('null_decision_interval')).replace(b'"total":0.5',b'"total":1e-9999999999999999999')
+        self.assertTrue(d.claim_side_bound_not_issuable(raw))
+        self.assertFalse(d.claim_side_bound_not_issuable(json.loads(raw)))
+        with mock.patch('json.loads',wraps=json.loads) as loads:
+            d.claim_side_bound_not_issuable(raw)
+        kwargs=loads.call_args.kwargs
+        self.assertIs(kwargs['parse_float']('0.5'),kwargs['parse_int']('3'))
+        self.assertNotIsInstance(kwargs['parse_float']('0.5'),(int,float,str))
+        # A non-string status, or terms that are not name objects, are shape defects, not a state.
+        for edit in (_edit(('floor','resolutions',0,'status'),3),_edit(('deterministic_bounds','terms'),[3]),
+                     _edit(('estimator',),None),_edit(('deterministic_bounds','terms'),None)):
+            contrast=side_bound_contrast();edit(contrast)
+            self.assertFalse(d.claim_side_bound_not_issuable(_verdict_bytes(side_bound_verdicts(contrast))))
 
 
 class ReferenceParityTests(unittest.TestCase):
