@@ -29,6 +29,8 @@ SCHEMA = "joulewise.b5_bracket_sensitivity.v1"
 _PACKS = ("alpha", "beta", "gamma")
 _FLOOR_PACKS = _PACKS[:2]
 _FLOOR_KEYS = ("floor_abs_j", "floor_cmp_j", "floor_gate_j")
+# engine._combined_floor: only these resolutions contribute a floor value (D-190).
+_USABLE_RESOLUTIONS = frozenset({"exact", "transported"})
 
 
 def _invalid() -> None:
@@ -173,6 +175,11 @@ def _engine_contrasts(*, gamma_manifest_path, runs_root, floor_artifact_path,
         item = prepared[cid]
         resolutions = []
         for resolution in item["floor_resolutions"]:
+            if resolution.status not in _USABLE_RESOLUTIONS:
+                # D-190: an unusable resolution contributes no floor value to
+                # engine._combined_floor, so it has no sensitivity floor either.
+                resolutions.append(resolution)
+                continue
             if not resolution.source_cell_ids:
                 _invalid()
             values = [_get(sensitivity_floors, source_id) for source_id in resolution.source_cell_ids]
@@ -198,10 +205,26 @@ _DEFAULT_CONSUMERS = SensitivityConsumers()
 
 
 def _contrast_values(row):
-    return {"floor_abs_j": _number(_get(row, "floor", "floor_abs_j")),
-            "floor_cmp_j": _number(_get(row, "floor", "floor_cmp_j")),
-            "floor_gate_j": _number(_get(row, "floor", "active_floor_j")),
-            "D_j": _number(_get(row, "deterministic_bounds", "total")),
+    # D-190: null stays null in exactly the engine's two registered states. A
+    # refused floor (engine._combined_floor) has no floor value; a contrast
+    # without an estimate (fewer than two complete blocks) has no D. Any other
+    # null is invalid input, as before.
+    refused = _get(row, "floor", "status") == "refused"
+
+    def floor(key):
+        value = _get(row, "floor", key)
+        if refused:
+            if value is not None:
+                _invalid()
+            return None
+        return _number(value)
+
+    total = _get(row, "deterministic_bounds", "total")
+    not_estimable = _get(row, "estimator", "estimate") is None
+    return {"floor_abs_j": floor("floor_abs_j"),
+            "floor_cmp_j": floor("floor_cmp_j"),
+            "floor_gate_j": floor("active_floor_j"),
+            "D_j": None if not_estimable and total is None else _number(total),
             "outcome": _get(row, "claim_evaluation", "outcome")}
 
 
@@ -336,14 +359,20 @@ def sensitivity_pass(windows, kept_units, contexts, brackets, b_max, *,
         _at_primary_bound(all(equal_bounds.values()), [before, independent_before], [after, independent_after])
         if not _same(independent_before, independent_after):
             raise AnalysisRefusal("sensitivity_changed_bound_independent_value")
+        bounded = (*_FLOOR_KEYS, "D_j")
+        # D-190: whether a floor resolves and whether D exists do not depend on the bound.
+        if any((before[key] is None) != (after[key] is None) for key in bounded):
+            raise AnalysisRefusal("sensitivity_changed_bound_independent_value")
         source_ids = list(dict.fromkeys(source for resolution in _get(row, "floor", "resolutions")
+                                      if _get(resolution, "status") in _USABLE_RESOLUTIONS
                                       for source in _get(resolution, "source_cell_ids")))
         if any(source not in sensitivity_floors for source in source_ids):
             _invalid()
         record["contrasts"].append({"contrast_id": cid, "floor_cell_ids": source_ids,
             "primary": before, "sensitivity": after, "bound_independent_values_equal_primary": True,
             "outcome_equals_primary": after["outcome"] == before["outcome"],
-            "not_below_primary": all(after[key] >= before[key] for key in (*_FLOOR_KEYS, "D_j"))})
+            "not_below_primary": all(after[key] >= before[key] for key in bounded
+                                     if before[key] is not None)})
     canonical_sha256(record)  # Validate against the issuer's canonical wire.
     return record
 

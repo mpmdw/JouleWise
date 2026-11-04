@@ -64,12 +64,17 @@ log counts of its step, in every layout.
 In those same comparisons (mixed, or legacy pairs from different commits) a
 step-codes side's raw code is always its authenticated step-codes value, and a
 legacy side's raw code is what its record and logs ESTABLISH under the driver's own
-rules (_legacy_decode: a public tooling code, the one outcome-class code, an
+rules (_legacy_decode: a public tooling code, the step's outcome-class code, an
 escaped exception read from the runner's own traceback, or a program's own exit
 other than 2). An exit-2 refusal without such a traceback could be a program exit,
 a successful program missing a promised output or a driver-raised refusal that R1
 records nowhere; when that raw code is all that could still differ the comparison
 fails closed: 'COMPARATOR_ERROR stage=refusal-code side=<the legacy side>'.
+
+The first refusal is the first row that stopped the run: step 9b's claim-side-bound
+non-issuance (D-189: outcome_class at exit 3, no output, steps 10 and 11 still run) stops
+nothing, so it is compared through the record's decision rows and the step codes, and its
+absent sidecar is a decision difference ('custody/claim_side_bound:presence').
 
 Open mode prints every differing leaf with both exact tokens. It refuses unless both
 records' window_index_sha256 values are listed in equivalence_open_indices.json
@@ -1200,9 +1205,22 @@ def field_name(cfg: Config, vocab: str, path: str) -> str:
 # Refusal identity
 # ---------------------------------------------------------------------------
 
+def _nonstopping_outcome(row):
+    """Step 9b's claim-side-bound non-issuance: the one refusing row that stops nothing (D-189).
+
+    dry_run.is_nonstopping_outcome, restated (the judge imports nothing from the
+    analysis): step 9b, no window, outcome_class at exit 3, no output. Its whole
+    identity is public (status, step, exit) and its raw code is the one 9b outcome
+    code, so it is compared through the record and step codes; the first refusal is
+    the first row that STOPPED the run, whose position and code the record hides.
+    """
+    return (str(row.get('step')) == '9b' and row.get('window') is None and row.get('status') == 'outcome_class'
+            and type(row.get('exit_status')) is int and row.get('exit_status') == 3 and row.get('outputs') == [])
+
+
 def _first_non_ok(record):
     for i, row in enumerate(record['steps']):
-        if row['status'] not in ('ok', 'not_run'):
+        if row['status'] not in ('ok', 'not_run') and not _nonstopping_outcome(row):
             return i, row
     return None, None
 
@@ -1260,12 +1278,22 @@ def read_step_codes(side: Side):
 DRIVER_TOKEN = re.compile(r'[A-Za-z][A-Za-z0-9_.]*')   # joulewise/b5_analysis/dry_run.py _TOKEN
 MINT_CONSUMPTION_REFUSED = 'mint_consumption_session_refused'
 DOMINANCE_ZERO_DENOMINATOR = 'dominance_ratio_zero_denominator'
-# configs/analysis/b5/dry_run_refusal_classes.json 'outcome_class', identical at
-# b5/analysis-r1 and on this branch (the two files differ by one tooling code). A
-# record row whose status is outcome_class therefore carries exactly this raw code
-# (steps.step_record maps a code to outcome_class only when it is listed there).
-# Embedded, not read, so the judge depends on no file the analysis may change.
-OUTCOME_CODES = (DOMINANCE_ZERO_DENOMINATOR,)
+CLAIM_SIDE_BOUND_NOT_ISSUABLE = 'claim_side_bound_not_issuable'
+# configs/analysis/b5/dry_run_refusal_classes.json 'outcome_class' (sorted), identical
+# on this branch and on the reference commit lane/b5-r1-9b-fix (b5/analysis-r1 with
+# the D-189 driver change; the tag itself predates CLAIM_SIDE_BOUND_NOT_ISSUABLE).
+# steps.step_record maps a code to outcome_class only when it is listed there, and
+# each code has one owner: the step-9b helper alone prints CLAIM_SIDE_BOUND_NOT_ISSUABLE
+# (D-189), so an outcome_class row at step 9b carries it and one at any other step
+# carries DOMINANCE_ZERO_DENOMINATOR (_outcome_code). Embedded, not read, so the
+# judge depends on no file the analysis may change.
+OUTCOME_CODES = (CLAIM_SIDE_BOUND_NOT_ISSUABLE, DOMINANCE_ZERO_DENOMINATOR)
+OUTCOME_CODE_BY_STEP = {'9b': CLAIM_SIDE_BOUND_NOT_ISSUABLE}
+
+
+def _outcome_code(step):
+    """The raw code an outcome_class record row of ``step`` carries."""
+    return OUTCOME_CODE_BY_STEP.get(str(step), DOMINANCE_ZERO_DENOMINATOR)
 CODE_UNESTABLISHED = '<raw-code-not-established-in-legacy-layout>'
 _ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
 _TRACEBACK_HEAD = re.compile(r'(  \+ )?(?:Exception Group )?Traceback \(most recent call last\):')
@@ -1351,7 +1379,10 @@ def _driver_read(data):
 # one guarded helper run through the runner, recorded with code=result.token(),
 # and nothing after it can change the code or raise a refusal (s.rehash() runs
 # before the program and leaves no log; the run() exception program writes a
-# second, driver-traced log).
+# second, driver-traced log). D-189 keeps step 9b one program: its claim-side-bound
+# non-issuance is the helper's own exit 3 ('error: claim_side_bound_not_issuable',
+# an outcome_class row) and a producer refusal past it is the helper's
+# AnalysisRefusal (a public tooling code), both inside that one invocation.
 INTERNAL_STEPS = frozenset({'0', '3', '3b', '9b'})
 
 
@@ -1411,7 +1442,7 @@ def _legacy_decode(side: Side, row) -> dict:
       'raw_code' keeps the lenient replay, so an R1 against R1 pair still compares it).
 
     Establishment: a tooling code is public in the record. An outcome-class row
-    carries the one outcome code (OUTCOME_CODES). Otherwise the logs establish the
+    carries its step's outcome code (_outcome_code). Otherwise the logs establish the
     code only when no other driver path can have produced the row: a runner
     traceback (escape or driver exception program: no code), or an exit status
     other than 2 (the program's own nonzero exit; every driver-decided code, a
@@ -1435,7 +1466,7 @@ def _legacy_decode(side: Side, row) -> dict:
         public = {'raw_code': row['refusal'], 'established': row['refusal'], 'invocation': None}
     else:
         public = {'raw_code': None, 'invocation': None,
-                  'established': OUTCOME_CODES[0] if row['status'] == 'outcome_class' and len(OUTCOME_CODES) == 1
+                  'established': _outcome_code(row['step']) if row['status'] == 'outcome_class'
                   else CODE_UNESTABLISHED}
     try:
         logs_fd = os.open('logs', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=side.restricted_fd)
@@ -1676,6 +1707,26 @@ def _legacy_pair_first_refusals(ref: Side, cand: Side):
     return firsts
 
 
+def nonstopping_outcomes(side: Side, codes, *, established):
+    """[{'pos', 'raw_code'}] of the record's non-stopping rows (D-189), for a comparison without two step codes.
+
+    _first_non_ok skips them, so without step codes on both sides their raw codes are
+    compared here: a step-codes side's authenticated value, and a legacy side's
+    established value (the step's outcome code) or, R1 against R1, the replayed one.
+    """
+    rows = []
+    for i, row in enumerate(side.record['steps']):
+        if not _nonstopping_outcome(row):
+            continue
+        if codes is not None:
+            code = codes[i]['raw_code']
+        else:
+            decoded = _legacy_decode(side, row)
+            code = decoded['established' if established else 'raw_code']
+        rows.append({'pos': ('#i', str(i)), 'raw_code': code})
+    return rows
+
+
 def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
     """Derived decision leaves: per-step result outputs and the raw refusal identity."""
     (codes_ref, auth_ref), (codes_cand, auth_cand) = read_step_codes(ref), read_step_codes(cand)
@@ -1705,8 +1756,10 @@ def decision_structure(ref: Side, cand: Side, cfg: Config, prefix):
                 d['first_refusal'] = {'window_children': window_children(side, _first_non_ok(side.record)[1])}
         elif mixed is not None:
             d['first_refusal'] = mixed[side.label]
+            d['nonstopping_outcomes'] = nonstopping_outcomes(side, codes, established=True)
         elif prefix is None:
             d['first_refusal'] = _first_refusal(side, *_first_non_ok(side.record))
+            d['nonstopping_outcomes'] = nonstopping_outcomes(side, codes, established=False)
         structures[side.label] = (d, audit)
     return structures, source
 
@@ -2049,7 +2102,8 @@ def emit_vocabulary(tree: Path, run: str = 'blind-dry-run', cfg: Config | None =
     try:
         flat = Flattener(cfg, side)
         names = {f'record:{section_of(p)}' for p in flat.flatten(_record_value(side, None), 'record', {})}
-        names |= {'record:input_census', 'decisions:step_outputs', 'decisions:first_refusal', 'decisions:step_codes'}
+        names |= {'record:input_census', 'decisions:step_outputs', 'decisions:first_refusal', 'decisions:step_codes',
+                  'decisions:nonstopping_outcomes'}
         for art in side.artifacts.values():
             names.add(f'{art.vocab}:presence')
             for p in flat.artifact_leaves(art):
