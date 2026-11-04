@@ -165,7 +165,11 @@ def build_disclosure_inputs(window_index,values,paths):
     if (values["claim_verdicts"]["inputs"]["analysis_manifest"]["file_sha256"] !=
             hashlib.sha256(read_authentication_input(manifest_path,grammar="json",label="finalized analysis manifest")).hexdigest()):
         raise AnalysisRefusal("step_output_digest_mismatch")
-    built=inputs.block5_claim_gate_inputs(window_index,manifest_path,windows["gamma"].claim_runs_root,evidence_roots)
+    # D-188 small fixes: the alpha/beta brackets were evaluated above in this
+    # program; the gate reuses one only for its own identical window and
+    # SHA256SUMS digest, and otherwise evaluates afresh.
+    built=inputs.block5_claim_gate_inputs(window_index,manifest_path,windows["gamma"].claim_runs_root,evidence_roots,
+        _brackets={p:s["bracket"] for p,s in setups.items()})
     archives.update(built["archives"])
     kept={p:s["kept"] for p,s in setups.items()}; kept["gamma"]=built["kept_units"]
     brackets={p:s["bracket"] for p,s in setups.items()}; brackets.update(built["brackets"])

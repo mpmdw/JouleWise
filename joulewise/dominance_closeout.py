@@ -451,8 +451,14 @@ def validate_d165_paper_sources(
     floor_artifact_bytes: bytes,
     replay_sidecar_bytes: bytes,
     window_index: Path | None = None,
+    _block5_inputs: Mapping[str, Any] | None = None,
 ) -> tuple[str, ...]:
-    """Replay D-165's four owners and expose only closed nested codes."""
+    """Replay D-165's four owners and expose only closed nested codes.
+
+    ``_block5_inputs`` (private, D-188 small fixes) forwards claim-gate inputs
+    the caller already built in this program for the same window index,
+    prospective manifest and runs root; None builds them afresh.
+    """
 
     codes: list[str] = []
     manifest = _paper_json_object(finalized_manifest_bytes)
@@ -461,6 +467,7 @@ def validate_d165_paper_sources(
         manifest_path=finalized_manifest_path,
         custody_root=custody_root,
         window_index=window_index,
+        **({"_block5_inputs": _block5_inputs} if _block5_inputs is not None else {}),
     ):
         codes.append("d165_paper_finalized_manifest_invalid")
     try:
