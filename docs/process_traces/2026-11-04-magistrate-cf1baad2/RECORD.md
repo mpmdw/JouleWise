@@ -17,3 +17,4 @@
 - **FROZEN for pilot 7: implementation `4d54cb47b`, run from tip `cda28a5ef`** (worktree `jw-wt/desk-alt-review`), recorded before pilot 7 is read under it.
 - PR #647 CI: GitHub runs no `pull_request` CI on it because the branch sits on the unmerged ALIGN pilot lanes and conflicts with main. Not resolved for a desk-only diagnostic; the reviewer's executed tests stand in until the ALIGN lanes merge.
 - Offload of pilot-v3 (pilot 4) and pilot-v4 (pilot 5) roots to iCloud `JouleWise-archive/2026-11-04-align-pilots/` started 15:50 during the desk (log `~/night-archive/seats-cf1baad2/offload.log`).
+- Offload done (rc 0): pilot-v3 35,343 files and pilot-v4 35,361 files, every file re-hashed from the iCloud copy and matched before local deletion (tar.zst 0.88 GB each, 60 s each); `.OFFLOADED.json` pointers left. Disk 72 -> 98 GB free (less than the 2 x 36 GB `du` because APFS clones share blocks).
