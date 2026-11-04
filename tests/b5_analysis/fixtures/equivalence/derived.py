@@ -376,8 +376,19 @@ def _variant(model):
         p['variant'] = [True, None]
 
 
-def _extraction_cell(model):
-    corpus.file_body(model, EXTRACTION)['cells'][0]['n_admitted'] = 8
+def _extraction(*path, value):
+    """Change one leaf of the extraction report, an artifact pinned only by file digest (@role) by the
+    floor cells' extraction_report.sha256 and the pinset producer rows' extraction-spec pins. The build
+    recomputes every digest downstream of it (floor, pinset, manifest, closeout, claim verdicts)."""
+    def apply(model):
+        node = corpus.file_body(model, EXTRACTION)
+        for p in path[:-1]:
+            node = node[p]
+        node[path[-1]] = value
+    return apply
+
+
+_extraction_cell = _extraction('cells', 0, 'n_admitted', value=8)
 
 
 PINSETS = {'mint/floor-mint-pinset.json:{}', 'finalized/mint/floor-mint-pinset.json:{}'}
@@ -388,8 +399,9 @@ def _both(names, section):
     return {n.format(section) for n in names}
 
 
-# The composite references that fail on any referent change (closeout sources: registered;
-# claim-verdict input pins and embedded copy: intermediate), as the raw digests did.
+# The composite references (closeout sources: registered; claim-verdict input pins and embedded
+# copy: intermediate). Their tokens carry the digest of their referents' canonical leaves, file
+# digests inside a referent as @role; the raw digests covered every byte, transitively.
 REFS = {'registered': {'finalized/outputs/closeout.json:sources'},
         'intermediate': {'outputs/claim-verdicts.json:inputs'}}
 
@@ -437,9 +449,18 @@ CASES = {
     'hidden_producer_acceptance': (None, _spec('producers', 1, 'calibration_acceptance', 'acceptance_id',
                                                value='syn-acceptance-v3'),
                                    _with_refs({'intermediate': _both(PINSETS, 'producer_plans')}), 'producer-set'),
-    # The extraction artifact is compared itself; its digest is @role wherever it is pinned.
+    # Leaves of a second-hop artifact pinned only by file digest (the extraction report; its digest is @role
+    # wherever it is pinned). Tiers are leaf-local (lead ruling 2026-11-04): it is compared directly under its
+    # own tiers, the references to it carry only which artifact they bind to. A non-audit leaf fails directly ...
     'hidden_extraction_cell': (None, _extraction_cell, {'decisions': {'mint/extraction-alpha.json:cells'}},
-                               'producer-pin'),
+                               '@role'),
+    'hidden_extraction_schema': (None, _extraction('schema_version', value='joulewise.extraction.v2'),
+                                 {'intermediate': {'mint/extraction-alpha.json:schema_version'}}, '@role'),
+    # ... and an audit leaf stays audit however many digests reference it (D-188 lets audit leaves change).
+    'hidden_extraction_manifest_id': (None, _extraction('manifest_id', value='am-' + _h('other-manifest')[:16]),
+                                      {'audit': 'DIFFER'}, '@role'),
+    'hidden_extraction_runs_root': (None, _extraction('runs_root', value='/synthetic/runs-other'),
+                                    {'audit': 'DIFFER'}, '@role'),
     # Audit-keyed leaves of a referent (review of PR #643): audit tier in the referent itself,
     # so only the referencing composite's coverage catches them.
     'hidden_floor_model_pin': (None, _spec('floor', 'cells', 0, 'source_regime', 'stack_identity',
@@ -455,9 +476,22 @@ CASES = {
                                                    value=_h('other-extraction-spec')), REFS, 'producer-pin'),
 }
 
-# The cases whose change is an audit-keyed leaf of a referent (each must still fail).
+# The cases whose change is an audit-keyed leaf of a reference site's referent (each still fails, through the
+# referent digest its tokens carry).
 AUDIT_LEAF_CASES = ('hidden_floor_model_pin', 'hidden_floor_extraction_pin', 'hidden_manifest_lineage_pin',
                     'hidden_producer_model_pin', 'hidden_producer_extraction_pin')
+
+# The cases whose change is a leaf of the second-hop extraction report (pinned only by file digest), with
+# the open-mode row naming the changed leaf.
+SECOND_HOP_CASES = {'hidden_extraction_cell': 'mint/extraction-alpha.json $.cells[0].n_admitted',
+                    'hidden_extraction_schema': 'mint/extraction-alpha.json $.schema_version',
+                    'hidden_extraction_manifest_id': 'mint/extraction-alpha.json $.manifest_id',
+                    'hidden_extraction_runs_root': 'mint/extraction-alpha.json $.runs_root'}
+
+# The one class the raw comparator rejected and this one accepts (lead ruling 2026-11-04): an audit-tier leaf
+# of an artifact pinned only by file digest. The raw composites (closeout sources, claim-verdict inputs)
+# digested its bytes transitively; the tokens do not, and the leaf is audit where it is stored.
+RAW_REJECTED_NOW_ACCEPTED = ('hidden_extraction_manifest_id', 'hidden_extraction_runs_root')
 
 FORGED = '0' * 63 + 'f'
 # name -> (candidate forgery, the site path the comparator must name)

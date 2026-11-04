@@ -1630,7 +1630,7 @@ class DerivedReferenceTest(_TmpCase):
         self.assert_expected(rc, got, {'audit': 'MATCH'}, text)
 
     def test_every_hidden_change_is_caught(self):
-        self.assertEqual({rule for *_x, rule in derived.CASES.values()} - {'all'}, set(REFERENCE_KINDS))
+        self.assertEqual({rule for *_x, rule in derived.CASES.values()} - {'all', '@role'}, set(REFERENCE_KINDS))
         for name, (ref_mut, cand_mut, expected, _rule) in derived.CASES.items():
             with self.subTest(case=name):
                 ref, cand = derived.build_pair(ref_mut, cand_mut, self.tmp, name)
@@ -1697,25 +1697,95 @@ class DerivedReferenceTest(_TmpCase):
                     self.assertLessEqual(got0[tier] if isinstance(got0[tier], set) else set(),
                                          got[tier] if isinstance(got[tier], set) else set(), (tier, text0, text))
 
-    def test_failing_fields_never_shrink_against_the_raw_comparator(self):
-        """On every same-commit corpus case the failing-tier fields include the raw comparator's, except
-        those that differed only through a file digest the comparator already reads as @role."""
+    def raw_and_now(self, ref, cand):
+        """(raw, now) blinded results: the comparator before REFERENCE SITES, then this one."""
         saved = cmp.resolve_references
+        cmp.resolve_references = lambda *args: None
+        try:
+            raw = self.blinded(ref, cand)
+        finally:
+            cmp.resolve_references = saved
+        return raw, self.blinded(ref, cand)
+
+    def test_failing_fields_never_shrink_against_the_raw_comparator(self):
+        """On every same-commit corpus case the failing-tier fields include the raw comparator's, with one
+        designed exception, asserted exactly (tiers are leaf-local, lead ruling 2026-11-04).
+
+        When the change is a leaf of an artifact pinned only by file digest (SECOND_HOP_CASES), the raw
+        composites (closeout sources, claim-verdict inputs) differed through their transitive byte digest. Their
+        tokens bind to which artifact, so exactly those two fields drop out and the leaf is reported directly at
+        its own tier. Only for an audit-tier leaf does that change the verdict: the explicit allow-list
+        RAW_REJECTED_NOW_ACCEPTED is the set of cases the raw comparator rejects and this one accepts, and it
+        holds only that audit-leaf class.
+        """
+        self.assertLessEqual(set(derived.RAW_REJECTED_NOW_ACCEPTED), set(derived.SECOND_HOP_CASES))
+        accepted = set()
         for name, (ref_mut, cand_mut, _expected, _rule) in derived.CASES.items():
-            if name in ('commit_only', 'hidden_extraction_cell'):
+            if name == 'commit_only':
                 continue
             with self.subTest(case=name):
                 ref, cand = derived.build_pair(ref_mut, cand_mut, self.tmp, name + '-raw')
-                cmp.resolve_references = lambda *args: None
-                try:
-                    _rc0, _t0, got0 = self.blinded(ref, cand)
-                finally:
-                    cmp.resolve_references = saved
-                _rc, text, got = self.blinded(ref, cand)
+                (rc0, t0, got0), (rc, text, got) = self.raw_and_now(ref, cand)
+                self.assertEqual((rc0, got0['verdict']), (1, 'NOT_EQUIVALENT'), t0)
+                dropped = {}
                 for tier in TIER_KEYS:
                     raw = got0[tier] if isinstance(got0[tier], set) else set()
                     now = got[tier] if isinstance(got[tier], set) else set()
-                    self.assertLessEqual(raw, now, (tier, text))
+                    if raw - now:
+                        dropped[tier] = raw - now
+                self.assertEqual(dropped, derived.REFS if name in derived.SECOND_HOP_CASES else {}, (t0, text))
+                if got['verdict'] == 'EQUIVALENT':
+                    self.assertEqual((rc, got['audit']), (0, 'DIFFER'), text)
+                    accepted.add(name)
+        self.assertEqual(accepted, set(derived.RAW_REJECTED_NOW_ACCEPTED))
+
+    def test_a_second_hop_leaf_is_compared_under_its_own_tier(self):
+        """Lead ruling 2026-11-04 on the PR #643 cold-pass probe: a field's tier is leaf-local.
+
+        The extraction report is pinned only by file digest (floor cells' extraction_report.sha256, pinset
+        producer rows' extraction-spec pins), and every digest downstream of it is recomputed. An audit leaf of
+        it (manifest_id, runs_root) is EQUIVALENT with an audit DIFFER naming that leaf; a non-audit leaf
+        (decision, intermediate) is NOT_EQUIVALENT naming it; each with and without an analysis-commit change.
+        """
+        self.assertEqual(set(derived.RAW_REJECTED_NOW_ACCEPTED),
+                         {'hidden_extraction_manifest_id', 'hidden_extraction_runs_root'})
+        for name, row in derived.SECOND_HOP_CASES.items():
+            ref_mut, cand_mut, expected, _rule = derived.CASES[name]
+            audit_only = name in derived.RAW_REJECTED_NOW_ACCEPTED
+            self.assertEqual(audit_only, set(expected) == {'audit'}, name)
+            for commit in (False, True):
+                with self.subTest(case=name, commit=commit):
+                    mut = corpus._chain(cand_mut, derived._commit) if commit else cand_mut
+                    ref, cand = derived.build_pair(ref_mut, mut, self.tmp, f'{name}-hop{int(commit)}')
+                    # Hidden: every pin to the extraction report is its true file digest on each side, and differs.
+                    pins = []
+                    for side in (ref, cand):
+                        restricted = side / 'dry-run' / 'restricted'
+                        actual = hashlib.sha256(next(restricted.glob('mint/*-extraction-alpha.json'))
+                                                .read_bytes()).hexdigest()
+                        floor = json.loads(next(restricted.glob('finalized/mint/*-aggregate-floor.json')).read_bytes())
+                        pinset = json.loads((restricted / 'finalized/mint/floor-mint-pinset.json').read_bytes())
+                        stated = {c['provenance']['decode']['extraction_report']['sha256'] for c in floor['cells']}
+                        stated |= {p['extraction_spec']['sha256'] for p in pinset['producer_plans']}
+                        self.assertEqual(stated, {actual})
+                        pins.append(actual)
+                    self.assertNotEqual(*pins)
+                    rc, text, got = self.blinded(ref, cand)
+                    self.assert_expected(rc, got, {**expected, 'audit': 'DIFFER'} if commit else expected, text)
+                    orc, otext = run_tool(['--mode', 'open', '--no-report', ref, cand])
+                    self.assertEqual(orc, rc, otext)
+                    rows, tier = {}, None
+                    for line in otext.splitlines():
+                        if re.match(r'^[a-z]+: ', line):
+                            tier = line.split(':')[0]
+                        elif line.startswith('  '):
+                            rows.setdefault(tier, []).append(line.split(':')[0].strip())
+                    commit_rows = ['record $.analysis_commit'] if commit else []
+                    leaf_tier = 'audit' if audit_only else next(t for t in expected if t in TIER_KEYS)
+                    want = {leaf_tier: [row]}
+                    if commit_rows:
+                        want['audit'] = commit_rows + want.get('audit', [])
+                    self.assertEqual(rows, want, otext)
 
     def test_every_forged_reference_is_a_comparator_error(self):
         for name, (forge, site) in derived.FORGERIES.items():

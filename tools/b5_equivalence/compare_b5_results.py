@@ -28,12 +28,22 @@ digest). A verified field becomes the token '@<kind>:<referent key>#<referent di
 where the referent digest covers EVERY canonical leaf of the referent (commit as
 @analysis_commit, file digests as @role, its own reference sites as their verified
 tokens). The token is therefore invariant under exactly the canonicalizations the
-comparator already applies and nothing else: a change to any referent leaf, at any of
-the referent's own tiers, still differs at the referencing site's tier, as the raw
-digest did. The referent is also compared leaf by leaf under the ordinary rules (a
-rebuilt component under the aggregate floor's rules, as part of the pinset field that
-pins it). A field that is not self-consistent is 'COMPARATOR_ERROR stage=reference
-side=<side>', never equivalent.
+comparator already applies and nothing else. The referent is also compared leaf by leaf
+under the ordinary rules (a rebuilt component under the aggregate floor's rules, as part
+of the pinset field that pins it). A field that is not self-consistent is
+'COMPARATOR_ERROR stage=reference side=<side>', never equivalent.
+
+Tiers are LEAF-LOCAL (block-5 lead ruling, 2026-11-04): every committed artifact is
+compared directly under its own tiers, and a reference site's content is WHICH artifact
+it binds to, verified on each side. A file digest of a committed output that is not
+itself a reference site is '@role', so the leaves of an artifact pinned only by file
+digest (for example the extraction report, pinned by the floor cells and the pinset
+producer rows) reach no reference token: an audit-tier leaf there stays audit however
+many digests reference it (D-188 lets audit leaves change), and every other leaf there
+is caught directly at its own tier. That audit leaf is the one class the raw digests
+rejected and this comparator accepts. Transitive file-digest expansion is deliberately
+not done: it would turn legitimate audit differences such as custody paths into
+NOT_EQUIVALENT.
 
 Blinded mode (default) prints only fixed grammar: tier MATCH/DIFFER lines and
 sorted 'field <role>:<section>' names drawn from the tracked vocabulary V. It never
@@ -826,7 +836,10 @@ class Flattener:
 # its token replaced by '@<kind>:<referent key>#<digest of the referent's resolved
 # canonical leaves>' (leaf_digest), so the token keeps the composite's coverage of every
 # referent leaf at the referencing site's tier while the analysis commit (canonicalized
-# inside the referent) no longer reaches it; anything that does not verify raises
+# inside the referent) no longer reaches it. A file digest inside the referent that is
+# not itself a site below stays '@role' (leaf-local tiers, module docstring): the artifact
+# it pins is compared directly under its own tiers and is not expanded into the token.
+# Anything that does not verify raises
 # ComparatorError('reference'). The referents are stored artifacts, compared as such,
 # except the per-producer component floor artifacts, which custody does not store:
 # those are rebuilt from the stored aggregate floor and pinset by the mint's own
