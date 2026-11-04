@@ -446,6 +446,9 @@ class LegacyRefusalDecoderTest(_TmpCase):
     def test_step8_stdout_refuse_message(self):
         ref, cand = self._refused_pair('8', 'finalize')
         for root, reason in ((ref, 'finalization_lineage_invalid: x'), (cand, 'finalization_plan_tree_mismatch: y')):
+            # step_8 reads the REFUSE message of its second program (the finalizer); the
+            # first is the staging helper (review 2 of PR #640, T2: the driver's own rule).
+            (self._logs(root) / '0007-8-block.stderr.log').write_text('staged\n')
             (self._logs(root) / '0008-8-block.stdout.log').write_text(
                 'progress\n' + json.dumps({'status': 'REFUSE', 'reason': reason, 'detail': 'd'}) + '\n')
         rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
@@ -471,6 +474,586 @@ class LegacyRefusalDecoderTest(_TmpCase):
         rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
         self.assertEqual(rc, 1, text)
         self.assertIn('$.first_refusal.raw_code: "claim_family_underpowered" -> null', text)
+
+
+class LegacyReferencePositionTest(_TmpCase):
+    """Review of PR #640 (finding S1): an R1 reference (no step codes) still pins WHERE a step refused.
+
+    The real gate compares a candidate against an R1-format reference. A tooling
+    refusal's invocation ordinal is counted from the reference's logs and compared
+    with the candidate's step-codes ordinal (never discarded). R1 persists no identity
+    of the bundle a refusing step-1/step-2 child ran, so when everything else agrees
+    the member cannot be established and the comparison fails closed.
+    """
+
+    BUNDLE_CODE = 'kept_bundle_strict_validation_failed'
+
+    def _tree(self, name, count, codes, member=None, commit=True):
+        model = corpus.base_model()
+        corpus._invocation_refusal('1', count, 'alpha', self.BUNDLE_CODE)(model)
+        if codes:
+            corpus._step_codes(member=member)(model)
+        root = corpus.build(model, self.tmp / name)
+        if codes and commit:
+            _commit_step_codes(root)
+        return root
+
+    def _codes(self, root):
+        path = root / 'dry-run' / 'restricted' / 'decisions' / 'step-codes.jsonl'
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_tooling_bundle_position_against_an_r1_reference(self):
+        # The Sol probe, committed: one versus two alpha bundle children, step 1 refusing.
+        r1 = self._tree('r1', 1, codes=False)
+        first = self._tree('new-first', 1, codes=True, member=corpus._h('member-one'))
+        second = self._tree('new-second', 2, codes=True, member=corpus._h('member-two'))
+        pos = corpus.POS['1']
+        self.assertEqual([(r['invocation'], r['member']) for r in (self._codes(first)[pos], self._codes(second)[pos])],
+                         [(1, corpus._h('member-one')), (2, corpus._h('member-two'))])
+        # A different bundle (ordinal) than the R1 reference: NOT_EQUIVALENT, both directions.
+        for left, right in ((r1, second), (second, r1)):
+            rc, text = run_tool(['--mode', 'blinded', left, right])
+            got = parse_blinded(self, text, self.cfg)
+            self.assertEqual((rc, got['verdict'], got['decisions']),
+                             (1, 'NOT_EQUIVALENT', {'decisions:first_refusal'}), text)
+            rc, text = run_tool(['--mode', 'open', '--no-report', left, right])
+            self.assertEqual(rc, 1, text)
+            self.assertRegex(text, r'\$\.first_refusal\.invocation: (1 -> 2|2 -> 1)')
+        # The same ordinal: everything agrees but the member, which R1 does not record: fail closed.
+        for left, right, side in ((r1, first, 'ref'), (first, r1, 'cand')):
+            for mode in ('blinded', 'open'):
+                args = ['--mode', mode] + (['--no-report'] if mode == 'open' else []) + [left, right]
+                rc, text = run_tool(args)
+                self.assertEqual((rc, text), (2, f'COMPARATOR_ERROR stage=refusal-member side={side}\n'))
+                self.assertIsNone(re.search(r'[0-9]', text))
+        # Two step-codes trees still compare both position fields.
+        rc, text = run_tool(['--mode', 'open', '--no-report', first, second])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('invocation', text)
+        self.assertIn('member', text)
+
+    def test_uncommitted_candidate_codes_are_not_discarded_either(self):
+        r1 = self._tree('r1', 1, codes=False)
+        second = self._tree('new-second', 2, codes=True, member=corpus._h('member-two'), commit=False)
+        rc, text = run_tool(['--mode', 'blinded', r1, second])
+        got = parse_blinded(self, text, self.cfg)
+        self.assertEqual((rc, got['decisions'], got['refusal_source']),
+                         (1, {'decisions:first_refusal'}, 'logs-unauthenticated'))
+
+    def test_member_free_refusal_against_an_r1_reference(self):
+        # Step 5 runs two member-free programs: the ordinal alone is the position; equal -> EQUIVALENT.
+        code = 'floor_mint_inputs_invalid'
+        ref, cand = self.pair(corpus._invocation_refusal('5', 2, code=code),
+                              corpus._chain(corpus._invocation_refusal('5', 2, code=code), corpus._step_codes()),
+                              name='mint')
+        _commit_step_codes(cand)
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual(rc, 0, text)
+        rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+        self.assertIn('VERDICT: EQUIVALENT', text)
+
+    def test_no_refusal_never_fails_closed(self):
+        ref = corpus.build(corpus.base_model(), self.tmp / 'clean-r1')
+        model = corpus.base_model()
+        corpus._step_codes()(model)
+        cand = corpus.build(model, self.tmp / 'clean-new')
+        _commit_step_codes(cand)
+        for left, right in ((ref, cand), (cand, ref)):
+            rc, text = run_tool(['--mode', 'blinded', left, right])
+            self.assertEqual(rc, 0, text)
+            self.assertEqual(parse_blinded(self, text, self.cfg)['verdict'], 'EQUIVALENT')
+
+    def test_candidate_bundle_refusal_against_a_completed_r1_reference(self):
+        # Only the candidate refuses: an ordinary decision difference, never COMPARATOR_ERROR.
+        ref = corpus.build(corpus.base_model(), self.tmp / 'clean-r1')
+        cand = self._tree('new-first', 1, codes=True, member=corpus._h('member-one'))
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        got = parse_blinded(self, text, self.cfg)
+        self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT'))
+        self.assertIn('decisions:first_refusal', got['decisions'])
+
+    def test_sidecarless_candidate_from_another_commit_fails_closed(self):
+        # Review of PR #640 (MEDIUM finding): the runner writes step codes best-effort
+        # (dry_run._commit_sidecars), so losing them must not turn the member
+        # comparison off. An R1 reference against a sidecar-less candidate built by
+        # another analysis commit, refusing at the same step-1 bundle ordinal: fail closed.
+        r1 = self._tree('r1', 2, codes=False)
+        model = corpus.base_model()
+        corpus._invocation_refusal('1', 2, 'alpha', self.BUNDLE_CODE)(model)
+        corpus._commit(model)
+        nosc = corpus.build(model, self.tmp / 'new-no-sidecar')
+        self.assertFalse((nosc / 'dry-run' / 'restricted' / 'decisions').exists())
+        for left, right in ((r1, nosc), (nosc, r1)):
+            for mode in ('blinded', 'open'):
+                args = ['--mode', mode] + (['--no-report'] if mode == 'open' else []) + [left, right]
+                rc, text = run_tool(args)
+                self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=refusal-member side=ref\n'))
+                self.assertIsNone(re.search(r'[0-9]', text))
+        # The same candidate WITH its step codes fails closed the same way (mixed path).
+        corpus._step_codes(member=corpus._h('member-two'))(model)
+        new = corpus.build(model, self.tmp / 'new-sidecar')
+        _commit_step_codes(new)
+        rc, text = run_tool(['--mode', 'blinded', r1, new])
+        self.assertEqual((rc, text), (2, 'COMPARATOR_ERROR stage=refusal-member side=ref\n'))
+        # R1 against R1 (one analysis commit) is unchanged: the same ordinal is EQUIVALENT.
+        rc, text = run_tool(['--mode', 'blinded', r1, self._tree('r1-again', 2, codes=False)])
+        self.assertEqual(rc, 0, text)
+
+    def test_sidecarless_pair_from_another_commit_without_a_bundle_refusal(self):
+        # The fail-closed rule needs a refusing step-1/step-2 bundle: a clean pair, a
+        # member-free refusal and a refusal on only one side compare as before.
+        clean = corpus.base_model()
+        corpus._commit(clean)
+        rc, text = run_tool(['--mode', 'blinded', corpus.build(corpus.base_model(), self.tmp / 'clean-r1'),
+                             corpus.build(clean, self.tmp / 'clean-other')])
+        self.assertEqual(rc, 0, text)
+        code = 'floor_mint_inputs_invalid'
+        ref, cand = self.pair(corpus._invocation_refusal('5', 2, code=code),
+                              corpus._chain(corpus._invocation_refusal('5', 2, code=code), corpus._commit),
+                              name='mint-other-commit')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        self.assertEqual(rc, 0, text)
+        ref, cand = self.pair(None, corpus._chain(corpus._invocation_refusal('1', 1, 'alpha'), corpus._commit),
+                              name='one-sided')
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        got = parse_blinded(self, text, self.cfg)
+        self.assertEqual((rc, got['verdict']), (1, 'NOT_EQUIVALENT'))
+        self.assertIn('decisions:first_refusal', got['decisions'])
+
+    def test_driver_stop_child_counts_in_every_layout(self):
+        # Review of PR #640 (LOW finding): open mode names the per-window child counts.
+        for name, codes in (('r1', (False, False)), ('mixed', (False, True)), ('new', (True, True))):
+            muts = []
+            for count, with_codes in zip((2, 3), codes):
+                fns = [corpus._driver_stop('1', count)] + ([corpus._step_codes()] if with_codes else [])
+                muts.append(corpus._chain(*fns))
+            ref, cand = self.pair(*muts, name=f'stop-{name}')
+            rc, text = run_tool(['--mode', 'open', '--no-report', ref, cand])
+            self.assertEqual(rc, 1, text)
+            self.assertIn('$.first_refusal.window_children:', text)
+
+    def test_r1_against_r1_compares_the_tooling_ordinal(self):
+        one, two = self._tree('r1-one', 1, codes=False), self._tree('r1-two', 2, codes=False)
+        again = self._tree('r1-one-again', 1, codes=False)
+        rc, text = run_tool(['--mode', 'blinded', one, again])
+        self.assertEqual(rc, 0, text)
+        rc, text = run_tool(['--mode', 'open', '--no-report', one, two])
+        self.assertEqual(rc, 1, text)
+        self.assertIn('$.first_refusal.invocation: 1 -> 2', text)
+        self.assertNotIn('member', text)
+
+    def test_legacy_decoder_counts_tooling_logs_as_the_runner_names_them(self):
+        from joulewise.b5_analysis import dry_run
+        self.assertEqual(cmp.LOG_NAME.pattern, dry_run.STEP_CODES_LOG.pattern)
+        root = self._tree('r1', 2, codes=False)
+        logs = root / 'dry-run' / 'restricted' / 'logs'
+        (logs / '0041-1-alpha.stdout.log').write_text('not counted\n')      # stdout logs are not invocations
+        (logs / '0041-1-beta.stderr.log').write_text('another window\n')    # another (step, window)
+        (logs / '0099-1-alpha.stderr.log').symlink_to(logs / '0041-1-beta.stderr.log')  # not a regular file
+        cfg = self.cfg
+        side = cmp.load_side(root, 'blind-dry-run', 'ref', cfg)
+        try:
+            row = side.record['steps'][corpus.POS['1']]
+            self.assertEqual(cmp.legacy_refusal(side, row),
+                             {'raw_code': self.BUNDLE_CODE, 'invocation': ('#i', '2')})
+        finally:
+            os.close(side.restricted_fd)
+
+
+# Review 2 of PR #640 (T1/T2). The traceback dry_run.StepRunner.run prints when a
+# program raises (traceback.print_exc() in its 'except BaseException'), as both
+# drivers write it to the program's stderr log.
+RUNNER_ESCAPE = ('Traceback (most recent call last):\n'
+                 '  File "/checkout/joulewise/b5_analysis/dry_run.py", line 144, in run\n'
+                 '    value = main(list(argv))\n'
+                 '  File "/checkout/scripts/program.py", line 41, in main\n'
+                 '    raise RuntimeError(\'synthetic child failure\')\n'
+                 'RuntimeError: synthetic child failure\n')
+STEP5 = corpus.POS['5']
+STEP5_LOG = f'{STEP5 + 1:04d}-5-block'
+
+
+def _unclassified(code=None, exit_status=2, codes=False, raw_code=None, commit=False):
+    """An unclassified step-5 refusal (one program); optionally with step codes or another commit."""
+    fns = [corpus._refused(STEP5, code, status='unclassified_refusal', exit_status=exit_status)]
+    if codes:
+        fns.append(corpus._step_codes(raw_code=raw_code, exception_class=None))
+    if commit:
+        fns.append(corpus._commit)
+    return corpus._chain(*fns)
+
+
+class MixedRawCodeStubTest(_TmpCase):
+    """Review 2 of PR #640: the Sol probes as faithful stub trees (no driver run).
+
+    Each tree mirrors what the real r1/HEAD driver writes for the probe (see
+    MixedRawCodeDriverTest, which runs the drivers): the record row, the step-5
+    program's stdout/stderr logs and, on a HEAD-driver side, the step codes. The
+    reference is the R1 layout (no step codes); the candidate is a HEAD tree with
+    committed step codes, or (sidecar-less) a legacy tree from another commit.
+    """
+
+    def _tree(self, name, mut, stdout, stderr, commit_codes=False):
+        model = corpus.base_model()
+        mut(model)
+        root = corpus.build(model, self.tmp / name)
+        logs = root / 'dry-run' / 'restricted' / 'logs'
+        (logs / (STEP5_LOG + '.stdout.log')).write_text(stdout)
+        (logs / (STEP5_LOG + '.stderr.log')).write_text(stderr)
+        if commit_codes:
+            _commit_step_codes(root)
+        return root
+
+    def _ref(self, name, stdout, stderr):
+        return self._tree(name + '-ref', _unclassified(), stdout, stderr)
+
+    def _cand(self, name, stdout, stderr, raw_code=None):
+        return self._tree(name + '-cand', _unclassified(codes=True, raw_code=raw_code), stdout, stderr,
+                          commit_codes=True)
+
+    def _verdict(self, ref, cand, side_of_legacy='ref'):
+        rc, text = run_tool(['--mode', 'blinded', ref, cand])
+        if rc == 2:
+            self.assertIsNone(re.search(r'[0-9]', text))
+            return rc, text.strip()
+        return rc, parse_blinded(self, text, self.cfg)['verdict']
+
+    def test_exception_code_is_not_equivalent(self):
+        # T1 'exception-code': r1 child prints the error line and returns 2 (raw
+        # hypothetical_refusal); HEAD child prints it and raises (raw None, from its
+        # authenticated step codes). Was EQUIVALENT (the candidate's code was a log guess).
+        ref = self._ref('exc-code', 'error: hypothetical_refusal\n', '')
+        cand = self._cand('exc-code', 'error: hypothetical_refusal\n', RUNNER_ESCAPE, raw_code=None)
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        self.assertEqual(self._verdict(cand, ref), (2, 'COMPARATOR_ERROR stage=refusal-code side=cand'))
+
+    def test_driver_code_is_not_equivalent(self):
+        # T1 'driver-code': both children succeed silently; the drivers then raise
+        # different refusals. R1 records the driver code nowhere: not established.
+        ref = self._ref('drv-code', '', '')
+        cand = self._cand('drv-code', '', '', raw_code='unknown_refusal_b')
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_exception_audit_is_equivalent(self):
+        # T2 'exception-audit': both children print a different progress line, then
+        # raise. The runner's traceback establishes the escape: raw None on both
+        # sides. Was NOT_EQUIVALENT (progress lines read as codes).
+        ref = self._ref('exc-audit', 'audit_reference\n', RUNNER_ESCAPE)
+        cand = self._cand('exc-audit', 'audit_candidate\n', RUNNER_ESCAPE, raw_code=None)
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(cand, ref), (0, 'EQUIVALENT'))
+        # The same escape against a HEAD code: an established difference.
+        cand = self._cand('exc-audit-other', 'audit_candidate\n', '', raw_code='audit_candidate')
+        self.assertEqual(self._verdict(ref, cand), (1, 'NOT_EQUIVALENT'))
+
+    def test_missing_output_is_never_a_log_guess(self):
+        # T2 'missing-output': a successful child without its promised output records
+        # no code (exit 2). R1's logs cannot tell it from a program exit 2: fail
+        # closed, never NOT_EQUIVALENT over a progress line.
+        ref = self._ref('missing', 'audit_reference\n', '')
+        cand = self._cand('missing', 'audit_candidate\n', '', raw_code=None)
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_sidecarless_candidate_from_another_commit(self):
+        # The same probes against a legacy candidate of another commit (its sidecar lost).
+        def legacy(name, stdout, stderr):
+            return self._tree(name + '-legacy', _unclassified(commit=True), stdout, stderr)
+        ref = self._ref('pair-audit', 'audit_reference\n', RUNNER_ESCAPE)
+        self.assertEqual(self._verdict(ref, legacy('pair-audit', 'audit_candidate\n', RUNNER_ESCAPE)),
+                         (0, 'EQUIVALENT'))
+        ref = self._ref('pair-code', 'error: hypothetical_refusal\n', '')
+        self.assertEqual(self._verdict(ref, legacy('pair-code', 'error: hypothetical_refusal\n', RUNNER_ESCAPE)),
+                         (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        ref = self._ref('pair-miss', 'audit_reference\n', '')
+        self.assertEqual(self._verdict(ref, legacy('pair-miss', 'audit_candidate\n', '')),
+                         (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_program_exit_other_than_two_establishes_the_code(self):
+        # A program's own nonzero exit (not 2) is never a driver-decided row: its token is the code.
+        ref = self._tree('exit3-ref', _unclassified(exit_status=3), '', 'error: closeout_branch_broken\n')
+        same = self._tree('exit3-same', _unclassified(exit_status=3, codes=True, raw_code='closeout_branch_broken'),
+                          '', 'error: closeout_branch_broken\n', commit_codes=True)
+        other = self._tree('exit3-other', _unclassified(exit_status=3, codes=True, raw_code='closeout_other'),
+                           '', 'error: closeout_branch_broken\n', commit_codes=True)
+        self.assertEqual(self._verdict(ref, same), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(ref, other), (1, 'NOT_EQUIVALENT'))
+
+    def test_undecodable_log_the_driver_reads_decides_nothing(self):
+        # Review 3: token() reads both logs with strict UTF-8; a program's own exit 3
+        # whose last log is undecodable would have sent the driver to its exception
+        # program (a later, driver-traced log), so such a last log establishes nothing.
+        ref = self._tree('bad-ref', _unclassified(exit_status=3), '', 'error: closeout_branch_broken\n')
+        log = ref / 'dry-run' / 'restricted' / 'logs' / (STEP5_LOG + '.stdout.log')
+        log.write_bytes(b'\xff\n')
+        same = self._tree('bad-same', _unclassified(exit_status=3, codes=True, raw_code='closeout_branch_broken'),
+                          '', 'error: closeout_branch_broken\n', commit_codes=True)
+        self.assertEqual(self._verdict(ref, same), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        self.assertIs(cmp._driver_read(b'\xff'), cmp._LOG_UNDECODABLE)
+        self.assertIs(cmp._driver_read(None), cmp._LOG_MISSING)
+        self.assertEqual(cmp._driver_read(b'a\r\nb'), 'a\r\nb')
+
+    def test_outcome_class_row_establishes_the_outcome_code(self):
+        def tree(name, codes, raw_code=corpus.OUTCOME_CODE):
+            fns = [corpus._refused(STEP5, corpus.OUTCOME_CODE)]
+            if codes:
+                fns.append(corpus._step_codes(raw_code=raw_code))
+            model = corpus.base_model()
+            corpus._chain(*fns)(model)
+            root = corpus.build(model, self.tmp / name)
+            if codes:
+                _commit_step_codes(root)
+            return root
+        ref = tree('outcome-ref', False)
+        self.assertEqual(self._verdict(ref, tree('outcome-same', True)), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(ref, tree('outcome-other', True, corpus.SENTINEL_CODE)), (1, 'NOT_EQUIVALENT'))
+
+    def test_no_refusal_never_fails_closed(self):
+        ref = corpus.build(corpus.base_model(), self.tmp / 'clean-ref')
+        model = corpus.base_model()
+        corpus._step_codes()(model)
+        cand = corpus.build(model, self.tmp / 'clean-cand')
+        _commit_step_codes(cand)
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+        # Only one side refusing (unestablished code included) is a difference, never an error.
+        refusing = self._ref('one-sided', 'audit_reference\n', '')
+        self.assertEqual(self._verdict(refusing, cand), (1, 'NOT_EQUIVALENT'))
+        self.assertEqual(self._verdict(cand, refusing), (1, 'NOT_EQUIVALENT'))
+
+
+class RunnerTracebackTest(unittest.TestCase):
+    """runner_traceback reads only tracebacks dry_run itself printed (review 2 of PR #640, T2)."""
+
+    def test_shapes(self):
+        rt = cmp.runner_traceback
+        self.assertEqual(rt(RUNNER_ESCAPE), 'escape')
+        self.assertEqual(rt('progress\n' + RUNNER_ESCAPE), 'escape')
+        driver = RUNNER_ESCAPE.replace('value = main(list(argv))', 'records=function(s,runner)')
+        self.assertEqual(rt(driver), 'driver')
+        # A program's own traceback starts at the program's frame: not the runner's.
+        own = RUNNER_ESCAPE.replace('joulewise/b5_analysis/dry_run.py', 'scripts/program.py')
+        self.assertIsNone(rt(own))
+        self.assertIsNone(rt(RUNNER_ESCAPE.replace(', in run\n', ', in main\n')))
+        self.assertIsNone(rt('Traceback (most recent call last):\n  boom\n'))
+        self.assertIsNone(rt(''))
+        # Colour (FORCE_COLOR) and the exception-group layout are the same traceback.
+        coloured = RUNNER_ESCAPE.replace('  File "', '  File \x1b[35m"').replace('", line', '"\x1b[0m, line')
+        self.assertEqual(rt(coloured), 'escape')
+        group = ('  + Exception Group Traceback (most recent call last):\n'
+                 '  |   File "/c/joulewise/b5_analysis/dry_run.py", line 144, in run\n'
+                 '  |     value = main(list(argv))\n'
+                 '  | ExceptionGroup: g (1 sub-exception)\n')
+        self.assertEqual(rt(group), 'escape')
+
+    def test_the_driver_prints_this_shape(self):
+        # The current driver's real traceback (no stub text): StepRunner.run on a raising program.
+        from joulewise.b5_analysis import dry_run
+        with tempfile.TemporaryDirectory(prefix='jw-b5-eq-runner-') as tmp:
+            runner = dry_run.StepRunner(Path(tmp))
+
+            def program(argv):
+                print('audit_progress')
+                raise RuntimeError('synthetic')
+            result = runner.run(program, [], step='5')
+            self.assertTrue(result.exception)
+            self.assertIsNone(result.token())
+            self.assertEqual(cmp.runner_traceback(result.stderr_path.read_text()), 'escape')
+
+    def test_one_decoder_serves_r1_and_this_branch(self):
+        # The rules legacy decoding replays are textually identical at b5/analysis-r1;
+        # the outcome-class list is the embedded one.
+        from joulewise.b5_analysis import dry_run
+        import inspect
+        classes = json.loads((CONFIG / 'dry_run_refusal_classes.json').read_bytes())
+        self.assertEqual(tuple(classes['outcome_class']), cmp.OUTCOME_CODES)
+        source = inspect.getsource(dry_run)
+        self.assertIn(cmp.RUNNER_ESCAPE_SOURCE, source)
+        self.assertIn(cmp.DRIVER_FAIL_SOURCE, source)
+        r1 = _git_show(R1_TAG, 'joulewise/b5_analysis/dry_run.py')
+        if r1 is None:
+            self.skipTest('tag b5/analysis-r1 is not available')
+        r1_classes = json.loads(_git_show(R1_TAG, 'configs/analysis/b5/dry_run_refusal_classes.json'))
+        self.assertEqual(tuple(r1_classes['outcome_class']), cmp.OUTCOME_CODES)
+        self.assertIn(cmp.RUNNER_ESCAPE_SOURCE, r1)
+        self.assertIn(cmp.DRIVER_FAIL_SOURCE, r1)
+        for name in ('refusal_token', 'mint_refusal_code'):
+            self.assertEqual(_function_source(r1, name), _function_source(source, name), name)
+        for cls, name in (('RunnerResult', 'token'), ('RunState', 'invoke')):
+            self.assertEqual(_method_source(r1, cls, name), _method_source(source, cls, name), name)
+        # Review 3: the strict reads and the single-program rows (_single_program_row).
+        for name in ('_internal_step', 'step_0', 'step_3', 'step_3b', 'step_5', 'step_6', 'step_8', 'step_9b',
+                     'step_10'):
+            self.assertEqual(_function_source(r1, name), _function_source(source, name), name)
+        for name in ('guarded', 'prepare_finalization'):
+            self.assertEqual(_method_source(r1, 'RunState', name), _method_source(source, 'RunState', name), name)
+
+
+R1_TAG = 'b5/analysis-r1'
+
+
+def _git_show(rev, path):
+    try:
+        proc = subprocess.run(['git', '-C', str(ROOT), 'show', f'{rev}:{path}'], capture_output=True, text=True)
+    except OSError:
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _function_source(source, name):
+    tree = ast.parse(source)
+    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    return ast.dump(node, include_attributes=False)
+
+
+def _method_source(source, cls, name):
+    tree = ast.parse(source)
+    klass = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls)
+    node = next(n for n in klass.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    return ast.dump(node, include_attributes=False)
+
+
+class MixedRawCodeDriverTest(unittest.TestCase):
+    """Review 2 of PR #640: the four Sol probes through the ACTUAL r1 and HEAD drivers.
+
+    The reference runs b5/analysis-r1's dry_run (joulewise/ and configs/analysis/ of
+    the tag, extracted by git archive into a temporary directory and removed after);
+    the candidate runs this checkout's. Each run is one synthetic driver run whose
+    step 5 executes a stub program (fixtures/equivalence/driver_probe.py). Skipped
+    when the tag is not available.
+    """
+
+    PROBE = Path(__file__).resolve().parent / 'fixtures' / 'equivalence' / 'driver_probe.py'
+
+    @classmethod
+    def setUpClass(cls):
+        commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', '--verify', '-q', R1_TAG + '^{commit}'],
+                                capture_output=True, text=True)
+        if commit.returncode != 0:
+            raise unittest.SkipTest('tag b5/analysis-r1 is not available')
+        cls.r1_commit = commit.stdout.strip()
+        cls._tmp = tempfile.TemporaryDirectory(prefix='jw-b5-eq-drivers-')
+        cls.tmp = Path(cls._tmp.name)
+        cls.r1 = cls.tmp / 'r1-tree'
+        cls.r1.mkdir()
+        archive = subprocess.run(['git', '-C', str(ROOT), 'archive', R1_TAG, 'joulewise', 'configs/analysis'],
+                                 capture_output=True, check=True).stdout
+        subprocess.run(['tar', '-x', '-C', str(cls.r1)], input=archive, check=True)
+        cls.head_commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True,
+                                         text=True, check=True).stdout.strip()
+        cls.cfg = cmp.load_config()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _run(self, checkout, commit, scenario, variant):
+        target = self.tmp / scenario / variant
+        env = {**os.environ, 'TMPDIR': str(self.tmp), 'JOULEWISE_CUSTODY_PARENT': str(self.tmp)}
+        env.pop('PYTHONPATH', None)
+        proc = subprocess.run([sys.executable, '-B', str(self.PROBE), str(checkout), commit, str(target),
+                               scenario, variant], cwd=checkout, capture_output=True, text=True, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        observed = json.loads(proc.stdout)
+        self.assertTrue(Path(observed['driver']).is_relative_to(Path(checkout).resolve()), observed)
+        return target / 'custody', observed
+
+    def _pair(self, scenario):
+        ref, r1 = self._run(self.r1, self.r1_commit, scenario, 'ref')
+        cand, head = self._run(ROOT, self.head_commit, scenario, 'cand')
+        self.assertFalse((ref / 'dry-run' / 'restricted' / 'decisions').exists(), 'r1 writes no step codes')
+        self.assertTrue((cand / 'dry-run' / 'restricted' / 'decisions' / 'step-codes.jsonl').is_file())
+        return ref, cand, r1['raw_refusals'], head['raw_refusals']
+
+    def _verdict(self, left, right):
+        rc, text = run_tool(['--mode', 'blinded', left, right])
+        if rc == 2:
+            self.assertIsNone(re.search(r'[0-9]', text))
+            return rc, text.strip()
+        return rc, parse_blinded(self, text, self.cfg)['verdict']
+
+    def test_no_refusal(self):
+        ref, cand, r1, head = self._pair('no-refusal')
+        self.assertEqual((r1, head), ([], []))
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+
+    def test_exception_code(self):
+        # T1: the drivers record different raw codes; was EQUIVALENT.
+        ref, cand, r1, head = self._pair('exception-code')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': 'hypothetical_refusal'}], [{'step': '5', 'code': None}]))
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        self.assertEqual(self._verdict(cand, ref), (2, 'COMPARATOR_ERROR stage=refusal-code side=cand'))
+
+    def test_driver_code(self):
+        # T1: distinct driver-raised raw codes after identical child logs; was EQUIVALENT.
+        ref, cand, r1, head = self._pair('driver-code')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': 'unknown_refusal_a'}],
+                                      [{'step': '5', 'code': 'unknown_refusal_b'}]))
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+    def test_exception_audit(self):
+        # T2: the same unclassified refusal (raw None) on both; was NOT_EQUIVALENT.
+        ref, cand, r1, head = self._pair('exception-audit')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': None}],) * 2)
+        self.assertEqual(self._verdict(ref, cand), (0, 'EQUIVALENT'))
+        self.assertEqual(self._verdict(cand, ref), (0, 'EQUIVALENT'))
+
+    def test_missing_output(self):
+        # T2: raw None on both, but R1's logs cannot tell a missing output from a
+        # program exit 2: fail closed instead of NOT_EQUIVALENT over progress lines.
+        ref, cand, r1, head = self._pair('missing-output')
+        self.assertEqual((r1, head), ([{'step': '5', 'code': None}],) * 2)
+        self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+
+    # Review 3 of PR #640. These run the drivers' REAL step functions on stub programs.
+    def _both_orders(self, ref, cand):
+        return self._verdict(ref, cand), self._verdict(cand, ref)
+
+    def test_step6_strict_read(self):
+        # Finding 1: step_6 reads stdout with strict UTF-8 and skips its StepRecord
+        # rule on a decode failure; legacy replay decoded with 'replace'.
+        ref, cand, r1, head = self._pair('step6-plain')
+        self.assertEqual((r1, head), ([{'step': '6', 'code': 'same_unregistered_closeout_code'}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # Raw None on both drivers: was NOT_EQUIVALENT.
+        ref, cand, r1, head = self._pair('step6-badbytes')
+        self.assertEqual((r1, head), ([{'step': '6', 'code': None}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # Raw None (r1) versus the StepRecord code (HEAD): was EQUIVALENT.
+        ref, cand, r1, head = self._pair('step6-badbytes-ref')
+        self.assertEqual((r1, head), ([{'step': '6', 'code': None}],
+                                      [{'step': '6', 'code': 'same_unregistered_closeout_code'}]))
+        self.assertEqual(self._both_orders(ref, cand), ((1, 'NOT_EQUIVALENT'),) * 2)
+
+    def test_internal_step_codes_are_established(self):
+        # Finding 2: an internal-helper refusal (exit 2, no traceback) decodes
+        # uniquely from its one log; was COMPARATOR_ERROR (blocked an equivalent pair).
+        for scenario, code in (('internal-unclassified', 'unclassified'),
+                               ('internal-code', 'same_unregistered_helper_code')):
+            with self.subTest(scenario):
+                ref, cand, r1, head = self._pair(scenario)
+                self.assertEqual((r1, head), ([{'step': '3', 'code': code}],) * 2)
+                self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # Negative control: different helper codes are an established difference.
+        ref, cand, r1, head = self._pair('internal-code-differs')
+        self.assertEqual((r1, head), ([{'step': '3', 'code': 'helper_code_reference'}],
+                                      [{'step': '3', 'code': 'helper_code_candidate'}]))
+        self.assertEqual(self._both_orders(ref, cand), ((1, 'NOT_EQUIVALENT'),) * 2)
+
+    def test_step8_staging_and_step10_reported_open(self):
+        ref, cand, r1, head = self._pair('step8-staging-code')
+        self.assertEqual((r1, head), ([{'step': '8', 'code': 'same_unregistered_staging_code'}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        ref, cand, r1, head = self._pair('step10-reported-code')
+        self.assertEqual((r1, head), ([{'step': '10', 'code': 'same_unregistered_reported_code'}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # The same step-8 row and ordinal after a SUCCESSFUL staging and a driver
+        # refusal (different codes R1 records nowhere): never established.
+        ref, cand, r1, head = self._pair('step8-after-staging')
+        self.assertEqual((r1, head), ([{'step': '8', 'code': 'driver_code_reference'}],
+                                      [{'step': '8', 'code': 'driver_code_candidate'}]))
+        self.assertEqual(self._both_orders(ref, cand),
+                         ((2, 'COMPARATOR_ERROR stage=refusal-code side=ref'),
+                          (2, 'COMPARATOR_ERROR stage=refusal-code side=cand')))
 
 
 class TimingClassTest(_TmpCase):

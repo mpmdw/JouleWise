@@ -156,6 +156,7 @@
    "joulewise/analysis_manifest_v3.py": "analysis",
    "joulewise/analysis_member_pool.py": "analysis",
    "joulewise/analysis_run_cache.py": "analysis",
+   "joulewise/analysis_verified_store.py": "analysis",
    "joulewise/arm_readiness_evidence.py": "retired",
    "joulewise/arm_readiness_evidence_t0.py": "retired",
    "joulewise/corecaptured_loop.py": "retired",

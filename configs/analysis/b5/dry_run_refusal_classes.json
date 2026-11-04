@@ -168,6 +168,7 @@
     "survivor_set_record_differs_from_bracket",
     "survivor_set_record_invalid",
     "verdict_membership_invalid",
+    "verified_store_defect",
     "whole_window_verdict_conflict",
     "whole_window_verdict_provenance_invalid",
     "window_bracket_differs_from_harvest",

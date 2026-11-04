@@ -33,6 +33,10 @@ SENTINEL_MEAN_MUTANT = '27182.818284'
 SENTINEL_BUNDLE = 'bundle-sentinel-qx'
 SENTINEL_CODE = 'claim_family_underpowered'
 SENTINEL_CODE_MUTANT = 'claim_family_unbalanced'
+# The one outcome-class code of configs/analysis/b5/dry_run_refusal_classes.json: a
+# real outcome_class row carries exactly this raw code (the SENTINEL codes above are
+# stand-ins that only same-layout comparisons may use).
+OUTCOME_CODE = 'dominance_ratio_zero_denominator'
 SENTINEL_PLAN = 'v5-b5-alpha-a1-s10-synthetic'
 
 
@@ -201,10 +205,13 @@ def base_model() -> dict:
         },
         'files': files,
         'logs': logs,
-        'step_codes': None,     # None: no step-codes.jsonl; otherwise {'raw_code': ..., 'exception_class': ...}
+        'step_codes': None,     # None: no step-codes.jsonl; otherwise {'raw_code', 'exception_class',
+                                # 'invocation' (None: count the step's logs), 'member'}
         'refused_at': None,     # serial position of an outcome-class refusal, if any
         'refusal_code': SENTINEL_CODE,
         'refusal_status': 'outcome_class',   # or 'tooling_refusal' (code then public in the record)
+                                             # or 'unclassified_refusal' (exit status 'refusal_exit')
+        'refusal_exit': 2,
         'indent': None,
     }
 
@@ -250,6 +257,9 @@ def build(model: dict, root: Path) -> Path:
         row = steps[refused]
         if model['refusal_status'] == 'tooling_refusal':
             row.update(status='tooling_refusal', exit_status=2, registered_exit=None, refusal=model['refusal_code'])
+        elif model['refusal_status'] == 'unclassified_refusal':
+            row.update(status='unclassified_refusal', exit_status=model['refusal_exit'], registered_exit=None,
+                       refusal=f'unclassified refusal at step {row["step"]}')
         else:
             row.update(status='outcome_class', exit_status=2, registered_exit=None,
                        refusal=f'outcome-class refusal at step {row["step"]}')
@@ -287,14 +297,22 @@ def build(model: dict, root: Path) -> Path:
         for i, row in enumerate(steps):
             code = None
             exc = None
+            invocation = member = None
             if row['status'] == 'tooling_refusal':
                 code = row['refusal']
             elif row['status'] in ('outcome_class', 'unclassified_refusal'):
                 code, exc = model['step_codes']['raw_code'], model['step_codes']['exception_class']
             elif row['exit_status'] not in (None, 0):
                 code = row['registered_exit']
+            if row['status'] not in ('ok', 'not_run'):
+                # As the driver: the refusing invocation's ordinal within its (step, window).
+                suffix = f'-{row["step"]}-{row["window"] or "block"}.stderr.log'
+                invocation = model['step_codes'].get('invocation') or (
+                    sum(1 for log in logs.iterdir() if log.name.endswith(suffix)) or None)
+                member = model['step_codes'].get('member')
             rows.append({'pos': i, 'step': row['step'], 'window': row['window'], 'raw_code': code,
-                         'exit_status': row['exit_status'], 'exception_class': exc})
+                         'exit_status': row['exit_status'], 'exception_class': exc,
+                         'invocation': invocation, 'member': member})
         (restricted / 'decisions').mkdir()
         (restricted / 'decisions' / 'step-codes.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
     record['completed_without_tooling_refusal'] = not any(
@@ -404,17 +422,56 @@ def _logs_noise(model):
         model['logs'][name] += 'timing: 12 s\n'
 
 
-def _refused(pos, code=SENTINEL_CODE, status='outcome_class'):
+def _refused(pos, code=SENTINEL_CODE, status='outcome_class', exit_status=2):
     def apply(model):
         model['refused_at'] = pos
         model['refusal_code'] = code
         model['refusal_status'] = status
+        model['refusal_exit'] = exit_status
     return apply
 
 
-def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal'):
+def _step_codes(raw_code=SENTINEL_CODE, exception_class='AnalysisRefusal', invocation=None, member=None):
     def apply(model):
-        model['step_codes'] = {'raw_code': raw_code, 'exception_class': exception_class}
+        model['step_codes'] = {'raw_code': raw_code, 'exception_class': exception_class,
+                               'invocation': invocation, 'member': member}
+    return apply
+
+
+def _invocation_refusal(step, count, window=None, code='kept_bundle_strict_validation_failed'):
+    """A public tooling refusal by the ``count``-th runner invocation of (step, window).
+
+    Review of PR #640 (finding S1): with ``window`` a pack and ``step`` 1 or 2 this
+    is a refusing kept-bundle child (the ``count``-th bundle of the pack); with
+    ``window`` None it is a member-free program of the step (step 5 runs two).
+    Only the last of the (step, window) stderr logs carries the error line.
+    """
+    def apply(model):
+        pos = POS[step]
+        _refused(pos, code=code, status='tooling_refusal')(model)
+        model['record']['steps'][pos]['window'] = window
+        # build() writes the refusing step's own <pos+1>-<step>-<STEPS window|block> log.
+        existing = 1 if window is None and STEPS[pos][1] is None else 0
+        for i in range(count - existing):
+            last = i == count - existing - 1
+            model['logs'][f'{40 + i:04d}-{step}-{window or "block"}.stderr.log'] = (
+                f'error: {code}\n' if last else 'child progress line\n')
+    return apply
+
+
+def _driver_stop(step, children, window='alpha', code='custody_path_invalid'):
+    """A driver-level refusal of ``step`` (window None) after ``children`` runner children of ``window``.
+
+    Review of PR #640 (LOW finding): a re-authentication or custody refusal between
+    bundle children is recorded with window None, so only the per-window child logs
+    say how far the step got. The step's own block log carries the error line.
+    """
+    def apply(model):
+        pos = POS[step]
+        _refused(pos, code=code, status='tooling_refusal')(model)
+        model['record']['steps'][pos]['window'] = None
+        for i in range(children):
+            model['logs'][f'{60 + i:04d}-{step}-{window}.stderr.log'] = 'child progress line\n'
     return apply
 
 
@@ -518,6 +575,55 @@ CASES = {
     'refusal_code_from_step_codes': (_chain(_refused(REFUSED_POS), _step_codes()),
                                      _chain(_refused(REFUSED_POS), _step_codes(raw_code=SENTINEL_CODE_MUTANT)),
                                      {'decisions': {'decisions:step_codes'}}),
+    # D-188 SHIP-FIX (finding C): same code, same step, a different invocation or bundle.
+    'refusal_invocation_from_step_codes': (_chain(_refused(REFUSED_POS), _step_codes(invocation=1)),
+                                           _chain(_refused(REFUSED_POS), _step_codes(invocation=2)),
+                                           {'decisions': {'decisions:step_codes'}}),
+    'refusal_member_from_step_codes': (_chain(_refused(REFUSED_POS), _step_codes(member=_h('member-one'))),
+                                       _chain(_refused(REFUSED_POS), _step_codes(member=_h('member-two'))),
+                                       {'decisions': {'decisions:step_codes'}}),
+    # Review of PR #640 (finding S1): an R1 reference (no step codes) against a candidate
+    # with step codes, and R1 against R1. A tooling refusal's invocation ordinal is
+    # counted from the logs on the legacy side and taken from the step codes on the other.
+    'refusal_r1_reference_other_bundle': (
+        _invocation_refusal('1', 1, 'alpha'),
+        _chain(_invocation_refusal('1', 2, 'alpha'), _step_codes(member=_h('member-two'))),
+        {'decisions': {'decisions:first_refusal'}}),
+    'refusal_r1_vs_r1_other_bundle': (_invocation_refusal('1', 1, 'alpha'), _invocation_refusal('1', 2, 'alpha'),
+                                      {'decisions': {'decisions:first_refusal'}}),
+    'refusal_r1_vs_r1_same_bundle': (_invocation_refusal('1', 2, 'alpha'), _invocation_refusal('1', 2, 'alpha'),
+                                     {'audit': 'MATCH'}),
+    'refusal_r1_reference_member_free_same_invocation': (
+        _invocation_refusal('5', 2, code='floor_mint_inputs_invalid'),
+        _chain(_invocation_refusal('5', 2, code='floor_mint_inputs_invalid'), _step_codes()),
+        {'audit': 'MATCH'}),
+    'refusal_r1_reference_member_free_other_invocation': (
+        _invocation_refusal('5', 2, code='floor_mint_inputs_invalid'),
+        _chain(_invocation_refusal('5', 1, code='floor_mint_inputs_invalid'), _step_codes()),
+        {'decisions': {'decisions:first_refusal'}}),
+    # Review of PR #640 (LOW finding): a driver-level stop inside a per-window step after k
+    # versus k+1 children, in every layout pairing (R1/R1, R1/step codes, step codes/step codes).
+    'refusal_driver_stop_r1_other_child_count': (_driver_stop('1', 2), _driver_stop('1', 3),
+                                                 {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_r1_same_child_count': (_driver_stop('1', 2), _driver_stop('1', 2), {'audit': 'MATCH'}),
+    'refusal_driver_stop_r1_other_window': (_driver_stop('2', 1, 'alpha'), _driver_stop('2', 1, 'beta'),
+                                            {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_r1_reference_other_child_count': (
+        _driver_stop('1', 2), _chain(_driver_stop('1', 3), _step_codes()),
+        {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_r1_reference_same_child_count': (
+        _driver_stop('1', 2), _chain(_driver_stop('1', 2), _step_codes()), {'audit': 'MATCH'}),
+    'refusal_driver_stop_step_codes_other_child_count': (
+        _chain(_driver_stop('1', 2), _step_codes()), _chain(_driver_stop('1', 3), _step_codes()),
+        {'decisions': {'decisions:first_refusal'}}),
+    'refusal_driver_stop_step_codes_same_child_count': (
+        _chain(_driver_stop('1', 2), _step_codes()), _chain(_driver_stop('1', 2), _step_codes()),
+        {'audit': 'MATCH'}),
+    # Review of PR #640 (MEDIUM finding): a sidecar-less tree from another analysis commit is
+    # compared like a mixed pair, so a different bundle is still a decision difference.
+    'refusal_r1_reference_sidecarless_other_bundle': (
+        _invocation_refusal('1', 1, 'alpha'), _chain(_invocation_refusal('1', 2, 'alpha'), _commit),
+        {'decisions': {'decisions:first_refusal'}, 'audit': 'DIFFER'}),
     'refusal_position': (_refused(REFUSED_POS), _refused(POS['6']),
                          {'decisions': {'record:steps', 'decisions:first_refusal', 'decisions:step_outputs',
                                         'outputs/claim-verdicts.json:presence'}, 'audit': 'DIFFER'}),
@@ -568,7 +674,10 @@ CASES = {
     'audit_exception_class': (_chain(_refused(REFUSED_POS), _step_codes()),
                               _chain(_refused(REFUSED_POS), _step_codes(exception_class='PaperCustodyRefusal')),
                               {'audit': 'DIFFER'}),
-    'audit_step_codes_one_side_only': (_refused(REFUSED_POS), _chain(_refused(REFUSED_POS), _step_codes()),
+    # Review 2 of PR #640: a mixed pair compares the legacy side's ESTABLISHED raw code; an
+    # outcome-class row establishes the one outcome code, so the pair uses the real one.
+    'audit_step_codes_one_side_only': (_refused(REFUSED_POS, OUTCOME_CODE),
+                                       _chain(_refused(REFUSED_POS, OUTCOME_CODE), _step_codes(raw_code=OUTCOME_CODE)),
                                        {'audit': 'MATCH'}),
 }
 

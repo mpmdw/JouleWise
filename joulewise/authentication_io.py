@@ -13,12 +13,16 @@ successes are remembered: a failing parse always re-runs and raises its own
 error at its own read.  A passive read recorder
 (``recording_authentication_reads``) lets the run-scoped derivation store see
 every read these APIs perform; it never changes what a read returns or raises.
+Session-less recording also represents capability-path reads
+(``RECORDS_CAPABILITY_READS``, D-188 AUTH-IO-2), and marks a recording scope
+``unrepresented`` where session-less code cannot stand for a session's.
 """
 
 from __future__ import annotations
 
 import ast
 import builtins
+import codecs
 import hashlib
 import io
 import json
@@ -84,6 +88,13 @@ class AuthenticationReadRow:
     grammar check under ``(grammar, vocabulary_flag)`` and it succeeded (an
     in-session read); a session-less read never parses, so it is false there.
     ``relative`` carries the contained relative name of a no-follow read.
+    ``parse_headroom`` is a lower bound on the Python stack headroom
+    (:func:`_python_stack_headroom`) at which a v2 session's strict parse of
+    this read ran (in a session: exactly that headroom) or would run had the
+    same code run in a session (session-less: measured at least as deep as
+    that parse, minus ``_SESSIONLESS_PARSE_MARGIN``); ``None`` when unknown.
+    A consumer that serves the read elsewhere uses it to decide the grammar
+    verdict at the depth of the serial read (D-188 AUTH-IO-2).
     """
 
     api: str
@@ -96,6 +107,7 @@ class AuthenticationReadRow:
     grammar_verified: bool
     vocabulary_flag: bool
     relative: str | None = None
+    parse_headroom: int | None = None
 
 
 # A passive recorder: a tuple of row sinks (one per nested recording scope),
@@ -111,17 +123,159 @@ _READ_RECORDER: ContextVar[tuple[list[AuthenticationReadRow], ...] | None] = (
 # by (sha256 of the bytes, effective grammar, governed-vocabulary flag).
 GRAMMAR_VERDICT_MEMO = "authentication_io.grammar_ok"
 
+# D-188 AUTH-IO-2 (Sol #3).  Session-less recording represents every
+# registration an active v2 session would make for the same code: every
+# authentication_io read API, every read through a capability path that
+# ``v2_authentication_path`` returned while recording (``BundleReader.path``
+# and every path derived from it, such as the reducer's calibration manifest
+# and member reads), and git ingests.  Where session-less code cannot stand
+# for the in-session computation, the recording scope is marked
+# ``unrepresented`` instead (see ``RecordedAuthenticationReads``), and a
+# consumer must not bridge its rows into a session.
+RECORDS_CAPABILITY_READS = True
+
+
+class RecordedAuthenticationReads(list):
+    """The rows one ``recording_authentication_reads`` scope received.
+
+    ``unrepresented`` lists, in order, why this scope's session-less reads do
+    not stand for what an active v2 session would have registered or returned
+    (empty when they do):
+
+    * a v2 session was entered inside the scope (a consumer's own session
+      would make that entry raise instead);
+    * session presence was queried at a site whose session dependence the
+      run-scoped store does not itself represent (``_REPRESENTED_QUERY_SITES``);
+    * a capability or text read whose session-mode result would differ: a
+      text decode that differs from the session's ``bytes.decode`` (newline
+      translation or the locale encoding), a ``newline`` argument the
+      capability's ``read_text`` does not take, a text open whose codec or
+      error handler differs, or a read-write capability open (which raises in
+      a session).
+
+    It is only ever appended to; recording never changes what a read returns
+    or raises.
+    """
+
+    __slots__ = ("unrepresented",)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.unrepresented: list[str] = []
+
+
+def _note_unrepresented(reason: str) -> None:
+    """Mark every active recording scope as not representing a session."""
+
+    sinks = _READ_RECORDER.get()
+    if sinks is None:
+        return
+    for sink in sinks:
+        unrepresented = getattr(sink, "unrepresented", None)
+        if isinstance(unrepresented, list):
+            unrepresented.append(reason)
+
+
+# Session-presence queries (``active_v2_authentication_session``) whose
+# session dependence the run-scoped store represents itself, by (module file
+# in this package, code qualname):
+#  * cli._strict_problems picks the session's instrument-calibration physics
+#    cache or the run partition; the store's L1 physics probe makes the same
+#    choice, keys which entries the call consults, and admits a hit only if
+#    the caller's visible value is absent or equal to the stored post-value;
+#  * the store's own adapter (its key carries session presence).
+# Any other query inside a session-less recording scope marks it unrepresented.
+_PACKAGE_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+_REPRESENTED_QUERY_SITES = frozenset(
+    {
+        (os.path.join(_PACKAGE_DIRECTORY, "cli.py"), "_strict_problems"),
+        (
+            os.path.join(_PACKAGE_DIRECTORY, "analysis_verified_store.py"),
+            "_AuthAdapter.session",
+        ),
+    }
+)
+
+
+def _query_site_represented(code: Any) -> bool:
+    qualname = code.co_qualname
+    filename = code.co_filename
+    if (filename, qualname) in _REPRESENTED_QUERY_SITES:
+        return True
+    try:
+        resolved = os.path.realpath(filename)
+        return any(
+            qualname == site_qualname and resolved == os.path.realpath(site_file)
+            for site_file, site_qualname in _REPRESENTED_QUERY_SITES
+        )
+    except (OSError, ValueError):
+        return False
+
+
+def _same_codec(first: str | None, second: str | None) -> bool:
+    try:
+        return (
+            first is not None
+            and second is not None
+            and codecs.lookup(first).name == codecs.lookup(second).name
+        )
+    except LookupError:
+        return False
+
+
+def _note_text_divergence(
+    text: str, raw: bytes, encoding: str | None, errors: str | None
+) -> None:
+    """Mark the scope if a session's ``raw.decode`` would not return ``text``."""
+
+    try:
+        same = raw.decode(encoding or "utf-8", errors or "strict") == text
+    except (LookupError, UnicodeError, TypeError):
+        same = False
+    if not same:
+        _note_unrepresented("text read differs from the session decode")
+
+
+def _decoded_or_noted(wrapper: io.TextIOWrapper) -> str:
+    """``wrapper.read()``; a decode that raises also marks the scope.
+
+    A session decodes with ``bytes.decode`` instead, whose error text may
+    differ, so a recorded text read that failed to decode is unrepresented.
+    """
+
+    decoded = False
+    try:
+        text = wrapper.read()
+        decoded = True
+    finally:
+        if not decoded:
+            _note_unrepresented("text read failed to decode")
+    return text
+
+
+def _note_open_divergence(
+    handle: Any, encoding: str | None, errors: str | None
+) -> None:
+    """Mark the scope if a session's text wrapper would decode differently."""
+
+    if not (
+        _same_codec(handle.encoding, encoding or "utf-8")
+        and handle.errors == (errors or "strict")
+    ):
+        _note_unrepresented("text open differs from the session wrapper")
+
 
 @contextmanager
-def recording_authentication_reads() -> Iterator[list[AuthenticationReadRow]]:
+def recording_authentication_reads() -> Iterator[RecordedAuthenticationReads]:
     """Record every successful authentication_io read in this context.
 
     Nested scopes each receive every row read inside them.  Rows are appended
     after the read (and, in a session, its strict parse and registration)
-    succeeded; a read that raises appends nothing.
+    succeeded; a read that raises appends nothing.  The yielded list also
+    carries ``unrepresented`` (see :class:`RecordedAuthenticationReads`).
     """
 
-    rows: list[AuthenticationReadRow] = []
+    rows = RecordedAuthenticationReads()
     sinks = _READ_RECORDER.get()
     token = _READ_RECORDER.set((rows,) if sinks is None else (*sinks, rows))
     try:
@@ -154,7 +308,11 @@ def _record_read(
     grammar_verified: bool,
     vocabulary_flag: bool,
     relative: str | None = None,
+    headroom_margin: int = 0,
 ) -> None:
+    # In a session, every caller calls this from the frame that just ran
+    # ``_parse_strict_memoized``, so this is that parse's exact headroom.
+    parse_headroom = _python_stack_headroom() - headroom_margin
     row = AuthenticationReadRow(
         api=api,
         identity=identity,
@@ -166,6 +324,7 @@ def _record_read(
         grammar_verified=grammar_verified,
         vocabulary_flag=vocabulary_flag,
         relative=relative,
+        parse_headroom=parse_headroom,
     )
     for sink in sinks:
         sink.append(row)
@@ -202,6 +361,7 @@ def _record_sessionless(
         grammar_verified=False,
         vocabulary_flag=False,
         relative=relative,
+        headroom_margin=_SESSIONLESS_PARSE_MARGIN,
     )
 
 
@@ -212,7 +372,10 @@ class V2AuthenticationPath(type(Path())):
     ``resolve``.  Those are the derivations used by the issued-pinned reducer,
     so an injected bundle root remains registration-aware all the way to the
     reducer's historical direct reads.  The methods retain ordinary ``Path``
-    behavior when no v2 session is active.
+    behavior when no v2 session is active; with a read recorder active (and
+    no session) they read exactly as :class:`_RecordedAuthenticationPath`
+    does, so the recorder sees what a session would register (D-188
+    AUTH-IO-2).
     """
 
     __slots__ = ()
@@ -220,6 +383,8 @@ class V2AuthenticationPath(type(Path())):
     def read_bytes(self) -> bytes:
         session = _ACTIVE_SESSION.get()
         if session is None:
+            if _READ_RECORDER.get() is not None:
+                return _RecordedAuthenticationPath(self).read_bytes()
             return super().read_bytes()
         return session.read(
             Path(self),
@@ -234,6 +399,10 @@ class V2AuthenticationPath(type(Path())):
     ) -> str:
         session = _ACTIVE_SESSION.get()
         if session is None:
+            if _READ_RECORDER.get() is not None:
+                return _RecordedAuthenticationPath(self).read_text(
+                    encoding=encoding, errors=errors
+                )
             return super().read_text(encoding=encoding, errors=errors)
         raw = session.read(
             Path(self),
@@ -253,6 +422,14 @@ class V2AuthenticationPath(type(Path())):
         session = _ACTIVE_SESSION.get()
         readable = "r" in mode or "+" in mode
         if session is None or not readable:
+            if session is None and _READ_RECORDER.get() is not None:
+                return _RecordedAuthenticationPath(self).open(
+                    mode=mode,
+                    buffering=buffering,
+                    encoding=encoding,
+                    errors=errors,
+                    newline=newline,
+                )
             return super().open(
                 mode=mode,
                 buffering=buffering,
@@ -314,7 +491,10 @@ class _RecordedAuthenticationPath(type(Path())):
         return raw
 
     def __repr__(self) -> str:
-        # The text a plain Path of a run without a recorder would show.
+        # The text a plain Path of a run without a recorder would show.  A
+        # session's capability shows ``V2AuthenticationPath(...)`` instead, so
+        # inside a recording scope the repr is unrepresented (D-188 AUTH-IO-2).
+        _note_unrepresented("capability path repr")
         return repr(Path(self))
 
     def read_text(
@@ -334,17 +514,25 @@ class _RecordedAuthenticationPath(type(Path())):
             return super().read_text(
                 encoding=encoding, errors=errors, newline=newline
             )
+        if newline is not None:
+            # V2AuthenticationPath.read_text takes no ``newline``: it raises
+            # TypeError in a session.
+            _note_unrepresented("capability read_text newline argument")
         with super().open(
             "r", encoding=encoding, errors=errors, newline=newline
         ) as handle:
             raw = handle.buffer.read()
-            text = io.TextIOWrapper(
-                io.BytesIO(raw),
-                encoding=handle.encoding,
-                errors=handle.errors,
-                newline=newline,
-            ).read()
+            text = _decoded_or_noted(
+                io.TextIOWrapper(
+                    io.BytesIO(raw),
+                    encoding=handle.encoding,
+                    errors=handle.errors,
+                    newline=newline,
+                )
+            )
         self._record("v2_path.read_text", raw)
+        if newline is None:
+            _note_text_divergence(text, raw, encoding, errors)
         return text
 
     def open(
@@ -355,9 +543,16 @@ class _RecordedAuthenticationPath(type(Path())):
         errors: str | None = None,
         newline: str | None = None,
     ) -> BinaryIO | TextIO:
-        if _READ_RECORDER.get() is None or not (
-            "r" in mode and not any(flag in mode for flag in ("w", "a", "x", "+"))
-        ):
+        recording = _READ_RECORDER.get() is not None
+        writes = any(flag in mode for flag in ("w", "a", "x", "+"))
+        if recording and writes and ("r" in mode or "+" in mode):
+            # V2AuthenticationPath.open raises ValueError for this in a session.
+            _note_unrepresented("capability read-write open")
+        elif recording and "r" in mode and buffering != -1:
+            # A session's capability open ignores ``buffering`` (a plain open
+            # may refuse it, for example unbuffered text).
+            _note_unrepresented("capability open buffering argument")
+        if not recording or not ("r" in mode and not writes):
             return super().open(
                 mode=mode,
                 buffering=buffering,
@@ -383,6 +578,7 @@ class _RecordedAuthenticationPath(type(Path())):
                     errors=handle.errors,
                     newline=newline,
                 )
+                _note_open_divergence(handle, encoding, errors)
         self._record("v2_path.open", raw)
         return served
 
@@ -560,6 +756,16 @@ def forced_grammar(
 _VERDICT_STACK_RESERVE = 256
 _VERDICT_STACK_SLACK = 64
 
+# A session-less recorded read is measured in ``_record_read`` (API ->
+# ``_record_sessionless`` -> ``_record_read``, or capability method ->
+# ``_record`` -> ``_record_sessionless`` -> ``_record_read``).  The same code
+# in a session parses in ``_parse_strict_memoized`` at most a few frames
+# deeper (API -> ``session.read`` -> parse; ``sha256_authentication_input`` ->
+# ``sha256_streaming_raw`` -> ``read`` -> parse); this margin keeps the
+# recorded ``parse_headroom`` a lower bound (tests/b5_analysis/
+# test_auth_capability_bridge.py checks every API).
+_SESSIONLESS_PARSE_MARGIN = 8
+
 
 def _python_stack_headroom() -> int:
     """Python frames this thread may still push before ``RecursionError``.
@@ -709,6 +915,78 @@ def ensure_grammar_verdict(
     _parse_strict_memoized(raw, digest, grammar, label, bool(vocabulary_flag))
 
 
+def bridged_grammar_verdict(
+    raw: bytes,
+    sha256: str,
+    grammar: AuthenticationGrammar,
+    vocabulary_flag: bool,
+    label: str,
+    *,
+    read_headroom: int | None,
+) -> bool:
+    """The grammar verdict a serial read at ``read_headroom`` would reach, if knowable here.
+
+    For a consumer serving a recorded read away from its serial position
+    (D-188 AUTH-IO-2).  ``read_headroom`` is a lower bound on the stack
+    headroom at which the serial read's ``_parse_strict_memoized`` would run,
+    or ``None`` when the serial computation runs no parse at this position
+    (a registration replayed from elsewhere).
+
+    Returns ``True`` when the serial parse would succeed: the run's memo
+    holds a success for (``sha256``, ``grammar``, flag), or the parse pushed
+    down to ``_VERDICT_STACK_RESERVE`` frames of headroom succeeds now (and
+    is memoized).  Raises the parse's own grammar refusal, which does not
+    depend on the stack, exactly as the read would.  Returns ``False``
+    (serve nothing; the caller computes at its serial position) whenever the
+    outcome may depend on the stack: ``read_headroom`` below
+    ``_VERDICT_STACK_RESERVE + _VERDICT_STACK_SLACK`` (a serial read there
+    parses at its own depth, without the memo), too little headroom here to
+    run the pushed-down parse, a memo entry marking the bytes as
+    stack-dependent, or a pushed-down parse that raised ``RecursionError`` or
+    ``MemoryError``.  It never re-parses at its own depth, which need not be
+    the serial read's.  ``sha256`` must match ``raw``; otherwise ``False``.
+    """
+
+    if grammar != "json" and grammar != "jsonl":
+        _parse_strict(
+            raw,
+            grammar,
+            label,
+            allow_governed_spec_vocabulary=bool(vocabulary_flag),
+        )
+        return True
+    if hashlib.sha256(raw).hexdigest() != sha256:
+        return False
+    floor = _VERDICT_STACK_RESERVE + _VERDICT_STACK_SLACK
+    if read_headroom is not None and read_headroom < floor:
+        return False
+    table = _run_cache.memo(GRAMMAR_VERDICT_MEMO)
+    key = (sha256, grammar, bool(vocabulary_flag))
+    verdict = None if table is None else table.get(key)
+    if verdict is True:
+        return True
+    if verdict is not None:
+        return False
+    headroom = _python_stack_headroom()
+    if headroom < floor:
+        return False
+    try:
+        _parse_strict_below(
+            headroom - _VERDICT_STACK_RESERVE,
+            raw,
+            grammar,
+            label,
+            bool(vocabulary_flag),
+        )
+    except (RecursionError, MemoryError):
+        if table is not None:
+            table[key] = False
+        return False
+    if table is not None:
+        table[key] = True
+    return True
+
+
 def _read_nofollow_bytes(directory: Path | str, relative: str) -> bytes:
     root = Path(directory)
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
@@ -767,6 +1045,9 @@ class V2AuthenticationReadSession:
         if active is not None and active is not self:
             raise RuntimeError("a different V2AuthenticationReadSession is already active")
         self._token = _ACTIVE_SESSION.set(self)
+        # Inside a recording scope this entry is unrepresented: a consumer's
+        # own active session would make it raise instead (D-188 AUTH-IO-2).
+        _note_unrepresented("v2 session entered while recording")
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
@@ -813,6 +1094,36 @@ class V2AuthenticationReadSession:
             label,
         )
         return effective
+
+    def bridged_grammar_verdict(
+        self,
+        identity: str,
+        raw: bytes,
+        *,
+        caller_grammar: AuthenticationGrammar,
+        label: str,
+        sha256: str,
+        read_headroom: int | None,
+    ) -> AuthenticationGrammar | None:
+        """:func:`bridged_grammar_verdict` under this session's grammar and flag.
+
+        Returns the effective grammar when the serial read at
+        ``read_headroom`` would pass its strict parse, ``None`` when that
+        cannot be decided here (the consumer must not serve), and raises the
+        read's own grammar refusal.  It registers nothing.
+        """
+
+        effective = _forced_grammar(identity, caller_grammar)
+        if bridged_grammar_verdict(
+            raw,
+            sha256,
+            effective,
+            self.vocabulary_flag(identity),
+            label,
+            read_headroom=read_headroom,
+        ):
+            return effective
+        return None
 
     def allow_governed_extraction_spec(self, path: Path | str) -> None:
         """Allow registration declarations only for one named governed spec."""
@@ -1053,7 +1364,16 @@ class V2AuthenticationReadSession:
 
 
 def active_v2_authentication_session() -> V2AuthenticationReadSession | None:
-    return _ACTIVE_SESSION.get()
+    session = _ACTIVE_SESSION.get()
+    if (
+        session is None
+        and _READ_RECORDER.get() is not None
+        and not _query_site_represented(sys._getframe(1).f_code)
+    ):
+        # Session-less code that branches on session presence: what it did
+        # here need not be what it would do in a session (D-188 AUTH-IO-2).
+        _note_unrepresented("session presence queried while recording")
+    return session
 
 
 def read_authentication_input(
@@ -1102,11 +1422,13 @@ def read_authentication_text(
         # binary buffer and decoded by an identical TextIOWrapper.
         with Path(path).open("r", **kwargs) as handle:
             raw = handle.buffer.read()
-            text = io.TextIOWrapper(
-                io.BytesIO(raw),
-                encoding=handle.encoding,
-                errors=handle.errors,
-            ).read()
+            text = _decoded_or_noted(
+                io.TextIOWrapper(
+                    io.BytesIO(raw),
+                    encoding=handle.encoding,
+                    errors=handle.errors,
+                )
+            )
         _record_sessionless(
             sinks,
             api="read_authentication_text",
@@ -1115,6 +1437,7 @@ def read_authentication_text(
             caller_grammar=grammar,
             label=label,
         )
+        _note_text_divergence(text, raw, encoding, errors)
         return text
     raw = session.read(path, grammar=grammar, label=label)
     return raw.decode(encoding or "utf-8", errors or "strict")
@@ -1157,6 +1480,7 @@ def open_authentication_input(
                     errors=handle.errors,
                     newline=newline,
                 )
+                _note_open_divergence(handle, encoding, errors)
         _record_sessionless(
             sinks,
             api="open_authentication_input",
@@ -1228,6 +1552,7 @@ def ingest_git_authentication_input(
                 in_session=False,
                 grammar_verified=False,
                 vocabulary_flag=False,
+                headroom_margin=_SESSIONLESS_PARSE_MARGIN,
             )
         return raw
     return session.ingest(

@@ -29,7 +29,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 import hashlib
 import itertools
-import json
 from typing import Any, Iterator
 
 _ACTIVE: "_RunCaches | None" = None
@@ -184,25 +183,112 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def canonical_key(value: Any) -> str:
-    """A digest of a JSON-shaped value; floats keep their exact repr.
+_CANONICAL_KEY_DOMAIN = b"joulewise.analysis_run_cache.canonical_key.v2\0"
 
-    Raises TypeError/ValueError for a value with no exact canonical form, and
-    the caller then does not use the memo for that call.
+
+def _frame(tag: bytes, payload: bytes) -> bytes:
+    return tag + str(len(payload)).encode("ascii") + b":" + payload
+
+
+def _qualified(kind: type) -> bytes:
+    return f"{kind.__module__}.{kind.__qualname__}".encode("utf-8", "surrogatepass")
+
+
+def _scalar_bytes(item: Any) -> bytes | None:
+    """The framed encoding of a non-container value, or None for a list, tuple or dict."""
+
+    if item is None:
+        return b"N"
+    if item is True:
+        return b"T"
+    if item is False:
+        return b"F"
+    kind = type(item)
+    if kind is int:
+        return _frame(b"i", str(item).encode("ascii"))
+    if kind is float:
+        return _frame(b"f", item.hex().encode("ascii"))
+    if kind is str:
+        return _frame(b"s", item.encode("utf-8", "surrogatepass"))
+    if isinstance(item, (int, float, str)) and not isinstance(item, bool):
+        # A subclass (an IntEnum, a str enum): its type is part of the key.
+        base = int if isinstance(item, int) else float if isinstance(item, float) else str
+        return _frame(b"x", _qualified(kind) + b"\0" + _scalar_bytes(base(item)))
+    if isinstance(item, (list, tuple, dict)):
+        return None
+    raise TypeError(f"uncanonical {kind.__name__}")
+
+
+_ENCODE, _LIST, _DICT = object(), object(), object()
+
+
+def _canonical_bytes(item: Any) -> bytes:
+    """An injective, type-tagged, length-framed encoding of a JSON-shaped value.
+
+    Every value is framed as tag + payload length + payload, so no encoded value
+    is a prefix of another and no two values of different types share bytes: a
+    float and the mapping {"float": its hex} differ (D-188 SHIP-FIX, finding A),
+    as do a list and a tuple, and a subclass and its base. The approach is the
+    verified store's (analysis_verified_store.canonical_bytes), restricted to the
+    JSON-shaped values a run memo keys on.
+
+    Iterative (an explicit work stack, post-order), so nesting depth never
+    exhausts Python's recursion budget: a deeply nested value that the r1
+    encoder keyed must not turn a memoized call into a RecursionError (review
+    of PR #640, finding S2). A container met again inside itself (a cycle,
+    never JSON-shaped) raises TypeError, so the caller bypasses the memo.
     """
 
-    def exact(item: Any) -> Any:
-        if isinstance(item, bool) or item is None or isinstance(item, (int, str)):
-            return item
-        if isinstance(item, float):
-            return {"float": item.hex()}
-        if isinstance(item, (list, tuple)):
-            return [exact(element) for element in item]
-        if isinstance(item, dict):
-            if not all(isinstance(key, str) for key in item):
-                raise TypeError("non-string key")
-            return {key: exact(element) for key, element in item.items()}
-        raise TypeError(f"uncanonical {type(item).__name__}")
+    done: list[bytes] = []
+    open_ids: set[int] = set()
+    work: list[tuple] = [(_ENCODE, item)]
+    while work:
+        op, value, *rest = work.pop()
+        if op is _ENCODE:
+            scalar = _scalar_bytes(value)
+            if scalar is not None:
+                done.append(scalar)
+                continue
+            if id(value) in open_ids:
+                raise TypeError("cyclic value")
+            open_ids.add(id(value))
+            if isinstance(value, dict):
+                if not all(isinstance(key, str) for key in value):
+                    raise TypeError("non-string key")
+                items = list(value.items())
+                work.append((_DICT, value, len(items)))
+                for key, element in reversed(items):
+                    work.append((_ENCODE, element))
+                    work.append((_ENCODE, key))
+            else:
+                elements = list(value)
+                work.append((_LIST, value, len(elements)))
+                for element in reversed(elements):
+                    work.append((_ENCODE, element))
+            continue
+        count = rest[0]
+        width = 2 * count if op is _DICT else count
+        cut = len(done) - width
+        parts = done[cut:]
+        del done[cut:]
+        open_ids.discard(id(value))
+        head = _qualified(type(value)) + b"\0"
+        if op is _DICT:
+            pairs = sorted(zip(parts[0::2], parts[1::2]))
+            done.append(_frame(b"d", head + b"".join(_frame(b"k", key) + _frame(b"v", element)
+                                                     for key, element in pairs)))
+        else:
+            done.append(_frame(b"l", head + b"".join(_frame(b"m", element) for element in parts)))
+    return done[0]
 
-    raw = json.dumps(exact(value), sort_keys=True, separators=(",", ":"), allow_nan=False)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def canonical_key(value: Any) -> str:
+    """A digest of a JSON-shaped value under an injective, type-tagged encoding.
+
+    Floats keep their exact bits (``float.hex``); a float never shares a key with
+    any other value, in particular not with the mapping ``{"float": x.hex()}``
+    (D-188 SHIP-FIX, finding A). Raises TypeError for a value with no exact
+    canonical form, and the caller then does not use the memo for that call.
+    """
+
+    return hashlib.sha256(_CANONICAL_KEY_DOMAIN + _canonical_bytes(value)).hexdigest()

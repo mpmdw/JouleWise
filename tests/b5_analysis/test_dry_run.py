@@ -539,7 +539,11 @@ class DriverAcceptanceTests(unittest.TestCase):
         DriverDouble.outcome=True;result=self.execute();self.assertEqual(result.code,3,result.stderr)
         row=next(r for r in result.record['steps'] if r['step']=='6')
         self.assertEqual(row['status'],'outcome_class');self.assertEqual(row['refusal'],'outcome-class refusal at step 6')
-        self.assertEqual(len(row['outputs']),2);self.assertTrue(result.record['completed_without_tooling_refusal'])
+        # D-188: the last step that ran also binds the restricted step codes and store mode.
+        own=[o for o in row['outputs'] if not d.is_sidecar_name(o['name'])]
+        self.assertEqual([o['name'] for o in row['outputs'] if o not in own][:1],[d.STEP_CODES_NAME])
+        self.assertTrue(row['outputs'][-1]['name'].startswith(d.VDL_MODE_PREFIX))
+        self.assertEqual(len(own),2);self.assertTrue(result.record['completed_without_tooling_refusal'])
         self.assertTrue(all(r['status']=='not_run' for r in result.record['steps'] if r['step'] in ('9','9b','10','11')))
         self.assertFalse(any(step=='9' for step,_,_ in DriverDouble.calls))
 
