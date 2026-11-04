@@ -778,6 +778,20 @@ class MixedRawCodeStubTest(_TmpCase):
         self.assertEqual(self._verdict(ref, same), (0, 'EQUIVALENT'))
         self.assertEqual(self._verdict(ref, other), (1, 'NOT_EQUIVALENT'))
 
+    def test_undecodable_log_the_driver_reads_decides_nothing(self):
+        # Review 3: token() reads both logs with strict UTF-8; a program's own exit 3
+        # whose last log is undecodable would have sent the driver to its exception
+        # program (a later, driver-traced log), so such a last log establishes nothing.
+        ref = self._tree('bad-ref', _unclassified(exit_status=3), '', 'error: closeout_branch_broken\n')
+        log = ref / 'dry-run' / 'restricted' / 'logs' / (STEP5_LOG + '.stdout.log')
+        log.write_bytes(b'\xff\n')
+        same = self._tree('bad-same', _unclassified(exit_status=3, codes=True, raw_code='closeout_branch_broken'),
+                          '', 'error: closeout_branch_broken\n', commit_codes=True)
+        self.assertEqual(self._verdict(ref, same), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+        self.assertIs(cmp._driver_read(b'\xff'), cmp._LOG_UNDECODABLE)
+        self.assertIs(cmp._driver_read(None), cmp._LOG_MISSING)
+        self.assertEqual(cmp._driver_read(b'a\r\nb'), 'a\r\nb')
+
     def test_outcome_class_row_establishes_the_outcome_code(self):
         def tree(name, codes, raw_code=corpus.OUTCOME_CODE):
             fns = [corpus._refused(STEP5, corpus.OUTCOME_CODE)]
@@ -865,6 +879,12 @@ class RunnerTracebackTest(unittest.TestCase):
             self.assertEqual(_function_source(r1, name), _function_source(source, name), name)
         for cls, name in (('RunnerResult', 'token'), ('RunState', 'invoke')):
             self.assertEqual(_method_source(r1, cls, name), _method_source(source, cls, name), name)
+        # Review 3: the strict reads and the single-program rows (_single_program_row).
+        for name in ('_internal_step', 'step_0', 'step_3', 'step_3b', 'step_5', 'step_6', 'step_8', 'step_9b',
+                     'step_10'):
+            self.assertEqual(_function_source(r1, name), _function_source(source, name), name)
+        for name in ('guarded', 'prepare_finalization'):
+            self.assertEqual(_method_source(r1, 'RunState', name), _method_source(source, 'RunState', name), name)
 
 
 R1_TAG = 'b5/analysis-r1'
@@ -982,6 +1002,58 @@ class MixedRawCodeDriverTest(unittest.TestCase):
         ref, cand, r1, head = self._pair('missing-output')
         self.assertEqual((r1, head), ([{'step': '5', 'code': None}],) * 2)
         self.assertEqual(self._verdict(ref, cand), (2, 'COMPARATOR_ERROR stage=refusal-code side=ref'))
+
+
+    # Review 3 of PR #640. These run the drivers' REAL step functions on stub programs.
+    def _both_orders(self, ref, cand):
+        return self._verdict(ref, cand), self._verdict(cand, ref)
+
+    def test_step6_strict_read(self):
+        # Finding 1: step_6 reads stdout with strict UTF-8 and skips its StepRecord
+        # rule on a decode failure; legacy replay decoded with 'replace'.
+        ref, cand, r1, head = self._pair('step6-plain')
+        self.assertEqual((r1, head), ([{'step': '6', 'code': 'same_unregistered_closeout_code'}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # Raw None on both drivers: was NOT_EQUIVALENT.
+        ref, cand, r1, head = self._pair('step6-badbytes')
+        self.assertEqual((r1, head), ([{'step': '6', 'code': None}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # Raw None (r1) versus the StepRecord code (HEAD): was EQUIVALENT.
+        ref, cand, r1, head = self._pair('step6-badbytes-ref')
+        self.assertEqual((r1, head), ([{'step': '6', 'code': None}],
+                                      [{'step': '6', 'code': 'same_unregistered_closeout_code'}]))
+        self.assertEqual(self._both_orders(ref, cand), ((1, 'NOT_EQUIVALENT'),) * 2)
+
+    def test_internal_step_codes_are_established(self):
+        # Finding 2: an internal-helper refusal (exit 2, no traceback) decodes
+        # uniquely from its one log; was COMPARATOR_ERROR (blocked an equivalent pair).
+        for scenario, code in (('internal-unclassified', 'unclassified'),
+                               ('internal-code', 'same_unregistered_helper_code')):
+            with self.subTest(scenario):
+                ref, cand, r1, head = self._pair(scenario)
+                self.assertEqual((r1, head), ([{'step': '3', 'code': code}],) * 2)
+                self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # Negative control: different helper codes are an established difference.
+        ref, cand, r1, head = self._pair('internal-code-differs')
+        self.assertEqual((r1, head), ([{'step': '3', 'code': 'helper_code_reference'}],
+                                      [{'step': '3', 'code': 'helper_code_candidate'}]))
+        self.assertEqual(self._both_orders(ref, cand), ((1, 'NOT_EQUIVALENT'),) * 2)
+
+    def test_step8_staging_and_step10_reported_open(self):
+        ref, cand, r1, head = self._pair('step8-staging-code')
+        self.assertEqual((r1, head), ([{'step': '8', 'code': 'same_unregistered_staging_code'}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        ref, cand, r1, head = self._pair('step10-reported-code')
+        self.assertEqual((r1, head), ([{'step': '10', 'code': 'same_unregistered_reported_code'}],) * 2)
+        self.assertEqual(self._both_orders(ref, cand), ((0, 'EQUIVALENT'),) * 2)
+        # The same step-8 row and ordinal after a SUCCESSFUL staging and a driver
+        # refusal (different codes R1 records nowhere): never established.
+        ref, cand, r1, head = self._pair('step8-after-staging')
+        self.assertEqual((r1, head), ([{'step': '8', 'code': 'driver_code_reference'}],
+                                      [{'step': '8', 'code': 'driver_code_candidate'}]))
+        self.assertEqual(self._both_orders(ref, cand),
+                         ((2, 'COMPARATOR_ERROR stage=refusal-code side=ref'),
+                          (2, 'COMPARATOR_ERROR stage=refusal-code side=cand')))
 
 
 class TimingClassTest(_TmpCase):

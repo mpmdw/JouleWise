@@ -911,6 +911,59 @@ def runner_traceback(stderr: str):
     return found
 
 
+# A log the driver reads with Path.read_text(): its text, or why the read raises.
+_LOG_MISSING = object()          # OSError (never caught by the rules below except mint's)
+_LOG_UNDECODABLE = object()      # UnicodeDecodeError, a ValueError
+
+
+def _driver_read(data):
+    """Path.read_text(encoding='utf-8') of a runner log, as the driver reads it (strict UTF-8).
+
+    step_6 and step_8 call read_text() without an encoding: the locale's, UTF-8 on
+    the measurement and analysis hosts (macOS). Universal newlines only rewrite
+    line ends, which splitlines() already treats alike.
+    """
+    if data is None:
+        return _LOG_MISSING
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:
+        return _LOG_UNDECODABLE
+
+
+# Steps whose step function is dry_run._internal_step alone (r1 and this branch):
+# one guarded helper run through the runner, recorded with code=result.token(),
+# and nothing after it can change the code or raise a refusal (s.rehash() runs
+# before the program and leaves no log; the run() exception program writes a
+# second, driver-traced log).
+INTERNAL_STEPS = frozenset({'0', '3', '3b', '9b'})
+
+
+def _single_program_row(step, row, ordinal, stderr):
+    """Whether an untraced refusing row's raw code is token() of its last log (review 3 of PR #640).
+
+    * steps 0, 3, 3b, 9b with exactly one (step, block) log: _internal_step.
+    * step 10 per window at ordinal 2: the guarded _reported_open, recorded by
+      step_10 itself (every driver-level step-10 row has window None).
+    * step 8 at ordinal 1: the guarded staging helper (prepare_finalization), but
+      only when it refused, which RunState.guarded always reports as a final
+      'error: ' stderr line (prepare_finalization writes nothing else and returns
+      0; any other exception escapes and is traced). A staging that succeeded
+      followed by a driver refusal before the finalizer ran (a rehash or primary
+      context refusal) has the same row and ordinal but no such line: not established.
+    Every other program step can still end in a promised-output check or a driver
+    check after the program, so an exit-2 row there stays unestablished.
+    """
+    if step in INTERNAL_STEPS:
+        return ordinal == 1 and row['window'] is None
+    if step == '10':
+        return row['window'] is not None and ordinal == 2
+    if step == '8':
+        lines = stderr.splitlines()
+        return row['window'] is None and ordinal == 1 and bool(lines) and lines[-1].startswith('error: ')
+    return False
+
+
 def _legacy_decode(side: Side, row) -> dict:
     """R1 layout: the refusing step's raw code, replayed and as far as the logs establish it.
 
@@ -933,6 +986,13 @@ def _legacy_decode(side: Side, row) -> dict:
       an exception; step 8: the stdout REFUSE message of the second program (the
       finalizer; the first is the staging helper), never after an exception;
       step 6: the stdout StepRecord (also after an exception, as step_6 reads it).
+    * Reads (review 3 of PR #640): the driver reads logs with strict UTF-8
+      (_driver_read). step_6 and step_8 catch the UnicodeDecodeError (a ValueError)
+      and skip their rule; token() and mint_refusal_code do not, and a missing log
+      raises everywhere. A rule whose read would have raised means the driver went
+      on to its exception program, whose driver-traced log would be the last one:
+      such a last log establishes nothing ('established' is CODE_UNESTABLISHED;
+      'raw_code' keeps the lenient replay, so an R1 against R1 pair still compares it).
 
     Establishment: a tooling code is public in the record. An outcome-class row
     carries the one outcome code (OUTCOME_CODES). Otherwise the logs establish the
@@ -945,7 +1005,10 @@ def _legacy_decode(side: Side, row) -> dict:
     a runner traceback is the program's exit 2, a successful program missing a
     promised output (no code), or a driver refusal raised after a successful
     program (a code no restricted R1 file records); its raw code is not
-    established. So is any refusal with no runner log.
+    established, except where the step function admits no other exit-2 source
+    once that log exists (_single_program_row: the guarded internal helpers of
+    steps 0, 3, 3b, 9b, the refused step-8 staging helper and step 10's per-window
+    _reported_open; review 3 of PR #640). So is any refusal with no runner log.
     The invocation ordinal is counted as the runner names its logs
     (dry_run.STEP_CODES_LOG, dry_run._refusal_position): the number of
     <counter>-<step>-<window|block>.stderr.log regular files, None when there are none.
@@ -976,44 +1039,64 @@ def _legacy_decode(side: Side, row) -> dict:
             return {**public, 'invocation': invocation}
         stems.sort()
         stem = stems[-1][1]
-        stderr = _read_beneath(logs_fd, stem + '.stderr.log', side.label, 'refusal').decode('utf-8', 'replace')
+        stderr_bytes = _read_beneath(logs_fd, stem + '.stderr.log', side.label, 'refusal')
         try:
-            stdout = _read_beneath(logs_fd, stem + '.stdout.log', side.label, 'refusal').decode('utf-8', 'replace')
+            stdout_bytes = _read_beneath(logs_fd, stem + '.stdout.log', side.label, 'refusal')
         except ComparatorError:
-            stdout = ''
+            stdout_bytes = None
     finally:
         os.close(logs_fd)
     step, exit_status, ordinal = str(row['step']), row['exit_status'], len(stems)
-    traced = runner_traceback(stderr)
+    # Texts are decoded leniently (the replay stays informative for an R1 against R1
+    # comparison); whether the DRIVER's strict read of a log succeeds, is skipped
+    # or raises is _driver_read's verdict, and only that decides a rule.
+    stderr_text = stderr_bytes.decode('utf-8', 'replace')
+    stdout_text = '' if stdout_bytes is None else stdout_bytes.decode('utf-8', 'replace')
+    traced = runner_traceback(stderr_text)
     escaped = traced == 'escape'
-    error_lines = [line for line in stderr.splitlines() if line.startswith('error: ')]
+    stderr, stdout = _driver_read(stderr_bytes), _driver_read(stdout_bytes)
+    raised = False     # a read the driver makes here would have raised: not the deciding log
     if traced == 'driver':
         code = None                      # dry_run.run: s.record(step, exit_status=2) after the program
     else:
-        if escaped or not exit_status:
-            code = None                  # RunnerResult.token() / RunState.invoke()
-        else:
-            code = _driver_token(stderr) if error_lines else _driver_token(stdout)
-        if step == '5' and ordinal == 2 and exit_status and not escaped \
-                and any('authenticated whole-window consumption refused' in line for line in error_lines):
-            code = MINT_CONSUMPTION_REFUSED
+        code = None                      # RunnerResult.token() / RunState.invoke()
+        if not escaped and exit_status:
+            error_lines = [line for line in stderr_text.splitlines() if line.startswith('error: ')]
+            code = _driver_token(stderr_text) if error_lines else _driver_token(stdout_text)
+            if not (isinstance(stderr, str) and isinstance(stdout, str)):
+                raised = True            # token() reads both logs strictly
+        if step == '5' and ordinal == 2 and exit_status and not escaped:
+            # mint_refusal_code: a strict stderr read (only OSError is caught).
+            raised = raised or not isinstance(stderr, str)
+            if any(line.startswith('error: ') and 'authenticated whole-window consumption refused' in line
+                   for line in stderr_text.splitlines()):
+                code = MINT_CONSUMPTION_REFUSED
         elif step == '8' and ordinal == 2 and exit_status and not escaped:
-            message = _last_json_line(stdout)
-            if message is not None and set(message) == {'status', 'reason', 'detail'} \
-                    and message['status'] == 'REFUSE' and isinstance(message['reason'], str):
-                code = _driver_token(message['reason'])
+            # step_8: stdout.read_text() inside except (ValueError, ...): an
+            # undecodable log skips the rule, a missing one raises.
+            raised = raised or stdout is _LOG_MISSING
+            if stdout is not _LOG_UNDECODABLE:
+                message = _last_json_line(stdout_text)
+                if message is not None and set(message) == {'status', 'reason', 'detail'} \
+                        and message['status'] == 'REFUSE' and isinstance(message['reason'], str):
+                    code = _driver_token(message['reason'])
         elif step == '6':
-            child = _last_json_line(stdout)
-            closeout = sum(1 for o in row['outputs']
-                           if re.fullmatch(r'finalized/outputs/closeout(\.ratio-table)?\.json', o['name']))
-            if child is not None and child.get('status') == 'outcome_class' and exit_status == 3 and closeout == 2:
-                code = DOMINANCE_ZERO_DENOMINATOR
-            elif child is not None and child.get('status') == 'tooling_refusal' \
-                    and isinstance(child.get('refusal'), str):
-                code = _driver_token(child['refusal'])
+            # step_6: the same read, also after an exception and after a zero exit.
+            raised = raised or stdout is _LOG_MISSING
+            if stdout is not _LOG_UNDECODABLE:
+                child = _last_json_line(stdout_text)
+                closeout = sum(1 for o in row['outputs']
+                               if re.fullmatch(r'finalized/outputs/closeout(\.ratio-table)?\.json', o['name']))
+                if child is not None and child.get('status') == 'outcome_class' and exit_status == 3 \
+                        and closeout == 2:
+                    code = DOMINANCE_ZERO_DENOMINATOR
+                elif child is not None and child.get('status') == 'tooling_refusal' \
+                        and isinstance(child.get('refusal'), str):
+                    code = _driver_token(child['refusal'])
     established = public['established']
     if row['status'] != 'outcome_class':
-        fixed = traced is not None or (type(exit_status) is int and exit_status != 2)
+        fixed = not raised and (traced is not None or (type(exit_status) is int and exit_status != 2)
+                                or _single_program_row(step, row, ordinal, stderr_text))
         established = code if fixed and code not in OUTCOME_CODES else CODE_UNESTABLISHED
     return {'raw_code': code, 'established': established, 'invocation': invocation}
 
