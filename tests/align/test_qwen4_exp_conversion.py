@@ -107,6 +107,7 @@ class TestConversion(unittest.TestCase):
             save_file(weights, source / "model.safetensors")
             output = root / "mlx"
             manifest = convert(source, output, "bf16", 32, "bf16")
+            self.assertTrue(json.loads((output / "config.json").read_text())["jw_bf16_fp32_ops"])
             self.assertEqual(len(manifest["omitted_keys"]), 2)
             ple = manifest["ple_tables"]["1"]
             self.assertEqual(ple["storage"], "bf16")
@@ -138,6 +139,9 @@ class TestConversion(unittest.TestCase):
             root = Path(d)
             source = root / "hf"
             model.save_pretrained(source, max_shard_size="100KB")
+            source_config = json.loads((source / "config.json").read_text())
+            source_config["jw_bf16_fp32_ops"] = False
+            (source / "config.json").write_text(json.dumps(source_config))
             output = root / "mlx"
             manifest = convert(source, output, "fp32", 32, "fp32")
             self.assertEqual(verify_manifest(output), manifest)
@@ -146,6 +150,7 @@ class TestConversion(unittest.TestCase):
             config = json.loads((output / "config.json").read_text())
             self.assertEqual(config["model_file"], "qwen4_exp.py")
             self.assertEqual(config["max_position_embeddings"], 40960)
+            self.assertFalse(config["jw_bf16_fp32_ops"])
             self.assertEqual(config["ple_tables"]["1"]["rows"], 88)
             index = json.loads((output / "model.safetensors.index.json").read_text())["weight_map"]
             expected = parameter_shapes(model.config.to_dict())

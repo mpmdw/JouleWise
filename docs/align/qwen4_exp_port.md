@@ -173,6 +173,29 @@ community module was imported, executed or copied wholesale.
   them by patching both Torch topk APIs **only inside QSA**. It compares all
   three modes and checks that an alternative admissible zero-tie subset
   changes logits. This isolates agreement modulo ties without changing MoE.
+- **Optional bf16 accuracy (default ON).** Set the JSON boolean
+  `jw_bf16_fp32_ops=false` to recover the previous bf16 arithmetic. The
+  default `true` evaluates hyper-connection stream means and sigmoid gates
+  in fp32, then casts each result back to its original bf16 activation dtype.
+  This covers hyper mixing/injection, attention output, shared-expert, PLE
+  and DeltaNet beta gates. The already-fp32 gated norm is unchanged. For beta,
+  the port uses pinned mlx-lm's same `compute_g`, recurrent ops and native
+  kernel dispatch with the promoted-and-rounded sigmoid result. SiLU,
+  projections and products retain their original arithmetic. Other input
+  dtypes, including fp32, take the original operations without new casts.
+  The flag is read from flat/nested text config (an outer override wins),
+  defaults on for configurations lacking the field in this runtime and is
+  explicit in new converter output.
+  Changing runtime code/config requires a new artifact and manifest pin.
+  The reported single-op bf16 error excess of 1.2–1.6× Torch suggests roughly
+  **17–38% less error for the affected operations** if fp32 evaluation reaches
+  Torch-like accuracy on matched inputs. This is an expectation from the
+  supplied finding, not a measured improvement here or a layer/logit bound;
+  bf16 rounding, unchanged SiLU, matmuls and error propagation remain.
+  Casts and fp32 temporary buffers add unmeasured latency/workspace. Native
+  `tests.align.test_qwen4_exp_precision` checks four-stream means/sigmoid
+  accuracy, the disabled legacy path, beta ops/kernel dispatch and bitwise
+  fp32 flag equivalence in prefill/chunks/steps. All native results are pending.
 - **Text only.** Official `Qwen4ExpForCausalLM` lines 1568-1664 uses no MTP
   module. Ordinary next-token logits therefore need neither the speculative
   MTP head nor the vision tower. Their checkpoint keys are explicitly logged
@@ -270,7 +293,7 @@ real measurement data, restricted directory or model checkpoint was read.
 | Maxfit policies for every tiny/release tensor, bf16 shard streaming/spans, tiny HF conversion/dtypes, strict inventory and manifest tampering | 6 PASS |
 | Component memory model, maxfit peaks/headroom and actual kit cap | 3 PASS |
 | Official reference fp32 and bf16 prefill vs stepwise | 2 PASS |
-| **MLX vs HF fp32/bf16; mixed, maxfit and maxfit5 vs native bf16** | **5 SKIPPED: no MLX in selected sandbox interpreter; native Metal unavailable here** |
+| **MLX vs HF fp32/bf16 and forced QSA ties; mixed, maxfit and maxfit5 vs native bf16** | **6 SKIPPED: no MLX in selected sandbox interpreter; native Metal unavailable here** |
 
 The gold fixture has 194,564 parameters, two layer types, short sparse QSA
 budget overflow, EOS boundaries, nonzero PLE convolution and nonzero norm
@@ -322,6 +345,13 @@ cold real-model latency and SSD traffic remain unmeasured.
    session; use existing appropriate venvs on the target, without modifying
    the protected venvs. A fresh reviewer must audit implementation and tests
    before release; no independent review was run in this offline task.
+
+   Also run `tests.align.test_qwen4_exp_qsa.TestNativeQSA` and
+   `tests.align.test_qwen4_exp_precision` in the native MLX interpreter,
+   serially. Require all nine native tests to pass without skips. The
+   precision test prints single-op RMSE against matched-input fp64 oracles;
+   retain those results, then repeat the real-layer comparison outside this
+   blinded sandbox to quantify the actual gain.
 
 2. Ed obtains the official HF bf16 checkpoint/tokenizer at an **immutable HF
    revision**, separately authorizing any network transfer. That revision is

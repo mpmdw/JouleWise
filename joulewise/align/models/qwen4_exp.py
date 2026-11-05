@@ -17,7 +17,9 @@ import mlx.nn as nn
 from mlx_lm.models.base import BaseModelArgs
 from mlx_lm.models import cache as cache_api
 from mlx_lm.models.cache import ArraysCache, KVCache
-from mlx_lm.models.gated_delta import gated_delta_update
+from mlx_lm.models.gated_delta import (
+    compute_g, gated_delta_kernel, gated_delta_ops, gated_delta_update,
+)
 from mlx_lm.models.switch_layers import SwitchGLU
 
 # A sibling file, shipped and hashed with this module, also works with the
@@ -77,11 +79,14 @@ class ModelArgs(BaseModelArgs):
     jw_format: str = "hf-zero-centered-v1"
     jw_max_prefill_tokens: int = 64
     jw_context_cap: int = 40960
+    # Promote only bf16 hyper-stream means and sigmoid evaluation, then cast
+    # back. FP32 (and other dtypes) retain the original operation graph.
+    jw_bf16_fp32_ops: bool = True
 
     @classmethod
     def from_dict(cls, config):
         c = tables.text_config(config)
-        for k in ("ple_tables", "jw_format", "jw_max_prefill_tokens", "jw_context_cap"):
+        for k in ("ple_tables", "jw_format", "jw_max_prefill_tokens", "jw_context_cap", "jw_bf16_fp32_ops"):
             if k in config:
                 c[k] = config[k]
         return cls(**{f.name: c[f.name] for f in fields(cls) if f.name in c})
@@ -119,6 +124,8 @@ class ModelArgs(BaseModelArgs):
             raise ValueError("Unsupported norm representation")
         if self.jw_max_prefill_tokens <= 0 or self.jw_context_cap <= 0:
             raise ValueError("Invalid runtime token limits")
+        if not isinstance(self.jw_bf16_fp32_ops, bool):
+            raise ValueError("jw_bf16_fp32_ops must be a boolean")
 
 
 class Qwen4ExpRecurrentCache(ArraysCache):
@@ -219,9 +226,44 @@ def rope(x, positions, args):
     return mx.concatenate([rotated, x[..., dim:]], axis=-1)
 
 
+def sigmoid_gate(x, promote_bf16):
+    """Evaluate bf16 sigmoid in fp32, returning the original activation dtype."""
+    if promote_bf16 and x.dtype == mx.bfloat16:
+        return mx.sigmoid(x.astype(mx.float32)).astype(x.dtype)
+    return mx.sigmoid(x)
+
+
+def hyper_stream_mean(x, promote_bf16):
+    """Accumulate the hyper streams in fp32, rounding once back to bf16."""
+    if promote_bf16 and x.dtype == mx.bfloat16:
+        return x.astype(mx.float32).mean(axis=-2).astype(x.dtype)
+    return x.mean(axis=-2)
+
+
+def delta_update(q, k, v, a, b, A_log, dt_bias, state, mask, use_kernel, promote_bf16):
+    """Pinned mlx-lm 0.31.3 dispatch with an optional promoted beta sigmoid.
+
+    gated_delta_update computes beta internally, so the bf16 opt-in uses its
+    same compute_g / native ops or kernel seam with our rounded beta. All
+    other inputs follow the original function, including fp32 bit for bit.
+    """
+    if not promote_bf16 or b.dtype != mx.bfloat16:
+        return gated_delta_update(q, k, v, a, b, A_log, dt_bias, state, mask, use_kernel=use_kernel)
+    beta = sigmoid_gate(b, True)
+    g = compute_g(A_log, a, dt_bias)
+    if state is None:
+        batch, _, _, key_dim = q.shape
+        heads, value_dim = v.shape[-2:]
+        state = mx.zeros((batch, heads, value_dim, key_dim), dtype=mx.float32)
+    if not use_kernel or mx.default_device() != mx.gpu or not mx.metal.is_available():
+        return gated_delta_ops(q, k, v, g, beta, state, mask)
+    return gated_delta_kernel(q, k, v, g, beta, state, mask)
+
+
 class HyperConnection(nn.Module):
     def __init__(self, a, combine=True):
         super().__init__()
+        self._args = a
         self.h, self.d = a.hc_count, a.hidden_size
         self.hc_norm = RMSNorm(self.h * self.d, a.rms_norm_eps, self.d)
         self.input_mix_weight_down = nn.Linear(self.h * self.d, a.hc_lowrank, bias=False)
@@ -230,10 +272,11 @@ class HyperConnection(nn.Module):
 
     def __call__(self, x):
         n = self.hc_norm(x)
-        weights = mx.sigmoid(self.input_mix_weight_up(nn.silu(self.input_mix_weight_down(n) / self.h)))
-        mixed = (weights * n).reshape(*x.shape[:-1], self.h, self.d).mean(axis=-2)
+        promote = self._args.jw_bf16_fp32_ops
+        weights = sigmoid_gate(self.input_mix_weight_up(nn.silu(self.input_mix_weight_down(n) / self.h)), promote)
+        mixed = hyper_stream_mean((weights * n).reshape(*x.shape[:-1], self.h, self.d), promote)
         return mixed if self.block_inject_weight is None else (
-            mixed, 2 * mx.sigmoid(self.block_inject_weight(n) / self.h))
+            mixed, 2 * sigmoid_gate(self.block_inject_weight(n) / self.h, promote))
 
 
 def short_conv(conv, x, previous, dilation=1):
@@ -289,9 +332,10 @@ class GatedDeltaNet(nn.Module):
         q *= mx.rsqrt(mx.sum(q * q, axis=-1, keepdims=True) + 1e-6) / a.linear_key_head_dim ** 0.5
         k *= mx.rsqrt(mx.sum(k * k, axis=-1, keepdims=True) + 1e-6)
         v = v.reshape(b, s, a.linear_num_value_heads, a.linear_value_head_dim)
-        out, state = gated_delta_update(q, k, v.astype(mx.float32), self.in_proj_a(x).astype(mx.float32), self.in_proj_b(x),
+        out, state = delta_update(q, k, v.astype(mx.float32), self.in_proj_a(x).astype(mx.float32), self.in_proj_b(x),
                                         self.A_log, self.dt_bias.astype(mx.float32), cache[1] if cache else None, mask,
-                                        use_kernel=not self.training and a.linear_key_head_dim % 32 == 0)
+                                        use_kernel=not self.training and a.linear_key_head_dim % 32 == 0,
+                                        promote_bf16=a.jw_bf16_fp32_ops)
         if cache is not None:
             cache[1] = state
         out = self.norm(out.astype(x.dtype), self.in_proj_z(x).reshape(v.shape))
@@ -422,7 +466,7 @@ class Attention(nn.Module):
                                                        kk, vv, scale=a.head_dim ** -0.5,
                                                        mask=keep.reshape(b * s, 1, 1, -1))
             out = out.reshape(b, s, a.num_attention_heads, a.head_dim)
-        out = out * mx.sigmoid(gate)
+        out = out * sigmoid_gate(gate, a.jw_bf16_fp32_ops)
         return mx.where(mask[..., None], self.o_proj(out.reshape(b, s, -1)), 0)
 
 
@@ -453,7 +497,7 @@ class SparseMoE(nn.Module):
         if self._args.norm_topk_prob:
             weights /= weights.sum(axis=-1, keepdims=True)
         routed = (self.switch_mlp(x, indices) * weights.astype(x.dtype)[..., None]).sum(axis=-2)
-        return routed + mx.sigmoid(self.shared_expert_gate(x)) * self.shared_expert(x)
+        return routed + sigmoid_gate(self.shared_expert_gate(x), self._args.jw_bf16_fp32_ops) * self.shared_expert(x)
 
 
 class NGramEmbedding(nn.Module):
@@ -509,7 +553,7 @@ class PLE(nn.Module):
         query = self.norm_query(x).reshape(shape)
         gate = (key * query).sum(axis=-1, keepdims=True) / a.hidden_size ** 0.5
         gate = mx.sqrt(mx.maximum(mx.abs(gate), 1e-6)) * mx.sign(gate)
-        value = (mx.sigmoid(gate) * self.value_proj(emb)[..., None, :]).reshape(x.shape)
+        value = (sigmoid_gate(gate, a.jw_bf16_fp32_ops) * self.value_proj(emb)[..., None, :]).reshape(x.shape)
         normed = mx.where(mask[..., None], self.norm_conv(value), 0)
         conv, state = short_conv(self.conv1d, normed, cache[2] if cache else None, a.ngram_size)
         if cache is not None:

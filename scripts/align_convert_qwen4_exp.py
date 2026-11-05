@@ -249,6 +249,9 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage=None
         raise ValueError("Output directory must not exist")
     config = json.loads((checkpoint / "config.json").read_text())
     c = rules.text_config(config)
+    promote_bf16 = config.get("jw_bf16_fp32_ops", c.get("jw_bf16_fp32_ops", True))
+    if not isinstance(promote_bf16, bool):
+        raise ValueError("jw_bf16_fp32_ops must be a boolean")
     expected = rules.parameter_shapes(c)
     inventory, constants, omitted, input_files = sources(checkpoint)
     if c.get("tie_word_embeddings", False):
@@ -315,6 +318,7 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage=None
     config_out = dict(model_type="qwen4_exp", architectures=["Model"], model_file="qwen4_exp.py",
                       text_config=c, jw_format="hf-zero-centered-v1", ple_tables=descriptors,
                       jw_max_prefill_tokens=64, jw_context_cap=40960, max_position_embeddings=40960,
+                      jw_bf16_fp32_ops=promote_bf16,
                       eos_token_id=c.get("eos_token_id"), tie_word_embeddings=c.get("tie_word_embeddings", False))
     if any(quantizers.values()):
         config_out["quantization"] = quantization
