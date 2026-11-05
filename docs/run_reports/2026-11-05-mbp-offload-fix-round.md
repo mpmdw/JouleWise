@@ -16,3 +16,16 @@ Preflight failures never reach rmtree; later OS failure is explicitly partial.
 validation against real custody, iCloud or a measurement Mac.
 
 Further groups and final verification are recorded below as they land.
+
+Group 2 (B1 shell state; H1–H5/H7; L3/L5/L6/L8): replaced the pause/intake
+steps with file-only execution, a persistent zsh environment and a pre-STOP
+census checking item 170, DESK_DONE, pin/PILOT products, lock owner and named
+writers. No interactive Mac agent before desk handoff. Mandatory KEEP roots,
+mechanical model-source/blob census, R0 inventories before offload and retained
+pilot-9 source are explicit. Model census refuses this old unintegrated base.
+Tier 3 is empty. System/user/cron/at launchers and symlink plists are covered;
+only redacted facts enter exported journals. No raw argv/plist export.
+`python3.13 -B -m unittest tests.test_align_offload_model_keep`: PASS, 2 tests,
+0.007 s. All current zsh fences parse with zsh -n (documentation only).
+R0's locally cached code was inspected through Git objects; no data paths
+from its example config were followed. Live R0 execution remains lead-owned.

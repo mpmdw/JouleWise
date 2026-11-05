@@ -1,70 +1,69 @@
 # Measurement MacBook Pro offload and gold setup runbook
 
-Operator: Ed and the measurement-Mac magistrate, during an explicitly paused,
-non-measurement window of approximately two days. **This document has not been
-executed. Do not execute it on the analysis laptop.** The measurement machine is
-Mac15,9, M3 Max, 128 GB (`docs/process_traces/2026-11-01-interactive-26be5929/RECORD.md:3`).
-Ed confirmed its SSD is **1 TB** on November 5; step 1 still measures actual
-available space and the APFS container before admission.
+**ED-MANUAL-ONLY, not executed.** Use only on the paused measurement Mac
+(Mac15,9, M3 Max, 128 GB, 1 TB internal SSD). Never run these commands from
+an agent on the analysis laptop or while measurement is active. The analysis
+laptop's 7-worker job and blinded inputs are outside this procedure.
 
-The objective is **minimal verified offload to about 150 GB available**, then
-full 48-layer real-weight gold parity and conversion by **streaming layer
-groups**. The official checkpoint is nominally 360 GB bf16 / 131 shards, but
-only the current bounded working unit is staged on disk. Converted output is
-about 90–95 GB; peak additional allocation is about 120 GB, including a working
-unit of about 15 GB and overhead. The starting target leaves a separate 30 GB
-free-space floor. Step 9 replaces estimates with measured byte budgets.
+Primary storage plan: Ed attaches a **1–2 TB external NVMe SSD over
+Thunderbolt/USB4**, APFS, excluded from Spotlight and Time Machine (step 9).
+`JW_GOLD`, rolling bf16 shards, caches, converted model and paged n-gram table
+live there. A separate durable backup device is preferable; gold scratch and
+the sole independent custody backup must not compete for unbudgeted space.
+Internal SSD alone cannot hold the converted model plus the next ALIGN window.
+The nominal gold streaming peak is 120 GB; full bf16 is roughly 360 GB/131
+shards and must never be downloaded as a resident whole checkpoint.
 
-Authority: the lead's November 5 streaming revision of Goal 11 and status log
-in `docs/align/qwen4_exp_port/GOAL.md` on `port/qwen4-exp-mlx`, supplied in the
-revision brief. The authoring clone's offline `origin/port/qwen4-exp-mlx` still
-resolves to `1643e9aac43ebfc10443a31c30a0cdc506bcbfc6`, whose item 11 describes
-the superseded full-checkpoint plan. The streaming brief controls this revision;
-the operator records the updated goal commit when the lead supplies it.
-Offload authority preserves every sealed retention and verify-then-delete gate.
+Authority: the lead's November 5 rulings in this fix brief, RUN_STATE retention
+at line 45, and item 170 / PR #662 (`lane/2026-11-05-runstate-170-align-pause`).
+**Pilots 8 and 9 must not be auto-offloaded by `offload.py`.** Pilot 9 is
+`/Users/edr/night-align/pilot-v8-20261105T102850Z`; its capture directories
+`runs-parent/*/instrument_validation/*` stay on the Mac through block-5 release.
+Pilot 8 may be considered only after a structure-only locator review finds
+none subject to that rule; otherwise keep it and STOP for the lead's ruling.
+Pilots 0–7 are already deleted/offloaded and cannot reclaim more source bytes.
 
-Scheduling authority: **RUN_STATE item 170 (PR #662), as relayed by the lead:
-ALIGN is paused after pilot 9.** This clone's base contains only item 169,
-which records pilot 9 armed. The Mac operator must obtain the current harvest
-and pause receipts; neither historical text proves live completion.
+Code references: port PR #664 `lane/2026-11-05-align-flashnext-port`, base
+`origin/port/qwen4-exp-mlx`; gold harness PR #667
+`lane/2026-11-05-align-flashnext-gold-parity` (pushed, per lead); R0 PR #661
+`lane/2026-11-05-align-r0-desk`. Obtain reviewed full commit SHAs in the Mac's
+checkout; moving branch tips and this clone's stale cached tips are not pins.
+This document does not assert any of those PRs merged or any live gate passed.
+No network or model download was performed while authoring it.
 
-| Slot | Work admitted |
-|---|---|
-| Pilot 9 still collecting | Off-machine runbook/harness review only; no Mac steps, hashing, downloads or imports. |
-| Pilot 9 terminal, harvest/desk still writing | Let the magistrate finish its normal harvest, ledger pin and desk custody. Keep pilot 9's root intact; this runbook runs no harvest. |
-| Harvest and required desk products saved, no source writers | Confirm the item-170 pause and perform steps 1–11 in order, including re-arm disable in step 2. Offload only enough eligible roots to reach the budget. |
-| Reviewed harness available | Step 12 runs in resumable units; it may span multiple operator sessions. Leave ALIGN paused at every checkpoint. |
-| Validation complete, lead/Ed release the pause | Step 13 admits a fresh ALIGN plan; no automatic next pilot after pilot 9. |
+**Execution contract.** Save each numbered step's commands as a reviewed FILE,
+`stepN.zsh`, then run `JW_OP=/exact/existing/operation zsh -f -euo pipefail stepN.zsh`.
+Step 2 is the bootstrap and writes `$JW_OP/env.zsh`; every later script starts
+by sourcing it. Run step 1 itself with `zsh -f -euo pipefail step1.zsh`.
+Never paste a collection of guard commands into an interactive shell. A STOP
+is a nonzero exit: keep sources and resolve it. `noclobber` intentionally
+refuses existing outputs. Resume with the same env file and immutable receipts;
+new phase/attempt output names require review. Never reset initialization to
+get past an existing file. Step 8 is one Python program, independent of shell
+error handling.
 
-Run numbered steps individually in Terminal. **STOP means leave the source
-intact and resolve the named condition before continuing.** Save receipts in the
-operation journal; never put measurement contents in this document or Git.
-When resuming an operator session, keep the same operation/journal and gold
-directories, restore their recorded variables and disk guard, re-confirm the
-pause and available bytes, and use the reviewed harness's resume entrypoint.
-Do not rerun initialization that creates a new journal or overwrites pins and
-receipts; restart only from the last validated durable unit checkpoint.
-All block-5 handling is metadata, opaque byte copying/compression and SHA-256
-only: never parse or print measurement values. Do not run
-`scripts/run_b5_analysis.py`, a reducer, a harvest, or a release/recompute here.
-No agent may inspect a real `restricted/` directory. Such directories are
-excluded from the commands below and require the authorized custody operator;
-they are never silently omitted from an archive declared complete.
+Blinding is a **path map**, not a directory-name filter: claim runs roots,
+`withheld/**` and other registered paths can be restricted without the literal
+name `restricted`. Agents never inventory, hash, read or print those real
+manifests/paths. Only an authorized custody operator may perform opaque byte
+copying/SHA-256 on approved roots, without parsing measurement values. The
+helper's literal-name refusal is additional defense, not a complete exclusion
+mechanism. Never run `scripts/run_b5_analysis.py`, harvest, a reducer, release
+or recompute here. Never follow absolute paths from config text during review.
 
-**Disk STOP throughout:** all GB budgets below are decimal bytes. Abort the
-active allocating operation if available space falls below **30,000,000,000
-bytes at any point**; retain sources, receipts and recoverable partial work.
-Check before/after every numbered step, archive hydration, download and output
-write, and monitor during long operations. Admit each operation only if its
-maximum additional allocation still leaves 30 GB. A check at step end alone
-does not protect a long write. The reviewed streaming runner must enforce this
-floor during downloads/conversion; absent that enforcement, step 12 stays STOP.
+All GB below are decimal bytes. Every allocating operation needs admission
+for its maximum additional bytes plus a **30,000,000,000-byte floor** on each
+filesystem it writes. Step 5's continuous guard SIGSTOPs the writer process
+group below that floor; preserve partials and source on failure. `df` available
+bytes control admission; purgeable space, snapshots, summed `du`, APFS clone
+sizes and promised evictions do not count as free space.
 
 ## 1. Identify the machine and measure the SSD, read-only
 
-These are the first commands, before creating an operation directory:
+Save as `step1.zsh`; no agent sessions on the Mac before the STOP-2 handoff.
 
 ```zsh
+setopt interactivecomments errexit nounset pipefail extendedglob noclobber
 /usr/sbin/sysctl -n hw.model hw.memsize
 /usr/sbin/system_profiler SPHardwareDataType SPNVMeDataType
 /bin/df -k / /System/Volumes/Data
@@ -73,282 +72,288 @@ These are the first commands, before creating an operation directory:
 /usr/bin/tmutil listlocalsnapshots /
 ```
 
-**STOP 1:** Ed confirms Mac15,9 / M3 Max / 128 GB / 1 TB SSD, physical container size,
-Data volume and actual available bytes. A different machine stops this runbook.
-Record APFS sharing, snapshots and purgeable storage separately. Use `df`
-available space for admission; do not count purgeable space, promised iCloud
-evictions, summed `du` sizes, or the SSD's marketed capacity as available space.
-Below 30 GB, stop here for a separately reviewed space-recovery action; do not
-start archive staging or discard protected data to bootstrap this procedure.
+**STOP 1:** Ed confirms the machine, container, Data volume and available bytes.
+Below 30 GB, no staging; obtain a separate recovery plan without deleting KEEP.
+Do not remove snapshots or treat marketed capacity as available capacity.
 
-## 2. Pause ALIGN and prove nothing can arm
+## 2. Prove the magistrate finished, then pause and disable re-arm
 
-Do this before hashing, compression, uploads, model downloads or imports. A
-live plan takes precedence: if collection is running, stop here and let the
-magistrate close it through its normal terminal procedure. Do not kill a
-collection to make room. The recorded pilot-9 plan was armed on November 5;
-its old record is not evidence of today's terminal or harvested state
-(`docs/process_traces/2026-11-05-magistrate-c110a6c9/RECORD.md:48–54`).
-Require the normal pilot-9 harvest/ledger-pin receipt and saved `PILOT.json`
-and required desk products before offload. Schedule the Mac session after that
-handoff under item 170 / PR #662; do not start pilot 10. Obtain these receipts
-from the magistrate without opening measurement contents in this runbook.
+PR #662 must be integrated in the **Mac records checkout** first. Item 170
+must say no auto-offload of pilots 8/9, no pilot 10, and the magistrate must
+finish normal harvest, pin, `p9-PILOT.json` and desk custody, then write
+`~/night-align/pilot-v8-20261105T102850Z/DESK_DONE`. An interactive Claude or
+Codex session on the Mac could prevent that desk handoff: **do not start one**
+until this gate completes. Do not stop/bootout a magistrate to force the gate.
 
-The following paths are recorded: canonical repository
-`scripts/install_magistrate_watchdog.sh:37`, measurement checkout
-`docs/process_traces/2026-11-02-magistrate-0eafdaa2/RECORD.md:96`, ALIGN root and
-plan layout `docs/process_traces/2026-11-05-magistrate-c110a6c9/RECORD.md:50`.
-The journal and all `flashnext-gold-*` paths below are **new proposed paths**,
-not claims that those directories already exist.
+Save this bootstrap as `step2.zsh`. Ed sets exact paths in this file before
+review. `JW_RECORDS` is the current records checkout, not the old pinned
+measurement clone. Set `JW_P9_PIN` and `JW_P9_PILOT` to the exact handoff
+products supplied by the magistrate; their existence is checked without
+opening measurement content. Choose one fixed operation path, once.
 
 ```zsh
-set -euo pipefail
-setopt extendedglob
-# Admission guard: argument is the maximum NEXT additional allocation in bytes.
-# Long-running writers also need the continuous floor enforcement above.
-jw_disk_check() {
-  python3.13 -I -B - "${1:-0}" <<'PY'
-import os, sys
-s = os.statvfs('/System/Volumes/Data')
-free = s.f_bavail * s.f_frsize
-next_bytes = int(sys.argv[1])
-print('available_bytes', free, 'next_allocation_bytes', next_bytes)
-if next_bytes < 0 or free < 30_000_000_000 + next_bytes:
-    raise SystemExit('STOP: disk floor or next-allocation budget would fail')
-PY
-}
-jw_disk_check
+setopt interactivecomments errexit nounset pipefail extendedglob noclobber
 export JW_CANON=/Users/edr/code/JouleWise
 export JW_MEAS=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2
-export JW_OP="/Users/edr/night-archive/mbp-offload-$(date -u +%Y%m%dT%H%M%SZ)"
+: "${JW_RECORDS:?Set exact current Mac records checkout}"
+: "${JW_P9_PIN:?Set exact pilot-9 ledger-pin receipt path}"
+: "${JW_P9_PILOT:?Set exact saved p9-PILOT.json path}"
+: "${JW_OP:?Set one fixed NEW operation directory under night-archive}"
+export JW_RECORDS JW_P9_PIN JW_P9_PILOT JW_OP
+# No STOP creation, bootout or uninstall before this function passes.
+jw_pause_check() {
+  python3.13 -I -B - <<'PY'
+import json, os, re, subprocess
+from pathlib import Path
+s = (Path(os.environ['JW_RECORDS']) / 'RUN_STATE.md').read_text()
+assert re.search(r'^170\.', s, re.M), 'STOP: item 170 absent in Mac records'
+# Ed also reviews its amended semantics: no pilot8/9 auto-offload or pilot10.
+assert Path('/Users/edr/night-align/pilot-v8-20261105T102850Z/DESK_DONE').is_file(), 'STOP: no DESK_DONE'
+assert Path(os.environ['JW_P9_PIN']).is_file(), 'STOP: missing pin receipt'
+assert Path(os.environ['JW_P9_PILOT']).name == 'p9-PILOT.json'
+assert Path(os.environ['JW_P9_PILOT']).is_file(), 'STOP: missing desk product'
+lock = Path('/Users/edr/night-custody/magistrate/magistrate.lock')
+if lock.exists():
+    obj = json.loads(lock.read_text())
+    assert obj.get('schema') == 'joulewise.magistrate_lock.v1'
+    pid = obj['pid']
+    assert type(pid) is int and pid > 1
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        pass
+    else:
+        raise SystemExit('STOP: lock owner PID still exists; wait for exit')
+# Raw argv may contain credentials: inspect only in memory, never journal it.
+ps = subprocess.run(['/bin/ps', '-axo', 'pid=,comm=,args='], check=True,
+                    text=True, capture_output=True).stdout
+pattern = re.compile(r'(?i)(?:^|[/\s])(?:codex|offload\.py|align_pilot_session(?:\.py)?|harvest(?:[\w.-]*)?|zstd|tar)(?:\s|$)|(?:^|[/\s])claude(?:\s|$).*?(?:\s)-(?:p|[^\s]*p)(?:\s|$)')
+for row in ps.splitlines():
+    pid, command = row.strip().split(None, 1)
+    if pattern.search(command):
+        raise SystemExit('STOP: writer/agent census busy; PID=' + pid)
+print('STOP-2 pre-pause prerequisites PASS; no argv recorded')
+PY
+}
+jw_pause_check
+# Ed confirms no collection.active, armed plan or scheduled t0; all products sealed.
 mkdir -m 700 "$JW_OP"
+{
+  print -r -- 'setopt interactivecomments errexit nounset pipefail extendedglob noclobber'
+  for name in JW_CANON JW_MEAS JW_RECORDS JW_OP JW_P9_PIN JW_P9_PILOT; do
+    printf 'export %s=%q\n' "$name" "${(P)name}"
+  done
+  functions jw_pause_check
+  cat <<'ENV'
+export JW_CLOUD='/Users/edr/Library/Mobile Documents/com~apple~CloudDocs'
+export JW_REMOTE="$JW_CLOUD/JouleWise-archive/${JW_OP:t}"
+jw_disk_check() {
+  python3.13 -I -B - "${1:-0}" "${2:-/System/Volumes/Data}" <<'PY'
+import os, sys
+s = os.statvfs(sys.argv[2])
+free = s.f_bavail * s.f_frsize
+extra = int(sys.argv[1])
+print('available_bytes', free, 'next_allocation_bytes', extra)
+if extra < 0 or free < 30_000_000_000 + extra:
+    raise SystemExit('STOP: disk floor or allocation budget')
+PY
+}
+ENV
+} > "$JW_OP/env.zsh"
+source "$JW_OP/env.zsh"
+jw_disk_check
 /bin/df -k /System/Volumes/Data > "$JW_OP/df-before.txt"
 /usr/sbin/diskutil apfs list > "$JW_OP/apfs-before.txt"
 git -C "$JW_MEAS" status --short --branch > "$JW_OP/measurement-status.txt"
 git -C "$JW_MEAS" rev-parse HEAD > "$JW_OP/measurement-head.txt"
 /bin/launchctl list > "$JW_OP/launchd-before.txt"
-/bin/launchctl print-disabled "gui/$(id -u)" > "$JW_OP/launchd-disabled-before.txt"
-/bin/launchctl print "gui/$(id -u)" > "$JW_OP/launchd-domain-before.txt"
-/bin/ps -axo pid,ppid,lstart,command > "$JW_OP/processes-before.txt"
-find /Users/edr/Library/LaunchAgents -maxdepth 1 -type f -name '*.plist' -print
-```
-
-Ed records `ALIGN PAUSED: mbp-offload; no automatic re-arm; next review <UTC>`
-in the journal and informs the laptop lead. Preserve the measurement checkout,
-`.venv`, pinned ledger, launchd plists and their executable targets. Copy each
-JouleWise/measurement plist into `$JW_OP/plists/` before unloading; record which
-jobs were loaded. Include user and system jobs, scheduled probes, BYTES/B6 loop,
-magistrate and any external scheduler that can restart a measurement. Do not
-unload unrelated Apple services. Inspect system jobs with:
-
-```zsh
-sudo /bin/launchctl print system > "$JW_OP/launchd-system-before.txt"
+/bin/launchctl print-disabled "gui/$(id -u)" > "$JW_OP/disabled-before.txt"
 mkdir "$JW_OP/plists"
-# For EACH reviewed measurement/agent plist; fill its exact discovered path.
-: "${JW_PLIST:?Set exact reviewed plist path}"
-cp -p "$JW_PLIST" "$JW_OP/plists/"
-plutil -p "$JW_PLIST"
+# Discover paths without following symlinked plists or printing their contents.
+find /Users/edr/Library/LaunchAgents /Library/LaunchAgents /Library/LaunchDaemons \
+  -maxdepth 1 \( -type f -o -type l \) -name '*.plist' -print
+crontab -l
+atq
 ```
 
-When the current plan is terminal, set its exact path from the magistrate's
-current control record, not an old timestamp. The established uninstall removes
-the night and deadman jobs (`7e06863b/RECORD.md:7` in the directory cited in
-step 6). Keep their saved plists even though the installer removes installed
-ones. Then prevent the magistrate from launching new agents:
+`crontab -l` exits nonzero if no crontab exists; record that exact absence and
+resume the reviewed script after it, not with a blanket `|| true`. Ed reviews
+system launchers/cron/at locally. Never upload raw `ps`, `plutil -p`, crontab
+commands, `launchctl print` or plist contents: they can contain credentials.
+The journal gets only domain, label, original disabled/loaded state, PID and
+executable **basename**, and redacted schedule facts. Keep raw plist backups
+in the mode-700 local journal; **exclude plists and other raw credential
+records from the cloud/independent journal export**. Ed reviews that export.
+
+Account for every auto-reloader: night/deadman, `com.joulewise.magistrate`,
+`com.joulewise.b6loop`, BYTES, scheduled probes and
+`com.joulewise.quiet-kit` (`RUN_STATE.md:96`), system domains, cron and at.
+Copy each exact reviewed plist with `cp -pP` before unloading; if it is a
+symlink, also preserve its exact target and identity separately without
+following arbitrary targets. Extract only Label/Program basename locally,
+not EnvironmentVariables. Save system disabled states locally too. Preserve
+`local.jwbench.keepawake`, its plist, AC settings, checkouts and venvs.
+
+Save this continuation as `step2-pause.zsh`; review exact discovered jobs first.
+The source of `JW_PLAN` is the current terminal-plan handoff, not an old date.
 
 ```zsh
-: "${JW_PLAN:?Set terminal ALIGN custody/night_plan.json}"
-"$JW_MEAS/scripts/install_night_agent.sh" --plan "$JW_PLAN" --uninstall
-# STOP is the watchdog's supported local stop gate (watchdog.py:2677).
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_PLAN:?Set exact TERMINAL night_plan.json from handoff}"
+jw_pause_check
+# Only now may the operation create STOP or boot out/uninstall anything.
 test ! -e /Users/edr/night-custody/magistrate/STOP
-printf '%s\n' 'ALIGN paused for MBP offload and gold validation' \
+printf '%s\n' "ALIGN paused for MBP offload and gold validation; $JW_OP" \
   > /Users/edr/night-custody/magistrate/STOP
+cp -p /Users/edr/night-custody/magistrate/STOP "$JW_OP/our-STOP.txt"
+"$JW_MEAS/scripts/install_night_agent.sh" --plan "$JW_PLAN" --uninstall
 /bin/launchctl bootout "gui/$(id -u)/com.joulewise.magistrate"
 /bin/launchctl disable "gui/$(id -u)/com.joulewise.magistrate"
-```
-
-If STOP already exists, preserve it and its owner: do not overwrite or later
-remove it. `night-custody/magistrate` and the label are established by
-`scripts/install_magistrate_watchdog.sh:45–46`; STOP semantics are in
-`scripts/magistrate_watchdog.py:2677–2682`. Bootout preserves the installed
-plist; unlike `--uninstall`, it does not remove the file. An already-absent job
-must be documented as absent, not hidden with a blanket `|| true`.
-
-For every other reviewed automatic launcher (including `com.joulewise.b6loop`,
-recorded in `2026-11-01-interactive-26be5929/RECORD.md:6`), boot out its **exact**
-label and domain, and temporarily disable only launchers enabled before pause
-so a login/reboot cannot re-arm them. Record each change against the original
-disabled-state snapshot; inspect system-domain disabled state too if it has
-a relevant job. Ed closes resident agent sessions after handoff. Preserve
-`local.jwbench.keepawake`, its plist and AC configuration (retention authority
-`RUN_STATE.md:36`); it is not a measurement launcher. Do not reuse old PIDs for
-Spotlight SIGCONT: verify names and start times first (`c110a6c9/RECORD.md:7`).
-
-```zsh
-# Fill for each reviewed launcher; use system domain only when actually found.
-: "${JW_JOB_TARGET:?Set reviewed domain/label}"
+# Repeat these two operations for each reviewed non-keepawake launcher.
+: "${JW_JOB_TARGET:?Set discovered exact domain/label}"
 /bin/launchctl bootout "$JW_JOB_TARGET"
 /bin/launchctl disable "$JW_JOB_TARGET"
 /bin/launchctl list > "$JW_OP/launchd-paused.txt"
-/bin/launchctl print "gui/$(id -u)" > "$JW_OP/launchd-domain-paused.txt"
-/bin/ps -axo pid,ppid,lstart,command > "$JW_OP/processes-paused.txt"
-```
-
-**STOP 2:** Ed/magistrate attest: pilot 9 harvested and required desk custody
-saved, item-170 pause confirmed, terminal plan, no collection process or
-`collection.active`, no scheduled t0, night/deadman absent, loops unable to
-launch, resident agents drained, every automatic reloader accounted for. A
-missing process in `ps` alone does not prove an armed launchd job is absent.
-No measurement resumes during any offload or setup step. Agent work is allowed
-only in this paused non-measurement window; **all agents must exit before any
-future measurement** (`AGENTS.md:60–64`).
-
-## 3. Inventory KEEP dependencies and the minimum offload candidates
-
-Start with metadata only for the exact candidate and KEEP roots supplied by the
-magistrate; expand only as needed to select a CLOSED leaf. Do not follow
-symlinks. BSD `du -I` prunes real `restricted` directories; mark their excluded
-size UNKNOWN and send them to the custody operator. Never `cat`, sample or
-preview a data file.
-
-```zsh
-# Operator prepares exact absolute candidate paths, one per line, no globs.
-test -s "$JW_OP/candidates.txt"
-while IFS= read -r root; do
-  /bin/df -k "$root"
-  /usr/bin/du -sk -I restricted "$root"
-done < "$JW_OP/candidates.txt" > "$JW_OP/root-metadata.txt"
+# Assert no com.joulewise.* job is loaded in GUI OR system domain.
+python3.13 -I -B - <<'PY'
+import subprocess
+for domain in ('gui', 'system'):
+    argv = ['/bin/launchctl', 'list'] if domain == 'gui' else ['sudo', '/bin/launchctl', 'list']
+    s = subprocess.run(argv, check=True, capture_output=True, text=True).stdout
+    assert not any('com.joulewise.' in row for row in s.splitlines()), 'STOP: JouleWise job loaded'
+print('JouleWise GUI/system jobs absent; keepawake preserved')
+PY
+jw_pause_check
 jw_disk_check
 ```
 
-Use a per-root ledger with columns: exact path, owning study/registration,
-source citation, allocated KiB, logical bytes (later manifest), status
-KEEP/CLOSED/UNKNOWN, irreplaceable yes/no, cloud destination, independent-copy
-location/device, verified manifest SHA, deletion receipt. UNKNOWN is KEEP.
-Do not expand into a home-wide cleanup or wipe. The old broad temp-removal
-command in `RUN_STATE.md:38` is not adopted. Default selection order is:
+If a job is already absent, document the specific absence and continue via a
+reviewed revised script. A pre-existing STOP is never overwritten or removed.
+Resume requires `cmp "$JW_OP/our-STOP.txt" .../STOP`, env/helper hash checks,
+no active writer and reviewed disable-state receipts. Optional remote
+`ops/stop*` control is lead-owned; this offline procedure does not push it.
 
-1. **Already-offloaded ALIGN roots first.** Re-read the existing cloud archive
-   and authenticated manifest, verify the independent restore, then delete
-   only a surviving local CLOSED source through steps 6–8. A pointer whose
-   source is already gone offers no additional free bytes. Do not upload a
-   duplicate archive merely to reuse the new-root commands.
-2. **Pilots 0–3 and 6–9 after their harvests.** Require per-root terminal,
-   harvest and required desk-product custody receipts and no remaining
-   writers/dependencies. Deduplicate paths already covered by tier 1. Pilot
-   numbers are not directory suffixes; pilot 9 is `pilot-v8-*`. Keep its root
-   until its harvest and desk handoff finish. Apply all verification gates.
-3. **Unused models only if still needed.** First list each candidate's repo,
-   full revision, exact snapshot/blob paths, per-file digests, restore command
-   and live references in the ledger. Resolve shared HF blobs before selecting
-   a leaf. Keep all Qwen3-30B anchor revisions and Qwen3.8-27B (step 4).
+**STOP 2:** Ed attests amended item 170 present, DESK_DONE/pin/p9-PILOT saved,
+lock owner gone, no named agent/writer, no collection/armed t0, launchers
+absent/disabled, external schedulers accounted for. This check precedes all
+STOP/bootout actions; repeat on resume. Agents must exit before measurements.
 
-After each root, measure actual available bytes. **Stop offloading once about
-150 GB is available and the measured step-9 budget passes.** If already enough
-is free, skip offload mutations; still record KEEP/identity baselines required
-by steps 6 and 13. Other B6/BYTES/calibration/personal roots are custody
-exclusions here, not a fallback deletion queue. If these candidates cannot
-meet admission, stop for the lead's revised storage plan; preserve KEEP.
+## 3. Mechanical model KEEP census and pre-offload R0 inventories
 
-Records establish these candidates and custody exclusions; add any dependency
-that the current candidate review discovers:
+Use the integrated Mac records/kit checkout containing the BYTES, B6, ALIGN
+and R0 code. Before **any offload or archive**, prepare the reviewed R0 config
+from PR #661's `docs/align/r0_desk.example.json`. Keep `disk_path` on the
+**measurement internal volume**; the example's `/Volumes/ALIGN_MODELS` is not
+appropriate for the measurement disk gate. Set all custody parents. Set
+`offloads[].destination` to separate **uncompressed, non-symlink materialized
+copies** on independent storage, not tar.zst or an HF snapshot of symlinks.
+Pilot 9's source is retained even though R0's schema calls its copy an offload.
 
-| Root (on the measurement Mac unless stated) | Record and treatment |
-|---|---|
-| `/Users/edr/night-b5`, `night-g2a`, `night-custody/v5-*`, `night-archive/harvest-v5-b5-*`, `night-plan-staging` | `RUN_STATE.md:45,360`; `BLOCK5-TRANSFER.md:26–44,84–104`. Entire B5 custody starts KEEP. Include all attempts, history, failed captures, meters and ledgers. |
-| `/Users/edr/night-custody/measurement`, `/Users/edr/night-custody/desk`, canonical `/Users/edr/code/JouleWise` and active worktrees | `RUN_STATE.md:27`; `2026-11-02-magistrate-0eafdaa2/RECORD.md:96`; offload registration `01-data-offload-lane-registration.md:43–50` cited in step 6. KEEP, never move live roots under sync. |
-| `/Users/edr/night-b6/sessions`, `night-b6/loop`, `night-b6/loop-bytes` | `docs/registrations/block6_replication_DRAFT.md:1195`; `docs/registrations/bytes_freeze_by_commit_addendum.md:198–217`. Separate closed B6 and BYTES sessions; retain control and registration dependencies. |
-| `/Users/edr/night-bytes`, `night-bytes-stream-test`, `night-archive/bytes-stream-test` | `RUN_STATE.md:1239`; `docs/process_traces/2026-10-31-magistrate-5cbfbcfc/RECORD.md:6–8`. Include H/H2, known-bytes receipts, raw streams and original/archived copies. |
-| `/Users/edr/night-align` (all v0–v9 preparations and pilots discovered there) | `docs/process_traces/2026-11-04-magistrate-7e06863b/RECORD.md:15–17`; `c110a6c9/RECORD.md:50`. Pilot number differs from root suffix: pilot 9 used `pilot-v8-*`; do not infer absent v9 or treat an empty prepare as disposable. Inventory `.OFFLOADED.json` pointers as custody too. |
-| `/Users/edr/night-archive`, `night-plan-staging`, canonical/measurement `runs/instrument_validation` and calibration ledgers | `RUN_STATE.md:45`; `TASK_QUEUE.md:1233` (R7 second-copy obligation); transfer `measurement-corpus18-data.manifest.json:8–24` and `ledger-captures.manifest.json:8–15` under the directory in step 4. Include quarantine, calibration, staging, raw plists and logs. |
-| `/Users/edr/jw_models`, `/Users/edr/.cache/huggingface/hub` | `docs/process_traces/2026-10-28-magistrate-39206674/RECORD.md:22`; pinned ALIGN config in step 4. HF snapshots can symlink to shared blobs: account for their actual targets before any cache deletion. |
-| `/Users/edr/Library/Mobile Documents/com~apple~CloudDocs` | `configs/campaigns/p2_015_floors/backup_icloud.sh:4–6`. Inventory backup/archive/transfer metadata without triggering mass hydration; already-cloud-only data is not reclaimable SSD space. |
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_R0_CODE:?Set reviewed integrated R0 checkout}"
+: "${JW_R0_CONFIG:?Set reviewed config JSON INSIDE that checkout}"
+: "${JW_P8_SOURCE:?Set exact pilot-8 root from handoff}"
+export JW_R0_CODE JW_R0_CONFIG JW_P8_SOURCE
+python3.13 -I -B "$JW_CANON/scripts/align_offload_model_keep.py" \
+  --repo "$JW_R0_CODE" --r0-config "$JW_R0_CONFIG" \
+  --output "$JW_OP/model-keep-provenance.json" > "$JW_OP/model-KEEP.txt"
+cat "$JW_OP/model-KEEP.txt"
+# --inventory only, not the R0 measurement/selection run. Run before any offload.
+"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
+  --config "$JW_R0_CONFIG" --inventory "$JW_P8_SOURCE" --output "$JW_OP/pilot8-r0-inventory.json"
+"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
+  --config "$JW_R0_CONFIG" --inventory /Users/edr/night-align/pilot-v8-20261105T102850Z \
+  --output "$JW_OP/pilot9-r0-inventory.json"
+jw_disk_check
+```
 
-Abbreviations in the table name files under `docs/process_traces/` and the
-full dated activation directories used elsewhere in this runbook. Add mount
-points, symlink targets and external volumes to the ledger; two paths on one
-APFS container do not represent independent copies.
+The tracked helper reads repository text only and prints model paths without
+following them: every config JSON (a superset of **every**
+`configs/campaigns/*/registration/identity_pins.json` `model_source`), every
+tracked roster file and the exact R0 config. It extracts model sources and
+artifact roots/blob paths, and records input SHA-256s. This older authoring
+checkout lacks integrated rosters; its census must refuse, not print a
+plausible incomplete list. Ed compares every BYTES ten-model + 27B extension,
+B6 §1.4 and ALIGN kit roster entry against the printed census, including any
+prose-only roster not represented by config sources. Unresolved IDs/paths are
+KEEP and STOP; do not infer a filesystem path from a model's display name.
+Store R0 config/source variables in a new mode-600 `$JW_OP/r0-env.zsh` with
+quoted `export` lines; later R0 scripts source it. No env overwrite on resume.
 
-## 4. KEEP list — never delete under this runbook
+The printed census must include the NEG-8 Qwen2.5-1.5B-Instruct-4bit,
+Qwen3-1.7B-4bit, Qwen3-8B-4bit, all BYTES roster models, Qwen3.8-27B-8bit,
+all Qwen3-30B-A3B-4bit anchors and Qwen3-Next-80B-A3B-Thinking-4bit (R0 N).
+Keep every pinned revision and its **blob bytes**, not just HF snapshot links.
+For HF KEEP baselines use the kit's `model_artifact_inventory` or hash each
+referenced blob with its resolved-path binding. A snapshot symlink manifest
+alone does not authenticate weights; no shared HF cache cleanup here.
 
-Copying KEEP material for additional safety is allowed after pause. Deletion,
-moving its source, iCloud relocation of live roots, and unreviewed cache
-cleanup are not. KEEP ancestors cannot be selected as deletion roots.
+Structure-only candidate metadata comes from the authorized custody operator,
+using the full restricted path map. No recursive `du -I restricted` is an
+agent-safe inventory. For approved paths only, process even a final line
+without newline with `while IFS= read -r root || [[ -n "$root" ]]; do ...; done`.
+UNKNOWN is KEEP. A source listing alone does not prove absence from the ledger:
+require a structure-only review of **all ledger locators** under that root,
+without exposing values, bound to the source manifest/archive in step 8.
 
-1. **Block-5 custody required for release/recompute on BOTH machines.** The
-   analysis laptop runs the blind dry run and independent recompute:
-   `docs/process_traces/2026-10-27-l9-restart/BLOCK5-TRANSFER.md:13–17,51–60`.
-   The release follows the laptop comparison (`RUN_STATE.md:1023`). Its local
-   `/Users/edr/night-{archive,b5,custody,g2a,plan-staging}` inputs and
-   `/Users/edr/jw-b5-staging/tars` are KEEP through release; the transfer was
-   verified at 88,653 files and 190 iCloud captures (`RUN_STATE.md:360`).
-   **Do not access those laptop paths from this operation.** Ask the laptop
-   lead for a fresh hash-only receipt against the committed manifests in
-   `docs/process_traces/2026-10-27-l9-restart/b5-transfer/`. The old receipt
-   is evidence of a transfer, not proof that today's entire Mac root has a
-   second copy. The laptop's unpacked inputs are independent of the MBP;
-   its own iCloud mount is the same cloud copy, not another backup.
-2. **On-device retention overrides space goals.** No calibration capture
-   after ledger sequence 376 is moved/offloaded before release, including
-   removed attempts under `night-b5` and `night-g2a` (`RUN_STATE.md:45`).
-   `BLOCK5-TRANSFER.md:44` explicitly leaves B5 originals in place. This runbook
-   retains B5 originals rather than interpreting a general offload approval
-   as a repeal. Also retain every root/ledger/config a sealed registration,
-   night plan, acceptance or recompute pins. Derive dependencies from tracked
-   registrations, committed path manifests and released control records;
-   do not parse raw blinded ledgers. If their coverage is incomplete: STOP.
-   Backup/offload copies inherit the blinding restrictions
-   (`configs/campaigns/v5_claim_25g83/registration_block5.md:4874–4904`).
-3. **ALIGN anchor Qwen3-30B-A3B-4bit.** Repository
-   `mlx-community/Qwen3-30B-A3B-4bit`, revision
-   `d388dead1515f5e085ef7a0431dd8fadf0886c57`, source
-   `/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57`.
-   Citation:
-   `8d1ab6e2c1c8f17fac0b20485f519d197e463c38:configs/campaigns/align_pilot_v3/stages/episodes-a/align-pilot-v3-episodes-a-e01.json:16–22`
-   (`origin/lane/2026-11-05-align-pilot9-kit`). Keep its referenced blob store.
-4. **Qwen3.8-27B-8bit.** Repository `mlx-community/Qwen3.8-27B-8bit`, revision
-   `815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9`, path
-   `/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit` (28 GB):
-   `docs/process_traces/2026-10-28-magistrate-39206674/RECORD.md:22`.
-   The record establishes its BYTES-extension use; current ALIGN use must be
-   confirmed from the current kit, not asserted from this older record.
-   **Models 3–4 stay on-device under this runbook**, including every shared
-   blob needed by the Qwen3-30B anchors and Qwen3.8-27B. Add any other anchor
-   revision named by the current kit to KEEP. For tier-3 unused models,
-   require no sealed/live obligation, a full revision and per-file digest
-   inventory, a verified cloud copy and pinned restore evidence before
-   deletion. Never delete a model named by an open roster
-   (`RUN_STATE.md:1203`). Re-downloadability is not assumed from a repo name.
-5. **Measurement infrastructure.** Canonical and measurement checkouts,
-   desk checkouts, ignored custody inputs/local-only commits, venvs, runtime
-   locks, magistrate executable targets, launchd plist backups, loop state,
-   plan staging, keepawake and credentials remain in place. `.venv` was
-   reproduced from 55 frozen dependencies, not a fresh unconstrained install
-   (`docs/process_traces/2026-11-02-magistrate-0eafdaa2/RECORD.md:96`).
-   `DATA-OFFLOAD-ICLOUD-01` never-sync list: `TASK_QUEUE.md:843` and
-   `01-data-offload-lane-registration.md:43–50` cited in step 6.
-6. **Legacy calibration/acceptance custody.** Retain mint inputs, quarantine,
-   six frozen acceptance bundles and experiment custody listed in
-   `docs/run_reports/2026-07-28-icloud-archive-prune.md:35–41`, unless the lead
-   supplies an explicit superseding dependency ruling. R7's 17 raw captures
-   need a second copy outside Git/iCloud (`TASK_QUEUE.md:1233`), including the
-   three previously iCloud-only captures. They cannot be counted safe merely
-   because an old archive exists. Do not change a ledger locator to repair
-   an offload. D-188 allows specific code benchmarking, not deletion or
-   unblinding (`docs/decision_log.md:12239`, clauses 1–6).
+Candidate order: (1) verify/second-copy existing pilots 0–7 archives; they
+reclaim zero deleted-source bytes; (2) pilot 8 only if no locator falls under
+retention and all gates pass; (3) models outside **every** printed model KEEP
+entry, every mandatory root and every sealed/live dependency. **Tier 3 is
+empty under the present KEEP roots/known roster; budget zero reclaimed bytes
+from it.** Do not use cache removal, calibration custody, B6/BYTES or personal
+roots as a fallback. Pilot 9 is not a candidate in this pause.
 
-**STOP 4:** Ed and the lead review the per-root classification and ordered
-minimal candidate list. Block-5 originals stay on-device until after release;
-this runbook supplies no B5-original deletion. If the eligible list cannot
-reach the measured streaming budget, retain protected bytes and ask for a
-revised storage plan. No wipe or retention waiver is supplied here.
+**STOP 3:** R0 inventories for both pilots saved outside sources; materialized
+copy destinations agreed and budgeted, full model KEEP printed and reviewed,
+pilot 8's retention census ruled or root retained. R0 may refuse symlinks or
+restricted content; retain sources and ask the lead rather than weakening it.
+Do not run a live R0 desk session from an agent. Copies may be made under this
+paused Ed-only procedure; full R0 remains its own lead-controlled gate.
 
-Save a complete plain-text list of exact absolute KEEP roots in
-`$JW_OP/KEEP.txt` (one path per line, no comments or glob patterns), expanding
-the table's patterns from metadata only. Include required individual files,
-the journal, active infrastructure, original B5 roots and every discovered
-sealed dependency. This is an additional deletion guard, not a replacement
-for the dependency review.
+## 4. KEEP roots and immutable custody
+
+`RUN_STATE.md:45` capture retention stays in force until block-5 release,
+including removed attempts and ALIGN capture directories. Pilot 9 stays
+**entirely on the Mac**; no split-root deletion or locator rewrite. If pilot
+8 has even one protected locator, keep it too and STOP for the lead's ruling.
+B5 originals on both machines and the transfer/recompute dependencies are
+KEEP; the analysis laptop is not spare scratch storage. A previous transfer
+receipt does not prove coverage of an unrelated current root.
+
+Before source deletion the complete `$JW_OP/KEEP.txt` must contain these exact
+mandatory roots, **all must exist**, plus the printed model paths, operation
+journal, active worktrees, venvs, ledgers, plan inputs, executable/plist targets
+and every discovered sealed dependency. Ancestors and descendants overlap by
+inode. Missing mandatory roots or unresolved KEEP entries are a refusal.
+
+```text
+/Users/edr/code/JouleWise
+/Users/edr/night-custody
+/Users/edr/night-b5
+/Users/edr/night-g2a
+/Users/edr/night-archive
+/Users/edr/night-plan-staging
+/Users/edr/night-b6
+/Users/edr/night-bytes
+/Users/edr/jw_models
+/Users/edr/.cache/huggingface/hub
+/Users/edr/Library/LaunchAgents
+```
+
+KEEP also includes calibration/acceptance/quarantine, raw streams and archived
+attempts, night-plan-staging, control state, keepawake, and `.OFFLOADED.json`
+pointers. Retain legacy mint/acceptance custody and R7's 17 raw captures;
+D-188 engineering permission grants no deletion or unblinding. Preserve raw
+bundles/run evidence unchanged. Approval of a broad offload plan is not
+approval of any item's bytes. Step 7 adds independent copies of existing
+single-copy archives; they remain protected after copying.
+
+**STOP 4:** Ed/lead review exact candidates, KEEP and dependency/retention
+coverage. Keep everything UNKNOWN. The external storage plan does not require
+removing pilot 9 or taking bytes from protected roots. If the full ledger
+locator review is unavailable, pilot 8 stays and no deletion proceeds.
 
 ## 5. Check quota, staging space and throughput for the selected roots only
 
@@ -360,6 +365,7 @@ approved cloud destination with equivalent full-byte verification. Never
 publish blinded data or create a new integration as a convenience.
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 export JW_CLOUD='/Users/edr/Library/Mobile Documents/com~apple~CloudDocs'
 /usr/bin/brctl status com.apple.CloudDocs > "$JW_OP/icloud-before.txt"
 # New operation namespace under the established JouleWise-archive namespace.
@@ -383,6 +389,7 @@ disappearance alone does not suffice. Then use **explicit** eviction and
 re-download of this probe to confirm the remote round trip:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 date -u +%FT%TZ > "$JW_OP/upload-end.utc"
 /usr/bin/brctl evict "$JW_REMOTE/upload-probe.bin"
 /usr/bin/brctl download "$JW_REMOTE/upload-probe.bin"
@@ -443,6 +450,7 @@ block-5 restricted path map: only the authorized custody operator may run it
 on roots cleared by that map. Agents never read real blinded manifests.
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 cp -p "$JW_CANON/scripts/align_offload_delete_root.py" "$JW_OP/manifest.py"
 shasum -a 256 "$JW_OP/manifest.py" > "$JW_OP/manifest-helper.sha256"
 ```
@@ -461,6 +469,7 @@ such targets separately or retain the source. An archived symlink is not a
 copy of its target (especially HF blobs and `.venv`).
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_SRC:?Set one exact approved CLOSED leaf root}"
 : "${JW_ID:?Set unique ledger ID using letters digits dash underscore only}"
 [[ "$JW_ID" == [A-Za-z0-9_-]## ]]
@@ -515,6 +524,7 @@ and aggregate queue state (the transfer precedent is
 `docs/process_traces/2026-10-28-magistrate-39206674/RECORD.md:88`).
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 /usr/bin/fileproviderctl evaluate "$JW_REMOTE/$JW_ID.tar.zst"
 /usr/bin/fileproviderctl evaluate "$JW_REMOTE/$JW_ID.manifest.json"
 /usr/bin/brctl status com.apple.CloudDocs
@@ -559,6 +569,7 @@ and make a complete restore to an empty directory
 top of custody or at the original absolute path):
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 # Independent device, with the same pipefail and helper as step 6.
 : "${JW_SECOND_ARCHIVE:?Set archive path on independent storage}"
 : "${JW_SECOND_MANIFEST:?Set copied source manifest}"
@@ -605,6 +616,7 @@ exact source path, source-manifest SHA-256 **and archive SHA-256** for this
 item. An unrelated receipt cannot authorize deletion.
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 # Ed only; a single fail-closed program owns every check and the deletion.
 shasum -a 256 -c "$JW_OP/manifest-helper.sha256"
 python3.13 -I -B "$JW_OP/manifest.py" delete \
@@ -641,6 +653,7 @@ Explicitly evict only the verified uploaded tar after independent verification
 to reclaim its local staging bytes; do not delete the cloud object:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 /usr/bin/brctl evict "$JW_REMOTE/$JW_ID.tar.zst"
 /bin/df -k /System/Volumes/Data > "$JW_OP/df-current.txt"
 ```
@@ -695,6 +708,7 @@ an unbounded layer-0 or n-gram working set.
 New proposed locations under the established non-iCloud model/code roots:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 export JW_GOLD=/Users/edr/jw_models/flashnext-gold-20261105.noindex
 export JW_GOLD_CODE=/Users/edr/code/JouleWise-flashnext-gold-20261105
 : "${JW_SETUP_BUDGET_BYTES:?Set approved new setup and temporary allocation ceiling}"
@@ -747,6 +761,7 @@ measurement MBP only; none were run while authoring this document.
 First resolve metadata without downloading weights:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 export JW_HF_REPO=Qwen/Qwen3.8-Flash-Next
 "$JW_GOLD/envs/reference/bin/python" -B - <<'PY'
 import json, os
@@ -775,6 +790,7 @@ and keep both files immutable. The source of each expected SHA-256 is the HF
 LFS oid at that revision, not a hash computed from a downloaded corrupt file.
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 cp -p "$JW_OP/hf-proposed.json" "$JW_OP/hf-pinned.json"
 export JW_HF_REV="$("$JW_GOLD/envs/reference/bin/python" -c \
   'import json,os; print(json.load(open(os.environ["JW_OP"]+"/hf-pinned.json"))["revision"])')"
@@ -866,6 +882,7 @@ weights or running the loop.** The following checkout commands become usable
 only once the lead supplies the lane object to the MBP:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_HARNESS_COMMIT:?Set reviewed full gold-parity lane commit}"
 git -C "$JW_CANON" cat-file -e "$JW_HARNESS_COMMIT^{commit}"
 git -C "$JW_CANON" worktree add --detach "$JW_GOLD_CODE" "$JW_HARNESS_COMMIT"
@@ -965,6 +982,7 @@ with different pins, prompts, bounds or quantization needs a new reviewed run.
 Before/after each unit, also record memory and disk state:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 /usr/bin/vm_stat > "$JW_OP/vm-before-phase.txt"
 /usr/sbin/sysctl vm.swapusage > "$JW_OP/swap-before-phase.txt"
 /bin/df -k /System/Volumes/Data > "$JW_OP/df-before-phase.txt"
@@ -1022,6 +1040,7 @@ the SSD.
    file and restore the magistrate supervisor from its original plist:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 # Ed only, after steps 1–2 and confirmation the STOP was created by step 2.
 test "$(cat /Users/edr/night-custody/magistrate/STOP)" = \
   'ALIGN paused for MBP offload and gold validation'
@@ -1043,6 +1062,7 @@ rm /Users/edr/night-custody/magistrate/STOP
    `8d1ab6e2c:scripts/align_pilot_session.py:430–445`:
 
 ```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
 # Magistrate only, after choosing the current reviewed kit and new root.
 : "${JW_NEXT_SESSION:?Set approved NEW /Users/edr/night-align/session root}"
 "$JW_MEAS/.venv/bin/python" -B "$JW_MEAS/scripts/align_pilot_session.py" \
