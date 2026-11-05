@@ -1,0 +1,3416 @@
+{
+  "base": "427cc6d302c4a3731b69b4b5f4bb2c725acc5285",
+  "method": "Top-level source helper census; excludes restricted directories and symlinks; AST spans include signatures and docstrings. Local fingerprints are syntactic inventory, not an equivalence claim.",
+  "helpers": [
+    {
+      "path": "joulewise/adapters/mlx_runtime.py",
+      "function": "_sha256_file",
+      "line": 78,
+      "lines": 6,
+      "family": "digest",
+      "contract": "sha256_file",
+      "disposition": "migrate",
+      "body_sha256": "ed432a52d30f4f484cdfc8d5d451e4b93bcf77b974dad8a7567d3aea6bd14621"
+    },
+    {
+      "path": "joulewise/adapters/mock_spec_runtime.py",
+      "function": "_tokenizer_artifact_sha256",
+      "line": 46,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/4a938f14c3eadde2",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "4a938f14c3eadde29857c43c4182303ac1e9a8c692d40f79d5510a459aa1ed16"
+    },
+    {
+      "path": "joulewise/adapters/node_worker.py",
+      "function": "write_status_atomic",
+      "line": 1891,
+      "lines": 15,
+      "family": "durability",
+      "contract": "local/c314c309657289e3",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "c314c309657289e3ae06a03e1150f84aed9ca68fb87644996e919d68590893f2"
+    },
+    {
+      "path": "joulewise/aggregate.py",
+      "function": "_is_finite_number",
+      "line": 486,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/a1d6c6d206174631",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a1d6c6d2061746318c43068ed7b42c84865efa0bb437ee69f7c5e618c2ab9912"
+    },
+    {
+      "path": "joulewise/analysis_engine/artifact.py",
+      "function": "canonical_json_bytes",
+      "line": 396,
+      "lines": 8,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "joulewise/analysis_engine/artifact.py",
+      "function": "render_claim_verdicts",
+      "line": 412,
+      "lines": 4,
+      "family": "JSON rendering",
+      "contract": "json_pretty_insertion_utf8_strict",
+      "disposition": "migrate",
+      "body_sha256": "2994ed813c4a1de37535aab5c373617b6cd4e631233c7d516874066fcff6cd88"
+    },
+    {
+      "path": "joulewise/analysis_engine/artifact.py",
+      "function": "_exact_keys",
+      "line": 418,
+      "lines": 11,
+      "family": "key set",
+      "contract": "collect_exact_keys",
+      "disposition": "migrate",
+      "body_sha256": "fe34a91081a8b6272e17a43846ce4521cf1cc8ef56206aee0edd52f7f44fb20b"
+    },
+    {
+      "path": "joulewise/analysis_engine/artifact.py",
+      "function": "_exact_keys_with_optional_group",
+      "line": 431,
+      "lines": 12,
+      "family": "key set",
+      "contract": "local/88c639b3b38ca2ca",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "88c639b3b38ca2cae2770b28ed5639953ab1cc1a7023e0c9c89947095e875841"
+    },
+    {
+      "path": "joulewise/analysis_engine/artifact.py",
+      "function": "_finite_json",
+      "line": 531,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "local/cf5571d5257565d5",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "cf5571d5257565d52b65055fdcc96c758e490dba469dcde6f54784cd58f0b966"
+    },
+    {
+      "path": "joulewise/analysis_engine/artifact.py",
+      "function": "_relative_label",
+      "line": 576,
+      "lines": 5,
+      "family": "path guard",
+      "contract": "local/5528ba857a121e71",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "5528ba857a121e71bbcbedcc0c3b9688a821ba4e35887f2b5e51e9f4ac6c80e5"
+    },
+    {
+      "path": "joulewise/analysis_engine/artifact.py",
+      "function": "write_claim_verdicts_atomic",
+      "line": 3645,
+      "lines": 32,
+      "family": "durability",
+      "contract": "local/a06f869915dafdcd",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a06f869915dafdcdc5b6c6ab7adcd90abda6a5a1a09b04720935f4142500d942"
+    },
+    {
+      "path": "joulewise/analysis_engine/claims.py",
+      "function": "_finite",
+      "line": 237,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "finite_or_none",
+      "disposition": "migrate",
+      "body_sha256": "227d84925358b8ae502290b090bd0fc922c1e06c48ffd92df4b6c6d79124d22a"
+    },
+    {
+      "path": "joulewise/analysis_engine/distributions.py",
+      "function": "_finite_float",
+      "line": 27,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "require_finite",
+      "disposition": "migrate",
+      "body_sha256": "d1f49227757a616274f43f9af1d8dfcc25d716cb505b8eef098e0b80e8b34374"
+    },
+    {
+      "path": "joulewise/analysis_engine/estimators.py",
+      "function": "_finite_number",
+      "line": 167,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "require_finite",
+      "disposition": "migrate",
+      "body_sha256": "d1f49227757a616274f43f9af1d8dfcc25d716cb505b8eef098e0b80e8b34374"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_reject_nonfinite_admission_number",
+      "line": 449,
+      "lines": 4,
+      "family": "number guard",
+      "contract": "local/d3a8d0d1b8fb92aa",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "d3a8d0d1b8fb92aa03ed3d9a56675eca6c8a236aa4c90a16aa039ec572c91712"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_parse_finite_admission_float",
+      "line": 455,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "parse_finite_float",
+      "disposition": "migrate",
+      "body_sha256": "1de5f1b5ee94b468fd25d4d7138809ad68de3bd6ad3794d6a435c72eeeb873a9"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_parse_finite_admission_int",
+      "line": 462,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "parse_finite_int",
+      "disposition": "migrate",
+      "body_sha256": "19e0c8c770d68cae89f26365cc67c7b8ab09e607621a9bdcf0b1438567f1f1e5"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_strict_json_admission_bytes",
+      "line": 491,
+      "lines": 35,
+      "family": "strict JSON",
+      "contract": "local/1b096d8dc4cd6ab2",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "1b096d8dc4cd6ab2264f1c48160845212d4361058b1d3430285d218bd6970aab"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_strict_jsonl_admission_bytes",
+      "line": 528,
+      "lines": 12,
+      "family": "strict JSON",
+      "contract": "local/328c099c4f4e8fe9",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "328c099c4f4e8fe9995f8332e73919e0ba93205e627744a85592423677763005"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_sha256_file",
+      "line": 748,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/7b5e3021d1eee0d7",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "7b5e3021d1eee0d7aeba690a67f3998a47fb7de7e6c5f8cd59ce3f2c0a17938f"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_safe_relative_posix",
+      "line": 1370,
+      "lines": 13,
+      "family": "path guard",
+      "contract": "local/c331ba36866d9b4b",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "c331ba36866d9b4b679e163179035f9556168c44fb5ad3e76e832ebe0c3e076d"
+    },
+    {
+      "path": "joulewise/analysis_engine/inputs.py",
+      "function": "_safe_relative",
+      "line": 2953,
+      "lines": 19,
+      "family": "path guard",
+      "contract": "local/af73ddaf7800fab4",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "af73ddaf7800fab457920846bb9915e38e63c1c11a00fed7a9b0a18f10f80533"
+    },
+    {
+      "path": "joulewise/analysis_engine/ratio.py",
+      "function": "_canonical_identity",
+      "line": 326,
+      "lines": 13,
+      "family": "JSON rendering",
+      "contract": "local/accf7f69a67bd0ee",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "accf7f69a67bd0ee9c09a6f3ce6a4573f5d1c1d6cda58a8d62e04babaf8a5daf"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "_reject_duplicate_admission_keys",
+      "line": 160,
+      "lines": 9,
+      "family": "strict JSON",
+      "contract": "unique_json_pairs",
+      "disposition": "migrate",
+      "body_sha256": "ea3a38663c3bd501cab1ad5cf5d2d8b6be21b7898b48762a1a52332f9819ee03"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "_reject_nonfinite_admission_number",
+      "line": 171,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/f7ea49bdfd182379",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f7ea49bdfd18237989c88b770ab7047136c4297e323cc4dc2a44fb40558a7d32"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "_parse_finite_admission_float",
+      "line": 175,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "parse_finite_float",
+      "disposition": "migrate",
+      "body_sha256": "1de5f1b5ee94b468fd25d4d7138809ad68de3bd6ad3794d6a435c72eeeb873a9"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "_parse_finite_admission_int",
+      "line": 182,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "parse_finite_int",
+      "disposition": "migrate",
+      "body_sha256": "19e0c8c770d68cae89f26365cc67c7b8ab09e607621a9bdcf0b1438567f1f1e5"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "_strict_json_admission_bytes",
+      "line": 210,
+      "lines": 24,
+      "family": "strict JSON",
+      "contract": "local/65c01bf985566d9c",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "65c01bf985566d9cc3f3279a327c49d407d77654ae637ac6378d1718353bbb4d"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "canonical_json_bytes",
+      "line": 236,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes",
+      "disposition": "migrate",
+      "body_sha256": "97a5dc3410862835fb1c6e4c74696b97aa0403f317b48b3aadd3a11222393963"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "normalized_json_bytes",
+      "line": 240,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_pretty_utf8",
+      "disposition": "migrate",
+      "body_sha256": "f5dd5734a901137e67d7149af319893b088bb6e7bc138b536c45a85bb36e9c7a"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "sha256_bytes",
+      "line": 248,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_value",
+      "disposition": "migrate",
+      "body_sha256": "62c1c3a71262ab8b419bd6c2746d42694de7434feed924065270a84b51195bb7"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "_relative_path",
+      "line": 264,
+      "lines": 5,
+      "family": "path guard",
+      "contract": "local/6ce2dbf86c89ef91",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "6ce2dbf86c89ef914da3d861aef6e61772ee2e3cbcb51d3f9416eedb0932c068"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "registry_semantic_sha256",
+      "line": 484,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/8b39613a7b3b1bc4",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8b39613a7b3b1bc44635b7869db37df4f0b6ec78ef970ffc2fbce54fb1252ed6"
+    },
+    {
+      "path": "joulewise/analysis_engine/registry.py",
+      "function": "pairing_projection_sha256",
+      "line": 510,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/122c3933c0f1f35e",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "122c3933c0f1f35e77b1caeb35650ade8e4c28533a5af8798984e9f9ac166ca4"
+    },
+    {
+      "path": "joulewise/analysis_manifest.py",
+      "function": "sha256_bytes",
+      "line": 209,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_value",
+      "disposition": "migrate",
+      "body_sha256": "62c1c3a71262ab8b419bd6c2746d42694de7434feed924065270a84b51195bb7"
+    },
+    {
+      "path": "joulewise/analysis_manifest.py",
+      "function": "canonical_json_bytes",
+      "line": 213,
+      "lines": 7,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes",
+      "disposition": "migrate",
+      "body_sha256": "97a5dc3410862835fb1c6e4c74696b97aa0403f317b48b3aadd3a11222393963"
+    },
+    {
+      "path": "joulewise/analysis_manifest.py",
+      "function": "_exact_keys",
+      "line": 232,
+      "lines": 12,
+      "family": "key set",
+      "contract": "local/7520f12dd4ff2185",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "7520f12dd4ff2185971fe8e4e55349eb92db82f6d00a64f2d546a3defe033bf9"
+    },
+    {
+      "path": "joulewise/analysis_manifest.py",
+      "function": "write_manifest_atomic",
+      "line": 1438,
+      "lines": 16,
+      "family": "durability",
+      "contract": "local/a3edc2e062c01b17",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a3edc2e062c01b17fe26291dfcd6c72e1294499fd16485b721d8d100c48d5e9e"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v2.py",
+      "function": "_exact_keys",
+      "line": 21,
+      "lines": 18,
+      "family": "key set",
+      "contract": "local/76dcf87a57872aac",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "76dcf87a57872aac726042e92cba1026142417a5cac8148d0febccce4a38544e"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v3.py",
+      "function": "canonical_json_bytes",
+      "line": 394,
+      "lines": 8,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v3.py",
+      "function": "render_manifest",
+      "line": 410,
+      "lines": 4,
+      "family": "JSON rendering",
+      "contract": "json_pretty_insertion_utf8_strict",
+      "disposition": "migrate",
+      "body_sha256": "2994ed813c4a1de37535aab5c373617b6cd4e631233c7d516874066fcff6cd88"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v3.py",
+      "function": "_exact_keys",
+      "line": 416,
+      "lines": 11,
+      "family": "key set",
+      "contract": "collect_exact_keys",
+      "disposition": "migrate",
+      "body_sha256": "fe34a91081a8b6272e17a43846ce4521cf1cc8ef56206aee0edd52f7f44fb20b"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v3.py",
+      "function": "_strict_json_bytes",
+      "line": 1426,
+      "lines": 28,
+      "family": "strict JSON",
+      "contract": "local/6e4ae93f4a7b0b14",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "6e4ae93f4a7b0b1460ec059ba6cc2f685bec438d78a32fe2c76f310c5f6a5d42"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v3.py",
+      "function": "analysis_semantics_sha256_v1",
+      "line": 1804,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/bb1c065e08770349",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "bb1c065e08770349d7eb119623112c3f4abda9f827c2e90ce290c510af904124"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v3.py",
+      "function": "write_manifest_atomic",
+      "line": 4700,
+      "lines": 19,
+      "family": "durability",
+      "contract": "local/2e850b6741fc89fc",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "2e850b6741fc89fc0d3837ec295615c45ded89499fafeef5cbc1936645b5f0ea"
+    },
+    {
+      "path": "joulewise/analysis_run_cache.py",
+      "function": "sha256",
+      "line": 182,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_data",
+      "disposition": "migrate",
+      "body_sha256": "d97ceeaa02c77e0b6592b638549b18ec8d2a53bcf66b125ef71a308e50fea4bc"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "sha256_bytes",
+      "line": 1326,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_require_exact_keys",
+      "line": 1330,
+      "lines": 9,
+      "family": "key set",
+      "contract": "local/17e1a5e0e6f99414",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "17e1a5e0e6f99414a3d0ef788f1880418f86e72a8e94965f7338d5a531b3e94f"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_require_lower_sha256",
+      "line": 1341,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/32eed0201ddf049c",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "32eed0201ddf049ccb15ea87b9962f448338b81e007cb871b0cc809be54fd45e"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_pairs_no_duplicates",
+      "line": 1407,
+      "lines": 9,
+      "family": "strict JSON",
+      "contract": "local/13c35d09e6aa54fe",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "13c35d09e6aa54fe797550df6f0fde1cd37db8a3015f39135b36f30fe49b721f"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_require_relative_path",
+      "line": 1494,
+      "lines": 12,
+      "family": "path guard",
+      "contract": "local/b1dcc80b295644a7",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b1dcc80b295644a7a3683188d29e038dce6641439628764355daf6cdf73ff26e"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_repository_and_pack_relative",
+      "line": 3064,
+      "lines": 11,
+      "family": "path guard",
+      "contract": "local/65b18eb0955fb7da",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "65b18eb0955fb7da518c4016276ccb75613645ffa3fda069972fde5d91f9872f"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "historical_pack_tree_sha256",
+      "line": 3639,
+      "lines": 9,
+      "family": "digest",
+      "contract": "local/5ba98ff42484a95d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "5ba98ff42484a95d78da96de22d36502870521af772fb15bec45c42636074983"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_histsem_exact_keys",
+      "line": 3650,
+      "lines": 6,
+      "family": "key set",
+      "contract": "local/676e547990486ba9",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "676e547990486ba94335c0d808d74f11f252e9a792f22a72693b7b4c82f6f7f7"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_fsync_directory",
+      "line": 5581,
+      "lines": 17,
+      "family": "durability",
+      "contract": "local/69d41a9ef49e32f3",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "69d41a9ef49e32f3ad70e2f991d3fa8d1d855b6b009501fe416e6dae12d4671f"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_atomic_replace",
+      "line": 5600,
+      "lines": 15,
+      "family": "durability",
+      "contract": "local/69b8d795ca7cc3e7",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "69b8d795ca7cc3e7abbb1318e7b3e001bcdcccc9bb33975844851efac0d5a9e7"
+    },
+    {
+      "path": "joulewise/arm_readiness.py",
+      "function": "_predecessor_evidence_set_sha256",
+      "line": 7276,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/3aef7ef529637efb",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3aef7ef529637efbc329cc3b3b296d2eef751bb8fe67030772c33683c788101f"
+    },
+    {
+      "path": "joulewise/arm_readiness_evidence.py",
+      "function": "_repo_relative",
+      "line": 255,
+      "lines": 5,
+      "family": "path guard",
+      "contract": "local/c9b0a84953a52595",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "c9b0a84953a525950d3672feabf6090d2575c43a4af02d50def829d60bd88d00"
+    },
+    {
+      "path": "joulewise/arm_readiness_evidence.py",
+      "function": "_safe_pack_relative",
+      "line": 1485,
+      "lines": 9,
+      "family": "path guard",
+      "contract": "local/46937b8f3ff502fb",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "46937b8f3ff502fb3cb4c0a2160a4dee59d7d328d446cc4ad70cfa68f7bc9b6c"
+    },
+    {
+      "path": "joulewise/authentication_io.py",
+      "function": "_nonfinite_number",
+      "line": 612,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "local/533a16a702e86644",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "533a16a702e86644df158e42ca32ac77c65433138bdcd7b81664e824e4ef1919"
+    },
+    {
+      "path": "joulewise/authentication_io.py",
+      "function": "_finite_float",
+      "line": 619,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "parse_finite_float",
+      "disposition": "migrate",
+      "body_sha256": "106593422eb3f5422f8c9e5fa046998a914b40d000d81b55495693d1ed1dd185"
+    },
+    {
+      "path": "joulewise/authentication_io.py",
+      "function": "_finite_int",
+      "line": 626,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "parse_finite_int",
+      "disposition": "migrate",
+      "body_sha256": "0b525688fa9d1681aa4d030c75bbbc7fc96abfe2b5656f04e5d1986a3c92be90"
+    },
+    {
+      "path": "joulewise/authentication_io.py",
+      "function": "_strict_json",
+      "line": 654,
+      "lines": 27,
+      "family": "strict JSON",
+      "contract": "local/f66b2e9decd8c059",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f66b2e9decd8c059a7755bc9f08acfc4115e17f4c7204651746aa13c4dd5212b"
+    },
+    {
+      "path": "joulewise/authentication_io.py",
+      "function": "_strict_jsonl",
+      "line": 683,
+      "lines": 22,
+      "family": "strict JSON",
+      "contract": "local/b5108efc580ffd26",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b5108efc580ffd265887314a169fd84c16fba16b88b5f87210b2845a1d029167"
+    },
+    {
+      "path": "joulewise/axi_decode_config.py",
+      "function": "canonical_json_bytes",
+      "line": 33,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes",
+      "disposition": "migrate",
+      "body_sha256": "97a5dc3410862835fb1c6e4c74696b97aa0403f317b48b3aadd3a11222393963"
+    },
+    {
+      "path": "joulewise/axi_decode_config.py",
+      "function": "normalized_json_bytes",
+      "line": 37,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_pretty_utf8",
+      "disposition": "migrate",
+      "body_sha256": "f5dd5734a901137e67d7149af319893b088bb6e7bc138b536c45a85bb36e9c7a"
+    },
+    {
+      "path": "joulewise/axi_decode_config.py",
+      "function": "sha256_bytes",
+      "line": 41,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_value",
+      "disposition": "migrate",
+      "body_sha256": "62c1c3a71262ab8b419bd6c2746d42694de7434feed924065270a84b51195bb7"
+    },
+    {
+      "path": "joulewise/axi_decode_config.py",
+      "function": "_relative",
+      "line": 74,
+      "lines": 6,
+      "family": "path guard",
+      "contract": "local/2cad9ace582477eb",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "2cad9ace582477eb124cfb7654495b97deb7dbee2be1be94f5fc7e1b58b86b9b"
+    },
+    {
+      "path": "joulewise/b5/chain.py",
+      "function": "_relative",
+      "line": 335,
+      "lines": 6,
+      "family": "path guard",
+      "contract": "local/f80da6ff5837038d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f80da6ff5837038db86b0015ab058e1b731035d7cabb53a718386a7848a488fe"
+    },
+    {
+      "path": "joulewise/b5/chain.py",
+      "function": "sha256_bytes",
+      "line": 1308,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/b5/driver.py",
+      "function": "_json_bytes",
+      "line": 191,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "local/9b133cb4e2915bc8",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "9b133cb4e2915bc89b0b471094b7e716f2d9fde41f7918a898ecfdd730313fdc"
+    },
+    {
+      "path": "joulewise/b5/driver.py",
+      "function": "_sha256_file",
+      "line": 228,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/345fecc10a641f6f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "345fecc10a641f6f687516111bdeeb3e50d8ee8df03707d20fa2d71ef98d106c"
+    },
+    {
+      "path": "joulewise/b5/harvest.py",
+      "function": "canonical_json_bytes",
+      "line": 803,
+      "lines": 3,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "joulewise/b5/harvest.py",
+      "function": "sha256_bytes",
+      "line": 808,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/b5/harvest.py",
+      "function": "sha256_file",
+      "line": 812,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/fa3507f15ba8620d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "fa3507f15ba8620d171e545cffa8c65db8df1b18c0a6ddf483fcbd6c47436f93"
+    },
+    {
+      "path": "joulewise/b5/harvest.py",
+      "function": "_is_sha256",
+      "line": 824,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/fd18d90e68d4099e",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "fd18d90e68d4099ec072bd6f81837597f781a1b1f8a66baa57133fa903a66a80"
+    },
+    {
+      "path": "joulewise/b5/harvest.py",
+      "function": "_fsync_dir",
+      "line": 1262,
+      "lines": 11,
+      "family": "durability",
+      "contract": "local/beecdd2fd3168012",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "beecdd2fd3168012ad380a453c4f538cff47cb7e7b27d54ab3cbded319b65c7c"
+    },
+    {
+      "path": "joulewise/b5/harvest.py",
+      "function": "_relative_to",
+      "line": 8321,
+      "lines": 5,
+      "family": "path guard",
+      "contract": "local/db21c2e4335a5206",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "db21c2e4335a52065a2612ace94378906a4b21b2eb8bed40caacb59813b3d7e4"
+    },
+    {
+      "path": "joulewise/b5/plan.py",
+      "function": "_sha256",
+      "line": 258,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/b5/plan.py",
+      "function": "_fsync_directory",
+      "line": 481,
+      "lines": 6,
+      "family": "durability",
+      "contract": "fsync_directory",
+      "disposition": "migrate",
+      "body_sha256": "1811b94e55217601803f6a64ade818bdbd7409d11639f6e866db0cd20563d435"
+    },
+    {
+      "path": "joulewise/b5/reference_spares.py",
+      "function": "sha256_bytes",
+      "line": 54,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/b5/reference_spares.py",
+      "function": "render_json",
+      "line": 58,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "local/a978dcd9fb98cc3b",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a978dcd9fb98cc3bc1bb19fc7e40832aa74638cc9dfa3a5d03b18bcd1998bdab"
+    },
+    {
+      "path": "joulewise/b5_analysis/archive.py",
+      "function": "_relative",
+      "line": 29,
+      "lines": 6,
+      "family": "path guard",
+      "contract": "local/a6198dff2ac27713",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a6198dff2ac277130b95e4330e17619a837f1b1602db7c0bf0a06513c289d089"
+    },
+    {
+      "path": "joulewise/b5_analysis/disclosures.py",
+      "function": "_finite",
+      "line": 107,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/c70725f46620c702",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "c70725f46620c70281f291f53530286b181dd5e6579792d7ff5795e609666e6b"
+    },
+    {
+      "path": "joulewise/b5_analysis/kept_units.py",
+      "function": "_strict_json",
+      "line": 24,
+      "lines": 26,
+      "family": "strict JSON",
+      "contract": "local/a9e35733268f3f97",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a9e35733268f3f97fe343bacbc4a06cb5db7990f2bc89d6a8b18292ae54cf4de"
+    },
+    {
+      "path": "joulewise/b5_analysis/phase_timing.py",
+      "function": "canonical_line",
+      "line": 221,
+      "lines": 3,
+      "family": "JSON rendering",
+      "contract": "local/31dbcd7fa7a4f10f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "31dbcd7fa7a4f10f367c20fe96f9953b4c727701fd1df88e9825f2ff15fae14d"
+    },
+    {
+      "path": "joulewise/b5_analysis/windows.py",
+      "function": "sealed_plan_tree_sha256",
+      "line": 98,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/8c56b7734ca0fd22",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8c56b7734ca0fd22f991431130549f136389fa92d4ddda7a4ae1a4863d4f2650"
+    },
+    {
+      "path": "joulewise/battery_float.py",
+      "function": "_is_sha256",
+      "line": 404,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/49bc00a67411df27",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "49bc00a67411df27cfd0a99705116bd23c6a4c52e8139c3c9ac5d0922e973ea5"
+    },
+    {
+      "path": "joulewise/battery_float.py",
+      "function": "verdict_relative_path",
+      "line": 512,
+      "lines": 5,
+      "family": "path guard",
+      "contract": "local/47268a141f430b99",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "47268a141f430b99eb1a021bffd26dc50d66422c94bcaa758368a23cb9643be9"
+    },
+    {
+      "path": "joulewise/benchmark_import.py",
+      "function": "_canonical_json",
+      "line": 161,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_ascii_text",
+      "disposition": "migrate",
+      "body_sha256": "5070e960562f9c05c67b58e9a4d74c5b5b0a8a0533792d81ecea4aaa9d70e1bd"
+    },
+    {
+      "path": "joulewise/benchmark_import.py",
+      "function": "_canonical_json_sha256",
+      "line": 165,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/17d692221b07b5a3",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "17d692221b07b5a3202d1020949d4f8c0e3a0328802b2188d66408b94c76d875"
+    },
+    {
+      "path": "joulewise/benchmark_import.py",
+      "function": "selected_item_ids_sha256",
+      "line": 294,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/b17c747e90ea1989",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b17c747e90ea1989ab45089caf6e78446148e6c313dc6767e126c80e44075b62"
+    },
+    {
+      "path": "joulewise/benchmark_import.py",
+      "function": "canonical_subset_json_sha256",
+      "line": 298,
+      "lines": 10,
+      "family": "digest",
+      "contract": "local/78516718c4a224e9",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "78516718c4a224e97ae19a968ba240ed1d013e1f5457079f9bff1fe8078abd17"
+    },
+    {
+      "path": "joulewise/benchmark_import.py",
+      "function": "expected_answer_sha256",
+      "line": 310,
+      "lines": 3,
+      "family": "digest",
+      "contract": "local/fcb92401a3a291b1",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "fcb92401a3a291b1b362d4ac9b53684e40642b60466f7a495d42933293ebc9b1"
+    },
+    {
+      "path": "joulewise/benchmark_import_math.py",
+      "function": "canonical_json",
+      "line": 43,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_ascii_text",
+      "disposition": "migrate",
+      "body_sha256": "5070e960562f9c05c67b58e9a4d74c5b5b0a8a0533792d81ecea4aaa9d70e1bd"
+    },
+    {
+      "path": "joulewise/benchmark_import_math.py",
+      "function": "canonical_json_sha256",
+      "line": 47,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/aefd57aa19f982b8",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "aefd57aa19f982b877353a4879e808e8c05138d28a72d269a66b225004262584"
+    },
+    {
+      "path": "joulewise/benchmark_import_math.py",
+      "function": "expected_answer_sha256",
+      "line": 413,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/b52e175acad1ecb4",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b52e175acad1ecb4e874965eb4d98f911b46871493df3296e19be2e60ee7e117"
+    },
+    {
+      "path": "joulewise/bundle.py",
+      "function": "_fsync_directory",
+      "line": 454,
+      "lines": 14,
+      "family": "durability",
+      "contract": "local/a9441d7d219ec9ed",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a9441d7d219ec9edfcb341f6ec3900cf0265a6df012eef708c0c2919db35f74c"
+    },
+    {
+      "path": "joulewise/bundle_read.py",
+      "function": "_lowercase_sha256",
+      "line": 909,
+      "lines": 6,
+      "family": "digest",
+      "contract": "is_lower_sha256",
+      "disposition": "migrate",
+      "body_sha256": "567d42d1e9f2d2ea8d8ad375b49385fdc921e70161a42599b87e4dcbeaf070c4"
+    },
+    {
+      "path": "joulewise/bundle_read.py",
+      "function": "_axi_token_sequence_sha256",
+      "line": 1084,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/ee0fe79e541507ca",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ee0fe79e541507ca9933b5a4c9d88e12d1db8bc0d9653ee2003e223155637357"
+    },
+    {
+      "path": "joulewise/bundle_read.py",
+      "function": "_axi_token_slice_sha256",
+      "line": 1091,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/fbc50577b8ff8e53",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "fbc50577b8ff8e5310214c1280ef4035a65485e16e505987db97358147bc686e"
+    },
+    {
+      "path": "joulewise/bundle_read.py",
+      "function": "_axi_tokenizer_artifact_sha256",
+      "line": 1098,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/ebc8599acc7d168d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ebc8599acc7d168d73056c891ddf6c11a0395288f07ab0d0c8641346e0556485"
+    },
+    {
+      "path": "joulewise/bundle_read.py",
+      "function": "_sha256_hex",
+      "line": 2670,
+      "lines": 6,
+      "family": "digest",
+      "contract": "is_sha256",
+      "disposition": "migrate",
+      "body_sha256": "ca45dad9db4c33ce5c9e26be62af89416e4f6fee3dfcd349314ed0f473d13594"
+    },
+    {
+      "path": "joulewise/calibration_bracketing.py",
+      "function": "_canonical_sha256",
+      "line": 737,
+      "lines": 9,
+      "family": "digest",
+      "contract": "local/34fb7dbacd8a0773",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "34fb7dbacd8a077355e46cf0e5573628333225fd798f48f977e24b4e19f92def"
+    },
+    {
+      "path": "joulewise/calibration_bracketing.py",
+      "function": "_current_estimator_code_sha256",
+      "line": 779,
+      "lines": 14,
+      "family": "digest",
+      "contract": "local/8ad9a82079429e47",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8ad9a82079429e47470f7dda2d97b9130b7b48b371597fe11c2187d634d113f6"
+    },
+    {
+      "path": "joulewise/calibration_bracketing.py",
+      "function": "_acceptance_artifact_sha256",
+      "line": 1393,
+      "lines": 7,
+      "family": "digest",
+      "contract": "local/1b73d8617ae705ad",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "1b73d8617ae705ad9904cd2be29171777d928ccf33a4e8cebc7c0d279a181236"
+    },
+    {
+      "path": "joulewise/calibration_bracketing.py",
+      "function": "_valid_sha256",
+      "line": 1402,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/4744043272ac12d4",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "4744043272ac12d4f9066568e7e0787dba2d2667e9ab2f93ced3a0fe200b3c54"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "function": "canonical_json_bytes",
+      "line": 223,
+      "lines": 8,
+      "family": "JSON rendering",
+      "contract": "local/5266880d9a9b1f1a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "5266880d9a9b1f1a81f7b931f96c9fe1eb2335fd59a376790d37fe83bab4b417"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "function": "canonical_sha256",
+      "line": 233,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/f52575e4266401fe",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f52575e4266401fe85bc387397afa7e0e72bc1419b915b8b902e46bae21ae072"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "function": "_is_sha256",
+      "line": 257,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/5312c74eab3a6be0",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "5312c74eab3a6be07e1166bf8b3be4ae2fc964c254d3999784b7e83a73f1935d"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "function": "_fsync_parent_directory",
+      "line": 4026,
+      "lines": 16,
+      "family": "durability",
+      "contract": "local/ac4883105668d023",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ac4883105668d023ad35cf536bbe0f36527678e5b5191330fb7dd2b6df0978a5"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "function": "_after_ledger_fsync",
+      "line": 4150,
+      "lines": 4,
+      "family": "durability",
+      "contract": "local/28519c3c2095a935",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "28519c3c2095a935d40cb01cfe44875d90419c29d6ed68ecb0b2086a1ea6fddd"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "function": "_append_and_fsync",
+      "line": 4156,
+      "lines": 17,
+      "family": "durability",
+      "contract": "local/d11ae88424191e1e",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "d11ae88424191e1e14f959dd0544e7a047102b89bc94c7bcccc764680b61e787"
+    },
+    {
+      "path": "joulewise/campaign_generator_core.py",
+      "function": "render_json",
+      "line": 24,
+      "lines": 6,
+      "family": "JSON rendering",
+      "contract": "local/d4a1a18a2dc71c7a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "d4a1a18a2dc71c7ac3d0605b137009198ac94b2e47dac2fc1288cc23071ee109"
+    },
+    {
+      "path": "joulewise/campaign_generator_core.py",
+      "function": "sha256_bytes",
+      "line": 42,
+      "lines": 4,
+      "family": "digest",
+      "contract": "sha256_data",
+      "disposition": "migrate",
+      "body_sha256": "d97ceeaa02c77e0b6592b638549b18ec8d2a53bcf66b125ef71a308e50fea4bc"
+    },
+    {
+      "path": "joulewise/campaign_provenance.py",
+      "function": "_canonical_number",
+      "line": 203,
+      "lines": 10,
+      "family": "JSON rendering",
+      "contract": "local/ab59a71a6ce3ff45",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ab59a71a6ce3ff4568479d686ef7b4de05a6d174a8545aef602e0bb8bd415583"
+    },
+    {
+      "path": "joulewise/campaign_provenance.py",
+      "function": "_canonical_unterminated_mapping",
+      "line": 741,
+      "lines": 12,
+      "family": "JSON rendering",
+      "contract": "local/ce8389d9ca512d29",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ce8389d9ca512d2942130d63ea37c4aaca907ab839d583cafd2132daf5fb3d0a"
+    },
+    {
+      "path": "joulewise/cli.py",
+      "function": "_strict_jsonl_object_count",
+      "line": 1335,
+      "lines": 23,
+      "family": "strict JSON",
+      "contract": "local/3f63bae369991c94",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3f63bae369991c94391bae25ff87925c1ace7979c03d0565564c89f36fb19dc1"
+    },
+    {
+      "path": "joulewise/cli.py",
+      "function": "_is_sha256_hex",
+      "line": 2080,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/6c87f69a435d1959",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "6c87f69a435d195957560ca28dbfff64c9473ee88b134cd6400db3ad08f6790b"
+    },
+    {
+      "path": "joulewise/controller.py",
+      "function": "_installed_copy_sha256",
+      "line": 510,
+      "lines": 11,
+      "family": "digest",
+      "contract": "local/181020a24e38c0c9",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "181020a24e38c0c97ada0107b052805c52d803fa0e08369592530939eca521b0"
+    },
+    {
+      "path": "joulewise/controller.py",
+      "function": "window_calibration_estimator_files_sha256",
+      "line": 531,
+      "lines": 10,
+      "family": "digest",
+      "contract": "local/3e6ec3b894dc1ff1",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3e6ec3b894dc1ff1f91aa7bb499f63845ffe68614cb5d7e0e90f698847bab536"
+    },
+    {
+      "path": "joulewise/controller.py",
+      "function": "_config_sha256",
+      "line": 4638,
+      "lines": 11,
+      "family": "digest",
+      "contract": "local/26266105f2877c88",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "26266105f2877c883b220ae405d3d1354ef190a9858627dcb2a66748cb16f0fb"
+    },
+    {
+      "path": "joulewise/cooldown_anchor.py",
+      "function": "_anchor_sha256_valid",
+      "line": 61,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/621db8a6d2c88c89",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "621db8a6d2c88c895b0cda3f505f74b8006446989edeeb2a9b471a7b9fdc6089"
+    },
+    {
+      "path": "joulewise/detection_floor.py",
+      "function": "canonical_domain_sha256",
+      "line": 546,
+      "lines": 10,
+      "family": "digest",
+      "contract": "local/49a9cfb3a19e372c",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "49a9cfb3a19e372c61b2ca17e86d603da204901da1cbc036e99c8c3f619cc25f"
+    },
+    {
+      "path": "joulewise/detection_floor.py",
+      "function": "_common_mode_finite",
+      "line": 725,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "finite_or_none",
+      "disposition": "migrate",
+      "body_sha256": "227d84925358b8ae502290b090bd0fc922c1e06c48ffd92df4b6c6d79124d22a"
+    },
+    {
+      "path": "joulewise/detection_floor.py",
+      "function": "floor_mint_config_set_sha256",
+      "line": 2350,
+      "lines": 11,
+      "family": "digest",
+      "contract": "local/4798d6fd1ab6f677",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "4798d6fd1ab6f6772eeaf11e7494c20c9305d9512381f9b57fbf0ca99fe2dcd3"
+    },
+    {
+      "path": "joulewise/detection_floor.py",
+      "function": "floor_mint_runtime_set_sha256",
+      "line": 2363,
+      "lines": 3,
+      "family": "digest",
+      "contract": "local/cef45345f36807d4",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "cef45345f36807d4a95d21a6b5a99f6b7d64e01f5ec53d5c1f507ab119aef044"
+    },
+    {
+      "path": "joulewise/detection_floor_registry.py",
+      "function": "_exact_keys",
+      "line": 63,
+      "lines": 11,
+      "family": "key set",
+      "contract": "local/3024c87ef3e7378b",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3024c87ef3e7378b2c312bfbe0c42c444ebd5cbe7cd172f245c0e3f9cb407ecf"
+    },
+    {
+      "path": "joulewise/determinism_gate.py",
+      "function": "_normalized_config_sha256",
+      "line": 595,
+      "lines": 8,
+      "family": "digest",
+      "contract": "local/dc7e0e0737f9b9bb",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "dc7e0e0737f9b9bbed66e7c06b269c7763d3154d02a752be3937962c71c2260a"
+    },
+    {
+      "path": "joulewise/determinism_gate.py",
+      "function": "_canonical_json_sha256",
+      "line": 695,
+      "lines": 8,
+      "family": "digest",
+      "contract": "local/d785eae449700819",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "d785eae449700819568777c39ca5f94d7aaca7ce075759b7a9dc6b424e3616ae"
+    },
+    {
+      "path": "joulewise/doctor.py",
+      "function": "render_json",
+      "line": 603,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "local/6ebcc093bddf58f8",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "6ebcc093bddf58f8cf7954ba12602ca9c0e4d39cde5ecd8f3507faca6efeed96"
+    },
+    {
+      "path": "joulewise/dominance_closeout.py",
+      "function": "_canonical_json_bytes",
+      "line": 492,
+      "lines": 8,
+      "family": "JSON rendering",
+      "contract": "local/e4eb463327f38a58",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e4eb463327f38a589e4fb61b1abab817b3a8a31e9cd3724cfaf2568825c7aecb"
+    },
+    {
+      "path": "joulewise/dominance_closeout.py",
+      "function": "canonical_json_sha256",
+      "line": 502,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/27794db72a6f4abf",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "27794db72a6f4abfd12a0f8a302d24b1cd6c44e5176fd94e37b939f44d9f348a"
+    },
+    {
+      "path": "joulewise/dominance_closeout.py",
+      "function": "_raw_sha256",
+      "line": 508,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/62c1c3a71262ab8b",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "62c1c3a71262ab8b419bd6c2746d42694de7434feed924065270a84b51195bb7"
+    },
+    {
+      "path": "joulewise/dominance_closeout.py",
+      "function": "_finite_number",
+      "line": 558,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/964bcd59b1ef01c9",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "964bcd59b1ef01c91827f05c139ba88102d4e27639df71599c22227094811753"
+    },
+    {
+      "path": "joulewise/dominance_closeout.py",
+      "function": "_finite_values",
+      "line": 567,
+      "lines": 4,
+      "family": "number guard",
+      "contract": "local/78eb06368890f831",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "78eb06368890f83108466e2eec36f3172c55d01b4f6b84d7a23985a66566ea22"
+    },
+    {
+      "path": "joulewise/dominance_closeout.py",
+      "function": "_is_finite_nonnegative",
+      "line": 1032,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/d15eff74f19f0027",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "d15eff74f19f00275fd85e1171ecef2c3cd3ab03315a4072080f1678a0d6b4a7"
+    },
+    {
+      "path": "joulewise/environment.py",
+      "function": "_canonical_sha256",
+      "line": 36,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/e50f3d7ebb03142a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "e50f3d7ebb03142a3856babeb8efb80f03fe7e39a4ad5604f20c1d664363aa86"
+    },
+    {
+      "path": "joulewise/environment_admission.py",
+      "function": "_finite_number",
+      "line": 115,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "finite_or_none",
+      "disposition": "migrate",
+      "body_sha256": "352978b6ad3be8bc5e0967fbb08f9c118d03b62067243d750b93d917a0754931"
+    },
+    {
+      "path": "joulewise/evidence_night.py",
+      "function": "atomic_bytes",
+      "line": 210,
+      "lines": 12,
+      "family": "durability",
+      "contract": "local/1c68a29a571fd396",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "1c68a29a571fd39657107c2815b6954ca032a68ed65bb436b908ef82d4e8544a"
+    },
+    {
+      "path": "joulewise/flags/collect.py",
+      "function": "_sha256_file",
+      "line": 145,
+      "lines": 6,
+      "family": "digest",
+      "contract": "sha256_file",
+      "disposition": "migrate",
+      "body_sha256": "4a8487623ace645a3ec82f7acfea1cff2a3fbe9239fd24d87c65f1f02128bde3"
+    },
+    {
+      "path": "joulewise/flags/collect.py",
+      "function": "runtime_versions_sha256",
+      "line": 907,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/1fb512269684c5cb",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "1fb512269684c5cbfc6814e1986ce96caf37e4f0bd073b93415a053132a6526e"
+    },
+    {
+      "path": "joulewise/flags/collect.py",
+      "function": "_is_sha256_hex",
+      "line": 942,
+      "lines": 3,
+      "family": "digest",
+      "contract": "is_lower_sha256",
+      "disposition": "migrate",
+      "body_sha256": "567d42d1e9f2d2ea8d8ad375b49385fdc921e70161a42599b87e4dcbeaf070c4"
+    },
+    {
+      "path": "joulewise/flags/schema.py",
+      "function": "canonical_json_bytes",
+      "line": 106,
+      "lines": 6,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "joulewise/flags/schema.py",
+      "function": "sha256_hex",
+      "line": 114,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/flags/sink.py",
+      "function": "_fsync_directory",
+      "line": 33,
+      "lines": 11,
+      "family": "durability",
+      "contract": "fsync_directory_best_effort_path",
+      "disposition": "migrate",
+      "body_sha256": "2966c6d58cdaf74a44ed6392a512c7063f5e5b071b45597a6226c98160b3fda4"
+    },
+    {
+      "path": "joulewise/floor_extraction.py",
+      "function": "_common_mode_finite",
+      "line": 336,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "finite_or_none",
+      "disposition": "migrate",
+      "body_sha256": "227d84925358b8ae502290b090bd0fc922c1e06c48ffd92df4b6c6d79124d22a"
+    },
+    {
+      "path": "joulewise/floor_extraction.py",
+      "function": "_is_sha256",
+      "line": 881,
+      "lines": 6,
+      "family": "digest",
+      "contract": "is_lower_sha256",
+      "disposition": "migrate",
+      "body_sha256": "567d42d1e9f2d2ea8d8ad375b49385fdc921e70161a42599b87e4dcbeaf070c4"
+    },
+    {
+      "path": "joulewise/floor_extraction.py",
+      "function": "_finite",
+      "line": 1989,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "finite_or_none",
+      "disposition": "migrate",
+      "body_sha256": "227d84925358b8ae502290b090bd0fc922c1e06c48ffd92df4b6c6d79124d22a"
+    },
+    {
+      "path": "joulewise/floor_extraction.py",
+      "function": "_reject_nonfinite_admission_number",
+      "line": 2009,
+      "lines": 4,
+      "family": "number guard",
+      "contract": "local/a57cf0d2b59d8b6a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a57cf0d2b59d8b6ad4d461264f680fb3a6d57b86f89de20cbaec851ca820b52a"
+    },
+    {
+      "path": "joulewise/floor_extraction.py",
+      "function": "_parse_finite_admission_float",
+      "line": 2015,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "parse_finite_float",
+      "disposition": "migrate",
+      "body_sha256": "1de5f1b5ee94b468fd25d4d7138809ad68de3bd6ad3794d6a435c72eeeb873a9"
+    },
+    {
+      "path": "joulewise/floor_extraction.py",
+      "function": "_parse_finite_admission_int",
+      "line": 2022,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "parse_finite_int",
+      "disposition": "migrate",
+      "body_sha256": "19e0c8c770d68cae89f26365cc67c7b8ab09e607621a9bdcf0b1438567f1f1e5"
+    },
+    {
+      "path": "joulewise/gensuite/__init__.py",
+      "function": "tokenizer_manifest_sha256",
+      "line": 221,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/b8dab265e77b4b27",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b8dab265e77b4b2742937a0534b8f28b754cd58d3f1509d19e238f8a01fd12f0"
+    },
+    {
+      "path": "joulewise/hazards/base.py",
+      "function": "sha256_hex",
+      "line": 189,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_data",
+      "disposition": "migrate",
+      "body_sha256": "d97ceeaa02c77e0b6592b638549b18ec8d2a53bcf66b125ef71a308e50fea4bc"
+    },
+    {
+      "path": "joulewise/hazards/base.py",
+      "function": "fsync_directory",
+      "line": 209,
+      "lines": 11,
+      "family": "durability",
+      "contract": "fsync_directory_best_effort_directory",
+      "disposition": "migrate",
+      "body_sha256": "9628373d87f7f1945668176fa682e695011f7a86d4bbb33b93378ce0c263967e"
+    },
+    {
+      "path": "joulewise/hazards/base.py",
+      "function": "canonical_json",
+      "line": 222,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_ascii_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "85f8bb1d5a94e17f4ab25da7c934189050a69ea30b1954953b8b975dee104052"
+    },
+    {
+      "path": "joulewise/hazards/instrument.py",
+      "function": "_relative",
+      "line": 193,
+      "lines": 7,
+      "family": "path guard",
+      "contract": "local/a35dc30dce97cb96",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a35dc30dce97cb96040ac3a171446083478b2e32f4aba19bedc57ede9c766f49"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "canonical_json_bytes",
+      "line": 200,
+      "lines": 8,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "canonical_json_sha256",
+      "line": 210,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/f52575e4266401fe",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f52575e4266401fe85bc387397afa7e0e72bc1419b915b8b902e46bae21ae072"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "canonical_domain_sha256",
+      "line": 214,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/4bb1132766c7d378",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "4bb1132766c7d378dc680e44f54ae71c46e60648e0ae8bb24876debfca511078"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "stack_identity_sha256",
+      "line": 220,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/03d7d9b7d97bfef7",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "03d7d9b7d97bfef77a946446a286e5b56ee69d9a7f92071954b405881134fe84"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "scientific_config_identity_sha256",
+      "line": 255,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/3de20b9dfb446c3f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3de20b9dfb446c3f0842ef7a230efa3d239ec7828e73987dfe7b241dcc3bb75a"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "identity_unit_config_set_sha256",
+      "line": 262,
+      "lines": 12,
+      "family": "digest",
+      "contract": "local/098895c59152c506",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "098895c59152c506e395cbc6b19e2a30defe89a32d68263d0f2330daaedf47ca"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "_require_exact_keys",
+      "line": 416,
+      "lines": 8,
+      "family": "key set",
+      "contract": "local/6fc102c1af01a5df",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "6fc102c1af01a5dfa1bc5199d4d6bb7b93fac8c743d2a6834a16f8df171db6f3"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "_require_lower_sha256",
+      "line": 426,
+      "lines": 7,
+      "family": "digest",
+      "contract": "local/14aae8edf352d438",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "14aae8edf352d43829fde55e166a4bffd7711d9e5afa5851fca03239d0eef592"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "_render_json",
+      "line": 784,
+      "lines": 5,
+      "family": "JSON rendering",
+      "contract": "json_pretty_utf8_strict",
+      "disposition": "migrate",
+      "body_sha256": "7263789a735834fcb92463183fc3f93a1fd3b13937cba43fdd6a3cbd7dd5aaf8"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "_sha256_bytes",
+      "line": 791,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_value",
+      "disposition": "migrate",
+      "body_sha256": "62c1c3a71262ab8b419bd6c2746d42694de7434feed924065270a84b51195bb7"
+    },
+    {
+      "path": "joulewise/identity_pins.py",
+      "function": "_atomic_write_set",
+      "line": 2238,
+      "lines": 28,
+      "family": "durability",
+      "contract": "local/e78506ab72e31eb2",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "e78506ab72e31eb2e7503e321454151a2a9dbc249dac833b128ec3d1caa5775f"
+    },
+    {
+      "path": "joulewise/idle_admission.py",
+      "function": "_require_exact_keys",
+      "line": 80,
+      "lines": 13,
+      "family": "key set",
+      "contract": "local/49991c49cf78fba8",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "49991c49cf78fba829db6eec4c75c99a708d1c63aaa7a398c917213a2ce4448d"
+    },
+    {
+      "path": "joulewise/idle_admission.py",
+      "function": "_require_finite_number",
+      "line": 107,
+      "lines": 11,
+      "family": "number guard",
+      "contract": "local/596fdbfabe9c8bee",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "596fdbfabe9c8bee0aa678d1b3ae36009ac6b45a3d3f4f44948f64f5fd39f314"
+    },
+    {
+      "path": "joulewise/idle_admission.py",
+      "function": "canonical_sha256",
+      "line": 126,
+      "lines": 7,
+      "family": "digest",
+      "contract": "local/e50f3d7ebb03142a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "e50f3d7ebb03142a3856babeb8efb80f03fe7e39a4ad5604f20c1d664363aa86"
+    },
+    {
+      "path": "joulewise/idle_admission.py",
+      "function": "_finite_positive",
+      "line": 600,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "local/a60d32c5dac90b79",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a60d32c5dac90b79b32bae4d96b0295a62b97048252f1df2f9bb7b299dd1da84"
+    },
+    {
+      "path": "joulewise/load_transition_alignment.py",
+      "function": "_canonical_bytes",
+      "line": 55,
+      "lines": 11,
+      "family": "JSON rendering",
+      "contract": "local/01ea51020b47800c",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "01ea51020b47800ca9dc35da72b5dc62af4eece876ab0b69da2476445b4efee4"
+    },
+    {
+      "path": "joulewise/load_transition_alignment.py",
+      "function": "canonical_sha256",
+      "line": 68,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/da3d8bc6fefa417f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "da3d8bc6fefa417fc378bd4e976ec8cb82d70fd8d8587742f69c4c53733a51ed"
+    },
+    {
+      "path": "joulewise/load_transition_alignment.py",
+      "function": "_require_exact_keys",
+      "line": 79,
+      "lines": 8,
+      "family": "key set",
+      "contract": "local/3b6769b51c02d1a6",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3b6769b51c02d1a69fd7e441b1b78107eb297f062ac1db60e60ba29476c5181d"
+    },
+    {
+      "path": "joulewise/load_transition_alignment.py",
+      "function": "_finite_number",
+      "line": 89,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/280d44e87ad6c7df",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "280d44e87ad6c7dfedbcfda56ad65d194946d102dd9bd0734f19a5a520dc3e43"
+    },
+    {
+      "path": "joulewise/load_transition_alignment.py",
+      "function": "_is_sha256",
+      "line": 107,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/6408cdfca05b8dab",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "6408cdfca05b8dabec55897aaf1c7feb4827c4a034f832b15710e39a2467bf36"
+    },
+    {
+      "path": "joulewise/load_transition_alignment.py",
+      "function": "write_artifact_atomic",
+      "line": 794,
+      "lines": 19,
+      "family": "durability",
+      "contract": "local/b7321725bd87fda0",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b7321725bd87fda036f7d18ef272f5cd37834035bcc1d7331570b40b0a537896"
+    },
+    {
+      "path": "joulewise/night_gate.py",
+      "function": "_exact_keys",
+      "line": 2321,
+      "lines": 13,
+      "family": "key set",
+      "contract": "local/7bb20a74e5c14640",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "7bb20a74e5c1464052e015098ee5acf9b55cecdbcb0c90d0f289f4e859d6f2ef"
+    },
+    {
+      "path": "joulewise/paper_custody.py",
+      "function": "_floor_binder_source_sha256",
+      "line": 536,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/a16b3f9f83e2d38a",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "a16b3f9f83e2d38aa389d97aa67db0ba61f582330409ad70589f825eb7b88d42"
+    },
+    {
+      "path": "joulewise/paper_custody.py",
+      "function": "_sha256",
+      "line": 862,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/e3167aef2ebfad8b",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/paper_custody.py",
+      "function": "_canonical_json_bytes",
+      "line": 866,
+      "lines": 11,
+      "family": "JSON rendering",
+      "contract": "local/2c413912aa58f0b3",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "2c413912aa58f0b3142892ba2441fc05a2a52ad65561416da93b975142d3d474"
+    },
+    {
+      "path": "joulewise/paper_custody.py",
+      "function": "_validator_source_sha256",
+      "line": 1021,
+      "lines": 13,
+      "family": "digest",
+      "contract": "local/e199542de482bb0a",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e199542de482bb0aac6d208c3fa04d69ec78b196b9d122f664a25f5a414be262"
+    },
+    {
+      "path": "joulewise/paper_reported_energy.py",
+      "function": "registration_sha256",
+      "line": 185,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/e55374ed96dcc04a",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e55374ed96dcc04a31c03339913d471c3b0fe7439f2aa9d469fa21b4a8829638"
+    },
+    {
+      "path": "joulewise/paper_reported_energy_issuer.py",
+      "function": "_finite",
+      "line": 30,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/c70725f46620c702",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "c70725f46620c70281f291f53530286b181dd5e6579792d7ff5795e609666e6b"
+    },
+    {
+      "path": "joulewise/phase_share.py",
+      "function": "_finite",
+      "line": 78,
+      "lines": 6,
+      "family": "number guard",
+      "contract": "is_finite_float_projection",
+      "disposition": "migrate",
+      "body_sha256": "c414105ab17618867e829f460d302b9352385ea7c33f324cfbf4723b9e31fc15"
+    },
+    {
+      "path": "joulewise/powermetrics_fiducial.py",
+      "function": "protocol_sha256",
+      "line": 137,
+      "lines": 10,
+      "family": "digest",
+      "contract": "local/94f789d6ab47e864",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "94f789d6ab47e86481334abc74784dc413471d85b628cd9e1ead03d29d3564fa"
+    },
+    {
+      "path": "joulewise/provenance.py",
+      "function": "sha256_hex",
+      "line": 27,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/f9bc60eb430c5553",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f9bc60eb430c5553c3254c7d0980469be59bfe3b1924e25b21c5aa96734aff86"
+    },
+    {
+      "path": "joulewise/provenance.py",
+      "function": "sha256_hex_shape",
+      "line": 33,
+      "lines": 6,
+      "family": "digest",
+      "contract": "is_sha256",
+      "disposition": "migrate",
+      "body_sha256": "ca45dad9db4c33ce5c9e26be62af89416e4f6fee3dfcd349314ed0f473d13594"
+    },
+    {
+      "path": "joulewise/provenance.py",
+      "function": "normalized_sha256_hex",
+      "line": 41,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/f50a37e4732e013a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f50a37e4732e013a4c88725b2edce3b5bd9072ad4e4d258a81bb3f1f67ce52c9"
+    },
+    {
+      "path": "joulewise/provenance.py",
+      "function": "prompt_token_ids_sha256",
+      "line": 58,
+      "lines": 3,
+      "family": "digest",
+      "contract": "local/80b5d62ed0b55a96",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "80b5d62ed0b55a9650c87e305c8c38c9a6aa26612d40720bd9930034d66ba87a"
+    },
+    {
+      "path": "joulewise/provenance.py",
+      "function": "folded_model_artifact_sha256",
+      "line": 63,
+      "lines": 3,
+      "family": "digest",
+      "contract": "local/c435b74cfe18953f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "c435b74cfe18953f1b0eaee8e87744bdc9ec20eb5fa97c9a10ee242967d7f73c"
+    },
+    {
+      "path": "joulewise/publication_privacy.py",
+      "function": "sha256_file",
+      "line": 343,
+      "lines": 6,
+      "family": "digest",
+      "contract": "sha256_file",
+      "disposition": "migrate",
+      "body_sha256": "a49653bf3cce1d737ec744f9c4fbeadfa01e2a62543952a6048042851932c9a9"
+    },
+    {
+      "path": "joulewise/publication_privacy.py",
+      "function": "_json_bytes",
+      "line": 963,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_pretty_ascii",
+      "disposition": "migrate",
+      "body_sha256": "cec6e06d7cc745cca5ff21c0003e0d6dace9200e930197cd27389ff0b0ffe7b6"
+    },
+    {
+      "path": "joulewise/quiet_guard.py",
+      "function": "canonical_json_bytes",
+      "line": 172,
+      "lines": 5,
+      "family": "JSON rendering",
+      "contract": "local/b7e3be5a2063fcaf",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b7e3be5a2063fcafb9b23614201b5c98781b81462ae3515842a3b138b96080e9"
+    },
+    {
+      "path": "joulewise/quiet_guard.py",
+      "function": "canonical_sha256",
+      "line": 179,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/f60741357e6f5261",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f60741357e6f5261bedf9095c206be79494100d0b37ebf628b2ed8be3d2f613e"
+    },
+    {
+      "path": "joulewise/quiet_guard.py",
+      "function": "_fsync_directory",
+      "line": 614,
+      "lines": 6,
+      "family": "durability",
+      "contract": "local/91f7f2d26fc9f1dd",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "91f7f2d26fc9f1dd6fa34105c1bce85cc1e5fff2bce61c020fae484149e3e20f"
+    },
+    {
+      "path": "joulewise/quiet_guard.py",
+      "function": "_atomic_write_json",
+      "line": 622,
+      "lines": 21,
+      "family": "durability",
+      "contract": "local/053d938d74bfe050",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "053d938d74bfe05024354e363410aa5d358d7015381ef36e797c4ee43909540c"
+    },
+    {
+      "path": "joulewise/receipt_oracle.py",
+      "function": "_sha256",
+      "line": 23,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/58cc182692fcdeba",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "58cc182692fcdebaa635173ea57ca958f247ae9e2cf4c27b40cc772dd2dc3f6f"
+    },
+    {
+      "path": "joulewise/results_fill_adapter.py",
+      "function": "_nonfinite",
+      "line": 39,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/e972e7407dcc24fd",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "e972e7407dcc24fd7d7e602d1cb923a574934d29508255985797330f51ccd17a"
+    },
+    {
+      "path": "joulewise/salvage_dangler.py",
+      "function": "_canonical_bytes",
+      "line": 190,
+      "lines": 8,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "joulewise/salvage_dangler.py",
+      "function": "_canonical_sha256",
+      "line": 200,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/da3d8bc6fefa417f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "da3d8bc6fefa417fc378bd4e976ec8cb82d70fd8d8587742f69c4c53733a51ed"
+    },
+    {
+      "path": "joulewise/salvage_dangler.py",
+      "function": "_sha256_text",
+      "line": 204,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/45e9de35745a0364",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "45e9de35745a036452c54b7d4ffa13d6bb6c865237c83fa4e64fbe582f5978b3"
+    },
+    {
+      "path": "joulewise/salvage_dangler.py",
+      "function": "_finite_timestamp",
+      "line": 355,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "local/eb65d841d273a264",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "eb65d841d273a26468532196be06121d6ca01a85a5959302e0c638c66fa2e120"
+    },
+    {
+      "path": "joulewise/salvage_dangler.py",
+      "function": "_finite_number_or_none",
+      "line": 362,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/671e50558eb6ff6d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "671e50558eb6ff6d5b2d1f9a2feb3f694983d6f6ecbb9d33e1bb1bf10495c959"
+    },
+    {
+      "path": "joulewise/scheduler_gates.py",
+      "function": "render_json",
+      "line": 203,
+      "lines": 4,
+      "family": "JSON rendering",
+      "contract": "json_pretty_ascii",
+      "disposition": "migrate",
+      "body_sha256": "cec6e06d7cc745cca5ff21c0003e0d6dace9200e930197cd27389ff0b0ffe7b6"
+    },
+    {
+      "path": "joulewise/scheduler_gates.py",
+      "function": "_require_exact_keys",
+      "line": 209,
+      "lines": 12,
+      "family": "key set",
+      "contract": "local/625f5fa047400869",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "625f5fa047400869e6d485d0c3a6c9b8f85bce1e601c2d6db83013ba8d1a5761"
+    },
+    {
+      "path": "joulewise/scheduler_gates.py",
+      "function": "_require_lower_sha256",
+      "line": 231,
+      "lines": 10,
+      "family": "digest",
+      "contract": "local/37e106aecc6f1944",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "37e106aecc6f1944b09183aa753c28814d1637e983d1d10db94b06a2e39e1d0b"
+    },
+    {
+      "path": "joulewise/schemas.py",
+      "function": "_is_finite_number",
+      "line": 280,
+      "lines": 6,
+      "family": "number guard",
+      "contract": "is_finite_float_projection",
+      "disposition": "migrate",
+      "body_sha256": "9ca569258f5b718c557f4df8efa22510cb85cf5cb1dc55bcf3549de2f1f2aecc"
+    },
+    {
+      "path": "joulewise/schemas.py",
+      "function": "_optional_sha256",
+      "line": 365,
+      "lines": 8,
+      "family": "digest",
+      "contract": "local/b48000977b99f0c8",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b48000977b99f0c86de394c4823f0cf8d57b90ba53da31afb8baf27e6bd6bf83"
+    },
+    {
+      "path": "joulewise/schemas.py",
+      "function": "_require_exact_keys",
+      "line": 423,
+      "lines": 8,
+      "family": "key set",
+      "contract": "local/0fc425c3404eeb37",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "0fc425c3404eeb379693e532a69df08f619bd854e34f6faa166a870106a016c3"
+    },
+    {
+      "path": "joulewise/scored_packer.py",
+      "function": "_canon",
+      "line": 30,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_ascii_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "60725566c1fa5a83d2a6e2bc0e92ced2b4de3b7516d21f0e1a8495f21d740b05"
+    },
+    {
+      "path": "joulewise/scored_reduce.py",
+      "function": "_canon",
+      "line": 61,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_ascii_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "60725566c1fa5a83d2a6e2bc0e92ced2b4de3b7516d21f0e1a8495f21d740b05"
+    },
+    {
+      "path": "joulewise/scored_registration.py",
+      "function": "_canon",
+      "line": 55,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_ascii_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "60725566c1fa5a83d2a6e2bc0e92ced2b4de3b7516d21f0e1a8495f21d740b05"
+    },
+    {
+      "path": "joulewise/suite.py",
+      "function": "suite_manifest_sha256",
+      "line": 1426,
+      "lines": 10,
+      "family": "digest",
+      "contract": "local/16c9e5ca1c3b8b2f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "16c9e5ca1c3b8b2f98965b9de66b069f5d03c36ece685b2143c8cd1ce755dca9"
+    },
+    {
+      "path": "joulewise/twins/harvest_twin.py",
+      "function": "_finite",
+      "line": 28,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/a27977d36f4c7307",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "a27977d36f4c7307e854cc545d25f61fd95a0567d789aed134442afdf3078620"
+    },
+    {
+      "path": "joulewise/validation.py",
+      "function": "is_finite_number",
+      "line": 9,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/1a65b19584b34da4",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "1a65b19584b34da44befadb29f4e5035a228d933227bb7e4d991aaa34fd208e9"
+    },
+    {
+      "path": "joulewise/validation.py",
+      "function": "finite_float",
+      "line": 18,
+      "lines": 11,
+      "family": "number guard",
+      "contract": "local/45409e87400e838b",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "45409e87400e838bd03dbe8f98b0d1c027579c50e6fdab717bf3821d5afa7a0b"
+    },
+    {
+      "path": "joulewise/whole_window.py",
+      "function": "canonical_sha256",
+      "line": 2452,
+      "lines": 9,
+      "family": "digest",
+      "contract": "local/ee0236210545715e",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ee0236210545715e92af27948e022ae72c67d853614a4f1c75443a6b3b4cfb7e"
+    },
+    {
+      "path": "joulewise/whole_window.py",
+      "function": "_sha256_text",
+      "line": 2463,
+      "lines": 6,
+      "family": "digest",
+      "contract": "is_lower_sha256",
+      "disposition": "migrate",
+      "body_sha256": "567d42d1e9f2d2ea8d8ad375b49385fdc921e70161a42599b87e4dcbeaf070c4"
+    },
+    {
+      "path": "joulewise/whole_window.py",
+      "function": "_finite_number",
+      "line": 2471,
+      "lines": 11,
+      "family": "number guard",
+      "contract": "local/921a2dbd94b0c3c8",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "921a2dbd94b0c3c88665cd3065d8c0330312b34ccfb5630b5561e4f7d2faf6cf"
+    },
+    {
+      "path": "joulewise/whole_window.py",
+      "function": "supersession_entry_sha256",
+      "line": 4041,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/8b8244bd72215c07",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8b8244bd72215c0776eb9f63728773cd26126b497f08d22af12d8d16fb9e1972"
+    },
+    {
+      "path": "joulewise/window_duration_margins.py",
+      "function": "_sha256",
+      "line": 139,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/window_duration_margins.py",
+      "function": "_canonical_bytes",
+      "line": 143,
+      "lines": 8,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes_strict",
+      "disposition": "migrate",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "joulewise/window_duration_margins.py",
+      "function": "_canonical_sha256",
+      "line": 153,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/65812f1815ab7295",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "65812f1815ab72959b6b65306e8f19dcd3436f5b61c33b08ee0d238da37aedb3"
+    },
+    {
+      "path": "joulewise/window_duration_margins.py",
+      "function": "_safe_relative_path",
+      "line": 202,
+      "lines": 10,
+      "family": "path guard",
+      "contract": "local/4ee20948047e617e",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "4ee20948047e617e914e088feea660c38b79e5891e7272574d03d96fdc6e308c"
+    },
+    {
+      "path": "joulewise/window_duration_margins.py",
+      "function": "_require_sha256",
+      "line": 214,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/9f80836869e9969e",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "9f80836869e9969e5aa0c291a4231c17896622a352660e76a261c0b805611f71"
+    },
+    {
+      "path": "joulewise/window_duration_margins.py",
+      "function": "_finite_number",
+      "line": 587,
+      "lines": 6,
+      "family": "number guard",
+      "contract": "is_finite_float_projection",
+      "disposition": "migrate",
+      "body_sha256": "c414105ab17618867e829f460d302b9352385ea7c33f324cfbf4723b9e31fc15"
+    },
+    {
+      "path": "joulewise/window_duration_margins.py",
+      "function": "_require_exact_keys",
+      "line": 1108,
+      "lines": 5,
+      "family": "key set",
+      "contract": "local/9399b3d051e0e220",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "9399b3d051e0e220972be5ce71db367a7381cf469866ca9e44fe800aea5a98d5"
+    },
+    {
+      "path": "joulewise/window_lineage.py",
+      "function": "render_json",
+      "line": 216,
+      "lines": 7,
+      "family": "JSON rendering",
+      "contract": "json_pretty_utf8_strict",
+      "disposition": "migrate",
+      "body_sha256": "7263789a735834fcb92463183fc3f93a1fd3b13937cba43fdd6a3cbd7dd5aaf8"
+    },
+    {
+      "path": "joulewise/window_lineage.py",
+      "function": "sha256_bytes",
+      "line": 225,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "joulewise/window_lineage.py",
+      "function": "_no_duplicate_pairs",
+      "line": 233,
+      "lines": 7,
+      "family": "strict JSON",
+      "contract": "unique_json_pairs",
+      "disposition": "migrate",
+      "body_sha256": "2f493657378217ad16a4dd907bacec6f1fb695f70b99c1a3ef0ae882b9bdf08f"
+    },
+    {
+      "path": "joulewise/window_lineage.py",
+      "function": "_is_sha256",
+      "line": 257,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/5d95c6b171896370",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "5d95c6b171896370542f774c9da5215208cdc35170726e44e50e63d12955b64c"
+    },
+    {
+      "path": "joulewise/window_lineage.py",
+      "function": "_is_relative_member_path",
+      "line": 303,
+      "lines": 10,
+      "family": "path guard",
+      "contract": "local/c735eb147914bfed",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "c735eb147914bfedbb93fd8dc9d7e7e4dd6f59bcd336351a7dc807a91d361dce"
+    },
+    {
+      "path": "joulewise/window_lineage.py",
+      "function": "_fsync_directory",
+      "line": 869,
+      "lines": 6,
+      "family": "durability",
+      "contract": "fsync_directory",
+      "disposition": "migrate",
+      "body_sha256": "1811b94e55217601803f6a64ade818bdbd7409d11639f6e866db0cd20563d435"
+    },
+    {
+      "path": "joulewise/window_lineage.py",
+      "function": "committed_pack_sha256",
+      "line": 877,
+      "lines": 12,
+      "family": "digest",
+      "contract": "local/4453e707edcfe2f9",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "4453e707edcfe2f932a4872d46f05efd20f31cd0b28611be78703267a0e6badd"
+    },
+    {
+      "path": "joulewise/workload_profile.py",
+      "function": "_sha256_text",
+      "line": 73,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_text",
+      "disposition": "migrate",
+      "body_sha256": "7125d1014d9b3e74268471e624f001de0546d71f696d1ca7eda0e1d3e64adc02"
+    },
+    {
+      "path": "joulewise/workload_profile.py",
+      "function": "calculate_prompt_set_sha256",
+      "line": 89,
+      "lines": 10,
+      "family": "digest",
+      "contract": "local/da4e0b5a491bc8de",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "da4e0b5a491bc8de000f2f32de4bd2d03892102ca1a9081a59b6ae35d843493a"
+    },
+    {
+      "path": "joulewise/workload_sizing.py",
+      "function": "_finite_real",
+      "line": 42,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/3e95456a096fbc25",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3e95456a096fbc25f103842313d406cc4958ca3962afcb22ce498e3c7126fd48"
+    },
+    {
+      "path": "joulewise/workloads.py",
+      "function": "expected_answer_sha256",
+      "line": 136,
+      "lines": 7,
+      "family": "digest",
+      "contract": "local/de345403e7b76c40",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "de345403e7b76c40b1b8a651134f88ddd92ca21065c3e939395cdc30bd7a4022"
+    },
+    {
+      "path": "joulewise/workloads.py",
+      "function": "_sha256_text",
+      "line": 177,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_text",
+      "disposition": "migrate",
+      "body_sha256": "7125d1014d9b3e74268471e624f001de0546d71f696d1ca7eda0e1d3e64adc02"
+    },
+    {
+      "path": "scripts/admit_model_panel_entry.py",
+      "function": "canonical_json_bytes",
+      "line": 66,
+      "lines": 9,
+      "family": "JSON rendering",
+      "contract": "local/9fa6f6732b3f35e4",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "9fa6f6732b3f35e47ef2d65c19b87e6f512b8d16d7d6e795735daac3c7e8d0c1"
+    },
+    {
+      "path": "scripts/admit_model_panel_entry.py",
+      "function": "sha256_bytes",
+      "line": 77,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_value",
+      "disposition": "migrate",
+      "body_sha256": "62c1c3a71262ab8b419bd6c2746d42694de7434feed924065270a84b51195bb7"
+    },
+    {
+      "path": "scripts/admit_model_panel_entry.py",
+      "function": "sha256_file",
+      "line": 81,
+      "lines": 6,
+      "family": "digest",
+      "contract": "sha256_file",
+      "disposition": "migrate",
+      "body_sha256": "ed432a52d30f4f484cdfc8d5d451e4b93bcf77b974dad8a7567d3aea6bd14621"
+    },
+    {
+      "path": "scripts/analyze_phase_share.py",
+      "function": "_sha256",
+      "line": 48,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_path_bytes",
+      "disposition": "migrate",
+      "body_sha256": "8d2feb51952f9c9e7bb476be12475446ec24bece691f464430939b50daedecfe"
+    },
+    {
+      "path": "scripts/axi_sb_static_batch_spike.py",
+      "function": "json_line",
+      "line": 54,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_utf8_text",
+      "disposition": "migrate",
+      "body_sha256": "78a3b2563a69f2ad030274f0f81ffd028049f7271f2d7694d77ecb331261ce1b"
+    },
+    {
+      "path": "scripts/axi_sb_static_batch_spike.py",
+      "function": "output_ids_sha256",
+      "line": 133,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/09068e63b6b95508",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "09068e63b6b95508063ce3d245b91bd457d68633441b4e57fc07598d4c7a58f6"
+    },
+    {
+      "path": "scripts/axi_sc_spec_decode_spike.py",
+      "function": "json_line",
+      "line": 59,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_utf8_text",
+      "disposition": "migrate",
+      "body_sha256": "78a3b2563a69f2ad030274f0f81ffd028049f7271f2d7694d77ecb331261ce1b"
+    },
+    {
+      "path": "scripts/axi_sc_spec_decode_spike.py",
+      "function": "_sha256_file",
+      "line": 92,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/ed432a52d30f4f48",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ed432a52d30f4f484cdfc8d5d451e4b93bcf77b974dad8a7567d3aea6bd14621"
+    },
+    {
+      "path": "scripts/axi_sc_spec_decode_spike.py",
+      "function": "_prompt_sha256",
+      "line": 104,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/0258c7609ac03345",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "0258c7609ac03345aae248c187c8e7cc2a5372e10177e3ca85ee45608ad49c89"
+    },
+    {
+      "path": "scripts/axi_sc_spec_decode_spike.py",
+      "function": "output_ids_sha256",
+      "line": 110,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/09068e63b6b95508",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "09068e63b6b95508063ce3d245b91bd457d68633441b4e57fc07598d4c7a58f6"
+    },
+    {
+      "path": "scripts/axi_sc_spec_decode_spike.py",
+      "function": "_is_finite_number",
+      "line": 290,
+      "lines": 6,
+      "family": "number guard",
+      "contract": "local/7ed7e93761e348ce",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "7ed7e93761e348ce4f7c337de73fa4080737587b9fd8abdad20e160ef47a0c5c"
+    },
+    {
+      "path": "scripts/b5_window_calibration_verdict.py",
+      "function": "_sha256",
+      "line": 56,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/bench_replay_start_drift.py",
+      "function": "sha256_file",
+      "line": 201,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/da05ec4d587e78cb",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "da05ec4d587e78cb28776b81719e35a80211ea2733555c7d3fbeb68914a57b97"
+    },
+    {
+      "path": "scripts/build_bracket_binding.py",
+      "function": "_strict_json_object",
+      "line": 68,
+      "lines": 23,
+      "family": "strict JSON",
+      "contract": "local/2da68b7517a67bef",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "2da68b7517a67bef5e882dc8f89a4ca808174cf9b0895bbcbb48a4e36878dc21"
+    },
+    {
+      "path": "scripts/build_bracket_binding.py",
+      "function": "_relative_to_custody",
+      "line": 105,
+      "lines": 17,
+      "family": "path guard",
+      "contract": "local/6f663cea03a28865",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "6f663cea03a288657f5cfe00a7848acd79fe0fe046c02266e84d5e7cbc445830"
+    },
+    {
+      "path": "scripts/build_v4_histsem_pinset.py",
+      "function": "_relative_pack",
+      "line": 68,
+      "lines": 10,
+      "family": "path guard",
+      "contract": "local/0f4e4c4db41ee628",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "0f4e4c4db41ee628d80255786aec02ed31cfaf3b90d6a85aa3ebc3facfe6c9dd"
+    },
+    {
+      "path": "scripts/calibration_ledger_bootstrap.py",
+      "function": "_atomic_emit_issued_artifact",
+      "line": 115,
+      "lines": 28,
+      "family": "durability",
+      "contract": "local/349424f08cf50b5d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "349424f08cf50b5d70a94584cf67df373f5b796920f7d6fa3f60d9afecb0d465"
+    },
+    {
+      "path": "scripts/check_paper_replay_fence.py",
+      "function": "_sha256",
+      "line": 320,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/e3167aef2ebfad8b",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/check_paper_round7_artifacts.py",
+      "function": "_sha256",
+      "line": 466,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/8d2feb51952f9c9e",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "8d2feb51952f9c9e7bb476be12475446ec24bece691f464430939b50daedecfe"
+    },
+    {
+      "path": "scripts/claims_lint.py",
+      "function": "_parse_strict_json",
+      "line": 984,
+      "lines": 9,
+      "family": "strict JSON",
+      "contract": "local/fe038329939c8742",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "fe038329939c8742e4a084d2d20854a12a1a054685619cb836a9cd7cc13b0dd3"
+    },
+    {
+      "path": "scripts/compare_b5_recompute.py",
+      "function": "finite",
+      "line": 119,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/7ed7e93761e348ce",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "7ed7e93761e348ce4f7c337de73fa4080737587b9fd8abdad20e160ef47a0c5c"
+    },
+    {
+      "path": "scripts/compare_b5_recompute.py",
+      "function": "canonical",
+      "line": 363,
+      "lines": 3,
+      "family": "JSON rendering",
+      "contract": "local/41b1b10b1f03d832",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "41b1b10b1f03d832940bcc84b8ca9e9097158a4d9d6b04a84362b1d8f5177d79"
+    },
+    {
+      "path": "scripts/compare_b5_recompute.py",
+      "function": "any_finite",
+      "line": 2744,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/5ed4f6ce1db7ac9b",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "5ed4f6ce1db7ac9b96efc7b06a38263cd034fca15c8e81ab7ead31884960965e"
+    },
+    {
+      "path": "scripts/dependence_sensitivity.py",
+      "function": "_repo_relative",
+      "line": 120,
+      "lines": 5,
+      "family": "path guard",
+      "contract": "local/a00b981a19a2ba4f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a00b981a19a2ba4f46f7c20f045606a1f6827c668e1109868211d5421452b0f9"
+    },
+    {
+      "path": "scripts/dependence_sensitivity.py",
+      "function": "_finite_number",
+      "line": 667,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "local/0f1c7d4a71192b9f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "0f1c7d4a71192b9ffb0362939bf530cba7e687e8001f68a0f9dc7f04429486bf"
+    },
+    {
+      "path": "scripts/dependence_sensitivity.py",
+      "function": "_canonical_json",
+      "line": 857,
+      "lines": 4,
+      "family": "JSON rendering",
+      "contract": "local/8092f0e77b65c45d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8092f0e77b65c45d3149a2fd3ae25ed1f3ec7a7b4e74e510f8bf87d6db69c75b"
+    },
+    {
+      "path": "scripts/dependence_sensitivity.py",
+      "function": "_sha256_text",
+      "line": 863,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/54ad42ee79914a16",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "54ad42ee79914a16446cb3f70be436d4ffa0109eea05964c0a1a5d61b5effa72"
+    },
+    {
+      "path": "scripts/floor_reconciliation_receipt.py",
+      "function": "_sha256",
+      "line": 35,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_data",
+      "disposition": "migrate",
+      "body_sha256": "d97ceeaa02c77e0b6592b638549b18ec8d2a53bcf66b125ef71a308e50fea4bc"
+    },
+    {
+      "path": "scripts/gen_state.py",
+      "function": "canonical_bytes",
+      "line": 81,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "local/9173e8083a1112c6",
+      "disposition": "keep: coordination tool",
+      "body_sha256": "9173e8083a1112c69ed0b1020a0ec6256b8955c78a77a4e02063890e85635257"
+    },
+    {
+      "path": "scripts/gen_state.py",
+      "function": "_atomic_write",
+      "line": 780,
+      "lines": 11,
+      "family": "durability",
+      "contract": "local/14444ae9bf218a79",
+      "disposition": "keep: coordination tool",
+      "body_sha256": "14444ae9bf218a79790a674f3a8f3aa2b41269720dbb091095f3481ac7410f4c"
+    },
+    {
+      "path": "scripts/generate_g2a_probe_inputs.py",
+      "function": "_json_bytes",
+      "line": 193,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_pretty_ascii",
+      "disposition": "migrate",
+      "body_sha256": "cec6e06d7cc745cca5ff21c0003e0d6dace9200e930197cd27389ff0b0ffe7b6"
+    },
+    {
+      "path": "scripts/generate_g2a_probe_inputs.py",
+      "function": "_sha256_bytes",
+      "line": 197,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_value",
+      "disposition": "migrate",
+      "body_sha256": "62c1c3a71262ab8b419bd6c2746d42694de7434feed924065270a84b51195bb7"
+    },
+    {
+      "path": "scripts/generate_g2a_probe_inputs.py",
+      "function": "_sha256_path",
+      "line": 201,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/8e61cf3e49a4ec24",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8e61cf3e49a4ec24b28012747579ad8eefea0ee72c0fdcfeba7d3747740911f3"
+    },
+    {
+      "path": "scripts/generate_g2a_probe_inputs.py",
+      "function": "_require_exact_keys",
+      "line": 208,
+      "lines": 7,
+      "family": "key set",
+      "contract": "local/fb319d9e49f84905",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "fb319d9e49f84905843f6a32df44ce82e5c3f7cc9222478e464d5fa269ca3eff"
+    },
+    {
+      "path": "scripts/generate_g2a_probe_inputs.py",
+      "function": "_require_sha256",
+      "line": 223,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/77b134b310218bf6",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "77b134b310218bf65240dfb57df28e5e08a9720a849885f3ed829fdb8464a429"
+    },
+    {
+      "path": "scripts/hydrate_d117_fixture.py",
+      "function": "_is_sha256",
+      "line": 50,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/12f56005c23b9730",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "12f56005c23b9730ffbd9a7283ffe90e03580707f6cc64561fe30c8a7e311f82"
+    },
+    {
+      "path": "scripts/independent_recompute_b5.py",
+      "function": "finite",
+      "line": 86,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/7ed7e93761e348ce",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "7ed7e93761e348ce4f7c337de73fa4080737587b9fd8abdad20e160ef47a0c5c"
+    },
+    {
+      "path": "scripts/issue_calibration_acceptance_generation.py",
+      "function": "_repo_relative_custody",
+      "line": 920,
+      "lines": 17,
+      "family": "path guard",
+      "contract": "local/f4e4005971506e07",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f4e4005971506e07a76686c811ee1d8f5064f4da4eae0d8398b7f36d6b9fcc17"
+    },
+    {
+      "path": "scripts/issue_calibration_acceptance_generation.py",
+      "function": "_canonical_relative_parts",
+      "line": 939,
+      "lines": 7,
+      "family": "path guard",
+      "contract": "local/787b6ba53f72f72d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "787b6ba53f72f72da8384836e06e0cc9c4ff5f6e00846e606921118865e9fd9d"
+    },
+    {
+      "path": "scripts/issue_calibration_acceptance_generation.py",
+      "function": "derivation_sha256",
+      "line": 3193,
+      "lines": 12,
+      "family": "digest",
+      "contract": "local/0d34e5847078eb1a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "0d34e5847078eb1a087ad062d6c348a66f2635d28f1e762194241c651e56ce04"
+    },
+    {
+      "path": "scripts/issue_dg071_dg075_statistics.py",
+      "function": "_sha256",
+      "line": 166,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/issue_g2a_prefill_prompt_pin.py",
+      "function": "_sha256",
+      "line": 106,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/issue_g2a_prefill_prompt_pin.py",
+      "function": "_is_sha256",
+      "line": 110,
+      "lines": 6,
+      "family": "digest",
+      "contract": "is_lower_sha256",
+      "disposition": "migrate",
+      "body_sha256": "567d42d1e9f2d2ea8d8ad375b49385fdc921e70161a42599b87e4dcbeaf070c4"
+    },
+    {
+      "path": "scripts/issue_g2a_prefill_prompt_pin.py",
+      "function": "_require_exact_keys",
+      "line": 118,
+      "lines": 4,
+      "family": "key set",
+      "contract": "local/9da4d35204190ace",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "9da4d35204190ace68b392800c1e2ac3706b7de656a340b005c16a033a4a1b42"
+    },
+    {
+      "path": "scripts/make_figures.py",
+      "function": "sha256_file",
+      "line": 104,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/e9af84666c4c5cd9",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "e9af84666c4c5cd979fb6a470b32468c08720ca4fade065991e8966670dfd460"
+    },
+    {
+      "path": "scripts/make_figures.py",
+      "function": "bundle_tree_sha256",
+      "line": 132,
+      "lines": 4,
+      "family": "digest",
+      "contract": "local/61fdc46c58e7a035",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "61fdc46c58e7a035b57deb551171fe11bbee833662bfd6b334d53fe7a20e76f1"
+    },
+    {
+      "path": "scripts/make_figures.py",
+      "function": "legacy_v1_bundle_tree_sha256",
+      "line": 138,
+      "lines": 9,
+      "family": "digest",
+      "contract": "local/f836d5ce398cf99c",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f836d5ce398cf99c3aee89e7095f1631953a5a87f0c85a1e565b68874ea04aa4"
+    },
+    {
+      "path": "scripts/mint_floor_artifact.py",
+      "function": "_sha256",
+      "line": 295,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/mint_floor_artifact.py",
+      "function": "_finite",
+      "line": 336,
+      "lines": 7,
+      "family": "number guard",
+      "contract": "local/96c02b569cc9176a",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "96c02b569cc9176ad63225e9900e2e968a6b265e2a281859a80199cbcc080717"
+    },
+    {
+      "path": "scripts/mint_floor_artifact.py",
+      "function": "_safe_relative_posix",
+      "line": 345,
+      "lines": 13,
+      "family": "path guard",
+      "contract": "local/8e7db1e1cfe354b2",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8e7db1e1cfe354b226b2edc70f76d2acece2f9790d5717ed7b8e8157587b1097"
+    },
+    {
+      "path": "scripts/mint_floor_artifact.py",
+      "function": "_sha256_file",
+      "line": 396,
+      "lines": 7,
+      "family": "digest",
+      "contract": "local/06a5eafeaa061066",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "06a5eafeaa061066b042292f174313e8a39117e20aaf4c05ed7344db0231ee3e"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_sha256",
+      "line": 603,
+      "lines": 5,
+      "family": "digest",
+      "contract": "local/cf30a0f26d740228",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "cf30a0f26d740228a4ec79b08bde567c5a08e505eb9534ae478a672e33c12ef8"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_reject_nonfinite_json",
+      "line": 1469,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/7c7feea8951c5d74",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "7c7feea8951c5d7408409387a6d2d09c205581a665c4795af8bdce5dc8e4a8b0"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_parse_finite_json_float",
+      "line": 1473,
+      "lines": 5,
+      "family": "number guard",
+      "contract": "parse_finite_float",
+      "disposition": "migrate",
+      "body_sha256": "bebeb51c466d77344170847b4083407a3d08f761d9fc2a2e595ca6eea1bf4f4b"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_parse_finite_json_int",
+      "line": 1480,
+      "lines": 9,
+      "family": "number guard",
+      "contract": "parse_finite_int",
+      "disposition": "migrate",
+      "body_sha256": "b99d1b25494efc43f98998b2af0bc5ae6d07ad94b062a583c2ded5031c46ecfb"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_strict_json_value",
+      "line": 1491,
+      "lines": 15,
+      "family": "strict JSON",
+      "contract": "local/333fd7c9f1a1b639",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "333fd7c9f1a1b639e5c083770a9a7483a6b1c0cc8582a378022dc0869cc8f9e5"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_strict_json_file",
+      "line": 1508,
+      "lines": 10,
+      "family": "strict JSON",
+      "contract": "local/0c41ae5c2e9c2e39",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "0c41ae5c2e9c2e39c0494bb1c0327fd799634392c7087ad7501f4b6fa80dca70"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_strict_json_lines_file",
+      "line": 1544,
+      "lines": 17,
+      "family": "strict JSON",
+      "contract": "local/5007ec9d4e64b80d",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "5007ec9d4e64b80d9130788a5e5a2cd40c53cd6901cb9b5ad68097110c16b5fa"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_canonical_json_sha256",
+      "line": 2080,
+      "lines": 12,
+      "family": "digest",
+      "contract": "local/7dad4a84517e645c",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "7dad4a84517e645c613e32280c390628377fb0b3a260a8b64393cd58fe47a2e2"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "function": "_artifact_sha256",
+      "line": 2100,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/4aaf1d1cace03f96",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "4aaf1d1cace03f960909a0c0d7bf7469779e0f25b62aabda2a5b88b41ede2d95"
+    },
+    {
+      "path": "scripts/package_bundle_pack.py",
+      "function": "sha256_file",
+      "line": 51,
+      "lines": 6,
+      "family": "digest",
+      "contract": "sha256_file",
+      "disposition": "migrate",
+      "body_sha256": "a49653bf3cce1d737ec744f9c4fbeadfa01e2a62543952a6048042851932c9a9"
+    },
+    {
+      "path": "scripts/package_bundle_pack.py",
+      "function": "_suite_effective_manifest_sha256",
+      "line": 163,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/3bacf0881bfd65c6",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "3bacf0881bfd65c60498bc11018a4bcbb440dbba9aa3e5e3585219e7a2015bf5"
+    },
+    {
+      "path": "scripts/package_d117_fixture.py",
+      "function": "_object_no_duplicates",
+      "line": 57,
+      "lines": 7,
+      "family": "strict JSON",
+      "contract": "local/a176e358de282d40",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a176e358de282d4015c29d514728b1d66a6538943cab7821894d8136cfb0f0ab"
+    },
+    {
+      "path": "scripts/package_d117_fixture.py",
+      "function": "strict_json_bytes",
+      "line": 66,
+      "lines": 9,
+      "family": "strict JSON",
+      "contract": "local/a475b07119c8ea62",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "a475b07119c8ea62bcb21515596344fb680c9b77f2299bfe0cd802d192283421"
+    },
+    {
+      "path": "scripts/package_d117_fixture.py",
+      "function": "_is_sha256",
+      "line": 77,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/12f56005c23b9730",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "12f56005c23b9730ffbd9a7283ffe90e03580707f6cc64561fe30c8a7e311f82"
+    },
+    {
+      "path": "scripts/package_d117_fixture.py",
+      "function": "file_sha256",
+      "line": 360,
+      "lines": 6,
+      "family": "digest",
+      "contract": "sha256_file",
+      "disposition": "migrate",
+      "body_sha256": "3451ae657acb028ecbe70ec0f09e3c3cfa59c477978de7335b76bdde1214bb67"
+    },
+    {
+      "path": "scripts/package_d117_fixture.py",
+      "function": "_atomic_json",
+      "line": 368,
+      "lines": 13,
+      "family": "durability",
+      "contract": "local/b4058a25dc5bfb6e",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "b4058a25dc5bfb6e213abf76678f781f11cd9c91e6e9d0ad82d589d289a6b774"
+    },
+    {
+      "path": "scripts/paper_anchor_correction_quantified.py",
+      "function": "_sha256",
+      "line": 129,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/e3167aef2ebfad8b",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/paper_excursion_decomposition.py",
+      "function": "_sha256",
+      "line": 118,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/e3167aef2ebfad8b",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/paper_prefill_resolvability_projection.py",
+      "function": "sha256_of",
+      "line": 134,
+      "lines": 6,
+      "family": "digest",
+      "contract": "local/4a8487623ace645a",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "4a8487623ace645a3ec82f7acfea1cff2a3fbe9239fd24d87c65f1f02128bde3"
+    },
+    {
+      "path": "scripts/paper_renumber_refs.py",
+      "function": "_write_atomic",
+      "line": 274,
+      "lines": 12,
+      "family": "durability",
+      "contract": "local/b9197ea32230bbb6",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "b9197ea32230bbb6f10c467708c70ecde45f777cbbb3e26483d795d4b2a56341"
+    },
+    {
+      "path": "scripts/quiet_guard.py",
+      "function": "canonical_output",
+      "line": 33,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_ascii_text",
+      "disposition": "migrate",
+      "body_sha256": "5070e960562f9c05c67b58e9a4d74c5b5b0a8a0533792d81ecea4aaa9d70e1bd"
+    },
+    {
+      "path": "scripts/reauthor_clean.py",
+      "function": "_sha256",
+      "line": 111,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/reauthor_clean.py",
+      "function": "_canonical_json",
+      "line": 115,
+      "lines": 4,
+      "family": "JSON rendering",
+      "contract": "json_utf8_bytes",
+      "disposition": "migrate",
+      "body_sha256": "97a5dc3410862835fb1c6e4c74696b97aa0403f317b48b3aadd3a11222393963"
+    },
+    {
+      "path": "scripts/reauthor_clean.py",
+      "function": "_fsync_directory",
+      "line": 392,
+      "lines": 13,
+      "family": "durability",
+      "contract": "local/e0d2a88589d36dc8",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "e0d2a88589d36dc838afc8106c4f39820788184625157689bc5432a10334b360"
+    },
+    {
+      "path": "scripts/reauthor_clean.py",
+      "function": "_open_relative",
+      "line": 1438,
+      "lines": 9,
+      "family": "path guard",
+      "contract": "local/ae353127fc7b84fe",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "ae353127fc7b84fe56b9d861645790215cbab37651d8a19be363021b86cb1042"
+    },
+    {
+      "path": "scripts/rehearse_b5_real.py",
+      "function": "sha256_file",
+      "line": 106,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/da05ec4d587e78cb",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "da05ec4d587e78cb28776b81719e35a80211ea2733555c7d3fbeb68914a57b97"
+    },
+    {
+      "path": "scripts/rehearse_t0_unattended.py",
+      "function": "_safe_relative",
+      "line": 51,
+      "lines": 7,
+      "family": "path guard",
+      "contract": "local/90dd1d4057af589f",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "90dd1d4057af589f7131006957eb8e39db71427a845e6a22c0cba3285b71af19"
+    },
+    {
+      "path": "scripts/reissue_calibration_acceptance.py",
+      "function": "_sha256",
+      "line": 86,
+      "lines": 2,
+      "family": "digest",
+      "contract": "local/e3167aef2ebfad8b",
+      "disposition": "keep: independent/historical",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/render_results_fills.py",
+      "function": "_reject_nonfinite_json",
+      "line": 190,
+      "lines": 2,
+      "family": "number guard",
+      "contract": "local/f7ea49bdfd182379",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "f7ea49bdfd18237989c88b770ab7047136c4297e323cc4dc2a44fb40558a7d32"
+    },
+    {
+      "path": "scripts/run_campaign.py",
+      "function": "_scientific_config_sha256",
+      "line": 1269,
+      "lines": 12,
+      "family": "digest",
+      "contract": "local/0ef7bd811e86abd1",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "0ef7bd811e86abd1410987574d54653d981f164c4d46564975f5dbe78b0a63fe"
+    },
+    {
+      "path": "scripts/run_campaign.py",
+      "function": "_sha256_bytes",
+      "line": 1333,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_data",
+      "disposition": "migrate",
+      "body_sha256": "d97ceeaa02c77e0b6592b638549b18ec8d2a53bcf66b125ef71a308e50fea4bc"
+    },
+    {
+      "path": "scripts/run_night.py",
+      "function": "_sha256_path",
+      "line": 187,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_path_bytes",
+      "disposition": "migrate",
+      "body_sha256": "8d2feb51952f9c9e7bb476be12475446ec24bece691f464430939b50daedecfe"
+    },
+    {
+      "path": "scripts/run_night.py",
+      "function": "_json_bytes",
+      "line": 207,
+      "lines": 2,
+      "family": "JSON rendering",
+      "contract": "json_pretty_ascii",
+      "disposition": "migrate",
+      "body_sha256": "cec6e06d7cc745cca5ff21c0003e0d6dace9200e930197cd27389ff0b0ffe7b6"
+    },
+    {
+      "path": "scripts/run_night.py",
+      "function": "_fsync_path",
+      "line": 233,
+      "lines": 6,
+      "family": "durability",
+      "contract": "fsync_directory",
+      "disposition": "migrate",
+      "body_sha256": "1811b94e55217601803f6a64ade818bdbd7409d11639f6e866db0cd20563d435"
+    },
+    {
+      "path": "scripts/run_night.py",
+      "function": "_atomic_probe_json",
+      "line": 4777,
+      "lines": 4,
+      "family": "durability",
+      "contract": "local/8d360f43c87c9f3c",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8d360f43c87c9f3cffe44471a717e9e678cdbab8f78bb1af7d62677e7c335306"
+    },
+    {
+      "path": "scripts/sample_quiet_predicate_evidence.py",
+      "function": "atomic_write_text",
+      "line": 146,
+      "lines": 13,
+      "family": "durability",
+      "contract": "local/066b0ce3652349d2",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "066b0ce3652349d2355b9e07db4d1d7365792876433d600c3ce3efe7409dc8a3"
+    },
+    {
+      "path": "scripts/sample_quiet_predicate_evidence.py",
+      "function": "stream_sha256",
+      "line": 844,
+      "lines": 7,
+      "family": "digest",
+      "contract": "local/16dcaa5d2ad96699",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "16dcaa5d2ad96699e9c0a7273ba0008c51e3de2fe156c5df94ffc93b7221c2ed"
+    },
+    {
+      "path": "scripts/size_b5_window.py",
+      "function": "sha256_bytes",
+      "line": 139,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/size_b5_window.py",
+      "function": "_relative",
+      "line": 151,
+      "lines": 4,
+      "family": "path guard",
+      "contract": "relative_inside",
+      "disposition": "migrate",
+      "body_sha256": "84bc494ba2d43d730339fe446520d41dcc9d31d816a4c7cd80023ff5e2c69ed9"
+    },
+    {
+      "path": "scripts/size_b5_window.py",
+      "function": "_atomic_write",
+      "line": 733,
+      "lines": 13,
+      "family": "durability",
+      "contract": "atomic_write_bytes",
+      "disposition": "migrate",
+      "body_sha256": "db380e142721bce50cabac274a711ed2e0480974d8caec8e276153e60113a742"
+    },
+    {
+      "path": "scripts/summarize_g2a_prefill_probe.py",
+      "function": "_sha256",
+      "line": 61,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/summarize_g2a_prefill_probe.py",
+      "function": "_is_sha256",
+      "line": 65,
+      "lines": 6,
+      "family": "digest",
+      "contract": "is_lower_sha256",
+      "disposition": "migrate",
+      "body_sha256": "567d42d1e9f2d2ea8d8ad375b49385fdc921e70161a42599b87e4dcbeaf070c4"
+    },
+    {
+      "path": "scripts/summarize_g2a_prefill_probe.py",
+      "function": "_require_exact_keys",
+      "line": 73,
+      "lines": 4,
+      "family": "key set",
+      "contract": "local/8f7766506fd0cf20",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "8f7766506fd0cf209e53b697316d6fa882aabf28f974329e0d494567cdd78073"
+    },
+    {
+      "path": "scripts/validate_gate_packet.py",
+      "function": "_sha256",
+      "line": 137,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_data",
+      "disposition": "migrate",
+      "body_sha256": "d97ceeaa02c77e0b6592b638549b18ec8d2a53bcf66b125ef71a308e50fea4bc"
+    },
+    {
+      "path": "scripts/validate_gate_packet.py",
+      "function": "_canonical_json",
+      "line": 601,
+      "lines": 6,
+      "family": "JSON rendering",
+      "contract": "local/91035330e1815b35",
+      "disposition": "keep: distinct contract/context",
+      "body_sha256": "91035330e1815b35a9bd7abb9301036d901026cc9d52ff923ef79ff11c65e55f"
+    },
+    {
+      "path": "scripts/validate_powermetrics_fiducial.py",
+      "function": "sha256_path",
+      "line": 808,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_path_bytes",
+      "disposition": "migrate",
+      "body_sha256": "8d2feb51952f9c9e7bb476be12475446ec24bece691f464430939b50daedecfe"
+    },
+    {
+      "path": "scripts/write_b5_identity_pins.py",
+      "function": "sha256_bytes",
+      "line": 165,
+      "lines": 2,
+      "family": "digest",
+      "contract": "sha256_raw",
+      "disposition": "migrate",
+      "body_sha256": "e3167aef2ebfad8b940530e7e6ab9c9f327cb787939d7750046e6e61cecf08ae"
+    },
+    {
+      "path": "scripts/write_b5_identity_pins.py",
+      "function": "_relative_inside",
+      "line": 177,
+      "lines": 4,
+      "family": "path guard",
+      "contract": "relative_inside",
+      "disposition": "migrate",
+      "body_sha256": "84bc494ba2d43d730339fe446520d41dcc9d31d816a4c7cd80023ff5e2c69ed9"
+    },
+    {
+      "path": "scripts/write_b5_identity_pins.py",
+      "function": "_atomic_write",
+      "line": 586,
+      "lines": 13,
+      "family": "durability",
+      "contract": "atomic_write_bytes",
+      "disposition": "migrate",
+      "body_sha256": "db380e142721bce50cabac274a711ed2e0480974d8caec8e276153e60113a742"
+    }
+  ]
+}
