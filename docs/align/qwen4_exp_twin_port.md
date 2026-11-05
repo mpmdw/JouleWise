@@ -39,7 +39,10 @@ The final `hyper_connection_mixer` (no write gate) feeds `lm_head` directly.
 There is no final norm, matching the reference.
 
 **Gated DeltaNet (36 layers).** The causal depthwise conv uses a K-1 history
-in the cache and accumulates in fp32, rounding once. q and k get the
+in the cache and accumulates in fp32, rounding once. Its silu then runs in
+fp32 on that rounded output and rounds once, as torch's bf16 silu does
+(`nn.silu` on bf16 rounds twice, which put the layer's bf16 error at
+1.08-1.09x the reference's own bf16 noise instead of 1.005-1.007x). q and k get the
 reference's fp32 `l2norm(eps=1e-6)` on the sum of squares, q is scaled by
 Dk^-0.5, beta is `sigmoid(b)` in the model dtype, and
 `g = -exp(A_log)·softplus(a + dt_bias)` is computed in fp32. The recurrence
@@ -174,6 +177,11 @@ q4 halves it).
    expert order), the hyper-connection stream mean and the PLE gate dot
    product. (1+w) norms use the raw `w` in fp32. Unlike mlx-lm's qwen3_5,
    `1+w` is not folded into bf16 weights, which would round it to 2^-7.
+   The DeltaNet and PLE conv activations evaluate silu in fp32 and round
+   once, like torch. The other silu sites (hyper-connection read gate,
+   shared expert, routed experts inside mlx-lm's `SwitchGLU`) still use
+   `nn.silu` in the model dtype, which rounds after the sigmoid and after
+   the multiply.
 5. **Fully padded query rows** attend to themselves so they stay finite.
    Their outputs are discarded, as in the reference.
 6. **N-gram table** lives off-GPU, optionally quantized (q8/q4). The

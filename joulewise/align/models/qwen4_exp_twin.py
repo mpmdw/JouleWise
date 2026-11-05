@@ -624,6 +624,18 @@ class DepthwiseConv(nn.Module):
         return acc.astype(full.dtype)
 
 
+def silu_rounded_once(x: mx.array) -> mx.array:
+    """[ref: ACT2FN["silu"] / F.silu on a low-precision tensor] silu evaluated
+    in fp32 and rounded once to ``x.dtype``.
+
+    torch computes bf16 silu internally in fp32 with a single rounding;
+    ``nn.silu`` on a bf16 array rounds after the sigmoid and again after the
+    multiply (5.4% of bf16 inputs then differ from torch on GPU, vs 1.5% with
+    one rounding). Identity cost for fp32 inputs.
+    """
+    return nn.silu(x.astype(_F32)).astype(x.dtype)
+
+
 def conv_history_tail(full: mx.array, hist: int) -> mx.array:
     """The last ``hist`` positions of ``full`` (B, T, C): the conv cache.
 
@@ -897,7 +909,9 @@ class GatedDeltaNet(nn.Module):
         full = mx.concatenate([conv_state, qkv], axis=1)
         if cache is not None:
             cache[0] = conv_history_tail(full, hist)
-        conv = nn.silu(self.conv1d(full, S))
+        # [ref: causal_conv1d_fn/_update] conv rounded to bf16, then silu
+        # (fp32 inside, one rounding)
+        conv = silu_rounded_once(self.conv1d(full, S))
 
         q, k, v = mx.split(conv, [self.key_dim, 2 * self.key_dim], axis=-1)
         q = q.reshape(B, S, self.hk, self.dk).astype(_F32)
@@ -1189,7 +1203,7 @@ class PLELayer(nn.Module):
         full = mx.concatenate([state, gated_normed], axis=1)
         if cache is not None:
             cache[2] = conv_history_tail(full, hist)
-        return gated + nn.silu(self.conv1d(full, S))
+        return gated + silu_rounded_once(self.conv1d(full, S))
 
 
 class DecoderLayer(nn.Module):

@@ -670,6 +670,22 @@ REG_GDN = {
     "dk16": {"over": {"linear_key_head_dim": 16}, "segments": [9, 1], "seed": 0,
              "devices": ("gpu", "cpu")},
 }
+# Released DeltaNet head geometry, fp32 and bf16 from the same weights: the
+# bf16 fidelity probe for the conv activation's rounding.
+GDN_REAL_DIMS = {"hidden_size": 256, "linear_num_key_heads": 16, "linear_num_value_heads": 48,
+                 "linear_key_head_dim": 128, "linear_value_head_dim": 128}
+for _seed in (1, 2, 3):
+    REG_GDN[f"real_dims_s{_seed}"] = {"over": GDN_REAL_DIMS, "segments": [200, 1, 1, 1],
+                                      "seed": _seed, "dtypes": ("fp32", "bf16")}
+REG_TOL = {
+    # rms(MLX bf16 - ref fp32) / rms(ref bf16 - ref fp32) for one DeltaNet layer
+    # at the released head dims. Single-rounding silu measures 1.003-1.007;
+    # the double-rounding nn.silu on bf16 measured 1.075-1.094.
+    "gdn_bf16_rms_over_noise": 1.04,
+    # Elementwise bf16 silu vs torch: the port's mismatches must stay below
+    # half of stock nn.silu's (measured 508 vs 1844 on GPU, 252 vs 1296 CPU).
+    "silu_mismatch_vs_stock": 0.5,
+}
 # Tiny full model at the edges of the config space, converted like the main
 # checkpoint. Reference logits are an UNCACHED prefill: with
 # ple_conv_kernel_size 1 the reference's own cached PLE path raises.
@@ -736,6 +752,18 @@ def _ref_gdn(engine, reg: Path):
         np.savez(reg / f"gdn_{name}.npz", **arrays)
 
 
+def _ref_silu(reg: Path):
+    """torch silu on every finite bf16 value with |x| < 50."""
+    import numpy as np
+    import torch
+
+    f = (np.arange(0, 1 << 16, dtype=np.uint32) << 16).view(np.float32)
+    f = f[np.isfinite(f) & (np.abs(f) < 50)]
+    t = torch.from_numpy(f).to(torch.bfloat16)          # exact: f holds bf16 values
+    np.savez(reg / "silu_ref.npz", x=t.float().numpy(),
+             y=torch.nn.functional.silu(t).float().numpy())
+
+
 def _ref_edge(engine, reg: Path):
     import numpy as np
     import torch
@@ -767,6 +795,7 @@ def stage_ref_regress(work: Path):
     engine = _load_engine_module()
     meta = {"validation": _ref_validation()}
     _ref_gdn(engine, reg)
+    _ref_silu(reg)
     meta["edge"] = _ref_edge(engine, reg)
     meta["peak_rss_bytes"] = _peak_rss()
     (reg / "ref_meta.json").write_text(json.dumps(meta, indent=2))
@@ -838,6 +867,48 @@ def _mlx_gdn(tw, reg: Path):
     return out, outs
 
 
+def _mlx_gdn_bf16_noise(reg: Path, outs):
+    """bf16 fidelity of the port relative to the reference's own bf16 noise."""
+    import numpy as np
+
+    def rms(a):
+        return float(np.sqrt(np.mean(np.square(a.astype(np.float64)))))
+
+    out = {}
+    for name, case in REG_GDN.items():
+        if "bf16" not in case.get("dtypes", ()):
+            continue
+        z = np.load(reg / f"gdn_{name}.npz")
+        n = len(z["segments"])
+        ref32 = np.concatenate([z[f"fp32::out{i}"].ravel() for i in range(n)])
+        ref16 = np.concatenate([z[f"bf16::out{i}"].ravel() for i in range(n)])
+        mlx16 = np.concatenate([o.ravel() for o in outs[f"{name}/bf16/gpu"]])
+        out[name] = {"rms_ratio": rms(mlx16 - ref32) / rms(ref16 - ref32),
+                     "max_ratio": float(np.abs(mlx16 - ref32).max() / np.abs(ref16 - ref32).max()),
+                     "ref_bf16_noise_rms": rms(ref16 - ref32)}
+    return out
+
+
+def _mlx_silu(tw, reg: Path):
+    import mlx.core as mx
+    import mlx.nn as nn
+    import numpy as np
+
+    z = np.load(reg / "silu_ref.npz")
+    x, y = mx.array(z["x"]).astype(mx.bfloat16), z["y"]
+    out = {"n": int(y.size)}
+    prev_device = mx.default_device()
+    for dev in ("gpu", "cpu"):
+        mx.set_default_device(mx.gpu if dev == "gpu" else mx.cpu)
+        try:
+            port = np.array(tw.silu_rounded_once(x).astype(mx.float32))
+            stock = np.array(nn.silu(x).astype(mx.float32))
+        finally:
+            mx.set_default_device(prev_device)
+        out[dev] = {"port_mismatch": int((port != y).sum()), "stock_mismatch": int((stock != y).sum())}
+    return out
+
+
 def _mlx_edge(reg: Path):
     import mlx.core as mx
     import numpy as np
@@ -872,7 +943,9 @@ def stage_mlx_regress(work: Path):
 
     reg = work / "regress"
     res = {"validation": _mlx_validation(tw)}
-    res["gdn"], _ = _mlx_gdn(tw, reg)
+    res["gdn"], gdn_outs = _mlx_gdn(tw, reg)
+    res["gdn_bf16_noise"] = _mlx_gdn_bf16_noise(reg, gdn_outs)
+    res["silu"] = _mlx_silu(tw, reg)
     res["edge"] = _mlx_edge(reg)
     res["peak_rss_bytes"] = _peak_rss()
     (reg / "mlx_results.json").write_text(json.dumps(res, indent=2))
@@ -1130,6 +1203,18 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
         for key in ("dk48/fp32/gpu", "dk48/fp32/cpu", "dk16/fp32/gpu", "dk16/fp32/cpu"):
             with self.subTest(case=key):
                 self.assertLessEqual(self._gdn(key)["max_abs"], TOL["fp32_vs_ref"])
+
+    def test_regress_conv_silu_rounds_once(self):
+        s = self.reg["silu"]
+        for dev in ("gpu", "cpu"):
+            with self.subTest(device=dev):
+                self.assertLess(s[dev]["port_mismatch"],
+                                REG_TOL["silu_mismatch_vs_stock"] * s[dev]["stock_mismatch"], s[dev])
+        for name, r in self.reg["gdn_bf16_noise"].items():
+            with self.subTest(case=name):
+                self.assertLessEqual(self._gdn(f"{name}/fp32/gpu")["max_abs"], TOL["fp32_vs_ref"])
+                self.assertLessEqual(r["rms_ratio"], REG_TOL["gdn_bf16_rms_over_noise"], r)
+        self.assertEqual(len(self.reg["gdn_bf16_noise"]), 3)
 
     def test_regress_kernel1_convs_cached_decode(self):
         # DeltaNet and PLE short convs with kernel 1, cached decode in uneven
