@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import sha256_raw as _sha256
+
 from joulewise.authentication_io import (
     V2AuthenticationInputError,
     V2AuthenticationReadSession,
@@ -134,10 +136,6 @@ class _MemberObservation:
 
 def _refuse(reason: str, detail: str) -> None:
     raise WindowDurationMarginsRefusal(reason, detail)
-
-
-def _sha256(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _canonical_bytes(value: Any) -> bytes:

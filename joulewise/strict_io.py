@@ -19,3 +19,7 @@ from typing import Any
 
 def sha256_value(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def sha256_raw(raw: bytes) -> str:
+    return sha256_value(raw)

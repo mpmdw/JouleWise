@@ -47,12 +47,10 @@ SLOTS: dict[str, tuple[str, str, str, int]] = {
 }
 
 
+from joulewise.strict_io import sha256_raw as sha256_bytes
+
 class SpareError(ValueError):
     """The committed reference bytes cannot give the spares; nothing was written."""
-
-
-def sha256_bytes(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def render_json(value: Any) -> bytes:

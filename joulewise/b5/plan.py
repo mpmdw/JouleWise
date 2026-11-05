@@ -48,6 +48,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from joulewise.strict_io import sha256_raw as _sha256
+
 from joulewise import night_gate
 from joulewise.b5 import chain as b5_chain
 
@@ -253,10 +255,6 @@ def dispatch_refusal(dispatches: Sequence[StageDispatch]) -> str | None:
                 + "; ".join(f"{row['run_id']} into {row['runs_root_binding']} by {', '.join(row['stages'])}"
                             for row in duplicates))
     return None
-
-
-def _sha256(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _absolute(value: Any, field: str) -> Path:

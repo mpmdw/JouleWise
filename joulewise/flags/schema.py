@@ -99,6 +99,8 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 DETAIL_MAX = 2000
 
 
+from joulewise.strict_io import sha256_raw as sha256_hex
+
 class FlagSchemaError(ValueError):
     """A record does not conform to ``joulewise.flag.v1``."""
 
@@ -109,10 +111,6 @@ def canonical_json_bytes(value: Any) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
-
-
-def sha256_hex(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def compute_flag_id(

@@ -128,6 +128,9 @@ NEG8_COLLECTED_SUMMARY = "neg8-settled-corpus.collected.summary.json"
 TERMINAL_BOUNDARY = "post-bracket-terminal-boundary.json"
 
 
+from joulewise.strict_io import sha256_raw as sha256_bytes
+
+
 @dataclasses.dataclass(frozen=True)
 class Tool:
     interface_id: str
@@ -1303,10 +1306,6 @@ def spare_retry_lines(stage: Stage, argv: Sequence[str], measurement_root: Path,
         ]
     lines += ["*) ;;", "esac"]
     return lines
-
-
-def sha256_bytes(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def sidecar_bytes(raw: bytes, name: str) -> bytes:

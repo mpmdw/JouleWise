@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from joulewise.strict_io import sha256_raw as _sha256
+
 from joulewise.controller import _config_sha256 as runner_config_sha256
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
@@ -56,10 +58,6 @@ def _load_json(path: Path, *, label: str) -> tuple[Any, bytes]:
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ProbeSummaryError(f"{label}_invalid_json:{path}:{exc}") from exc
     return value, raw
-
-
-def _sha256(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _is_sha256(value: Any) -> bool:

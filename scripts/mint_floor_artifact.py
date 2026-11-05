@@ -25,6 +25,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.strict_io import sha256_raw as _sha256
+
 from joulewise.authentication_io import (  # noqa: E402
     V2AuthenticationInputError,
     read_authentication_input,
@@ -290,10 +292,6 @@ class AuthenticatedComponent:
     # receipt.  Legacy components keep the default and therefore retain their
     # exact artifact bytes.
     launch_lineage: Mapping[str, Any] | None = None
-
-
-def _sha256(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]:

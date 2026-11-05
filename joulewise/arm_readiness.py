@@ -27,6 +27,8 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
+from joulewise.strict_io import sha256_raw as sha256_bytes
+
 from joulewise import clock_reference as _clock_reference
 from joulewise import kernel_clock as _kernel_clock
 from joulewise import network_time_off as _network_time_off
@@ -1321,10 +1323,6 @@ def _render_plan_tree(value: Any) -> bytes:
 def gnu_sidecar(digest: str, filename: str) -> bytes:
     _require_lower_sha256(digest, "sidecar digest")
     return _gnu_sidecar(digest, filename)
-
-
-def sha256_bytes(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _require_exact_keys(

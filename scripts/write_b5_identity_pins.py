@@ -88,6 +88,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.strict_io import sha256_raw as sha256_bytes
+
 from joulewise.flags.collect import (  # noqa: E402
     IDENTITY_PINS_SCHEMA,
     runtime_versions,
@@ -160,10 +162,6 @@ class IdentityPinsError(ValueError):
 def _require(condition: bool, detail: str) -> None:
     if not condition:
         raise IdentityPinsError(detail)
-
-
-def sha256_bytes(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _read_json(path: Path, label: str) -> tuple[Any, bytes]:

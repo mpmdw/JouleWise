@@ -187,6 +187,8 @@ UNRECORDABLE_FIELDS = frozenset({"pack_sha256", "collection_boot_session_id", "a
 _SHA256_HEX = frozenset("0123456789abcdef")
 
 
+from joulewise.strict_io import sha256_raw as sha256_bytes
+
 class HazardLineageError(ValueError):
     """A refusal by the hazard-path lineage, with a registered reason code."""
 
@@ -220,10 +222,6 @@ def render_json(value: Any) -> bytes:
         json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
         + "\n"
     ).encode("utf-8")
-
-
-def sha256_bytes(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def gnu_sidecar(digest: str, filename: str) -> bytes:
