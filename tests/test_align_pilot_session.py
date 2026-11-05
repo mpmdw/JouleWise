@@ -57,14 +57,20 @@ class KitTests(unittest.TestCase):
         self.assertTrue(tree['non_claim'])
         self.assertEqual(len(chain.stage_plan(tree)),len(tree['stage_graph']))
         collection=json.loads(files[kit.KIT/'collection_plan.json'])
-        self.assertEqual(collection['seeds_per_cell'],6)
+        self.assertEqual(collection['seeds_per_cell'], {'benign': 11, 'sabotage': 1})
+        self.assertEqual(collection['seed_indices'], [1, *range(17, 27)])
+        self.assertEqual(collection['cross_session_anchor_of'][-1], 'align-pilot-20261104T164323823784Z')
         members=collection['members']
         self.assertEqual(len(members),28)
         self.assertEqual([m['block'] for m in members], ['A'] * 28)
         originals = [m for m in members if not m['is_replay']]
         self.assertEqual(len(originals),24)
-        for seed in kit.SEED_BLOCKS:
-            self.assertEqual(len([m for m in originals if m['seed_index'] == seed]),4)
+        self.assertEqual(len([m for m in originals if m['seed_index'] == 1]), 4)
+        for seed in range(17, 27):
+            fresh = [m for m in originals if m['seed_index'] == seed]
+            self.assertEqual(len(fresh), 2)
+            self.assertEqual({m['condition'] for m in fresh}, {'benign'})
+            self.assertEqual({m['task_pair'] for m in fresh}, set(pilot.PILOT_V0_PAIRS))
         for member in members:
             config=BenchmarkConfig.from_mapping(json.loads(files[Path(member['config_path'])]))
             base=BenchmarkConfig.from_mapping(json.loads((ROOT/kit.base_config_path(member['model_id'])).read_bytes()))
@@ -123,9 +129,9 @@ class KitTests(unittest.TestCase):
         for member in collection['members']:
             self.assertEqual(h.read(ROOT/member['config_path'])['sampling']['idle_seconds'],cap)
 
-    def test_three_repeat_roster_has_the_two_ruled_configurations(self):
+    def test_benign_heavy_roster_has_the_ruled_configuration(self):
         collection=h.read(ROOT/kit.KIT/'collection_plan.json')
-        self.assertEqual(collection['seeds_per_cell'],6)
+        self.assertEqual(collection['seeds_per_cell'], {'benign': 11, 'sabotage': 1})
         self.assertEqual([(b['model_id'],b['enable_thinking'],b['max_tokens'],b['max_turns']) for b in collection['blocks']],
             [('qwen3-30b-a3b',True,4096,12)])
 

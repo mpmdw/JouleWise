@@ -1,5 +1,5 @@
 {
-  "identity_pins_sha256": "1ab414fb1bf96c3272fd39a2c15309a6cd5d393b15c5f84fa3a01e5728fbc6f6",
+  "identity_pins_sha256": "95f2841fe43bfe0d454759ff8863bc29895b815b392762eea61dac6288ed6c61",
   "inherited_from": "configs/campaigns/align_pilot_v1/registration/local_file_verification.json",
   "inherited_sha256": "10857f06270322dfd3993e1af727abd9830b18e130b9837cec48aa7d3769b687",
   "non_claim": true,

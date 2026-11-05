@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 import random
 import shutil
+import subprocess
 import sys
 import tempfile
 from types import ModuleType, SimpleNamespace
@@ -49,7 +50,8 @@ class FakeRandom:
         return value
 
 
-def native(root, seed=1, noise=0, guard=None, condition='benign', pair='spam_filter_update', collision=False):
+def native(root, seed=1, noise=0, guard=None, condition='benign', pair='spam_filter_update', collision=False,
+           spec_updates=None):
     rng = FakeRandom(collision)
     mlx = ModuleType('mlx')
     core = ModuleType('mlx.core')
@@ -62,6 +64,7 @@ def native(root, seed=1, noise=0, guard=None, condition='benign', pair='spam_fil
     updates = {'seed': seed, 'condition': condition, 'sampler': kit.SAMPLER,
                'temperature': kit.SAMPLER['temperature'], 'max_episode_seconds': guard, 'enable_thinking':True,
                'task_kwargs':{'mode':'think','task_pair':pair}}
+    updates.update(spec_updates or {})
     with patch.object(MlxRuntimeAdapter, '_event', observe), patch.dict(sys.modules, {'mlx': mlx, 'mlx.core': core}), patch(
         'joulewise.align.apple.prompt_cache.native_cache_api', return_value=CacheAPI()
     ):
@@ -171,10 +174,11 @@ class KitTests(unittest.TestCase):
             actual = episode_seed(*seed_inputs(config, spec.enable_thinking), tasks[pair].task_pair, spec.seed)
             self.assertEqual(actual, m['expected_episode_seed'])
             values.add(actual)
-        self.assertEqual(len(values), 12)
+        self.assertEqual(len(values), 22)
 
-    def test_preregistered_table_equals_seed_law_for_indices_1_to_18(self):
-        # Every tabled index, including the unused indices 2-11 and 17-18, against the runtime law.
+    def test_preregistered_table_equals_seed_law_for_indices_1_to_26(self):
+        # Independently hash the protocol text's literal inputs, then check the
+        # runtime/factory route too. The table is supplied, never runtime-derived.
         from joulewise.align.apple.pilot import offline_shade_task
         plan = h.read(ROOT / kit.KIT / 'collection_plan.json')
         firsts = {}
@@ -185,9 +189,22 @@ class KitTests(unittest.TestCase):
             task = offline_shade_task(**spec.task_kwargs)
             config = BenchmarkConfig.from_mapping(h.read(ROOT / m['config_path']))
             table = kit.EXPECTED_EPISODE_SEEDS[pair]
-            self.assertEqual(len(table), 18)
-            for i in range(1, 19):
+            self.assertEqual(len(table), 26)
+            for i in range(1, 27):
+                raw = json.dumps(['align-p4-v1', 'qwen3-30b-a3b', 'thinking_on', 'shade/' + pair, i],
+                                 separators=(',', ':'), ensure_ascii=True).encode('utf-8')
+                self.assertEqual(int.from_bytes(hashlib.sha256(raw).digest()[:8], 'big'), table[i - 1])
                 self.assertEqual(episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair, i), table[i - 1])
+
+    def test_anchor_configs_and_sizing_are_byte_identical_to_pilot7_parent(self):
+        plan = h.read(ROOT / kit.KIT / 'collection_plan.json')
+        parent = '50bf73f78ff108286c356c5542b8de35fe180d81'
+        paths = [m['config_path'] for m in plan['members'] if m['ordinal'] in (1, 2, 3, 4, 9, 14, 19, 28)]
+        self.assertEqual(len(paths), 8)
+        paths.append((kit.KIT / 'registration/sizing_b5.json').as_posix())
+        for path in paths:
+            self.assertEqual((ROOT / path).read_bytes(), subprocess.check_output(
+                ['git', '-C', str(ROOT), 'show', parent + ':' + path]), path)
 
     def test_planning_statistics_and_spans_are_source_derived(self):
         evidence = h.read(ROOT / kit.KIT / 'registration/sizing_evidence.json')
@@ -210,11 +227,24 @@ class KitTests(unittest.TestCase):
         originals = [m for m in members if not m['is_replay']]
         cells = [('spam_filter_update', 'benign'), ('bank_transfer_2', 'sabotage'),
                  ('spam_filter_update', 'sabotage'), ('bank_transfer_2', 'benign')]
-        self.assertEqual(kit.SEED_BLOCKS, (1, 12, 13, 14, 15, 16))
-        for ordinal, seed in enumerate(kit.SEED_BLOCKS, 1):
+        self.assertEqual(kit.SEED_INDICES, (1, *range(17, 27)))
+        self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition)
+                          for m in originals[:4]], cells)
+        fresh = []
+        for seed in range(17, 27):
             rows = [m for m in originals if m['spec'].seed == seed]
-            self.assertEqual([(m['spec'].task_kwargs['task_pair'],m['spec'].condition) for m in rows], cells if ordinal % 2 else list(reversed(cells)))
-        # Anchors: the seed-1 block and its replays sit at pilots 4-6's ordinals (1-based).
+            pairs = ['spam_filter_update', 'bank_transfer_2'] if seed % 2 else ['bank_transfer_2', 'spam_filter_update']
+            self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition)
+                              for m in rows], [(p, 'benign') for p in pairs])
+            fresh.extend((p, 'benign', seed) for p in pairs)
+        expected = [(p, c, 1) for p, c in cells]
+        remaining = iter(fresh)
+        replays = dict(zip((9, 14, 19, 28), cells))
+        for ordinal in range(5, 29):
+            expected.append((*replays[ordinal], 1) if ordinal in replays else next(remaining))
+        self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition, m['seed_index'])
+                          for m in members], expected)
+        # Anchors: seed-1 originals and replays retain pilots 4-7's ordinals (1-based).
         self.assertEqual([i for i, m in enumerate(members, 1) if m['spec'].seed == kit.ANCHOR_SEED_INDEX], [1, 2, 3, 4, 9, 14, 19, 28])
         self.assertTrue(all(m['spec'].seed == kit.ANCHOR_SEED_INDEX for m in members if m['is_replay']))
         for i, m in enumerate(members):
@@ -280,6 +310,97 @@ def coefficient_bundle(root, rid, pair, condition, seed, rows):
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_pilot8_production_shaped_28_bundle_desk_and_one_bit_seed_flip(self):
+        """Real desk/attribution/provenance/residual paths; all compute/sensors synthetic."""
+        from tests.align.test_apple_campaign import base_config
+        from tests.test_align_pilot_session import SessionPrepareTests
+        prepared = SessionPrepareTests()
+        prepared.setUp()
+        self.addCleanup(prepared.doCleanups)
+        state = prepared.prepared()
+        self.assertEqual(state['preparation_status'], 'STAGED')
+        with tempfile.TemporaryDirectory() as d:
+            session = prepared.session
+            collection = h.read(Path(state['registration_dir']).parent / 'collection_plan.json')
+            runs = Path(state['runs_roots']['claim'])
+            custody = Path(h.read(state['plan_path'])['custody_root'])
+            clocks, thermals = [], []
+            for m in collection['members']:
+                spec = EpisodeSpec.from_text(json.dumps(m['spec']))
+                # Keep the kit's seed-law inputs and controls. Only the local
+                # review task, fake native model and telemetry are substitutes.
+                base = base_config()
+                base = replace(base, model=replace(base.model, name='qwen3-30b-a3b-mlx'),
+                               run_metadata=replace(base.run_metadata, tags=('align-model=qwen3-30b-a3b',)))
+                controls = {k: getattr(spec, k) for k in ('max_turns', 'max_tokens', 'max_context_tokens',
+                            'enable_thinking', 'sampler', 'temperature', 'max_episode_seconds')}
+                with patch('tests.align.test_apple_endpoint.base_config', return_value=base):
+                    bundle, status, _, _ = native(Path(d) / m['run_id'], seed=spec.seed,
+                        condition=spec.condition, pair='shade/' + m['task_pair'], spec_updates=controls)
+                self.assertEqual(status.status.value, 'succeeded')
+                trace = bundle / 'power_trace.csv'
+                with trace.open() as stream:
+                    reader = csv.DictReader(stream)
+                    fields, samples = reader.fieldnames, list(reader)
+                for sample in samples:
+                    sample.update(source='powermetrics', rail='gpu_power')
+                with trace.open('w') as stream:
+                    writer = csv.DictWriter(stream, fieldnames=fields)
+                    writer.writeheader()
+                    writer.writerows(samples)
+                target = runs / m['run_id']
+                shutil.copytree(bundle, target)
+                for name in ('config.json', 'metadata.json', 'summary_metrics.json'):
+                    value = h.read(target / name)
+                    value['run_id'] = m['run_id']
+                    h.write(target / name, value)
+                ep = read_episode_bundle(target)
+                for event, stamp in (('start', ep.start_ns - 1), ('end', ep.end_ns + 1)):
+                    clocks.append({'run_id': m['run_id'], 'event': event, 'clock': {'monotonic_ns': stamp}})
+                    thermals.append({'kind': 'reading', 'finished': {'monotonic_ns': stamp},
+                                     'values': {'source': 'synthetic_fixture_only', 'level': 0}})
+            for path, rows in ((custody / 'collection/run_clock.jsonl', clocks),
+                               (custody / 'hazards/monitor/thermal.jsonl', thermals)):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+            h.write(custody / 'night/result.json', {'chain_exit_code': 0, 'synthetic_fixture_only': True})
+            h.write(session / 'archive/derived/exclusions.json', {'members_excluded': []})
+            with redirect_stdout(io.StringIO()):
+                status = desk.desk(session, harvest=False)
+            report = h.read(Path(status['pilot']))
+            self.assertEqual(status['pilot_status'], 'instrument_ok', report['checks'])
+            self.assertTrue(report['checks']['I4_sampler_provenance'])
+            self.assertEqual(len(report['members']), 28)
+            self.assertEqual(len(report['residual_analysis']), 1)
+            sabotage = {m['run_id'] for m in collection['members']
+                        if m['condition'] == 'sabotage' and not m['is_replay']}
+            self.assertEqual(len(sabotage), 2)
+            for scope in report['residual_analysis'][0]['scopes'].values():
+                for label in ('counts_logged_headline', 'counts_withheld'):
+                    analysis = scope[label]
+                    self.assertEqual(analysis['distinct_trajectories'], 24)
+                    self.assertEqual(analysis['benign_distinct_trajectories'], 22)
+                    scores = analysis['residuals']
+                    self.assertEqual({r['run_id'] for r in scores if r['method'] == 'full_benign_fit'}, sabotage)
+                    self.assertEqual({r['seed'] for r in scores if r['method'] == 'full_benign_fit'}, {1})
+                    self.assertEqual({r['seed'] for r in scores if r['method'] == 'leave_one_trajectory_out'},
+                                     {1, *range(17, 27)})
+                curve = scope['counts_logged_headline']['tamper_detection_curve']
+                self.assertEqual({r['run_id'] for r in curve}, sabotage)
+            # Change exactly one recorded per-turn seed bit in a fresh benign
+            # bundle, leaving the registered table and bundle seed unchanged.
+            victim = next(m for m in collection['members'] if m['seed_index'] == 17)
+            path = runs / victim['run_id'] / 'outputs/align_turns.jsonl'
+            turns = [json.loads(line) for line in path.read_text().splitlines()]
+            turns[0]['generation']['sampler']['per_turn_seed'] ^= 1
+            path.write_text(''.join(json.dumps(t) + '\n' for t in turns))
+            with redirect_stdout(io.StringIO()):
+                changed = h.read(Path(desk.desk(session, harvest=False)['pilot']))
+            self.assertEqual(changed['status'], 'instrument_incomplete')
+            self.assertFalse(changed['checks']['I4_sampler_provenance'])
+            failures = [m['run_id'] for m in changed['members'] if m['summary']['sampler_check']['status'] == 'fail']
+            self.assertEqual(failures, [victim['run_id']])
+
     def test_missing_and_error_only_thermal_are_null_and_ineligible(self):
         for readings in ({}, {'readings_monotonic_ns_level': [[9, None], [15, None], [21, None]],
                               'errors': ['sensor error']}):

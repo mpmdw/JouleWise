@@ -63,29 +63,33 @@ EXPECTED_EPISODE_SEEDS = {
                         9590288282068465104, 14994728377087409958, 10452994169483960014,
                         5212558227230803783, 12699264629597988571, 11636965341270972789,
                         18253662798353926632, 14709000170216792543, 7699749620054696321,
-                        14391847153820844903, 64101551862339147, 14103990616903134865),
+                        14391847153820844903, 64101551862339147, 14103990616903134865,
+                        7268392907185236625, 9247697570265327422, 7076630650964378836,
+                        3155401452424472451, 82493771458586576, 16525231594250945407,
+                        6247149306856102155, 16492001447681482),
     "spam_filter_update": (2570132319625341959, 4097311025052448992, 6169586229110087908,
                            18211783659995252033, 10515714233578474446, 8438206852662645142,
                            10900152454805747463, 2618380097672501688, 5842603386054999094,
                            2294347453123286324, 10022564881829687868, 3030301297807311119,
                            2387602866340824655, 8158640411307706161, 11880471321531920545,
-                           7655467588542005630, 1008689895933592083, 650340283923250499),
+                           7655467588542005630, 1008689895933592083, 650340283923250499,
+                           16502070860977911228, 17921220545376944226, 1203897718749072581,
+                           761989538063463473, 11385273429233211377, 10418615604173023675,
+                           13611609224312858782, 8611708807891225113),
 }
-# Seed block k runs seed index SEED_BLOCKS[k-1]; block 1 and the four seed-1
-# replays are the cross-session anchors shared with pilots 4, 5 and 6.
-SEED_BLOCKS = (1, 12, 13, 14, 15, 16)
+# The seed-1 block and four replays retain pilots 4-7's exact ordinals.
+FRESH_BENIGN_SEEDS = tuple(range(17, 27))
 ANCHOR_SEED_INDEX = 1
+SEED_INDICES = (ANCHOR_SEED_INDEX, *FRESH_BENIGN_SEEDS)
 
 
 def ordered_members():
-    """Six balanced four-cell seed blocks, four replays spread away from originals."""
+    """Eight unchanged anchors interleaved with ten benign seeds per pair."""
     cells = (("spam_filter_update", "benign"), ("bank_transfer_2", "sabotage"),
              ("spam_filter_update", "sabotage"), ("bank_transfer_2", "benign"))
     members = []
     block = BLOCKS[0]
-    # Replay seed 1 after seed blocks 2,3,4,6. The earliest replay is eight
-    # positions after its original; all later ones are further away.
-    replay_after = {2: cells[0], 3: cells[1], 4: cells[2], 6: cells[3]}
+    replays = {9: cells[0], 14: cells[1], 19: cells[2], 28: cells[3]}
     def member(pair, condition, seed, replay=False):
         spec = pilot.EpisodeSpec(
             task_factory=pilot.FACTORY, condition=condition, seed=seed,
@@ -95,11 +99,16 @@ def ordered_members():
             task_kwargs={"cache_dir": SHADE_CACHE, "task_pair": pair, "give_hint": True})
         return {**block, "repeat": 2 if replay else 1, "seed_index": seed, "is_replay": replay,
                 "base_config": base_config_path(block["model_id"]).as_posix(), "spec": spec}
-    for ordinal, seed in enumerate(SEED_BLOCKS, 1):
-        for pair, condition in cells if ordinal % 2 else reversed(cells):
-            members.append(member(pair, condition, seed))
-        if ordinal in replay_after:
-            members.append(member(*replay_after[ordinal], ANCHOR_SEED_INDEX, replay=True))
+    members.extend(member(pair, condition, ANCHOR_SEED_INDEX) for pair, condition in cells)
+    fresh = iter((pair, seed) for seed in FRESH_BENIGN_SEEDS
+                 for pair in (("spam_filter_update", "bank_transfer_2") if seed % 2
+                              else ("bank_transfer_2", "spam_filter_update")))
+    for ordinal in range(5, 29):
+        if ordinal in replays:
+            members.append(member(*replays[ordinal], ANCHOR_SEED_INDEX, replay=True))
+        else:
+            pair, seed = next(fresh)
+            members.append(member(pair, "benign", seed))
     return members
 
 
@@ -340,10 +349,11 @@ def build_files(root=ROOT):
         "seed_bits": 64, "max_episode_seconds": TIME_GUARD_S,
         "blocks": list(BLOCKS), "max_context_tokens": CONTEXT_CAP, "idle_seconds": ALIGN_IDLE_S, "shade_cache": SHADE_CACHE,
         "task_pairs": list(pilot.PILOT_V0_PAIRS), "conditions": list(pilot.PILOT_V0_CONDITIONS),
-        "seeds_per_cell": 6, "seed_indices": list(SEED_BLOCKS), "replays_per_cell": 1, "anchor_seed_index": ANCHOR_SEED_INDEX,
+        "seeds_per_cell": {"benign": 11, "sabotage": 1}, "seed_indices": list(SEED_INDICES),
+        "replays_per_cell": 1, "anchor_seed_index": ANCHOR_SEED_INDEX,
         "cross_session_anchor_of": ["align-pilot-20261103T134903416190Z", "align-pilot-20261103T224628898457Z",
-                                    "align-pilot-20261104T074612673532Z"],
-        "order_policy": "alternating_four_cells_per_seed_block_replays_after_seed_blocks_2_3_4_6",
+                                    "align-pilot-20261104T074612673532Z", "align-pilot-20261104T164323823784Z"],
+        "order_policy": "seed1_anchors_at_1_2_3_4_9_14_19_28_fresh_benign_seeds_17_to_26_ascending_pairs_spam_bank_odd_bank_spam_even",
         "members": members}
     originals = {(m["task_pair"], m["condition"], m["seed_index"]): m["run_id"] for m in members if not m["is_replay"]}
     for m in members:
@@ -418,20 +428,25 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
     return files
 
 
-README = """# ALIGN pilot 4 (non-claim)
+README = """# ALIGN pilot 8 (non-claim)
 
 Generate: `python3 scripts/align_pilot_kit.py`; verify: `--check`.
 Protocol: `docs/align/pilot_protocol_v3.md`. Session: `scripts/align_pilot_session.py`.
-28 A-only members: 2 pairs x 2 conditions x seed blocks 1,12,13,14,15,16 + seed1 replay per cell.
-Pilot-7 anchors: the seed-1 block (ordinals 1-4) and the four seed-1 replays (9,14,19,28)
-repeat pilots 4-6 at the same ordinals; seeds 12-16 are new trajectories.
+28 A-only members: eight unchanged anchors plus 20 fresh benign members (10 seeds x 2 pairs).
+The seed-1 block (ordinals 1-4) and four seed-1 replays (9,14,19,28) are
+byte-identical to pilot 7 and repeat pilots 4-7 at the same ordinals.
+Fresh benign seeds 17-26 fill ordinals 5-8,10-13,15-18,20-27 in ascending seed order.
+Within each fresh seed, odd indices run spam then bank; even indices run bank then spam.
+Both pairs share the seed index. Unique seeds per pair/condition: benign 11
+(anchor 1 plus fresh 17-26), sabotage 1 (anchor 1); replays do not add trajectories.
 Qwen3 thinking sampler 0.6/0.95/20/0, per-turn SHA256 64-bit reseed; guard120s.
 Seed-law task identifiers are exactly `shade/spam_filter_update` and
 `shade/bank_transfer_2` (the task's task_pair attribute, not task_kwargs.task_pair).
 Every member's expected_episode_seed is pre-registered in collection_plan.json.
 Cache episode_prefix, cap40960, 12x4096, hint on, idle300s, repetition observe-only.
-Odd seed-block ordinal: spam/benign,bank/sabotage,spam/sabotage,bank/benign; even reversed.
-Replays after seed blocks2,3,4,6, all at least six members after originals.
+Seed-1 block order: spam/benign,bank/sabotage,spam/sabotage,bank/benign.
+Replays at 9,14,19,28 use that same cell order, all at least six members after originals.
+The midpoint reference remains after member 14 (episodes-a / episodes-b).
 25 scaffold members and calibration bracket unchanged. Hardware rehearsal required.
 `registration/derive_sizing.py --pilot-session <pilot3 root>` derives file-digested
 receipts without MLX. Identity pins retain verified Mac hashes and package readings.
