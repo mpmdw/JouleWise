@@ -1616,7 +1616,7 @@ def _open_paper_input_impl(
     if not runs_root.is_dir():
         raise PaperCustodyRefusal("paper_custody_path_refused")
     try:
-        repository, head = _mint_git_anchor(require_origin_main=True)
+        repository, head = _mint_git_anchor(require_registered_analysis=True)  # F2; freeze_p1_rebind.md
     except IdentityPinProjectionError as exc:
         raise PaperCustodyRefusal("paper_custody_anchor_unavailable") from exc
 

@@ -831,12 +831,17 @@ def _load_mint_module() -> ModuleType:
     return module
 
 
-def _mint_git_anchor(*, require_origin_main: bool = False) -> tuple[Path, str]:
-    """Invoke the mint's fixed-repository Git gate with optional release containment."""
+def _mint_git_anchor(*, require_origin_main: bool = False,
+                     require_registered_analysis: bool = False) -> tuple[Path, str]:
+    """Invoke the clean-tree gate and optionally authenticate the block release.
+
+    ``require_origin_main`` is a compatibility spelling for the F2 gate.
+    Rebind: docs/process/freeze_p1_rebind.md (RUN_STATE 146, F2).
+    """
 
     module = _load_mint_module()
     try:
-        head, origin_main_contains_head = module._actual_v2_git_state()
+        head, _origin_main_contains_head = module._actual_v2_git_state()
         repository = Path(module.REPO_ROOT).resolve(strict=True)
     except module.MintError as exc:
         message = str(exc)
@@ -855,15 +860,16 @@ def _mint_git_anchor(*, require_origin_main: bool = False) -> tuple[Path, str]:
             "readiness_identity_projection_mint_divergence",
             f"generalized mint Git-anchor interface is unusable: {exc}",
         ) from exc
-    if require_origin_main and origin_main_contains_head is not True:
-        raise IdentityPinProjectionError(
-            "readiness_identity_artifact_unreadable",
-            "generalized mint Git anchor requires HEAD to be contained in origin/main",
-            observed={
-                "mint_git_anchor_head": head,
-                "origin_main_contains_head": origin_main_contains_head,
-            },
-        )
+    if require_origin_main or require_registered_analysis:
+        from joulewise.freeze_by_commit import FreezeIdentityError, require_analysis_head
+        try:
+            require_analysis_head(repository, head)
+        except (FreezeIdentityError, KeyError, TypeError, ValueError) as exc:
+            raise IdentityPinProjectionError(
+                "readiness_identity_artifact_unreadable",
+                "HEAD must equal the registered analysis commit or a ruled descendant",
+                observed={"mint_git_anchor_head": head},
+            ) from exc
     return repository, head
 
 

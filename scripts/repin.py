@@ -292,6 +292,11 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
 def _literal_at(files: _Files, row: StaleRow) -> str | None:
     """The single 64-hex literal a stale row holds now, or None if ambiguous."""
 
+    if row.pointer.startswith("#sha256/"):
+        # F7 rebind: docs/process/freeze_p1_rebind.md. Retain the old literal
+        # for an explicit family rewrite, independently of its source line.
+        value = row.pointer.removeprefix("#sha256/")
+        return value if census.HEX64.fullmatch(value) and value in (files.text(row.path) or "") else None
     if row.pointer.startswith("#L"):
         match = re.match(r"#L([0-9]+)", row.pointer)
         lines = (files.text(row.path) or "").splitlines()

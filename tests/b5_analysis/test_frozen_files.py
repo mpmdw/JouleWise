@@ -1,67 +1,75 @@
-"""Freeze the collection, harvest, exclusions and sealed inputs throughout L9."""
+"""Freeze block-5 Git trees, independent of main (F1; freeze_p1_rebind.md)."""
 import ast
 import hashlib
 import json
 from pathlib import Path
 import re
-import subprocess
 import unittest
+from unittest import mock
 
-from joulewise.b5_analysis.windows import ROOT, SealPins
+from joulewise.freeze_by_commit import (
+    ROOT, blob, blob_digests, load_registration, verify_tag,
+)
 
 SEALED_DIR = "configs/campaigns/v5_claim_25g83/"
-SEAL = ROOT / "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
-# The accepted block-5 analysis commit (RUN_STATE items 83, 88, 93): the dry run and the release run
-# there. Main may evolve a collection file after L9's acceptance; for such a file the freeze binds the
-# analysis commit's bytes, not main's working tree.
-B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
-EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py"})
-PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
-                 "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/")
-
-
-def frozen_digests():
-    pins = SealPins.load()
-    inventory = json.loads((ROOT / (SEALED_DIR + "sealed_inventory.json")).read_bytes())["files"]
-    singles = {"scripts/run_campaign.py", "joulewise/reduce.py", "joulewise/uncertainty_evidence.py",
-               "joulewise/powermetrics_fiducial.py", "joulewise/adapters/powermetrics.py", "scripts/prewindow_check.sh"}
-    digests = {path: digest for path, digest in inventory.items()
-               if path in singles or path.startswith("joulewise/flags/") or path.startswith(PACK_PREFIXES)}
-    digests.update({path: digest for path, digest in pins.pins["pin4"]["files"].items()
-                    if path != "joulewise/whole_window.py"})
-    for name, key in (("registration_block5.md", "registration_sha256"), ("analysis_plan_block5.md", "analysis_plan_sha256"),
-                      ("sealed_inventory.json", "inventory_sha256"), ("flag_catalog.json", "catalog_sha256"),
-                      ("identity_pins.json", "identity_pins_sha256"), ("sizing_b5.json", "sizing_sha256")):
-        digests[SEALED_DIR + name] = pins.sealed[key]
-    return digests
-
-
-def _bytes(root, path):
-    if path not in EVOLVED_ON_MAIN:
-        return (root / path).read_bytes()
-    return subprocess.run(["git", "-C", str(root), "show", f"{B5_ANALYSIS_COMMIT}:{path}"],
-                          check=True, capture_output=True).stdout
+SEAL = "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
 
 
 def frozen_mismatches(root=ROOT):
-    result = []
-    for path, digest in frozen_digests().items():
-        try:
-            same = hashlib.sha256(_bytes(root, path)).hexdigest() == digest
-        except (OSError, subprocess.CalledProcessError):
-            same = False
-        if not same:
-            result.append(path)
+    """F1: verify registered Git trees; current main may evolve independently."""
+    registration = load_registration(root)
+    commits = {tag: verify_tag(root, tag, record)
+               for tag, record in registration["tags"].items()}
+    analysis = commits[registration["active_analysis"]]
+    pins = json.loads(blob(root, analysis, "configs/analysis/b5/seal_pins.json"))
+    inventory_raw = blob(root, analysis, SEALED_DIR + "sealed_inventory.json")
+    inventory = json.loads(inventory_raw)
+    if inventory["head"] != commits["b5/collection"]:
+        return ["collection_commit"]
+    expected = inventory["files"]
+    actual = blob_digests(root, commits["b5/collection"], expected)
+    result = [path for path in expected if actual[path] != expected[path]]
+    if hashlib.sha256(inventory_raw).hexdigest() != pins["sealed"]["inventory_sha256"]:
+        result.append("sealed_inventory_sha256")
+    # Each historical harvest amendment owns its own tree, including the
+    # whole_window code that the analysis subsequently evolved under rulings.
+    for pin in pins["pins"].values():
+        actual = blob_digests(root, pin["head"], pin["files"])
+        result.extend(path for path, digest in pin["files"].items() if actual[path] != digest)
+    for tag in ("b5/analysis", registration["active_analysis"]):
+        for name, key in (("registration_block5.md", "registration_sha256"),
+                          ("analysis_plan_block5.md", "analysis_plan_sha256"),
+                          ("sealed_inventory.json", "inventory_sha256"),
+                          ("flag_catalog.json", "catalog_sha256"),
+                          ("identity_pins.json", "identity_pins_sha256"),
+                          ("sizing_b5.json", "sizing_sha256")):
+            path = SEALED_DIR + name
+            if hashlib.sha256(blob(root, commits[tag], path)).hexdigest() != pins["sealed"][key]:
+                result.append(tag + ":" + path)
     return result
+
+
+def analysis_blob(path):
+    value = load_registration()
+    tag = value["active_analysis"]
+    return blob(ROOT, verify_tag(ROOT, tag, value["tags"][tag]), path)
 
 
 class FrozenFilesTests(unittest.TestCase):
     def test_frozen_files(self):
         self.assertEqual(frozen_mismatches(), [])
 
+    def test_freeze_does_not_open_worktree_source_bytes(self):
+        read_bytes = Path.read_bytes
+        def registered_metadata_only(path):
+            self.assertEqual(path, ROOT / "configs/analysis/b5/freeze_commits.json")
+            return read_bytes(path)
+        with mock.patch.object(Path, "read_bytes", registered_metadata_only):
+            self.assertEqual(frozen_mismatches(), [])
+
     def test_seal_pins_match_every_printed_value(self):
-        value = json.loads((ROOT / "configs/analysis/b5/seal_pins.json").read_bytes())
-        text = SEAL.read_text()
+        value = json.loads(analysis_blob("configs/analysis/b5/seal_pins.json"))
+        text = analysis_blob(SEAL).decode()
         for shape, pin in value["pins"].items():
             number = shape.removeprefix("pin")
             section = text.split(f"## Addendum {number}:", 1)[1].split("\n## ", 1)[0]
@@ -85,7 +93,7 @@ class FrozenFilesTests(unittest.TestCase):
 
     def test_collection_does_not_import_analysis(self):
         for name in ("scripts/run_campaign.py", "joulewise/b5/harvest.py"):
-            tree = ast.parse((ROOT / name).read_bytes())
+            tree = ast.parse(analysis_blob(name))
             imports = [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
             imports += [f"{node.module or ''}.{alias.name}" for node in ast.walk(tree)
                         if isinstance(node, ast.ImportFrom) for alias in node.names]

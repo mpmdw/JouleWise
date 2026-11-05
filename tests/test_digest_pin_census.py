@@ -88,11 +88,11 @@ class LiteralLocationTests(unittest.TestCase):
         raw = ("x = '" + "ab" * 64 + "'\ny = '" + "AB" * 32 + "'\n").encode()
         self.assertEqual(census.literals_in("tests/test_x.py", raw), [])
 
-    def test_python_literals_carry_line_and_enclosing_binding(self) -> None:
+    def test_python_literals_carry_stable_digest_and_enclosing_binding(self) -> None:
         digest = sha("y")
         raw = f'import os\n\nPINS = {{\n    "k": "{digest}",\n}}\n\n\ndef f():\n    return "{digest}"\n'.encode()
         found = [(item.pointer, item.context) for item in census.literals_in("tests/test_x.py", raw)]
-        self.assertEqual(found, [("#L4", "PINS"), ("#L9", "f")])
+        self.assertEqual(found, [("#sha256/" + digest, "PINS"), ("#sha256/" + digest, "f")])
 
     def test_jsonl_rows_get_line_and_pointer(self) -> None:
         digest = sha("z")
@@ -207,12 +207,12 @@ class CensusTests(unittest.TestCase):
                 ("/estimator_code_sha256", "estimator_code", "file:joulewise/reduce.py"),
                 ("/raw_capture_sha256", "calibration_issued", None),
             ])
-            self.assertEqual(rows["tests/test_example.py"], [
-                ("#L1", "pinned_config_copy", "file:configs/campaigns/packx/plan_tree.json"),
-                ("#L2", "issued_code", "py_segment:joulewise/battery_float.py::LIMIT_MA"),
-                ("#L3", "placeholder", None),
-                ("#L4", "synthetic_literal", None),
-            ])
+            self.assertEqual(rows["tests/test_example.py"], sorted([
+                ("#sha256/" + digests["plan"], "pinned_config_copy", "file:configs/campaigns/packx/plan_tree.json"),
+                ("#sha256/" + sha("LIMIT_MA = 200"), "issued_code", "py_segment:joulewise/battery_float.py::LIMIT_MA"),
+                ("#sha256/" + "a" * 64, "placeholder", None),
+                ("#sha256/" + SYNTHETIC_DIGEST, "synthetic_literal", None),
+            ]))
             self.assertEqual(rows["tests/fixtures/example/record.json"],
                              [("/config_sha256", "fixture_content", "file:configs/campaigns/packx/run_01.json")])
             entry = next(item for item in registry["files"] if item["path"] == "configs/campaigns/packx/plan_tree.json")
@@ -226,14 +226,23 @@ class CensusTests(unittest.TestCase):
                            "count": 1}, registry["followups"])
             self.assertTrue(digests["plan"])
 
-    def test_render_is_line_oriented_and_round_trips(self) -> None:
+    def test_moving_python_test_lines_does_not_change_registry(self) -> None:
         with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
             root = Path(temporary)
             build_tree(root)
+            before = census.census(root)
+            path = root / "tests/test_example.py"
+            path.write_text("# inserted comment\n\n" + path.read_text())
+            self.assertEqual(census.census(root), before)
+
+    def test_render_is_line_oriented_and_round_trips(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+            root = Path(temporary)
+            digests = build_tree(root)
             registry = census.census(root)
             text = census.render(registry)
             self.assertEqual(json.loads(text), registry)
-            self.assertIn('\n      ["#L1", "pinned_config_copy", ', text)
+            self.assertIn('\n      ["#sha256/' + digests["plan"] + '", "pinned_config_copy", ', text)
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(census.main(["--write", "--root", str(root)]), 0)
             self.assertEqual(census.load_registry(root), registry)

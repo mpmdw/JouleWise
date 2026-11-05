@@ -31035,14 +31035,14 @@
       ["/prompts/7/text_utf8_sha256", "issued_config", null]
     ]},
     {"path": "tests/b5_analysis/test_claim_gate_kept_quads.py", "rows": [
-      ["#L157", "synthetic_literal", null]
+      ["#sha256/5e8e93e8f3106ec7637baebb0b43ee87f1fda2ba74ed61d1b931893d51a73fe7", "synthetic_literal", null]
     ]},
     {"path": "tests/b5_analysis/test_step4_reason_table.py", "rows": [
-      ["#L156", "source_digest", 1815],
-      ["#L46", "source_digest", 1815]
+      ["#sha256/051c13b267c747f3c4bf88318c819bcb9c5c603ba608160ca04389e817a549d2", "source_digest", 1815],
+      ["#sha256/051c13b267c747f3c4bf88318c819bcb9c5c603ba608160ca04389e817a549d2", "source_digest", 1815]
     ]},
     {"path": "tests/battery_float_corpus.py", "rows": [
-      ["#L19", "recorded_evidence", 1859]
+      ["#sha256/582475270c35c51cc05c2020f500d8c7dfba3eb9a6436a0186cb5ce18a851631", "recorded_evidence", 1859]
     ]},
     {"path": "tests/fixtures/axi_ap_spec/analysis_manifest.json", "rows": [
       ["/contrasts/0/models/enabled_mechanism_identity_sha256", "fixture_content", null],
@@ -32804,7 +32804,7 @@
       ["/custody_manifest_sha256", "fixture_content", 1865]
     ]},
     {"path": "tests/fixtures/epoch_bootstrap/build.py", "rows": [
-      ["#L53", "fixture_content", null]
+      ["#sha256/b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5", "fixture_content", null]
     ]},
     {"path": "tests/fixtures/epoch_bootstrap/revision6_declaration.json", "rows": [
       ["/disposition_registry_sha256", "fixture_content", 26],
@@ -34348,7 +34348,7 @@
       ["#L49", "recorded_evidence", 1919]
     ]},
     {"path": "tests/fixtures/qpe01_pilot_n1_20260922/extract_fixtures.py", "rows": [
-      ["#L125", "recorded_evidence", 1917]
+      ["#sha256/70218c4a41b0ee87e20f032790e442451f36d713df49933ccbaba907395797b6", "recorded_evidence", 1917]
     ]},
     {"path": "tests/fixtures/results_fill/direction_supported.json", "rows": [
       ["/bundle_audit/0/config_sha256", "placeholder", null],
@@ -35001,477 +35001,477 @@
       ["/replacements/~1spec_on_bundle~1requests_artifact_sha256", "fixture_content", null]
     ]},
     {"owner_lane": "L1", "path": "tests/hazards/test_refusal_allowlist.py", "rows": [
-      ["#L52", "recorded_evidence", 1941]
+      ["#sha256/fba2978ac812883f0bad1094dce938ea410448188097c3a0ccf57c7a354a10f5", "recorded_evidence", 1941]
     ]},
     {"path": "tests/oracle_l9_env_2_reduce_clamp.py", "rows": [
-      ["#L25", "historical_pin", null],
-      ["#L29", "historical_pin", null]
+      ["#sha256/31ff400ab51881ec64c71e55d044d05f5b7a69d16d4ab351ae7883931772bf6e", "historical_pin", null],
+      ["#sha256/d37f731c07116c025a7670043e13c6a0f37bee74d2217ae08d160f4ac0074f8f", "historical_pin", null]
     ]},
     {"path": "tests/test_acc_25g83_rev5.py", "regenerators": ["estimator_code"], "rows": [
-      ["#L337", "estimator_code", 1800],
-      ["#L338", "estimator_code", 1805],
-      ["#L339", "estimator_code", 1785],
-      ["#L340", "estimator_code", 1803],
-      ["#L54", "synthetic_literal", null],
-      ["#L55", "synthetic_literal", null],
-      ["#L56", "synthetic_literal", null],
-      ["#L57", "synthetic_literal", null],
-      ["#L58", "synthetic_literal", null],
-      ["#L59", "synthetic_literal", null],
-      ["#L60", "synthetic_literal", null],
-      ["#L61", "synthetic_literal", null],
-      ["#L62", "synthetic_literal", null],
-      ["#L63", "synthetic_literal", null],
-      ["#L64", "synthetic_literal", null]
+      ["#sha256/08cf2f19ca7d2b1881e9ed426bbf2c4039e1b425e1ba999a5527bcee4e743cb6", "synthetic_literal", null],
+      ["#sha256/150e6e9b1c0b04a440a2b9b63f858fd92a8f0e4f858b512ab7d627ced71b82a3", "synthetic_literal", null],
+      ["#sha256/45731bb9943b9f29a3f3d6fc2175c7b66ad11987f88de1868fb79fb8f87d1cdb", "synthetic_literal", null],
+      ["#sha256/64fc21fb609d5baba98dc686dff12ab803b6294474639551f23fdb0a078257cd", "synthetic_literal", null],
+      ["#sha256/697ad07383e83bca6e031dd40708595d1f59227fece3c3eb8e6d04c8c2318dca", "synthetic_literal", null],
+      ["#sha256/70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4", "estimator_code", 1785],
+      ["#sha256/748018ce72e41600464dcb9f2fddcc466e2e3c0ebfcf6474828d908239c36b7b", "synthetic_literal", null],
+      ["#sha256/7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc", "estimator_code", 1803],
+      ["#sha256/7bce01d1490e10190958052c770f790a2ea2733c5091c605f2fdc86a09afb1c2", "synthetic_literal", null],
+      ["#sha256/a1975da884533272159688d260aa034fe7f4ccfb30e4abaa67cde14977bc38fc", "synthetic_literal", null],
+      ["#sha256/b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8", "estimator_code", 1805],
+      ["#sha256/ba83eb6f2b3dfb2e72e5cf37fe25df8d3387e70dafc6e8fe384b1f650003a236", "synthetic_literal", null],
+      ["#sha256/bcdfeec06a03525cc6f6c700f2e2e6d10341af1323e4f9355b68ee47eb5bd30c", "estimator_code", 1800],
+      ["#sha256/e7e313e191bc844b49f4ddb18cbea5e17ca8367faa097f81aa699fc89a2d81a1", "synthetic_literal", null],
+      ["#sha256/fc6e8fb3d3d69ef157407f0ecb565e6952e977e84f637c151c1edcfb402cf57f", "synthetic_literal", null]
     ]},
     {"path": "tests/test_analysis_claims.py", "rows": [
-      ["#L133", "synthetic_literal", null]
+      ["#sha256/8abd820ea4955713897c512cde703c0e05dfe9aa3a1b1daabc4c4062459f42e8", "synthetic_literal", null]
     ]},
     {"path": "tests/test_analysis_finalizer.py", "rows": [
-      ["#L821", "historical_pin", null]
+      ["#sha256/4e496e5f9853a010069ece26a22a184e4f2e3ce7bde1cab8a34217788f8ef963", "historical_pin", null]
     ]},
     {"path": "tests/test_analysis_integration.py", "rows": [
-      ["#L1614", "synthetic_literal", null],
-      ["#L1618", "synthetic_literal", null]
+      ["#sha256/5e8e93e8f3106ec7637baebb0b43ee87f1fda2ba74ed61d1b931893d51a73fe7", "synthetic_literal", null],
+      ["#sha256/97532d73a9889e34caab780a64435cda3c9d11ea7e708b1234d4c5ad68ce07e0", "synthetic_literal", null]
     ]},
     {"path": "tests/test_analysis_manifest_v2.py", "regenerators": ["issued_code"], "rows": [
-      ["#L19", "issued_code", 1792]
+      ["#sha256/5b4ba3ff4962bb9941c64a7f7acad98e6128119c5b4b93ad686e104a746e8cc9", "issued_code", 1792]
     ]},
     {"path": "tests/test_analysis_manifest_v3.py", "regenerators": ["issued_code"], "rows": [
-      ["#L61", "issued_code", 1792]
+      ["#sha256/5b4ba3ff4962bb9941c64a7f7acad98e6128119c5b4b93ad686e104a746e8cc9", "issued_code", 1792]
     ]},
     {"path": "tests/test_arm_readiness_schemas.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L566", "pinned_config_copy", 12]
+      ["#sha256/d248fdc521cb904b7ad8f1c4ecb834f7810a1d8f39697b462591f2feac39a2e5", "pinned_config_copy", 12]
     ]},
     {"path": "tests/test_audit_amplification.py", "rows": [
-      ["#L34", "synthetic_literal", null]
+      ["#sha256/ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5", "synthetic_literal", null]
     ]},
     {"path": "tests/test_authentication_io.py", "regenerators": ["estimator_code"], "rows": [
-      ["#L100", "estimator_code", 1803]
+      ["#sha256/7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc", "estimator_code", 1803]
     ]},
     {"path": "tests/test_axi_analysis_manifest.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L34", "fixture_content", 1823],
-      ["#L35", "pinned_config_copy", 11],
-      ["#L36", "synthetic_literal", null],
-      ["#L365", "fixture_content", 1933],
-      ["#L366", "fixture_content", 1934]
+      ["#sha256/152f4756d8a814f882e37af421c6f916ca13fde7e3726afd1790a1e10e219117", "fixture_content", 1934],
+      ["#sha256/502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9", "fixture_content", 1823],
+      ["#sha256/623f82c9a7aa317195ab2120e63ca0249b57cab093d586447cc259bbf1814216", "synthetic_literal", null],
+      ["#sha256/9defb37454aec95ff8a40df60f50edcca8e45d17d03f35364f07571d31475b01", "pinned_config_copy", 11],
+      ["#sha256/ea63fa60996164cb7673af918760f40f86884b6d92c16c88374b0f806131060c", "fixture_content", 1933]
     ]},
     {"path": "tests/test_axi_burst_reduce.py", "rows": [
-      ["#L31", "fixture_content", 1940],
-      ["#L32", "fixture_content", 1937],
-      ["#L33", "fixture_content", 1935],
-      ["#L34", "fixture_content", 1936],
-      ["#L453", "synthetic_literal", null],
-      ["#L454", "synthetic_literal", null],
-      ["#L484", "synthetic_literal", null]
+      ["#sha256/22ebcf01886138f87881aa0e6be067e5abac9edfe5a930e7293776bd57f5af81", "fixture_content", 1937],
+      ["#sha256/2931b49140a36aa1e12b0b5e5f4b33627aa8c2901275b81a3bc1fceff13a3c96", "fixture_content", 1936],
+      ["#sha256/544ca93c6bfa8ab35f4d26ada966212e3cef9d95312dac24c3292dae82997c82", "synthetic_literal", null],
+      ["#sha256/86eddab41ca9dc78e6d378456e0567fc126282a030f103eee3686c4ec8cfa589", "fixture_content", 1940],
+      ["#sha256/ba21a0c32c7ec4ae141345e6ed4753b135178aba82e7972089d002d6f3ae0f02", "fixture_content", 1935],
+      ["#sha256/c561702b69aa308e48ecda406eea33f382995e91faaa8ce45bbf8bafedb1fd4c", "synthetic_literal", null],
+      ["#sha256/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "synthetic_literal", null]
     ]},
     {"path": "tests/test_axi_controller_events.py", "rows": [
-      ["#L137", "synthetic_literal", null],
-      ["#L140", "synthetic_literal", null]
+      ["#sha256/8dc5387f3f8554f444390c99cc4655cd40c8d1f757bc1a0fdce67d463287457b", "synthetic_literal", null],
+      ["#sha256/ccf256f856ff12cc59897db26865cc8da53c8f32e4355289598e7693d3eb9137", "synthetic_literal", null]
     ]},
     {"path": "tests/test_axi_mock_spec.py", "rows": [
-      ["#L33", "fixture_content", 1824]
+      ["#sha256/746b0743e81fd9d78f9598268da7f43c2906ba28776a7c4969518846979a1754", "fixture_content", 1824]
     ]},
     {"path": "tests/test_axi_request_validation.py", "rows": [
-      ["#L218", "synthetic_literal", null],
-      ["#L222", "synthetic_literal", null],
-      ["#L83", "fixture_content", 1819]
+      ["#sha256/544ca93c6bfa8ab35f4d26ada966212e3cef9d95312dac24c3292dae82997c82", "synthetic_literal", null],
+      ["#sha256/79e34a9adef077ee3f82b4aed16bc551b1ad565fa285da44831917eba11ca48d", "fixture_content", 1819],
+      ["#sha256/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "synthetic_literal", null]
     ]},
     {"path": "tests/test_axi_schemas.py", "rows": [
-      ["#L133", "synthetic_literal", null],
-      ["#L201", "fixture_content", 1823]
+      ["#sha256/15a556a8ea5853f6aef1d5d6a814d97264f6bc0b9dd11274755c98a7ec686355", "synthetic_literal", null],
+      ["#sha256/502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9", "fixture_content", 1823]
     ]},
     {"path": "tests/test_battery_float.py", "regenerators": ["issued_code"], "rows": [
-      ["#L1894", "historical_pin", null],
-      ["#L30", "issued_code", 2665],
-      ["#L31", "issued_code", 2660],
-      ["#L32", "issued_code", 2659],
-      ["#L33", "issued_code", 2664],
-      ["#L34", "issued_code", 2667],
-      ["#L35", "issued_code", 2668],
-      ["#L36", "issued_code", 2666],
-      ["#L37", "issued_code", 2661],
-      ["#L38", "issued_code", 2663],
-      ["#L39", "issued_code", 2662],
-      ["#L40", "issued_code", 2657],
-      ["#L41", "issued_code", 2658],
-      ["#L42", "issued_code", 2669],
-      ["#L43", "issued_code", 2670],
-      ["#L44", "issued_code", 2671],
-      ["#L45", "issued_code", 2672],
-      ["#L46", "issued_code", 2673],
-      ["#L47", "issued_code", 2674],
-      ["#L48", "issued_code", 2675],
-      ["#L49", "issued_code", 2676],
-      ["#L50", "issued_code", 2677],
-      ["#L51", "issued_code", 2678],
-      ["#L52", "issued_code", 2679],
-      ["#L53", "issued_code", 2680],
-      ["#L54", "issued_code", 2681],
-      ["#L55", "issued_code", 2682],
-      ["#L56", "issued_code", 2683],
-      ["#L57", "issued_code", 2684],
-      ["#L58", "issued_code", 2685],
-      ["#L59", "issued_code", 2686],
-      ["#L60", "issued_code", 2687],
-      ["#L61", "issued_code", 2688],
-      ["#L62", "issued_code", 2689],
-      ["#L63", "issued_code", 2690],
-      ["#L64", "issued_code", 2691],
-      ["#L65", "issued_code", 2692],
-      ["#L66", "issued_code", 2693],
-      ["#L67", "issued_code", 2694],
-      ["#L68", "issued_code", 2695],
-      ["#L76", "recorded_evidence", 1860]
+      ["#sha256/017cd99d2e73bf9d602a294a8aca6130651bd04ef4c5304ce31651d452a94652", "issued_code", 2680],
+      ["#sha256/0298b4e2433d25f8a7a17c02cd4eadb9005690374efd3f2a89a87553519a2e60", "issued_code", 2674],
+      ["#sha256/0ae4f61b4476696d75266386599163614e082804903c3f4aaeb7fded73d33334", "issued_code", 2688],
+      ["#sha256/0f59448f0574b50bdc75a470ab152a387b91ce6d5a36fc13445bb4b11b95770e", "issued_code", 2686],
+      ["#sha256/10df00b324a3456785e16c3f918c7444e4a217ef2615275bd819e92b8c3e8fbd", "issued_code", 2682],
+      ["#sha256/188a5709f352361b5364a703853a2bd02fc4a5e57fa1c74b274dea4b1f1b5d2e", "issued_code", 2664],
+      ["#sha256/1a4d783b9937e6d5dee26e1b02295898abd2170ef5b354573e2a88b7cad73522", "issued_code", 2661],
+      ["#sha256/1a9c32970aec07423f1c05930c689cfa248b428214bde066167f13b52c395d4f", "historical_pin", null],
+      ["#sha256/2180032f495eb79febde14e4455a93c2b4b213c08080855e38689d3bed92cb10", "issued_code", 2684],
+      ["#sha256/226cee6f2cea583774e26dc26712190284560809af5766e2b0a24b3c0f31998d", "issued_code", 2690],
+      ["#sha256/28c04bf25d88d342ceca917a801dfa5a12d191f4db5ea56c89a222b9d83045fe", "issued_code", 2667],
+      ["#sha256/28e540c7133a0dab42e4a886e42b0d2c37e738a90f85c06deb0548cc1891a422", "issued_code", 2685],
+      ["#sha256/29acdbfbd45625ec97608150fb64502f8c0efa590cfcd50c3a486c6586ad63f6", "issued_code", 2669],
+      ["#sha256/2aede614e2ae18d7739ae17979f1af5e9fed697ccce9ba758b7558d966980a95", "issued_code", 2678],
+      ["#sha256/39fbf6c9f379d227806c610b1777877cf7260391e80e45844c368fcb0b0cef0c", "issued_code", 2695],
+      ["#sha256/3d85b5391517d8bd80520bf83a0b7f3ab0f210b4ca4cd2dd87a38950dee2b1ca", "issued_code", 2691],
+      ["#sha256/4382ad39712e5db9e5546d9febe9349ebdb180c054c03eb54b7b47e7f8d0a60f", "issued_code", 2693],
+      ["#sha256/43900752071c16b8d4fe7b603c0d30ec573e185aa48e40515b24ed9b587ca1ea", "issued_code", 2663],
+      ["#sha256/4d9d9c1bf381907734c0654a7e8234a1a79d05c8ad388156963c6cb8a2e0fcd1", "issued_code", 2670],
+      ["#sha256/70adf088e78290667bb59b6888d5839418851c51603c195612abfbda1c5aa117", "issued_code", 2658],
+      ["#sha256/716d6b07a7f70c047b08f460f8b8bdca46cb935e76d1c9c359f5bc0d507657fc", "issued_code", 2681],
+      ["#sha256/82256b7fa221253727d55b39feb793ef5e71e87d87ee707802e09d5f882f7468", "issued_code", 2659],
+      ["#sha256/82d2e7105d92d3d11063956e01ae73c65d7f43453365814ddecdd656525bea06", "issued_code", 2675],
+      ["#sha256/8383ff7e1c7b33d971a307f08c492d3a0671b2532c01c331c05655e4b168afb6", "issued_code", 2679],
+      ["#sha256/938ae450fde51fff154cd5c2af01836eec2426b1380175fb1919c6e0cca3fd92", "issued_code", 2672],
+      ["#sha256/988e36bb5acb54737e10183e26ff46e5dd1a1a7130156931fa7111f03dab9a60", "issued_code", 2660],
+      ["#sha256/a387371550b0ac3f18b709ff5fa0288bf6e743660c52d402fb54ae413bb2fcee", "issued_code", 2666],
+      ["#sha256/ae35444c67b8b672ecd990e149e0862adbcb2fc7d8529c6d0483859e13197e79", "issued_code", 2676],
+      ["#sha256/af27587c69dc2b4e69cfad2eff52affd3e2dd293997470b4ccc8725fafb51dbf", "issued_code", 2671],
+      ["#sha256/b0f493c94be9efe77f555250fb8ad85f02b87c49b2ae9e4a5449c7a8a878f8e7", "issued_code", 2657],
+      ["#sha256/b42eb919dad653bc42dffac24df0512a4f9b315edbc928f79a1d31bd5b0766b4", "recorded_evidence", 1860],
+      ["#sha256/bb18d0432bfeea2f9720ecbe6439b63f0e2b9be12f2ada1ccf74d38de61d0e65", "issued_code", 2692],
+      ["#sha256/bb81088fb3b64528f649e806972081cbfb2851594b4b19d59cfe51c23e2f3d0c", "issued_code", 2689],
+      ["#sha256/ccd50dd168b5ce128127a4f6f9e454b7715a4dcb01229bbe34cd03ecef23e865", "issued_code", 2665],
+      ["#sha256/cda762184be73c6853c98679bac375e96fc44c8dd7a200b5f53a4c89079fcb4d", "issued_code", 2668],
+      ["#sha256/d31b6f3d122c4b4a595c758ef30e1484602f3ab097cda1a2b2f6b756ff8b4fec", "issued_code", 2683],
+      ["#sha256/d375ca6c5d514a2d2c62fd3ce999a3679936677463771b13cdb210ec677fa143", "issued_code", 2662],
+      ["#sha256/e896aeeb3c183096e6e997469b1ee5240dc27cd957c6b2660c9705c8808afdaa", "issued_code", 2677],
+      ["#sha256/eaefb6095996519ae18fdf550c302b2597f84e4a39be4c6c59c1bc9eef14e0ed", "issued_code", 2694],
+      ["#sha256/ef9889df272af5fdece3b6f2ad681f2e35e3c10036cd3ebd58c8c3ecba5ccf1f", "issued_code", 2673],
+      ["#sha256/f75d6f4b3b35d4f389cf6b9a8e6cb8ada77eee92e1284c037da76b84bfe4cec6", "issued_code", 2687]
     ]},
     {"path": "tests/test_benchmark_import.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L59", "pinned_config_copy", 1719],
-      ["#L62", "pinned_config_copy", 1720]
+      ["#sha256/1ad902f8ec64c737ee80f76b9b2dc6989b9e2d49ca267d5cb685b6f4c645c7f5", "pinned_config_copy", 1719],
+      ["#sha256/9123780834539c9bf9bf3c1a7581034018fea5a9f5e4a26a65ed30c9ed36c7e2", "pinned_config_copy", 1720]
     ]},
     {"path": "tests/test_benchmark_import_math.py", "rows": [
-      ["#L299", "synthetic_literal", null],
-      ["#L299", "synthetic_literal", null],
-      ["#L299", "synthetic_literal", null]
+      ["#sha256/04c04ffec881aed3d970da059945587f1d2abecaf05b7361e05c1babf1b12d53", "synthetic_literal", null],
+      ["#sha256/7ebb2d9defaf4d973bd975e7d7e0dcd6862c0fcdf47fec5bb3ac42127ccede92", "synthetic_literal", null],
+      ["#sha256/bf94123715a95328fc89bdf6fdbe5388ea803214283d764fd8113aede618b0d2", "synthetic_literal", null]
     ]},
     {"path": "tests/test_calibration_bracketing.py", "rows": [
-      ["#L122", "recorded_evidence", 1724],
-      ["#L125", "recorded_evidence", 1723],
-      ["#L128", "historical_pin", null],
-      ["#L660", "synthetic_literal", null]
+      ["#sha256/08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7", "synthetic_literal", null],
+      ["#sha256/5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a", "recorded_evidence", 1724],
+      ["#sha256/99cbf3df7aef3b81839f40272a529eb137bf2f21276e2a1d07788c764035f078", "recorded_evidence", 1723],
+      ["#sha256/9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb", "historical_pin", null]
     ]},
     {"path": "tests/test_calibration_dispositions.py", "rows": [
-      ["#L67", "synthetic_literal", null]
+      ["#sha256/ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c", "synthetic_literal", null]
     ]},
     {"path": "tests/test_calibration_ledger.py", "rows": [
-      ["#L1461", "synthetic_literal", null],
-      ["#L2631", "synthetic_literal", null],
-      ["#L79", "recorded_evidence", 1724],
-      ["#L82", "recorded_evidence", 1723],
-      ["#L85", "synthetic_literal", null],
-      ["#L88", "fixture_content", 1866]
+      ["#sha256/08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7", "synthetic_literal", null],
+      ["#sha256/316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985", "fixture_content", 1866],
+      ["#sha256/4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02", "synthetic_literal", null],
+      ["#sha256/5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a", "recorded_evidence", 1724],
+      ["#sha256/99cbf3df7aef3b81839f40272a529eb137bf2f21276e2a1d07788c764035f078", "recorded_evidence", 1723],
+      ["#sha256/ac4426e4bbc961256116221f1fad7b9580968f072209bda14e875df897ea19e0", "synthetic_literal", null]
     ]},
     {"path": "tests/test_campaign_generator_core.py", "rows": [
-      ["#L126", "historical_pin", null],
-      ["#L31", "historical_pin", null],
-      ["#L36", "fixture_content", 1867]
+      ["#sha256/08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7", "historical_pin", null],
+      ["#sha256/6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902", "fixture_content", 1867],
+      ["#sha256/a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014", "historical_pin", null]
     ]},
     {"path": "tests/test_cli_run.py", "rows": [
-      ["#L64", "synthetic_literal", null]
+      ["#sha256/ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5", "synthetic_literal", null]
     ]},
     {"path": "tests/test_codex_mcp_server.py", "rows": [
-      ["#L715", "synthetic_literal", null]
+      ["#sha256/f668514ceb19e15d0a7907b62d1b13d513d7826dd9e9f3848e34aee746bd70b6", "synthetic_literal", null]
     ]},
     {"path": "tests/test_controller_retry_backoff.py", "rows": [
-      ["#L95", "synthetic_literal", null]
+      ["#sha256/8c2faf057456e0034704d92600dcdf7078af7cd26438274c0f25c43727ab2295", "synthetic_literal", null]
     ]},
     {"owner_lane": "L10", "path": "tests/test_d117_contrast_v5_pack.py", "rows": [
-      ["#L257", "synthetic_literal", null]
+      ["#sha256/aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4", "synthetic_literal", null]
     ]},
     {"path": "tests/test_d117_decode_contrast_plan.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L2297", "historical_pin", null],
-      ["#L55", "pinned_config_copy", 148],
-      ["#L56", "pinned_config_copy", 141],
-      ["#L57", "pinned_config_copy", 151],
-      ["#L58", "pinned_config_copy", 117],
-      ["#L59", "pinned_config_copy", 152],
-      ["#L60", "pinned_config_copy", 147],
-      ["#L62", "historical_pin", null]
+      ["#sha256/4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218", "pinned_config_copy", 141],
+      ["#sha256/550035ae92199185e9ad21ae0277593e4821c1788f645ee5345bd6d3268a1c09", "historical_pin", null],
+      ["#sha256/5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575", "pinned_config_copy", 147],
+      ["#sha256/8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d", "pinned_config_copy", 151],
+      ["#sha256/9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456", "pinned_config_copy", 152],
+      ["#sha256/dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38", "historical_pin", null],
+      ["#sha256/e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57", "pinned_config_copy", 117],
+      ["#sha256/e6a0ac14ab601b57f1116fef762b108c5850769ccec279f8cd72dbe35cbb9d52", "pinned_config_copy", 148]
     ]},
     {"path": "tests/test_d117_floor_qwen25_1p5b_plan.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L100", "pinned_config_copy", 632],
-      ["#L103", "pinned_config_copy", 1710],
-      ["#L105", "synthetic_literal", null],
-      ["#L107", "synthetic_literal", null],
-      ["#L110", "synthetic_literal", null],
-      ["#L115", "pinned_config_copy", 1600],
-      ["#L118", "pinned_config_copy", 1701],
-      ["#L121", "pinned_config_copy", 1697],
-      ["#L1236", "synthetic_literal", null],
-      ["#L124", "pinned_config_copy", 1695],
-      ["#L127", "pinned_config_copy", 1587],
-      ["#L130", "pinned_config_copy", 152],
-      ["#L1409", "fixture_content", 1866],
-      ["#L1410", "historical_pin", null],
-      ["#L1432", "historical_pin", null],
-      ["#L1441", "fixture_content", 1866],
-      ["#L1682", "synthetic_literal", null],
-      ["#L1683", "synthetic_literal", null],
-      ["#L55", "synthetic_literal", null],
-      ["#L83", "historical_pin", null],
-      ["#L84", "synthetic_literal", null],
-      ["#L86", "pinned_config_copy", 633],
-      ["#L87", "pinned_config_copy", 628],
-      ["#L88", "pinned_config_copy", 629],
-      ["#L89", "pinned_config_copy", 635],
-      ["#L90", "pinned_config_copy", 636],
-      ["#L91", "pinned_config_copy", 637],
-      ["#L92", "pinned_config_copy", 638],
-      ["#L94", "pinned_config_copy", 630],
-      ["#L97", "pinned_config_copy", 631]
+      ["#sha256/0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f", "pinned_config_copy", 1600],
+      ["#sha256/17210f5cea020367f3ff18574c096fee90799e115aaf525365b1806c76fbdd3b", "synthetic_literal", null],
+      ["#sha256/1a99f77ff436f3a6464d63a42142c55fcb5af6bc6fd1c3b87d8dbec3ccb97a0a", "pinned_config_copy", 638],
+      ["#sha256/2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d", "pinned_config_copy", 628],
+      ["#sha256/316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985", "fixture_content", 1866],
+      ["#sha256/316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985", "fixture_content", 1866],
+      ["#sha256/3e725c047c9850d507564e4a5131d1b65a739d2e452aab209652db05433bad6c", "pinned_config_copy", 636],
+      ["#sha256/4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02", "historical_pin", null],
+      ["#sha256/56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182", "synthetic_literal", null],
+      ["#sha256/5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff", "pinned_config_copy", 635],
+      ["#sha256/707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312", "pinned_config_copy", 629],
+      ["#sha256/74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688", "pinned_config_copy", 1587],
+      ["#sha256/76c6a6e66618acd4782d8513aa302f1b36288da276620209b02c3689f46ba972", "pinned_config_copy", 637],
+      ["#sha256/82d263bf18024875eaad2124bdcc65e3a9801c76e80a867938611b8979a9ffc6", "pinned_config_copy", 633],
+      ["#sha256/88e0f5c179a7ecccb1f048f209e25ed0f239772cc078cf650c50957beceab138", "synthetic_literal", null],
+      ["#sha256/8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67", "pinned_config_copy", 1695],
+      ["#sha256/93c9ee9b32c8c2b25675cff263e2c98882fe5f0c7f81f3ad6899f55f6f9d3c39", "synthetic_literal", null],
+      ["#sha256/974014e096806423b866a167510787482397cb4f68bb9e6f9f0ba7fd34f93f36", "synthetic_literal", null],
+      ["#sha256/985a4e5370724698b601303b2ba99027d298060eedc95a65d20112df413043ad", "pinned_config_copy", 631],
+      ["#sha256/9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0", "pinned_config_copy", 1701],
+      ["#sha256/9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21", "pinned_config_copy", 1697],
+      ["#sha256/9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456", "pinned_config_copy", 152],
+      ["#sha256/c7d2b28276791ab8c5c10b27460bbccba6cb7aad75470e9d74ba4b64ed4ef9f2", "pinned_config_copy", 632],
+      ["#sha256/c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8", "pinned_config_copy", 630],
+      ["#sha256/d89011dbda01172c41ebaa200d2410b37419fc2ee626700945a811d51b136952", "synthetic_literal", null],
+      ["#sha256/d98ae4deb787caaf8a80f972b88b2c85ecc2f96a13092e9127c1e1a661640fd2", "pinned_config_copy", 1710],
+      ["#sha256/dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38", "historical_pin", null],
+      ["#sha256/e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe", "synthetic_literal", null],
+      ["#sha256/ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06", "historical_pin", null],
+      ["#sha256/f149dddcb4b9d27b3d68b0455c5f774e56e37bfc04430b53e139a4c08f044faf", "synthetic_literal", null]
     ]},
     {"path": "tests/test_d117_floor_qwen25_7b_plan.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L101", "pinned_config_copy", 969],
-      ["#L104", "pinned_config_copy", 980],
-      ["#L107", "pinned_config_copy", 1001],
-      ["#L110", "pinned_config_copy", 1022],
-      ["#L113", "pinned_config_copy", 1053],
-      ["#L116", "pinned_config_copy", 1054],
-      ["#L119", "pinned_config_copy", 1055],
-      ["#L122", "pinned_config_copy", 1056],
-      ["#L126", "pinned_config_copy", 1713],
-      ["#L1262", "historical_pin", null],
-      ["#L1266", "historical_pin", null],
-      ["#L1272", "historical_pin", null],
-      ["#L1325", "historical_pin", null],
-      ["#L1335", "fixture_content", 1866],
-      ["#L1376", "fixture_content", 1866],
-      ["#L1380", "historical_pin", null],
-      ["#L70", "synthetic_literal", null],
-      ["#L71", "historical_pin", null],
-      ["#L75", "pinned_config_copy", 1046],
-      ["#L78", "pinned_config_copy", 1047],
-      ["#L81", "pinned_config_copy", 1048],
-      ["#L86", "pinned_config_copy", 1049],
-      ["#L90", "pinned_config_copy", 1050],
-      ["#L92", "pinned_config_copy", 1051],
-      ["#L95", "pinned_config_copy", 927],
-      ["#L98", "pinned_config_copy", 948]
+      ["#sha256/023a513fc4020c67d5866e8176dbb872bb3884109c63e3d57637fa6195ba9538", "historical_pin", null],
+      ["#sha256/16d6d49e7c49f18909c2c3e5ec38e9d485fdfc54b444180c93c9d25c04bc2787", "pinned_config_copy", 1053],
+      ["#sha256/1e279684438d7eb5dea92f3bd01eff61c8c48aeaf70c86c5ec99fde5d4bca35a", "pinned_config_copy", 980],
+      ["#sha256/23246a97191bc5136e880e190dc8d88ac6e97925a690f67957150fa28c46d35e", "pinned_config_copy", 1056],
+      ["#sha256/28cb8a5f89000fc91a1b20cc88514f1c5ecf0260bf7594e67fb628b103e7db97", "pinned_config_copy", 969],
+      ["#sha256/316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985", "fixture_content", 1866],
+      ["#sha256/316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985", "fixture_content", 1866],
+      ["#sha256/36a5fae72b37643550ecb4471b4566db30331a4089abc3f4827593632407bba2", "pinned_config_copy", 927],
+      ["#sha256/402ef473f3d7a14daeecb8178107aaf30057c6211fb285d846ed88bcd846111c", "pinned_config_copy", 948],
+      ["#sha256/428301690ab8c765d65898638d861e21d0522003e51d06a637e1881316423242", "pinned_config_copy", 1054],
+      ["#sha256/4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02", "historical_pin", null],
+      ["#sha256/5519b18ae971fd3655af5d7e7be67d4462ee1fd487e179ba9961cb971a1c6dca", "historical_pin", null],
+      ["#sha256/77056ffc154fc8d3fd461233a6ab54800a25055fdf3296c974996c32bd9612a0", "pinned_config_copy", 1046],
+      ["#sha256/82bb3363e44d7165655634e69f2647d2bb00ea05046647e401eec04adc68b67a", "pinned_config_copy", 1022],
+      ["#sha256/86809f31d2c6933cda42881e10a32bc521cddec01fa941ac4613cd32b9ef49b8", "pinned_config_copy", 1713],
+      ["#sha256/a20018d57f06d69ffcc14e1e9365ab0121b73804ec480f9b08302384bd583843", "historical_pin", null],
+      ["#sha256/a3f652ff72cfcad15c2b0bf0193d4e1336c526ef330dd76c05a74076f19d7da5", "pinned_config_copy", 1051],
+      ["#sha256/b8d29e3bcd45e16653f0b369beeca838bf1b90ca05c66ceeed2ce921cc5fb610", "pinned_config_copy", 1001],
+      ["#sha256/b95688675b5518ab6675b8688ce4475b0d756653ecfb10ec80fa913ee49d69f1", "historical_pin", null],
+      ["#sha256/c20ef596f64a4a8d5367a963614c4db0f2c34a7077441e204bcf22e2b1033f40", "synthetic_literal", null],
+      ["#sha256/d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252", "pinned_config_copy", 1050],
+      ["#sha256/d90b8fec2ccc74f1e982e573789a32116cda78d625ce84e72f2717926edc0cdb", "pinned_config_copy", 1048],
+      ["#sha256/dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38", "historical_pin", null],
+      ["#sha256/e57dc2beba16a5ee7687a2c7031e82f80bdb084bd4ad09ce7745fbef8f4fe031", "pinned_config_copy", 1047],
+      ["#sha256/e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25", "pinned_config_copy", 1049],
+      ["#sha256/ea3f9cb18ae70a1b6d8b229de131246dacfc59fda940c2c99a4bee55667511e7", "pinned_config_copy", 1055]
     ]},
     {"path": "tests/test_d117_floor_qwen3_v5_generate.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L44", "synthetic_literal", null],
-      ["#L45", "synthetic_literal", null],
-      ["#L450", "pinned_config_copy", 1577]
+      ["#sha256/84dd04268a2aed17118bd98b87c10ebe38e5f1bce2ea330a02048537b0342476", "pinned_config_copy", 1577],
+      ["#sha256/87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5", "synthetic_literal", null],
+      ["#sha256/aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4", "synthetic_literal", null]
     ]},
     {"path": "tests/test_d117_v3_family.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L24", "pinned_config_copy", 21],
-      ["#L25", "historical_pin", null],
-      ["#L71", "synthetic_literal", null],
-      ["#L74", "synthetic_literal", null],
-      ["#L77", "synthetic_literal", null]
+      ["#sha256/0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d", "pinned_config_copy", 21],
+      ["#sha256/18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3", "historical_pin", null],
+      ["#sha256/2fe51b037ad063f932c29445ef60cde24479f76d465d5f013810e0287274e540", "synthetic_literal", null],
+      ["#sha256/95f7c51ca4f2833a69d2767e9a35fcbf028365332edeb36d1b43d73b6eea31b9", "synthetic_literal", null],
+      ["#sha256/e5ec0f74df3a61daff3ffdb8c6521c2ae69dae25ac6b6490394ee64d89015968", "synthetic_literal", null]
     ]},
     {"path": "tests/test_d165_dominance_closeout.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L1976", "pinned_config_copy", 496],
-      ["#L819", "synthetic_literal", null]
+      ["#sha256/cff755ba28175cff51bc47298ee97c97011444c8a7f2dd08de89d3216fe38500", "synthetic_literal", null],
+      ["#sha256/dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265", "pinned_config_copy", 496]
     ]},
     {"path": "tests/test_detection_floor.py", "regenerators": ["issued_code", "pinned_config_copy"], "rows": [
-      ["#L106", "issued_code", 1809],
-      ["#L1216", "synthetic_literal", null],
-      ["#L1281", "historical_pin", null],
-      ["#L1282", "historical_pin", null],
-      ["#L1283", "historical_pin", null],
-      ["#L1284", "historical_pin", null],
-      ["#L1285", "historical_pin", null],
-      ["#L1286", "historical_pin", null],
-      ["#L2256", "recorded_evidence", 1721],
-      ["#L3203", "historical_pin", null],
-      ["#L881", "synthetic_literal", null],
-      ["#L884", "synthetic_literal", null],
-      ["#L96", "pinned_config_copy", 1621]
+      ["#sha256/17f4ed63add651e7010d4df09c429e371e6c08d943ef5ea829d6d6123fdb9d51", "historical_pin", null],
+      ["#sha256/4c58e64636863379f26bcf0fe03503ddfcf3bcf9bfa184fe0d385ca47b459a67", "issued_code", 1809],
+      ["#sha256/4d1c544fe3a52148c7d379f4c50ade4ac3b64211d817cd1438a2365973291981", "historical_pin", null],
+      ["#sha256/559ab5ede19e5aba4110fca2177773458ac93d3248d3f7d143cc86d2071188a8", "recorded_evidence", 1721],
+      ["#sha256/6b89624ac29ec59543caaa474abce0806f0c1daae849255ebb16b8762a83a1d7", "synthetic_literal", null],
+      ["#sha256/973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7", "historical_pin", null],
+      ["#sha256/977189cd79c5a1668130af4335656928e51cfb3b7e632b32bf73711e97795b06", "historical_pin", null],
+      ["#sha256/9d964cfb8e73149d7ebfa1bc23f79a48632478bdb33d2c4bc7f181dbd1e13df3", "historical_pin", null],
+      ["#sha256/dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38", "synthetic_literal", null],
+      ["#sha256/dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf", "historical_pin", null],
+      ["#sha256/e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab", "pinned_config_copy", 1621],
+      ["#sha256/e59ac7fc75e5426150ca3c0a590272bfc4f06a9d507d22bf02172dddfe00b407", "synthetic_literal", null],
+      ["#sha256/ea4aa669b8814ec6a267f924f02fe0c862edd14c33b2ecfd4ae5b4bf1e8c7480", "historical_pin", null]
     ]},
     {"path": "tests/test_floor_extraction.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L4615", "pinned_config_copy", 630],
-      ["#L4624", "synthetic_literal", null]
+      ["#sha256/c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8", "pinned_config_copy", 630],
+      ["#sha256/e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe", "synthetic_literal", null]
     ]},
     {"path": "tests/test_harvest_window.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L660", "fixture_content", 1907],
-      ["#L668", "pinned_config_copy", 907]
+      ["#sha256/27924ffd849a50d5237629cd653b3bc6a230d19bd73c5e9420f89c5aa61e91a7", "fixture_content", 1907],
+      ["#sha256/9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072", "pinned_config_copy", 907]
     ]},
     {"path": "tests/test_hazard_whole_window_verdict.py", "rows": [
-      ["#L57", "synthetic_literal", null]
+      ["#sha256/568cd8f3daee4a73017874bc24b5af1658caa8f5d7aa46a468a40277fb852b37", "synthetic_literal", null]
     ]},
     {"path": "tests/test_identity_pins.py", "rows": [
-      ["#L360", "synthetic_literal", null]
+      ["#sha256/ca2dd22172c13b472f1b191a1de7900d351c2debab9fdb4844b39e691255b5bf", "synthetic_literal", null]
     ]},
     {"path": "tests/test_issue_calibration_acceptance_generation.py", "rows": [
-      ["#L1987", "historical_pin", null],
-      ["#L2046", "synthetic_literal", null]
+      ["#sha256/b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5", "historical_pin", null],
+      ["#sha256/b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5", "synthetic_literal", null]
     ]},
     {"path": "tests/test_issue_dg071_dg075_statistics.py", "rows": [
-      ["#L382", "synthetic_literal", null],
-      ["#L438", "synthetic_literal", null]
+      ["#sha256/cc31866f096948d8af0e8c55f80a432086dfb753f907d52825fea00da9e2d58f", "synthetic_literal", null],
+      ["#sha256/cc31866f096948d8af0e8c55f80a432086dfb753f907d52825fea00da9e2d58f", "synthetic_literal", null]
     ]},
     {"path": "tests/test_mint_floor_artifact.py", "rows": [
-      ["#L1513", "recorded_evidence", 1721],
-      ["#L1516", "recorded_evidence", 1727],
-      ["#L1519", "recorded_evidence", 1728],
-      ["#L1522", "recorded_evidence", 1729],
-      ["#L1525", "recorded_evidence", 1730]
+      ["#sha256/06f9b63d020098f0d67bb2dd48e9442d36f7922a494b70463439e865e877a066", "recorded_evidence", 1729],
+      ["#sha256/559ab5ede19e5aba4110fca2177773458ac93d3248d3f7d143cc86d2071188a8", "recorded_evidence", 1721],
+      ["#sha256/5bd4d748d7ec7477f72b31c23aa47090737aaae2ca335c2f4b9a58e4a9575755", "recorded_evidence", 1727],
+      ["#sha256/da611926e4a4eda3207b1f5a92c2cf204aa1c769f5e65aeec1a97cb0031b90c1", "recorded_evidence", 1730],
+      ["#sha256/ecea77fcbe16e7b36f42cccc8174d70e27656d414f2928de6791445e48f228c9", "recorded_evidence", 1728]
     ]},
     {"path": "tests/test_mint_floor_artifact_generalized.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L118", "synthetic_literal", null],
-      ["#L1285", "synthetic_literal", null],
-      ["#L1286", "synthetic_literal", null],
-      ["#L1307", "synthetic_literal", null],
-      ["#L1308", "synthetic_literal", null],
-      ["#L1311", "synthetic_literal", null],
-      ["#L1314", "synthetic_literal", null],
-      ["#L1315", "synthetic_literal", null],
-      ["#L3298", "historical_pin", null],
-      ["#L6283", "synthetic_literal", null],
-      ["#L6284", "synthetic_literal", null],
-      ["#L6287", "synthetic_literal", null],
-      ["#L6288", "synthetic_literal", null],
-      ["#L6292", "pinned_config_copy", 22],
-      ["#L6294", "historical_pin", null],
-      ["#L6311", "synthetic_literal", null],
-      ["#L7057", "historical_pin", null]
+      ["#sha256/029a412be038ce88428ff1e8d302d90f2020e5cb0179ef4a750613fffc51f8ee", "historical_pin", null],
+      ["#sha256/0873dfbaba8562065ca2156418167b9e3fac8dd93086cb1398e907326686cbc4", "synthetic_literal", null],
+      ["#sha256/2c7dab72ecdd4bfad740fc962f0c36820dd9adedcf65c2446956b1580b35c118", "historical_pin", null],
+      ["#sha256/3ff9128b170136c57eea1376e954d32736d82d319d0d82bd1b64a78e616f1173", "synthetic_literal", null],
+      ["#sha256/5a2444110275ef84b91179200fc3e4818d8e6fbc2063485ef4ae7ac85ee83f16", "historical_pin", null],
+      ["#sha256/5d0b4bafbb106b3a2f577f642f9fdee7b426e20fdbbf8aeaa6f1b126806fdc03", "synthetic_literal", null],
+      ["#sha256/5d22aa113ceb339aa208c1cd558499c15c07a982feb62204b618418746cdb842", "synthetic_literal", null],
+      ["#sha256/7cfc66aeb206ef58db79af3a11021505c7cbc91c19c99e9fee5d2aa1d2cf671f", "synthetic_literal", null],
+      ["#sha256/8151052a4c7d2294124486d6a1967a4a2a29d0ecee2074b159c7b4c87aeafa66", "synthetic_literal", null],
+      ["#sha256/8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495", "synthetic_literal", null],
+      ["#sha256/9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16", "pinned_config_copy", 22],
+      ["#sha256/a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70", "synthetic_literal", null],
+      ["#sha256/a92cf81e56e5a5ea082b5ee9b449d8c6a7124207e1cd4ff35a64620e94e53ed1", "synthetic_literal", null],
+      ["#sha256/bdee676282a1fc7e0dee99a412fb22cfa4a30722f5de84923831c6ccf6b012a0", "synthetic_literal", null],
+      ["#sha256/c12749ccf1691860c5635c08de5cafce9edf57f1f81604bead7951bc80925b9c", "synthetic_literal", null],
+      ["#sha256/dae1d43209662a471c1ff1d283f151c4296da58a6456177a9543e6b6061391e7", "synthetic_literal", null],
+      ["#sha256/e9760631722b2e9bb49b9a2b967544ab071baeb8dbe204c3cdf34b1ba331c178", "synthetic_literal", null]
     ]},
     {"path": "tests/test_mlx_runtime.py", "rows": [
-      ["#L829", "synthetic_literal", null],
-      ["#L835", "synthetic_literal", null]
+      ["#sha256/9b3acfda60512c060fbf440d17a47bac3ff9cbd1afb8e8ff2c1bcedbf58b4bc7", "synthetic_literal", null],
+      ["#sha256/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "synthetic_literal", null]
     ]},
     {"path": "tests/test_model_panel.py", "rows": [
-      ["#L71", "synthetic_literal", null]
+      ["#sha256/aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4", "synthetic_literal", null]
     ]},
     {"owner_lane": "L2", "path": "tests/test_night_gate.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L1896", "historical_pin", null],
-      ["#L482", "pinned_config_copy", 496]
+      ["#sha256/dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265", "pinned_config_copy", 496],
+      ["#sha256/e70f35b226fe1f8b768fc93f2fab15206713cf0b629908411585daaa8fec4e76", "historical_pin", null]
     ]},
     {"path": "tests/test_paper_first_use_ledger.py", "rows": [
-      ["#L21", "fixture_content", 1916]
+      ["#sha256/04e78ec457bb4005ad4e135bad8894f29b4f6c0b45325b7c38874d5c1745ce89", "fixture_content", 1916]
     ]},
     {"path": "tests/test_paper_renumber_refs.py", "rows": [
-      ["#L15", "recorded_evidence", 1725]
+      ["#sha256/db095aca956a91ae34037b9ad1b1011704b1c3c3d4b08b2e857a92b3710ef579", "recorded_evidence", 1725]
     ]},
     {"path": "tests/test_paper_reported_energy.py", "rows": [
-      ["#L82", "synthetic_literal", null],
-      ["#L83", "synthetic_literal", null]
+      ["#sha256/88e0f5c179a7ecccb1f048f209e25ed0f239772cc078cf650c50957beceab138", "synthetic_literal", null],
+      ["#sha256/d89011dbda01172c41ebaa200d2410b37419fc2ee626700945a811d51b136952", "synthetic_literal", null]
     ]},
     {"path": "tests/test_paper_successor_migration.py", "rows": [
-      ["#L136", "synthetic_literal", null],
-      ["#L138", "synthetic_literal", null],
-      ["#L140", "synthetic_literal", null],
-      ["#L157", "synthetic_literal", null]
+      ["#sha256/185c4884a11aa8cc38a68035f05dbeca775e124d3623eea97a9cca761688916b", "synthetic_literal", null],
+      ["#sha256/1bf367a0ff8f978627fa6713120fe0709adeaa38a866c3018b2b866201500ab6", "synthetic_literal", null],
+      ["#sha256/b106ee627f6bf9641d081511119c356d8ae810b5fb662034150b7d30a82daf97", "synthetic_literal", null],
+      ["#sha256/d4cbf0283f015b1b1ef003590df5e5e7a57d550c60bd55c5a0588b4ad8c820f9", "synthetic_literal", null]
     ]},
     {"path": "tests/test_paper_terms_lint.py", "rows": [
-      ["#L290", "recorded_evidence", 1732],
-      ["#L291", "recorded_evidence", 1726],
-      ["#L321", "recorded_evidence", 1731],
-      ["#L357", "recorded_evidence", 1733],
-      ["#L450", "fixture_content", 1870]
+      ["#sha256/21618026dfc677165b2a1acd511ff0d3130bd3837fa344c9ca9fbac95d7e058b", "recorded_evidence", 1732],
+      ["#sha256/6ac9d5c7a84ac1bb8d3c0da036449f77e0e5d2d36564dfc33a1c2812912782cf", "recorded_evidence", 1726],
+      ["#sha256/9a4fdddeb8939ce363a93be617352781dba5bfb39bc7a3b1aa8130c9d691c3c7", "recorded_evidence", 1731],
+      ["#sha256/ba9398bf74829d0dbf00dc19b6bb14c4119efc750e132dfef1daab0fc2808ea4", "fixture_content", 1870],
+      ["#sha256/e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1", "recorded_evidence", 1733]
     ]},
     {"path": "tests/test_phase_share.py", "rows": [
-      ["#L310", "historical_pin", null],
-      ["#L320", "historical_pin", null]
+      ["#sha256/7386959d73d0de47c1c551b3de49d2281241f0c82caff18439cfac5ba6ce36c9", "historical_pin", null],
+      ["#sha256/f49d278b4a17e97784b62daa05afe24da8e3ce64c387baae3f8a3ee57dc12aa8", "historical_pin", null]
     ]},
     {"path": "tests/test_powermetrics_fiducial.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L1030", "historical_pin", null],
-      ["#L1607", "pinned_config_copy", 24],
-      ["#L1642", "fixture_content", 1866],
-      ["#L1646", "pinned_config_copy", 25],
-      ["#L1823", "pinned_config_copy", 27]
+      ["#sha256/14a7b5d82f446ba76609dafb0773ea1c3588ab6247919518e50c275e8b99eff9", "pinned_config_copy", 27],
+      ["#sha256/254b86581074063da7622fd792d520d53726e2b3e4744a4a0647a4fd68cc02c7", "historical_pin", null],
+      ["#sha256/316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985", "fixture_content", 1866],
+      ["#sha256/3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e", "pinned_config_copy", 25],
+      ["#sha256/f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660", "pinned_config_copy", 24]
     ]},
     {"path": "tests/test_publication_privacy.py", "rows": [
-      ["#L109", "synthetic_literal", null],
-      ["#L91", "synthetic_literal", null],
-      ["#L96", "synthetic_literal", null]
+      ["#sha256/001e3ed0f152ef0dd6443cf3b6f5fce7fb1029582fc588afaee242de78824317", "synthetic_literal", null],
+      ["#sha256/06eb7d6a69ee19e5fbdf749018d3d2abfa04bcbd1365db312eb86dc7169389b8", "synthetic_literal", null],
+      ["#sha256/b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060", "synthetic_literal", null]
     ]},
     {"path": "tests/test_quiet_predicate_campaign.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L2929", "pinned_config_copy", 1622],
-      ["#L811", "recorded_evidence", 1918],
-      ["#L812", "recorded_evidence", 1862]
+      ["#sha256/69321c693b3370b949b0a4a1b8548e35dd081a36165ba8f6799a387c2d813616", "pinned_config_copy", 1622],
+      ["#sha256/da1b28eff7848fc42698579387fb9881a2bd1ceda8151ba16617a3b63550718b", "recorded_evidence", 1862],
+      ["#sha256/dba7fb7cb92e9179a8e4d09e40290b578bbd68d12f29bb42eb417abcf6a4eb63", "recorded_evidence", 1918]
     ]},
     {"path": "tests/test_receipt_histsem.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L47", "pinned_config_copy", 14]
+      ["#sha256/3e513c535e3095bab44b53c029961aeb54baf1875df2bddd663e679482b38543", "pinned_config_copy", 14]
     ]},
     {"path": "tests/test_reduce.py", "regenerators": ["estimator_code"], "rows": [
-      ["#L2092", "recorded_evidence", 1864],
-      ["#L2098", "estimator_code", 1803]
+      ["#sha256/7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc", "estimator_code", 1803],
+      ["#sha256/cb25bfddc13610150795732a44be1183c154dcc4990b857425943028fd8edf81", "recorded_evidence", 1864]
     ]},
     {"path": "tests/test_revision6_seal.py", "rows": [
-      ["#L75", "synthetic_literal", null]
+      ["#sha256/81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1", "synthetic_literal", null]
     ]},
     {"path": "tests/test_rpt001_report_slice.py", "rows": [
-      ["#L109", "recorded_evidence", 1],
-      ["#L110", "recorded_evidence", 2],
-      ["#L111", "recorded_evidence", 3],
-      ["#L112", "recorded_evidence", 4],
-      ["#L113", "recorded_evidence", 5],
-      ["#L114", "recorded_evidence", 6],
-      ["#L115", "recorded_evidence", 7],
-      ["#L116", "recorded_evidence", 8],
-      ["#L117", "recorded_evidence", 9],
-      ["#L118", "recorded_evidence", 1778],
-      ["#L222", "synthetic_literal", null]
+      ["#sha256/0a2fdf9912b4a364ea7c87211b5c7599eebf20197a1d48b43629019644ea660f", "recorded_evidence", 4],
+      ["#sha256/33e5918dc74470433f1b868f2ba9e68b102c581820ea19fa83a9a02186af3b41", "recorded_evidence", 1778],
+      ["#sha256/54bf3cdb2bab54e8240c946c081bb577926b729e3abe92135684305966b00452", "synthetic_literal", null],
+      ["#sha256/5e8433e19817e46b145a580916b27cdf0260c400467d444c3aeb6cf730827571", "recorded_evidence", 7],
+      ["#sha256/69a5344eb55796fd9e6bd5a02965f6e8e2c8ae3ba3fcca1c615968a3b1a77e8b", "recorded_evidence", 2],
+      ["#sha256/6e0096a80a4c6f8d8ada22f9add2bf58d826359a3be3d250e34ef319304dea10", "recorded_evidence", 8],
+      ["#sha256/975f66fe94a0017e380eccb23146838232f74aa35579aa46e4d8c67e78a6516a", "recorded_evidence", 6],
+      ["#sha256/c28a99db36e60cb6ea37560c3da140ce40be566e124e5dbc5761dafd1abd542e", "recorded_evidence", 9],
+      ["#sha256/c8d8a841e6036a715e20c443b8982e0035de5e4b258675a3e86346b274da3df2", "recorded_evidence", 3],
+      ["#sha256/cf016eed5434a228e50c8b95591ff10408a6d90b025bb1ea0a857f1bd01b9805", "recorded_evidence", 5],
+      ["#sha256/fe849005553f0671c1e5d8b213497e0a4139918323ae16635acd98fa278b6f6f", "recorded_evidence", 1]
     ]},
     {"path": "tests/test_run_campaign.py", "rows": [
-      ["#L1247", "synthetic_literal", null],
-      ["#L5115", "historical_pin", null],
-      ["#L5148", "historical_pin", null],
-      ["#L5480", "historical_pin", null],
-      ["#L5533", "historical_pin", null],
-      ["#L5597", "historical_pin", null],
-      ["#L5621", "historical_pin", null],
-      ["#L5652", "historical_pin", null],
-      ["#L5755", "historical_pin", null],
-      ["#L8746", "synthetic_literal", null]
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10", "historical_pin", null],
+      ["#sha256/5d7c51bfa697d3e72c8b79b97ba7396ffd399406ccb332b028bd38f44557a284", "synthetic_literal", null],
+      ["#sha256/e7df882bc294a55756f3d791829657eb207d0ca82d4c2208ad6493d029fd7a87", "synthetic_literal", null]
     ]},
     {"path": "tests/test_salvage_dangler.py", "rows": [
-      ["#L40", "historical_pin", null],
-      ["#L43", "historical_pin", null],
-      ["#L46", "historical_pin", null]
+      ["#sha256/1857ebb709713a0aa0ea640ee3c2598c5d13ca085333e8b435a5a7883db7ef0d", "historical_pin", null],
+      ["#sha256/329bc9f88295eb6a7ab91a25f28ea2600483fca42bd3e3396629a1aee5df3039", "historical_pin", null],
+      ["#sha256/72fb6d92cceead16c6082c0fd2266727989bb94deffe9e0f2df91fa0c947c2e2", "historical_pin", null]
     ]},
     {"path": "tests/test_schemas.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L201", "pinned_config_copy", 32],
-      ["#L207", "synthetic_literal", null],
-      ["#L462", "synthetic_literal", null],
-      ["#L47", "synthetic_literal", null],
-      ["#L48", "synthetic_literal", null],
-      ["#L49", "synthetic_literal", null],
-      ["#L50", "synthetic_literal", null],
-      ["#L51", "synthetic_literal", null],
-      ["#L52", "synthetic_literal", null],
-      ["#L53", "synthetic_literal", null],
-      ["#L54", "pinned_config_copy", 1709]
+      ["#sha256/100d76977dffab1ae841124c4708727ac45ab793bbe0061dd87a6d9f54dbb97a", "synthetic_literal", null],
+      ["#sha256/15a556a8ea5853f6aef1d5d6a814d97264f6bc0b9dd11274755c98a7ec686355", "synthetic_literal", null],
+      ["#sha256/15a556a8ea5853f6aef1d5d6a814d97264f6bc0b9dd11274755c98a7ec686355", "synthetic_literal", null],
+      ["#sha256/4023dee935eb17d1a4da1f2bd90af9404de2eca33f1df9c41382e4750fd93eda", "synthetic_literal", null],
+      ["#sha256/6fbc1e2c94e84a86e6322aefa06d8318af2454ca42b4e4a79651932bb1e41124", "pinned_config_copy", 1709],
+      ["#sha256/a8a8ed0ca03e5d50247ef1f3b0520962660141f144107cef8e8b4bdb6e7e8f81", "synthetic_literal", null],
+      ["#sha256/b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd", "pinned_config_copy", 32],
+      ["#sha256/cd113411afe49a2047b7efd1cd1237fca3f48c1e31fe54c5f15f610ef6190592", "synthetic_literal", null],
+      ["#sha256/dbe5f48bf2a17a19ea16a8d4a9884483009da2d146dc2a3f5d31f3ec74fa3ecd", "synthetic_literal", null],
+      ["#sha256/e33e9587b37996e4c94767129eaae5575079821dc07ce5dbbe4331095a4ed58d", "synthetic_literal", null],
+      ["#sha256/e9878c0ed7735eb48293581b0944c1f5e1d08e67c9b77f0fafd8c4c265020f3e", "synthetic_literal", null]
     ]},
     {"path": "tests/test_single_count_discipline_matrix.py", "rows": [
-      ["#L219", "historical_pin", null],
-      ["#L220", "historical_pin", null]
+      ["#sha256/8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495", "historical_pin", null],
+      ["#sha256/a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70", "historical_pin", null]
     ]},
     {"path": "tests/test_suite.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L252", "pinned_config_copy", 1719],
-      ["#L41", "synthetic_literal", null],
-      ["#L44", "pinned_config_copy", 1718],
-      ["#L45", "synthetic_literal", null],
-      ["#L46", "synthetic_literal", null]
+      ["#sha256/0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471", "synthetic_literal", null],
+      ["#sha256/16c2d67f8c5e84b369938ee8d633dec01c594f5f7fcbf22fcaa2301d986e1267", "synthetic_literal", null],
+      ["#sha256/1ad902f8ec64c737ee80f76b9b2dc6989b9e2d49ca267d5cb685b6f4c645c7f5", "pinned_config_copy", 1719],
+      ["#sha256/24fb008b7c38484b6a7cb36a4fef1fce4c47a669e3db23131bce06088340f7a9", "pinned_config_copy", 1718],
+      ["#sha256/855be4e5b40c70bd017d83c9c576b07e6912e9200ea5bbd90985f9a376a6c5f1", "synthetic_literal", null]
     ]},
     {"path": "tests/test_suite_control_parity.py", "rows": [
-      ["#L165", "placeholder", null],
-      ["#L274", "synthetic_literal", null],
-      ["#L284", "synthetic_literal", null],
-      ["#L304", "historical_pin", null],
-      ["#L310", "historical_pin", null]
+      ["#sha256/0000000000000000000000000000000000000000000000000000000000000000", "placeholder", null],
+      ["#sha256/32d4c855f12ac899eebe502ab3e1626d8c8719c8082e69f18108940006ed1b28", "historical_pin", null],
+      ["#sha256/9671acaa71b2d415c1cdcb0d2da657adb6205969e870abe0dddf46dabceef0ea", "historical_pin", null],
+      ["#sha256/96dc4280db328c5baee0772af14ecaf5a16a58bd24a357c0b5dbc1b820d9a76a", "synthetic_literal", null],
+      ["#sha256/96dc4280db328c5baee0772af14ecaf5a16a58bd24a357c0b5dbc1b820d9a76a", "synthetic_literal", null]
     ]},
     {"path": "tests/test_v5_block4_x2.py", "rows": [
-      ["#L250", "recorded_evidence", 1773]
+      ["#sha256/3c9b6844e22958a6ba0eaee28cfab63642f3d0310f15b9bbc9e82363a2d772fb", "recorded_evidence", 1773]
     ]},
     {"path": "tests/test_validate_powermetrics_fiducial_derivation_only.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L286", "pinned_config_copy", 28],
-      ["#L290", "pinned_config_copy", 28]
+      ["#sha256/9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1", "pinned_config_copy", 28],
+      ["#sha256/9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1", "pinned_config_copy", 28]
     ]},
     {"path": "tests/test_whole_window_inverted_corner_clamp.py", "regenerators": ["estimator_code"], "rows": [
-      ["#L51", "estimator_code", 1800],
-      ["#L54", "estimator_code", 1805],
-      ["#L57", "estimator_code", 1785],
-      ["#L60", "estimator_code", 1803],
-      ["#L64", "source_digest", 1816]
+      ["#sha256/523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d", "source_digest", 1816],
+      ["#sha256/70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4", "estimator_code", 1785],
+      ["#sha256/7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc", "estimator_code", 1803],
+      ["#sha256/b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8", "estimator_code", 1805],
+      ["#sha256/bcdfeec06a03525cc6f6c700f2e2e6d10341af1323e4f9355b68ee47eb5bd30c", "estimator_code", 1800]
     ]},
     {"path": "tests/test_whole_window_selection.py", "rows": [
-      ["#L2364", "synthetic_literal", null]
+      ["#sha256/e1e93a54eb17a7d9eeb3766659d879dc388c4bbe4a90694c668b12860b4ee959", "synthetic_literal", null]
     ]},
     {"path": "tests/test_window_duration_margins.py", "regenerators": ["pinned_config_copy"], "rows": [
-      ["#L49", "pinned_config_copy", 1710],
-      ["#L60", "pinned_config_copy", 1713],
-      ["#L70", "pinned_config_copy", 117]
+      ["#sha256/86809f31d2c6933cda42881e10a32bc521cddec01fa941ac4613cd32b9ef49b8", "pinned_config_copy", 1713],
+      ["#sha256/d98ae4deb787caaf8a80f972b88b2c85ecc2f96a13092e9127c1e1a661640fd2", "pinned_config_copy", 1710],
+      ["#sha256/e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57", "pinned_config_copy", 117]
     ]},
     {"path": "tests/test_workloads.py", "rows": [
-      ["#L124", "synthetic_literal", null],
-      ["#L134", "synthetic_literal", null],
-      ["#L186", "synthetic_literal", null],
-      ["#L294", "synthetic_literal", null]
+      ["#sha256/17415d395ba899c93d20477636bcc1874fb3510ad85e3f634977aa552c789076", "synthetic_literal", null],
+      ["#sha256/2dd6347eb863a81b55f30378bf37ccce66296e093768a99af55001d479494847", "synthetic_literal", null],
+      ["#sha256/2dd6347eb863a81b55f30378bf37ccce66296e093768a99af55001d479494847", "synthetic_literal", null],
+      ["#sha256/cd113411afe49a2047b7efd1cd1237fca3f48c1e31fe54c5f15f610ef6190592", "synthetic_literal", null]
     ]},
     {"path": "tests/verify_w1w2_disposition_sources.py", "rows": [
-      ["#L21", "recorded_evidence", 1742]
+      ["#sha256/dbad7cc782945691701c2ee11188179a61b333dbd0a5588b970636716554b5b2", "recorded_evidence", 1742]
     ]}
   ]
 }

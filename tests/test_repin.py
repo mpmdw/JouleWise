@@ -115,7 +115,7 @@ class RegistryCheckTests(unittest.TestCase):
         tree.edit("joulewise/battery_float.py", "LIMIT_MA = 200", "LIMIT_MA = 250")
         code, out = tree.check()
         self.assertEqual(code, 1)
-        self.assertIn("pin issued_code stale: tests/test_example.py #L2", out)
+        self.assertIn("pin issued_code stale: tests/test_example.py #sha256/" + sha("LIMIT_MA = 200"), out)
         out = io.StringIO()
         with redirect_stdout(out):
             self.assertEqual(repin.write_registry_family("issued_code", tree.root), 1)
@@ -129,12 +129,20 @@ class RegistryCheckTests(unittest.TestCase):
         new_plan = sha(tree.path("configs/campaigns/packx/plan_tree.json").read_bytes())
         code, out = tree.check()
         self.assertEqual(code, 1)
-        self.assertIn("pin pinned_config_copy stale: tests/test_example.py #L1", out)
+        self.assertIn("pin pinned_config_copy stale: tests/test_example.py #sha256/" + tree.digests["plan"], out)
         self.assertIn("run python scripts/repin.py --write pinned_config_copy", out)
         with redirect_stdout(io.StringIO()):
             self.assertEqual(repin.write("pinned_config_copy", root=tree.root), 0)
         self.assertIn(new_plan, tree.path("tests/test_example.py").read_text())
         self.assertNotIn(tree.digests["plan"], tree.path("tests/test_example.py").read_text())
+        self.assertEqual(tree.check()[0], 0)
+
+    def test_rewrite_finds_a_stale_pin_after_its_line_moves(self) -> None:
+        tree = self.tree()
+        tree.edit("tests/test_example.py", "PLAN_TREE_SHA256", "# moved\nPLAN_TREE_SHA256")
+        tree.edit("configs/campaigns/packx/plan_tree.json", '"members"', '"note": "reviewed", "members"')
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(repin.write("pinned_config_copy", root=tree.root), 0)
         self.assertEqual(tree.check()[0], 0)
 
     def test_busywork_edits_need_no_repin(self) -> None:

@@ -36,6 +36,7 @@ JOINED_SEAMS = (
     ('mint_floor_artifact_generalized._actual_v2_git_state', 'Supply scratch H and synthetic origin/main containment; mint computation stays real.'),
     ('identity_pins._load_mint_module()._actual_v2_git_state', 'The independently loaded mint module observes the same scratch H.'),
     ('identity_pins._load_mint_module().REPO_ROOT', 'Custody reads actual Git blobs from the scratch repository.'),
+    ('freeze_by_commit.load_registration', 'Synthetic registration binds the scratch annotated analysis tag; the real F2 predicate executes.'),
     ('paper_reported_energy.verify_registration_ordering', 'Replay the existing registered ordering history in the source repository; the one-commit scratch repository has no such history.'),
 )
 
@@ -199,6 +200,16 @@ class JoinedHarness:
         self.git('-c', 'user.name=S10 synthetic harness', '-c', 'user.email=s10@example.invalid',
                  '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'Synthetic joined inputs')
         self.head = self.git('rev-parse', 'HEAD').strip()
+        self.git('-c', 'user.name=S10 synthetic harness', '-c', 'user.email=s10@example.invalid',
+                 '-c', 'tag.gpgSign=false', 'tag', '-a', 'b5/analysis-r2', '-m', 'Synthetic F2 release')
+        self.freeze_registration = {
+            'active_analysis': 'b5/analysis-r2',
+            'tags': {'b5/analysis-r2': {
+                'tag_object': self.git('rev-parse', 'refs/tags/b5/analysis-r2').strip(),
+                'commit': self.head, 'tree': self.git('rev-parse', self.head+'^{tree}').strip(),
+            }},
+            'ruled_descendants': {},
+        }
 
     def git(self, *args):
         return subprocess.run(['git', '-C', str(self.repo), *args], check=True,
@@ -213,7 +224,7 @@ class JoinedHarness:
 
     @contextmanager
     def git_seams(self):
-        from joulewise import identity_pins, paper_reported_energy as energy
+        from joulewise import freeze_by_commit, identity_pins, paper_reported_energy as energy
         from scripts import mint_floor_artifact_generalized as mint
         identity_mint = identity_pins._load_mint_module()
         ordering = energy.verify_registration_ordering
@@ -235,6 +246,7 @@ class JoinedHarness:
             seams.enter_context(patch.object(mint, '_actual_v2_git_state', return_value=(self.head, True)))
             seams.enter_context(patch.object(identity_mint, '_actual_v2_git_state', return_value=(self.head, True)))
             seams.enter_context(patch.object(identity_mint, 'REPO_ROOT', self.repo))
+            seams.enter_context(patch.object(freeze_by_commit, 'load_registration', return_value=self.freeze_registration))
             seams.enter_context(patch.object(energy, 'verify_registration_ordering', registered_history))
             yield checkout
 
