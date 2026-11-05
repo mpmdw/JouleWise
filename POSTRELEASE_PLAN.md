@@ -114,3 +114,29 @@ Line references below identify the base unless stated otherwise.
 - Semantics: test coverage only; no writer or release behavior changes.
 - Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_g9 -q`
   passed (2 tests; the full driver is stubbed).
+
+## f. Step-11 refusal-code registry — IMPLEMENT
+
+- What/where: step-11 emitters in `joulewise/b5_analysis/sensitivity.py:37`,
+  `:153`, `:294`, `joulewise/b5_analysis/disclosures.py:186`, `:237` and
+  `scripts/produce_b5_disclosures.py:37` lack exact tooling entries in
+  `configs/analysis/b5/dry_run_refusal_classes.json:51` and `:196`.
+- Why: malformed provenance or a broken sensitivity invariant becomes an
+  unclassified refusal. D-190 already distinguishes these defects from the
+  registered null scientific states.
+- Fix: explicitly register `disclosure_input_invalid`,
+  `sensitivity_changed_bound_independent_value`,
+  `sensitivity_floor_composition_differs_from_mint`,
+  `sensitivity_inputs_invalid`, and `sensitivity_record_invalid` as tooling
+  refusals. Retain existing entries, including the detail-stripped
+  `disclosure_input_missing`. No prefix wildcard and no new outcome class.
+- Test: census the emitted reason literals and detail prefixes in the three
+  step-11 source files, then drive synthetic failures through the real
+  helper/runner/record classification. Unknown prefix lookalikes must stay
+  unclassified and the two existing outcome classes must stay unchanged.
+- Called-out behavior change: these five errors change from
+  `unclassified_refusal` to `tooling_refusal` with their public reason token.
+  Both remain stopping failures (exit 2). No legitimate null, measured
+  quantity, claim verdict or scientific outcome is changed. Post-release only.
+- Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_step11_codes -q`
+  passed (7 tests; no analysis pipeline or worker pool).
