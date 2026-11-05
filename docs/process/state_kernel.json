@@ -3832,8 +3832,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 346,
-      "status": "partial",
-      "status_note": "Registered 2026-10-30 from RUN_STATE item 146. Ed 2026-11-04: this is the first task to start once block 5 is released; it is blocked only by that release (not a kernel dependency: the release is not a kernel task). The trim inventory was committed to docs/process/TRIM_REPORT.md on 2026-11-04 (RUN_STATE item 167). Phase 0 is done: annotated tag b5/collection at c27485347; b5/analysis is tagged at attempt C's merged commit; the release runs at b5/analysis-r2. PR #649 fix round 1 prepared locally on lane/2026-11-05-freeze-by-commit-p1 (2026-11-05): exact registered F3 analysis identity replaces runtime descendant ledgers; post-release paper/fill runs require the r2 checkout. B1/H1/M1/M2/L1-L5 disposition and targeted offline checks: docs/run_reports/2026-11-05-freeze-by-commit-p1.md. F4 combined reissue, registration selection per block/role (TODO A346), reproduction, release/landing and remaining lead gates stay open.",
+      "status": "queued",
+      "status_note": "Registered 2026-10-30 from RUN_STATE item 146. Ed 2026-11-04: this is the first task to start once block 5 is released; it is blocked only by that release (not a kernel dependency: the release is not a kernel task). The trim inventory was committed to docs/process/TRIM_REPORT.md on 2026-11-04 (RUN_STATE item 167). Phase 0 is done: annotated tag b5/collection at c27485347; b5/analysis is tagged at attempt C's merged commit; the release runs at b5/analysis-r2.",
       "stop_card": null
     },
     "FULL-SUITE-EVERY-FIX-HEAD-RULE-01": {

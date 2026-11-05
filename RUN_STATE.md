@@ -10,16 +10,6 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**PR #649 / A346 local fix round 1, 2026-11-05:** prepared on
-`lane/2026-11-05-freeze-by-commit-p1`; implementation `2e0528ad8` plus separate
-finding commits. Exact registered F3 identity replaces the runtime descendant
-ledger. Post-release paper/fill runs require the r2 checkout for all current
-custody families. F4, per-block/role registration selection (TODO A346),
-reproduction and the owning lead's release/landing gates remain open.
-[Report](docs/run_reports/2026-11-05-freeze-by-commit-p1.md). This clone is a
-blind, offline code-repair lane; no machine-state measurement instruction is
-selected here.
-
 **▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
 
 What happened. BETA attempt 1 (`v5-b5-beta-a1-20261010T0742Z`) ran its whole chain; the pinned harvest gave it one window-removing code, `neg8.screen_failed` (`harvest.json` sha256 `f0d72323b67d075db29a5c136d087222284a6d4651d130549f9dbd5a82d6ec7d`). No physical measurement removed it. One end reference (a short run of a fixed small workload, used to check that the machine did not drift between a window's start and end) was aborted at run time; the chain ran its spare; the spare left no result directory; and the sealed program that writes the window's verdict then recorded none of the window's stage lists as its source. The registered harvest rule re-runs the drift check only on the references that verdict names, so the check was never run, although two start and two end references survive, which is enough. Records: `docs/process_traces/2026-10-block5/seal2-beta-a1-window.md`, `seal2-beta-a1-consult.md`.
@@ -841,14 +831,6 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 146. **Ed adopted "freeze blocks by commit, not on main" (reported by joulewise-28, 2026-10-30, about 06:20Z).**
 - The plan is `docs/process/freeze_by_commit.md`, on PR #606 (light tier, docs only). joulewise-28 will merge it once CI is green.
 - **Phase 0, now (additive only):** the annotated tag `b5/collection` is pushed at `c27485347` (H_claim, the head named in `sealed_inventory.json`). The orchestrator verified it on origin: the tag object is `dbf91f4ba` and it peels to `c27485347`. The tag `b5/analysis` is added at the merged commit that official attempt C runs on.
-- **Full identity expansion (PR #649 M2, 2026-11-05; clerical):** the following literals expand this item's phase-0 record, the annotated attempt-C tag message (items 144–146 and 156), and item 165's r2 release record (D-188/D-189/D-190). Verified from existing local Git objects; no tags or scientific registrations changed. `tests/test_freeze_by_commit.py` pins these independently of `freeze_commits.json` and cross-checks this table. This records previously abbreviated identities; it is not a claim that all full tag-object literals were printed here before this fix.
-
-| Tag | Annotated tag object | Peeled commit | Tree |
-| --- | --- | --- | --- |
-| `b5/collection` | `dbf91f4ba108017c8973b0f0ad8c6819b4300422` | `c27485347c9629b857df81665b5b1b8d10dcd36a` | `30dc0681fbea919338f639075389bde0161f7c21` |
-| `b5/analysis` | `8b8aa535898142470426050e8b4b2ef64e593e3a` | `2fdc0929d5c214505617145893df2e71ab8a83b5` | `ea994f30a109123cffe19e1b064e1593928f16b3` |
-| `b5/analysis-r2` | `bdaf0c03e74b6fc824e16f607122c0738dab0eb7` | `929fc65c9ce3ff82f0311d28acf76a682edd466f` | `9e89d7ff48999416467129c03ea171fc3a1f3f83` |
-
 - **Phase 1, immediately after the block-5 release:**
   - Freeze tests check the tag's tree instead of main's bytes.
   - The step-5 identity check becomes "HEAD is the registered analysis commit or a ruled descendant".
