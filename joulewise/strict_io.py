@@ -174,3 +174,18 @@ def fsync_directory_best_effort_directory(directory: Path) -> None:
 
 def fsync_directory_best_effort_path(path: Path) -> None:
     return fsync_directory_best_effort_directory(path)
+
+
+def atomic_write_bytes(path: Path, raw: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+        raise

@@ -89,7 +89,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+
 from joulewise.strict_io import (
+    atomic_write_bytes as _atomic_write,
     relative_inside as _strict_relative_inside,
     sha256_raw as sha256_bytes,
 )
@@ -581,21 +583,6 @@ def derive_document(*, repo_root: Path, packs: Sequence[Path], reference_roots: 
 
 def render(document: Mapping[str, Any]) -> bytes:
     return (json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
-
-
-def _atomic_write(path: Path, raw: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(raw)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    except BaseException:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-        raise
 
 
 def build_parser() -> argparse.ArgumentParser:
