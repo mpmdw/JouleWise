@@ -62,7 +62,7 @@ class _Checkpoint:
 def checkpoint_size_from_config(config, *, state_itemsize=4, conv_itemsize=2):
     """Batch-one payload; no KV arrays are copied. Dtypes are explicit inputs.
 
-    Gated-delta state is [B, Hv, Dk, Dv]; convolution history is
+    Gated-delta state is [B, Hv, Dv, Dk]; convolution history is
     [B, kernel-1, 2*Hk*Dk + Hv*Dv]. Python/container overhead is excluded.
     """
     cfg = config.get("text_config", config)
