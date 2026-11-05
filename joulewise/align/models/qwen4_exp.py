@@ -646,8 +646,11 @@ def rope_inv_freq(args: TextModelArgs) -> mx.array:
     """[HF compute_default_rope_parameters:107-115] ``1 / base ** (arange/dim)``
     (T:649-667, D2): fp32 exponent and reciprocal as the reference; the pow in
     float64 rounded once to fp32. Bit-identical to the reference at the
-    released config (rope_theta 1e7, rotary_dim 64); mlx's fp32 ``**`` (Sol)
-    differed in 15/32 entries, a 9.8e-4 rad phase drift by 40K positions."""
+    released config ONLY (rope_theta 1e7, rotary_dim 64: 32/32); mlx's fp32
+    ``**`` (Sol) differed in 15/32 entries, a 9.8e-4 rad phase drift by 40K
+    positions. The recipe is not torch's fp32 pow in general (63/64 at
+    rope_theta 1e6, rotary_dim 128): re-verify inv_freq bitwise for any other
+    theta or rotary_dim (validation round 1)."""
     base = np.float64(np.float32(args.rope_parameters.get("rope_theta", 10000.0)))
     dim = args.rotary_dim
     exponent = np.arange(0, dim, 2, dtype=np.float32) / np.float32(dim)
@@ -1642,7 +1645,8 @@ class PLELayer(nn.Module):
 
     Gate: bf16 product, fp32 sum rounded once (T:1224), fp32 division by
     sqrt(hidden) rounded once (D8: MLX would round the Python divisor to bf16,
-    changing 36.5% of gates at hidden 2560); sigmoid and conv silu rounded once."""
+    50.596 -> 50.5 at the released hidden 2560, changing 35.9% of bf16 values
+    in [2^-8, 2^8)); sigmoid and conv silu rounded once."""
 
     def __init__(self, args: TextModelArgs):
         super().__init__()
