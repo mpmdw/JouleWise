@@ -1,0 +1,110 @@
+{
+ "meta": {
+  "device": {
+   "device_name": "Apple M4",
+   "max_recommended_working_set_size": 17179885568,
+   "memory_size": 25769803776,
+   "architecture": "applegpu_g16g",
+   "max_buffer_length": 12884901888,
+   "resource_limit": 499000
+  },
+  "mlx": "0.31.2",
+  "python": "3.13.18",
+  "machine": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+  "peak_memory_MB": 1658.509904,
+  "argv": [
+   "--suite",
+   "calib",
+   "--iters",
+   "9",
+   "--json",
+   "/private/tmp/jwsupport-tmp/bench/final_calib.json"
+  ]
+ },
+ "results": [
+  {
+   "suite": "calib",
+   "what": "bf16_gemm_4096_TFLOPS",
+   "value": 2.702715761956236,
+   "best": 3.0144362769013187
+  },
+  {
+   "suite": "calib",
+   "what": "qmm_3bit_M2048_TFLOPS",
+   "value": 2.0234572856899913,
+   "best": 2.05291079118636
+  },
+  {
+   "suite": "calib",
+   "what": "qmm_4bit_M2048_TFLOPS",
+   "value": 1.9053701644980572,
+   "best": 1.986667105305007
+  },
+  {
+   "suite": "calib",
+   "what": "qmm_8bit_M2048_TFLOPS",
+   "value": 1.8992177755906432,
+   "best": 1.9642624627554681
+  },
+  {
+   "suite": "calib",
+   "what": "stream_rw_GBps",
+   "value": 43.716164289889186,
+   "best": 55.04392395304286
+  },
+  {
+   "suite": "calib",
+   "what": "qmv_8bit_weight_stream_GBps",
+   "value": 48.87998281648852,
+   "best": 63.48552127839192
+  },
+  {
+   "suite": "calib",
+   "what": "dispatch_us_per_op",
+   "value": 7.888499996624887,
+   "best": 7.636499009095132
+  },
+  {
+   "suite": "calib",
+   "what": "gdn_decode_layer_eager_ms",
+   "value": 1.1661874984080594,
+   "best": 0.9498854180694454
+  },
+  {
+   "suite": "calib",
+   "what": "gdn_decode_layer_compiled_ms",
+   "value": 0.8625983900856227,
+   "best": 0.8160092499262342
+  },
+  {
+   "suite": "calib",
+   "what": "moe_prefill_us_per_token_T64",
+   "value": 282.2971946443431,
+   "best": 253.99868900422007
+  },
+  {
+   "suite": "calib",
+   "what": "moe_prefill_us_per_token_T256",
+   "value": 191.05420119558403,
+   "best": 177.16113279675483
+  },
+  {
+   "suite": "calib",
+   "what": "moe_prefill_us_per_token_T512",
+   "value": 197.73982796778,
+   "best": 178.5727538390347
+  },
+  {
+   "suite": "calib",
+   "what": "moe_prefill_us_per_token_T1024",
+   "value": 128.7717490185969,
+   "best": 127.48168944654026
+  },
+  {
+   "suite": "calib",
+   "what": "moe_prefill_us_per_token_T2048",
+   "value": 110.80265309715287,
+   "best": 91.739054653317
+  }
+ ]
+}

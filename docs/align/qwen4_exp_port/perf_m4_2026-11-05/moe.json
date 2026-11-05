@@ -1,0 +1,256 @@
+{
+ "meta": {
+  "device": {
+   "device_name": "Apple M4",
+   "max_recommended_working_set_size": 17179885568,
+   "memory_size": 25769803776,
+   "architecture": "applegpu_g16g",
+   "max_buffer_length": 12884901888,
+   "resource_limit": 499000
+  },
+  "mlx": "0.31.2",
+  "python": "3.13.18",
+  "machine": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+  "peak_memory_MB": 1604.21689,
+  "argv": [
+   "--suite",
+   "moe",
+   "--iters",
+   "9",
+   "--json",
+   "/private/tmp/jwsupport-tmp/bench/final_moe.json"
+  ]
+ },
+ "results": [
+  {
+   "suite": "moe_router",
+   "T": 1,
+   "median_ms": 0.028266501127897452,
+   "p10_ms": 0.02410243663083141,
+   "p90_ms": 0.2874166675610468
+  },
+  {
+   "suite": "moe_router",
+   "T": 512,
+   "median_ms": 2.7163749327883124,
+   "p10_ms": 1.2147079687565565,
+   "p90_ms": 7.3987089563161135
+  },
+  {
+   "suite": "moe_block",
+   "variant": "split3",
+   "gate_up_bits": 3,
+   "down_bits": 3,
+   "T": 1,
+   "resident_MB": 1105.78176,
+   "decode_bytes_per_token_MB": 26.28096,
+   "median_ms": 0.5095833330415189,
+   "p10_ms": 0.4849887069819185,
+   "p90_ms": 1.4496744794693466
+  },
+  {
+   "suite": "moe_block",
+   "variant": "split3",
+   "gate_up_bits": 3,
+   "down_bits": 3,
+   "T": 512,
+   "resident_MB": 1105.78176,
+   "decode_bytes_per_token_MB": 26.28096,
+   "median_ms": 86.55579201877117,
+   "p10_ms": 63.307875068858266,
+   "p90_ms": 101.24408302363008
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused",
+   "gate_up_bits": 3,
+   "down_bits": 3,
+   "T": 1,
+   "resident_MB": 1105.78176,
+   "decode_bytes_per_token_MB": 26.28096,
+   "median_ms": 0.6007057284781089,
+   "p10_ms": 0.5546571240605166,
+   "p90_ms": 2.3009687502053566
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused",
+   "gate_up_bits": 3,
+   "down_bits": 3,
+   "T": 512,
+   "resident_MB": 1105.78176,
+   "decode_bytes_per_token_MB": 26.28096,
+   "median_ms": 85.06904100067914,
+   "p10_ms": 72.73616595193744,
+   "p90_ms": 90.78958397731185
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused_folded",
+   "gate_up_bits": 3,
+   "down_bits": 3,
+   "T": 1,
+   "resident_MB": 1105.78176,
+   "decode_bytes_per_token_MB": 26.28096,
+   "median_ms": 0.9074218736107772,
+   "p10_ms": 0.47261718767307076,
+   "p90_ms": 1.594152769636518
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused_folded",
+   "gate_up_bits": 3,
+   "down_bits": 3,
+   "T": 512,
+   "resident_MB": 1105.78176,
+   "decode_bytes_per_token_MB": 26.28096,
+   "median_ms": 78.87320907320827,
+   "p10_ms": 62.277209013700485,
+   "p90_ms": 98.26320898719132
+  },
+  {
+   "suite": "moe_block",
+   "variant": "split3",
+   "gate_up_bits": 4,
+   "down_bits": 4,
+   "T": 1,
+   "resident_MB": 1420.96896,
+   "decode_bytes_per_token_MB": 33.03936,
+   "median_ms": 0.6363446251877273,
+   "p10_ms": 0.5731328128604218,
+   "p90_ms": 1.0164470416687739
+  },
+  {
+   "suite": "moe_block",
+   "variant": "split3",
+   "gate_up_bits": 4,
+   "down_bits": 4,
+   "T": 512,
+   "resident_MB": 1420.96896,
+   "decode_bytes_per_token_MB": 33.03936,
+   "median_ms": 82.86604203749448,
+   "p10_ms": 66.17904209997505,
+   "p90_ms": 94.04395800083876
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused",
+   "gate_up_bits": 4,
+   "down_bits": 4,
+   "T": 1,
+   "resident_MB": 1420.96896,
+   "decode_bytes_per_token_MB": 33.03936,
+   "median_ms": 0.6204097080626525,
+   "p10_ms": 0.5661510416151335,
+   "p90_ms": 1.5651302092010155
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused",
+   "gate_up_bits": 4,
+   "down_bits": 4,
+   "T": 512,
+   "resident_MB": 1420.96896,
+   "decode_bytes_per_token_MB": 33.03936,
+   "median_ms": 83.81841599475592,
+   "p10_ms": 74.0996670210734,
+   "p90_ms": 104.5483750058338
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused_folded",
+   "gate_up_bits": 4,
+   "down_bits": 4,
+   "T": 1,
+   "resident_MB": 1420.96896,
+   "decode_bytes_per_token_MB": 33.03936,
+   "median_ms": 0.6328203113904843,
+   "p10_ms": 0.5353619781089947,
+   "p90_ms": 1.887319437325156
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused_folded",
+   "gate_up_bits": 4,
+   "down_bits": 4,
+   "T": 512,
+   "resident_MB": 1420.96896,
+   "decode_bytes_per_token_MB": 33.03936,
+   "median_ms": 80.367041984573,
+   "p10_ms": 72.27887504268438,
+   "p90_ms": 91.76025004126132
+  },
+  {
+   "suite": "moe_block",
+   "variant": "split3",
+   "gate_up_bits": 3,
+   "down_bits": 4,
+   "T": 1,
+   "resident_MB": 1210.63936,
+   "decode_bytes_per_token_MB": 28.32896,
+   "median_ms": 0.5337091885545912,
+   "p10_ms": 0.5193168326513842,
+   "p90_ms": 2.4827656234265305
+  },
+  {
+   "suite": "moe_block",
+   "variant": "split3",
+   "gate_up_bits": 3,
+   "down_bits": 4,
+   "T": 512,
+   "resident_MB": 1210.63936,
+   "decode_bytes_per_token_MB": 28.32896,
+   "median_ms": 83.61554204020649,
+   "p10_ms": 67.56329210475087,
+   "p90_ms": 102.74458397179842
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused",
+   "gate_up_bits": 3,
+   "down_bits": 4,
+   "T": 1,
+   "resident_MB": 1210.63936,
+   "decode_bytes_per_token_MB": 28.32896,
+   "median_ms": 0.5971701442225216,
+   "p10_ms": 0.5266701458216024,
+   "p90_ms": 2.0713090222367705
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused",
+   "gate_up_bits": 3,
+   "down_bits": 4,
+   "T": 512,
+   "resident_MB": 1210.63936,
+   "decode_bytes_per_token_MB": 28.32896,
+   "median_ms": 77.25787500385195,
+   "p10_ms": 72.84695899579674,
+   "p90_ms": 94.62591598276049
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused_folded",
+   "gate_up_bits": 3,
+   "down_bits": 4,
+   "T": 1,
+   "resident_MB": 1210.84416,
+   "decode_bytes_per_token_MB": 28.53376,
+   "median_ms": 0.533232623032139,
+   "p10_ms": 0.49712675051220384,
+   "p90_ms": 1.6440512069190543
+  },
+  {
+   "suite": "moe_block",
+   "variant": "fused_folded",
+   "gate_up_bits": 3,
+   "down_bits": 4,
+   "T": 512,
+   "resident_MB": 1210.84416,
+   "decode_bytes_per_token_MB": 28.53376,
+   "median_ms": 80.78674995340407,
+   "p10_ms": 66.91683293320239,
+   "p90_ms": 95.15795798506588
+  }
+ ]
+}
