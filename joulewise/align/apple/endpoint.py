@@ -219,8 +219,12 @@ class _StreamObservation:
                         from joulewise.align.apple.thermal import drain_decode
                         # Drain before the hold's entry stamp, under the model
                         # alarm. Never dispatch next(stream) to obtain a boundary.
-                        with deadman.guard() if deadman is not None else nullcontext():
-                            drain_decode(stream)
+                        try:
+                            with deadman.guard() if deadman is not None else nullcontext():
+                                drain_decode(stream)
+                        except DeadmanExpired:
+                            self.deadman_expired = True
+                            break
                         hold = thermal.wait('H', turn=turn_index, token_count=count, deadman=deadman, defer_resume=True)
                         if hold['outcome'] != 'released':
                             self.thermal_aborted = True

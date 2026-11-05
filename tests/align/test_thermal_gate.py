@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from joulewise.align.apple.budget import EpisodeDeadman
+from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman
 from joulewise.align.apple.endpoint import _StreamObservation
 from joulewise.align.apple.thermal import ThermalSession, drain_decode, slow_slope, validate_policy
 from joulewise.align.apple.workload import EpisodeRuntimeAdapter, EpisodeSpec
@@ -222,6 +222,23 @@ class HoldTests(unittest.TestCase):
         self.assertTrue(observation.thermal_aborted)
         self.assertEqual(closed, [True])
         self.assertIn('thermal.hold_timeout:0', obj.flags)
+
+    def test_deadman_during_drain_retains_every_returned_token(self):
+        obj, clock = session(config=policy(heavy=True))
+        obj.wait('G0')
+        closed = []
+        def stream():
+            try:
+                yield from self.stream(600, clock)
+            finally:
+                closed.append(True)
+        observation = _StreamObservation(SimpleNamespace(stream_generate=stream), max_tokens=600, thermal=obj,
+                                         deadman=EpisodeDeadman(clock, clock.stamp(), 100))
+        with patch('joulewise.align.apple.thermal.drain_decode', side_effect=DeadmanExpired):
+            self.assertEqual([r.token for r in observation.stream_generate()], list(range(256)))
+        self.assertTrue(observation.deadman_expired)
+        self.assertEqual(observation.finish_reason, 'episode.deadman')
+        self.assertEqual(closed, [True])
 
     def test_hold_exit_includes_bookkeeping_until_next_dispatch(self):
         obj, clock = session(config=policy(heavy=True))
@@ -446,7 +463,7 @@ class StatusWiringTests(unittest.TestCase):
 
 
 class NativeIntegrationTests(unittest.TestCase):
-    def held_run(self, root, *, timeout=False):
+    def held_run(self, root, *, timeout=False, expire_drain=False):
         from tests.align.test_apple_endpoint import run_native_review
         class TickClock(FakeClock):
             sidecar = None
@@ -476,6 +493,8 @@ class NativeIntegrationTests(unittest.TestCase):
             obj.clock.sidecar, obj.clock.next_tick = obj, obj.clock.now()+1
         def drain(stream):
             clock.sleep(.09)
+            if expire_drain:
+                raise DeadmanExpired()
             if timeout:
                 clock.sidecar.reader._transport.values = lambda t: (60, 60)
                 clock.sidecar.sample()
@@ -522,6 +541,19 @@ class NativeIntegrationTests(unittest.TestCase):
             self.assertIsNone(ep.main_task_score)
             self.assertTrue(ep.hardware['token_budget']['incomplete'])
             self.assertEqual(ep.hardware['token_budget']['decode_tokens_used'], 436)
+
+    def test_endpoint_records_partial_turn_when_drain_alarm_fires(self):
+        from joulewise.align.apple.workload import read_episode_bundle
+        with tempfile.TemporaryDirectory() as d:
+            bundle, status, _ = self.held_run(Path(d), expire_drain=True)
+            ep = read_episode_bundle(bundle)
+            self.assertEqual(status.status.value, 'failed')
+            self.assertEqual([t.decode_tokens for t in ep.turns], [180, 256])
+            self.assertEqual(ep.turns[-1].tool_calls, ())
+            self.assertIn('episode.deadman:1', ep.flags)
+            rows = [json.loads(line) for line in (bundle/'outputs/align_turns.jsonl').read_text().splitlines()]
+            self.assertEqual(len(rows[-1]['generation']['output_token_ids']), 256)
+            self.assertTrue((bundle/'outputs/align_runtime_events.jsonl').read_text())
 
 
 if __name__ == '__main__':
