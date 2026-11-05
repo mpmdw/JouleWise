@@ -29,6 +29,8 @@ REGISTRATION_KEYS = frozenset("schema mode registration_id plan_id scorer_id arm
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
 
 
+from joulewise.strict_io import json_ascii_bytes_strict as _canon
+
 class RegistrationRefusal(ValueError):
     def __init__(self, code, detail=""):
         self.code = code
@@ -50,10 +52,6 @@ def _integer(value, minimum):
 
 def _text(value):
     return type(value) is str and bool(value)
-
-
-def _canon(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 class Registration:

@@ -54,7 +54,11 @@ C_LOCALE_ENV = {"LC_ALL": "C"}
 # Clocks
 
 
-from joulewise.strict_io import sha256_data as sha256_hex
+
+from joulewise.strict_io import (
+    json_ascii_bytes_strict as canonical_json,
+    sha256_data as sha256_hex,
+)
 
 @dataclasses.dataclass(frozen=True)
 class Stamp:
@@ -215,10 +219,6 @@ def fsync_directory(directory: Path) -> None:
         pass
     finally:
         os.close(descriptor)
-
-
-def canonical_json(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
 # --------------------------------------------------------------------------

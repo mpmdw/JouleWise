@@ -8,6 +8,8 @@ import math
 import re
 
 import joulewise.scored_registration as sr
+from joulewise.strict_io import json_ascii_bytes_strict as _canon
+
 from joulewise.scored_packer import executed_status, verify_executed_roster
 
 STOP_REASONS = {"stop": False, "length": True}
@@ -56,10 +58,6 @@ def _int(v):
 
 def _num(v):
     return (type(v) is int or (type(v) is float and math.isfinite(v))) and v <= ENERGY_MAX_J
-
-
-def _canon(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 def _in_force(roster, envelope_index):

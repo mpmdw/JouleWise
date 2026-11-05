@@ -43,3 +43,7 @@ def sha256_file(path: Path) -> str:
 
 def sha256_path_bytes(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def json_ascii_bytes_strict(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=False, separators=(',', ':')) .encode("utf-8")

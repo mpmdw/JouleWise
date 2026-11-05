@@ -7,6 +7,8 @@ import json
 import math
 from contextvars import ContextVar
 
+from joulewise.strict_io import json_ascii_bytes_strict as _canon
+
 from joulewise.scored_registration import (
     Registration, LEVELS, RETRY_STAGES, MIN_PARENT_BLOCKS, MIN_ENVELOPES,
     ROSTER_SCHEMA,
@@ -25,10 +27,6 @@ _REPLAYING = ContextVar("scored_packer_replaying", default=False)
 def _need(ok, code, detail=""):
     if not ok:
         raise PackingRefusal(code, detail)
-
-
-def _canon(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 def _digest(roster):
