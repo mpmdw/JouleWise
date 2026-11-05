@@ -191,3 +191,33 @@ production reduction cost or sustained whole-pipeline speed. Paired timings
 vary under the concurrent job; use the complete pair ledger, not the fastest
 sample. Full driver completion and a 7-vs-10-worker comparison remain post-release
 work, outside this blinded, loaded-machine session.
+
+## Stage 2 implementation measurements (3 workers)
+
+Post-release scheduling work, in the requested order. The earlier measurements
+above describe stage 1. Stage 2 uses the committed full-size S10 synthetic
+joined window (125/125/107 members), real production-dispatch consumers and
+`artifacts/` custody under `$TMPDIR`. It never invokes the real-data entry point
+or creates/opens `restricted/`. Git observations are the documented
+`JoinedHarness` seams. No worker pin or release tag changes.
+
+| Step | Before / after (seconds) | Wall reduction | Equality evidence |
+|---|---:|---:|---|
+| 3b — independent pack brackets | 180.781 / 89.707 | 50.4% | All 277 registered files, 5 accumulated records and all archive censuses in the joined prefix match exactly |
+
+These are single paired synthetic observations under the concurrent job, not
+production forecasts. The private pool transports frozen inputs, authentication
+rows, archive censuses, deadlines and store deltas; it consumes packs in their
+original order and recomputes failed work at its serial position. Mathematical
+accumulation and registered writers retain their existing order.
+
+Reproduce each slice with `scripts/benchmark_b5_pack_parallel.py --baseline
+<parent-commit> --step <step> --output $TMPDIR/<name>.json`, using Python 3.13,
+`TMPDIR=/private/tmp/jwsol/speed-impl/tmp`, `GIT_CONFIG_GLOBAL=/dev/null` and
+`GIT_CONFIG_NOSYSTEM=1`. It fixes the process budget at 3, loads no external
+index, and checks actual registered-file digests, complete step records and
+archive censuses. The detailed method, refusal regressions and limitations are
+in the [stage-2 report](../run_reports/2026-11-05-b5-speed-plan-stage2.md);
+the [3b ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-3b.json) preserves
+the matching commitments and per-file hashes. Full joined production promotion
+still needs the authorized blinded equivalence gate.
