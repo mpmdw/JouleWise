@@ -48,7 +48,7 @@ def xml(parameters="<parameter=text>hello</parameter>", name="update"):
 
 
 def parse(text, **kwargs):
-    return parse_completion(text, model_family="qwen3_5_moe", tools=TOOLS, **kwargs)
+    return parse_completion(text, model_family="qwen3_8", tools=TOOLS, **kwargs)
 
 
 def template_renderer(fixture="qwen38_chat_template.jinja"):

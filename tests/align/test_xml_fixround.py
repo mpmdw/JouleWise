@@ -6,6 +6,7 @@ import unittest
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion
+from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES
 from joulewise.align.interfaces import ChatMessage
 from joulewise.clock import FakeClock
 from joulewise.schemas import RuntimeBackend
@@ -42,6 +43,15 @@ def endpoint(family="qwen3_8", text="", finish_reason="length", **kwargs):
 
 
 class XmlFixRoundTests(unittest.TestCase):
+    def test_unverified_122b_template_is_explicitly_unsupported(self):
+        for family in ("qwen3_5_moe", "qwen3_5_moe_text", "qwen3.5_moe"):
+            with self.subTest(family=family):
+                self.assertNotIn(family, XML_MODEL_FAMILIES)
+                with self.assertRaisesRegex(ValueError, "unverified_xml_template"):
+                    endpoint(family)
+                with self.assertRaisesRegex(ValueError, "unverified_xml_template"):
+                    endpoint("qwen3.8", prepare_metadata={"model_config_name": family})
+
     def test_dotted_families_select_xml_and_split_history(self):
         for family in ("qwen3.5", "qwen3.8"):
             with self.subTest(family=family):

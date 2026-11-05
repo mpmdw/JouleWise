@@ -17,9 +17,12 @@ from joulewise.align.interfaces import ToolCallRequest
 
 # HF model_type spellings; qwen3_moe and qwen3_next deliberately stay JSON.
 XML_MODEL_FAMILIES = frozenset({
-    "qwen3_5", "qwen3_5_moe", "qwen3_5_text", "qwen3_5_moe_text",
+    "qwen3_5", "qwen3_5_text",
     "qwen3_8", "qwen3_8_moe", "qwen3_8_text", "qwen3_8_moe_text",
 })
+# Reserve F's pinned template uses Python scalar spellings via |string. Do
+# not advertise this family until its schema decoding and replay are verified.
+UNVERIFIED_XML_FAMILIES = frozenset({"qwen3_5_moe", "qwen3_5_moe_text"})
 
 
 def normalize_model_family(family):
@@ -34,6 +37,8 @@ def normalize_model_family(family):
 def validate_model_family(family, prepared, model_config=None):
     """Refuse contradictory configured and loaded wire protocols before a turn."""
     family = normalize_model_family(family)
+    if family in UNVERIFIED_XML_FAMILIES:
+        raise ValueError(f"unverified_xml_template:{family}")
     artifact_types = [prepared.get("model_config_name")]
     if isinstance(model_config, Mapping):
         artifact_types.append(model_config.get("model_type"))
@@ -41,6 +46,8 @@ def validate_model_family(family, prepared, model_config=None):
         if isinstance(text_config, Mapping):
             artifact_types.append(text_config.get("model_type"))
     for artifact in filter(None, artifact_types):
+        if normalize_model_family(artifact) in UNVERIFIED_XML_FAMILIES:
+            raise ValueError(f"unverified_xml_template:{artifact}")
         if (normalize_model_family(artifact) in XML_MODEL_FAMILIES) != (family in XML_MODEL_FAMILIES):
             raise ValueError(f"model_family_artifact_mismatch:{family}:{artifact}")
     return family
