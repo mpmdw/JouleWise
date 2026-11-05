@@ -207,3 +207,14 @@ observed failing before its fix; final commit mapping and checks follow below.
   cannot establish remote identity. Lead must supply a revision-authenticated
   manifest/weight-total pin before live qualification. Existing file hashes and
   byte differences remain diagnostics, not a claim of revision authentication.
+
+- G7 / MEDIUM idle-only/exit-code-only SMC: request `--gpu-step`, allow 2,400 s
+  for the roughly 1,500 s protocol, and require resolved distinct s_fast/s_slow
+  values from r0.json. Missing, malformed or unrecognized receipt schemas are
+  inconclusive; exit 0 cannot certify thermometry. Regression fails before and
+  passes after for no receipt, two selected keys and unresolved slow key.
+  **Integration uncertainty:** #658 exists per the review, but neither its source
+  nor its ref is present locally. The adapter currently reads top-level
+  s_fast/s_slow keys named by the review. The exact receipt nesting/types and
+  step CLI remain to be checked against #658 before live use; unknown shapes
+  fail closed. Requested its local commit from the lead; no network fetch ran.

@@ -72,8 +72,13 @@ accepts `reasoning_effort`. Integrate the SMC lane before live R0. Do not run th
    checks passed; **`complete_r0: true` requires every check for D**.
    Both files are updated after each check. Preserve failed/partial attempts.
    Local model SHA-256 lists authenticate the observed bytes only, not an HF
-   revision. The SMC hook calls `scripts/align_smc_enumerate.py --output DIR`;
-   absence is `unavailable`, never a pass. Confirm this CLI when that lane lands.
+   revision. The SMC hook calls
+   `scripts/align_smc_enumerate.py --output DIR --gpu-step` with a 2,400 s timeout
+   for the roughly 1,500 s default step protocol. Exit 0 alone is insufficient:
+   `r0.json` must resolve distinct `s_fast`/`s_slow` sensor keys. Missing output,
+   unresolved selection or an unrecognized schema is inconclusive, never a pass.
+   The exact #658 output schema must be checked when that lane is integrated;
+   its source is absent from this clone's cached refs.
 
 Interpretation: NLL uses the first 2,049 rendered benign SHADE IDs (2,048 next-token
 targets), ≤3.0 nats/token. Synthetic rewrite tables diagnose templates; **generated**

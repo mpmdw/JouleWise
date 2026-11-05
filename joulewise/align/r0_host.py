@@ -226,9 +226,44 @@ def smc_enumeration(repo, output):
     if not script.is_file():
         return {"status": "unavailable", "reason": "SMC lane not integrated"}
     import sys
-    result = subprocess.run([sys.executable, "-B", str(script), "--output", str(output)],
-                            capture_output=True, text=True, timeout=180)
-    return {"status": "pass" if result.returncode == 0 else "fail",
-            "argv": [str(script), "--output", str(output)], "exit_code": result.returncode,
-            "stdout": result.stdout, "stderr": result.stderr,
-            "note": "Enumeration only; R1 must qualify fast/slow sensor classes."}
+    argv = [sys.executable, "-B", str(script), "--output", str(output), "--gpu-step",
+            "--idle-seconds", "600", "--load-seconds", "60", "--recovery-seconds", "600"]
+    result = subprocess.run(argv, capture_output=True, text=True, timeout=2400)
+    receipt = {"status": "fail" if result.returncode else "inconclusive",
+               "argv": argv, "exit_code": result.returncode, "timeout_seconds": 2400,
+               "stdout": result.stdout, "stderr": result.stderr,
+               "smc_source_commit": "274fec2cb2fcc301798c91140e51c244c2469988",
+               "qualification_blocker": (
+                   "Amendment 1 requires a 60 s step; #658 requires 120 < tau < load duration "
+                   "to resolve S_slow. Lead must rule on a separate longer characterization step."),
+               "note": "Idle plus load-step selection; R1 still owns thermal-control qualification."}
+    if result.returncode:
+        return receipt
+    try:
+        payload = json.loads((Path(output) / "r0.json").read_text())
+        if payload["schema"] != "joulewise.align_smc_r0.v1" or payload["gpu_step"] is not True:
+            raise ValueError("not a #658 GPU-step receipt")
+        selection = {name: payload["response"][name] for name in ("s_fast", "s_slow")}
+        resolved = all(isinstance(v, str) and re.fullmatch(r"T[!-~]{3}", v) for v in selection.values())
+        resolved = resolved and selection["s_fast"] != selection["s_slow"]
+        receipt.update(selection=selection)
+        coverage = payload["coverage"]
+        readable = resolved and coverage["period_ns"] == 1_000_000_000
+        if readable:
+            for key in selection.values():
+                stats = coverage["per_key"][key]
+                expected, valid = stats["expected_samples"], stats["valid_samples"]
+                readable = readable and (type(expected) is int and type(valid) is int
+                                        and expected >= 600 and 0 <= valid <= expected and valid / expected > .99)
+        receipt["readability_bar_met"] = bool(readable)
+        # The exact source's class fit cannot succeed with the ruled 60 s
+        # step. Never silently substitute its 600 s default or certify R0.
+        if not resolved:
+            receipt["reason"] = "SMC die/heatsink selection unresolved"
+        elif not readable:
+            receipt["reason"] = "SMC selected-key coverage does not meet 1 Hz / <1% errors / 10 min"
+        else:
+            receipt["reason"] = receipt["qualification_blocker"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        receipt["reason"] = f"SMC r0.json selection unavailable: {exc}"
+    return receipt

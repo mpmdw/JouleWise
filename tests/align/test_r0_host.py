@@ -182,8 +182,27 @@ class R0HostTest(unittest.TestCase):
             (root / "scripts").mkdir()
             (root / "scripts/align_smc_enumerate.py").write_text("# fake hook")
             with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "enumerated", "")) as call:
-                self.assertEqual(smc_enumeration(root, root / "output")["status"], "pass")
-                self.assertEqual(call.call_args.args[0][-2:], ["--output", str(root / "output")])
+                self.assertEqual(smc_enumeration(root, root / "output")["status"], "inconclusive")
+                self.assertIn("--gpu-step", call.call_args.args[0])
+                argv = call.call_args.args[0]
+                self.assertEqual(argv[argv.index("--load-seconds") + 1], "60")
+                self.assertEqual(argv[argv.index("--idle-seconds") + 1], "600")
+                self.assertGreaterEqual(call.call_args.kwargs["timeout"], 1800)
+                output = root / "output"
+                output.mkdir()
+                payload = {"schema": "joulewise.align_smc_r0.v1", "gpu_step": True,
+                           "response": {"s_fast": "TC0P", "s_slow": "TH0P"},
+                           "coverage": {"period_ns": 1_000_000_000, "per_key": {
+                               key: {"expected_samples": 1260, "valid_samples": 1260, "sample_fraction": 1.0}
+                               for key in ("TC0P", "TH0P")}}}
+                (output / "r0.json").write_text(json.dumps(payload))
+                result = smc_enumeration(root, output)
+                self.assertEqual(result["selection"], payload["response"])
+                self.assertEqual(result["status"], "inconclusive")
+                self.assertIn("60 s", result["qualification_blocker"])
+                payload["response"]["s_slow"] = None
+                (output / "r0.json").write_text(json.dumps(payload))
+                self.assertEqual(smc_enumeration(root, output)["status"], "inconclusive")
 
 
 if __name__ == "__main__":
