@@ -261,7 +261,9 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(len(ordered), 2)
 
     def test_spec_legacy_bytes_and_governed_policy_digest(self):
-        spec = episode_spec(hidden=False)
+        # None represents a historical omitted checkpoint field. New specs
+        # explicitly carry the rebuild-only default 0 in their policy hash.
+        spec = replace(episode_spec(hidden=False), hybrid_checkpoint_limit=None)
         # Explicit pre-controls contract; adding optional dataclass fields must
         # not silently change the legacy serialization oracle.
         legacy = {key: asdict(spec)[key] for key in ('task_factory', 'condition', 'seed',
@@ -285,6 +287,9 @@ class CacheTests(unittest.TestCase):
                                                 'requested_temperature': spec.temperature, 'max_tokens': spec.max_tokens})
         self.assertEqual(identity(spec), identity(replace(spec, prompt_cache=None)))
         self.assertNotEqual(identity(spec), identity(replace(spec, prompt_cache='episode_prefix')))
+        self.assertEqual(EpisodeSpec.from_text(spec.to_text()).to_text(), spec.to_text())
+        self.assertNotEqual(identity(spec), identity(replace(spec, hybrid_checkpoint_limit=0)))
+        self.assertEqual(len({identity(replace(spec, hybrid_checkpoint_limit=limit)) for limit in (0, 1, 2)}), 3)
         native = MlxRuntimeAdapter(FakeClock())
         native._mlx_lm = SimpleNamespace(make_sampler=lambda **kwargs: kwargs,
                                          stream_generate=lambda *args, **kwargs: iter(()))

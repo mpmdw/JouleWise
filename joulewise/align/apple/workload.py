@@ -68,12 +68,15 @@ class EpisodeSpec:
     warmup_condition: Condition | None = None
     assistant_history: str | None = None
     chat_template_kwargs: Mapping[str, Any] | None = None
+    # Fix per model before its first measured window; splitting the prefill
+    # changes every hybrid turn's computation schedule and token trajectory.
+    hybrid_checkpoint_limit: int | None = 0
 
     def to_text(self) -> str:
         value = asdict(self)
         for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds",
                     "max_episode_decode_tokens", "deadman_s", "thermal", "warmup_condition",
-                    "assistant_history", "chat_template_kwargs"):
+                    "assistant_history", "chat_template_kwargs", "hybrid_checkpoint_limit"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -93,6 +96,9 @@ class EpisodeSpec:
         ):
             raise ValueError("mock_turns must contain mappings")
         obj["mock_turns"] = tuple(mock_turns)
+        # Omission is the legacy identity (effective limit zero). New specs
+        # serialize their explicit default 0; None round-trips as omission.
+        obj.setdefault("hybrid_checkpoint_limit", None)
         spec = cls(**obj)
         if spec.condition not in ("benign", "sabotage"):
             raise ValueError("unknown episode condition")
@@ -110,6 +116,10 @@ class EpisodeSpec:
             raise ValueError("max_context_tokens must be a positive integer or null")
         if spec.prompt_cache not in (None, "episode_prefix"):
             raise ValueError("prompt_cache must be episode_prefix or null")
+        if spec.hybrid_checkpoint_limit is not None and (
+            type(spec.hybrid_checkpoint_limit) is not int or spec.hybrid_checkpoint_limit < 0
+        ):
+            raise ValueError("hybrid_checkpoint_limit must be a nonnegative integer or null")
         if type(spec.temperature) not in (int, float) or not math.isfinite(spec.temperature):
             raise ValueError("temperature must be numeric and finite")
         if spec.sampler is not None:
@@ -302,6 +312,15 @@ class EpisodeRuntimeAdapter:
                 "accounting_version": "represented_ids_v1",
                 "repetition": "observe_only",
             }
+            from joulewise.align.apple.prompt_cache import hybrid_checkpoint_policy
+            checkpoint = hybrid_checkpoint_policy(getattr(self.runtime, "_model_config", None), spec.hybrid_checkpoint_limit)
+            if checkpoint is not None:
+                metadata["sampler"]["execution_policy"].update(
+                    fallback="checkpoint_then_whole_cache_rebuild_on_untrimmable_rewrite",
+                    checkpoint=checkpoint,
+                )
+        if spec.hybrid_checkpoint_limit is not None:
+            metadata["sampler"].setdefault("execution_policy", {})["hybrid_checkpoint_limit"] = spec.hybrid_checkpoint_limit
         template_policy = template_execution_policy(
             config.model.family, spec.assistant_history, spec.chat_template_kwargs, spec.enable_thinking)
         if template_policy:
@@ -399,6 +418,7 @@ class EpisodeRuntimeAdapter:
             **({"deadman": deadman, "enforce_turn_cap": True}
                if deadman is not None or spec.max_episode_decode_tokens is not None else {}),
             assistant_history=spec.assistant_history, chat_template_kwargs=spec.chat_template_kwargs,
+            hybrid_checkpoint_limit=spec.hybrid_checkpoint_limit,
         )
         task = self.task
         from joulewise.align.runner import RepetitionObserver
