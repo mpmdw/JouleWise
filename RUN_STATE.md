@@ -10,19 +10,6 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-## 2026-11-05 — block-5 post-release preparation (unmerged branch)
-
-Prepared `lane/2026-11-05-b5-post-release-fixes` from cached `origin/main`
-`92026c1849`. Items a/c/d/e/f are implemented; accounting b is NEEDS-LEAD
-and the D-178 successor g is a NEEDS-ED draft only. 104 targeted tests passed;
-pytest is unavailable, so targeted stdlib unittest modules were used. No full
-suite, network, measurement pipeline or real-data equivalence run was performed.
-The checkout's `.git` is read-only: seven commits live in separate local Git
-metadata and a prerequisite bundle in `/private/tmp`. Do not merge or use this
-branch for the release analysis. [Plan](POSTRELEASE_PLAN.md),
-[PR draft](.pr/post-release-fixes.md), and
-[full handoff](docs/run_reports/2026-11-05-b5-post-release-fixes.md).
-
 **▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
 
 What happened. BETA attempt 1 (`v5-b5-beta-a1-20261010T0742Z`) ran its whole chain; the pinned harvest gave it one window-removing code, `neg8.screen_failed` (`harvest.json` sha256 `f0d72323b67d075db29a5c136d087222284a6d4651d130549f9dbd5a82d6ec7d`). No physical measurement removed it. One end reference (a short run of a fixed small workload, used to check that the machine did not drift between a window's start and end) was aborted at run time; the chain ran its spare; the spare left no result directory; and the sealed program that writes the window's verdict then recorded none of the window's stage lists as its source. The registered harvest rule re-runs the drift check only on the references that verdict names, so the check was never run, although two start and two end references survive, which is enough. Records: `docs/process_traces/2026-10-block5/seal2-beta-a1-window.md`, `seal2-beta-a1-consult.md`.
@@ -7325,7 +7312,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-05). Latest report: [Block-5 post-release branch prepared; accounting NEEDS-LEAD and successor NEEDS-ED; integration held until release](docs/run_reports/2026-11-05-b5-post-release-fixes.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
 
 ### [ED-EXTERNAL]
 
