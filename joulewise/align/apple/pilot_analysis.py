@@ -147,7 +147,18 @@ def check_turns(episode, rows, spec, config, transcript, *, expected_episode_see
     def status(checks):
         return 'fail' if any(r['status'] == 'fail' for r in checks) else 'pass' if checks and all(r['status'] == 'pass' for r in checks) else 'not_evaluated'
     seed_matches = base == expected_episode_seed if expected_episode_seed is not None else None
-    return {'identity_turns': identities, 'accounting_check': {'status': status(accounting), 'turns': accounting},
+    # The v3 desk expands these results into each member summary. Only opt-in
+    # specs add fields, preserving legacy desk output and separating new limits
+    # in its existing configuration-based grouping.
+    budget = episode.hardware.get('token_budget')
+    extra = {}
+    if budget is not None:
+        extra = {'token_budget': budget, 'configuration': {
+            **{k: getattr(spec, k) for k in ('enable_thinking', 'sampler', 'prompt_cache',
+                'max_context_tokens', 'max_episode_seconds', 'max_episode_decode_tokens', 'deadman_s',
+                'max_tokens', 'max_turns')},
+            'model': config.model.name}}
+    return {**extra, 'identity_turns': identities, 'accounting_check': {'status': status(accounting), 'turns': accounting},
             'sampler_check': {'status': 'fail' if spec.sampler and seed_matches is False else status(samplers),
                               'preregistered_episode_seed_matches_bundle': seed_matches, 'turns': samplers},
             'sampler_seed_inputs': {'model_id': model, 'thinking': thinking, 'task_pair': episode.task_pair,
@@ -163,6 +174,7 @@ def episode_ineligibility_reasons(member):
     # Only replace this one registered exclusion for the labelled alternative.
     other = [c for c in member.get('exclusion_codes', []) if c != 'thermal.os_level_nonzero']
     s = member['summary']
+    other.extend(f for f in s.get('flags', ()) if f.startswith('episode.deadman:'))
     thermal = s.get('os_thermal', {}).get('os_level_nonzero_in_episode')
     if thermal is None:
         other.append('no_valid_os_reading_inside_or_bracketing_episode')
@@ -181,7 +193,8 @@ def residual_analysis(members):
     output = []
     for config, members in sorted(configurations.items()):
         scopes = {}
-        for scope, eligible in (('registered', lambda m: not m.get('excluded')),
+        for scope, eligible in (('registered', lambda m: not m.get('excluded') and not any(
+                                    f.startswith('episode.deadman:') for f in m['summary'].get('flags', ()))),
                                 ('episode_scope_alternative', episode_eligible),
                                 ('all_members_diagnostic', lambda m: True)):
             unique = {}
