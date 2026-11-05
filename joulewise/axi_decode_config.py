@@ -27,17 +27,15 @@ EVENT_TOP_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
 
 
+
 from joulewise.strict_io import (
     json_pretty_utf8 as normalized_json_bytes,
+    json_utf8_bytes as canonical_json_bytes,
     sha256_value as sha256_bytes,
 )
 
 class AxiSchemaError(ValueError):
     """An AXI config or v2 wire object violates the frozen schema."""
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def _int(value: Any, where: str, minimum: int = 0) -> int:

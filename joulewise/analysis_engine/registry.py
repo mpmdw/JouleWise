@@ -16,8 +16,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 
+
 from joulewise.strict_io import (
     json_pretty_utf8 as normalized_json_bytes,
+    json_utf8_bytes as canonical_json_bytes,
     sha256_value as sha256_bytes,
 )
 
@@ -237,10 +239,6 @@ def _strict_json_admission_bytes(raw: bytes, label: str) -> Any:
             f"{forbidden}",
         )
     return value
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def canonical_jsonl_bytes(rows: Iterable[Mapping[str, Any]]) -> bytes:

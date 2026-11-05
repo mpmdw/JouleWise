@@ -159,7 +159,9 @@ AUTHORIZED_PLANNED_N_BLOCKS = {5, 10}
 REGISTRY_FREEZE_BASIS = "window_a_variance_mde_before_campaign_execution"
 
 
+
 from joulewise.strict_io import (
+    json_utf8_bytes as canonical_json_bytes,
     sha256_value as sha256_bytes,
 )
 
@@ -208,15 +210,6 @@ def _resolve_repository_paths(
         registry_path if registry_path is not None else root / REGISTRY_RELATIVE_PATH,
         ap_path if ap_path is not None else root / AP_RELATIVE_PATH,
     )
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
 
 
 def calculate_manifest_id(value: Mapping[str, Any]) -> str:
