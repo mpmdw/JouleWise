@@ -863,6 +863,11 @@ class GatedDeltaNet(nn.Module):
         self.key_dim = self.hk * self.dk
         self.value_dim = self.hv * self.dv
         self.conv_dim = 2 * self.key_dim + self.value_dim
+        # mlx-lm's Metal gated_delta_kernel splits Dk over one 32-lane
+        # simdgroup (n_per_t = Dk / 32): Dk < 32 fails to compile and any
+        # other non-multiple of 32 silently covers only part of the key dims.
+        # Such configs use the exact ops recurrence instead.
+        self.metal_kernel_ok = self.dk % 32 == 0
         self.kernel = args.linear_conv_kernel_dim
         self.conv1d = DepthwiseConv(self.conv_dim, self.kernel)
         self.in_proj_qkv = nn.Linear(self.hidden, self.conv_dim, bias=False)
@@ -909,7 +914,7 @@ class GatedDeltaNet(nn.Module):
         state = cache[1] if cache is not None and cache[1] is not None else None
         if state is None:
             state = mx.zeros((B, self.hv, self.dv, self.dk), dtype=_F32)
-        if mx.default_device() == mx.gpu and mx.metal.is_available():
+        if self.metal_kernel_ok and mx.default_device() == mx.gpu and mx.metal.is_available():
             out, state = gated_delta_kernel(q, k, v, decay, beta, state)
         else:
             out, state = gated_delta_ops(q, k, v, decay, beta, state)

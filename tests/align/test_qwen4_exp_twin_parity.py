@@ -663,6 +663,12 @@ REG_GDN = {
     "k4_segments": {"over": {}, "segments": [2, 70, 1, 1, 64, 3, 1], "seed": 0},
     # kernel 1: zero-length conv history (the cache kept the whole sequence)
     "k1_segments": {"over": {"linear_conv_kernel_dim": 1}, "segments": [3, 1, 1, 4], "seed": 0},
+    # key head dims that are not a multiple of 32 (the Metal kernel's simdgroup
+    # split): 48 silently covered 32 of 48 dims, 16 failed to compile
+    "dk48": {"over": {"linear_key_head_dim": 48}, "segments": [9, 1], "seed": 0,
+             "devices": ("gpu", "cpu")},
+    "dk16": {"over": {"linear_key_head_dim": 16}, "segments": [9, 1], "seed": 0,
+             "devices": ("gpu", "cpu")},
 }
 # Tiny full model at the edges of the config space, converted like the main
 # checkpoint. Reference logits are an UNCACHED prefill: with
@@ -1119,6 +1125,11 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
                 r = self._gdn(f"{name}/fp32/gpu")
                 self.assertLessEqual(r["max_abs"], TOL["fp32_vs_ref"], r["seg_max_abs"])
                 self.assertEqual(r["conv_cache_len"], r["kernel"] - 1)
+
+    def test_regress_deltanet_key_dims_not_multiple_of_32(self):
+        for key in ("dk48/fp32/gpu", "dk48/fp32/cpu", "dk16/fp32/gpu", "dk16/fp32/cpu"):
+            with self.subTest(case=key):
+                self.assertLessEqual(self._gdn(key)["max_abs"], TOL["fp32_vs_ref"])
 
     def test_regress_kernel1_convs_cached_decode(self):
         # DeltaNet and PLE short convs with kernel 1, cached decode in uneven

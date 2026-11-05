@@ -44,8 +44,12 @@ reference's fp32 `l2norm(eps=1e-6)` on the sum of squares, q is scaled by
 Dk^-0.5, beta is `sigmoid(b)` in the model dtype, and
 `g = -exp(A_log)·softplus(a + dt_bias)` is computed in fp32. The recurrence
 uses mlx-lm's Metal `gated_delta_kernel` (fp32 state [B, Hv, Dv, Dk]) for both
-prefill and decode, with a CPU ops fallback. The output gate is a
-norm-before-gate RMSNorm with `output_gate_type` (sigmoid for the release).
+prefill and decode. The exact ops recurrence (`gated_delta_ops`) runs on CPU,
+and also on GPU whenever `linear_key_head_dim` is not a multiple of 32: the
+kernel splits Dk over one 32-lane simdgroup, so Dk = 48 silently covered 32
+of the 48 key dims and Dk < 32 does not compile. The release has Dk = 128.
+The output gate is a norm-before-gate RMSNorm with `output_gate_type`
+(sigmoid for the release).
 Padding is handled as in the reference: inputs at padded positions are
 zeroed, so state stays zero.
 
