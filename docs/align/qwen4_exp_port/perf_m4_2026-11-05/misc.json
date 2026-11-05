@@ -1,0 +1,111 @@
+{
+ "meta": {
+  "device": {
+   "device_name": "Apple M4",
+   "max_recommended_working_set_size": 17179885568,
+   "memory_size": 25769803776,
+   "architecture": "applegpu_g16g",
+   "max_buffer_length": 12884901888,
+   "resource_limit": 499000
+  },
+  "mlx": "0.31.2",
+  "python": "3.13.18",
+  "machine": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+  "peak_memory_MB": 3824.68614,
+  "argv": [
+   "--suite",
+   "misc",
+   "--iters",
+   "9",
+   "--other-bits",
+   "8",
+   "4",
+   "bf16",
+   "--json",
+   "/private/tmp/jwsupport-tmp/bench/final_misc.json"
+  ]
+ },
+ "results": [
+  {
+   "suite": "hyper_connection",
+   "bits": 8,
+   "T": 1,
+   "weight_MB": 7.04512,
+   "median_ms": 0.23026909305675267,
+   "p10_ms": 0.15902908368540616,
+   "p90_ms": 0.4785438334996191
+  },
+  {
+   "suite": "hyper_connection",
+   "bits": 8,
+   "T": 512,
+   "weight_MB": 7.04512,
+   "median_ms": 8.175353985279799,
+   "p10_ms": 5.594333459157497,
+   "p90_ms": 10.579916532151401
+  },
+  {
+   "suite": "lm_head",
+   "bits": 8,
+   "T": 1,
+   "weight_MB": 675.4304,
+   "median_ms": 8.447165950201452,
+   "p10_ms": 7.8968750312924385,
+   "p90_ms": 8.85312503669411
+  },
+  {
+   "suite": "hyper_connection",
+   "bits": 4,
+   "T": 1,
+   "weight_MB": 3.76832,
+   "median_ms": 0.14826822977435464,
+   "p10_ms": 0.10164583242537144,
+   "p90_ms": 0.2955755214012849
+  },
+  {
+   "suite": "hyper_connection",
+   "bits": 4,
+   "T": 512,
+   "weight_MB": 3.76832,
+   "median_ms": 7.0623749634251,
+   "p10_ms": 4.747874976601452,
+   "p90_ms": 8.380916493479162
+  },
+  {
+   "suite": "lm_head",
+   "bits": 4,
+   "T": 1,
+   "weight_MB": 357.5808,
+   "median_ms": 7.19341600779444,
+   "p10_ms": 4.5617499854415655,
+   "p90_ms": 8.691582945175469
+  },
+  {
+   "suite": "hyper_connection",
+   "bits": null,
+   "T": 1,
+   "weight_MB": 13.18912,
+   "median_ms": 0.2617595418996643,
+   "p10_ms": 0.24480426024335125,
+   "p90_ms": 0.3667803854720357
+  },
+  {
+   "suite": "hyper_connection",
+   "bits": null,
+   "T": 512,
+   "weight_MB": 13.18912,
+   "median_ms": 7.024749997071922,
+   "p10_ms": 4.55756246810779,
+   "p90_ms": 10.151395457796752
+  },
+  {
+   "suite": "lm_head",
+   "bits": null,
+   "T": 1,
+   "weight_MB": 1271.3984,
+   "median_ms": 19.44891596212983,
+   "p10_ms": 14.341375092044473,
+   "p90_ms": 27.299333014525473
+  }
+ ]
+}

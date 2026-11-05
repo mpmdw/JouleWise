@@ -1,0 +1,148 @@
+{
+ "meta": {
+  "device": {
+   "device_name": "Apple M4",
+   "max_recommended_working_set_size": 17179885568,
+   "memory_size": 25769803776,
+   "architecture": "applegpu_g16g",
+   "max_buffer_length": 12884901888,
+   "resource_limit": 499000
+  },
+  "mlx": "0.31.2",
+  "python": "3.13.18",
+  "machine": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+  "peak_memory_MB": 269.828354,
+  "argv": [
+   "--suite",
+   "gdn",
+   "--iters",
+   "9",
+   "--other-bits",
+   "8",
+   "4",
+   "bf16",
+   "--json",
+   "/private/tmp/jwsupport-tmp/bench/final_gdn.json"
+  ]
+ },
+ "results": [
+  {
+   "suite": "gdn_kernel",
+   "variant": "native_bf16_qk",
+   "T": 1,
+   "median_ms": 0.15730208380975658,
+   "p10_ms": 0.149368056251357,
+   "p90_ms": 0.16157869443607828
+  },
+  {
+   "suite": "gdn_kernel",
+   "variant": "adapter_fp32_qk",
+   "T": 1,
+   "median_ms": 0.16448033339757887,
+   "p10_ms": 0.15953124966472387,
+   "p90_ms": 0.2493669162504375
+  },
+  {
+   "suite": "gdn_kernel",
+   "variant": "native_bf16_qk",
+   "T": 512,
+   "median_ms": 8.170958957634866,
+   "p10_ms": 6.89241592772305,
+   "p90_ms": 14.677541912533343
+  },
+  {
+   "suite": "gdn_kernel",
+   "variant": "adapter_fp32_qk",
+   "T": 512,
+   "median_ms": 7.945958990603685,
+   "p10_ms": 7.557915989309549,
+   "p90_ms": 8.209333987906575
+  },
+  {
+   "suite": "gdn_conv",
+   "variant": "explicit_fma",
+   "T": 1,
+   "median_ms": 0.0963611107888735,
+   "p10_ms": 0.09032291644770238,
+   "p90_ms": 0.11146180461057359
+  },
+  {
+   "suite": "gdn_conv",
+   "variant": "mx_conv1d_groups",
+   "T": 1,
+   "median_ms": 0.0235648347168333,
+   "p10_ms": 0.02243055496364832,
+   "p90_ms": 0.02904283529561427
+  },
+  {
+   "suite": "gdn_conv",
+   "variant": "explicit_fma",
+   "T": 512,
+   "median_ms": 7.367915939539671,
+   "p10_ms": 7.230291957966983,
+   "p90_ms": 8.545042015612125
+  },
+  {
+   "suite": "gdn_conv",
+   "variant": "mx_conv1d_groups",
+   "T": 512,
+   "median_ms": 1.8236669711768627,
+   "p10_ms": 1.7402080120518804,
+   "p90_ms": 2.1751249441877007
+  },
+  {
+   "suite": "gdn_layer",
+   "bits": 8,
+   "T": 1,
+   "weight_MB": 61.6192,
+   "median_ms": 0.9797696677398764,
+   "p10_ms": 0.8872083336528804,
+   "p90_ms": 1.1781724428551064
+  },
+  {
+   "suite": "gdn_layer",
+   "bits": 8,
+   "T": 512,
+   "weight_MB": 61.6192,
+   "median_ms": 39.62487506214529,
+   "p10_ms": 31.729166046716273,
+   "p90_ms": 43.2024160400033
+  },
+  {
+   "suite": "gdn_layer",
+   "bits": 4,
+   "T": 1,
+   "weight_MB": 32.66048,
+   "median_ms": 0.668799779507228,
+   "p10_ms": 0.6192731412334574,
+   "p90_ms": 1.4162743076061208
+  },
+  {
+   "suite": "gdn_layer",
+   "bits": 4,
+   "T": 512,
+   "weight_MB": 32.66048,
+   "median_ms": 42.314000078476965,
+   "p10_ms": 33.13979099038988,
+   "p90_ms": 45.32816703431308
+  },
+  {
+   "suite": "gdn_layer",
+   "bits": null,
+   "T": 1,
+   "weight_MB": 115.9168,
+   "median_ms": 1.866428249437983,
+   "p10_ms": 1.5167523330698411,
+   "p90_ms": 2.215796305487553
+  },
+  {
+   "suite": "gdn_layer",
+   "bits": null,
+   "T": 512,
+   "weight_MB": 115.9168,
+   "median_ms": 42.112833936698735,
+   "p10_ms": 29.62749998550862,
+   "p90_ms": 61.444624909199774
+  }
+ ]
+}
