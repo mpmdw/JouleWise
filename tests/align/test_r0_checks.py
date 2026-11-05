@@ -101,7 +101,7 @@ class R0ChecksTest(unittest.TestCase):
         synthetic = r0.template_rewrites(backend)
         generated = r0.generated_rewrites(backend)
         self.assertEqual(len(synthetic["transitions"]), 12)
-        self.assertEqual(synthetic["status"], "pass")
+        self.assertEqual(synthetic["status"], "diagnostic")
         self.assertEqual(generated["status"], "pass")
         self.assertNotEqual(synthetic["evidence"], generated["evidence"])
 
@@ -163,7 +163,34 @@ class R0ChecksTest(unittest.TestCase):
             self.assertEqual(r0.ladder(FakeBackend(), "D")["selected"], "xhigh")
         turns[1]["reasoning_tokens"] = turns[2]["reasoning_tokens"] = turns[3]["reasoning_tokens"] = 2049
         with patch.object(r0, "screen_episode", return_value={"turns": turns}):
-            self.assertEqual(r0.ladder(FakeBackend(), "D")["status"], "fail")
+            self.assertEqual(r0.ladder(FakeBackend(), "D")["status"], "fallback")
+
+    def test_decisions_are_successful_checks_and_template_is_diagnostic(self):
+        backend = FakeBackend()
+        with patch.object(backend, "render", return_value=[999]):
+            result = r0.template_rewrites(backend)
+        self.assertFalse(result["prefix_stable"])
+        self.assertEqual(result["status"], "diagnostic")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(r0, "checkpoint_verdict", return_value={"status": "required"}), \
+                    patch.object(r0, "ladder", return_value={"status": "fallback", "selected": None, "rungs": []}):
+                report = execute(config_at(root), root, ["generated", "ladder", "template"], ["D"],
+                                 guard=FakeGuard(), backend_factory=FakeBackend)
+            self.assertEqual(report["status"], "pass")
+            self.assertIn("required", [r["status"] for r in report["checks"]])
+
+    def test_coherence_format_and_echo_are_diagnostics_but_nll_is_a_bar(self):
+        from dataclasses import replace
+        class Backend(FakeBackend):
+            def chat(self, *args, **kwargs):
+                result = super().chat(*args, **kwargs)
+                return replace(result, content="\\boxed{42}") if result.content == "42" else replace(result, tool_calls=())
+        result = r0.load_coherence(Backend())
+        self.assertEqual(result["status"], "pass")
+        self.assertFalse(result["coherent"])
+        self.assertFalse(result["tool_round_trip"]["succeeded"])
+        self.assertNotIn("exactly once", r0.ECHO_PROMPT)
 
     def test_episode_enforces_decode_ceiling_and_seed_law(self):
         result = r0.screen_episode(FakeBackend(), "D", r0.PAIRS[0], 91, 4096, budget=4300)

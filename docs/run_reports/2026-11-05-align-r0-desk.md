@@ -179,3 +179,11 @@ observed failing before its fix; final commit mapping and checks follow below.
   in-flight work interrupted. Three regressions failed before and pass after,
   including reading the partial receipt from disk inside a timed-out retry.
   Runbook gives D's token/time calculation and a 14,400 s slow-host override.
+
+- G8 / LOW extra load bars and outcome semantics: coherence/echo are diagnostic,
+  NLL remains a gate, and the echo instruction consistently asks for one call
+  per turn. Template is diagnostic-only. Checkpoint `required` and ladder
+  `fallback` are completed selection decisions, recorded separately as pending
+  lead action rather than run failures. Inconclusive/error results still fail
+  completion. Two regressions fail before/pass after. A completed R0 does not
+  authorize R1 or waive the resulting checkpoint/fallback actions.

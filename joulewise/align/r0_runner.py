@@ -180,10 +180,15 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             finally:
                 if backend is not None:
                     backend.close()
-        bad = [r for r in report["checks"] if r["status"] not in {"pass", "not_required"}]
+        outcomes = {"checkpoint": {"required", "not_required"}, "ladder": {"pass", "fallback"},
+                    "template": {"diagnostic"}}
+        bad = [r for r in report["checks"] if r["status"] not in outcomes.get(r["check"], {"pass"})]
         report["status"] = "fail" if bad else "pass"
         report["complete_r0"] = (set(checks) == set(CHECKS) and set(models) == {"N", "D"}
                                   and not bad and report["evidence_kind"] == "live_desk")
+        report["decisions_pending_lead_action"] = [
+            {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
+            for row in report["checks"] if row["status"] in {"required", "fallback"}]
     except Refused as exc:
         report.update(status="refused", refusal=str(exc))
     except Exception as exc:
