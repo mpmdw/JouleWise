@@ -74,3 +74,32 @@ failures exposed the saved per-expert layout and tiny rank/group mismatch;
 both fixed. Quantized tensor conversion is **PENDING MLX device access**.
 `git diff --check` passed. No full suite run, per the explicit machine-load
 restriction.
+
+## Stage 4
+
+Added `test_qwen4_exp_parity.py`, a split-interpreter gold gate. The official
+194,564-parameter random fixture includes both attention types, QSA budget
+overflow, PLE/EOS hashing, nonzero PLE convolution and nonzero norm weights.
+It saves through Transformers, converts, then uses the pinned `load_model`
+custom-module seam. FP32 acceptance: atol 2e-5 / rtol 2e-4; bf16: atol .004 /
+rtol .02. Mixed quantization: atol .04 / rtol .15 plus RMSE <= .012. These
+are prospective gates, not measured MLX error bounds.
+
+The MLX worker checks HF prefill/stepwise parity, MLX prefill/stepwise/chunks,
+sparse causality, two-row left padding and cached continuation, native disk
+snapshot/restore (all recurrent/PLE states), attention-only prefix trim and
+re-prefill, QSA-cache quantization refusal and absence of GPU PLE parameters.
+The worker must actually run before any of those claims can be made.
+
+Because the provided MLX venv has no Torch, replaced the converter's Torch
+reader with a bounded NumPy safetensors reader that preserves bf16 bits.
+Conversion tests rerun: 3 PASS (6.938 s).
+
+`JW_QWEN_REF_PYTHON=/private/tmp/jwsol/venv-ref/bin/python
+JW_QWEN_MLX_PYTHON=/private/tmp/jwsol/venv-mlx/bin/python
+venv-ref/bin/python -B -m unittest tests.align.test_qwen4_exp_parity`:
+5 tests in 8.044 s, **2 reference tests PASS / 3 MLX tests SKIPPED** due to
+the unavailable Metal device. Official HF prefill vs stepwise max abs error:
+fp32 7.450580596923828e-08; bf16 0.0, on [1,11,64] logits. These numbers
+are HF self-consistency only. Cross-backend parity, MLX cache correctness and
+quantized conversion remain **UNVERIFIED, RELEASE BLOCKING**.

@@ -34,3 +34,45 @@ def reference_model(dtype="fp32"):
             if name.endswith("ple.conv1d.weight") or ("norm" in name and ".linear_attn.norm." not in name):
                 value.normal_(mean=0, std=.02)
     return model.to(torch.bfloat16 if dtype == "bf16" else torch.float32)
+
+
+def write_gold(directory, dtype):
+    import json
+    from pathlib import Path
+    import numpy as np
+    import torch
+    from scripts.align_convert_qwen4_exp import convert
+    model = reference_model(dtype)
+    directory = Path(directory)
+    directory.mkdir(parents=True)
+    model.save_pretrained(directory / "hf", max_shard_size="100KB")
+    ids = torch.tensor([[7, 8, 9, 10, 2, 12, 13, 14, 15, 16, 17]])
+    with torch.inference_mode():
+        prefill = model(ids, use_cache=False).logits.float().numpy()
+        cache, step = None, []
+        for i in range(ids.shape[1]):
+            out = model(ids[:, i:i + 1], past_key_values=cache, use_cache=True)
+            cache = out.past_key_values
+            step.append(out.logits.float().numpy())
+        step = np.concatenate(step, axis=1)
+    atol = 2e-5 if dtype == "fp32" else .004
+    np.testing.assert_allclose(prefill, step, atol=atol, rtol=2e-4 if dtype == "fp32" else .02)
+    np.savez(directory / "gold.npz", ids=ids.numpy(), prefill=prefill, stepwise=step)
+    evidence = dict(dtype=dtype, reference_prefill_stepwise_max_abs=float(np.max(np.abs(prefill - step))),
+                    parameters=sum(p.numel() for p in model.parameters()),
+                    logits_shape=list(prefill.shape), torch=torch.__version__)
+    (directory / "reference.json").write_text(json.dumps(evidence, indent=2) + "\n")
+    convert(directory / "hf", directory / "mlx", dtype, 32, dtype)
+    print(json.dumps(evidence))
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    p = argparse.ArgumentParser()
+    p.add_argument("output")
+    p.add_argument("--dtype", choices=("fp32", "bf16"), default="fp32")
+    a = p.parse_args()
+    write_gold(a.output, a.dtype)
