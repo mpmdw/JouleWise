@@ -353,7 +353,20 @@ class AnchorRegressionTests(unittest.TestCase):
             self.assertIsNone(spec.deadman_s)
 
     def test_120_second_guard_checks_only_at_turn_boundaries(self):
-        with tempfile.TemporaryDirectory() as d:
+        self._check_legacy_guard_hashes()
+
+    def test_legacy_anchor_hashes_with_symlinked_temp_root(self):
+        self._check_legacy_guard_hashes(symlinked=True)
+
+    def _check_legacy_guard_hashes(self, *, symlinked=False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            if symlinked:
+                target = root / 'physical'
+                target.mkdir()
+                root = root / 'alias'
+                root.symlink_to(target, target_is_directory=True)
+            d = str(root)
             clock = ScaledClock(20)
             with scale_work(clock):
                 bundle, status, _ = run_native_review(Path(d), 'think', clock,
@@ -385,7 +398,7 @@ class AnchorRegressionTests(unittest.TestCase):
             payloads['policy'] = json.dumps({k: provenance[k] for k in
                 ('sampler', 'output_policy', 'episode_outcome')}, sort_keys=True)
             for name, text in payloads.items():
-                normalized = text.replace(d, '<synthetic-root>')
+                normalized = text.replace(str(root.resolve()), '<synthetic-root>').replace(d, '<synthetic-root>')
                 self.assertEqual(hashlib.sha256(normalized.encode()).hexdigest(), expected[name], name)
 
 
