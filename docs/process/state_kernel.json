@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Blind block-5 Results renderer: candidate tooling and remaining lead gates",
-    "path": "docs/run_reports/2026-11-05-b5-results-renderer.md"
+    "label": "Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review",
+    "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -844,57 +844,6 @@
       "priority": "p2_next_slice",
       "rank": 14,
       "status": "queued",
-      "stop_card": null
-    },
-    "B5-RESULTS-LEAD-ADOPTION-01": {
-      "acceptance": {
-        "evidence": [
-          "Record adopted paper anchors, registered claim wording, publication precision and issuing routes.",
-          "Resolve the existing D-190 null-comparator refusal without widening block-5 bars or dropping rows.",
-          "After authorized release, complete the digest-bound reader checks and independent Results cold gate, then run render_b5_results.py --validate-rendered."
-        ],
-        "pointer": {
-          "anchor": "needs-lead-before-paper-use",
-          "label": "Block-5 Results adoption and gate acceptance",
-          "path": "docs/process/b5_results_renderer.md"
-        },
-        "summary": "Every released contrast remains represented, all printed values have recompute or reader checks, and only lead-adopted issuing placements enter the paper."
-      },
-      "authority": {
-        "label": "Block-5 renderer authority and NEEDS-LEAD decisions",
-        "path": "docs/process/b5_results_renderer.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "decision",
-          "required": "Lead adoption of paper placements and a governed null-recompute disposition before Results publication.",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "B5-RESULTS-LEAD-ADOPTION"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Renderer blind and publication boundaries",
-            "path": "docs/process/b5_results_renderer.md"
-          },
-          "rule": "No study outputs in a blind renderer seat; no raw measurement reads, changed bars, fabricated claim wording or paper issuance from a preview."
-        }
-      ],
-      "flags": [
-        "lead_only"
-      ],
-      "goal": "Adopt the block-5 Results paper placements and precision, resolve the independent-comparator null gate, and perform the post-release Results cold gate before paper use.",
-      "id": "B5-RESULTS-LEAD-ADOPTION-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 347,
-      "status": "blocked",
-      "status_note": "2026-11-05 user-directed renderer lane: implementation and synthetic verification supplied; live paper adoption and null-comparator repair remain NEEDS-LEAD. No phase checklist completion is claimed.",
       "stop_card": null
     },
     "BATTERY-FLOAT-GATE-01": {
@@ -11500,5 +11449,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-11-05"
+  "updated": "2026-09-25"
 }

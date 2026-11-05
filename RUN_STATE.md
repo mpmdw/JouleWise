@@ -7312,7 +7312,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-05). Latest report: [Blind block-5 Results renderer: candidate tooling and remaining lead gates](docs/run_reports/2026-11-05-b5-results-renderer.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
 
 ### [ED-EXTERNAL]
 
@@ -8123,20 +8123,3 @@ work. The generated region controls task selection.
 - Git author identity on this machine auto-selected as
   `Ed R <edr@Eds-MacBook-Pro.local>`. Amend future commits if a
   different identity is needed.
-
-## 2026-11-05 — blind block-5 Results renderer lane
-
-User-directed [AGENT] work on `lane/2026-11-05-b5-results-renderer` supplies
-the new block-5 Results template, script/module, leaf provenance and synthetic
-tests. Study data remains unopened in this lane. No release, measured result,
-issuing grant or phase completion is asserted. All proposed paper placements
-remain STOP_FILL / NEEDS-LEAD.
-
-The existing recompute comparator still refuses some legitimate D-190 null
-floor/contrast states. The renderer preserves that gate; display support for
-nulls is not proof of an end-to-end null release. Lead adoption, that comparator
-gap and the actual post-release Results cold gate are carried by
-`B5-RESULTS-LEAD-ADOPTION-01`. Exact next step: lead dispositions in
-`docs/process/b5_results_renderer.md`, then authorized release/recompute reader
-checks and `render_b5_results.py --validate-rendered` before paper use. Evidence:
-`docs/run_reports/2026-11-05-b5-results-renderer.md`.
