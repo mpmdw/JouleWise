@@ -19,6 +19,8 @@ import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from joulewise.strict_io import fsync_directory_best_effort_path as _fsync_directory
+
 from joulewise.flags.schema import (
     SCOPE_KEYS,
     make_flag,
@@ -28,19 +30,6 @@ from joulewise.flags.schema import (
     require_flag,
     validate_flag,
 )
-
-
-def _fsync_directory(path: Path) -> None:
-    try:
-        fd = os.open(path, os.O_RDONLY)
-    except OSError:
-        return
-    try:
-        os.fsync(fd)
-    except OSError:
-        pass
-    finally:
-        os.close(fd)
 
 
 class FlagSink:

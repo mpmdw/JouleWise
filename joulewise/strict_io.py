@@ -170,3 +170,7 @@ def fsync_directory_best_effort_directory(directory: Path) -> None:
         pass
     finally:
         os.close(descriptor)
+
+
+def fsync_directory_best_effort_path(path: Path) -> None:
+    return fsync_directory_best_effort_directory(path)
