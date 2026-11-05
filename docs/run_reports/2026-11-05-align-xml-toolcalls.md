@@ -229,3 +229,159 @@ Qwen3.5 MoE pinned template before treating that family as template-verified.
 Then the lead can schedule a clean, agent-free live gate with token-ID cache
 diagnostics. This branch supplies parser/fixture evidence only and does not
 authorize or perform that measurement. No other blocking design question remains.
+
+## Fix round
+
+2026-11-05, PR #659; branch `fix/2026-11-05-pr-659`, starting at `d01288e25`.
+This section supersedes the original implementation's family list, ambiguous-null
+policy, test counts, and remaining B2 work above. The earlier sections retain
+their original-run evidence and limitations.
+
+Intake: read `/private/tmp/jwsol/rev-659.json` first (two HIGH, three MEDIUM,
+three LOW; no refuted notes), then repository M0, stop card (NONE), current
+queue/do-not-do-yet, orchestration, and targeted dependency authority (D-009).
+The user's fix brief selects this AGENT task and prohibits coordination-state
+edits, full-suite runs, network access, and real measurement-data access.
+Those four lead-owned paths remain untouched; no kernel task was registered.
+No measurements, analysis pipeline, network calls, dependency installations,
+delegated agents, pushes, or remote PR edits ran in this round.
+
+The named council remote ref is absent from this clone. Git object enumeration
+in the explicitly allowed shared object store recovered council commit
+`219fb151515383cbbcde887d096837a829c67396`; `git show` supplied FINAL-DESIGN.md,
+including the B1/B2 build clauses in §2.8. Amendment 1 is absent from that tree
+and was not located as a commit in the available objects. Its text was therefore
+not independently verified. Apply the owner's explicit amendment instruction:
+W1's new cell is Qwen3.8-27B only; Qwen3-Next is dropped, Flash-Next is later.
+No window roster or model config was changed here. The brief supplied no new
+branch name, so the branch above was selected and disclosed during work.
+
+### Finding-to-commit map
+
+Identifiers below follow severity and order in the supplied review JSON.
+Every fix group includes a regression observed failing before the fix and
+passing afterward. The documentation handoff is a separate final commit.
+
+| Finding | Commit | Fix and regression |
+|---|---|---|
+| H1: cap-cut reparsing exposes template-prefilled reasoning | `bf0f0227b` | Remove the redundant second parse; the first parse already honors the template opener and hides the entire unfinished span. Endpoint-level synthetic native streams cover `finish_reason=length`, drafted actions, and a quoted `<think>` for both XML and JSON. The two nested-opener subcases executed a call before the fix. |
+| H2: dotted family labels silently select JSON | `142a9ab0b` | Normalize `qwen3.5`/`qwen3.8` (including underscore suffixes), then check configured and loaded XML/JSON protocol membership at prepare and endpoint construction. Check `model_config_name`, top-level `model_type`, and nested `text_config.model_type` when available. Reject contradictions before a turn. Alias and mismatch regressions had six failing subcases before the fix. |
+| M1: unverified 122B scalar template | `2b6652561` | Remove `qwen3_5_moe`/`qwen3_5_moe_text` from the supported set; refuse them and their dotted aliases explicitly, including an artifact presented under another configured family. Three subcases failed before the fix. F is unsupported until the pinned `e9c67b08` template and decoder/replay are verified. No F boolean/null byte-stability claim is made. |
+| M2: Any, Optional[str], and mixed string unions | `61e9d1c48` | Prefer schema-valid JSON for Any and string/non-string unions, including bare `null` → None; preserve literal text for declared strings. Tests cover numbers, arrays, quoted Any strings, booleans, optional strings, and string/integer and string/array unions. Eight subcases failed under the old ambiguity refusal. |
+| M3: B2 controls and identity missing; PR body stale | `88e7772fa` | Add optional `assistant_history` and `chat_template_kwargs`, omit None from spec text, pass controls through workload and both render paths, include effective controls in endpoint and governed execution-policy identity, and keep counterbalance cells separate. Existing implicit XML history also gets an explicit identity entry. New `test_history_rendering` failed with six errors before implementation; actual runtime identity hashes differ across effort levels afterward. Update the legacy cache-test omission list. Current replacement PR body appears below; remote editing remains pending under the no-network rule. |
+| L1: real-template tests skipped by CI; byte-only prefix probes | `9d6439519` | Add a dedicated Python 3.13 CI job with optional Jinja2 and explicit real-template modules (history-module step added with M3). The CI-wiring regression failed before the change. Local Python 3.14 runs all Jinja tests. **Disposition:** pinned token-level coverage is written as two opt-in native tests and remains unexecuted here; no pinned tokenizer is supplied and MLX cannot run in this sandbox. |
+| L2: shared consumers lose XML reasoning | `4a694ce32` | Add a `reasoning_text` alias without duplicating serialized reasoning; update scrubbing to replace only actual dataclass fields. Monitor full/no-scratchpad views and per-call coalescing retain the intended visibility. The alias/monitor regression failed before the fix. Protocol-v4 integration disclosure follows below. |
+| L3: literal think tags inflate hidden-token counts | `0be7fc4b9` | Stop XML output-ID accounting at the first tool-call delimiter outside reasoning, including initial prefilled-opener inference. Keep counting tool syntax genuinely inside reasoning. Endpoint regression counted 46 synthetic byte IDs instead of 5 before the fix. Native pinned-ID regression is supplied but unrun here. |
+
+### Behavior and protocol-v4 integration disclosures
+
+- H1 deliberately changes the affected **legacy JSON cap-cut path**, including
+  Qwen3-Next templates with a prefilled opener. Draft actions stay hidden and
+  cannot execute; the unfinished reasoning text is retained intact. Frozen
+  pilot-9 JSON parser/render/result fixtures still pass. Byte identity beyond
+  those fixtures is not claimed for this changed cap-cut behavior.
+- Both new spec fields are omitted when None. Existing JSON families retain
+  raw assistant history by default. XML families retain the branch's separate
+  reasoning history, now represented in execution identity even if the spec
+  field is unset. New v4 D specs should explicitly set
+  `assistant_history="reasoning_content"` and carry the selected effort in
+  `chat_template_kwargs`. Effort, history mode, and kwargs affect identity;
+  counterbalancing does not pair different policies.
+- XML/D judge input contains visible content and structured calls; reasoning
+  is available through `reasoning_text` for full visibility and omitted for
+  no-scratchpad visibility. Legacy 30B default transcripts retain raw think
+  tags and JSON tool text in content. **The family-dependent judge input is a
+  protocol-v4 disclosure**, not evidence of equivalent judge prompts. No
+  `pilot_protocol_v4.md` exists on this branch; the lead should carry this
+  paragraph into that document when integrating B10.
+- The supplied Qwen3.8 fixture remains unverified against pin `815b83c0`.
+  No actual SHADE schema census or live R0 parse-rate tally was run. R0 should
+  tally XML refusal reasons per tool using the real schemas before W1.
+- Noncanonical replay can rewrite prefixes even with separate reasoning.
+  The review reports **13 tokens** for compact `[1,2]`, **12** for `2.50`, and
+  **27** for a single-LF prose/call separator per transition. These are
+  review-provided observations, not measurements repeated in this round.
+  Retain these classes in R0's round-trip report. The local effort-ladder
+  probe checks canonical bytes only and reports zero rewritten bytes.
+
+### Verification
+
+Final targeted results (each listed module was rerun on the final code):
+
+| Command | Result |
+|---|---|
+| `python3.13 -B -m unittest tests.align.test_xml_tool_calls` | 21 run, OK; seven Jinja tests skipped (Jinja absent in this interpreter). |
+| `python3 -B -m unittest tests.align.test_xml_tool_calls` | Python 3.14.6 / Jinja2 3.1.6: 21 passed, no skips. |
+| `python3.13 -B -m unittest tests.align.test_history_rendering` | 9 run, OK; one Jinja and two native tests skipped. |
+| `python3 -B -m unittest tests.align.test_history_rendering` | 9 run, OK; seven passed, two native tests skipped. Includes xhigh/medium/low six-turn byte-prefix and historical-reasoning scrub probes. |
+| `python3.13 -B -m unittest tests.align.test_xml_fixround` | 7 passed. |
+| `python3.13 -B -m unittest tests.align.test_pilot3_cache` | 12 passed. Initial run found a stale test-side optional-field omission list, corrected in M3. |
+| `python3.13 -B -m unittest tests.align.test_apple_endpoint` | 9 passed (23.968 s). |
+| `python3.13 -B -m unittest tests.align.test_apple_campaign` | 12 passed (71.540 s). |
+| `python3.13 -B -m unittest tests.align.test_apple_support_edges` | 4 passed. |
+| `python3.13 -B -m compileall -q` on the four changed source files and four changed/new test files | Passed. |
+| `git diff --check` | Passed. |
+
+Total test execution was well below 20 minutes. No full suite was run, per the
+owner's machine-load rule. **Serial-order deviation:** one campaign-module
+invocation started after a poll returned a still-running endpoint module.
+Both completed successfully; later modules ran only after process completion.
+This brief overlap was a mistake and is not described as serial validation.
+The deviations recorded in the original report above belong to the earlier
+implementation sessions, not this fix round. No outside-clone `/Users/edr`
+filesystem path was queried in this round except Git's permitted shared
+repository object access. No real `restricted/` directory was accessed.
+
+### Lead's next exact checks
+
+1. Provide/verify Amendment 1's actual Git object and verify that the brief's
+   W1 override matches it. Review the eight fix commits and the final diff.
+2. Outside this sandbox, with native MLX and transformers installed, run the
+   two tests in
+   `tests.align.test_history_rendering.NativeHistoryRenderingTests`:
+
+   ```sh
+   JW_ALIGN_NATIVE_TESTS=1 JW_ALIGN_QWEN38_MODEL=/path/to/local/815b83c0-snapshot \
+     python3.13 -B -m unittest tests.align.test_history_rendering.NativeHistoryRenderingTests
+   ```
+
+   They check the local template digest, six-turn **token-ID** prefix stability
+   (one call, two calls, no-content calls, and prose), and literal think-tag
+   accounting using native MLX arrays. Imports are gated; tokenizer loading is
+   local-only. They load no weights and do not substitute for live generation,
+   real SHADE parse-rate, or cache validation in R0. A digest mismatch must be
+   resolved as a provenance issue, not waived as a successful test.
+3. Carry the judge-input disclosure into protocol v4; apply the replacement
+   PR body below when network use is authorized. Run the remaining owning R0
+   and review gates under lead control before W1. F remains unsupported.
+
+### Offline replacement PR body
+
+The following is ready for the lead to copy to PR #659. The actual GitHub body
+was not read or changed because this session has no network authority.
+
+> Qwen3.8 emits pseudo-XML tool calls and requires separate historical reasoning.
+> This change parses schema-directed XML arguments, preserves reasoning in
+> assistant history, and adds spec-carried history/template kwargs (including
+> the effort ladder) to execution identity. Dotted family aliases are supported;
+> loaded artifact/config protocol mismatches fail before a turn. Unverified
+> Qwen3.5 MoE templates are explicitly unsupported.
+>
+> The fix round also prevents draft tool execution at reasoning token cuts,
+> supports Any/optional/union parameter shapes, preserves reasoning in monitor
+> views, and excludes literal think tags in XML arguments from hidden-token
+> counts. JSON cap-cut behavior intentionally changes for affected prefilled
+> templates; the frozen pilot-9 JSON fixtures continue to pass.
+>
+> Validation: the parser/template module has 21 tests, all passing locally with
+> Jinja. History policy has 9 tests (7 passed with Jinja, 2 native tests pending);
+> fix-round regressions have 7 passing tests. Endpoint (9), campaign (12), cache
+> (12), and support edges (4) pass. A dedicated CI job installs Jinja. Full suite
+> omitted by owner instruction during the long analysis job.
+>
+> Pending: pinned `815b83c0` template/tokenizer verification and the two native
+> tests; real R0 schema parse-rate, token-level rewrite classes, and live cache
+> checks; protocol-v4 judge-input disclosure; lead verification of Amendment 1.
+> W1's new model is Qwen3.8-27B only; Next is dropped and Flash-Next is later.
+> B2's history/kwargs implementation is complete. No hardware validation is
+> claimed. Finding-to-commit details are in this run report's Fix round section.
