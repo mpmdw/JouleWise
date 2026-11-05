@@ -10,6 +10,22 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**2026-11-05 — user-directed block-5 release-readiness lane (SYNTHETIC ONLY).**
+`lane/2026-11-05-b5-release-readiness`, from local `origin/main` `92026c184`:
+both recompute lanes are merged through RC-CMP-11. An untouched r2 worktree
+completed the full S10 fixture through step 11, driver/recompute/comparator
+all exit 0. Original RC-CMP-1 replay on r2 exactly reproduces 1,454 comparisons,
+0 disagreements, 841 normalized paths (217 compared, 624 uncovered). Current
+comparator: 2,514 comparisons, 0 disagreements, 1,384 normalized paths
+(328 compared, 1,056 uncovered; 340 numeric/null exemption paths), 0 unmapped.
+This does not certify D-190 null branches: RC-CMP-1 A2's null-disagreement rule
+still needs a lead disposition before broader certification. The r2
+analysis-program addendum and 315-file Git-derived pin inventory are DRAFT,
+with real evidence/adoption fields `LEAD-FILL`. No real custody was opened,
+no release/unblinding occurred, and the seal record and r2 code are unchanged.
+Report, exact commands, coverage maps, the interrupted first synthetic attempt,
+and the next lead step: [release-readiness report](docs/run_reports/2026-11-05-b5-release-readiness.md).
+
 **▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
 
 What happened. BETA attempt 1 (`v5-b5-beta-a1-20261010T0742Z`) ran its whole chain; the pinned harvest gave it one window-removing code, `neg8.screen_failed` (`harvest.json` sha256 `f0d72323b67d075db29a5c136d087222284a6d4651d130549f9dbd5a82d6ec7d`). No physical measurement removed it. One end reference (a short run of a fixed small workload, used to check that the machine did not drift between a window's start and end) was aborted at run time; the chain ran its spare; the spare left no result directory; and the sealed program that writes the window's verdict then recorded none of the window's stage lists as its source. The registered harvest rule re-runs the drift check only on the references that verdict names, so the check was never run, although two start and two end references survive, which is enough. Records: `docs/process_traces/2026-10-block5/seal2-beta-a1-window.md`, `seal2-beta-a1-consult.md`.
@@ -7312,7 +7328,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-05). Latest report: [Block-5 release readiness: synthetic compatibility audit and draft r2 analysis addendum; no release](docs/run_reports/2026-11-05-b5-release-readiness.md).
 
 ### [ED-EXTERNAL]
 
