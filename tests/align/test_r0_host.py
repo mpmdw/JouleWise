@@ -133,7 +133,7 @@ class R0HostTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = config_at(root)
-            for tag in ("D",):
+            for tag in ("D", "anchor"):
                 folder = root / tag
                 folder.mkdir()
                 (folder / "model").write_text("tiny fake weight")
@@ -145,7 +145,10 @@ class R0HostTest(unittest.TestCase):
                 manifest.write_text(json.dumps(inventory(folder)))
                 config["offloads"].append({"label": label, "inventory": str(manifest), "destination": str(folder)})
             with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_000_000_000)):
-                self.assertEqual(disk_census(config, PINS)["status"], "pass")
+                result = disk_census(config, PINS)
+                self.assertEqual(result["status"], "pass")
+                self.assertTrue(result["anchor"]["files"])
+                self.assertEqual(result["design"]["W1_two_copies_bytes"], 37_400_000_000)
                 (root / "pilot9" / "file").write_text("changed")
                 self.assertEqual(disk_census(config, PINS)["status"], "fail")
             with patch("shutil.disk_usage", return_value=SimpleNamespace(free=79_999_999_999)):

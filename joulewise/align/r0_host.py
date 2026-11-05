@@ -143,6 +143,7 @@ def inventory(root, tick=lambda: None):
 
 def disk_census(config, pins, tick=lambda: None):
     free = shutil.disk_usage(config["disk_path"]).free
+    anchor_files = inventory(config["anchor_source"], tick)
     models = {}
     for tag, entry in config["models"].items():
         rows = inventory(entry["source"], tick)
@@ -166,8 +167,11 @@ def disk_census(config, pins, tick=lambda: None):
     covered = {row["label"] for row in offloads if row["pass"]}
     return {"status": "pass" if free >= 80_000_000_000 and {"pilot8", "pilot9"} <= covered else "fail",
             "free_bytes_after_present_weights": free, "required_free_bytes_after_weights": 80_000_000_000,
-            "design": {"W1_bytes_per_copy": 18_600_000_000, "W1_two_copies_bytes": 37_200_000_000,
-                       "D_two_copies_bytes": 52_900_000_000, "N_download_bytes": 44_860_367_003},
+            "design": {"W1_bytes_per_copy": 18_710_000_000, "W1_two_copies_bytes": 37_400_000_000,
+                       "D_two_copies_bytes": 52_900_000_000, "disk_figures_are_rounded_planning_estimates": True},
+            "anchor": {"files": anchor_files, "bytes": sum(r["bytes"] for r in anchor_files),
+                       "revision": "d388dead1515f5e085ef7a0431dd8fadf0886c57",
+                       "identity_note": "Local hashes; remote revision not independently authenticated."},
             "models": models, "offloads": offloads,
             "note": "Download totals are diagnostics (mirror metadata can differ); free-space and offload hashes are gates."}
 

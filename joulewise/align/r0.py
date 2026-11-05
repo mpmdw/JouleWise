@@ -365,7 +365,7 @@ def markdown(report):
                          for tag, m in row["models"].items())
             lines.extend(["", "| Offload | Hash comparison passed |", "|---|---|"])
             lines.extend(f"| {o['label']} | {o['pass']} |" for o in row["offloads"])
-            lines.append("W1 two copies: 37.2 GB; D windows two copies: 52.9 GB. Full file hashes are in JSON.")
+            lines.append("W1 two copies: 37.4 GB; D windows two copies: 52.9 GB (rounded planning estimates). D and 30B anchor file hashes are in JSON.")
         else:
             # Large token arrays and file inventories live in the companion JSON.
             brief = {k: v for k, v in row.items() if k not in {"short", "tool_round_trip", "nll_prompt_ids", "models", "offloads", "attempts", "memory_samples"}}

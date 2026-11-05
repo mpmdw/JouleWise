@@ -88,7 +88,7 @@ def config_at(root):
     return {"schema": "joulewise.align.r0.config.v1", "models": {
             "D": {"source": str(root / "D")}}, "shade_cache": str(root / "shade"),
             "disk_path": str(root), "custody_parents": [str(root / "custody")], "offloads": [],
-            "measurement_hw_model": "MacSynthetic"}
+            "measurement_hw_model": "MacSynthetic", "anchor_source": str(root / "anchor")}
 
 
 class R0ChecksTest(unittest.TestCase):

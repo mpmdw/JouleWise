@@ -34,7 +34,7 @@ def _path(value):
 
 
 def validate_config(config):
-    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads", "measurement_hw_model"}:
+    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads", "measurement_hw_model", "anchor_source"}:
         raise ValueError("unknown R0 config field")
     if config.get("schema") != "joulewise.align.r0.config.v1" or set(config.get("models", {})) != {"D"}:
         raise ValueError("R0 config requires schema v1 and D only (Amendment 1)")
@@ -44,7 +44,7 @@ def validate_config(config):
         if set(entry) != {"source"}:
             raise ValueError("model entries contain only source; council pins cannot be overridden")
         _path(entry["source"])
-    for key in ("shade_cache", "disk_path"):
+    for key in ("shade_cache", "disk_path", "anchor_source"):
         _path(config[key])
     if not isinstance(config.get("custody_parents"), list):
         raise ValueError("custody_parents must list any extras to the shared default parents")
@@ -92,6 +92,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "authority": "origin/lane/2026-11-05-align-window-council:docs/align/council-2026-11-05/FINAL-DESIGN.md §§2.1,2.2,2.8",
               "authority_commit": "219fb151515383cbbcde887d096837a829c67396",
               "authority_blob": "0a802a3097a20c9f4dd5e8823d858302ae596785",
+              "authority_amendment_commit": "6eb1ff5be31bec330ae5af262c2b4c7601e7755e",
+              "authority_amendment": "docs/align/council-2026-11-05/FINAL-DESIGN-AMENDMENT-1.md §§A1,A3,A5",
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
