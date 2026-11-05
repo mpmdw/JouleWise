@@ -124,8 +124,41 @@ PY
 `/private/tmp/jwsol/venv-mlx/bin/python`, but this sandbox cannot obtain a Metal
 device. Both exactness and timing stop before model creation. See
 `docs/run_reports/2026-11-05-align-cache-checkpoint-native.md` for attempted
-commands and the new two-family inference-mode gate. The historical test
-description below records the original implementation, not successful evidence.
+commands and the two-family inference-mode gate. Max absolute logit difference,
+runtime cache shapes/dtypes and native resource cost remain **unmeasured**.
+
+`tests.align.test_cache_checkpoint` provides synthetic mechanics and complete
+non-hybrid endpoint-byte regression against base c9a0a3943. These checks do not
+provide real-model logit evidence.
+
+`tests.align.test_cache_checkpoint_native` now uses the reusable driver and
+mlx-lm's own `qwen3_next.Model` and `qwen3_5.Model`, four layers each, float32
+and bf16, Next MoE and Qwen3.5 dense. It explicitly calls `model.eval()` to use
+the inference recurrence kernel. Consecutive synthetic turns discard exactly
+143, 257 and 560 tokens, matching pilot 2's documented trim counts without
+reading its token/data fixtures. It checks snapshot independence, repeated
+restoration, native offsets, cache dtype/payload and finite logits.
+
+Repeat full re-prefills establish determinism. Restored suffix logits must be
+bitwise identical (uint8 views) to full fresh re-prefills using the same prefix/
+suffix schedule. No tolerance is accepted. Prefix lengths 512 and 73 exercise
+both aligned and partial boundaries; at 512 the reference is also ordinary
+512-token chunked full prefill. A separate one-call full prefill reports bitwise
+status and actual maximum absolute difference as a diagnostic. Deterministic
+kernels alone do not imply equality across different chunk/matmul shapes.
+This gate cannot establish arbitrary chunk-schedule equality, real-template
+stability or production-weight behavior.
+
+The four native tests skip only when MLX/MLX-LM packages are absent. Installed
+but unusable packages, pin mismatch or Metal device denial fail setup. A skip
+or setup failure is not numerical evidence. The stdlib-only probe tests check
+real-config model-family routing and memory arithmetic, and ensure estimation
+cannot import a native backend.
+
+```sh
+PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  /private/tmp/jwsol/venv-mlx/bin/python -B -m unittest tests.align.test_cache_checkpoint_native
+```
 
 ## Resource probe and extrapolation
 
@@ -160,42 +193,3 @@ gives a conservative four-set planning allowance of 309,067,776 B and
 allocator overhead, offsets and kernel workspaces, so it is not process RSS.
 Restoration copies layers successively; four whole sets are a conservative
 planning allowance, not a measured restore peak. Real models were not loaded.
-
-### Historical initial gate description
-
-`tests.align.test_cache_checkpoint` uses a synthetic in-place recurrence to
-check isolation, repeated restoration, correct checkpoint selection, eviction,
-fallback, offsets, per-turn accounting, identity and prefill-phase integration.
-Its non-hybrid regression compares complete endpoint result, event, provenance,
-identity, flags and native-input bytes against the untouched cache implementation
-from base commit c9a0a3943. This is structural/synthetic evidence, not real-model
-logit evidence.
-
-`tests.align.test_cache_checkpoint_native` builds a tiny random four-layer
-Qwen3-Next from mlx-lm's own `Model`/`ModelArgs`, with small vocabulary and four
-experts, without loading any weights or tokenizer. It exercises float32 and
-bf16, repeated restores after differing suffixes, independent snapshot state,
-and config/runtime byte agreement. It is designed to stay far below 1 GB;
-resource use has not been measured because the dependencies are absent.
-
-For identical prefill chunks and evaluation barriers, repeat fresh runs first
-establish kernel determinism. If deterministic, restored logits must be bitwise
-identical. Only demonstrated nondeterminism permits an allclose comparison.
-A separate one-shot full re-prefill comparison uses `atol=rtol=1e-5` for float32
-and `atol=rtol=0.015625` for bf16, because splitting prefill can change matmul
-shapes and recurrent reduction order. These are prospective test bounds, not
-measured errors or an assertion of token equality under near-tied logits.
-The test prints determinism, bitwise status and maximum absolute bulk error.
-
-Neither Python 3.13 nor the default Python in this clone has mlx-lm installed.
-No vendored mlx-lm source was found. Implementation references were the pinned
-`env/mac-measurement-lock.txt`, the existing native cache adapter and spike,
-and `docs/align/pilot_protocol_v2.md`; no new upstream source/API audit was
-possible. Consequently native constructor/API compatibility, deep-copy behavior,
-cache shapes/dtypes, numerical exactness and resource use remain **PROVISIONAL**.
-Run this module in a clone-local offline installation of the exact pins, fix
-any failure, and review the numerical output before a lead-controlled live gate:
-
-```sh
-python3.13 -B -m unittest tests.align.test_cache_checkpoint_native
-```

@@ -189,6 +189,13 @@ class NativeProbe:
             raise AssertionError(f"native payload differs from formula: {saved.state_bytes} != {expected_size}")
         shapes = [{"shape": list(a.shape), "dtype": str(a.dtype), "nbytes": int(a.nbytes)}
                   for a in next(iter(saved.recurrent.values())).state]
+        text = config.get("text_config", config)
+        hk, hv = text["linear_num_key_heads"], text["linear_num_value_heads"]
+        dk, dv = text["linear_key_head_dim"], text["linear_value_head_dim"]
+        expected_shapes = [[1, text["linear_conv_kernel_dim"] - 1, 2 * hk * dk + hv * dv],
+                           [1, hv, dv, dk]]
+        if [a["shape"] for a in shapes] != expected_shapes:
+            raise AssertionError(f"unexpected native recurrent shapes: {shapes}")
         if shapes[0]["dtype"] != str(getattr(mx, dtype_name)) or shapes[1]["dtype"] != str(mx.float32):
             raise AssertionError(f"unexpected native recurrent dtypes: {shapes}")
 
