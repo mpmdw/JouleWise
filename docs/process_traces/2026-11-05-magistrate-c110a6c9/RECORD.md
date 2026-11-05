@@ -44,3 +44,11 @@ Opus cloud review (`REVIEW.md` on `claude/align-desk-cal-review-cf1`, JouleWise-
 ## Next window (lead's call; data allocation, no science question open)
 - **Pilot 9 = the admitted kit: the 8 anchors plus 20 fresh benign, seeds 27-36.** Reason: the benign tails are heavy on both pairs (bank -7.0, spam +7.1 within one session), so the threshold question needs more held-out benign trajectories per pair, and nothing in pilot 8 argues for a different roster. After pilot 9 the held-out pools reach bank m 19 and spam m 20, the first finite split thresholds (k = 19 and 20, both the sample maximum).
 - Kit rebased onto the pin: `8d1ab6e2c` = `c9a0a3943` plus the pin-only ledger change (diff `c9a0a3943..8d1ab6e2c` is `calibration_ledger_head.json` only). A force-push of the rebased lane was refused by the permission classifier, so the armed kit lives on the new branch `lane/2026-11-05-align-pilot9-kit`; `lane/2026-11-05-align-pilot9-benign` on origin still holds the reviewed pre-rebase `c9a0a3943`. Measurement checkout fast-forwarded to `8d1ab6e2c`; kit `--check` OK; disk 107 GB free.
+
+## ARM (ALIGN pilot 9)
+- Gmail unread from Ed: none; no standdown request; directives unchanged (#587, #422, #421, #417, #416, #408, #405).
+- Prepare 02:28:50 PST: session `align-pilot-20261105T102850144782Z`, root `/Users/edr/night-align/pilot-v8-20261105T102850Z`, STAGED, plan sha256 `14cafc3091efd551834023f94048988dc30ced16d4acd19404fcbd51f9b4ac27`. **t0 02:36:00 PST** (2026-11-05T10:36:00Z); programmed span 26,914 s; window maximum 44,640 s. Flags: `runtime_stack_unobserved` x29, `sizing.planning_bound_unmeasured`.
+- `corespotlightd` 716 and `spotlightknowledged` 47361 SIGSTOPped (same pids). Raycast app not running (AppIntents extension 1158 left alone).
+- Arm notice with the pilot-8 read and the spam-reading correction: Gmail `1a1ab41729b682a1` (thread `1a198fafa8fc12ba`), sent before install. No pending watchdog notice, so no `notice.ack`.
+- Records fast-forwarded to main (`63784f3d4`); canonical fast-forwarded to it before install.
+- Install 02:30:04 PST, rc 0: `com.joulewise.night` and `.deadman` loaded. This activation exits now.
