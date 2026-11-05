@@ -332,9 +332,44 @@ class DeleteRootTests(unittest.TestCase):
         self.journal.mkdir()
         self.refused_audit_failure()
 
+    def test_journal_symlink_and_hardlink_never_append_to_keep(self):
+        target = self.keep_root / 'precious'
+        target.write_bytes(b'KEEP exact bytes\n')
+        for link in ('symlink', 'hardlink'):
+            with self.subTest(link=link):
+                if link == 'symlink':
+                    self.journal.symlink_to(target)
+                else:
+                    os.link(target, self.journal)
+                # Force an early refusal, the formerly vulnerable path.
+                with mock.patch.object(g.shutil, 'rmtree') as deletion:
+                    with self.assertRaisesRegex(g.Refusal, 'journal'):
+                        g.delete_root(self.item / 'missing', self.keep, self.remote, self.journal)
+                    deletion.assert_not_called()
+                self.assertEqual(target.read_bytes(), b'KEEP exact bytes\n')
+                self.journal.unlink()
+
+    def test_journal_wrong_parent_or_name_is_not_created(self):
+        for path in (self.item / 'deletions.tsv', self.op / 'other.tsv'):
+            with self.subTest(path=path), self.assertRaisesRegex(g.Refusal, 'journal'):
+                g.delete_root(self.item, self.keep, self.remote, path)
+            self.assertFalse(path.exists())
+
+    def test_journal_link_swap_during_open_never_writes(self):
+        target = self.keep_root / 'precious'
+        target.write_bytes(b'KEEP')
+        real_open = os.open
+        def swapped(path, flags, mode):
+            os.link(target, path)
+            return real_open(path, flags, mode)
+        with mock.patch.object(g.os, 'open', side_effect=swapped), \
+             self.assertRaisesRegex(g.Refusal, 'journal'):
+            self.run_delete()
+        self.assertEqual(target.read_bytes(), b'KEEP')
+
     def refused_audit_failure(self):
         with mock.patch.object(g.shutil, 'rmtree') as deletion:
-            with self.assertRaises(OSError):
+            with self.assertRaises((OSError, g.Refusal)):
                 self.run_delete()
             deletion.assert_not_called()
         self.assertTrue(self.src.exists())

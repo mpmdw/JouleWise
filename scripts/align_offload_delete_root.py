@@ -198,22 +198,48 @@ def checksum_receipt(receipt, target):
     return match[1]
 
 
-def audit(journal, src, state, manifest_sha='', archive_sha=''):
-    with journal.open('a', encoding='utf-8') as f:
-        f.write('\t'.join((datetime.now(timezone.utc).isoformat(), str(src), state,
-                           manifest_sha, archive_sha)) + '\n')
-        f.flush()
-        os.fsync(f.fileno())
+def open_journal(journal, item):
+    """Validate before even a refusal row. Never follow an audit alias."""
+    parent = exact_path(str(journal.parent))
+    require(parent == exact_path(str(item.parent)) and journal.name == 'deletions.tsv',
+            'journal must be item.parent/deletions.tsv')
+    if os.path.lexists(journal):
+        s = journal.lstat()
+        require(stat.S_ISREG(s.st_mode) and s.st_nlink == 1,
+                'journal must be regular, not symlink or hardlink')
+    fd = os.open(journal, os.O_WRONLY | os.O_NOFOLLOW | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        validate_journal_fd(fd, journal)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def validate_journal_fd(fd, journal):
+    s, named = os.fstat(fd), journal.lstat()
+    require(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and
+            stat.S_ISREG(named.st_mode) and named.st_nlink == 1 and
+            (s.st_dev, s.st_ino) == (named.st_dev, named.st_ino),
+            'journal alias or replacement')
+
+
+def audit(fd, journal, src, state, manifest_sha='', archive_sha=''):
+    validate_journal_fd(fd, journal)
+    row = '\t'.join((datetime.now(timezone.utc).isoformat(), str(src), state,
+                     manifest_sha, archive_sha)) + '\n'
+    require(os.write(fd, row.encode('utf-8')) == len(row.encode('utf-8')), 'short audit write')
+    os.fsync(fd)
 
 
 def delete_root(item, keep, remote, journal):
     """Production policy constants cannot be overridden through CLI or env."""
     src = 'UNRESOLVED'
     started = False
+    # Outside the audit-on-refusal block: invalid journals must receive no write.
+    journal_fd = open_journal(journal, item)
     try:
         item, keep, remote = (exact_path(str(p)) for p in (item, keep, remote))
-        exact_path(str(journal.parent))
-        require(not journal.is_symlink(), 'journal symlink')
         for name in ('source-path.txt', 'source.json', 'source.sha256', 'archive.sha256',
                      'source-after.json', 'cloud-local.json', 'cloud-roundtrip.json',
                      'independent-receipt.txt', 'ed-approval.txt', 'retention-review.json'):
@@ -281,16 +307,21 @@ def delete_root(item, keep, remote, journal):
             f.write('\n')
             f.flush()
             os.fsync(f.fileno())
-        audit(journal, src, 'DELETE_AUTHORIZED', manifest_sha, archive_sha)
+        audit(journal_fd, journal, src, 'DELETE_AUTHORIZED', manifest_sha, archive_sha)
         started = True
         shutil.rmtree(src)
         require(not os.path.lexists(src), 'source remains')
         os.link(staged, pointer)  # exclusive publication; never clobber a pointer
         staged.unlink()
-        audit(journal, src, 'DELETED', manifest_sha, archive_sha)
+        audit(journal_fd, journal, src, 'DELETED', manifest_sha, archive_sha)
     except Exception:
-        audit(journal, src, 'FAILED_PARTIAL' if started else 'REFUSED_NO_DELETE')
+        try:
+            audit(journal_fd, journal, src, 'FAILED_PARTIAL' if started else 'REFUSED_NO_DELETE')
+        except (OSError, Refusal):
+            pass  # preserve the original failure; never fall back to another path
         raise
+    finally:
+        os.close(journal_fd)
 
 
 def main():
