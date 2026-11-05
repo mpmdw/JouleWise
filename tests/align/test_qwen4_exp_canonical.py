@@ -1580,6 +1580,45 @@ class ValidationRound1Test(unittest.TestCase):
         self.assertEqual(outs["dense_calls"], 0)
         self.assertLessEqual(diff(outs["kernel"], outs["dense"])["max_abs"], INTERNAL_FP32_TOL)
 
+    # ------------------------------------------------ real-parity LOW (PLE)
+    def test_r1_ngram_table_inside_a_larger_file(self):
+        """NgramTable._prefetch passed the memmap's FILE offset to madvise on
+        the underlying mmap, which numpy starts at that offset rounded down to
+        the allocation granularity: wrong pages for early rows, a ValueError
+        past the mapping's end. A table mapped 100000 bytes into a file (as the
+        real-weight harness mapped a safetensors shard region) must gather
+        exactly, with prefetch on, through mmap and pread."""
+        import mmap
+        import numpy as np
+        import tempfile
+        fx = self.fx
+        model = fx.model("fp32")
+        Table = g(model, "NgramTable")
+        rows, dim, head = 1000, 160, 100000
+        rng = np.random.default_rng(9)
+        bits = rng.integers(0, 0x7F00, size=(rows, dim), dtype=np.uint16)  # finite, non-negative bf16 patterns
+        want = (bits.astype(np.uint32) << 16).view(np.float32)
+        ids = np.array([[0, 1, 2, 500], [997, 998, 999, 3]], dtype=np.int64)
+        with tempfile.TemporaryDirectory(dir=fx.ref_dir) as tmp:
+            alone, inside = Path(tmp) / "alone.bin", Path(tmp) / "inside.bin"
+            alone.write_bytes(bits.tobytes())
+            inside.write_bytes(b"\x00" * head + bits.tobytes() + b"\x00" * 7)
+            for io in ("mmap", "pread"):
+                with self.subTest(io=io):
+                    t = Table(inside, rows, dim, "bf16", io=io, prefetch=True, offset=head)
+                    self.assertTrue(np.array_equal(t.gather(ids), want[ids]))
+                    t.close()
+            # The prefetch arithmetic itself, on a memmap that starts mid-file.
+            t = Table(alone, rows, dim, "bf16", prefetch=True)
+            t._mm = np.memmap(inside, dtype=np.uint8, mode="r", offset=head, shape=(rows, t.record_bytes))
+            self.assertNotEqual(head % mmap.ALLOCATIONGRANULARITY, head)
+            self.assertTrue(np.array_equal(t.gather(ids), want[ids]))
+            raw = t._mm._mmap
+            for row in (0, 999):
+                pos = t._map_base() + row * t.record_bytes
+                self.assertEqual(raw[pos:pos + t.record_bytes], bits[row].tobytes())
+            t.close()
+
 
 if __name__ == "__main__":
     unittest.main()

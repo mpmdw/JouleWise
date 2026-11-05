@@ -485,19 +485,24 @@ class NgramTable:
     PREFETCH_MAX_ROWS = 4096
 
     def __init__(self, path: os.PathLike, rows: int, dim: int, fmt: str,
-                 group_size: int = 32, io: str = "mmap", prefetch: bool = True):
+                 group_size: int = 32, io: str = "mmap", prefetch: bool = True, offset: int = 0):
+        """``offset``: byte position of row 0 in ``path`` (0 for the converter's
+        own record files, which must then be exactly rows * record_bytes)."""
         self.path = Path(path)
         self.rows, self.dim, self.fmt, self.group_size = int(rows), int(dim), fmt, int(group_size)
         self.layout = ngram_record_layout(fmt, self.dim, self.group_size)
         self.record_bytes = self.layout["record_bytes"]
+        self.offset = int(offset)
         expected = self.rows * self.record_bytes
         actual = self.path.stat().st_size
-        if actual != expected:
-            raise ValueError(f"{self.path}: size {actual} != rows*record_bytes {expected}")
+        if self.offset < 0 or (actual != expected if self.offset == 0 else actual < self.offset + expected):
+            raise ValueError(f"{self.path}: size {actual} does not hold rows*record_bytes {expected} "
+                             f"at offset {self.offset}")
         self.io, self.prefetch = io, prefetch
         self._mm = self._fd = None
         if io == "mmap":
-            self._mm = np.memmap(self.path, dtype=np.uint8, mode="r", shape=(self.rows, self.record_bytes))
+            self._mm = np.memmap(self.path, dtype=np.uint8, mode="r", offset=self.offset,
+                                 shape=(self.rows, self.record_bytes))
         elif io == "pread":
             self._fd = os.open(self.path, os.O_RDONLY)
             try:
@@ -515,15 +520,28 @@ class NgramTable:
             self._fd = None
         self._mm = None
 
-    def _prefetch(self, ids: np.ndarray) -> None:
-        """MADV_WILLNEED each row's pages so cold rows page in concurrently."""
+    def _map_base(self) -> Optional[int]:
+        """Position of row 0 inside the memmap's underlying ``mmap``. numpy maps
+        from the file offset rounded down to the allocation granularity, so
+        this is NOT the file offset (validation round 1: madvise used the file
+        offset, advising wrong pages and raising past the mapping's end)."""
         raw = getattr(self._mm, "_mmap", None)
         if raw is None or not hasattr(raw, "madvise"):
+            return None
+        start = np.frombuffer(raw, dtype=np.uint8, count=1)
+        try:
+            return int(self._mm.ctypes.data - start.ctypes.data)
+        finally:
+            del start
+
+    def _prefetch(self, ids: np.ndarray) -> None:
+        """MADV_WILLNEED each row's pages so cold rows page in concurrently."""
+        base = self._map_base()
+        if base is None:
             return
-        rb, page = self.record_bytes, mmap.PAGESIZE
-        offset = getattr(self._mm, "offset", 0)
+        raw, rb, page = self._mm._mmap, self.record_bytes, mmap.PAGESIZE
         for row in ids.tolist():
-            start = offset + row * rb
+            start = base + row * rb
             first = (start // page) * page
             raw.madvise(mmap.MADV_WILLNEED, first, start + rb - first)
 
@@ -535,7 +553,7 @@ class NgramTable:
         rb = self.record_bytes
         out = np.empty((ids.shape[0], rb), dtype=np.uint8)
         for i, row in enumerate(ids.tolist()):
-            buf = os.pread(self._fd, rb, row * rb)
+            buf = os.pread(self._fd, rb, self.offset + row * rb)
             if len(buf) != rb:
                 raise IOError(f"short n-gram read at row {row}")
             out[i] = np.frombuffer(buf, dtype=np.uint8)
