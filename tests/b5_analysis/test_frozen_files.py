@@ -49,10 +49,13 @@ def frozen_mismatches(root=ROOT):
     return result
 
 
-def analysis_blob(path):
+def registered_blob(tag, path):
     value = load_registration()
-    tag = value["active_analysis"]
     return blob(ROOT, verify_tag(ROOT, tag, value["tags"][tag]), path)
+
+
+def analysis_blob(path):
+    return registered_blob(load_registration()["active_analysis"], path)
 
 
 class FrozenFilesTests(unittest.TestCase):
@@ -92,11 +95,13 @@ class FrozenFilesTests(unittest.TestCase):
         self.assertEqual(value["schema"], "joulewise.b5_seal_pins.v1")
 
     def test_collection_does_not_import_analysis(self):
-        for name in ("scripts/run_campaign.py", "joulewise/b5/harvest.py"):
-            tree = ast.parse(analysis_blob(name))
-            imports = [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
-            imports += [f"{node.module or ''}.{alias.name}" for node in ast.walk(tree)
-                        if isinstance(node, ast.ImportFrom) for alias in node.names]
-            imports += [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant)
-                        and isinstance(node.value, str) and node.value.startswith("joulewise.b5_analysis")]
-            self.assertFalse(any("b5_analysis" in name for name in imports))
+        for tag in ("b5/collection", load_registration()["active_analysis"]):
+            for name in ("scripts/run_campaign.py", "joulewise/b5/harvest.py"):
+                with self.subTest(tag=tag, path=name):
+                    tree = ast.parse(registered_blob(tag, name))
+                    imports = [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
+                    imports += [f"{node.module or ''}.{alias.name}" for node in ast.walk(tree)
+                                if isinstance(node, ast.ImportFrom) for alias in node.names]
+                    imports += [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant)
+                                and isinstance(node.value, str) and node.value.startswith("joulewise.b5_analysis")]
+                    self.assertFalse(any("b5_analysis" in name for name in imports))
