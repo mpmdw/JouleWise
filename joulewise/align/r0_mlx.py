@@ -158,10 +158,20 @@ class MlxBackend:
         base = self.encode("A desk check repeats a short neutral sentence. ")
         prompt = (base * ((prompt_size + len(base) - 1) // len(base)))[:prompt_size]
         delta, metadata = cache.prepare(prompt)
+        mx.synchronize()
         samples = [{"position": 0, "active_bytes": mx.get_active_memory()}]
         errors = []
+        metadata_arrays_evaluated = 0
+
+        def kv_bytes():
+            def size(value):
+                if isinstance(value, (tuple, list)):
+                    return sum(size(v) for v in value)
+                return getattr(value, "nbytes", 0)
+            return sum(size(c.state) for c in cache.cache if "KVCache" in type(c).__name__)
 
         def observe(count):
+            nonlocal metadata_arrays_evaluated
             # Simulated turn boundaries for the council's first mitigation;
             # no production behavior is changed by this diagnostic probe.
             if eval_metadata and (count % 4096 == 0 or count == output_size):
@@ -169,8 +179,11 @@ class MlxBackend:
                           if getattr(c, name, None) is not None]
                 if arrays:
                     mx.eval(arrays)
+                    metadata_arrays_evaluated += len(arrays)
             if count == 1 or count % 256 == 0 or count == output_size:
-                samples.append({"position": prompt_size + count, "active_bytes": mx.get_active_memory()})
+                mx.synchronize()
+                samples.append({"position": prompt_size + count, "active_bytes": mx.get_active_memory(),
+                                "kv_cache_bytes": kv_bytes()})
         self.native.observe = observe
         started = time.monotonic()
         record = None
@@ -191,6 +204,9 @@ class MlxBackend:
                   "prompt_tokens": prompt_size, "seconds": time.monotonic() - started,
                   "cache_classes": [type(c).__name__ for c in cache.cache],
                   "memory_samples": samples, "errors": errors, "eval_metadata": eval_metadata,
+                  "metadata_arrays_evaluated": metadata_arrays_evaluated,
+                  "metadata_evaluation": ("evaluated" if metadata_arrays_evaluated else
+                      "metadata_absent_single_stream" if eval_metadata else "not_requested"),
                   "peak_bytes": mx.get_peak_memory()}
         del cache, record
         mx.clear_cache()

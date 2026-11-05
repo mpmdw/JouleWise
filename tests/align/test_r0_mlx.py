@@ -34,6 +34,8 @@ class FakeCore:
         self.eval_calls.append(args)
     def clear_cache(self):
         pass
+    def synchronize(self):
+        pass
     @staticmethod
     def logsumexp(logits, axis):
         return Array([math.log(sum(math.exp(v) for v in row)) for row in logits.data])
@@ -91,7 +93,7 @@ class ShimTest(unittest.TestCase):
         self.assertEqual(seen, ids[:-1])
         self.assertEqual(len(backend.mx.eval_calls), 3)
 
-    def test_fixed_context_uses_episode_cache_exact_positions_and_metadata_eval(self):
+    def test_fixed_context_uses_episode_cache_exact_positions_and_absent_metadata(self):
         backend = MlxBackend.__new__(MlxBackend)
         backend.mx, backend.guard = FakeCore(), FakeGuard()
         backend.mx.get_active_memory = lambda: 123
@@ -99,7 +101,7 @@ class ShimTest(unittest.TestCase):
         backend.new_session = Mock()
         backend.encode = lambda text: [1, 2, 3]
         backend.native = SimpleNamespace(observe=None)
-        native_cache = [SimpleNamespace(lengths="length-array", left_padding="padding-array")]
+        native_cache = [SimpleNamespace(lengths=None, left_padding=None)]
         cache = Mock()
         cache.cache = native_cache
         cache.prepare.side_effect = lambda ids: (ids, {})
@@ -116,8 +118,9 @@ class ShimTest(unittest.TestCase):
         self.assertEqual(result["positions"], 40960)
         self.assertEqual(result["errors"], [])
         self.assertEqual(result["memory_samples"][-1]["position"], 40960)
-        self.assertEqual(len(backend.mx.eval_calls), 10)
-        self.assertEqual(backend.mx.eval_calls[0], (["length-array", "padding-array"],))
+        self.assertEqual(backend.mx.eval_calls, [])
+        self.assertEqual(result["metadata_arrays_evaluated"], 0)
+        self.assertEqual(result["metadata_evaluation"], "metadata_absent_single_stream")
         cache.finish.assert_called_once()
 
     def test_close_uses_config_argument_of_pinned_runtime(self):

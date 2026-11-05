@@ -134,3 +134,18 @@ observed failing before its fix; final commit mapping and checks follow below.
   production template paths, with the default omitted. Added prompt-ID parity
   and effort regressions (`test_r0_integration`, 2 errors before, 2 pass after).
   Existing fake backends now implement the real history seam.
+
+- G2 / HIGH memory sampling + MEDIUM no-op metadata retest: synchronize each
+  sample, exclude the pre-prefill baseline, and use median slopes spanning at
+  least 10k positions. Report actual KV-array allocation slope alongside total
+  active-memory trend. Preserve raw samples. Isolated-spike and sustained-growth
+  regressions fail before/pass after. Count arrays actually evaluated; an empty
+  single-stream retest is explicit and cannot claim a mitigation. If the first
+  attempt fails and an identical no-metadata retry passes, the result remains
+  inconclusive, requiring a lead ruling. The refuted note limits the original
+  projection: a D-shaped probe did not reproduce the toy-model effect. This
+  change does not assert a D-scale leak or claim to validate #1632 in batching.
+  Added `tests.align.test_r0_mlx_native.NativeMemoryTest` using random tiny
+  hybrid weights and real streaming/cache APIs. Native test is skipped here
+  (MLX absent); the lead must run it on the pinned Metal stack. Existing shim
+  now models the real single-stream absence of lengths/left_padding.

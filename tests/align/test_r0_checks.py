@@ -196,8 +196,10 @@ class R0ChecksTest(unittest.TestCase):
     def test_long_decode_retests_metadata_eval_and_checks_growth(self):
         backend = FakeBackend()
         good = backend.long_decode(eval_metadata=True)
+        good["metadata_arrays_evaluated"] = 2
         bad = deepcopy(good)
         bad["memory_samples"][1]["active_bytes"] += 2_000_000_000
+        bad["errors"] = ["Resource limit"]
         with patch.object(backend, "long_decode", side_effect=[bad, good]) as call:
             result = r0.long_decode(backend)
         self.assertEqual(call.call_args_list[0].kwargs, {"eval_metadata": False})
@@ -205,6 +207,28 @@ class R0ChecksTest(unittest.TestCase):
         self.assertTrue(result["metadata_eval_required"])
         bad["errors"] = ["Resource limit"]
         self.assertEqual(r0.long_decode_verdict(bad)["status"], "fail")
+
+    def test_memory_transient_is_not_sustained_growth_and_kv_is_reported(self):
+        samples = [{"position": p, "active_bytes": 1_000_000_000 + p * 66000,
+                    "kv_cache_bytes": p * 66000} for p in range(2049, 40961, 256)]
+        samples[-2]["active_bytes"] += 8_000_000_000
+        result = r0.long_decode_verdict({"positions": 40960, "errors": [], "memory_samples": samples})
+        self.assertEqual(result["status"], "pass")
+        self.assertAlmostEqual(result["trend_bytes_per_10k"], 660_000_000)
+        self.assertAlmostEqual(result["kv_bytes_per_10k"], 660_000_000)
+        for sample in samples:
+            sample["active_bytes"] = 1_000_000_000 + sample["position"] * 210000
+        self.assertEqual(r0.long_decode_verdict({"positions": 40960, "memory_samples": samples})["status"], "fail")
+
+    def test_empty_metadata_retest_cannot_claim_a_mitigation(self):
+        backend = FakeBackend()
+        good = backend.long_decode(eval_metadata=True)
+        good.update(metadata_arrays_evaluated=0, metadata_evaluation="metadata_absent_single_stream")
+        bad = {**good, "errors": ["Resource limit"]}
+        with patch.object(backend, "long_decode", side_effect=[bad, good]):
+            result = r0.long_decode(backend)
+        self.assertFalse(result["metadata_eval_required"])
+        self.assertEqual(result["status"], "inconclusive")
 
     def test_memory_swap_peak_and_token_positions(self):
         backend = FakeBackend()

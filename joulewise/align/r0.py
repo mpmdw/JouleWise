@@ -245,16 +245,18 @@ def tool_envelopes(results):
 
 
 def long_decode_verdict(result):
-    samples = result["memory_samples"]
-    growth = []
-    for i, first in enumerate(samples):
-        for last in samples[i + 1:]:
-            delta = last["position"] - first["position"]
-            if delta >= 10000:
-                growth.append((last["active_bytes"] - first["active_bytes"]) * 10000 / delta)
-    worst = max(growth, default=None)
-    ok = result["positions"] == 40960 and not result.get("errors") and worst is not None and worst <= 2_000_000_000
-    return {**result, "status": "pass" if ok else "fail", "max_growth_bytes_per_10k": worst,
+    # Exclude the pre-prefill baseline. Median long-span pair slopes resist
+    # isolated allocator excursions while preserving sustained cache growth.
+    samples = [s for s in result["memory_samples"] if s["position"] > 0]
+    def slope(field):
+        growth = [(b[field] - a[field]) * 10000 / (b["position"] - a["position"])
+                  for i, a in enumerate(samples) for b in samples[i + 1:]
+                  if field in a and field in b and b["position"] - a["position"] >= 10000]
+        return statistics.median(growth) if growth else None
+    trend = slope("active_bytes")
+    ok = result["positions"] == 40960 and not result.get("errors") and trend is not None and trend <= 2_000_000_000
+    return {**result, "status": "pass" if ok else "fail", "trend_bytes_per_10k": trend,
+            "kv_bytes_per_10k": slope("kv_cache_bytes"), "growth_estimator": "median_long_span_pair_slopes",
             "growth_limit_bytes_per_10k": 2_000_000_000}
 
 
@@ -263,9 +265,14 @@ def long_decode(backend):
     attempts = [first]
     if first["status"] != "pass":
         attempts.append(long_decode_verdict(backend.long_decode(eval_metadata=True)))
-    return {"status": attempts[-1]["status"], "attempts": attempts,
-            "consequence": None if attempts[-1]["status"] == "pass" else "Screen-only pending separate stack-change ruling",
-            "metadata_eval_required": len(attempts) > 1 and attempts[-1]["status"] == "pass"}
+    evaluated = attempts[-1].get("metadata_arrays_evaluated", 0) > 0
+    status = attempts[-1]["status"]
+    if len(attempts) > 1 and status == "pass" and not evaluated:
+        status = "inconclusive"
+    return {"status": status, "attempts": attempts,
+            "consequence": None if status == "pass" else "Screen-only pending separate stack-change ruling",
+            "metadata_eval_required": len(attempts) > 1 and status == "pass" and evaluated,
+            "metadata_scope": "#1632 concerns batched metadata; absent single-stream metadata cannot demonstrate its mitigation."}
 
 
 def memory_peak(backend, tag):
@@ -302,9 +309,9 @@ def markdown(report):
                                  for t in ep["turns"])
             lines.append(f"Selected: {row['selected']}. See JSON for rung bars and raw ID evidence.")
         elif row["check"] == "long-decode" and "attempts" in row:
-            lines.extend(["| Metadata evaluation | Positions | Max growth bytes/10k | Status | Errors |",
-                          "|---|---|---|---|---|"])
-            lines.extend(f"| {a.get('eval_metadata')} | {a['positions']} | {a['max_growth_bytes_per_10k']} | {a['status']} | {a.get('errors', [])} |"
+            lines.extend(["| Metadata evaluation | Positions | Trend bytes/10k | KV bytes/10k | Status | Errors |",
+                          "|---|---|---|---|---|---|"])
+            lines.extend(f"| {a.get('metadata_evaluation')} | {a['positions']} | {a['trend_bytes_per_10k']} | {a['kv_bytes_per_10k']} | {a['status']} | {a.get('errors', [])} |"
                          for a in row["attempts"])
             lines.append(f"Metadata evaluation required: {row['metadata_eval_required']}. See JSON for all memory samples.")
         elif row["check"] == "disk" and "models" in row:
