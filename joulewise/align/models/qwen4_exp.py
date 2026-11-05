@@ -702,15 +702,35 @@ class Qwen4ExpLinearCache(ArraysCache):
     ``advance``). ``padding`` keeps the constant per-row value and ``offset``
     the tokens seen, for positions and prompt-cache files. A recurrent state
     cannot be cropped: prefix rewrites restore a snapshot (``restore_cache``).
+
+    ``left_padding`` is derived from the host ints ``padding - offset`` on
+    each read. mlx-lm 0.31.3's ``ArraysCache.advance`` does a lazy
+    ``left_padding -= n``; only the first linear cache's value is ever read
+    (``create_ssm_mask``), so every other layer grew one graph node and one
+    Metal buffer per decode step until the allocator's resource limit
+    (mlx-lm #1632; validation round 1, systems MEDIUM).
     """
 
     def __init__(self, size: int, left_padding: Optional[Sequence[int]] = None):
-        super().__init__(size, left_padding=list(left_padding) if left_padding and any(left_padding) else None)
         self.padding = tuple(int(p) for p in left_padding) if left_padding and any(left_padding) else None
         self.offset = 0
+        super().__init__(size)
+
+    @property
+    def left_padding(self):
+        padding = self.__dict__.get("padding")
+        if padding is None:
+            return None
+        return mx.array(np.asarray(padding, dtype=np.int32) - np.int32(self.offset))
+
+    @left_padding.setter
+    def left_padding(self, value):
+        if value is None and self.__dict__.get("padding") is None:
+            return  # ArraysCache.__new__ initialises the field
+        raise NotImplementedError("qwen4_exp linear caches derive left padding from make_cache(left_padding=...) "
+                                  "and the offset")
 
     def advance(self, n: int):
-        super().advance(n)
         self.offset += n
 
     def size(self):
@@ -726,15 +746,16 @@ class Qwen4ExpLinearCache(ArraysCache):
 
     @property
     def meta_state(self):
-        lp = None if self.left_padding is None else np.array(self.left_padding).tolist()
+        lp = None if self.padding is None else [p - self.offset for p in self.padding]
         return (str(self.offset), _csv(self.padding), _csv(lp))
 
     @meta_state.setter
     def meta_state(self, v):
         self.offset = int(v[0])
         self.padding = _uncsv(v[1])
-        lp = _uncsv(v[2])
-        self.left_padding = None if lp is None else mx.array(lp)
+        want = None if self.padding is None else tuple(p - self.offset for p in self.padding)
+        if _uncsv(v[2]) != want:
+            raise ValueError("prompt-cache left padding disagrees with padding - offset")
         self.lengths = None
 
     def filter(self, batch_indices):
@@ -902,8 +923,7 @@ def snapshot_cache(cache: List[Any]) -> List[Any]:
         if isinstance(c, Qwen4ExpQSACache):
             snap.append(("qsa", c.offset))
         elif isinstance(c, Qwen4ExpLinearCache):
-            lp = None if c.left_padding is None else np.array(c.left_padding).tolist()
-            snap.append(("linear", list(c.cache), c.offset, lp))
+            snap.append(("linear", list(c.cache), c.offset, c.padding))
         else:
             raise TypeError(f"unsupported cache type {type(c).__name__}")
     return snap
@@ -917,10 +937,9 @@ def restore_cache(cache: List[Any], snap: List[Any]) -> None:
                 raise ValueError("cannot restore a QSA cache forward in time")
             c.trim(c.offset - entry[1])
         else:
-            _, slots, offset, lp = entry
+            _, slots, offset, _padding = entry
             c.cache = list(slots)
-            c.offset = offset
-            c.left_padding = None if lp is None else mx.array(lp)
+            c.offset = offset  # left_padding derives from padding - offset
 
 
 # --------------------------------------------------------------------------
