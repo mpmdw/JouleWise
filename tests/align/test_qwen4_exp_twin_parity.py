@@ -1072,6 +1072,32 @@ def _mlx_qsa(tw, reg: Path):
     return out
 
 
+def _mlx_selection_retention(tw):
+    """A sparse prefill must not leave its (B, S, NB) block selection on the
+    module unless diagnostics are switched on."""
+    import mlx.core as mx
+    import numpy as np
+
+    args = tw.TextModelArgs.from_dict(_qsa_cfg(REG_QSA_REAL))
+    att = tw.QSAAttention(args)
+    x = mx.random.normal((1, 1024, args.hidden_size), key=mx.random.key(0))
+    out = {}
+    for label, record in (("default", None), ("recorded", True)):
+        if record is not None:
+            att.indexer.record_selection = record
+        step = tw._Step(1, 1024, 0, np.zeros((1,), np.int64), tw.rope_inv_freq(args))
+        mx.eval(att(x, step, tw.QSACache()))
+        sel = att.indexer._last_selection
+        held = [] if sel is None else [sel] if isinstance(sel, mx.array) else [sel.blocks, sel.scores]
+        out[label] = {
+            "sparse_queries": att.indexer._last_stats.sparse_queries,
+            "retained": sel is not None or "_last_selection" in att.indexer,
+            "blocks_shape": list(held[0].shape) if held else None,
+            "retained_bytes": int(sum(a.nbytes for a in held)),
+        }
+    return out
+
+
 def _mlx_rope(tw, reg: Path):
     import types
 
@@ -1140,6 +1166,7 @@ def stage_mlx_regress(work: Path):
     res["silu"] = _mlx_silu(tw, reg)
     res["qsa"] = _mlx_qsa(tw, reg)
     res["rope"] = _mlx_rope(tw, reg)
+    res["selection_retention"] = _mlx_selection_retention(tw)
     res["edge"] = _mlx_edge(reg)
     res["peak_rss_bytes"] = _peak_rss()
     (reg / "mlx_results.json").write_text(json.dumps(res, indent=2))
@@ -1424,6 +1451,13 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
         near, far = q["real_near_bf16"], q["real_far_bf16"]
         self.assertEqual(far["mask_rows_mismatched"], 0)
         self.assertLessEqual(far["max_abs"], REG_TOL["qsa_bf16_far_over_near"] * near["max_abs"])
+
+    def test_regress_qsa_selection_not_retained_by_default(self):
+        r = self.reg["selection_retention"]
+        self.assertEqual(r["default"]["sparse_queries"], 1024 - 4 * 8 - 3)
+        self.assertFalse(r["default"]["retained"])
+        self.assertTrue(r["recorded"]["retained"])
+        self.assertEqual(r["recorded"]["blocks_shape"], [1, 1024, 256])
 
     def test_regress_kernel1_convs_cached_decode(self):
         # DeltaNet and PLE short convs with kernel 1, cached decode in uneven

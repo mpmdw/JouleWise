@@ -342,7 +342,12 @@ Estimated prefill transient peak (prefill step 2,048, query chunk 512):
 | MoE activations | 0.31 |
 | **Total** | **~2.37** |
 
-The transient figure is an estimate, not a measurement.
+The transient figure is an estimate, not a measurement. No selection state
+outlives a forward: the indexer keeps its (B, S, NB) block selection only
+when the `QSAIndexer.record_selection` diagnostics switch is on (off by
+default). Left on, it would hold ~134 MB per QSA layer per 2,048-token
+prefill chunk at 262k context (~1.6 GB over the 12 layers), which the model
+above does not count.
 
 | Scheme | resident estimate | vs 80 GB |
 |---|---|---|

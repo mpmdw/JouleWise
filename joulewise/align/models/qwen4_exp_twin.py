@@ -956,6 +956,13 @@ class GatedDeltaNet(nn.Module):
 class QSAIndexer(nn.Module):
     """[ref: Qwen4ExpTextQSAIndexer] block selection -> boolean attention mask."""
 
+    # Diagnostics, off by default. When True, ``_last_selection`` keeps the
+    # last sparse call's (B, S, NB) block selection and block scores until
+    # the next call. Kept by default, that is unmodelled resident memory: a
+    # 2048-token prefill chunk at 262k context holds ~134 MB per QSA layer
+    # (~1.6 GB over the 12 layers). The reference keeps no selection state.
+    record_selection = False
+
     def __init__(self, args: TextModelArgs):
         super().__init__()
         self.n_heads = args.indexer_n_heads
@@ -966,7 +973,8 @@ class QSAIndexer(nn.Module):
             args.hidden_size, (self.n_heads + args.indexer_kv_heads) * self.head_dim, bias=False)
         self.q_layernorm = OffsetRMSNorm(self.head_dim, eps=args.rms_norm_eps)
         self.k_layernorm = OffsetRMSNorm(self.head_dim, eps=args.rms_norm_eps)
-        # Diagnostics only (underscore: never an MLX parameter).
+        # Diagnostics only (plain objects, never MLX parameters). _last_stats
+        # holds a few host ints; _last_selection see ``record_selection``.
         self._last_selection = None
         self._last_stats = None
 
@@ -1045,7 +1053,8 @@ class QSAIndexer(nn.Module):
         valid_blk = mx.arange(NB)[None, None, :] < n_t_mx[..., None]
         scores = mx.where(valid_blk, scores, -mx.inf)
         sel_blk = topk_mask_lowest_index(scores, K) & valid_blk             # (B, S, NB)
-        self._last_selection = sel_blk
+        self._last_selection = (SimpleNamespace(blocks=sel_blk, scores=scores)
+                                if self.record_selection else None)
 
         ar = mx.arange(L)
         if not padded:
