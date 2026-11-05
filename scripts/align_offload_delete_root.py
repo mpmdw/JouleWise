@@ -31,6 +31,11 @@ ALIGN_ROOT = Path('/Users/edr/night-align')
 STOP_PATH = Path('/Users/edr/night-custody/magistrate/STOP')
 DATALESS = 0x40000000
 LOCK_FLAGS = 0x2 | 0x4 | 0x20000 | 0x40000  # uchg/uappnd/schg/sappnd
+# Deliberately unpinned. Step 5 must capture real macOS evaluate output; a
+# reviewed code change must install its exact safe grammar/sample and digest.
+# Synthetic tests do not supply operational upload authority.
+UPLOAD_SUCCESS_SAMPLE = None
+UPLOAD_SAMPLE_SHA256 = None
 
 
 class Refusal(ValueError):
@@ -169,12 +174,23 @@ def check_acl_flags(p):
     require(not re.search(r'^\s*\d+:', result.stdout, re.M), 'ACL present')
 
 
+def parse_uploaded(text):
+    require(UPLOAD_SUCCESS_SAMPLE is not None and UPLOAD_SAMPLE_SHA256 is not None,
+            'cloud upload parser unpinned: record and review step-5 real sample')
+    require(hashlib.sha256(UPLOAD_SUCCESS_SAMPLE.encode()).hexdigest() == UPLOAD_SAMPLE_SHA256,
+            'cloud upload sample pin mismatch')
+    # Scaffold only until the real sample is reviewed. No substring matching,
+    # optional keys, uploadingError (even empty), duplicate or unknown fields.
+    safe = 'isUploaded=1\nisUploading=0\nhasUnresolvedConflicts=0\n'
+    require(UPLOAD_SUCCESS_SAMPLE == safe and text == UPLOAD_SUCCESS_SAMPLE,
+            'cloud upload unknown format, pending, error or conflict')
+
+
 def check_uploaded(p):
     result = subprocess.run(['/usr/bin/fileproviderctl', 'evaluate', str(p)],
                             check=True, text=True, capture_output=True)
-    require(bool(re.search(r'\bisUploaded\s*=\s*1\b', result.stdout)) and
-            not re.search(r'\bisUploaded\s*=\s*0\b', result.stdout),
-            'cloud upload unconfirmed')
+    require(not result.stderr.strip(), 'cloud upload diagnostic unrecognized')
+    parse_uploaded(result.stdout)
 
 
 def check_pause_and_disk(op):
@@ -328,6 +344,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='command', required=True)
     sub.add_parser('archive')
+    sub.add_parser('uploaded').add_argument('path', type=Path)
     for name in ('tree', 'budget'):
         sub.add_parser(name).add_argument('path', type=Path)
     d = sub.add_parser('delete')
@@ -342,6 +359,8 @@ def main():
         with lock_path.open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             delete_root(args.item, args.keep, args.remote, args.journal)
+    elif args.command == 'uploaded':
+        check_uploaded(args.path)
     elif args.command == 'budget':
         rows = json.loads(args.path.read_text())
         total = sum(r[3] for r in rows if r[1] == 'file')

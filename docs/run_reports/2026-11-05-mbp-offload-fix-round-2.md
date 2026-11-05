@@ -26,3 +26,13 @@ journals receive no refusal row. Tests preserve exact KEEP bytes for symlink,
 hardlink and a link substituted during open, and reject wrong parent/name.
 `python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS,
 45 tests, 0.721 s.
+
+N3: all upload decisions now use one exact-output parser, including shell
+jw_uploaded. No real step-5 fileproviderctl sample is available here, so its
+sample/digest pins are unset and every operational check refuses. Step 5 now
+captures stdout/stderr/digest and requires a reviewed parser commit before
+continuing. Synthetic-only parser tests cover pending uploads, any error,
+conflicts, unknown keys/format, duplicate keys and misleading uploaded values.
+`python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS,
+46 tests. Operational cloud deletion remains BLOCKED until the lead records
+and pins the real sample; no synthetic fixture is represented as live output.

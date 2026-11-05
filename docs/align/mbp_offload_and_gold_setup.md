@@ -159,9 +159,7 @@ if extra < 0 or free < 30_000_000_000 + extra:
 PY
 }
 jw_uploaded() {
-  local state
-  state="$(/usr/bin/fileproviderctl evaluate "$1")"
-  print -r -- "$state" | python3.13 -I -B -c 'import re,sys; s=sys.stdin.read(); assert re.search(r"\bisUploaded\s*=\s*1\b",s) and not re.search(r"\bisUploaded\s*=\s*0\b",s), "STOP: upload unconfirmed"'
+  python3.13 -I -B "$JW_CANON/scripts/align_offload_delete_root.py" uploaded "$1"
 }
 jw_wait_dataless() {
   local file="$1" expected="$2" flags attempt
@@ -441,16 +439,30 @@ dd if=/dev/urandom of="$JW_OP/upload-probe.bin" bs=1048576 count=256
 shasum -a 256 "$JW_OP/upload-probe.bin" > "$JW_OP/upload-probe.sha256"
 date -u +%FT%TZ > "$JW_OP/upload-start.utc"
 cp -p "$JW_OP/upload-probe.bin" "$JW_REMOTE/upload-probe.bin"
-/usr/bin/fileproviderctl evaluate "$JW_REMOTE/upload-probe.bin"
+/usr/bin/fileproviderctl evaluate "$JW_REMOTE/upload-probe.bin" \
+  > "$JW_OP/fileprovider-evaluate-step5.txt" \
+  2> "$JW_OP/fileprovider-evaluate-step5.stderr.txt"
+shasum -a 256 "$JW_OP/fileprovider-evaluate-step5.txt"
 /usr/bin/brctl status com.apple.CloudDocs
 ```
 
-Poll manually until that exact file reports `isUploaded=1` and no pending
-upload/error. Record end UTC and elapsed seconds including upload delay.
-If `fileproviderctl` is unavailable or ambiguous, STOP; this procedure has no
-Finder substitute for its machine-checkable `isUploaded=1` requirement. A local
-copy, checksum or progress-bar disappearance alone does not suffice. Then use **explicit** eviction and
-re-download of this probe to confirm the remote round trip:
+**STOP 5 parser pin:** capture a real successful `fileproviderctl evaluate`
+sample for this synthetic probe, its SHA-256, stderr, macOS/tool version and
+reviewed field meanings. Keep successive pending/error samples at unique names.
+The shipped parser is intentionally **unpinned and always refuses**. The lead
+must review this real sample and commit the exact grammar, known keys and
+sample digest before cloud eviction or deletion can proceed. Do not install a
+synthetic sample, accept a substring, or pass an operator override. Unknown
+keys/formats, `isUploading=1`, any `uploadingError`, and
+`hasUnresolvedConflicts=1` must refuse even alongside `isUploaded=1`.
+A changed macOS format needs another reviewed pin. No live sample was available
+in this blind offline fix session.
+
+After that reviewed parser is installed, require its successful check on the
+exact file, record end UTC and elapsed seconds including upload delay, then
+use explicit eviction and re-download to confirm the remote round trip.
+Unavailable or ambiguous tool output is STOP; a local checksum or progress
+bar cannot substitute for upload-state confirmation.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"

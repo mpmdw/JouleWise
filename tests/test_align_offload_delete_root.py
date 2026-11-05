@@ -1,5 +1,6 @@
 """All filesystem work is synthetic, under TemporaryDirectory; no study reads."""
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -402,16 +403,26 @@ class DeleteRootTests(unittest.TestCase):
 
 
 class HelperTests(unittest.TestCase):
-    def test_upload_parser_requires_unambiguous_one(self):
-        for text, ok in (('isUploaded=1', True), ('isUploaded=0', False),
-                         ('isUploaded=10', False), ('unknown', False),
-                         ('isUploaded=1 isUploaded=0', False)):
-            with self.subTest(text=text), mock.patch.object(g.subprocess, 'run', return_value=types.SimpleNamespace(stdout=text)):
-                if ok:
-                    g.check_uploaded(Path('/synthetic'))
-                else:
-                    with self.assertRaises(g.Refusal):
-                        g.check_uploaded(Path('/synthetic'))
+    def test_upload_parser_is_closed_until_real_sample_recorded(self):
+        for text in ('isUploaded=1', 'isUploaded=1\nisUploading=0\nhasUnresolvedConflicts=0\n'):
+            with self.subTest(text=text), self.assertRaisesRegex(g.Refusal, 'unpinned'):
+                g.parse_uploaded(text)
+
+    def test_upload_parser_rejects_pending_errors_conflicts_and_unknowns(self):
+        sample = 'isUploaded=1\nisUploading=0\nhasUnresolvedConflicts=0\n'
+        # Synthetic grammar exercise ONLY; this pin is never shipped as real.
+        with mock.patch.object(g, 'UPLOAD_SUCCESS_SAMPLE', sample), \
+             mock.patch.object(g, 'UPLOAD_SAMPLE_SHA256', hashlib.sha256(sample.encode()).hexdigest()):
+            g.parse_uploaded(sample)
+            for text in (sample.replace('isUploading=0', 'isUploading=1'),
+                         sample + 'uploadingError=\n', sample + 'uploadingError=failed\n',
+                         sample.replace('hasUnresolvedConflicts=0', 'hasUnresolvedConflicts=1'),
+                         sample + 'unknown=0\n', sample + 'isUploaded=1\n',
+                         sample.replace('isUploaded=1', 'isUploaded=10'),
+                         sample.replace('isUploaded=1', 'isUploaded=0'),
+                         'isUploaded=1', sample.replace('\n', ' ')):
+                with self.subTest(text=text), self.assertRaises(g.Refusal):
+                    g.parse_uploaded(text)
 
     def test_tree_archive_roundtrip_preserves_modes_links_and_empty_dirs(self):
         with tempfile.TemporaryDirectory() as d:
