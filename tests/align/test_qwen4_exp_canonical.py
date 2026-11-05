@@ -1575,7 +1575,7 @@ class ValidationRound1Test(unittest.TestCase):
         on every linear cache; only the first is ever read, so in a left-padded
         batch the others grew one graph node and one Metal buffer per decode
         step (the upstream crash: ``[metal::malloc] Resource limit``). A
-        1024-step padded decode, active memory measured at intervals: no
+        1536-step padded decode, active memory measured every 32 steps: no
         chain, and no growth beyond the caches' own buffers."""
         import mlx.core as mx
         import numpy as np
@@ -1587,20 +1587,25 @@ class ValidationRound1Test(unittest.TestCase):
         mx.eval([c.state for c in cache])
         linear = [c for c in cache if type(c).__name__ == "Qwen4ExpLinearCache"]
         probe = lambda c: dict(nodes=max(graph_nodes(lc.left_padding) for lc in linear))
-        trace = decode_trace(model, cache, 2, 1024, range(32, 1025, 32), probe)
-        growth = (trace[-1]["active"] - trace[0]["active"]) - (trace[-1]["cache"] - trace[0]["cache"])
-        # Between cache-capacity steps (KV / raw keys every 256 tokens, block
-        # keys every 64 blocks) active memory must not grow (transients move it
-        # by +-2 KB either way); the chain grew 4 bytes per padded linear layer
-        # per step, ~17 KB over these steps.
-        flat = sum(b["active"] - a["active"] for a, b in zip(trace, trace[1:]) if a["cache"] == b["cache"])
-        flat_steps = sum(b["step"] - a["step"] for a, b in zip(trace, trace[1:]) if a["cache"] == b["cache"])
-        fx.record("r1_padded_decode_memory", dict(trace=trace, residual_growth_bytes=growth,
-                                                  growth_between_capacity_steps=flat, flat_steps=flat_steps))
+        trace = decode_trace(model, cache, 2, 1536, range(32, 1537, 32), probe)
+        # Growth rate of active memory beyond the caches' own bytes, fitted
+        # within each stretch between cache-capacity steps (KV / raw keys every
+        # 256 tokens, block keys every 64 blocks; the allocator rounds those
+        # steps, and transients move single readings by +-2 KB). The chain cost
+        # 4 bytes per padded linear layer per step: 18 B/step measured here.
+        stretches = {}
+        for t in trace:
+            stretches.setdefault(t["cache"], []).append((t["step"], t["active"] - t["cache"]))
+        num = den = 0.0
+        for pts in stretches.values():
+            ms, mr = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+            num += sum((st - ms) * (r - mr) for st, r in pts)
+            den += sum((st - ms) ** 2 for st, _ in pts)
+        slope = num / den
+        fx.record("r1_padded_decode_memory", dict(trace=trace, bytes_per_step=slope, stretches=len(stretches)))
         self.assertTrue(all(t["nodes"] == 0 for t in trace), trace)
-        self.assertGreaterEqual(flat_steps, 512)
-        self.assertLessEqual(flat, 4096, trace)
-        self.assertLessEqual(growth, 32 * 1024, trace)
+        self.assertGreaterEqual(len(stretches), 4)
+        self.assertLessEqual(slope, 8.0, trace)
         # The derived value is the protocol's: pad tokens still ahead.
         self.assertEqual(np.array(linear[1].left_padding).tolist(), [0 - linear[1].offset, PAD_B - linear[1].offset])
 
