@@ -257,6 +257,7 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage="q4"
             weight_map[tensor] = name
     config_out = dict(model_type="qwen4_exp", architectures=["Model"], model_file="qwen4_exp.py",
                       text_config=c, jw_format="hf-zero-centered-v1", ple_tables=descriptors,
+                      jw_max_prefill_tokens=64, jw_context_cap=40960,
                       eos_token_id=c.get("eos_token_id"), tie_word_embeddings=c.get("tie_word_embeddings", False))
     if any(quantizers.values()):
         config_out["quantization"] = quantization

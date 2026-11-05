@@ -103,3 +103,25 @@ the unavailable Metal device. Official HF prefill vs stepwise max abs error:
 fp32 7.450580596923828e-08; bf16 0.0, on [1,11,64] logits. These numbers
 are HF self-consistency only. Cross-backend parity, MLX cache correctness and
 quantized conversion remain **UNVERIFIED, RELEASE BLOCKING**.
+
+## Stage 5
+
+Added backend-free component memory accounting and a tracked text-config
+fixture, so CI does not depend on ignored `.engine` sources. The kit cap is
+confirmed as 40,960. Mixed weights estimate 75,239,294,720 bytes; persistent
+state 1,248,595,976 bytes. Chunk 256 plus a 3 GB runtime reserve exceeded
+the strict 80 GB planning target (80,759,813,384); chunk 64 estimates
+79,876,650,248. Converted runtime config now refuses larger chunks and
+contexts; generation must explicitly use `prefill_step_size=64`.
+
+The design doc includes per-component 8/6/4/3/mixed tables and physical
+file-cache caveats. q4 PLE disk bytes 28,160,135,168; illustrative page-cache
+estimate 8.93 GB, conservative page-span bound 21.47 GB. Mixed combined
+physical upper estimate 101.35 GB before OS/process headroom. These are
+accounting estimates, not measured peaks or a guarantee against swap.
+
+`python3 -B -m unittest tests.align.test_qwen4_exp_memory`: 2 PASS (0.012 s).
+Initial budget assertion caught chunk 256 exceeding target; fixed by using
+and enforcing chunk 64, without reducing the explicit runtime reserve.
+`git diff --check` passed. Full-model memory, allocator reserve adequacy,
+file-cache behavior, and swap absence remain target-Mac gates.

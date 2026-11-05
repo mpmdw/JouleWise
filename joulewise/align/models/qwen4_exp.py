@@ -72,11 +72,13 @@ class ModelArgs(BaseModelArgs):
     eos_token_id: object = 248044
     ple_tables: dict = field(default_factory=dict)
     jw_format: str = "hf-zero-centered-v1"
+    jw_max_prefill_tokens: int = 64
+    jw_context_cap: int = 40960
 
     @classmethod
     def from_dict(cls, config):
         c = tables.text_config(config)
-        for k in ("ple_tables", "jw_format"):
+        for k in ("ple_tables", "jw_format", "jw_max_prefill_tokens", "jw_context_cap"):
             if k in config:
                 c[k] = config[k]
         return cls(**{f.name: c[f.name] for f in fields(cls) if f.name in c})
@@ -112,6 +114,8 @@ class ModelArgs(BaseModelArgs):
             raise ValueError("Invalid PLE configuration")
         if self.jw_format != "hf-zero-centered-v1":
             raise ValueError("Unsupported norm representation")
+        if self.jw_max_prefill_tokens <= 0 or self.jw_context_cap <= 0:
+            raise ValueError("Invalid runtime token limits")
 
 
 class Qwen4ExpRecurrentCache(ArraysCache):
@@ -535,10 +539,14 @@ class Model(nn.Module):
     def __call__(self, inputs, cache=None, attention_mask=None):
         if inputs.ndim != 2 or inputs.shape[1] == 0:
             raise ValueError("Nonempty [batch, tokens] input required")
+        if inputs.shape[1] > self.args.jw_max_prefill_tokens:
+            raise ValueError(f"Prefill chunk exceeds model budget; set prefill_step_size <= {self.args.jw_max_prefill_tokens}")
         if cache is not None and len(cache) != len(self.layers):
             raise ValueError("Wrong cache layer count")
         if cache is not None and len({c.offset for c in cache}) != 1:
             raise ValueError("Hybrid cache offsets disagree")
+        if inputs.shape[1] + (cache[0].offset if cache is not None else 0) > self.args.jw_context_cap:
+            raise ValueError("JouleWise context cap exceeded")
         mask = mx.ones(inputs.shape, dtype=mx.bool_) if attention_mask is None else attention_mask[:, -inputs.shape[1]:].astype(mx.bool_)
         # Only initial left padding is supported. Holes or right padding need
         # sequence compaction, not the contiguous compressed-block algorithm.
