@@ -13,7 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from joulewise.hazards import base, smc, smc_enumeration as r0
+from joulewise.align.apple import smc
+from joulewise.hazards import base, smc_enumeration as r0
 from joulewise.measurement_liveness import Census
 from joulewise.night_gate import ProbeResult
 from scripts import align_smc_enumerate as cli

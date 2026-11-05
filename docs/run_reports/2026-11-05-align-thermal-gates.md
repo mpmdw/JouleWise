@@ -38,8 +38,10 @@ explicitly allowed shared object store. No real restricted directory opened.
   typed decoded values/errors, paired epoch/monotonic brackets and a
   bundle-local journal. An explicit per-run registry binds OS notify readings
   and the actual telemetry adapter's current complete PM frames. No second
-  sampler or model is launched. No pinned controller, monitor, SMC reader or
-  MLX runtime source changed in this implementation.
+  sampler or model is launched. The initial lane did not itself edit the core,
+  but its merged #658 base changed the pinned monitor and SMC reader. The fix
+  round below restores their exact pre-#658 pilot-9 bytes and relocates the
+  extensions into ALIGN-local code. No pin rebind is claimed.
 - Neutral benign warmup, first-member last-60-second idle medians, G0 after
   warmup/before the episode stamp, both temperature upper bands, 10 samples,
   60-second slow OLS slope ±0.2 °C/min, OS 0 / PM Nominal, 600-second cap.

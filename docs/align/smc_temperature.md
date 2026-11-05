@@ -4,6 +4,14 @@ Implementation is **PROVISIONAL**, tested with fake hardware only. The target
 is the M3 Max Mac15,9 (128 GB). No M4 Air key names or readings establish
 which M3 Max sensors measure a die, GPU cluster, heatsink or skin.
 
+PR #666 fix round: numeric extensions and index enumeration live in
+`joulewise/align/apple/smc.py`, using the unchanged hazard SMC transport.
+The optional temperature monitor is an ALIGN-local subclass in
+`joulewise/align/apple/temperature_monitor.py`. A temperature-pinned campaign
+selects `scripts/align_temperature_monitor.py`; other campaigns keep the
+original launcher. The core `hazards/smc.py` and `hazards/monitor.py` bytes
+are restored to their pre-#658 pilot-9 base; no pin rebind is claimed.
+
 ## R0 on the measurement Mac
 
 Run in a separate, quiet desk session after every Codex/Claude session has

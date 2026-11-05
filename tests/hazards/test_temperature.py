@@ -9,7 +9,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from joulewise.hazards import base, monitor, temperature
+from joulewise.align.apple import temperature_monitor as monitor
+from joulewise.hazards import base, temperature
 from joulewise.schemas import CampaignPolicy, SchemaError
 from tests.hazards.test_monitor import FakeMac
 
@@ -112,6 +113,20 @@ class TemperatureTests(unittest.TestCase):
             self.assertLess(lines[-1]["values"]["coverage"]["all_keys"]["sample_fraction"], 1)
             self.assertIn("temperature", monitor.load_journals(root))
 
+    def test_extension_adds_temperature_to_the_inherited_fast_loop(self):
+        from joulewise.hazards import monitor as core
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mac = FakeMac(root)
+            mac.clocks.read_cost_ns = 0
+            config = monitor.build_config(custody_dir=root, tree_roots=[4000], disk_targets=[], smc_temperature=POLICY)
+            mon = monitor.Monitor(config, ctx=base.Context(clocks=mac.clocks, run=mac.runner), smc_reader=FakeSensors())
+            mon.open_session()
+            mon._loop(core.FAST_TASKS, mac.clocks.monotonic_ns() + 3*NS)
+            mon.close_session('test')
+            rows, _ = monitor.read_journal(root/'hazards/monitor/temperature.jsonl')
+            self.assertEqual(sum(r['kind'] == 'reading' for r in rows), 3)
+
     def test_disabled_monitor_has_no_new_journal_or_probe(self):
         with tempfile.TemporaryDirectory() as directory:
             mac = FakeMac(Path(directory))
@@ -157,6 +172,7 @@ class DriverPolicyTests(unittest.TestCase):
         seam = production_seams(Path.cwd())
         argv = seam.monitor_argv(request)
         self.assertIn("--config", argv)
+        self.assertEqual(Path(argv[argv.index('--config')-1]).name, 'align_temperature_monitor.py')
         config = json.loads((self.root / "hazards/monitor/config.json").read_text())
         self.assertEqual(config["smc_temperature"], POLICY)
         self.assertEqual(seam.monitor_argv(request), argv)

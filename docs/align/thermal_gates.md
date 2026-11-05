@@ -2,8 +2,13 @@
 
 **PROVISIONAL: synthetic verification only.** Authority is FINAL-DESIGN §§1(c–e),
 2.4–2.6 and B5/B6/B9 on `origin/lane/2026-11-05-align-window-council`.
-The pinned controller, monitor, MLX runtime and SMC reader remain unchanged.
-This layer imports the merged 1 Hz journal/SMC transport and token-budget work.
+The pinned controller and MLX runtime are unchanged. The fix round restores
+the hazard monitor and SMC reader byte-for-byte to the pre-#658 pilot-9 base;
+the inherited changes had violated this boundary. Extra decoders/enumeration
+now live in `align/apple/smc.py`, over the unchanged core transport/reader.
+The optional monitor task lives in `align/apple/temperature_monitor.py`,
+selected by `scripts/align_temperature_monitor.py` only for a temperature policy.
+This layer also imports the merged token-budget work.
 It does not register, size, arm or run a measurement window.
 
 ## Configuration and launch contract

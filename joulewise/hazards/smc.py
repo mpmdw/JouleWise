@@ -13,8 +13,7 @@ here instead.
 
 What is read.  An SMC key is a four-character name; the SMC answers a key
 with a data type (also four characters) and up to 32 bytes.  On Apple Silicon
-the native float/integer types are little-endian (legacy sp78/fpe2 fixed
-point remains big-endian). The default battery/power keys read here:
+the numeric types are little-endian.  The keys read here:
 
 ======  ======  =====  ==================================================
 key     type    unit   meaning
@@ -39,9 +38,6 @@ Errors never raise out of :class:`Reader`: every read returns
 ``{"values": {key: value or None}, "errors": {key: reason}}`` so the monitor
 and the arm journal a failed read as data.  Imports nothing outside the
 standard library.
-
-``enumerate_sensors()`` additionally walks the SMC index for readable T***
-temperatures and F?Ac fan RPM; it returns enumeration errors as data too.
 """
 
 from __future__ import annotations
@@ -58,7 +54,6 @@ UNITS: Mapping[str, str] = {"B0AC": "mA", "B0AV": "mV", "PDTR": "W", "PSTR": "W"
 SERVICE = b"AppleSMC"
 SELECTOR = 2            # kSMCHandleYPCEvent
 CMD_READ_KEY = 5        # kSMCReadKey
-CMD_GET_KEY_BY_INDEX = 8  # kSMCGetKeyFromIndex
 CMD_GET_KEY_INFO = 9    # kSMCGetKeyInfo
 RESULT_KEY_NOT_FOUND = 0x84
 IOKIT_PATH = "/System/Library/Frameworks/IOKit.framework/IOKit"
@@ -113,13 +108,6 @@ def decode(data_type: str, raw: bytes) -> int | float:
     Raises ValueError for an unsupported type or too few bytes.
     """
 
-    # Legacy fixed-point temperature/fan encodings use big-endian bytes;
-    # Apple Silicon's flt/integer encodings above remain little-endian.
-    if data_type in ("sp78", "fpe2"):
-        if len(raw) < 2:
-            raise ValueError(f"SMC type {data_type!r} needs 2 bytes")
-        return struct.unpack(">h" if data_type == "sp78" else ">H", raw[:2])[0] / (
-            256 if data_type == "sp78" else 4)
     fmt = _FORMATS.get(data_type)
     if fmt is None:
         raise ValueError(f"unsupported SMC data type {data_type!r}")
@@ -274,45 +262,6 @@ class Reader:
                 errors[key] = error
         return {"values": values, "errors": errors}
 
-    def enumerate_sensors(self) -> dict[str, Any]:
-        """Enumerate the SMC index, retaining readable T*** and F?Ac keys.
-
-        Names are candidates, not assertions about anatomical location. Failed
-        index lookups and unreadable candidates are retained in ``errors``.
-        No hardcoded model-specific key list is used.
-        """
-        sensors, errors = [], {}
-        count, why = self.read_key("#KEY")
-        if why or type(count) is not int or not 0 < count <= 65536:
-            return {"keys": [], "errors": {"#KEY": why or f"invalid key count {count!r}"},
-                    "complete": False}
-        complete = True
-        for index in range(count):
-            try:
-                reply = self._open().call(SMCKeyData(data8=CMD_GET_KEY_BY_INDEX, data32=index))
-                if reply.result:
-                    raise OSError(f"index result {reply.result:#x}")
-                key = type_name(reply.key)
-            except Exception as exc:
-                errors[f"index:{index}"] = str(exc)
-                complete = False
-                continue
-            unit = "degC" if key.startswith("T") else (
-                "rpm" if len(key) == 4 and key[0] == "F" and key[2:] == "Ac" else None)
-            if unit is None:
-                continue
-            value, why = self.read_key(key)
-            if why is not None:
-                errors[key] = why
-            elif (unit == "degC" and not -40 <= value <= 150) or (unit == "rpm" and value < 0):
-                errors[key] = f"implausible {unit} value {value}"
-            else:
-                size, data_type = self._info[key]
-                sensors.append({"key": key, "unit": unit, "data_type": data_type,
-                                "data_size": size, "initial_value": value})
-        return {"keys": sorted(sensors, key=lambda item: item["key"]),
-                "errors": errors, "complete": complete}
-
     def close(self) -> None:
         transport, self._transport = self._transport, None
         if transport is not None:
@@ -338,6 +287,6 @@ def read_once(keys: Sequence[str] = KEYS) -> dict[str, Any]:
         reader.close()
 
 
-__all__ = ["CMD_GET_KEY_BY_INDEX", "CMD_GET_KEY_INFO", "CMD_READ_KEY", "IOKitTransport", "KEYS", "Reader",
+__all__ = ["CMD_GET_KEY_INFO", "CMD_READ_KEY", "IOKitTransport", "KEYS", "Reader",
            "RESULT_KEY_NOT_FOUND", "SMCKeyData", "Transport", "UNITS", "decode", "fourcc",
            "read_once", "type_name"]

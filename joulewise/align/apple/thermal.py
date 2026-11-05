@@ -16,7 +16,8 @@ from types import GeneratorType
 from joulewise.align.apple.sampler import monotonic_ns, _stamp_record
 from joulewise.align.apple.budget import DeadmanExpired
 from joulewise.clock import SystemClock
-from joulewise.hazards import smc, temperature
+from joulewise.align.apple import smc
+from joulewise.hazards import temperature
 from joulewise.interfaces import RuntimeEvent
 
 NS = 1_000_000_000

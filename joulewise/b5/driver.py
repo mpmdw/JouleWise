@@ -711,6 +711,13 @@ def production_seams(repo_root: Path) -> Seams:
         """Write the monitor's config once (lane L1's format) and return its command line."""
 
         from joulewise.hazards import monitor as hazard_monitor
+        temperature_policy = monitor_temperature_policy(request.plan)
+        monitor_script = 'hazard_monitor.py'
+        temperature_args = {}
+        if temperature_policy is not None:
+            from joulewise.align.apple import temperature_monitor as hazard_monitor
+            monitor_script = 'align_temperature_monitor.py'
+            temperature_args['smc_temperature'] = temperature_policy
         window = request.plan.hazard_window
         thresholds = window["thresholds"]
         # PLAN2 row 10: the chain's process-group leader (night/chain.started)
@@ -723,14 +730,14 @@ def production_seams(repo_root: Path) -> Seams:
             cpu_limit_s_per_s=float(thresholds.get("contention", {}).get("cpu_limit_s_per_s", 0.05)),
             tree_root_files=(str(Path(request.night_dir) / "chain.started"),),
             clock_step_ns=_plan_clock_step_ns(window),
-            smc_temperature=monitor_temperature_policy(request.plan))
+            **temperature_args)
         path = hazard_monitor.monitor_dir(request.custody_root) / "config.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             _create_once(path, hazard_monitor.validate_config(config))
         elif json.loads(path.read_text()) != hazard_monitor.validate_config(config):
             raise ValueError("existing monitor config differs from the pinned policy/config")
-        return [*TASKPOLICY_ARGV, sys.executable, "-B", str(repo_root / "scripts/hazard_monitor.py"),
+        return [*TASKPOLICY_ARGV, sys.executable, "-B", str(repo_root / 'scripts' / monitor_script),
                 "--config", str(path)]
 
     def collectors_argv(request: CollectorRequest) -> list[str]:
