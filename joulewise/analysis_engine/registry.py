@@ -15,6 +15,10 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
+from joulewise.strict_io import (
+    sha256_value as sha256_bytes,
+)
+
 from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import AXI_VALIDATOR_REASON_CODES
 
@@ -243,10 +247,6 @@ def normalized_json_bytes(value: Any) -> bytes:
 
 def canonical_jsonl_bytes(rows: Iterable[Mapping[str, Any]]) -> bytes:
     return b"".join(canonical_json_bytes(row) + b"\n" for row in rows)
-
-
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def _is_int(value: Any, *, minimum: int = 0) -> bool:

@@ -159,6 +159,10 @@ AUTHORIZED_PLANNED_N_BLOCKS = {5, 10}
 REGISTRY_FREEZE_BASIS = "window_a_variance_mde_before_campaign_execution"
 
 
+from joulewise.strict_io import (
+    sha256_value as sha256_bytes,
+)
+
 class AnalysisManifestError(ValueError):
     """Raised when a registry or generated manifest is invalid."""
 
@@ -204,10 +208,6 @@ def _resolve_repository_paths(
         registry_path if registry_path is not None else root / REGISTRY_RELATIVE_PATH,
         ap_path if ap_path is not None else root / AP_RELATIVE_PATH,
     )
-
-
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def canonical_json_bytes(value: Any) -> bytes:

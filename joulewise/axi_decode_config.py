@@ -26,6 +26,10 @@ IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 EVENT_TOP_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
 
+from joulewise.strict_io import (
+    sha256_value as sha256_bytes,
+)
+
 class AxiSchemaError(ValueError):
     """An AXI config or v2 wire object violates the frozen schema."""
 
@@ -36,10 +40,6 @@ def canonical_json_bytes(value: Any) -> bytes:
 
 def normalized_json_bytes(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
-
-
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def _int(value: Any, where: str, minimum: int = 0) -> int:

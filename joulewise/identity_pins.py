@@ -24,6 +24,10 @@ from pathlib import Path, PurePosixPath
 from types import ModuleType
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from joulewise.strict_io import (
+    sha256_value as _sha256_bytes,
+)
+
 from joulewise.provenance import model_artifact_identity
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
@@ -786,10 +790,6 @@ def _render_json(value: Any) -> bytes:
         json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
         + "\n"
     ).encode("utf-8")
-
-
-def _sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def _gnu_sidecar(digest: str, filename: str) -> bytes:

@@ -26,6 +26,10 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.strict_io import (
+    sha256_value as _sha256_bytes,
+)
+
 from joulewise.adapters.mlx_runtime import _encode as runtime_encode  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     DEFAULT_ACCEPTANCE_BOUND_PATH,
@@ -192,10 +196,6 @@ def _read_json(path: Path, *, label: str) -> dict[str, Any]:
 
 def _json_bytes(value: object) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
-
-
-def _sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def _sha256_path(path: Path) -> str:
