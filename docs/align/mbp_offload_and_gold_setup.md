@@ -378,6 +378,11 @@ locator review is unavailable, pilot 8 stays and no deletion proceeds.
 
 ## 5. Check quota, staging space and throughput for the selected roots only
 
+Run the operation **inside tmux plus caffeinate**: start `tmux new -s jw-offload`,
+then keep `caffeinate -i -s` running in a separate tmux pane for the whole
+operation. **Never close the Terminal.** Keep the Mac on reliable AC power.
+This does not authorize starting a measurement or interacting with analysis.
+
 The tracked `scripts/align_offload_disk_guard.py` runs each allocating writer
 in a new session/process group, samples every filesystem supplied with
 `--path` every **5 seconds**, and sends **SIGSTOP to the whole writer group**
@@ -389,6 +394,12 @@ must stay in that group, foreground and wait for children (no daemonization,
 HF/package downloads, conversion, backup and step 12, in addition to each
 maximum-allocation admission check. Sampled checks cannot prevent sub-5-second
 bursts; the admitted whole-operation byte ceiling funds those bursts.
+SIGHUP, SIGTERM, SIGINT and SIGQUIT stop the group before the guard exits.
+The guard's child supervisor owns the writer group and monitors a private
+pipe: guard death (including SIGKILL) closes it and stops the group; a missing
+heartbeat for more than 15 seconds also stops it. The actual writer is its
+child and inherits no heartbeat descriptors. A stopped group is never resumed
+automatically; restarting requires a new guarded attempt after review.
 
 Save a writer's commands in a separate reviewed file (which also sources
 env.zsh), then run it from a guarded step file:
