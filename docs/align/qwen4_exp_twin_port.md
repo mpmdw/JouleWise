@@ -224,10 +224,12 @@ q4 halves it).
 
 ## Test evidence
 
-`python3 -m unittest tests.align.test_qwen4_exp_twin_parity`: **20 tests,
-OK** (~50 s on the loaded M4 Air; ref stage peak RSS 377 MB, MLX stage
-186 MB). The test skips when the venvs are absent or
-`JW_SKIP_TWIN_PARITY=1`.
+`python3 -m unittest tests.align.test_qwen4_exp_twin_parity`: **31 tests,
+OK** (~25 s on the M4 Air; peak RSS: ref stage 392 MB, MLX stage 166 MB,
+review-regression stages 817 MB / 272 MB). The test skips when the venvs are
+absent or `JW_SKIP_TWIN_PARITY=1`. The numbers below are from the run after
+the 2026-11-05 review fixes; the regression probes are listed after the
+converter checks.
 
 Tiny config: hidden 64, 8 layers (L L L QSA L L L QSA), PLE at layers 2 and
 5 (two `ple_layer_index` values), 8 experts top-3, hc 4, and an indexer with
@@ -247,7 +249,7 @@ summary JSON):
 | left-padded batch + 4 decode steps, row 0 / row 1 vs reference | 3.81e-06 / 3.93e-06 | 6e-07 | 1.000 | 2e-4 |
 | batch-1 seq B + decode vs reference | 4.44e-06 | 5.7e-07 | 1.000 | 2e-4 |
 | trimmed cache + re-prefill vs reference | 2.74e-06 | 4.9e-07 | 1.000 | 2e-4 |
-| `mlx_lm.generate_step` greedy (prefill step 16): tokens / logprobs | 8/8 equal / 2.4e-06 | | | equal / 2e-4 |
+| `mlx_lm.generate_step` greedy (prefill step 16): tokens / logprobs | 8/8 equal / 3.3e-06 | | | equal / 2e-4 |
 | MLX prefill vs MLX stepwise | 2.47e-06 | 4.7e-07 | 1.000 | 1e-4 |
 | batch-1 vs left-padded (MLX): sparse QSA path / dense path (short, + 2 decode steps) | 2.38e-06 / 1.19e-06 | 4.5e-07 | 1.000 | 1e-4 |
 | KV trim + re-prefill vs fresh (same call split) | **0 (bitwise)** | 0 | 1.000 | exact |
@@ -258,10 +260,10 @@ summary JSON):
 | fused-expert vs per-expert checkpoint conversion | bitwise equal (445 tensors) | | | exact |
 | reference: pinned copy vs installed transformers; reloads of both layouts | 0.0 | | | exact |
 | *bf16 noise floor: reference bf16 vs reference fp32* | *2.87e-01* | *2.06e-02* | 1.000 | — |
-| MLX bf16 vs reference fp32 (prefill = stepwise) | 8.80e-02 | 1.45e-02 | 1.000 | ≤ noise floor (max and RMS) |
-| MLX bf16 vs reference bf16 (prefill / stepwise) | 2.70e-01 / 2.66e-01 | 2.4e-02 | 1.000 | ≤ 1.5 × floor |
-| mixed quant (q4 experts, q8 dense, q8 n-gram) vs MLX bf16 | 3.79e-01 (rel 0.105) | 6.0e-02 | 0.973 | rel ≤ 0.15, top-1 ≥ 0.85 |
-| quantization attribution: q4 experts / q8 dense / q8 n-gram / q4 n-gram only | 0.26 / 0.32 / 0.26 / 0.44 | 0.041 / 0.040 / 0.026 / 0.076 | 0.973 / 0.973 / 0.973 / 0.946 | informational |
+| MLX bf16 vs reference fp32 (prefill = stepwise) | 6.87e-02 | 1.4e-02 | 1.000 | ≤ noise floor (max and RMS) |
+| MLX bf16 vs reference bf16 (prefill / stepwise) | 2.89e-01 / 2.85e-01 | 2.0e-02 / 2.1e-02 | 1.000 | ≤ 1.5 × floor |
+| mixed quant (q4 experts, q8 dense, q8 n-gram) vs MLX bf16 | 3.76e-01 (rel 0.105) | 6.1e-02 | 1.000 | rel ≤ 0.15, top-1 ≥ 0.85 |
+| quantization attribution: q4 experts / q8 dense / q8 n-gram / q4 n-gram only | 0.22 / 0.34 / 0.21 / 0.41 | 0.040 / 0.044 / 0.018 / 0.074 | 0.946 / 1.000 / 1.000 / 0.973 | informational |
 | *sensitivity: reference with indexer made dense / n-gram table zeroed* | *0.431 / 3.68* | | 0.946 / 0.135 | ≫ fp32 bound |
 
 How to read the table:
@@ -285,6 +287,29 @@ Converter checks in the same run:
 - the 1 `mtp.*` tensor was dropped;
 - all 6 n-gram hash buffers matched the recomputation;
 - 4-bit module count 24 and 8-bit 90, both exactly as the policy predicts.
+
+Review regressions (2026-11-05; stages `ref_regress` / `mlx_regress`). Each
+probe reproduces a confirmed review finding against the engine copy, at the
+layer level or on a tiny converted model. The probes for code fixes fail on
+the pre-fix code; the two tie probes guard documented behaviour (only exact
+ties may differ from the reference):
+
+| Probe | After fix | Before fix | Bound |
+|---|---|---|---|
+| config validation: 8 configs vs reference `Qwen4ExpTextConfig` | same accept/reject on all 8 | 7 invalid configs accepted | identical |
+| GatedDeltaNet layer, cached segments, kernel 4 / kernel 1 | 7.6e-06 / 6.0e-07, conv cache K-1 | kernel 1: 1.76, cache of 9 | 2e-4 |
+| tiny model with kernel-1 DeltaNet + PLE convs: cached uneven segments vs reference uncached prefill | 1.7e-06, conv caches empty | 2.73, caches grew to 41 | 2e-4 |
+| GatedDeltaNet, Dk = 48 / 16, GPU and CPU | ≤ 9.5e-07 | GPU: 1.61 / Metal compile error | 2e-4 |
+| bf16 silu, all finite bf16 \|x\| < 50: mismatches vs torch, GPU / CPU | 508 / 252 (stock `nn.silu`: 1844 / 1296) | = stock | < 0.5 × stock |
+| GatedDeltaNet at released head dims, bf16 error / reference bf16 noise (RMS, 3 seeds) | 1.005-1.007 | 1.08-1.10 | ≤ 1.04 |
+| RoPE inv_freq vs reference at (1e7, 64) / (1e7, 16) | bit-identical | 11 / 1 entries off | exact |
+| bf16 cos/sin over positions 0-262k vs reference | 8.8e-06 of entries | 2.65e-02 | ≤ 1e-4 |
+| QSA layer at released head geometry, fp32 at position 200k | 1.07e-06, masks equal | 8.9e-04 | 2e-4 |
+| same, bf16 at 250k vs at 0 | 7.8e-03 vs 7.8e-03, masks equal | 0.115, 1 non-tie flip | ≤ 2 × |
+| QSA mask differences, tie-aware (relu-zero ties; degenerate equal scores) | 1 / 20 tie-only rows, 0 others; equal-mask rows ≤ 8.3e-07 | (documentation fix) | 0 non-tie |
+| router at 512 experts / top-10, bf16, 64 tokens | 5 boundary ties, 5 tied swaps, 0 others | (documentation fix) | 0 non-tie |
+| QSA block selection kept after a 1024-token sparse prefill | none (opt-in still records) | (1, 1024, 256) array | none |
+| checkpoint whose n-gram table `torch.chunk`s into 27 of 28 parts | converts; prefill 1.4e-06 | conversion aborted | 2e-4 |
 
 ## N-gram table: residency and latency (measured)
 
@@ -452,7 +477,7 @@ core with its slightly different 8-bit set, and a 57.6 / 32.0 GB table.
 ## How to run
 
 ```bash
-# parity (needs venv-ref + venv-mlx; ~1 min, <0.4 GB per stage)
+# parity (needs venv-ref + venv-mlx; ~1 min, <0.9 GB per stage)
 TMPDIR=/private/tmp/jwtwin-tmp nice -n 10 python3 -m unittest tests.align.test_qwen4_exp_twin_parity -v
 # keep the work dir and its summary.json: JW_TWIN_KEEP=1
 
