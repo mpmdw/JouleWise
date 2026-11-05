@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from contextlib import nullcontext
 from dataclasses import replace
 from functools import wraps
 from typing import Any, Mapping, Sequence
@@ -17,6 +18,7 @@ from joulewise.align.endpoints import _coalesce_assistant_calls
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mapping
 from joulewise.align.apple.sampling import turn_seed
+from joulewise.align.apple.budget import DeadmanExpired
 from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
@@ -164,16 +166,82 @@ def parse_completion(
 class _StreamObservation:
     """Observe native finish reasons without replacing MLX's generation loop."""
 
-    def __init__(self, native: Any) -> None:
+    def __init__(self, native: Any, *, deadman=None, max_tokens=None, thermal=None, turn_index=0) -> None:
         self.native = native
         self.finish_reason: str | None = None
+        self.deadman_expired = False
+        self.thermal_aborted = False
 
         @wraps(native.stream_generate)
         def stream_generate(*args: Any, **kwargs: Any):
-            for response in native.stream_generate(*args, **kwargs):
-                reason = getattr(response, "finish_reason", None)
-                self.finish_reason = reason if isinstance(reason, str) else None
-                yield response
+            stream = iter(native.stream_generate(*args, **kwargs))
+            if deadman is None and max_tokens is None and thermal is None:
+                for response in stream:
+                    reason = getattr(response, "finish_reason", None)
+                    self.finish_reason = reason if isinstance(reason, str) else None
+                    yield response
+                return
+            count = 0
+            pending_hold = None
+            try:
+                while max_tokens is None or count < max_tokens:
+                    resumed = False
+                    try:
+                        with deadman.guard() if deadman is not None else nullcontext():
+                            if pending_hold is not None:
+                                thermal.resume_hold(pending_hold)
+                                resumed = True
+                            response = next(stream)
+                    except StopIteration:
+                        break
+                    except DeadmanExpired:
+                        self.deadman_expired = True
+                        break
+                    finally:
+                        if pending_hold is not None:
+                            if not resumed:
+                                thermal.resume_hold(pending_hold)
+                            thermal.persist_interval(pending_hold)
+                            pending_hold = None
+                    reason = getattr(response, "finish_reason", None)
+                    self.finish_reason = reason if isinstance(reason, str) else None
+                    count += 1
+                    # Retain every returned token, including the one crossing
+                    # the deadline; dispatch no further work after that token.
+                    yield response
+                    if deadman is not None and deadman.expired():
+                        self.deadman_expired = True
+                        break
+                    if (thermal is not None and thermal.policy['heavy']
+                            and count % thermal.policy['chunk_tokens'] == 0
+                            and (max_tokens is None or count < max_tokens)
+                            and self.finish_reason not in ('stop', 'eos', 'length', 'max_tokens')):
+                        from joulewise.align.apple.thermal_gates import drain_decode
+                        # Drain before the hold's entry stamp, under the model
+                        # alarm. Never dispatch next(stream) to obtain a boundary.
+                        try:
+                            with deadman.guard() if deadman is not None else nullcontext():
+                                drain_decode(stream)
+                        except DeadmanExpired:
+                            self.deadman_expired = True
+                            break
+                        hold = thermal.wait('H', turn=turn_index, token_count=count, deadman=deadman, defer_resume=True)
+                        if hold['outcome'] not in ('released', 'unobserved'):
+                            self.thermal_aborted = True
+                            self.deadman_expired = hold['outcome'] == 'deadman'
+                            break
+                        pending_hold = hold
+            finally:
+                if pending_hold is not None:
+                    thermal.resume_hold(pending_hold)
+                    thermal.persist_interval(pending_hold)
+                close = getattr(stream, "close", None)
+                if close is not None:
+                    close()
+            if self.deadman_expired:
+                self.finish_reason = "episode.deadman"
+            elif max_tokens is not None and count == max_tokens and not self.finish_reason:
+                self.finish_reason = "length"
 
         self.stream_generate = stream_generate
 
@@ -196,6 +264,9 @@ class MlxEndpoint:
         enable_thinking: bool | None = None,
         prompt_cache: str | None = None,
         sampler: Mapping[str, Any] | None = None,
+        deadman=None,
+        enforce_turn_cap: bool = False,
+        thermal=None,
     ) -> None:
         self.runtime = runtime
         self.config = config
@@ -203,6 +274,9 @@ class MlxEndpoint:
         self.episode_domain = episode_domain
         self.mock_turns = tuple(mock_turns)
         self.enable_thinking = enable_thinking
+        self.deadman = deadman
+        self.enforce_turn_cap = enforce_turn_cap
+        self.thermal = thermal
         from joulewise.align.apple.sampling import validate_policy
         self.sampler = validate_policy(dict(sampler)) if sampler is not None else None
         if prompt_cache not in (None, "episode_prefix"):
@@ -307,7 +381,8 @@ class MlxEndpoint:
                     profile = replace(profile, prompt_text=json.dumps(
                         [message.__dict__ for message in messages], sort_keys=True
                     ))
-                result = self.runtime.run_workload(replace(self.config, workload_profile=profile))
+                with self.deadman.guard() if self.deadman is not None else nullcontext():
+                    result = self.runtime.run_workload(replace(self.config, workload_profile=profile))
                 new_events = result.events
                 text = str(script.get("content", result.output_artifacts.get("response.txt", "")))
                 if requested_tokens > max_tokens:
@@ -348,7 +423,7 @@ class MlxEndpoint:
                 cache_setup_metadata = {}
                 stream_options = {}
 
-                def prepare_prompt():
+                def unguarded_prepare():
                     nonlocal prior_hidden_prefill_tokens, reasoning_open_from_template
                     rendered = render_prompt(messages)
                     reasoning_open_from_template = rendered.rstrip().endswith("<think>")
@@ -367,6 +442,10 @@ class MlxEndpoint:
                         if prior_hidden_prefill_tokens < 0:
                             flags.append("prior_hidden_prefill_token_delta_negative")
                     return ids, ids, rendered
+
+                def prepare_prompt():
+                    with self.deadman.guard() if self.deadman is not None else nullcontext():
+                        return unguarded_prepare()
 
                 def reconcile_prompt(ids):
                     from joulewise.align.apple.prompt_cache import EpisodePromptCache
@@ -390,7 +469,11 @@ class MlxEndpoint:
                     return delta
 
                 native = self.runtime._mlx_lm
-                observation = _StreamObservation(native)
+                observation = _StreamObservation(
+                    native, deadman=self.deadman,
+                    max_tokens=max_tokens if self.enforce_turn_cap or self.thermal is not None else None,
+                    thermal=self.thermal, turn_index=turn_index,
+                )
                 # Sequential in-process turns own this prepared runtime. Restore
                 # the module even on a native fault; identity/probes see it intact.
                 self.runtime._mlx_lm = observation
@@ -405,14 +488,21 @@ class MlxEndpoint:
                     )
                 finally:
                     self.runtime._mlx_lm = native
-                if self.cache_policy == "episode_prefix":
+                if self.cache_policy == "episode_prefix" and not observation.deadman_expired and not observation.thermal_aborted:
                     self._episode_cache.finish(record.prompt_token_ids, record.output_token_ids, cache_metadata)
                     cached_tokens = cache_metadata["cached_prompt_tokens"]
+                elif observation.deadman_expired or observation.thermal_aborted:
+                    cached_tokens = cache_metadata.get("cached_prompt_tokens", 0)
+                    self._episode_cache = None
                 finish_reason = observation.finish_reason
                 text = record.text
                 prompt_tokens = record.prompt_tokens
                 completion_tokens = record.output_tokens
                 new_events = record.events
+                if self.thermal is not None:
+                    from joulewise.align.apple.thermal_gates import split_decode_events
+                    new_events = split_decode_events(new_events, [r for r in self.thermal.intervals
+                        if r['kind'] == 'H' and r['turn'] == turn_index])
                 self.prompt_token_ids.extend(record.prompt_token_ids)
                 self.tokenizer_provenance = _tokenizer_identity(tokenizer, self.config)
                 provenance = {
@@ -439,9 +529,17 @@ class MlxEndpoint:
                 # first decode step (10 ms later in the D-019 mock world).
                 if first_epoch is None and event.event_type == "phase_end" and event.phase == "prefill":
                     first_epoch = event.timestamp_s
+        except DeadmanExpired:
+            self._episode_cache = None
+            finish_reason = "episode.deadman"
         except Exception as exc:
             self._episode_cache = None  # never reuse partial/unknown native state
             flags.append(f"endpoint_error:{type(exc).__name__}:{exc}")
+        if self.deadman is not None and self.deadman.expired():
+            self._episode_cache = None
+            finish_reason = "episode.deadman"
+        if finish_reason == "episode.deadman":
+            flags.append(f"episode.deadman:{turn_index}")
         # A native stop is authoritative even at the exact integer budget.
         # With no finish reason, equality is the only available cut evidence.
         if not isinstance(finish_reason, str) or not finish_reason:
