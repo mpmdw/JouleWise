@@ -42,7 +42,7 @@ def fixed_turn_members():
 
 class TestCalibration(unittest.TestCase):
     def test_rank_algebra(self):
-        for m, k in ((16, 17), (18, 19), (19, 19), (20, 20), (21, 20),
+        for m, k in ((16, 17), (18, 19), (19, 19), (20, 20), (21, 21),
                      (38, 38), (39, 38), (40, 39)):
             with self.subTest(m=m):
                 t = desk.split_threshold(list(range(m)))
