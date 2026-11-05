@@ -1,6 +1,6 @@
 # A346 / PR #649 — Phase 1, fix round 2 (2026-11-05)
 
-Status: local repair on `lane/2026-11-05-freeze-by-commit-p1`, starting at
+Status: partial local repair; X3 requires a ruling. Work is on `lane/2026-11-05-freeze-by-commit-p1`, starting at
 `801bf6046`. This report supersedes the fix-round-1 verification and handoff.
 The named branch was already checked out; no replacement branch was invented.
 Implementation commit: `2e0528ad8`; pre-PR base:
@@ -29,7 +29,7 @@ Phase 2 and mirror removal remain outside this repair.
 | X2 | `e8a2a4dbf` | Resolve `/tmp` with pathlib for portable scratch repositories. The remaining PR occurrences were historical report prose, replaced here. |
 | H1′ | `21cf8fb88` | Load only the origin/main registration blob; require a listed annotated analysis tag's commit/object/tree; retain distinct missing-ref and removed-override refusals. |
 | X3 | Pending ruling | Broad registry regeneration and the full repin module read measurement artifacts; see the blocking conflict below. |
-| Cleanup | This report's commit | Delete the committed .pr directory, replace stale report claims, and supply the PR body below for the offline lead. |
+| Cleanup | `8ebff430c` | Delete the committed .pr directory, replace stale report claims, and supply the PR body below for the offline lead. |
 
 The F3 regressions use disposable repositories and fake origin/main refs.
 They exercise ignored and assume-unchanged registration forgeries, an unreviewed
@@ -43,8 +43,10 @@ proposed metadata before merge; this test helper does not grant runtime admissio
 
 Files changed this round: tests/test_freeze_by_commit.py,
 tests/b5_analysis/test_frozen_files.py, joulewise/freeze_by_commit.py,
-docs/process/freeze_p1_rebind.md, this report, and deletion of .pr/freeze-p1.md.
-The old-digest audit and registry disposition are pending the X3 ruling.
+docs/process/freeze_p1_rebind.md, this report,
+docs/run_reports/2026-11-05-freeze-p1-old-digest-audit.json, and deletion of
+.pr/freeze-p1.md. The registry itself remains unchanged this round; its stale
+row is explicitly recorded as an open X3 blocker.
 
 ## Verification
 
@@ -55,16 +57,57 @@ Commands use the existing `TMPDIR` environment, Python 3.13 stdlib unittest,
 | --- | --- |
 | python3.13 -B -m unittest tests.test_freeze_by_commit.RegistrationAuthorityTests -q | 1 test, OK, 0.218 s |
 | python3.13 -B -m unittest tests.test_freeze_by_commit -q | 18 tests, OK, 18.284 s |
-| python3.13 -B -m unittest tests.test_repin -q | Blocked by the blinding conflict below; no full-module pass claimed. |
-| python3.13 -B -m unittest tests.test_digest_pin_census -q | Running |
-| python3.13 -B -m unittest tests.b5_analysis.test_frozen_files -q | Pending |
-| python3.13 -B -m unittest tests.test_whole_window_inverted_corner_clamp -q | Pending |
-| python3.13 -B -m unittest tests.test_paper_custody -q | Pending |
+| tests.test_repin (explicit safe selection below) | 47 tests, OK, 27.277 s; two real-tree methods unrun. Full-module result BLOCKED. |
+| python3.13 -B -m unittest tests.test_digest_pin_census -q | 23 tests, OK, 77.819 s |
+| python3.13 -B -m unittest tests.b5_analysis.test_frozen_files -q | 4 tests, OK, 4.632 s |
+| GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 python3.13 -B -m unittest tests.test_whole_window_inverted_corner_clamp -q | 33 tests, OK, 119.108 s |
+| python3.13 -B -m unittest tests.test_paper_custody -q | 33 tests, OK, 66.406 s; 147 owner-source, 5 grant-policy and 4 refusal-AST mutations killed |
+
+The exact safe repin selection (no test monkeypatches or skip decorators):
+
+```sh
+TMPDIR="$TMPDIR" python3.13 -B -m unittest \
+  tests.test_repin.RegistryCheckTests \
+  tests.test_repin.CommandFamilyTests \
+  tests.test_repin.EraRecordTests \
+  tests.test_repin.Block5EraRecordTests \
+  tests.test_repin.SealedInventoryEraRecordTests \
+  tests.test_repin.SealPinsEraRecordTests \
+  tests.test_repin.RealTreeTests.test_cli_subcommand_aliases \
+  tests.test_repin.RealTreeTests.test_ci_runs_the_repin_check -q
+```
+
+Unrun: RealTreeTests.test_committed_registry_kind_p_rows_are_current and
+RealTreeTests.test_real_generator_families_pass. A full unmodified
+`python3.13 -B -m unittest tests.test_repin -q` was not executed. This does
+not meet the requested full-module gate. All independent safe verification
+is complete: 158 tests passed across the selections above, plus the separate
+one-test X1 check. Total runner-reported test time: 313.744 s (about 5.3 minutes).
+
+Syntax check: compileall.compile_file on 735 explicitly tracked Python files
+under joulewise/tests passed, with PYTHONPYCACHEPREFIX under TMPDIR. Git path
+selection excludes restricted directories; no broad filesystem walk is used.
+
+All 11 rebind-table digests match current allowed code/metadata bytes;
+`git diff --check` passes. The current PR files have no hard-coded temporary
+path tied to macOS. Protected coordination files match `801bf6046` exactly.
 
 The full suite is prohibited while the seven-worker analysis job runs. Local
 synthetic checks establish neither real-data equivalence nor hardware validation.
 Final-head CI, independent delta review, block-5 release and the owning live
 reproduction/calibration gates remain open.
+
+## Repeated old-digest audit
+
+The machine-readable audit at
+[2026-11-05-freeze-p1-old-digest-audit.json](2026-11-05-freeze-p1-old-digest-audit.json)
+records 37 predecessor digests and an exact 995-file search allowlist. The
+source/prose/freeze-metadata scan explicitly includes configs/pins/registry.json.
+Of 13 matching lines, 11 are the historical rebind table, one is collection-seal
+provenance, and one is the stale registry row. That row is an unresolved CI
+blocker, not a harmless occurrence. This narrower, reproducible search supersedes
+the previous broad-audit/no-live-constraint claim. No assertion is made about
+excluded measurement artifacts or unopened configs.
 
 ## Blocking conflict / NEEDS_RULING
 
@@ -82,7 +125,9 @@ Options considered: explicitly permit the necessary artifact reads, or preserve
 blinding and authorize a bounded registry refresh with synthetic/metadata-only
 verification. Recommendation: preserve blinding. Blocked work: broad registry
 regeneration and a truthful full, unmodified tests.test_repin result. Independent
-fixes and safe requested modules continue while the ruling is pending.
+fixes and safe requested checks are complete. The ruling remains unanswered.
+Next exact step: the lead must choose the authorized X3 route, then resume
+registry regeneration and the outstanding full-module gate before delta review.
 
 ## PR body for the lead (offline handoff)
 

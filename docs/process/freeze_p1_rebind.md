@@ -158,13 +158,17 @@ closes AttributeError from malformed registration at the anchor boundary.
 L1 warns when a `#sha256/` pointer is absent and prints the registry-refresh
 command after a family rewrite. It does not run a broad census automatically.
 
-The B1 old-digest search and exact hit dispositions are recorded in
-`docs/run_reports/2026-11-05-freeze-p1-old-digest-audit.json`. It checks all
-predecessor file digests for PR-changed paths at the pre-PR base, r2 and the
-initial implementation, over allowed source/config/Markdown files, beyond
-Kind-P pins. Remaining occurrences are historical seal provenance, this
-rebind table, and the retained informational Kind-B census row for the retired
-test pin. That row is not admission authority (`is_checked` is false for
-`source_digest`); L1 reports its absent pointer. Regenerating the whole census
-would index forbidden measurement artifacts, so it is not done in this lane.
-No other live old-digest constraint was found in the inspected tree.
+The repeated old-digest search and exact hit dispositions are recorded in
+`docs/run_reports/2026-11-05-freeze-p1-old-digest-audit.json`. It checks 37
+predecessor digests at the pre-PR base, r2, initial implementation and fix-round-2
+intake across 995 explicitly listed code/prose/metadata files, including
+`configs/pins/registry.json`. The narrower scope excludes measurement artifacts
+and records its limits; it supersedes the prior broad-audit claim.
+
+Of 13 matching lines, 11 are this historical rebind table and one is collection
+seal provenance. **X3 remains open:** the retired test digest still has a
+registry content pointer, which L1 warns is absent. It produces an extra warning
+and breaks the real-tree repin test even though `source_digest` is not admission
+authority. The run report records the blocking conflict between required broad
+regeneration/full repin verification and the standing prohibition on measurement
+reads. This is not classified as a resolved harmless occurrence.
