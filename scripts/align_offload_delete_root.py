@@ -194,6 +194,25 @@ def check_uploaded(p):
     parse_uploaded(result.stdout)
 
 
+def busy_processes(table):
+    """ps comm is executable identity, never arbitrary argv/path arguments."""
+    pattern = re.compile(r'(?i)(?:claude|codex|offload\.py|align_pilot_session(?:\.py)?|harvest[\w.-]*|zstd|tar)')
+    busy = []
+    for row in table.splitlines():
+        fields = row.strip().split(None, 1)
+        require(len(fields) == 2 and fields[0].isdigit(), 'unknown process census format')
+        pid, executable = fields
+        if (pattern.fullmatch(PurePosixPath(executable).name) or
+                re.fullmatch(r'.*/claude/versions/[\d.]+', executable)):
+            busy.append(pid)
+    return busy
+
+
+def process_census():
+    return busy_processes(subprocess.run(['/bin/ps', '-axo', 'pid=,comm='],
+                          check=True, text=True, capture_output=True).stdout)
+
+
 def check_pause_and_disk(op):
     stop = exact_path(str(STOP_PATH))
     ours = exact_path(str(op / 'our-STOP.txt'))
@@ -201,10 +220,7 @@ def check_pause_and_disk(op):
     require(stop.read_bytes() == ours.read_bytes() == expected, 'pause STOP mismatch')
     s = os.statvfs(op)
     require(s.f_bavail * s.f_frsize >= 30_000_000_000, 'disk floor')
-    table = subprocess.run(['/bin/ps', '-axo', 'pid=,comm=,args='],
-                           check=True, text=True, capture_output=True).stdout
-    pattern = re.compile(r'(?i)(?:^|[/\s])(?:claude(?:/versions/[\d.]+)?|codex|offload\.py|align_pilot_session(?:\.py)?|harvest[\w.-]*|zstd|tar)(?:\s|$)')
-    require(not any(pattern.search(row) for row in table.splitlines()), 'writer/agent census busy')
+    require(not process_census(), 'writer/agent census busy')
 
 
 def checksum_receipt(receipt, target):
@@ -345,6 +361,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='command', required=True)
     sub.add_parser('archive')
+    sub.add_parser('census')
     sub.add_parser('uploaded').add_argument('path', type=Path)
     for name in ('tree', 'budget'):
         sub.add_parser(name).add_argument('path', type=Path)
@@ -360,6 +377,9 @@ def main():
         with lock_path.open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             delete_root(args.item, args.keep, args.remote, args.journal)
+    elif args.command == 'census':
+        busy = process_census()
+        require(not busy, 'writer/agent census busy; PIDs=' + ','.join(busy))
     elif args.command == 'uploaded':
         check_uploaded(args.path)
     elif args.command == 'budget':

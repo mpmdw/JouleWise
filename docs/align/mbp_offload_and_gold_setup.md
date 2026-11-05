@@ -124,14 +124,10 @@ if lock.exists():
         pass
     else:
         raise SystemExit('STOP: lock owner PID still exists; wait for exit')
-# Raw argv may contain credentials: inspect only in memory, never journal it.
-ps = subprocess.run(['/bin/ps', '-axo', 'pid=,comm=,args='], check=True,
-                    text=True, capture_output=True).stdout
-pattern = re.compile(r'(?i)(?:^|[/\s])(?:claude(?:/versions/[\d.]+)?|codex|offload\.py|align_pilot_session(?:\.py)?|harvest[\w.-]*|zstd|tar)(?:\s|$)')
-for row in ps.splitlines():
-    pid, command = row.strip().split(None, 1)
-    if pattern.search(command):
-        raise SystemExit('STOP: writer/agent census busy; PID=' + pid)
+# Kernel executable names only; never match or record arbitrary argv tokens.
+subprocess.run(['python3.13', '-I', '-B',
+                str(Path(os.environ['JW_CANON']) / 'scripts/align_offload_delete_root.py'),
+                'census'], check=True)
 print('STOP-2 pre-pause prerequisites PASS; no argv recorded')
 PY
 }

@@ -42,3 +42,12 @@ N4: LOCK_FLAGS additionally rejects SF_NOUNLINK (0x100000), SF_RESTRICTED
 bit independently and assert refusal before ACL execution.
 `python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS, 47 tests.
 Native privileged flags are not set by these tests.
+
+N7: deletion and pause bootstrap share `census`, using ps pid/comm only and
+full executable basename matching (plus the Claude versioned executable
+spelling). No argv is requested, matched or exported; `--item harvest...`
+cannot trigger a false positive. Synthetic tests cover named executables,
+benign executable paths containing harvest/tar directory tokens, and the exact
+ps field request. Interpreted scripts whose comm is only Python require the
+external no-writer/launcher gates too; comm is not an argv script census.
+`python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS, 48 tests.

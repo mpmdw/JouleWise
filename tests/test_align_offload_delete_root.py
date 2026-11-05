@@ -477,11 +477,16 @@ class HelperTests(unittest.TestCase):
             space = types.SimpleNamespace(f_bavail=40_000_000_000, f_frsize=1)
             with mock.patch.object(g, 'STOP_PATH', stop), mock.patch.object(g.os, 'statvfs', return_value=space), mock.patch.object(g.subprocess, 'run', return_value=types.SimpleNamespace(stdout='1 /sbin/launchd')) as ps:
                 g.check_pause_and_disk(op)
-                for command in ('claude -p hi', 'codex', 'offload.py', 'align_pilot_session.py',
-                                'harvest.py', 'zstd', '/usr/bin/tar -cf archive'):
+                self.assertEqual(ps.call_args.args[0], ['/bin/ps', '-axo', 'pid=,comm='])
+                for command in ('claude', 'codex', 'offload.py', 'align_pilot_session.py',
+                                'harvest.py', 'zstd', '/usr/bin/tar', '/app/claude/versions/2.1.3'):
                     ps.return_value.stdout = '123 ' + command
                     with self.assertRaisesRegex(g.Refusal, 'census busy'):
                         g.check_pause_and_disk(op)
+                # The kernel's executable field has no --item or script argv.
+                # A path argument named harvest is never requested from ps.
+                ps.return_value.stdout = '123 /usr/bin/python3.13\n124 /bin/zsh\n'
+                g.check_pause_and_disk(op)
                 ps.return_value.stdout = ''
                 space.f_bavail = 29_999_999_999
                 with self.assertRaisesRegex(g.Refusal, 'disk floor'):
@@ -490,6 +495,12 @@ class HelperTests(unittest.TestCase):
                 stop.write_text('someone else')
                 with self.assertRaisesRegex(g.Refusal, 'STOP mismatch'):
                     g.check_pause_and_disk(op)
+
+    def test_census_matches_executable_basename_only(self):
+        self.assertEqual(g.busy_processes('123 /bin/python3.13\n'), [])
+        self.assertEqual(g.busy_processes('123 /tmp/harvest-project/python3.13\n'), [])
+        self.assertEqual(g.busy_processes('123 /tmp/tar-project/other\n'), [])
+        self.assertEqual(g.busy_processes('123 /bin/harvest.py\n'), ['123'])
 
     def test_archive_unsafe_duplicate_and_hardlink(self):
         for name, kind, repeat in (('../bad', tarfile.REGTYPE, False),
