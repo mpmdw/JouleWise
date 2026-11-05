@@ -41,6 +41,14 @@ class CheckpointProbeTests(unittest.TestCase):
                 self.assertEqual(row['replacement_snapshot_array_bytes'], replacement)
                 self.assertEqual(row['replacement_plus_active_recurrent_array_bytes'], plus_active)
 
+    def test_native_timings_are_never_scaled_by_retained_array_bytes(self):
+        timings = {'checkpoint': {'median_ms': .125}, 'restore': {'median_ms': .25}}
+        for family in ('qwen3_next', 'qwen3_5'):
+            with self.subTest(family=family):
+                row = payload_projection(family, 'bfloat16', timings)
+                self.assertIsNone(row['byte_proportional_timing_ms'])
+                self.assertEqual(row['snapshot_storage'], 'immutable_array_reference_retention')
+
     def test_estimate_cli_never_imports_native_backend(self):
         # Guard imports even when MLX is installed. This checks data-free
         # estimation, not a mocked numerical result.

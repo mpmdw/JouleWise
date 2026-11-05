@@ -29,12 +29,15 @@ No extra sampler draws occur. Full prompt and fed-token
 counts continue to include the manually prefetched prefix. A checkpoint is
 never taken after generation in the hope of rewinding recurrent state later.
 
-Each checkpoint retains an offset for every attention layer and a Python deep
-copy of **each entire ArraysCache object**, including auxiliary metadata. Arrays
-are evaluated before generation continues. KV tensors remain in the active
-cache and are not duplicated. Restore trims every attention layer to its saved
-offset and installs a fresh deep copy of every saved recurrent layer; the saved
-copy remains reusable. Native offsets must agree with the token ledger before
+Each checkpoint retains an offset for every attention layer and deep-copies
+the Python containers of **each entire ArraysCache object**, including auxiliary
+metadata. In MLX 0.31.2, `deepcopy(mx.array)` retains the underlying buffer by
+reference under immutable-array value semantics; it does not copy array bytes.
+Retained references prevent buffer donation while a snapshot uses the value.
+Arrays are evaluated before generation continues. KV tensors remain in the
+active cache. Restore trims attention layers and installs independent recurrent
+containers retaining the saved arrays; the snapshot remains reusable.
+Native offsets must agree with the token ledger before
 and after restoration. A partial or failed operation invalidates the episode
 cache through the existing endpoint error path.
 
@@ -82,12 +85,13 @@ Hybrid turns add these observations to the existing `generation` member record:
 - A config-derived payload estimate when the prepared model config has the
   required shape fields. Missing shapes are explicitly marked unavailable.
 
-Byte accounting is `array_nbytes_plus_u64_offsets`: copied recurrent arrays,
+Byte accounting is `array_nbytes_plus_u64_offsets`: retained recurrent arrays,
 including auxiliary array attributes, plus eight logical bytes per KV offset.
 It is a payload count, not measured allocator residency or bus traffic. Python
 object overhead, active model/cache memory and allocator fragmentation are
 excluded. Creating a checkpoint can temporarily retain N+1 snapshots before
-eviction; restore also needs an active recurrent copy. No energy-model term,
+eviction; active recurrence can later allocate new storage. Shared buffers make
+logical payload totals different from incremental allocator bytes. No energy-model term,
 predictor, exclusion rule or stopping rule changes. Non-hybrid execution-policy
 identity and generated record/event bytes remain unchanged.
 
@@ -201,18 +205,20 @@ PYTHONPATH=. python3.13 -B scripts/align_cache_checkpoint_native.py --estimate-o
 ```
 
 The second command imports no MLX and reads only the retained config fixtures.
-For bf16 history / fp32 recurrence, the tiny state payloads are 26,880 B (Next)
-and 39,744 B (Qwen3.5). The corresponding real/tiny array-byte ratios are
-2,874.5143 and 3,873.3913. Multiplying a measured tiny copy time by this ratio
-is only a **byte-proportional scenario**, not a production prediction or bound:
-Python layer overhead, allocator behavior, copy bandwidth and contention differ.
-Timing projections remain null until actual timings exist.
+For bf16 history / fp32 recurrence, the tiny retained-state payloads are 26,880 B
+(Next) and 39,744 B (Qwen3.5). The real/tiny array-byte ratios describe payload
+only. **No byte-proportional timing projection is valid** for reference-retaining
+snapshots; the probe leaves that legacy field null even when given measured
+timings. The review's benchmark reported zero extra active array bytes for
+snapshot/restore, while its retained-memory probe confirmed the saved buffers
+stay live. These are review-supplied results, not rerun in this sandbox.
 
 For real configs, two retained snapshots occupy the table's payload. Snapshot
-replacement can briefly retain three copied sets of recurrent arrays:
+replacement can briefly retain three generations of recurrent array values:
 231,800,832 B (Next), 461,832,192 B (Qwen3.8). Including the active recurrence
 gives a conservative four-set planning allowance of 309,067,776 B and
 615,776,256 B, respectively. This excludes weights, KV arrays, Python objects,
 allocator overhead, offsets and kernel workspaces, so it is not process RSS.
-Restoration copies layers successively; four whole sets are a conservative
-planning allowance, not a measured restore peak. Real models were not loaded.
+Buffers can be shared across these logical sets. The four-set figure is a
+conservative planning allowance, not an allocation or measured restore peak.
+Real models were not loaded.

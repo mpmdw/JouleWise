@@ -30,7 +30,11 @@ CONFIG_FIXTURES = {"qwen3_next": "qwen3_next_config.json", "qwen3_5": "qwen38_co
 
 
 def payload_projection(family, dtype_name, timings=None):
-    """Config-only memory arithmetic; optional timing scenario, never a forecast."""
+    """Config-only retained payload, with no byte-scaled latency projection.
+
+    timings is accepted for callers of the old probe interface. MLX deepcopy
+    retains immutable array storage, so those timings cannot scale by bytes.
+    """
     if dtype_name not in ("float32", "bfloat16"):
         raise ValueError(dtype_name)
     itemsize = 4 if dtype_name == "float32" else 2
@@ -38,17 +42,14 @@ def payload_projection(family, dtype_name, timings=None):
     real = checkpoint_size_from_config(json.loads(fixture.read_text()), conv_itemsize=itemsize)
     tiny = checkpoint_size_from_config(tiny_config(family), conv_itemsize=itemsize)
     ratio = real["state_bytes"] / tiny["state_bytes"]
-    # Production policy retains two copies; replacement briefly holds three.
+    # Optional limit-two planning allowance, not the rebuild-only default.
     result = dict(family=family, dtype=dtype_name, config_fixture=CONFIG_FIXTURES[family],
                   tiny=tiny, real=real, state_byte_ratio=ratio,
                   two_retained_payload_bytes=2 * real["checkpoint_bytes"],
                   replacement_snapshot_array_bytes=3 * real["state_bytes"],
                   replacement_plus_active_recurrent_array_bytes=4 * real["state_bytes"],
-                  byte_proportional_timing_ms=None)
-    if timings is not None:
-        result["byte_proportional_timing_ms"] = {
-            op: values["median_ms"] * ratio for op, values in timings.items()
-        }
+                  byte_proportional_timing_ms=None,
+                  snapshot_storage="immutable_array_reference_retention")
     return result
 
 
@@ -280,7 +281,7 @@ class NativeProbe:
             rows = []
             for iteration in range(samples + 3):
                 if operation == "checkpoint":
-                    # Force a new copy rather than the duplicate-offset no-op.
+                    # Force a new container snapshot, excluding duplicate-offset no-op.
                     state.checkpoints.clear()
                 else:
                     tail = [50] * 17
@@ -314,13 +315,13 @@ class NativeProbe:
                     checkpoint_payload_bytes=expected["checkpoint_bytes"],
                     peak_rss_bytes=self.check_memory(), mlx_cache_bytes=mx.get_cache_memory(),
                     projection=payload_projection(family, dtype_name, timings),
-                    timing_projection_caveat="byte proportional scenario only; tiny fixed overhead and bandwidth do not scale uniformly")
+                    timing_projection_caveat="no latency extrapolation: snapshots retain immutable array storage")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--family", choices=FAMILIES, action="append")
-    parser.add_argument("--benchmark", action="store_true", help="measure copy/restore instead of logits")
+    parser.add_argument("--benchmark", action="store_true", help="measure snapshot/restore instead of logits")
     parser.add_argument("--estimate-only", action="store_true", help="config arithmetic; does not import MLX")
     parser.add_argument("--samples", type=int, default=25)
     args = parser.parse_args()

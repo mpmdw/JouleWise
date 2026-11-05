@@ -130,7 +130,9 @@ class EpisodePromptCache:
                      for i, c in enumerate(self.cache) if type(c).__name__ == "ArraysCache"}
         import mlx.core as mx
         arrays = list(_recurrent_arrays(recurrent.values()))
-        mx.eval(*arrays)  # materialize before generation can replace/mutate state
+        # deepcopy isolates Python containers; MLX immutable arrays retain
+        # buffer references (not copied bytes), preventing unsafe donation.
+        mx.eval(*arrays)  # materialize before generation replaces active state
         checkpoint = _Checkpoint(length, tuple(getattr(c, "offset", None) for c in self.cache),
                                  recurrent, sum(int(a.nbytes) for a in arrays))
         self.checkpoints = [c for c in self.checkpoints if c.length != length]
@@ -141,9 +143,8 @@ class EpisodePromptCache:
         for i, layer in enumerate(self.cache):
             offset = checkpoint.offsets[i]
             if i in checkpoint.recurrent:
-                # Copy the complete ArraysCache, including optional metadata
-                # such as lengths/padding. Restoring must not mutate the saved
-                # checkpoint on the subsequent forward pass.
+                # Isolate the complete ArraysCache container and metadata;
+                # immutable MLX array storage is retained by reference.
                 self.cache[i] = deepcopy(checkpoint.recurrent[i])
             else:
                 rewind = int(layer.offset) - int(offset)
