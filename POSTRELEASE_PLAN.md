@@ -77,3 +77,25 @@ Line references below identify the base unless stated otherwise.
 - Semantics: cache retention only. No key, reduced value or decision changes.
 - Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_bracket_copies -q`
   passed (2 tests; no worker pool or bundle reads).
+
+## d. Bracket bypass snapshot hardening — IMPLEMENT
+
+- What/where: `joulewise/b5_analysis/bracket.py:278–309` normalizes
+  `ledger_snapshot.ledger_path` before handing arguments to the store.
+  `joulewise/analysis_verified_store.py:1675–1690` can bypass the store and
+  call the supplied function with those normalized arguments. The existing
+  `tests/b5_analysis/test_leaf_bracket.py:298` records this behavior.
+- Why: key normalization should not alter arguments observed by a bypass,
+  including a wrapped callable or disabled store. The genuine frozen leaf
+  does not read that field; the existing test pins this assumption.
+- Fix: project this single scalar field only while encoding L4's key,
+  including the post-fill scalar check. Always execute the callable with
+  the caller's original snapshot. Remove normalization from the wrapper.
+- Test: synthetic snapshots and wrapped callables, store absent/off/on,
+  rejected and non-servable hits, and normalized-key equality across
+  distinct temporary parent paths. Other snapshot fields still change the
+  key; the original snapshot identity reaches fallback calls unchanged.
+- Semantics: same L4 key and frozen callable behavior; bypass arguments are
+  hardened. No ledger contents or numeric quantities change.
+- Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_bracket_snapshot -q`
+  passed (5 tests, synthetic scalar snapshots; no processes spawned).
