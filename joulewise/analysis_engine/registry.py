@@ -18,10 +18,12 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 
+
 from joulewise.strict_io import (
     json_pretty_utf8 as normalized_json_bytes,
     json_utf8_bytes as canonical_json_bytes,
     parse_finite_float as _strict_parse_finite_float,
+    parse_finite_int as _strict_parse_finite_int,
     sha256_value as sha256_bytes,
 )
 
@@ -187,14 +189,7 @@ def _parse_finite_admission_float(value: str) -> float:
 
 
 def _parse_finite_admission_int(value: str) -> int:
-    parsed = int(value)
-    try:
-        finite_projection = math.isfinite(float(parsed))
-    except OverflowError:
-        finite_projection = False
-    if not finite_projection:
-        _reject_nonfinite_admission_number(value)
-    return parsed
+    return _strict_parse_finite_int(value, _reject_nonfinite_admission_number)
 
 
 def _registration_vocabulary_path(value: object, where: str) -> str | None:

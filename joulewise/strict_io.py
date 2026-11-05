@@ -123,3 +123,14 @@ def parse_finite_float(value: str, reject: Callable[[str], None]) -> float:
     if not math.isfinite(parsed):
         reject(value)
     return parsed
+
+
+def parse_finite_int(value: str, reject: Callable[[str], None]) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        reject(value)
+    return parsed

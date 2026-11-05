@@ -21,7 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Sequence
 
-from joulewise.strict_io import parse_finite_float as _strict_parse_finite_float
+
+from joulewise.strict_io import (
+    parse_finite_float as _strict_parse_finite_float,
+    parse_finite_int as _strict_parse_finite_int,
+)
 
 from joulewise.analysis_manifest import (
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V1_SCHEMA,
@@ -459,14 +463,7 @@ def _parse_finite_admission_float(value: str) -> float:
 
 
 def _parse_finite_admission_int(value: str) -> int:
-    parsed = int(value)
-    try:
-        finite_projection = math.isfinite(float(parsed))
-    except OverflowError:
-        finite_projection = False
-    if not finite_projection:
-        _reject_nonfinite_admission_number(value)
-    return parsed
+    return _strict_parse_finite_int(value, _reject_nonfinite_admission_number)
 
 
 def _registration_vocabulary_paths(value: object, where: str) -> list[str]:

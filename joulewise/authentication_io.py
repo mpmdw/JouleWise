@@ -38,7 +38,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO, Iterator, Literal, Mapping, TextIO
 
-from joulewise.strict_io import parse_finite_float as _strict_parse_finite_float
+
+from joulewise.strict_io import (
+    parse_finite_float as _strict_parse_finite_float,
+    parse_finite_int as _strict_parse_finite_int,
+)
 
 from joulewise import analysis_run_cache as _run_cache
 
@@ -623,14 +627,7 @@ def _finite_float(value: str) -> float:
 
 
 def _finite_int(value: str) -> int:
-    parsed = int(value)
-    try:
-        finite_projection = math.isfinite(float(parsed))
-    except OverflowError:
-        finite_projection = False
-    if not finite_projection:
-        _nonfinite_number(value)
-    return parsed
+    return _strict_parse_finite_int(value, _nonfinite_number)
 
 
 def _reserved_vocabulary_path(value: object, where: str) -> str | None:
