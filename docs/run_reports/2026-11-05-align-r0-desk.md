@@ -149,3 +149,11 @@ observed failing before its fix; final commit mapping and checks follow below.
   hybrid weights and real streaming/cache APIs. Native test is skipped here
   (MLX absent); the lead must run it on the pinned Metal stack. Existing shim
   now models the real single-stream absence of lengths/left_padding.
+
+- G3 / HIGH custody fail-open: shared default, environment additions and config
+  extras are unioned and resolved, every root must exist as a directory, and
+  receipts retain the resolved list even on refusal. Added missing-root and
+  hidden-default regressions (both fail before/pass after). Example uses the
+  actual shared default semantics, with runbook instructions for overrides.
+  All guard tests redirect environment roots to generated temporary directories;
+  no real custody census ran in this session.

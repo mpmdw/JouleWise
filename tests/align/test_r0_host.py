@@ -13,6 +13,14 @@ from tests.align.test_r0_checks import config_at
 
 
 class R0HostTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.default_parent = Path(self.temp.name)
+        env = patch.dict("os.environ", {"JOULEWISE_CUSTODY_PARENT": self.temp.name,
+                                       "JOULEWISE_ADDITIONAL_CUSTODY_PARENTS": "[]"})
+        env.start()
+        self.addCleanup(env.stop)
     def runner(self, argv, **kwargs):
         if "pgrep" in argv[0]:
             return subprocess.CompletedProcess(argv, 1, "", "")
@@ -23,10 +31,32 @@ class R0HostTest(unittest.TestCase):
         def custody(**kwargs):
             calls.append(kwargs)
             return Census()
-        guard = QuietGuard(["/tmp/explicit"], run=self.runner, inspect_custody=custody)
+        explicit = self.default_parent / "explicit"
+        explicit.mkdir()
+        guard = QuietGuard([str(explicit)], run=self.runner, inspect_custody=custody)
         guard.check(force=True)
-        self.assertEqual(calls, [{"parents": [Path("/tmp/explicit")]}])
+        self.assertEqual(calls, [{"parents": [self.default_parent, explicit]}])
         self.assertEqual(len(guard.receipts), 1)
+
+    def test_missing_configured_parent_refuses_and_records_resolved_parents(self):
+        missing = self.default_parent / "typo"
+        guard = QuietGuard([missing], run=self.runner, inspect_custody=lambda **kw: Census())
+        with self.assertRaises(Refused):
+            guard.check(force=True)
+        self.assertIn(str(missing), guard.receipts[-1]["resolved_custody_parents"])
+
+    def test_environment_parents_cannot_be_hidden_by_explicit_extras(self):
+        extra = self.default_parent / "additional"
+        extra.mkdir()
+        calls = []
+        def custody(**kwargs):
+            calls.append(kwargs["parents"])
+            return Census(refusals=["live chain in default parent"])
+        with patch.dict("os.environ", {"JOULEWISE_ADDITIONAL_CUSTODY_PARENTS": json.dumps([str(extra)])}):
+            guard = QuietGuard([], run=self.runner, inspect_custody=custody)
+            with self.assertRaises(Refused):
+                guard.check(force=True)
+        self.assertEqual(calls, [[self.default_parent, extra]])
 
     def test_measurement_chain_refuses_and_refusal_is_latched(self):
         def running(argv, **kwargs):

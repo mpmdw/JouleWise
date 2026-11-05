@@ -1,8 +1,9 @@
-"""Read-only R0 host probes. No model imports, downloads or custody defaults."""
+"""Read-only R0 host probes. No model imports or downloads."""
 from __future__ import annotations
 
 from dataclasses import asdict
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -11,7 +12,7 @@ import subprocess
 import time
 from types import SimpleNamespace
 
-from joulewise.measurement_liveness import census
+from joulewise.measurement_liveness import census, custody_parent, ADDITIONAL_PARENTS_ENV
 from joulewise.night_gate import ProbeResult, agent_census
 from joulewise.prewindow import PS_ARGV, busy_contaminants
 
@@ -32,7 +33,7 @@ class QuietGuard:
     """Reuse the agent identity and custody census, with no ancestor exemption.
 
     Additional argv matching covers hand-run measurement chains. Custody parents
-    are explicit: never discover data directories from environment defaults.
+    include shared defaults and configured extras; missing roots fail closed.
     A refusal is latched even if an endpoint catches the raised exception.
     """
 
@@ -49,12 +50,26 @@ class QuietGuard:
             raise Refused(self.failure)
         if not force and self.clock() - self.last < 15:
             return
+        receipt = {"monotonic_s": self.clock(), "resolved_custody_parents": []}
+        self.receipts.append(receipt)
         try:
+            extra = json.loads(os.environ.get(ADDITIONAL_PARENTS_ENV, "[]"))
+            if not isinstance(extra, list) or any(not isinstance(p, str) or not p for p in extra):
+                raise Refused("additional custody parents must be a JSON array of paths")
+            parents = [custody_parent(), *(Path(p).expanduser() for p in extra), *self.parents]
+            for parent in parents:
+                if not parent.is_absolute() or "restricted" in parent.parts or ".." in parent.parts:
+                    raise Refused(f"invalid custody parent: {parent}")
+            parents = list(dict.fromkeys(p.resolve() for p in parents))
+            receipt["resolved_custody_parents"] = [str(p) for p in parents]
+            for parent in parents:
+                if "restricted" in parent.parts or not parent.is_dir():
+                    raise Refused(f"custody parent missing or not a directory: {parent}")
             def probe(argv):
                 r = self.run(argv, capture_output=True, text=True, timeout=15)
                 return ProbeResult(argv, r.returncode, r.stdout, r.stderr, time.monotonic_ns())
             agent, refusal = agent_census(SimpleNamespace(run=probe, monotonic_ns=time.monotonic_ns))
-            custody = self.inspect_custody(parents=self.parents)
+            custody = self.inspect_custody(parents=parents)
             table = probe(PS_ARGV)
             if table.exit_code != 0:
                 raise Refused("process table unavailable")
@@ -68,14 +83,13 @@ class QuietGuard:
                 pid, _, argv = line.split(None, 2)
                 if int(pid) != os.getpid() and pattern.search(argv):
                     chains.append(line)
-            receipt = {"monotonic_s": self.clock(), "agent": asdict(agent),
-                       "custody": asdict(custody), "busy": busy, "chains": chains}
-            self.receipts.append(receipt)
+            receipt.update(agent=asdict(agent), custody=asdict(custody), busy=busy, chains=chains)
             if refusal or not custody.clear or busy or chains:
                 raise Refused(f"machine occupied or census indeterminate: {receipt}")
             self.last = self.clock()
         except Exception as exc:
             self.failure = str(exc)
+            receipt["refusal"] = self.failure
             raise Refused(self.failure) from exc
 
 

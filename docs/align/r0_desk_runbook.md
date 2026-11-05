@@ -22,10 +22,16 @@ the SMC lane when ready. Do not run these commands from an agent session.
    ```
 
    Set both local model sources, SHADE cache parent, the measurement filesystem
-   `disk_path`, **every measurement custody parent**, and verified pilot8/9
+   `disk_path`, any **additional measurement custody parents**, and verified pilot8/9
    offload destinations. `disk_path` must be on the measurement volume, not
    the offload volume. N revision is `9a2b46347bb170cb2924092175fa21554fe585a9`;
    D is `815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9`.
+
+   The real shared custody parent is `$JOULEWISE_CUSTODY_PARENT`, defaulting to
+   `~/night-custody`; `JOULEWISE_ADDITIONAL_CUSTODY_PARENTS` (JSON array) is also
+   always included. `custody_parents: []` in the example means no further extras.
+   All resolved roots must exist as directories; missing/typo roots refuse the
+   run and are recorded. Do not point this command at blinded study data.
 
 2. Before the independently managed offload, save each source inventory to
    its configured inventory path. Set the four variables to the actual paths.

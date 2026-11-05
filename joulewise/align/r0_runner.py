@@ -44,8 +44,8 @@ def validate_config(config):
         _path(entry["source"])
     for key in ("shade_cache", "disk_path"):
         _path(config[key])
-    if not config.get("custody_parents"):
-        raise ValueError("explicit measurement custody_parents are required")
+    if not isinstance(config.get("custody_parents"), list):
+        raise ValueError("custody_parents must list any extras to the shared default parents")
     for path in config["custody_parents"]:
         _path(path)
     labels = set()
