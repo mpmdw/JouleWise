@@ -4,9 +4,19 @@ import json
 import math
 from pathlib import Path
 
-from joulewise.align.models.qwen4_exp_tables import parameter_shapes, quantization_for, text_config
+from joulewise.align.models.qwen4_exp_tables import parameter_shapes, ple_storage_for, quantization_for, text_config
 
 ALIGN_CONTEXT_CAP = 40960  # scripts/align_pilot_kit.py:CONTEXT_CAP, lead ruling
+GPU_WORKING_SET_BYTES = 115_400_000_000  # decimal GB; hardware constraint
+
+
+class MemoryReport(dict):
+    """JSON-serializable byte accounting with a caller-supplied hardware gate."""
+
+    def fits_gpu_working_set(self, limit_bytes):
+        if limit_bytes <= 0:
+            raise ValueError("GPU working set limit must be positive")
+        return self["resident_peak_estimate"] <= limit_bytes
 
 
 def component(key):
@@ -32,7 +42,8 @@ def component(key):
 
 
 def memory_model(config, profile="mixed", context_tokens=ALIGN_CONTEXT_CAP, chunk_tokens=64,
-                 group_size=64, batch_size=1, ple_storage="q4", runtime_reserve_bytes=3_000_000_000):
+                 group_size=64, batch_size=1, ple_storage=None, runtime_reserve_bytes=3_000_000_000,
+                 gpu_working_set_limit_bytes=GPU_WORKING_SET_BYTES):
     """Return integer component bytes and named, explicit workspace assumptions.
 
     Uniform bit profiles quantize eligible leaves only. The same exclusions as
@@ -42,6 +53,7 @@ def memory_model(config, profile="mixed", context_tokens=ALIGN_CONTEXT_CAP, chun
     """
     if context_tokens <= 0 or chunk_tokens <= 0 or batch_size <= 0:
         raise ValueError("Context, chunk and batch must be positive")
+    ple_storage = ple_storage_for(profile, group_size, ple_storage)
     c = text_config(config)
     shapes = parameter_shapes(c)
     resident, params, disk_bytes = {}, {}, 0
@@ -100,24 +112,30 @@ def memory_model(config, profile="mixed", context_tokens=ALIGN_CONTEXT_CAP, chun
     pages = math.ceil(disk_bytes / 16384) if disk_bytes else 0
     lookups = b * t * head_count
     expected_pages = pages * -math.expm1(-lookups / pages) if pages else 0
-    return dict(profile=profile, context_tokens=t, chunk_tokens=s, batch_size=b,
+    report = MemoryReport(profile=profile, ple_storage=ple_storage,
+                context_tokens=t, chunk_tokens=s, batch_size=b,
                 parameter_counts=params, resident_by_component=resident, weights_resident=weights,
                 state_bytes=cache, workspace_bytes=workspace, resident_peak_estimate=peak,
-                below_80GB_model_budget=peak <= 80_000_000_000,
+                gpu_working_set_limit_bytes=gpu_working_set_limit_bytes,
+                gpu_working_set_headroom_bytes=gpu_working_set_limit_bytes - peak,
                 ple_disk_bytes=disk_bytes, ple_page_cache_uniform_estimate=int(expected_pages * 16384),
                 ple_page_cache_upper_bound=min(disk_bytes, lookups * 2 * 16384),
                 physical_peak_upper_estimate=peak + min(disk_bytes, lookups * 2 * 16384),
                 caveat="No swap guarantee: validate actual peaks, OS headroom and swap counters on target Mac; file pages are physical memory.")
+    report["fits_gpu_working_set"] = report.fits_gpu_working_set(gpu_working_set_limit_bytes)
+    return report
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("config", type=Path)
     p.add_argument("--chunk-tokens", type=int, default=64)
+    p.add_argument("--gpu-working-set-bytes", type=int, default=GPU_WORKING_SET_BYTES)
     a = p.parse_args()
     config = json.loads(a.config.read_text())
-    print(json.dumps({profile: memory_model(config, profile, chunk_tokens=a.chunk_tokens)
-                      for profile in ("8", "6", "4", "3", "mixed")}, indent=2))
+    print(json.dumps({profile: memory_model(config, profile, chunk_tokens=a.chunk_tokens,
+                                           gpu_working_set_limit_bytes=a.gpu_working_set_bytes)
+                      for profile in ("8", "6", "4", "3", "mixed", "maxfit", "maxfit5")}, indent=2))
 
 
 if __name__ == "__main__":

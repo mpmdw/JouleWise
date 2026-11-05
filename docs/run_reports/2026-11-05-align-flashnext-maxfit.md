@@ -29,3 +29,29 @@ in this sandbox.
 
 Tests use offline environment variables and place HF/Torch/cache state under
 `/private/tmp/jwsol/port-maxfit/tmp`, with OMP/MKL thread counts set to one.
+
+## Item 2 — memory as a hardware constraint
+
+Removed the 80 GB flag. `memory_model` returns a JSON-serializable
+`MemoryReport` with `fits_gpu_working_set(limit_bytes)`, plus the selected
+limit, fit result and signed headroom in its JSON fields. The CLI reports both
+new profiles and accepts `--gpu-working-set-bytes`. Maxfit defaults to and
+requires bf16 PLE storage, using the same policy as conversion.
+
+Release-config estimates at context 40,960, chunk 64, batch 1, group 64,
+including the existing unmeasured 3 GB runtime reserve (decimal GB):
+
+| Profile | Resident weights | Estimated GPU peak | Headroom vs 115.4 GB | Physical upper estimate |
+|---|---:|---:|---:|---:|
+| maxfit | 108.042110720 | 112.679466248 | 2.720533752 | 134.154302728 |
+| maxfit5 | 92.942616320 | 97.579971848 | 17.820028152 | 119.054808328 |
+
+Both use 102,400,491,520 disk bytes for PLE. Its illustrative uniform-access
+page-cache estimate is 10,193,642,156 bytes; the page-span upper bound is
+21,474,836,480 bytes. GPU fit does not prove physical fit or zero swap:
+maxfit's physical upper estimate exceeds 128 GB, before OS/other processes.
+These are accounting estimates, not native measurements or admission results.
+
+Validation: `python3.13 -B -m unittest tests.align.test_qwen4_exp_memory`:
+**3 PASS**, 0.039 s, including exact expert and non-expert byte counts,
+bf16 PLE, hardware-limit boundaries, negative headroom and JSON serialization.
