@@ -171,9 +171,30 @@ class CommitFreezeTests(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD"), child)
         self.assertFalse((self.repo / f.REGISTRATION).exists())
         self.require(child)
-        # An earlier analysis tag remains listed and reproducible as well.
+
+    def test_superseded_r2_checkout_refuses_custody_after_r3_is_active(self):
+        from joulewise import paper_custody as custody, identity_pins as pins
+        _, registration = self.successor()
+        self.publish_registration(registration)
         self.git("checkout", "--detach", self.base)
-        self.require(self.base)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertEqual(f.load_registration(self.repo)["active_analysis"], "b5/analysis-r3")
+        self.assertIn("b5/analysis-r2", registration["tags"])
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^analysis_descendant_unruled$"):
+            self.require(self.base)
+
+        module = SimpleNamespace(REPO_ROOT=self.repo, MintError=ValueError,
+                                 _actual_v2_git_state=lambda: (self.base, None))
+        ref = custody.ReportedEnergyParentsRef(role="fixture.synthetic", runs_root=self.repo)
+        with mock.patch.object(pins, "_load_mint_module", return_value=module), \
+             mock.patch.object(custody, "V2AuthenticationReadSession") as session:
+            with self.assertRaises(custody.PaperCustodyRefusal) as raised:
+                custody.open_paper_input(ref)
+        self.assertEqual(raised.exception.code, "paper_custody_anchor_unavailable")
+        self.assertIsInstance(raised.exception.__cause__, pins.IdentityPinProjectionError)
+        self.assertIsInstance(raised.exception.__cause__.__cause__, f.FreezeIdentityError)
+        self.assertEqual(str(raised.exception.__cause__.__cause__), "analysis_descendant_unruled")
+        session.assert_not_called()
 
     def test_collection_tag_cannot_authorize_analysis_head(self):
         child, _ = self.successor()

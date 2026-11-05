@@ -28,10 +28,13 @@ local registration commits cannot supply authority. A missing origin/main
 ref refuses with `freeze_registration_origin_main_missing`; a missing or
 invalid registration also refuses, without a worktree fallback.
 
-Admission requires HEAD to equal the peeled commit of a registered
+The PR #649 fix-round-3 lead ruling requires HEAD to equal the peeled commit
+of the registration's **active_analysis**
 `b5/analysis` or `b5/analysis-r<k>` annotated tag, with its tag-object ID
 and tree matching that origin/main record. Earlier listed analysis tags
-remain reproducible. Untagged descendants and collection tags refuse.
+remain historical tree records; superseded checkouts cannot grant paper
+custody. No reproduce-only admission function is introduced. Untagged
+descendants and collection tags refuse.
 Nonempty legacy `ruled_descendants` ledgers also refuse.
 
 `JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT` is retired and explicitly refuses
@@ -46,7 +49,8 @@ For a future ruled correction:
    computation trees, and create the successor annotated `b5/analysis-r<k>`
    tag at the corrected computation commit.
 2. Review and merge a registration update to main listing that tag's full
-   tag-object, peeled commit and tree IDs. The registration commit follows
+   tag-object, peeled commit and tree IDs, and selecting it as `active_analysis`.
+   The registration commit follows
    the computation commit; neither needs to name itself.
 3. Make the merged main ref and the successor tag available locally, then
    execute from a clean checkout of the successor computation commit.
@@ -57,7 +61,7 @@ the earlier tagged computation commit and admits it without a worktree
 registration file.
 
 M1: after Phase 1 lands, **post-release paper and fill runs must execute
-from a clean listed analysis-tag checkout** (currently active
+from the clean active analysis-tag checkout** (currently
 `b5/analysis-r2`). This applies to
 `build_results_fill_input.py`, `issue_reported_energy.py`,
 `produce_b5_disclosures.py`, `compare_b5_recompute.py`, and `open_paper_input`

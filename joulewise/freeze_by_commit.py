@@ -112,18 +112,20 @@ def verify_tag(repository: Path, tag: str, record: dict) -> str:
 
 
 def require_analysis_head(repository: Path, head: str) -> None:
-    """F2/F3: require an analysis tag registered in origin/main.
+    """F2/F3: require origin/main's active analysis tag for paper custody.
 
     The caller owns the clean-checkout gate. Descendants (including merges)
-    require a new reviewed registration and analysis-r<k> tag before use.
+    require a new reviewed registration and active analysis-r<k> tag before
+    use. Superseded tags remain historical records and cannot grant custody.
     """
     head = _commit(head)
     value = load_registration(repository)
-    for tag, record in value["tags"].items():
-        if (re.fullmatch(r"b5/analysis(?:-r[0-9]+)?", tag)
-                and isinstance(record, dict) and record.get("commit") == head):
-            verify_tag(repository, tag, record)
-            return
+    tag = value["active_analysis"]
+    record = value["tags"][tag]
+    if (re.fullmatch(r"b5/analysis(?:-r[0-9]+)?", tag)
+            and isinstance(record, dict) and record.get("commit") == head):
+        verify_tag(repository, tag, record)
+        return
     raise FreezeIdentityError("analysis_descendant_unruled")
 
 
