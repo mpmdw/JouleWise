@@ -144,6 +144,74 @@ in the unrelated synthetic fiducial pulse refit to preserve the user's test-time
 budget. It is not counted as a passing module. The bounded class above was
 rerun to obtain a complete result. No full suite was run.
 
+## Step 5
+
+The emitter opts into independent alpha/beta composition (archive, kept units,
+bracket, primary context and ledger snapshot), followed by independent
+authenticated bootstrap preparation. The common index/attempt selection,
+Gamma authentication, consumer bindings, ordered manifest assembly, provisional
+pinset authentication, `build_pinset`, output writes and mint retain their
+original sequence. Other composition callers remain serial by default; an
+existing session with earlier reads retains serial capability/first-read behavior.
+
+Consumed successful preparations restore the worker's sealed extraction-spec
+vocabulary authority before registering its first read row. Both composition
+and bootstrap use this same consume helper. Failed workers recompute at the
+original cursor, and worker-local producer registry entries are restored in a
+`finally` block. No independent authentication is replaced by an earlier result.
+
+The rebuilt joined prefix matched all **288 registered files, 8 accumulated
+records and all archive censuses**, including pinset, block-5 input manifest,
+copied plans/orders, aggregate floor, D-165 dominance replay and single-count
+statement. Wall time at 3 workers was **1467.026 → 1348.711 s (8.1% reduction)**.
+The [step-5 ledger](2026-11-05-b5-speed-plan-stage2-5.json) preserves every file
+hash, record digest, matching aggregate commitments and parent-received pack
+outcomes. The output commitment is
+`da09390e94e12f1a4176678721a32d244d7aab59e3e054fb9cc03248643d3157`.
+Both composition results and both bootstrap results succeeded and were consumed,
+with shares 1/2 in each phase. The serial target dispatched neither preparation;
+its prefix retained the already-implemented three-pack bracket scheduling.
+This is one loaded-machine observation, not a production forecast.
+
+`python3.13 -B -m unittest tests.b5_analysis.test_producer_parallel` passed
+4 tests in 7.684 s: competing authenticated composition/preparation failures,
+identical first refusal/partial rows, primary-context rejection, registry cleanup,
+and successful vocabulary authority before census replay. An initial 3-test run
+failed one assertion because invalid-JSON errors do not include a path; the
+assertion now checks the distinct alpha invalid-JSON code versus beta's missing
+input. The compared refusal strings were already identical. The parent-side
+vocabulary handoff was found in review and regression-tested before benchmarking.
+
+`python3.13 -B -m unittest
+tests.b5_analysis.test_mint_kept_units.S10RelativeReportPathTests` passed 3 tests
+in 4.745 s, retaining relative manifest bytes and path-escape refusals.
+
+The benchmark now records parent-received pack outcome flags/shares and persists
+each verified run snapshot before resetting its files. Incomplete benchmark JSON
+has no `digests_equal` success flag. Git child processes now explicitly disable
+external excludes, attributes, fsmonitor, hooks and signing as well as global/system
+configuration and lazy fetching. These changes do not alter scientific consumers.
+
+## Files and commits
+
+| Slice | Commit | Runtime and focused tests |
+|---|---|---|
+| 3b | `b61dcf98e` | `context.py`, `dry_run.py`, `pack_parallel.py`; `test_pack_parallel.py` |
+| 10 | `3ba677116` | `dry_run.py`, `pack_parallel.py`, `reported_parallel.py`; `test_reported_parallel.py` and shared transport tests |
+| 11 | `948d7a2c9` | `sensitivity.py`, `sensitivity_parallel.py`; `test_sensitivity_parallel.py` |
+| 5 | This report's final slice | `scripts/emit_floor_mint_pinset.py`, `scripts/mint_floor_artifact_generalized.py`, `producer_parallel.py`; `test_producer_parallel.py` |
+
+Unqualified runtime names above are under `joulewise/b5_analysis/`; test names
+are under `tests/b5_analysis/`. The shared synthetic harness is
+`scripts/benchmark_b5_pack_parallel.py`. Documentation changes are this report,
+`docs/process/b5_speed_plan.md` and the four per-step digest ledgers linked above.
+Verification used Python 3.13; Python 3.11 was not run here.
+
+All 14 changed Python files passed a syntax compilation check without creating
+bytecode files. Scoped diff whitespace checks passed. The full unittest suite
+was not run under the user's explicit busy-machine constraint; the focused
+commands and corrected fixture failures are recorded above.
+
 ## Handoff and limits
 
 Some Git review/status and local-commit commands omitted the explicit

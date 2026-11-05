@@ -223,6 +223,12 @@ def main(argv=None):
         parser.error('synthetic restart must be under TMPDIR')
     os.environ.update(GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1', GIT_NO_LAZY_FETCH='1',
                       JW_B5_S10_REAL_PROGRAMS='1', JOULEWISE_B5_ANALYSIS_WORKERS='3')
+    settings = {'core.excludesFile': '/dev/null', 'core.attributesFile': '/dev/null',
+                'core.fsmonitor': 'false', 'core.hooksPath': '/dev/null', 'commit.gpgSign': 'false'}
+    os.environ.update(GIT_ATTR_NOSYSTEM='1', GIT_CONFIG_COUNT=str(len(settings)))
+    for i, (key, value) in enumerate(settings.items()):
+        os.environ['GIT_CONFIG_KEY_' + str(i)] = key
+        os.environ['GIT_CONFIG_VALUE_' + str(i)] = value
     if args.retain_prefix:
         os.environ['JW_B5_SPEED_RETAIN_PREFIX'] = '1'
     safe_paths()
@@ -268,10 +274,21 @@ def main(argv=None):
         old = baseline_function(args.baseline, emit, name)
     current = getattr(owner, name)
     checkpoint = None
+    map_packs = pp.pack_map
     try:
         # Identical input and output locators on both runs, with a fresh run
         # store. All registered bytes, rows and archive censuses are compared.
         for label, implementation in (('before', old), ('after', current)):
+            pack_events = []
+
+            def observed_pack_map(function, calls):
+                outcomes = map_packs(function, calls)
+                pack_events.append(dict(function=function.__module__ + ':' + function.__qualname__,
+                    dispatched=outcomes is not None,
+                    ok=None if outcomes is None else [item.ok for item in outcomes],
+                    worker_shares=None if outcomes is None else pp.member_worker_shares(3, len(calls))))
+                return outcomes
+
             artifacts = harness.root / 'artifacts'
             if artifacts.exists():
                 shutil.rmtree(artifacts)
@@ -292,6 +309,7 @@ def main(argv=None):
             times = {}
             with ExitStack() as stack:
                 stack.enter_context(harness.git_seams())
+                stack.enter_context(patch.object(pp, 'pack_map', observed_pack_map))
                 stack.enter_context(patch.object(owner, name, implementation))
                 stack.enter_context(shared_instrument_calibration_physics_cache(physics))
                 caches = stack.enter_context(analysis_run_caches(physics, workers=3,
@@ -331,7 +349,11 @@ def main(argv=None):
                         raise AssertionError('synthetic joined run refused at step ' + step)
                     if step == args.step:
                         break
-            result['runs'][label] = dict(wall_s=times, **snapshot(state, state.step_records))
+            result['runs'][label] = dict(wall_s=times, pack_events=pack_events,
+                                         **snapshot(state, state.step_records))
+            # Preserve the verified before snapshot before resetting its files.
+            # An incomplete file lacks digests_equal and cannot claim equality.
+            args.output.write_text(json.dumps(result, indent=2, sort_keys=True)+'\n')
         for field in ('outputs', 'records', 'census'):
             if result['runs']['before'][field] != result['runs']['after'][field]:
                 raise AssertionError('synthetic joined mismatch: ' + field)
