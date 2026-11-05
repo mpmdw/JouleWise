@@ -92,3 +92,14 @@ intentionally refuses rather than inventing a value. Runbook formula updated.
 `python3.13 -B -m unittest tests.test_align_offload_r0_patch`: PASS, 2 tests;
 exact shipped patch applies to cached code, synthetic boundary +/-1 byte and
 missing/malformed inputs tested. No R0 or model/hardware probe executed.
+
+N5b patch 2: second applyable diff in the same patch document records pilot
+measurement/ view symlinks (including dangling links) as path/type/target text.
+It uses scandir metadata with follow_symlinks=False rather than os.walk, which
+can stat link targets while classifying them. Regular file reads use O_NOFOLLOW
+and inode/change checks. CLI --inventory and pilot-copy comparisons opt in;
+model inventories stay strict. Blinded entries refuse before stat/descent.
+Runbook pilot copies preserve links with cp -pRP. Exact delivered two-patch
+series applies sequentially in the test's synthetic checkout.
+`python3.13 -B -m unittest tests.test_align_offload_r0_patch`: PASS, 4 tests.
+No R0 branch, model data, real pilot or measurement view target was accessed.

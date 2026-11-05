@@ -33,8 +33,8 @@ Suggested R0 commit: `fix(r0): admit two W1 bundle copies plus the 30 GB floor`.
 +++ b/joulewise/align/r0_host.py
 @@ -115,7 +115,31 @@
      return sorted(rows, key=lambda row: row["path"])
- 
- 
+
+
 +
 +DISK_FLOOR_BYTES = 30_000_000_000
 +AMENDMENT_PATH = "docs/align/council-2026-11-05/FINAL-DESIGN-AMENDMENT-1.md"
@@ -79,21 +79,21 @@ Suggested R0 commit: `fix(r0): admit two W1 bundle copies plus the 30 GB floor`.
 +                       "authority": config["disk_budget"]["authority"]},
              "models": models, "offloads": offloads,
              "note": "Download totals are diagnostics (mirror metadata can differ); free-space and offload hashes are gates."}
- 
+
 --- a/joulewise/align/r0_runner.py
 +++ b/joulewise/align/r0_runner.py
 @@ -14,7 +14,7 @@
- 
+
  from joulewise.align import r0
  from joulewise.align.r0_host import (
 -    QuietGuard, Refused, command, disk_census, host_snapshot, inventory, smc_enumeration,
 +    QuietGuard, Refused, command, disk_census, host_snapshot, inventory, required_free_bytes, smc_enumeration,
  )
- 
+
  CHECKS = ("host", "disk", "smc", "load", "template", "generated", "ladder", "long-decode", "memory")
 @@ -34,7 +34,7 @@
- 
- 
+
+
  def validate_config(config):
 -    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads"}:
 +    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads", "disk_budget"}:
@@ -106,8 +106,8 @@ Suggested R0 commit: `fix(r0): admit two W1 bundle copies plus the 30 GB floor`.
          _path(row["destination"])
 +    required_free_bytes(config)  # refuse missing/unreviewed amendment budget
      return config
- 
- 
+
+
 --- a/docs/align/r0_desk.example.json
 +++ b/docs/align/r0_desk.example.json
 @@ -6,6 +6,11 @@
@@ -123,3 +123,135 @@ Suggested R0 commit: `fix(r0): admit two W1 bundle copies plus the 30 GB floor`.
    "offloads": [
      {"label": "pilot8", "inventory": "/Volumes/ALIGN_INPUTS/pilot8-source-inventory.json", "destination": "/Volumes/ALIGN_OFFLOAD/pilot8"},
 ```
+
+## Patch 2 — preserve pilot measurement views as symlink records
+
+Suggested R0 commit: `fix(r0): inventory pilot view links without following`.
+Apply after patch 1. CLI --inventory and pilot-copy comparisons use
+record_symlinks=True; model loading/inventories retain the default strict
+materialized-file policy. A symlink row has path, type=symlink and exact target
+text, never target bytes or target metadata. Preserve these links as links in
+independent pilot copies. Blinded named directory entries still refuse before
+stat or descent; no permission to inventory restricted content is granted.
+
+```diff
+--- a/joulewise/align/r0_host.py
++++ b/joulewise/align/r0_host.py
+@@ -7,6 +7,7 @@
+ from pathlib import Path
+ import re
+ import shutil
++import stat
+ import subprocess
+ import time
+ from types import SimpleNamespace
+@@ -79,41 +80,54 @@
+             raise Refused(self.failure) from exc
+
+
+-def inventory(root, tick=lambda: None):
+-    """Hash regular files only; refuse symlinks and restricted subdirectories.
+-
+-    Operators supply a materialized local model mirror, rather than an HF cache
+-    with links to another tree. This makes the hashed read boundary explicit.
+-    """
++def inventory(root, tick=lambda: None, *, record_symlinks=False):
++    """Models stay materialized; pilot views record link text without following."""
+     root = Path(root)
+-    if "restricted" in root.parts or root.is_symlink() or not root.is_dir():
++    if ({"restricted", "withheld"} & {p.casefold() for p in root.parts} or
++            root.is_symlink() or not root.is_dir()):
+         raise ValueError(f"not a materialized unrestricted directory: {root}")
+     rows = []
+-    def walk_error(exc):
+-        raise exc
+-    for directory, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
+-        for name in dirs:
+-            path = Path(directory) / name
+-            if name == "restricted" or path.is_symlink():
+-                raise ValueError(f"refusing directory: {path}")
+-        for name in sorted(files):
++    def walk(directory):
++        # os.walk can stat a symlink target while classifying entries. Use
++        # lstat-style scandir metadata instead, even for dangling view links.
++        with os.scandir(directory) as entries:
++            children = sorted(entries, key=lambda entry: entry.name)
++        for entry in children:
++            if entry.name.casefold() in {"restricted", "withheld"}:
++                raise ValueError("refusing blinded directory entry")
+             tick()
+-            path = Path(directory) / name
+-            if path.is_symlink() or not path.is_file():
++            path = Path(entry.path)
++            info = entry.stat(follow_symlinks=False)
++            name = path.relative_to(root).as_posix()
++            if stat.S_ISLNK(info.st_mode):
++                if not record_symlinks:
++                    raise ValueError(f"not a regular materialized file: {path}")
++                rows.append({"path": name, "type": "symlink", "target": os.readlink(path)})
++            elif stat.S_ISDIR(info.st_mode):
++                walk(path)
++            elif stat.S_ISREG(info.st_mode):
++                digest = hashlib.sha256()
++                size = 0
++                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
++                with os.fdopen(fd, "rb") as handle:
++                    opened = os.fstat(handle.fileno())
++                    if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
++                        raise ValueError("inventory file changed before open")
++                    for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
++                        tick()
++                        digest.update(chunk)
++                        size += len(chunk)
++                after = path.lstat()
++                if (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns) != (
++                        after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
++                    raise ValueError("inventory file changed")
++                rows.append({"path": name, "bytes": size, "sha256": digest.hexdigest()})
++            else:
+                 raise ValueError(f"not a regular materialized file: {path}")
+-            digest = hashlib.sha256()
+-            size = 0
+-            with path.open("rb") as handle:
+-                for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+-                    tick()
+-                    digest.update(chunk)
+-                    size += len(chunk)
+-            rows.append({"path": path.relative_to(root).as_posix(),
+-                         "bytes": size, "sha256": digest.hexdigest()})
++    walk(root)
+     if not rows:
+         raise ValueError(f"empty inventory: {root}")
+     return sorted(rows, key=lambda row: row["path"])
+-
+
+
+ DISK_FLOOR_BYTES = 30_000_000_000
+@@ -156,7 +170,7 @@
+         # been removed. No copying or deletion is performed here.
+         import json
+         expected = json.loads(Path(item["inventory"]).read_text())
+-        actual = inventory(item["destination"], tick)
++        actual = inventory(item["destination"], tick, record_symlinks=True)
+         ok = (isinstance(expected, list) and bool(expected) and expected == actual)
+         offloads.append({"label": item["label"], "pass": ok,
+                          "inventory": item["inventory"], "destination": item["destination"],
+--- a/joulewise/align/r0_runner.py
++++ b/joulewise/align/r0_runner.py
+@@ -195,7 +195,7 @@
+             parser.exit(2, "Another R0 runner owns the machine lock\n")
+         if args.inventory:
+             guard.check(force=True)
+-            rows = inventory(_path(str(args.inventory)), guard.check)
++            rows = inventory(_path(str(args.inventory)), guard.check, record_symlinks=True)
+             with args.output.open("x") as handle:
+                 json.dump(rows, handle, indent=2, sort_keys=True)
+                 handle.write("\n")
+```
+
+Lead verification after rebase: run the native R0 inventory/config/disk tests
+on synthetic roots, confirm dangling and measurement/ view links produce exact
+link rows, confirm models still refuse links, then run the reviewed operator
+inventories only after pause/retention authority. Run R0 hardware/model checks
+outside this sandbox after the real v4 config and amendment citation are pinned.
+Nothing in this patch authorizes deleting a pilot root.

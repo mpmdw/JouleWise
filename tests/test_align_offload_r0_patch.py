@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -38,7 +39,7 @@ class R0PatchTests(unittest.TestCase):
                            check=True, cwd=cls.root, capture_output=True)
         cls.host_text = (cls.root / 'joulewise/align/r0_host.py').read_text()
         cls.runner_text = (cls.root / 'joulewise/align/r0_runner.py').read_text()
-        cls.ns = dict(os=os, Path=Path, hashlib=hashlib, shutil=shutil, re=re)
+        cls.ns = dict(os=os, Path=Path, hashlib=hashlib, shutil=shutil, re=re, stat=stat)
         parsed = ast.parse(cls.host_text)
         selected = [n for n in parsed.body if isinstance(n, ast.FunctionDef) and n.name in
                     ('inventory', 'required_free_bytes', 'disk_census') or
@@ -79,6 +80,39 @@ class R0PatchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.ns['required_free_bytes'](example)
         self.assertIn('required_free_bytes(config)', self.runner_text)
+
+    def test_pilot_view_and_dangling_links_record_target_text_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            (root / 'runs').mkdir()
+            (root / 'runs' / 'opaque').write_bytes(b'synthetic')
+            target = '/never-follow/restricted/measurement'
+            (root / 'measurement').symlink_to(target, target_is_directory=True)
+            (root / 'dangling').symlink_to('/never-follow/missing')
+            opened = []
+            real_open = os.open
+            def open_local(path, flags, *args, **kwargs):
+                self.assertEqual(Path(path), root / 'runs' / 'opaque')
+                self.assertTrue(flags & os.O_NOFOLLOW)
+                opened.append(str(path))
+                return real_open(path, flags, *args, **kwargs)
+            with mock.patch.object(os, 'open', side_effect=open_local):
+                rows = self.ns['inventory'](root, record_symlinks=True)
+            self.assertEqual([r for r in rows if r.get('type') == 'symlink'], [
+                {'path': 'dangling', 'type': 'symlink', 'target': '/never-follow/missing'},
+                {'path': 'measurement', 'type': 'symlink', 'target': target}])
+            self.assertEqual(len(opened), 1)
+            self.assertEqual(rows[-1]['bytes'], 9)
+            self.assertIn('guard.check, record_symlinks=True', self.runner_text)
+            with self.assertRaisesRegex(ValueError, 'materialized'):
+                self.ns['inventory'](root)
+
+    def test_real_synthetic_restricted_directory_still_refuses(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            (root / 'restricted').mkdir()
+            with self.assertRaisesRegex(ValueError, 'blinded'):
+                self.ns['inventory'](root, record_symlinks=True)
 
 
 if __name__ == '__main__':

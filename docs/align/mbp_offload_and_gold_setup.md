@@ -332,8 +332,10 @@ roots as a fallback. Pilot 9 is not a candidate in this pause.
 
 **STOP 3:** R0 inventories for both pilots saved outside sources; materialized
 copy destinations agreed and budgeted, full model KEEP printed and reviewed,
-pilot 8's retention census ruled or root retained. R0 may refuse symlinks or
-restricted content; retain sources and ask the lead rather than weakening it.
+pilot 8's retention census ruled or root retained. R0 must use both [coordination patches](r0_disk_gate_patch.md): pilot view
+symlinks are recorded as exact target text without following them; model
+inventories still require materialized files. Restricted content still refuses;
+retain the source and ask the lead rather than weakening that boundary.
 Do not run a live R0 desk session from an agent. Copies may be made under this
 paused Ed-only procedure; full R0 remains its own lead-controlled gate.
 
@@ -784,7 +786,9 @@ cloud objects are never deleted by this backup step.
 
 Use the pre-offload R0 inventories from step 3. Copy **both** pilots into the
 configured independent-device destinations as uncompressed directories. R0's
-inventory already refuses symlinks; do not introduce any in the copy. The
+inventory records pilot `measurement/` view links as symlinks with their exact
+target text. Preserve those links without dereferencing; never copy target
+contents through them. Model inventories remain strict and refuse links. The
 copy and a full re-inventory must fit the device budget alongside archives,
 restore workspace and gold storage if sharing the device.
 
@@ -797,7 +801,7 @@ source "$JW_OP/r0-env.zsh"
 : "${JW_R0_ACTUAL:?Set NEW comparison receipt path}"
 test ! -e "$JW_R0_DEST"
 mkdir -m 700 "$JW_R0_DEST"
-cp -pR "$JW_R0_SOURCE/." "$JW_R0_DEST/"
+cp -pRP "$JW_R0_SOURCE/." "$JW_R0_DEST/"
 "$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
   --config "$JW_R0_CONFIG" --inventory "$JW_R0_DEST" --output "$JW_R0_ACTUAL"
 cmp "$JW_R0_EXPECTED" "$JW_R0_ACTUAL"
