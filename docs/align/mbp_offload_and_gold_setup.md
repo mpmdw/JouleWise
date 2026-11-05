@@ -158,8 +158,26 @@ if extra < 0 or free < 30_000_000_000 + extra:
     raise SystemExit('STOP: disk floor or allocation budget')
 PY
 }
+jw_uploaded() {
+  local state
+  state="$(/usr/bin/fileproviderctl evaluate "$1")"
+  print -r -- "$state" | python3.13 -I -B -c 'import re,sys; s=sys.stdin.read(); assert re.search(r"\bisUploaded\s*=\s*1\b",s) and not re.search(r"\bisUploaded\s*=\s*0\b",s), "STOP: upload unconfirmed"'
+}
+jw_wait_dataless() {
+  local file="$1" expected="$2" flags attempt
+  for attempt in {1..240}; do
+    flags="$(/usr/bin/stat -f %Sf "$file")"
+    if [[ "$expected" == yes && "$flags" == *dataless* ]]; then return 0; fi
+    if [[ "$expected" == no && "$flags" != *dataless* ]]; then return 0; fi
+    jw_disk_check
+    sleep 5
+  done
+  print -u2 -- 'STOP: expected dataless transition not observed'
+  return 1
+}
 ENV
 } > "$JW_OP/env.zsh"
+shasum -a 256 "$JW_OP/env.zsh" > "$JW_OP/env.sha256"
 source "$JW_OP/env.zsh"
 jw_disk_check
 /bin/df -k /System/Volumes/Data > "$JW_OP/df-before.txt"
@@ -229,7 +247,7 @@ jw_disk_check
 
 If a job is already absent, document the specific absence and continue via a
 reviewed revised script. A pre-existing STOP is never overwritten or removed.
-Resume requires `cmp "$JW_OP/our-STOP.txt" .../STOP`, env/helper hash checks,
+Resume first checks `shasum -a 256 -c "$JW_OP/env.sha256"`; it also requires `cmp "$JW_OP/our-STOP.txt" .../STOP`, env/helper hash checks,
 no active writer and reviewed disable-state receipts. Optional remote
 `ops/stop*` control is lead-owned; this offline procedure does not push it.
 
@@ -357,6 +375,40 @@ locator review is unavailable, pilot 8 stays and no deletion proceeds.
 
 ## 5. Check quota, staging space and throughput for the selected roots only
 
+The tracked `scripts/align_offload_disk_guard.py` runs each allocating writer
+in a new session/process group, samples every filesystem supplied with
+`--path` every **5 seconds**, and sends **SIGSTOP to the whole writer group**
+if free bytes fall below 30 GB or the space check fails. Exit 75 is STOP; it
+does not resume or discard partials. Ed records PGID/start identity locally,
+resolves space and obtains review before any SIGCONT or new attempt. Writers
+must stay in that group, foreground and wait for children (no daemonization,
+`setsid` or detached jobs). It protects archive compression/copy/hydration,
+HF/package downloads, conversion, backup and step 12, in addition to each
+maximum-allocation admission check. Sampled checks cannot prevent sub-5-second
+bursts; the admitted whole-operation byte ceiling funds those bursts.
+
+Save a writer's commands in a separate reviewed file (which also sources
+env.zsh), then run it from a guarded step file:
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_WRITER_FILE:?Set reviewed foreground writer .zsh file}"
+: "${JW_WRITER_VOLUME:?Set exact writable destination volume}"
+: "${JW_WRITER_BUDGET:?Set computed/admitted maximum new bytes}"
+jw_disk_check "$JW_WRITER_BUDGET" "$JW_WRITER_VOLUME"
+python3.13 -I -B "$JW_CANON/scripts/align_offload_disk_guard.py" \
+  --path /System/Volumes/Data --path "$JW_WRITER_VOLUME" -- \
+  /bin/zsh -f -euo pipefail "$JW_WRITER_FILE"
+```
+
+All allocating fences below are **writer files run through this wrapper**.
+When hydration may continue after `brctl` returns, its writer file stays alive
+through `jw_wait_dataless ... no` and the full hash check. The HF harness must
+keep every worker in the guarded group. Persist its actual CLI/PGID receipt.
+Watch both internal storage and the external destination; they share a budget
+only if `stat` proves the same filesystem. On remount/unmount STOP and recheck
+volume identity, never write into a bare mountpoint on the internal SSD.
+
 Ed opens System Settings → Apple Account → iCloud → storage management and
 records account, quota, used and remaining bytes, including other devices'
 pending uploads. `df` on the iCloud folder measures local SSD capacity, **not
@@ -366,10 +418,8 @@ publish blinded data or create a new integration as a convenience.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-export JW_CLOUD='/Users/edr/Library/Mobile Documents/com~apple~CloudDocs'
 /usr/bin/brctl status com.apple.CloudDocs > "$JW_OP/icloud-before.txt"
 # New operation namespace under the established JouleWise-archive namespace.
-export JW_REMOTE="$JW_CLOUD/JouleWise-archive/$(basename "$JW_OP")"
 mkdir -p "$JW_REMOTE"
 # Synthetic 256 MiB probe; contains no study data. Keep until operation closes.
 jw_disk_check 536870912  # Probe plus its local cloud-folder copy.
@@ -383,16 +433,20 @@ cp -p "$JW_OP/upload-probe.bin" "$JW_REMOTE/upload-probe.bin"
 
 Poll manually until that exact file reports `isUploaded=1` and no pending
 upload/error. Record end UTC and elapsed seconds including upload delay.
-If `fileproviderctl` is unavailable or ambiguous, Ed must establish the same
-server-upload state in Finder; a local copy, checksum or progress-bar
-disappearance alone does not suffice. Then use **explicit** eviction and
+If `fileproviderctl` is unavailable or ambiguous, STOP; this procedure has no
+Finder substitute for its machine-checkable `isUploaded=1` requirement. A local
+copy, checksum or progress-bar disappearance alone does not suffice. Then use **explicit** eviction and
 re-download of this probe to confirm the remote round trip:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
 date -u +%FT%TZ > "$JW_OP/upload-end.utc"
+jw_uploaded "$JW_REMOTE/upload-probe.bin"
 /usr/bin/brctl evict "$JW_REMOTE/upload-probe.bin"
+jw_wait_dataless "$JW_REMOTE/upload-probe.bin" yes
+jw_disk_check 268435456
 /usr/bin/brctl download "$JW_REMOTE/upload-probe.bin"
+jw_wait_dataless "$JW_REMOTE/upload-probe.bin" no
 cmp "$JW_OP/upload-probe.bin" "$JW_REMOTE/upload-probe.bin"
 jw_disk_check
 ```
@@ -476,6 +530,11 @@ source "${JW_OP:?Set existing operation}/env.zsh"
 export JW_SRC JW_ID
 export JW_ITEM="$JW_OP/$JW_ID"
 mkdir "$JW_ITEM"
+{
+  for name in JW_SRC JW_ID JW_ITEM; do
+    printf 'export %s=%q\n' "$name" "${(P)name}"
+  done
+} > "$JW_ITEM/item-env.zsh"
 python3.13 -I -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source.json"
 shasum -a 256 "$JW_ITEM/source.json" > "$JW_ITEM/source.sha256"
 printf '%s\n' "$JW_SRC" > "$JW_ITEM/source-path.txt"
@@ -492,13 +551,31 @@ python3.13 -I -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source-after.js
 cmp "$JW_ITEM/source.json" "$JW_ITEM/source-after.json"
 shasum -a 256 "$JW_REMOTE/$JW_ID.tar.zst" > "$JW_ITEM/archive.sha256"
 cp -p "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
+export JW_MANIFEST_SHA="$(cut -d ' ' -f1 "$JW_ITEM/source.sha256")"
+printf '%s  %s\n' "$JW_MANIFEST_SHA" "$JW_REMOTE/$JW_ID.manifest.json" \
+  > "$JW_ITEM/cloud-manifest.sha256"
+shasum -a 256 -c "$JW_ITEM/cloud-manifest.sha256"
 jw_disk_check
 ```
 
 Step 2 enables `extendedglob` for the zsh ID pattern above. Use one compression
 worker to limit non-measurement load. A partial archive is not verified; on
-interruption keep the source and use a new ID, or explicitly retire only the
-failed `.partial` after checking its path. Do not overwrite an earlier receipt.
+interruption keep the source and use a new ID. **Ed only** may retire the exact
+failed partial after recording failure and checking its path; no glob removal:
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+source "${JW_ITEM:?Set exact item directory}/item-env.zsh"
+: "${JW_RETIRED_ID:?Set unique reviewed retired ID}"
+[[ "$JW_RETIRED_ID" == [A-Za-z0-9_-]## ]]
+test -f "$JW_REMOTE/$JW_ID.tar.zst.partial"
+test ! -L "$JW_REMOTE/$JW_ID.tar.zst.partial"
+test ! -e "$JW_REMOTE/$JW_RETIRED_ID.retired.partial"
+mv -n "$JW_REMOTE/$JW_ID.tar.zst.partial" "$JW_REMOTE/$JW_RETIRED_ID.retired.partial"
+```
+
+Retiring preserves bytes and uses no delete authority. Budget that retained
+partial until Ed separately approves its exact removal. Do not overwrite an earlier receipt.
 If tar produces an unsupported hardlink member, the helper refuses; use a
 reviewed archival adjustment and verify again, never discard the link silently.
 
@@ -525,16 +602,23 @@ and aggregate queue state (the transfer precedent is
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-/usr/bin/fileproviderctl evaluate "$JW_REMOTE/$JW_ID.tar.zst"
-/usr/bin/fileproviderctl evaluate "$JW_REMOTE/$JW_ID.manifest.json"
+source "${JW_ITEM:?Set exact item}/item-env.zsh"
+jw_uploaded "$JW_REMOTE/$JW_ID.tar.zst"
+jw_uploaded "$JW_REMOTE/$JW_ID.manifest.json"
 /usr/bin/brctl status com.apple.CloudDocs
 # Execute ONLY after confirmed server upload; sources remain intact.
 /usr/bin/brctl evict "$JW_REMOTE/$JW_ID.tar.zst"
 /usr/bin/brctl evict "$JW_REMOTE/$JW_ID.manifest.json"
+jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" yes
+jw_wait_dataless "$JW_REMOTE/$JW_ID.manifest.json" yes
 # Budget the bytes still to hydrate; wait for eviction before admission.
+export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/manifest.py" budget "$JW_ITEM/source.json")"
 jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
 /usr/bin/brctl download "$JW_REMOTE/$JW_ID.tar.zst"
 /usr/bin/brctl download "$JW_REMOTE/$JW_ID.manifest.json"
+jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" no
+jw_wait_dataless "$JW_REMOTE/$JW_ID.manifest.json" no
+shasum -a 256 -c "$JW_ITEM/cloud-manifest.sha256"
 cmp "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
 shasum -a 256 -c "$JW_ITEM/archive.sha256"
 zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
@@ -559,7 +643,11 @@ are not independent failure domains. The active analysis laptop has a 7-worker
 job: coordinate a quiet verification slot with its lead; do not start work on
 it from this session. B5 laptop custody is KEEP, not spare scratch space.
 
-On the independent device only, Ed fills these variables with approved new
+On an attached independent volume, the MBP can verify/copy under its guarded
+writer. On another host, Ed first copies the reviewed step files and writes a
+host-specific `$JW_OP/env.zsh` with the same shell options, equivalent local
+disk guard and only approved local paths (never use the MBP absolute paths).
+No remote execution from this agent. Ed fills these variables with approved new
 paths; no independent target path is established by the repository. Use a
 non-synced filesystem with enough capacity. Copy the entire uploaded archive,
 source manifest, archive digest and helper there. Verify archive SHA-256,
@@ -575,10 +663,14 @@ source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_SECOND_MANIFEST:?Set copied source manifest}"
 : "${JW_SECOND_HELPER:?Set copied manifest.py}"
 : "${JW_SECOND_RESTORE:?Set new empty non-synced restore directory}"
-shasum -a 256 "$JW_SECOND_ARCHIVE"
-# Manually compare with archive.sha256 whose digest was anchored on the MBP.
-shasum -a 256 "$JW_SECOND_HELPER"
-# Compare with manifest-helper.sha256 from the MBP journal too.
+# Use EXPECTED hashes authenticated from the original MBP journal (not new local hashes).
+: "${JW_ARCHIVE_SHA:?Set original archive SHA256}"
+: "${JW_MANIFEST_SHA:?Set original source-manifest SHA256}"
+: "${JW_HELPER_SHA:?Set original helper SHA256}"
+printf '%s  %s\n' "$JW_ARCHIVE_SHA" "$JW_SECOND_ARCHIVE" \
+  "$JW_MANIFEST_SHA" "$JW_SECOND_MANIFEST" "$JW_HELPER_SHA" "$JW_SECOND_HELPER" \
+  > "$JW_SECOND_ARCHIVE.expected.sha256"
+shasum -a 256 -c "$JW_SECOND_ARCHIVE.expected.sha256"
 zstd -dc "$JW_SECOND_ARCHIVE" | python3.13 -I -B "$JW_SECOND_HELPER" archive \
   > "$JW_SECOND_ARCHIVE.members.json"
 cmp "$JW_SECOND_MANIFEST" "$JW_SECOND_ARCHIVE.members.json"
@@ -597,6 +689,77 @@ the B5 transfer excluded results-clone and did not include superseded raw
 attempts (`BLOCK5-TRANSFER.md:34–35`; `measurement-corpus18-data.manifest.json:8`).
 An old B5 receipt cannot cover an unrelated B6/BYTES/ALIGN root. A receipt with
 one missing member, pending upload or mismatched digest is not approval.
+
+### 7a. Copy existing single-copy archives while the device is attached
+
+This is required even if **no source deletion** is eligible. Ed supplies an
+exact path inventory from the existing records for: ALIGN pilots **0–7**
+under `JouleWise-archive/2026-11-04-align-pilots`, BYTES **H/H2 raw tars**
+(`RUN_STATE.md:1239`), and R7 captures **A343, P0, READY** (the three iCloud-only
+captures of R7's 17-capture second-copy obligation). No wildcard hydration.
+For each exact archive, copy its authenticated original manifest, original
+archive digest and original verifier to the separate non-synced device. Use
+its original format/verifier if it predates this helper; no replacement trust
+anchor made from a freshly copied corrupt file. Missing original digest or
+coverage is STOP for the lead, not an invented success.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_EXISTING_ARCHIVE:?Set one exact existing iCloud archive}"
+: "${JW_EXISTING_MANIFEST:?Set its authenticated existing manifest}"
+: "${JW_EXISTING_COPY:?Set new item directory on independent device}"
+: "${JW_EXISTING_BUDGET:?Set archive hydration plus destination restore budget}"
+jw_disk_check "$JW_EXISTING_BUDGET"
+jw_uploaded "$JW_EXISTING_ARCHIVE"
+jw_uploaded "$JW_EXISTING_MANIFEST"
+/usr/bin/brctl download "$JW_EXISTING_ARCHIVE"
+/usr/bin/brctl download "$JW_EXISTING_MANIFEST"
+jw_wait_dataless "$JW_EXISTING_ARCHIVE" no
+jw_wait_dataless "$JW_EXISTING_MANIFEST" no
+mkdir -m 700 "$JW_EXISTING_COPY"
+cp -p "$JW_EXISTING_ARCHIVE" "$JW_EXISTING_COPY/"
+cp -p "$JW_EXISTING_MANIFEST" "$JW_EXISTING_COPY/"
+# Continue with the original hash receipts and full member/restore verification
+# of step 7, using expected checksums rebound to these destination filenames.
+```
+
+Run each as a guarded writer checking BOTH volumes; include destination full
+restore bytes in admission, not just compressed archive length. Verify both
+archive and manifest with `shasum -a 256 -c`, restore to an empty directory,
+re-hash all restored bytes, and save an attributed per-item receipt with both
+SHA-256s and device identity. A checklist requires one verified row per pilot,
+H/H2 tar and R7 capture; report missing rows as BLOCKED. Only then explicitly
+evict its uploaded cloud staging copy and **poll dataless**. Sources and
+cloud objects are never deleted by this backup step.
+
+### 7b. Materialized R0 copies without moving retained sources
+
+Use the pre-offload R0 inventories from step 3. Copy **both** pilots into the
+configured independent-device destinations as uncompressed directories. R0's
+inventory already refuses symlinks; do not introduce any in the copy. The
+copy and a full re-inventory must fit the device budget alongside archives,
+restore workspace and gold storage if sharing the device.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/r0-env.zsh"
+: "${JW_R0_SOURCE:?Set exact source for this pilot}"
+: "${JW_R0_DEST:?Set configured NEW materialized destination}"
+: "${JW_R0_EXPECTED:?Set its original pre-offload R0 inventory JSON}"
+: "${JW_R0_ACTUAL:?Set NEW comparison receipt path}"
+test ! -e "$JW_R0_DEST"
+mkdir -m 700 "$JW_R0_DEST"
+cp -pR "$JW_R0_SOURCE/." "$JW_R0_DEST/"
+"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
+  --config "$JW_R0_CONFIG" --inventory "$JW_R0_DEST" --output "$JW_R0_ACTUAL"
+cmp "$JW_R0_EXPECTED" "$JW_R0_ACTUAL"
+```
+
+Save as a guarded writer. Reconfirm config `offloads` labels are `pilot8` and
+`pilot9`, their inventory filenames are those exact step-3 receipts and their
+destinations are these verified directories. tar.zst cannot satisfy R0.
+If source content changed since the frozen inventory, STOP and retain it.
+Pilot 9's Mac source stays intact regardless of a passing external copy.
 
 ## 8. Ed-only deletion, one reviewed root per receipt
 
@@ -617,6 +780,7 @@ item. An unrelated receipt cannot authorize deletion.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
+source "${JW_ITEM:?Set exact item}/item-env.zsh"
 # Ed only; a single fail-closed program owns every check and the deletion.
 shasum -a 256 -c "$JW_OP/manifest-helper.sha256"
 python3.13 -I -B "$JW_OP/manifest.py" delete \
@@ -654,7 +818,10 @@ to reclaim its local staging bytes; do not delete the cloud object:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
+source "${JW_ITEM:?Set exact item}/item-env.zsh"
+jw_uploaded "$JW_REMOTE/$JW_ID.tar.zst"
 /usr/bin/brctl evict "$JW_REMOTE/$JW_ID.tar.zst"
+jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" yes
 /bin/df -k /System/Volumes/Data > "$JW_OP/df-current.txt"
 ```
 

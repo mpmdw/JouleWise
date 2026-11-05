@@ -29,3 +29,19 @@ only redacted facts enter exported journals. No raw argv/plist export.
 0.007 s. All current zsh fences parse with zsh -n (documentation only).
 R0's locally cached code was inspected through Git objects; no data paths
 from its example config were followed. Live R0 execution remains lead-owned.
+
+Group 3 (H6, M3/M6, L7/L11 and cloud portions of M5): persistent upload and
+stat-flag polling functions prove eviction reaches dataless and hydration
+clears it; copied manifests use checked checksum receipts. The continuous
+five-second guard launches a new process group and SIGSTOPs the writer group
+on low/unknown free space. Archive budget is computed from source.json with
+padding/header/expansion/control allowance; no compression savings assumed.
+Existing ALIGN 0–7, BYTES H/H2 and R7 A343/P0/READY archives get independent
+full-copy/restore receipts. R0 gets separate materialized copies, including
+pilot 9 without removal of its retained Mac source. Failed partial retirement
+is an exact-path, Ed-only rename, not deletion. Per-item env files preserve
+resume identity; outputs remain noclobber.
+`python3.13 -B -m unittest tests.test_align_offload_disk_guard`: PASS, 3 tests,
+0.003 s. All 23 current zsh fences parse; no commands in them were executed.
+The guard's five-second sampling is not transactional allocation control;
+whole-operation ceilings must fund bursts and detached writers are forbidden.
