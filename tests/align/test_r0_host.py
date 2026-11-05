@@ -10,6 +10,7 @@ from joulewise.align.r0 import PINS
 from joulewise.align.r0_host import QuietGuard, Refused, disk_census, host_snapshot, host_identity, inventory, smc_enumeration, swap_bytes
 from joulewise.measurement_liveness import Census
 from tests.align.test_r0_checks import config_at
+from tests.align.test_r0_step import write_capture
 
 
 class R0HostTest(unittest.TestCase):
@@ -144,14 +145,16 @@ class R0HostTest(unittest.TestCase):
                 manifest = root / (label + ".json")
                 manifest.write_text(json.dumps(inventory(folder)))
                 config["offloads"].append({"label": label, "inventory": str(manifest), "destination": str(folder)})
-            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_000_000_000)):
+            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_029_491_200)):
                 result = disk_census(config, PINS)
                 self.assertEqual(result["status"], "pass")
                 self.assertTrue(result["anchor"]["files"])
                 self.assertEqual(result["design"]["W1_two_copies_bytes"], 37_400_000_000)
+                self.assertEqual(result["smc_step_budget"]["capture_seconds"], 1800)
+                self.assertEqual(result["required_free_bytes_after_weights"], 80_029_491_200)
                 (root / "pilot9" / "file").write_text("changed")
                 self.assertEqual(disk_census(config, PINS)["status"], "fail")
-            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=79_999_999_999)):
+            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_029_491_199)):
                 self.assertEqual(disk_census(config, PINS)["status"], "fail")
 
     def test_swap_parse_and_missing_value(self):
@@ -188,24 +191,51 @@ class R0HostTest(unittest.TestCase):
                 self.assertEqual(smc_enumeration(root, root / "output")["status"], "inconclusive")
                 self.assertIn("--gpu-step", call.call_args.args[0])
                 argv = call.call_args.args[0]
-                self.assertEqual(argv[argv.index("--load-seconds") + 1], "60")
-                self.assertEqual(argv[argv.index("--idle-seconds") + 1], "600")
-                self.assertGreaterEqual(call.call_args.kwargs["timeout"], 1800)
+                self.assertEqual(argv[argv.index("--load-seconds") + 1], "900")
+                self.assertEqual(argv[argv.index("--idle-seconds") + 1], "300")
+                self.assertEqual(argv[argv.index("--recovery-seconds") + 1], "600")
+                self.assertEqual(call.call_args.kwargs["timeout"], 2400)
                 output = root / "output"
                 output.mkdir()
-                payload = {"schema": "joulewise.align_smc_r0.v1", "gpu_step": True,
-                           "response": {"s_fast": "TC0P", "s_slow": "TH0P"},
-                           "coverage": {"period_ns": 1_000_000_000, "per_key": {
-                               key: {"expected_samples": 1260, "valid_samples": 1260, "sample_fraction": 1.0}
-                               for key in ("TC0P", "TH0P")}}}
-                (output / "r0.json").write_text(json.dumps(payload))
+                payload = write_capture(output)
                 result = smc_enumeration(root, output)
-                self.assertEqual(result["selection"], payload["response"])
-                self.assertEqual(result["status"], "inconclusive")
-                self.assertIn("60 s", result["qualification_blocker"])
-                payload["response"]["s_slow"] = None
+                self.assertEqual(result["selection"], {"s_fast": "TC0P", "s_slow": "TH0P"})
+                self.assertEqual(result["status"], "pass")
+                payload["coverage"]["per_key"]["TH0P"]["valid_samples"] = 0
                 (output / "r0.json").write_text(json.dumps(payload))
                 self.assertEqual(smc_enumeration(root, output)["status"], "inconclusive")
+
+    def test_smc_configured_durations_and_timeout_reach_capture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "scripts").mkdir()
+            (root / "scripts/align_smc_enumerate.py").write_text("# fake hook")
+            output = root / "output"
+            output.mkdir()
+            profile = {"idle_seconds": 400, "load_seconds": 1200, "recovery_seconds": 700}
+            write_capture(output, profile=profile)
+            with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as call:
+                result = smc_enumeration(root, output, profile)
+            self.assertEqual(result["status"], "pass")
+            argv = call.call_args.args[0]
+            for phase, duration in profile.items():
+                self.assertEqual(argv[argv.index("--" + phase.replace("_", "-")) + 1], str(duration))
+            self.assertEqual(call.call_args.kwargs["timeout"], 2900)
+
+    def test_smc_journal_mismatch_never_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "scripts").mkdir()
+            (root / "scripts/align_smc_enumerate.py").write_text("# fake hook")
+            output = root / "output"
+            output.mkdir()
+            write_capture(output)
+            with (output / "samples.jsonl").open("ab") as handle:
+                handle.write(b"\n")
+            with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")):
+                result = smc_enumeration(root, output)
+            self.assertEqual(result["status"], "inconclusive")
+            self.assertIn("SHA-256 mismatch", result["reason"])
 
 
 if __name__ == "__main__":

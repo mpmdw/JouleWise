@@ -359,7 +359,8 @@ def markdown(report):
                          for a in row["attempts"])
             lines.append(f"Metadata evaluation required: {row['metadata_eval_required']}. See JSON for all memory samples.")
         elif row["check"] == "disk" and "models" in row:
-            lines.extend([f"Free after present weights: {row['free_bytes_after_present_weights']} bytes; required ≥80,000,000,000.",
+            lines.extend([f"Free after present weights: {row['free_bytes_after_present_weights']} bytes; required ≥{row['required_free_bytes_after_weights']} (80 GB plus SMC journal allowance).",
+                          f"SMC capture: {row['smc_step_budget']['capture_seconds']} s; journal estimate: {row['smc_step_budget']['journal_bytes_estimate']} bytes.",
                           "", "| Model | Observed bytes | Design download bytes | Difference |", "|---|---|---|---|"])
             lines.extend(f"| {tag} | {m['bytes']} | {m['design_download_bytes']} | {m['difference_bytes']} |"
                          for tag, m in row["models"].items())

@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from joulewise.measurement_liveness import census, custody_parent, ADDITIONAL_PARENTS_ENV
 from joulewise.night_gate import ProbeResult, agent_census
 from joulewise.prewindow import PS_ARGV, busy_contaminants
+from joulewise.align.r0_step import ProfileRefused, profile_config, rank_response, step_budget
 
 
 class Refused(RuntimeError):
@@ -142,6 +143,8 @@ def inventory(root, tick=lambda: None):
 
 
 def disk_census(config, pins, tick=lambda: None):
+    budget = step_budget(config.get("smc_step"))
+    required = 80_000_000_000 + budget["journal_bytes_estimate"]
     free = shutil.disk_usage(config["disk_path"]).free
     anchor_files = inventory(config["anchor_source"], tick)
     models = {}
@@ -165,8 +168,9 @@ def disk_census(config, pins, tick=lambda: None):
                          "inventory": item["inventory"], "destination": item["destination"],
                          "observed": actual})
     covered = {row["label"] for row in offloads if row["pass"]}
-    return {"status": "pass" if free >= 80_000_000_000 and {"pilot8", "pilot9"} <= covered else "fail",
-            "free_bytes_after_present_weights": free, "required_free_bytes_after_weights": 80_000_000_000,
+    return {"status": "pass" if free >= required and {"pilot8", "pilot9"} <= covered else "fail",
+            "free_bytes_after_present_weights": free, "required_free_bytes_after_weights": required,
+            "required_free_bytes_after_r0": 80_000_000_000, "smc_step_budget": budget,
             "design": {"W1_bytes_per_copy": 18_710_000_000, "W1_two_copies_bytes": 37_400_000_000,
                        "D_two_copies_bytes": 52_900_000_000, "disk_figures_are_rounded_planning_estimates": True},
             "anchor": {"files": anchor_files, "bytes": sum(r["bytes"] for r in anchor_files),
@@ -225,21 +229,26 @@ def host_snapshot(run=command):
             "note": "Read-only desk readiness; R1 lever adoption and arm readiness require their own gates."}
 
 
-def smc_enumeration(repo, output):
+def smc_enumeration(repo, output, step=None):
+    try:
+        profile = profile_config(step)
+    except ProfileRefused as exc:
+        return {"status": "refused", "refusal_code": exc.code, "reason": str(exc)}
+    budget = step_budget(profile)
     script = Path(repo) / "scripts/align_smc_enumerate.py"
     if not script.is_file():
         return {"status": "unavailable", "reason": "SMC lane not integrated"}
     import sys
     argv = [sys.executable, "-B", str(script), "--output", str(output), "--gpu-step",
-            "--idle-seconds", "600", "--load-seconds", "60", "--recovery-seconds", "600"]
-    result = subprocess.run(argv, capture_output=True, text=True, timeout=2400)
+            "--idle-seconds", str(profile["idle_seconds"]), "--load-seconds", str(profile["load_seconds"]),
+            "--recovery-seconds", str(profile["recovery_seconds"])]
+    result = subprocess.run(argv, capture_output=True, text=True, timeout=budget["timeout_seconds"])
     receipt = {"status": "fail" if result.returncode else "inconclusive",
-               "argv": argv, "exit_code": result.returncode, "timeout_seconds": 2400,
+               "argv": argv, "exit_code": result.returncode, "smc_step_budget": budget,
+               "timeout_seconds": budget["timeout_seconds"],
                "stdout": result.stdout, "stderr": result.stderr,
                "smc_source_commit": "274fec2cb2fcc301798c91140e51c244c2469988",
-               "qualification_blocker": (
-                   "Amendment 1 requires a 60 s step; #658 requires 120 < tau < load duration "
-                   "to resolve S_slow. Lead must rule on a separate longer characterization step."),
+               "step_ruling": "docs/align/r0_step_test_ruling.md",
                "note": "Idle plus load-step selection; R1 still owns thermal-control qualification."}
     if result.returncode:
         return receipt
@@ -247,10 +256,17 @@ def smc_enumeration(repo, output):
         payload = json.loads((Path(output) / "r0.json").read_text())
         if payload["schema"] != "joulewise.align_smc_r0.v1" or payload["gpu_step"] is not True:
             raise ValueError("not a #658 GPU-step receipt")
-        selection = {name: payload["response"][name] for name in ("s_fast", "s_slow")}
+        if payload["samples_journal"] != "samples.jsonl":
+            raise ValueError("unexpected SMC journal name")
+        raw = (Path(output) / "samples.jsonl").read_bytes()
+        if hashlib.sha256(raw).hexdigest() != payload["samples_sha256"]:
+            raise ValueError("SMC journal SHA-256 mismatch")
+        samples = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        response = rank_response(payload, samples, profile)
+        selection = {name: response[name] for name in ("s_fast", "s_slow")}
         resolved = all(isinstance(v, str) and re.fullmatch(r"T[!-~]{3}", v) for v in selection.values())
         resolved = resolved and selection["s_fast"] != selection["s_slow"]
-        receipt.update(selection=selection)
+        receipt.update(selection=selection, response=response, source_response=payload["response"])
         coverage = payload["coverage"]
         readable = resolved and coverage["period_ns"] == 1_000_000_000
         if readable:
@@ -260,14 +276,13 @@ def smc_enumeration(repo, output):
                 readable = readable and (type(expected) is int and type(valid) is int
                                         and expected >= 600 and 0 <= valid <= expected and valid / expected > .99)
         receipt["readability_bar_met"] = bool(readable)
-        # The exact source's class fit cannot succeed with the ruled 60 s
-        # step. Never silently substitute its 600 s default or certify R0.
         if not resolved:
             receipt["reason"] = "SMC die/heatsink selection unresolved"
         elif not readable:
             receipt["reason"] = "SMC selected-key coverage does not meet 1 Hz / <1% errors / 10 min"
         else:
-            receipt["reason"] = receipt["qualification_blocker"]
+            receipt["status"] = "pass"
+            receipt["reason"] = "Ruled load fits, slow recovery confirmation and readability bars met; locations PROVISIONAL"
     except (OSError, ValueError, KeyError, TypeError) as exc:
         receipt["reason"] = f"SMC r0.json selection unavailable: {exc}"
     return receipt

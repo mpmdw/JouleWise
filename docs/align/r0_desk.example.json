@@ -8,6 +8,7 @@
   "shade_cache": "/Volumes/ALIGN_INPUTS/shade",
   "disk_path": "/Volumes/ALIGN_MODELS",
   "custody_parents": [],
+  "smc_step": {"idle_seconds": 300, "load_seconds": 900, "recovery_seconds": 600},
   "offloads": [
     {"label": "pilot8", "inventory": "/Volumes/ALIGN_INPUTS/pilot8-source-inventory.json", "destination": "/Volumes/ALIGN_OFFLOAD/pilot8"},
     {"label": "pilot9", "inventory": "/Volumes/ALIGN_INPUTS/pilot9-source-inventory.json", "destination": "/Volumes/ALIGN_OFFLOAD/pilot9"}

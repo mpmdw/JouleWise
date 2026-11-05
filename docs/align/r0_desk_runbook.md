@@ -9,7 +9,9 @@ transformers 5.12.1. Stage-1 B1/B2 from `d01288e25` is imported in this fix roun
 the production endpoint also accepts `reasoning_effort`. Review that integration
 and integrate the SMC lane before live R0. Do not run these commands from an
 agent session. Full Amendment 1 was verified at `6eb1ff5be` in local Git objects.
-**SMC qualification is blocked pending the step-duration ruling below.**
+The [2026-11-05 laptop-lead ruling](r0_step_test_ruling.md) replaces Amendment 1's
+60 s SMC load with **300 s idle, 900 s load, 600 s recovery** (30 min).
+The #658 capture lane still needs integration before live R0.
 
 1. In Terminal at the integrated checkout, set the interpreter and config.
    The paths below are **examples to edit**, never auto-discovered. Model
@@ -23,6 +25,11 @@ agent session. Full Amendment 1 was verified at `6eb1ff5be` in local Git objects
    Set `measurement_hw_model` to the lead-verified measurement Mac's exact
    `sysctl -n hw.model` value. The placeholder refuses model work. Every model
    subset requires this identity plus at least 128 GiB physical RAM before load.
+
+   `smc_step` configures `idle_seconds`, `load_seconds`, `recovery_seconds`;
+   omitted fields default to 300/900/600. A load below 900 s refuses before
+   host/model/capture work with `smc_step.load_below_tau_upper_bound`. The fixed
+   slow tau upper bound is 900 s; equality is allowed for load duration only.
 
    ```sh
    PY="$PWD/.venv/bin/python"
@@ -53,8 +60,9 @@ agent session. Full Amendment 1 was verified at `6eb1ff5be` in local Git objects
    ```
 
 3. Start the unattended desk run after the offloads and model preparation.
-   Use a new record directory for every attempt; expect approximately 5–6 h,
-   potentially longer for long-decode retries. AC power, Automatic initially.
+   Use a new record directory for every attempt; budget approximately 5.5–6.5 h,
+   including the 30 min SMC profile, potentially longer for long-decode retries.
+   AC power, Automatic initially.
 
    ```sh
    RECORD="$PWD/.desk/align-r0/$(date -u +%Y%m%dT%H%M%SZ)"
@@ -81,16 +89,23 @@ agent session. Full Amendment 1 was verified at `6eb1ff5be` in local Git objects
    `decisions_pending_lead_action` must be resolved before R1. Template is
    diagnostic-only. Inconclusive results prevent R0 completion.
    Local model SHA-256 lists authenticate the observed bytes only, not an HF
-   revision. The SMC hook calls
-   `scripts/align_smc_enumerate.py --output DIR --gpu-step --idle-seconds 600
-   --load-seconds 60 --recovery-seconds 600`, with a 2,400 s timeout.
+   revision. The default SMC hook calls
+   `scripts/align_smc_enumerate.py --output DIR --gpu-step --idle-seconds 300
+   --load-seconds 900 --recovery-seconds 600`, with a 2,400 s timeout (configured
+   phase total plus 600 s). Raise `--timeout` too if a longer configured profile
+   would exceed the per-check deadline.
    #658 (`274fec2cb`) emits schema `joulewise.align_smc_r0.v1` with keys under
-   `response.s_fast`/`response.s_slow`. Exit 0 alone is insufficient; the adapter
-   checks selected keys and 1 Hz / >99% successful slots over at least 600 s.
-   **Current verdict remains inconclusive:** #658 requires slow tau >120 s and
-   tau shorter than the load duration, so the amendment's 60 s step cannot
-   resolve it. The lead must rule on an additional 600 s characterization
-   capture (recommended) or a revised qualification method before live R0.
+   `response.s_fast`/`response.s_slow`. Exit 0 alone is insufficient. R0 verifies
+   its `samples.jsonl` SHA-256 and phase durations, then re-ranks from that
+   journal: **S_fast tau <30 s from the first 120 s of load; S_slow tau in
+   (120 s, 900 s), fitted on load and confirmed on recovery**. Recovery does
+   not refit tau or require tau <600 s. #658's amplitude/noise, >=90% per-phase
+   slot coverage and R2 >=0.8 diagnostic bars remain; recovery confirmation
+   uses that same R2 bar against the fixed load-fit prediction.
+   The adapter also checks selected keys and 1 Hz / >99% successful slots over
+   at least 600 s. Missing roles or failed confirmation remain inconclusive;
+   sensor locations remain PROVISIONAL. The source #658 response is retained
+   alongside the R0 ruling's response for review.
 
 Interpretation: NLL uses the first 2,049 rendered benign SHADE IDs (2,048 next-token
 targets), ≤3.0 nats/token. Synthetic rewrite tables diagnose templates; **generated**
@@ -113,7 +128,13 @@ evaluated no arrays is inconclusive; it cannot set `metadata_eval_required`.
 Even evaluated-array success needs Stage-3/R1 production-boundary qualification.
 
 Memory uses full context, D floor budget 6,144, guess bar 45 decimal GB, no swap
-growth. Disk retains ≥80 decimal GB free and both offload hash matches.
+growth. Disk requires ≥80 decimal GB plus the SMC journal allowance free after
+present weights, and both offload hash matches. At the default 1 Hz / 1,800 s
+profile, the planning allowance is 1,800 × 16 KiB = 29,491,200 bytes, so the
+pre-R0 free-space bar is 80,029,491,200 bytes. This row-size estimate is not a
+measured bound: check actual journal size after enumeration and retain ≥80 GB
+before W1. Configured phase durations scale the allowance and capture time in
+both disk receipts and the runner's `smc_step_budget`.
 Amendment 1 estimates 37.4 GB for two W1 copies and 52.9 GB for D windows.
 The current whole-download total is not a pinned weight-file manifest; the
 lead must authenticate the revision before live qualification.

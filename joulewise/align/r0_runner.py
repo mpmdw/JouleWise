@@ -13,6 +13,7 @@ import sys
 import time
 
 from joulewise.align import r0
+from joulewise.align.r0_step import ProfileRefused, profile_config, step_budget
 from joulewise.align.r0_host import (
     QuietGuard, Refused, command, disk_census, host_snapshot, host_identity, inventory, smc_enumeration,
 )
@@ -34,7 +35,7 @@ def _path(value):
 
 
 def validate_config(config):
-    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads", "measurement_hw_model", "anchor_source"}:
+    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads", "measurement_hw_model", "anchor_source", "smc_step"}:
         raise ValueError("unknown R0 config field")
     if config.get("schema") != "joulewise.align.r0.config.v1" or set(config.get("models", {})) != {"D"}:
         raise ValueError("R0 config requires schema v1 and D only (Amendment 1)")
@@ -57,7 +58,7 @@ def validate_config(config):
         labels.add(row["label"])
         _path(row["inventory"])
         _path(row["destination"])
-    return config
+    return {**config, "smc_step": profile_config(config.get("smc_step"))}
 
 
 @contextmanager
@@ -94,6 +95,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "authority_blob": "0a802a3097a20c9f4dd5e8823d858302ae596785",
               "authority_amendment_commit": "6eb1ff5be31bec330ae5af262c2b4c7601e7755e",
               "authority_amendment": "docs/align/council-2026-11-05/FINAL-DESIGN-AMENDMENT-1.md §§A1,A3,A5",
+              "authority_step_ruling": "docs/align/r0_step_test_ruling.md (laptop lead, 2026-11-05)",
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
@@ -134,17 +136,21 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         save_report(output, report)
         return row
     try:
+        config = validate_config(config)
+        report["config"] = config
+        report["smc_step_budget"] = step_budget(config["smc_step"])
         # This guard precedes host probes, file inventories, optional SMC and
         # lazy imports. No model can be opened after a refused initial census.
         guard.check(force=True)
         report["implementation_sha256"] = {
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (Path(__file__), Path(r0.__file__), REPO / "joulewise/align/r0_host.py",
-                         REPO / "joulewise/align/r0_mlx.py", REPO / "scripts/align_r0_checks.py")}
+                         REPO / "joulewise/align/r0_mlx.py", REPO / "joulewise/align/r0_step.py",
+                         REPO / "scripts/align_r0_checks.py")}
         report["config_sha256"] = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         report["checkout_head"] = command(("git", "-C", str(REPO), "rev-parse", "HEAD")).strip()
         for name, fn in (("host", host_snapshot), ("disk", lambda: disk_census(config, r0.PINS, guard.check)),
-                         ("smc", lambda: smc_enumeration(REPO, output / "smc"))):
+                         ("smc", lambda: smc_enumeration(REPO, output / "smc", config["smc_step"]))):
             if name in checks:
                 receipt(name, None, fn)
         model_checks = [c for c in checks if c not in {"host", "disk", "smc"}]
@@ -200,6 +206,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         report["decisions_pending_lead_action"] = [
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
             for row in report["checks"] if row["status"] in {"required", "fallback"}]
+    except ProfileRefused as exc:
+        report.update(status="refused", refusal=str(exc), refusal_code=exc.code)
     except Refused as exc:
         report.update(status="refused", refusal=str(exc))
     except Exception as exc:
@@ -225,7 +233,10 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard):
     if (not set(checks) <= set(CHECKS) or set(models) != {"D"}
             or len(checks) != len(set(checks)) or len(models) != len(set(models)) or args.timeout <= 0):
         parser.error("invalid checks, models or timeout")
-    config = validate_config(json.loads(args.config.read_text()))
+    try:
+        config = validate_config(json.loads(args.config.read_text()))
+    except ValueError as exc:
+        parser.error(str(exc))
     guard = guard_factory(config["custody_parents"])
     # One per-machine lock, not per output directory. An agent ancestor still
     # refuses: the lock never grants a census exemption.
