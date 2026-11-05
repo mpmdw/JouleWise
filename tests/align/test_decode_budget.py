@@ -100,6 +100,33 @@ class SpecTests(unittest.TestCase):
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_endpoint_error_after_text_is_failed_even_when_budget_exhausts(self):
+        with tempfile.TemporaryDirectory() as d:
+            for budget, deadman in ((None, None), (100, 1086)):
+                with self.subTest(budget=budget), patch(
+                    'joulewise.align.apple.endpoint.reasoning_tokens_from_ids',
+                    side_effect=RuntimeError('synthetic accounting fault after text'),
+                ):
+                    bundle, status, _ = run(Path(d) / str(budget), budget=budget, deadman=deadman)
+                    self.assertEqual(status.status.value, 'failed', status)
+                    ep = read_episode_bundle(bundle)
+                    self.assertTrue(ep.turns[0].tool_calls)
+                    self.assertTrue(any(f.startswith('endpoint_error:') for f in ep.flags))
+                    if budget is not None:
+                        self.assertIn('episode.decode_budget:1', ep.flags)
+                        self.assertTrue(ep.hardware['token_budget']['stop_reason'].startswith('endpoint_error:'))
+                        failure = read(bundle / 'outputs/align_failure.json')
+                        self.assertEqual(failure['episode_outcome']['stop_condition'], 'endpoint_error')
+                    self.assertEqual(end_state(ep), 'runner.error')
+                    summary = episode_summary(bundle)
+                    self.assertEqual(summary['end_state'], 'runner.error')
+                    for fault in ('episode_error:RuntimeError:synthetic', 'endpoint_error:RuntimeError:synthetic',
+                                  'runner.error:synthetic'):
+                        faulted = replace(ep, flags=('episode.decode_budget:1', fault))
+                        self.assertEqual(end_state(faulted), 'runner.error')
+                        self.assertEqual(end_state(replace(faulted, flags=(*faulted.flags, 'episode.deadman:1'))),
+                                         'episode.deadman:1')
+
     def test_exact_threshold_and_overshoot_keep_the_full_admitted_turn(self):
         with tempfile.TemporaryDirectory() as d:
             for budget, counts, reason in ((180, [180], 'episode.decode_budget:1'),

@@ -532,13 +532,14 @@ class EpisodeRuntimeAdapter:
             stop = "episode.time_guard"
         if any(flag.startswith("episode.end_task:") for flag in flags):
             stop = "episode.end_task"
+        if any(flag.startswith("episode.decode_budget:") for flag in flags):
+            stop = "episode.decode_budget"
         if any(flag.startswith("episode_error:") for flag in flags):
             stop = "episode_error"
         if any(flag.startswith("endpoint_error:") for flag in flags):
             stop = "endpoint_error"
-        for prefix in ("episode.decode_budget:", "episode.deadman:"):
-            if any(flag.startswith(prefix) for flag in flags):
-                stop = prefix[:-1]
+        if any(flag.startswith("episode.deadman:") for flag in flags):
+            stop = "episode.deadman"
         reason = next((f for f in reversed(flags) if f.startswith(stop + ":")), stop)
         token_details = budget_record(spec, turns, reason, incomplete=incomplete,
                                       effective_context_cap=self.prepared.get("max_context_tokens"))
