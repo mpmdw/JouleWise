@@ -23,6 +23,8 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import sha256_file as _sha256_file
+
 from joulewise.adapters.suite_control import SuiteItemResult, execute_suite
 from joulewise.clock import Clock
 from joulewise.interfaces import (
@@ -73,14 +75,6 @@ _MLX_CORE_MODULE: Any | None = None
 # ``sys.modules["mlx.core"] = None`` is Python's blocked-import sentinel: an
 # import must raise ImportError, and so must this adapter's probe.
 _MODULE_KEY_ABSENT = object()
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _model_identity_pin_refusal(config: BenchmarkConfig) -> AdapterResult | None:

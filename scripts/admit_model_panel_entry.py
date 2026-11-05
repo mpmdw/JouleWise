@@ -15,7 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+
 from joulewise.strict_io import (
+    sha256_file,
     sha256_value as sha256_bytes,
 )
 
@@ -76,14 +78,6 @@ def canonical_json_bytes(value: Any) -> bytes:
         return item
 
     return (json.dumps(thaw(value), indent=2, sort_keys=True) + "\n").encode("utf-8")
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _check(status: str, **details: Any) -> dict[str, Any]:

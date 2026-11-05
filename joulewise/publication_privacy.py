@@ -319,6 +319,8 @@ _POWER_TRACE_INTERVAL_COLUMNS = (
 )
 
 
+from joulewise.strict_io import sha256_file
+
 class PrivacyAuditError(RuntimeError):
     """Raised when a private bundle contains an unreviewed publication surface."""
 
@@ -338,14 +340,6 @@ class PrivacyAudit:
     source_bundle_sha256: str
     files: tuple[AuditedFile, ...]
     classification_counts: dict[str, int]
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def tree_identity_descriptor() -> dict[str, str]:
