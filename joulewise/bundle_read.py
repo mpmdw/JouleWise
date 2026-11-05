@@ -40,7 +40,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from joulewise.strict_io import is_lower_sha256 as _lowercase_sha256
+
+from joulewise.strict_io import (
+    is_lower_sha256 as _lowercase_sha256,
+    is_sha256 as _sha256_hex,
+)
 
 from joulewise.authentication_io import (
     open_authentication_input,
@@ -2659,14 +2663,6 @@ def _marker_identity(metadata: dict[str, Any], id_key: str) -> str | None:
 
 def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
-
-
-def _sha256_hex(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(char in "0123456789abcdefABCDEF" for char in value)
-    )
 
 
 def _marker_pair_problems(

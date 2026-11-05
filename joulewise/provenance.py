@@ -24,18 +24,12 @@ FIXED_BUDGET_EXACT = "fixed_budget_exact"
 FIXED_BUDGET_INCOMPLETE = "fixed_budget_incomplete"
 
 
+from joulewise.strict_io import is_sha256 as sha256_hex_shape
+
 def sha256_hex(data: bytes | str) -> str:
     if isinstance(data, str):
         data = data.encode("utf-8")
     return hashlib.sha256(data).hexdigest()
-
-
-def sha256_hex_shape(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(char in "0123456789abcdefABCDEF" for char in value)
-    )
 
 
 def normalized_sha256_hex(value: Any) -> str | None:
