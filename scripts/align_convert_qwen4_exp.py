@@ -32,8 +32,10 @@ import hashlib
 import importlib.util
 import json
 import math
+import os
 import re
 import shutil
+import stat
 import struct
 import sys
 from pathlib import Path
@@ -251,20 +253,98 @@ def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_
     return descriptor, dict(descriptor, size_bytes=size, source_shards=shards)
 
 
-def verify_manifest(directory, expected_manifest_sha256=None):
+# Bytecode a plain mlx-lm load (sys.dont_write_bytecode False) leaves behind.
+# Never read by load_verified_model, which compiles the module from its hashed
+# source bytes, so it is tolerated outside the inventory and reported.
+PYCACHE_RE = re.compile(r"^qwen4_exp\.[A-Za-z0-9_.-]+\.pyc$")
+_READ_ONCE = ("manifest.json", "config.json", "qwen4_exp.py")
+
+
+def _lstat_regular(path):
+    st = os.lstat(path)
+    if not stat.S_ISREG(st.st_mode):
+        raise ValueError(f"artifact entries must be regular files, not links or devices: {Path(path).name}")
+    return st
+
+
+def _entries(path):
+    with os.scandir(path) as it:
+        return list(it)
+
+
+def _stamp(st):
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
+
+
+def _verify(directory, expected_manifest_sha256=None):
+    """Verification core: (manifest, verified bytes of manifest/config/module,
+    file stamps). Every payload entry must be a regular file inside the
+    directory (no symlinks); the small files are read once and the bytes
+    that were hashed are the bytes returned for use."""
     directory = Path(directory)
-    if expected_manifest_sha256 is not None and sha256(directory / "manifest.json") != expected_manifest_sha256:
+    if directory.is_symlink() or not directory.is_dir():
+        raise ValueError("artifact must be a real directory")
+    _lstat_regular(directory / "manifest.json")
+    raw = (directory / "manifest.json").read_bytes()
+    if expected_manifest_sha256 is not None and hashlib.sha256(raw).hexdigest() != expected_manifest_sha256:
         raise ValueError("manifest pin mismatch")
-    manifest = json.loads((directory / "manifest.json").read_text())
+    manifest = json.loads(raw)
     if any(Path(name).name != name or name in (".", "..") for name in manifest["files"]):
         raise ValueError("manifest payload names must be flat filenames")
-    actual = {p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file()}
-    if actual != set(manifest["files"]) | {"manifest.json"}:
+    files, ignored = set(), []
+    for entry in _entries(directory):
+        if entry.is_symlink():
+            raise ValueError(f"symlink in artifact: {entry.name}")
+        if entry.is_dir(follow_symlinks=False):
+            inner = _entries(entry.path) if entry.name == "__pycache__" else None
+            if inner is None or any(e.is_symlink() or not e.is_file(follow_symlinks=False)
+                                    or not PYCACHE_RE.match(e.name) for e in inner):
+                raise ValueError(f"unexpected directory in artifact: {entry.name}")
+            ignored += [f"__pycache__/{e.name}" for e in inner]
+        elif entry.is_file(follow_symlinks=False):
+            files.add(entry.name)
+        else:
+            raise ValueError(f"unexpected entry in artifact: {entry.name}")
+    if files != set(manifest["files"]) | {"manifest.json"}:
         raise ValueError("manifest file inventory mismatch")
+    stamps, blobs = {"manifest.json": _stamp(_lstat_regular(directory / "manifest.json"))}, {"manifest.json": raw}
+    for name in _READ_ONCE[1:]:
+        if name in manifest["files"]:
+            st = _lstat_regular(directory / name)
+            blobs[name] = (directory / name).read_bytes()
+            if hashlib.sha256(blobs[name]).hexdigest() != manifest["files"][name]:
+                raise ValueError(f"manifest sha256 mismatch: {name}")
+            stamps[name] = _stamp(st)
     for name, expected in manifest["files"].items():
+        if name in blobs:
+            continue
+        stamps[name] = _stamp(_lstat_regular(directory / name))
         if sha256(directory / name) != expected:
             raise ValueError(f"manifest sha256 mismatch: {name}")
-    return manifest
+    manifest["ignored_bytecode"] = sorted(ignored)
+    return manifest, blobs, stamps
+
+
+def verify_manifest(directory, expected_manifest_sha256=None):
+    """Check the artifact against its manifest (and the pin, if given).
+    Inspection only: loading goes through ``load_verified_model``."""
+    return _verify(directory, expected_manifest_sha256)[0]
+
+
+def _check_unchanged(directory, stamps):
+    for name, stamp in stamps.items():
+        if _stamp(_lstat_regular(Path(directory) / name)) != stamp:
+            raise ValueError(f"artifact file changed after verification: {name}")
+
+
+def _module_from_source(source, path):
+    """The model module, compiled from the verified source bytes: no path-based
+    import, so no stale or planted ``__pycache__`` bytecode can run instead."""
+    import types
+    module = types.ModuleType("custom_model")  # mlx-lm's own (unregistered) name
+    module.__file__ = str(path)
+    exec(compile(source, str(path), "exec", dont_inherit=True), module.__dict__)
+    return module
 
 
 def _is_sha256(value):
@@ -279,12 +359,19 @@ def load_verified_model(directory, expected_manifest_sha256, lazy=False, *, expe
     sha256 of the artifact's ``manifest.json``, recorded when it was
     converted) and ``expected_module_sha256`` (default: the canonical
     module this converter pins, ``MODULE_SHA256``). The manifest's
-    ``module_sha256`` must equal its own ``qwen4_exp.py`` entry and the pin."""
+    ``module_sha256`` must equal its own ``qwen4_exp.py`` entry and the pin.
+
+    This is the only supported way to load an artifact. The module runs from
+    the bytes that were hashed, config.json is taken from its hashed bytes,
+    the n-gram tables are opened before returning, and every payload file's
+    (device, inode, size, mtime) is re-checked after loading. Residual window:
+    with ``lazy=True`` weight bytes are read at first use, after the check."""
     if not _is_sha256(expected_manifest_sha256):
         raise ValueError("load_verified_model requires the artifact's pinned manifest sha256 (64 lowercase hex)")
     if not _is_sha256(expected_module_sha256):
         raise ValueError("load_verified_model requires a pinned qwen4_exp.py sha256 (64 lowercase hex)")
-    manifest = verify_manifest(directory, expected_manifest_sha256)
+    directory = Path(directory)
+    manifest, blobs, stamps = _verify(directory, expected_manifest_sha256)
     module_entry = manifest["files"].get("qwen4_exp.py")
     if module_entry is None or manifest.get("module_sha256") != module_entry:
         raise ValueError("manifest module_sha256 disagrees with its qwen4_exp.py entry")
@@ -296,15 +383,19 @@ def load_verified_model(directory, expected_manifest_sha256, lazy=False, *, expe
             raise ValueError(f"pinned stack mismatch: {package}")
     if manifest["format"] != FORMAT:
         raise ValueError("unsupported artifact format")
-    if json.loads((Path(directory) / "config.json").read_text()).get("model_file") != "qwen4_exp.py":
+    config = json.loads(blobs["config.json"])
+    if config.get("model_file") != "qwen4_exp.py":
         raise ValueError("artifact config.json must load qwen4_exp.py")
-    previous = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True
-    try:
-        from mlx_lm.utils import load_model
-        return load_model(Path(directory), lazy=lazy, strict=True, model_config=model_config)
-    finally:
-        sys.dont_write_bytecode = previous
+    module = _module_from_source(blobs["qwen4_exp.py"], directory / "qwen4_exp.py")
+    from mlx_lm.utils import load_model
+    # The verified config overrides load_model's own read of config.json, and
+    # model_file=None routes class lookup to the module compiled above.
+    overrides = {**config, **(model_config or {}), "model_file": None}
+    model, loaded_config = load_model(directory, lazy=lazy, strict=True, model_config=overrides,
+                                      get_model_classes=lambda config: (module.Model, module.ModelArgs))
+    model.ngram_tables()
+    _check_unchanged(directory, stamps)
+    return model, loaded_config
 
 
 def _text_config(config):

@@ -1395,6 +1395,75 @@ class ValidationRound1Test(unittest.TestCase):
         model, _ = conv.load_verified_model(src, pin)
         self.assertEqual(type(model).__name__, "Model")
 
+    # ------------------------------------------- systems LOW (artifact)
+    def test_r1_verified_artifact_survives_plain_load_and_refuses_links(self):
+        """A plain mlx-lm load writes __pycache__ into the artifact. That
+        bytecode is never read by load_verified_model (it compiles the module
+        from its hashed source bytes), so verification survives it and a
+        planted .pyc does not run. Payload symlinks (even to identical bytes),
+        nested files, and files changed after verification are refused."""
+        import importlib.util as iu
+        import marshal
+        import shutil
+        import tempfile
+        from mlx_lm.utils import load_model
+        fx = self.fx
+        conv = fx.converter()
+        src, pin = fx.converted("bf16"), fx.manifest_pin("bf16")
+        marker = "JW_R1_PLANTED_PYC_RAN"
+        with tempfile.TemporaryDirectory(dir=fx.ref_dir) as tmp:
+            tmp = Path(tmp)
+            plain = tmp / "plain"
+            shutil.copytree(src, plain)
+            previous, sys.dont_write_bytecode = sys.dont_write_bytecode, False
+            try:
+                load_model(plain)  # ordinary mlx-lm use: writes __pycache__/qwen4_exp.*.pyc
+            finally:
+                sys.dont_write_bytecode = previous
+            pyc = sorted((plain / "__pycache__").glob("qwen4_exp.*.pyc"))
+            self.assertEqual(len(pyc), 1)
+            # Plant bytecode with the genuine header (source mtime and size), so
+            # a path-based import trusts it.
+            evil = (plain / "qwen4_exp.py").read_text() + f"\nimport os\nos.environ['{marker}'] = '1'\n"
+            pyc[0].write_bytes(pyc[0].read_bytes()[:16] + marshal.dumps(compile(evil, "qwen4_exp.py", "exec")))
+            os.environ.pop(marker, None)
+            spec = iu.spec_from_file_location("custom_model", plain / "qwen4_exp.py")
+            spec.loader.exec_module(iu.module_from_spec(spec))
+            self.assertEqual(os.environ.pop(marker, None), "1", "the planted bytecode must be live for this check")
+            manifest = conv.verify_manifest(plain, pin)
+            self.assertEqual(manifest["ignored_bytecode"], [f"__pycache__/{pyc[0].name}"])
+            model, _ = conv.load_verified_model(plain, pin)
+            self.assertNotIn(marker, os.environ, "planted bytecode ran under load_verified_model")
+            self.assertEqual(run(model, [fx.seqs["seq_a"][:5]]).shape, (1, 5, TEXT["vocab_size"]))
+            # A payload file replaced by a symlink to identical bytes outside.
+            sym = tmp / "sym"
+            shutil.copytree(src, sym)
+            victim = sorted(sym.glob("model-*.safetensors"))[0]
+            outside = tmp / "outside.bin"
+            shutil.copyfile(victim, outside)
+            victim.unlink()
+            victim.symlink_to(outside)
+            with self.assertRaises(ValueError):
+                conv.verify_manifest(sym, pin)
+            with self.assertRaises(ValueError):
+                conv.load_verified_model(sym, pin)
+            # Anything nested other than mlx-lm's own bytecode.
+            nested = tmp / "nested"
+            shutil.copytree(src, nested)
+            (nested / "extra").mkdir()
+            (nested / "extra" / "notes.txt").write_text("x")
+            with self.assertRaises(ValueError):
+                conv.verify_manifest(nested, pin)
+            # Changed between verification and use.
+            changed = tmp / "changed"
+            shutil.copytree(src, changed)
+            _, _, stamps = conv._verify(changed, pin)
+            f = sorted(changed.glob("model-*.safetensors"))[0]
+            st = f.stat()
+            os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns + 1000))
+            with self.assertRaises(ValueError):
+                conv._check_unchanged(changed, stamps)
+
 
 if __name__ == "__main__":
     unittest.main()
