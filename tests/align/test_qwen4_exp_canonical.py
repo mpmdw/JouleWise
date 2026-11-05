@@ -960,7 +960,10 @@ class CanonicalParityTest(unittest.TestCase):
         model = fx.model("bf16")
         sa, sb = fx.seqs["seq_a"], fx.seqs["seq_b"]
         path = str(fx.ref_dir / "prompt_cache.safetensors")
-        for lp, batch in ((None, [fx.seqs["long"][:300]]), ([0, PAD_B], [sa, [EOS] * PAD_B + sb])):
+        cases = ((None, [fx.seqs["long"][:300]]), ([0, PAD_B], [sa, [EOS] * PAD_B + sb]),
+                 # fewer real tokens than one QSA block: no complete block yet
+                 (None, [sa[:3]]), ([0, 2], [sa[:3], [EOS, EOS, sb[0]]]))
+        for lp, batch in cases:
             cache = model.make_cache(left_padding=lp)
             run(model, batch, cache)
             save_prompt_cache(path, cache)
@@ -970,6 +973,22 @@ class CanonicalParityTest(unittest.TestCase):
             b = run(model, nxt, loaded)
             self.assertEqual(type(loaded[0]).__name__, "Qwen4ExpLinearCache")
             self.assertEqual(float(np.abs(a - b).max()), 0.0)
+
+    def test_legacy_rope_keys_fold_or_fail(self):
+        """Top-level rope_theta / partial_rotary_factor (older configs) fold into
+        rope_parameters as HF does; conflicts and rope_scaling fail loudly."""
+        import numpy as np
+        model = self.fx.model("fp32")
+        Args, inv = g(model, "TextModelArgs"), g(model, "rope_inv_freq")
+        base = {k: v for k, v in TEXT.items() if k != "rope_parameters"}
+        legacy = Args.from_dict(dict(base, rope_theta=10000000, partial_rotary_factor=0.25))
+        modern = Args.from_dict(TEXT)
+        self.assertEqual(legacy.rotary_dim, modern.rotary_dim)
+        self.assertTrue(np.array_equal(np.array(inv(legacy)), np.array(inv(modern))))
+        with self.assertRaises(ValueError):
+            Args.from_dict(dict(TEXT, rope_theta=10000))
+        with self.assertRaises(ValueError):
+            Args.from_dict(dict(TEXT, rope_scaling={"type": "yarn", "factor": 4.0}))
 
     def test_d_mlx_lm_generate_step(self):
         """End to end through mlx-lm's generate_step (chunked prefill)."""

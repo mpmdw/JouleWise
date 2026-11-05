@@ -123,6 +123,25 @@ class TextModelArgs(BaseModelArgs):
     indexer_compress_ratio: Optional[int] = None
     output_gate_type: Optional[str] = None
 
+    @classmethod
+    def from_dict(cls, params):
+        """``BaseModelArgs.from_dict`` drops unknown keys, so legacy top-level
+        RoPE keys would be silently ignored (theta 1e4, full rotary). Fold
+        them into ``rope_parameters`` as HF does (modeling_rope_utils), and
+        refuse conflicting or unsupported ones."""
+        params = dict(params)
+        legacy = {k: params[k] for k in ("rope_theta", "partial_rotary_factor") if params.get(k) is not None}
+        if params.get("rope_scaling"):
+            raise ValueError("rope_scaling is not implemented by this port")
+        if legacy:
+            rope = dict(params.get("rope_parameters") or {"rope_type": "default"})
+            for k, v in legacy.items():
+                if k in rope and rope[k] != v:
+                    raise ValueError(f"conflicting RoPE settings: {k}={v} vs rope_parameters[{k!r}]={rope[k]}")
+                rope[k] = v
+            params["rope_parameters"] = rope
+        return super().from_dict(params)
+
     def __post_init__(self):
         # [HF Qwen4ExpTextConfig.__post_init__]
         self.ple_layer_ids = sorted(set(self.ple_layer_ids or []))
@@ -799,9 +818,16 @@ class Qwen4ExpQSACache(KVCache):
     def state(self):
         if self.keys is None:
             return []
-        nb = self.n_blocks()
-        blocks = (self.block_keys[:, :nb] if self.block_keys is not None
-                  else mx.zeros((self.keys.shape[0], 0, self.raw_keys.shape[-1]), self.raw_keys.dtype))
+        # At least one block slot, so safetensors never sees an empty array
+        # (no block completes before ``ratio`` real tokens). Slots past the
+        # complete-block count are never read: validity derives from offset.
+        nb = max(self.n_blocks(), 1)
+        if self.block_keys is None or self.block_keys.shape[1] < nb:
+            blocks = mx.zeros((self.keys.shape[0], nb, self.raw_keys.shape[-1]), self.raw_keys.dtype)
+            if self.block_keys is not None:
+                blocks[:, :self.block_keys.shape[1]] = self.block_keys
+        else:
+            blocks = self.block_keys[:, :nb]
         return [self.keys[..., :self.offset, :], self.values[..., :self.offset, :],
                 self.raw_keys[:, :self.offset], blocks]
 
@@ -811,9 +837,8 @@ class Qwen4ExpQSACache(KVCache):
             self.keys = self.values = self.raw_keys = self.block_keys = None
             self.offset = 0
             return
-        self.keys, self.values, self.raw_keys, blocks = v
+        self.keys, self.values, self.raw_keys, self.block_keys = v
         self.offset = self.keys.shape[2]
-        self.block_keys = blocks if blocks.shape[1] else None
 
     @property
     def meta_state(self):
