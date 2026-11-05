@@ -4,7 +4,8 @@ Owner: laptop lead (Opus 5.5), set by Ed on 2026-11-05: "make that a major separ
 
 ## Why
 - Qwen3.8-Flash-Next is the strongest open model that fits on the 128 GB M3 Max measurement Mac (Artificial Analysis Progress Index v1: 320, against 303 for Qwen3.8-27B and 225 for Qwen3-Next-80B). ALIGN / SHADE-Arena needs agents capable enough to attempt deception.
-- MLX has no merged support: ml-explore/mlx-lm PR #1788 has been open since 2026-08-26 and has known defects. A correct, tested port is a real upstream contribution.
+- CORRECTION (2026-11-05): the model IS already supported elsewhere. **mlx-vlm** (Blaizzy) supports Qwen3.8-Flash-Next text+vision (Qwen's README recommends it for Apple Silicon); **llama.cpp** merged support 2026-08-27 (PR #27742); community MLX quants exist (4-bit, 6-bit, mixed 4/8: pipenetwork, Vontra, RockTalk) and an MLX Swift implementation exists. Only the text-only **mlx-lm** PR #1788 is unmerged. The lead's earlier 'no MLX support' claim was wrong.
+- Remaining contribution: (a) a verified-correctness AUDIT of the existing ports (mlx-vlm, llama.cpp) with the gold harness against the official reference on real weights, upstreaming fixes for any discrepancy found; (b) the highest-fidelity 128 GB build: 6-bit experts, everything else bf16, and the bf16 n-gram table paged from SSD, offering PLE paging upstream (mlx-vlm); (c) for JouleWise, our own port on the PINNED stack, verified, for measurement integrity.
 
 ## Architecture in scope (text path)
 Gated DeltaNet layers; Qwen Sparse Attention (QSA) with its indexer; hyper-connection residual streams; a 512-expert MoE (10 routed plus 1 shared); a sharded n-gram PLE embedding (about 51B parameters, at layer 1); norms with any `1 + w` folding; and MTP, only if correctness needs it. Vision is out of scope for v1.
@@ -53,3 +54,4 @@ The status log is appended below as phases complete.
   - Disk: about 210 GB, so an external NVMe is required.
   - Quantization error is measured, never assumed: per-layer quantized vs bf16 on real weights, plus end-to-end against the hosted bf16 reference.
 - 2026-11-05: **P10 stretch (optional, after core validation): expert streaming.** All experts on SSD at 8-bit or bf16, with a RAM LRU cache of hot experts and the misses read on demand (M3 Max TB4 external at about 3 GB/s, internal at about 6 GB/s). The purpose is an on-device near-lossless quality reference that measures the 6-bit gap. It is NOT for ALIGN energy windows, where SSD I/O would confound energy. Reads do not wear flash. Upstreamable like PLE paging.
+- 2026-11-05: Ed asked whether anyone had already ported it. The lead verified (mlx-vlm models/qwen4_exp; llama.cpp PR #27742 merged 2026-08-27; QwenLM README) and corrected the GOAL framing. The existing ports become extra differential references.
