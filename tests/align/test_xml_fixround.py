@@ -1,6 +1,7 @@
 """PR 659 regressions; native computation is replaced by synthetic streams."""
 from dataclasses import replace
 import json
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
@@ -45,6 +46,12 @@ def endpoint(family="qwen3_8", text="", finish_reason="length", **kwargs):
 
 
 class XmlFixRoundTests(unittest.TestCase):
+    def test_ci_runs_real_templates_with_jinja_installed(self):
+        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
+        self.assertIn("  align-templates:", workflow)
+        self.assertIn("python -m pip install 'jinja2>=3.1,<4'", workflow)
+        self.assertIn("python -B -m unittest tests.align.test_xml_tool_calls", workflow)
+
     def test_xml_hidden_id_count_ignores_literal_think_tags_in_call_arguments(self):
         wire = xml("<parameter=text>literal <think>quoted</parameter>")
         ep = endpoint(text="plan\n</think>\n\n" + wire, finish_reason="stop")

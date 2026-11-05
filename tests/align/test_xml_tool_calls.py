@@ -431,7 +431,7 @@ class QwenTemplateTests(unittest.TestCase):
             def apply_chat_template(inner, messages, **kwargs):
                 return self.template.render(messages=messages, **kwargs)
         config = base_config()
-        config = replace(config, model=replace(config.model, family="qwen3_5_moe"))
+        config = replace(config, model=replace(config.model, family="qwen3_8"))
         endpoint = MlxEndpoint(SimpleNamespace(_tokenizer=Tokenizer()), config, FakeClock(), episode_domain="synthetic")
         raw = "<think>\nplan\n</think>\n\n" + xml()
         history = [ChatMessage("user", "Do it"), ChatMessage("assistant", raw),
