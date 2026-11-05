@@ -37,6 +37,11 @@ Architecture (48 layers: 12 x [3 x GatedDeltaNet, 1 x QSA], MoE everywhere):
 Numerics: every bf16 op follows the reference's rounding (one rounding per
 torch op; transcendental activations evaluated in fp32 and rounded once; fp32
 reductions where torch accumulates in fp32). In fp32 every cast is identity.
+Inside the attention core the rounding is the SDPA backend's: MLX's fused
+kernels (head_dim 64, decode) and the block-sparse kernel keep fp32
+probabilities through P.V, MLX's head_dim-256 prefill fallback rounds scores
+and probabilities like HF's eager path, and torch's CPU bf16 SDPA rounds the
+unnormalised probabilities (canonical.md, deviation 12).
 MTP and vision are not implemented: the reference ignores ``mtp.*`` on load.
 """
 

@@ -72,6 +72,12 @@ Every row follows the differential's convergence table ("Adopt" column) and the 
 9. **n-gram record format** is the twin's (`NgramTable`: f32 / bf16 / q8 / q4 with fp16 scales), not Sol's (f32 scales). maxfit uses bf16, where both formats are the raw bf16 bits.
 10. **Unsupported, failing loudly:** BatchGenerator cache `merge` / `extend` / `filter` (cache-carried padding; same as Sol), `input_embeddings` (PLE needs token ids; same as twin), KV-cache quantization (it would drop the indexer state).
 11. **Bound for (f).** "Quantized vs bf16 within the bound" is made testable as: the maxfit model must equal the fp32 reference run with the SAME dequantized 6-bit expert weights, within (b)'s 1.25x bf16-noise bound. The quantization effect itself (maxfit vs bf16) is measured and reported, not bounded: it is a property of the recipe, not of the port.
+12. **Attention core rounding is the backend's** (validation round 1, replacing the earlier "reference artifact" reading of D9). The port calls `mx.fast.scaled_dot_product_attention` and its own block-sparse kernel. On identical bf16 inputs (probe `qsa_core_probe.py`, QSA-like masks, 40 and 320 queries):
+    - MLX's fused SDPA at head_dim 64, MLX's decode kernel (any head_dim) and the block-sparse kernel keep fp32 scores and fp32 probabilities through P.V: 0.9998-1.0 bitwise against an fp32-score, fp32-probability eager core.
+    - torch's CPU bf16 SDPA rounds the unnormalised probabilities exp(s - m) to bf16 before P.V, inside a blocked online softmax: 0.958 (40 queries) / 0.847 (320) against that emulation, 0.61-0.68 against MLX. It is reproducible across thread counts and batch composition (Fable), so it is not reference noise.
+    - MLX's unfused fallback at head_dim 256 (the released config's prefill) rounds scores and probabilities to bf16, exactly HF's `eager` order: 1.0 / 0.9998 against it.
+
+    Matching torch's kernel bitwise would need an unfused core that reproduces its blocking, so the port keeps the backend's order (more precise than torch's at head_dim 64). Test (c) gates the QSA layer against the same layer with an fp32-probability core (`Fp32ProbabilityAttention`). For P4 at the released config: prefill can match an `eager` reference's core bitwise and decode an fp32-probability core; neither matches torch `sdpa` bitwise.
 
 ## Test evidence
 
@@ -178,7 +184,7 @@ Kernel calls: 2 (both QSA layers), dense-masked calls in the comparison model: 2
 
 ## Components where the fixes did not reach a bitwise result
 
-- **QSA attention core** (whole QSA layer ~0.48 bitwise in bf16): differential D9, a reference artifact. torch's CPU bf16 SDPA is not bitwise reproducible across call contexts; every wrapper op is exact and the block selection is identical. Not gated.
+- **QSA attention core** (whole QSA layer 0.555 / 0.530 bitwise against torch's SDPA in bf16): a systematic rounding-order difference inside the attention kernels, deviation 12; not a reference artifact (the earlier reading of D9 was wrong: torch's CPU SDPA is reproducible). Against the same layer with an fp32-probability core it is 0.996 / >= 0.999 (gated at 0.99), and the block selection is identical.
 - **Hyper-connection stream mix**: 0.999 rather than the prototype's 1.000 (about 1 bf16 ulp on 0.1% of elements) at hidden 192, from fp32 reduction order (deviation 6). The MoE matches the prototype (0.999); the HC weights path, router logits, expert sets, PLE, mixer and head are 1.000.
 - **DeltaNet**: 0.991 (the prototype reached 0.969): the fp32 state recurrence runs in a different order from torch's chunked rule.
 
