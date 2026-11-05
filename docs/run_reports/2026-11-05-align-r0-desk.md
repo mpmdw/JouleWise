@@ -157,3 +157,10 @@ observed failing before its fix; final commit mapping and checks follow below.
   actual shared default semantics, with runbook instructions for overrides.
   All guard tests redirect environment roots to generated temporary directories;
   no real custody census ran in this session.
+
+- G5 / MEDIUM armed-window detection: initial and boundary/periodic guard
+  checks refuse installed `com.joulewise.night*.plist` files or a loaded night
+  service; unknown launchctl failures also refuse. Added installed-but-idle,
+  loaded-without-plist and observation-error regressions (fail before/pass
+  after). Guard tests mock home and launchctl, so no real LaunchAgent path
+  was inspected. This remains a snapshot, not protection against later arming.

@@ -65,6 +65,18 @@ class QuietGuard:
             for parent in parents:
                 if "restricted" in parent.parts or not parent.is_dir():
                     raise Refused(f"custody parent missing or not a directory: {parent}")
+            installed = sorted(str(p) for p in (Path.home() / "Library/LaunchAgents").glob("com.joulewise.night*.plist"))
+            receipt["installed_night_agents"] = installed
+            if installed:
+                raise Refused(f"measurement window armed: {installed}")
+            launched = self.run(("/bin/launchctl", "print", f"gui/{os.getuid()}/com.joulewise.night"),
+                                capture_output=True, text=True, timeout=15)
+            receipt["launchctl"] = {"exit_code": launched.returncode, "stdout": launched.stdout,
+                                    "stderr": launched.stderr}
+            if launched.returncode == 0:
+                raise Refused("measurement night LaunchAgent is loaded")
+            if launched.returncode != 113 or "could not find service" not in launched.stderr.lower():
+                raise Refused("LaunchAgent census indeterminate")
             def probe(argv):
                 r = self.run(argv, capture_output=True, text=True, timeout=15)
                 return ProbeResult(argv, r.returncode, r.stdout, r.stderr, time.monotonic_ns())

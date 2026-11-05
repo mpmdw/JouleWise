@@ -21,10 +21,34 @@ class R0HostTest(unittest.TestCase):
                                        "JOULEWISE_ADDITIONAL_CUSTODY_PARENTS": "[]"})
         env.start()
         self.addCleanup(env.stop)
+        home = patch("joulewise.align.r0_host.Path.home", return_value=self.default_parent)
+        home.start()
+        self.addCleanup(home.stop)
     def runner(self, argv, **kwargs):
+        if "launchctl" in argv[0]:
+            return subprocess.CompletedProcess(argv, 113, "", "Could not find service")
         if "pgrep" in argv[0]:
             return subprocess.CompletedProcess(argv, 1, "", "")
         return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n", "")
+
+    def test_armed_launchagent_refuses_even_without_running_process(self):
+        agents = self.default_parent / "Library/LaunchAgents"
+        agents.mkdir(parents=True)
+        plist = agents / "com.joulewise.night.future.plist"
+        plist.write_text("synthetic installed future window")
+        guard = QuietGuard([], run=self.runner, inspect_custody=lambda **kw: Census())
+        with self.assertRaises(Refused):
+            guard.check(force=True)
+
+    def test_loaded_agent_without_plist_and_unavailable_launchctl_refuse(self):
+        for code, stderr in ((0, ""), (1, "permission denied")):
+            def run(argv, **kwargs):
+                if "launchctl" in argv[0]:
+                    return subprocess.CompletedProcess(argv, code, "", stderr)
+                return self.runner(argv, **kwargs)
+            guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census())
+            with self.assertRaises(Refused):
+                guard.check(force=True)
 
     def test_guard_clear_reuses_shared_censuses_with_explicit_parents(self):
         calls = []
