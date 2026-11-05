@@ -1537,6 +1537,49 @@ class ValidationRound1Test(unittest.TestCase):
         self.assertEqual(float(np.abs(a - want).max()), 0.0)
         self.assertEqual(float(np.abs(b - want).max()), 0.0)
 
+    # ----------------------------------------- systems LOW (sparse kernel)
+    def test_r1_sparse_kernel_with_fewer_than_8_indices(self):
+        """mx.fast.metal_kernel passes inputs of fewer than 8 elements in the
+        constant address space; the kernel declared the token list `device`
+        and failed to build. Direct calls with 3, 7 and 8 indices against an
+        explicit softmax over the listed tokens, and the model path that
+        reaches it (ratio 2, top-1 block, a 2-token chunk through the kernel)
+        against the dense-masked path."""
+        import mlx.core as mx
+        import numpy as np
+        fx = self.fx
+        model = fx.model("fp32")
+        attn = g(model, "qsa_sparse_attention")
+        rng = np.random.default_rng(5)
+        for width in (3, 7, 8):
+            with self.subTest(indices=width):
+                q = rng.standard_normal((1, 2, 1, 32)).astype(np.float32)
+                k = rng.standard_normal((1, 1, 16, 32)).astype(np.float32)
+                v = rng.standard_normal((1, 1, 16, 32)).astype(np.float32)
+                idx = np.full((1, 1, width), -1, np.int32)
+                idx[0, 0, :min(width, 5)] = rng.choice(16, min(width, 5), replace=False)
+                out = np.array(attn(mx.array(q), mx.array(k), mx.array(v), mx.array(idx), 0.25))
+                t = idx[0, 0][idx[0, 0] >= 0]
+                sc = (q[0, :, 0] @ k[0, 0, t].T) * 0.25
+                p = np.exp(sc - sc.max(-1, keepdims=True))
+                want = (p / p.sum(-1, keepdims=True)) @ v[0, 0, t]
+                self.assertLessEqual(float(np.abs(out[0, :, 0] - want).max()), 1e-5)
+        tc = fx.text_config("fp32", indexer_compress_ratio=2, indexer_budget=2)
+        kern = fx.model("fp32", text_config=tc, qsa_sparse_prefill_min_kv=0)
+        dense = fx.model("fp32", text_config=tc)
+        cls = type(kern.layers[QSA_LAYERS[0]].self_attn)
+        ids = fx.seqs["seq_a"][:12]
+        outs = {}
+        for name, m in (("kernel", kern), ("dense", dense)):
+            cache = m.make_cache()
+            run(m, [ids[:10]], cache)
+            k0 = cls.paths.kernel
+            outs[name] = run(m, [ids[10:12]], cache)
+            outs[name + "_calls"] = cls.paths.kernel - k0
+        self.assertEqual(outs["kernel_calls"], len(QSA_LAYERS), "the 2-token chunk must take the kernel")
+        self.assertEqual(outs["dense_calls"], 0)
+        self.assertLessEqual(diff(outs["kernel"], outs["dense"])["max_abs"], INTERNAL_FP32_TOL)
+
 
 if __name__ == "__main__":
     unittest.main()

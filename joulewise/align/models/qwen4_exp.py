@@ -1053,7 +1053,8 @@ def sdpa_query_chunked(queries, keys, values, scale, mask, max_score_bytes=256 *
 # HPS of the query heads sharing kv head g, so a selected token's K/V row is
 # reused from L1 by every head. Scores lane-per-token, online softmax per
 # 32-token tile, P.V lane-per-dims; fp32 accumulation. Unused idx slots are -1;
-# every row holds at least one valid token. Verbatim from the perf track.
+# every row holds at least one valid token. Verbatim from the perf track, except
+# the token-list pointer's address space (validation round 1).
 _QSA_SPARSE_ATTN_SRC = """
     constexpr int E = D / 32;
     const uint lane = thread_index_in_simdgroup;
@@ -1071,7 +1072,9 @@ _QSA_SPARSE_ATTN_SRC = """
       }
     }
     simdgroup_barrier(mem_flags::mem_threadgroup);
-    const device int* ip = idx + ((size_t)(b * L + l) * S);
+    // auto: mx.fast.metal_kernel passes inputs of fewer than 8 elements in the
+    // constant address space, so the pointer must not be declared device.
+    auto ip = idx + ((size_t)(b * L + l) * S);
     const device InT* kb = k + ((size_t)(b * Hkv + g) * Tcap) * D;
     const device InT* vb = v + ((size_t)(b * Hkv + g) * Tcap) * D + lane * E;
     float m[HPS], lsum[HPS], o[HPS][E];

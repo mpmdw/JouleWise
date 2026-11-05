@@ -47,7 +47,7 @@ PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 # sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
 # default. Rebind it with every module change (the canonical test checks it
 # against the file; canonical.md records it under "Pin").
-MODULE_SHA256 = "b0e4b7b7311497e62602a100f8cc20b8e3e7750dd9346c79d6fe1a17f973acfb"
+MODULE_SHA256 = "3d80f547cba658d05be90dae2e967b7ddf4c54989cd43e1a9b5c0b938e6aad0c"
 EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
 DTYPES = {"BF16": "<u2", "F32": "<f4", "F16": "<f2", "I64": "<i8"}
