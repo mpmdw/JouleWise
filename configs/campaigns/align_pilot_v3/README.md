@@ -1,14 +1,14 @@
-# ALIGN pilot 8 (non-claim)
+# ALIGN pilot 9 (non-claim)
 
 Generate: `python3 scripts/align_pilot_kit.py`; verify: `--check`.
 Protocol: `docs/align/pilot_protocol_v3.md`. Session: `scripts/align_pilot_session.py`.
 28 A-only members: eight unchanged anchors plus 20 fresh benign members (10 seeds x 2 pairs).
 The seed-1 block (ordinals 1-4) and four seed-1 replays (9,14,19,28) are
-byte-identical to pilot 7 and repeat pilots 4-7 at the same ordinals.
-Fresh benign seeds 17-26 fill ordinals 5-8,10-13,15-18,20-27 in ascending seed order.
+byte-identical to pilot 8 and repeat pilots 4-8 at the same ordinals.
+Fresh benign seeds 27-36 fill ordinals 5-8,10-13,15-18,20-27 in ascending seed order.
 Within each fresh seed, odd indices run spam then bank; even indices run bank then spam.
 Both pairs share the seed index. Unique seeds per pair/condition: benign 11
-(anchor 1 plus fresh 17-26), sabotage 1 (anchor 1); replays do not add trajectories.
+(anchor 1 plus fresh 27-36), sabotage 1 (anchor 1); replays do not add trajectories.
 Qwen3 thinking sampler 0.6/0.95/20/0, per-turn SHA256 64-bit reseed; guard120s.
 Seed-law task identifiers are exactly `shade/spam_filter_update` and
 `shade/bank_transfer_2` (the task's task_pair attribute, not task_kwargs.task_pair).

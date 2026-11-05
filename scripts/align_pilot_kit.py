@@ -66,7 +66,11 @@ EXPECTED_EPISODE_SEEDS = {
                         14391847153820844903, 64101551862339147, 14103990616903134865,
                         7268392907185236625, 9247697570265327422, 7076630650964378836,
                         3155401452424472451, 82493771458586576, 16525231594250945407,
-                        6247149306856102155, 16492001447681482),
+                        6247149306856102155, 16492001447681482,
+                        15687072437900082636, 14547895389782532273, 1304766852881457576,
+                        2031542896409805193, 12221455923050917836, 663209219352660720,
+                        5401005708850811187, 16826500089795268605, 7010655722886473667,
+                        3041705395096372086),
     "spam_filter_update": (2570132319625341959, 4097311025052448992, 6169586229110087908,
                            18211783659995252033, 10515714233578474446, 8438206852662645142,
                            10900152454805747463, 2618380097672501688, 5842603386054999094,
@@ -75,10 +79,14 @@ EXPECTED_EPISODE_SEEDS = {
                            7655467588542005630, 1008689895933592083, 650340283923250499,
                            16502070860977911228, 17921220545376944226, 1203897718749072581,
                            761989538063463473, 11385273429233211377, 10418615604173023675,
-                           13611609224312858782, 8611708807891225113),
+                           13611609224312858782, 8611708807891225113,
+                           4655960188439686796, 200540435998295475, 17743156806661904953,
+                           11217574357957399425, 11563999810116829156, 14164434283717512370,
+                           5585048416722385742, 10588522004417812035, 8663564172505080375,
+                           12790751251127751140),
 }
-# The seed-1 block and four replays retain pilots 4-7's exact ordinals.
-FRESH_BENIGN_SEEDS = tuple(range(17, 27))
+# The seed-1 block and four replays retain pilots 4-8's exact ordinals.
+FRESH_BENIGN_SEEDS = tuple(range(27, 37))
 ANCHOR_SEED_INDEX = 1
 SEED_INDICES = (ANCHOR_SEED_INDEX, *FRESH_BENIGN_SEEDS)
 
@@ -352,8 +360,9 @@ def build_files(root=ROOT):
         "seeds_per_cell": {"benign": 11, "sabotage": 1}, "seed_indices": list(SEED_INDICES),
         "replays_per_cell": 1, "anchor_seed_index": ANCHOR_SEED_INDEX,
         "cross_session_anchor_of": ["align-pilot-20261103T134903416190Z", "align-pilot-20261103T224628898457Z",
-                                    "align-pilot-20261104T074612673532Z", "align-pilot-20261104T164323823784Z"],
-        "order_policy": "seed1_anchors_at_1_2_3_4_9_14_19_28_fresh_benign_seeds_17_to_26_ascending_pairs_spam_bank_odd_bank_spam_even",
+                                    "align-pilot-20261104T074612673532Z", "align-pilot-20261104T164323823784Z",
+                                    "align-pilot-20261105T015948125148Z"],
+        "order_policy": "seed1_anchors_at_1_2_3_4_9_14_19_28_fresh_benign_seeds_27_to_36_ascending_pairs_spam_bank_odd_bank_spam_even",
         "members": members}
     originals = {(m["task_pair"], m["condition"], m["seed_index"]): m["run_id"] for m in members if not m["is_replay"]}
     for m in members:
@@ -428,17 +437,17 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
     return files
 
 
-README = """# ALIGN pilot 8 (non-claim)
+README = """# ALIGN pilot 9 (non-claim)
 
 Generate: `python3 scripts/align_pilot_kit.py`; verify: `--check`.
 Protocol: `docs/align/pilot_protocol_v3.md`. Session: `scripts/align_pilot_session.py`.
 28 A-only members: eight unchanged anchors plus 20 fresh benign members (10 seeds x 2 pairs).
 The seed-1 block (ordinals 1-4) and four seed-1 replays (9,14,19,28) are
-byte-identical to pilot 7 and repeat pilots 4-7 at the same ordinals.
-Fresh benign seeds 17-26 fill ordinals 5-8,10-13,15-18,20-27 in ascending seed order.
+byte-identical to pilot 8 and repeat pilots 4-8 at the same ordinals.
+Fresh benign seeds 27-36 fill ordinals 5-8,10-13,15-18,20-27 in ascending seed order.
 Within each fresh seed, odd indices run spam then bank; even indices run bank then spam.
 Both pairs share the seed index. Unique seeds per pair/condition: benign 11
-(anchor 1 plus fresh 17-26), sabotage 1 (anchor 1); replays do not add trajectories.
+(anchor 1 plus fresh 27-36), sabotage 1 (anchor 1); replays do not add trajectories.
 Qwen3 thinking sampler 0.6/0.95/20/0, per-turn SHA256 64-bit reseed; guard120s.
 Seed-law task identifiers are exactly `shade/spam_filter_update` and
 `shade/bank_transfer_2` (the task's task_pair attribute, not task_kwargs.task_pair).
