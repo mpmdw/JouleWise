@@ -88,7 +88,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.strict_io import sha256_raw as sha256_bytes
+
+from joulewise.strict_io import (
+    relative_inside as _strict_relative_inside,
+    sha256_raw as sha256_bytes,
+)
 
 from joulewise.b5 import chain as b5_chain  # noqa: E402
 from joulewise.hazards import clock as clock_hazard  # noqa: E402
@@ -147,9 +151,7 @@ def _read_json(path: Path, label: str) -> tuple[Any, bytes]:
 
 
 def _relative(root: Path, value: Any, label: str) -> Path:
-    _require(isinstance(value, str) and value and not PurePosixPath(value).is_absolute()
-             and ".." not in PurePosixPath(value).parts, f"{label} must be a relative path without '..'")
-    return root / value
+    return _strict_relative_inside(root, value, label, _require)
 
 
 def json_pointer(document: Any, pointer: str) -> Any:

@@ -143,3 +143,9 @@ def unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValueError(f"duplicate JSON key {key!r}")
         result[key] = value
     return result
+
+
+def relative_inside(root: Path, value: Any, label: str, require: Callable[[Any, str], None]) -> Path:
+    require(isinstance(value, str) and value and not PurePosixPath(value).is_absolute()
+            and ".." not in PurePosixPath(value).parts, f"{label} must be a relative path without '..'")
+    return root / value
