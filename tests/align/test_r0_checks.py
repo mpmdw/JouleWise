@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from types import SimpleNamespace
 import json
 from pathlib import Path
 import tempfile
@@ -37,6 +38,8 @@ class FakeBackend:
         self.sessions = []
         self.generation = None
         self.closed = False
+        self.endpoint = SimpleNamespace(assistant_history_message=lambda result: r0.ChatMessage("assistant", result.raw_usage["raw_text"]))
+        self.config = SimpleNamespace(model=SimpleNamespace(family="qwen3_next"))
     def new_session(self, effort):
         self.sessions.append(effort)
     def device_info(self):
@@ -176,11 +179,11 @@ class R0ChecksTest(unittest.TestCase):
         backend = FakeBackend()
         result = backend.chat([r0.ChatMessage("user", "echo")], r0.ECHO_TOOLS, 4096, 91)
         messages = []
-        replies = r0.append_result(messages, result, task)
+        replies = r0.append_result(backend, messages, result, task)
         self.assertIn("bad argument", json.loads(replies[0])["error"])
         self.assertEqual(messages[-1].role, "tool")
         with self.assertRaises(ValueError):
-            r0.append_result([], result, task, strict=True)
+            r0.append_result(backend, [], result, task, strict=True)
 
     def test_envelope_denominator_and_unsupported_flags(self):
         row = {"raw_text": "<tool_call>a</tool_call><tool_call>broken", "tool_calls": 1, "flags": []}

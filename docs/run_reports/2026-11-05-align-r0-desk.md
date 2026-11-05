@@ -118,3 +118,19 @@ Review and commit that live record; resolve any required B7/fallback before R1.
 pinned MLX runtime are untouched. All native/hardware conclusions remain
 **PROVISIONAL / UNMEASURED**. This implementation has not received the council's
 independent executing review or cold science review.
+
+## Fix round
+
+Review intake: `/private/tmp/jwsol/rev-661.json` (12 findings, no BLOCKER).
+Fix branch: `fix/2026-11-05-pr661-r0`. No network, real custody/data reads,
+model loads, full suite, coordination-state edits, push or merge. New tests
+use generated temporary inputs only. Each group below has a regression
+observed failing before its fix; final commit mapping and checks follow below.
+
+- G1 / HIGH endpoint API and history: imported the actual Stage-1 B1/B2 code
+  and its synthetic fixtures/tests from `d01288e25`, rather than inventing a
+  desk-only history representation. R0 and workload now use
+  `assistant_history_message`; optional `reasoning_effort` reaches both
+  production template paths, with the default omitted. Added prompt-ID parity
+  and effort regressions (`test_r0_integration`, 2 errors before, 2 pass after).
+  Existing fake backends now implement the real history seam.

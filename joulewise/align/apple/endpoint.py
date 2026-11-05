@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import replace
+from dataclasses import asdict, dataclass, replace
 from functools import wraps
 from typing import Any, Mapping, Sequence
 
@@ -17,6 +17,7 @@ from joulewise.align.endpoints import _coalesce_assistant_calls
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mapping
 from joulewise.align.apple.sampling import turn_seed
+from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES, parse_xml_calls
 from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
@@ -60,7 +61,7 @@ def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False, sp
 _TOOL_CALL = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
 
-def _split_reasoning(text: str) -> tuple[str, str, tuple[str, ...]]:
+def _split_reasoning(text: str, *, stop_at_tool_call: bool = False) -> tuple[str, str, tuple[str, ...]]:
     """Separate reasoning, including an unclosed tail and a prefilled opener."""
     visible: list[str] = []
     hidden: list[str] = []
@@ -69,6 +70,13 @@ def _split_reasoning(text: str) -> tuple[str, str, tuple[str, ...]]:
     while cursor < len(text):
         opening = text.find("<think>", cursor)
         closing = text.find("</think>", cursor)
+        if stop_at_tool_call:
+            call = text.find("<tool_call>", cursor)
+            if call >= 0 and (opening < 0 or call < opening) and (closing < 0 or call < closing):
+                # XML arguments are literal strings. Reasoning delimiters in
+                # a parameter value must survive the outer reasoning split.
+                visible.append(text[cursor:])
+                break
         if closing >= 0 and (opening < 0 or closing < opening):
             if cursor == 0:
                 hidden.append(text[:closing])
@@ -92,14 +100,54 @@ def _split_reasoning(text: str) -> tuple[str, str, tuple[str, ...]]:
     return "".join(visible), "\n".join(hidden), tuple(flags)
 
 
+@dataclass(frozen=True)
+class _XmlAssistantMessage(ChatMessage):
+    """Template-ready history, distinguished from legacy raw completions."""
+
+    reasoning_content: str = ""
+    tool_calls: tuple[ToolCallRequest, ...] = ()
+
+
+def _xml_history_reasoning(message, tools):
+    # The endpoint already split generated text using the actual prompt's
+    # think opener. Do not reinterpret visible prose in structured history.
+    if isinstance(message, _XmlAssistantMessage):
+        return message.content, message.reasoning_content, ()
+    if getattr(message, "reasoning_text", ""):
+        return message.content, message.reasoning_text, ()
+    text = message.content
+    parts = _split_reasoning(text, stop_at_tool_call=True)
+    # Stored raw completions can omit the template-prefilled opening think
+    # tag. A thought may itself quote a call. Prefer the explicit close only
+    # when the ordinary interpretation cannot form a valid visible turn.
+    if "</think>" in text and not text.startswith("<think>") and parse_xml_calls(parts[0], tools)[1]:
+        candidate = _split_reasoning("<think>" + text, stop_at_tool_call=True)
+        if not parse_xml_calls(candidate[0], tools)[1]:
+            return candidate
+    return parts
+
+
 def parse_completion(
     text: str, *, reasoning_tokens: int = 0, reasoning_open: bool = False,
+    model_family: str | None = None, tools: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[str, str, tuple[ToolCallRequest, ...], tuple[str, ...]]:
     """Parse think spans, Qwen envelopes and bare Llama name/parameters JSON.
 
+    XML is enabled only by a configured Qwen3.5/3.8 family and its tool schemas.
     Unknown tool-like syntax remains text with a flag. Retokenization is an
     estimate of hidden generation, never a server-provided ground-truth count.
     """
+    if model_family in XML_MODEL_FAMILIES:
+        visible, reasoning, reasoning_flags = _split_reasoning(
+            "<think>" + text if reasoning_open else text, stop_at_tool_call=True)
+        calls, xml_flags = parse_xml_calls(visible, tools)
+        flags = list(reasoning_flags)
+        if reasoning_open:
+            flags.append("reasoning_open_tag_prefilled_or_missing")
+        flags.extend(xml_flags)
+        if reasoning and reasoning_tokens == 0:
+            flags.append("reasoning_token_count_unavailable")
+        return visible, reasoning, calls, tuple(flags)
     visible, reasoning, reasoning_flags = _split_reasoning("<think>" + text if reasoning_open else text)
     flags = list(reasoning_flags)
     if reasoning_open:
@@ -196,6 +244,7 @@ class MlxEndpoint:
         enable_thinking: bool | None = None,
         prompt_cache: str | None = None,
         sampler: Mapping[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.runtime = runtime
         self.config = config
@@ -203,6 +252,9 @@ class MlxEndpoint:
         self.episode_domain = episode_domain
         self.mock_turns = tuple(mock_turns)
         self.enable_thinking = enable_thinking
+        if reasoning_effort not in (None, "xhigh", "medium", "low"):
+            raise ValueError("unknown reasoning effort")
+        self.reasoning_effort = reasoning_effort
         from joulewise.align.apple.sampling import validate_policy
         self.sampler = validate_policy(dict(sampler)) if sampler is not None else None
         if prompt_cache not in (None, "episode_prefix"):
@@ -237,7 +289,28 @@ class MlxEndpoint:
         }, sort_keys=True)
         self._prepare_flags = tuple(self.flags)
 
+    def assistant_history_message(self, result: ChatResult) -> ChatMessage:
+        """Retain separate reasoning for templates that require that field.
+
+        JSON families keep their original raw-completion history byte for byte.
+        """
+        if self.config.model.family in XML_MODEL_FAMILIES:
+            content = result.content
+            if result.tool_calls and "<tool_call>" in content:
+                content = content[:content.index("<tool_call>")].rstrip()
+            return _XmlAssistantMessage("assistant", content,
+                reasoning_content=result.reasoning_text, tool_calls=result.tool_calls)
+        return ChatMessage("assistant", str(result.raw_usage.get("raw_text", result.content)))
+
+    def _mock_prompt_text(self, messages):
+        return json.dumps([
+            asdict(message) if isinstance(message, _XmlAssistantMessage) else message.__dict__
+            for message in messages
+        ], sort_keys=True)
+
     def _render_prompt(self, messages, tools):
+        if self.config.model.family in XML_MODEL_FAMILIES:
+            return self._render_xml_prompt(messages, tools)
         return self.runtime._tokenizer.apply_chat_template(
             [{"role": m.role, "content": m.content,
               **({"name": m.name} if m.name else {}),
@@ -247,6 +320,42 @@ class MlxEndpoint:
                  if getattr(m, "tool_calls", ()) else {})} for m in _coalesce_assistant_calls(messages)],
             tools=list(tools) or None, tokenize=False, add_generation_prompt=True,
             **({"enable_thinking": self.enable_thinking} if self.enable_thinking is not None else {}),
+            **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort is not None else {}),
+        )
+
+    def _render_xml_prompt(self, messages, tools):
+        history = []
+        for message in _coalesce_assistant_calls(messages):
+            item = {"role": message.role, "content": message.content}
+            if message.name:
+                item["name"] = message.name
+            if message.tool_call_id:
+                item["tool_call_id"] = message.tool_call_id
+            if message.role == "assistant":
+                visible, reasoning, _ = _xml_history_reasoning(message, tools)
+                calls = getattr(message, "tool_calls", ())
+                if "<tool_call>" in visible:
+                    parsed, flags = parse_xml_calls(visible, tools)
+                    if calls and (flags or [(c.name, json.loads(c.arguments_json)) for c in parsed] != [
+                        (c.name, json.loads(c.arguments_json)) for c in calls
+                    ]):
+                        raise ValueError("xml_history_tool_calls_disagree")
+                    if not flags:
+                        # The workload stores raw completions. Structured
+                        # callers may also retain them. Render each action once.
+                        calls = calls or parsed
+                        visible = visible[:visible.index("<tool_call>")].rstrip()
+                item["content"] = visible
+                item["reasoning_content"] = reasoning
+                if calls:
+                    item["tool_calls"] = [{"id": call.call_id, "type": "function", "function": {
+                        "name": call.name, "arguments": json.loads(call.arguments_json),
+                    }} for call in calls]
+            history.append(item)
+        return self.runtime._tokenizer.apply_chat_template(
+            history, tools=list(tools) or None, tokenize=False, add_generation_prompt=True,
+            **({"enable_thinking": self.enable_thinking} if self.enable_thinking is not None else {}),
+            **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort is not None else {}),
         )
 
     def rendered_prompt_length(self, messages, *, tools=()):
@@ -256,7 +365,7 @@ class MlxEndpoint:
             if "prompt_tokens" in script:
                 count = int(script["prompt_tokens"])
             else:
-                count = len(json.dumps([m.__dict__ for m in messages], sort_keys=True).split())
+                count = len(self._mock_prompt_text(messages).split())
             return count
         from joulewise.adapters.mlx_runtime import _encode
         return len(_encode(self.runtime._tokenizer, self._render_prompt(messages, tools), add_special_tokens=False))
@@ -282,8 +391,15 @@ class MlxEndpoint:
         provenance: dict[str, Any] = {}
         finish_reason: str | None = None
         reasoning_open_from_template = False
+        xml_family = self.config.model.family in XML_MODEL_FAMILIES
+
+        def history_reasoning(message):
+            return (_xml_history_reasoning(message, tools) if xml_family
+                    else _split_reasoning(message.content))
+
         prior_hidden = any(
-            message.role == "assistant" and _split_reasoning(message.content)[0] != message.content
+            message.role == "assistant" and (history_reasoning(message)[0] != message.content
+                or (xml_family and bool(history_reasoning(message)[1])))
             for message in messages
         )
         prior_hidden_prefill_tokens: int | None = None if prior_hidden else 0
@@ -304,9 +420,7 @@ class MlxEndpoint:
                     output_tokens=emitted_tokens,
                 )
                 if profile.prompt_tokens is None:
-                    profile = replace(profile, prompt_text=json.dumps(
-                        [message.__dict__ for message in messages], sort_keys=True
-                    ))
+                    profile = replace(profile, prompt_text=self._mock_prompt_text(messages))
                 result = self.runtime.run_workload(replace(self.config, workload_profile=profile))
                 new_events = result.events
                 text = str(script.get("content", result.output_artifacts.get("response.txt", "")))
@@ -356,7 +470,10 @@ class MlxEndpoint:
                     ids = _encode(tokenizer, rendered, add_special_tokens=False)
                     if prior_hidden:
                         scrubbed = [
-                            replace(message, content=_split_reasoning(message.content)[0])
+                            replace(message, content=history_reasoning(message)[0], **(
+                                {field: "" for field in ("reasoning_text", "reasoning_content")
+                                 if xml_family and hasattr(message, field)}
+                            ))
                             if message.role == "assistant" else message
                             for message in messages
                         ]
@@ -474,6 +591,7 @@ class MlxEndpoint:
             first_ns = max(start_ns, min(end_ns, first_ns))
         visible, reasoning, calls, parse_flags = parse_completion(
             text, reasoning_tokens=reasoning_tokens, reasoning_open=reasoning_open_from_template,
+            model_family=self.config.model.family, tools=tools,
         )
         flags.extend(parse_flags)
         if cut and "unclosed_reasoning_span" in parse_flags:
@@ -482,7 +600,8 @@ class MlxEndpoint:
             # may itself contain tool-like text that must remain hidden.
             # Closed spans earlier in the same turn stay reasoning too.
             visible, prior, calls, prefix_flags = parse_completion(
-                prefix, reasoning_tokens=reasoning_tokens
+                prefix, reasoning_tokens=reasoning_tokens,
+                model_family=self.config.model.family, tools=tools,
             )
             reasoning = "\n".join(part for part in (prior, tail) if part)
             flags.extend(prefix_flags)

@@ -39,9 +39,9 @@ class MlxBackend:
 
         # B1/B2 belong to Stage 1. Fail explicitly instead of shadowing them in
         # desk-only code and thereby certifying a different production path.
-        required = {"assistant_history", "chat_template_kwargs"}
-        if not required <= set(inspect.signature(MlxEndpoint).parameters):
-            raise RuntimeError("Stage-1 B2 endpoint fields missing; integrate align-v4-s1 before live R0")
+        if (not callable(getattr(MlxEndpoint, "assistant_history_message", None))
+                or "reasoning_effort" not in inspect.signature(MlxEndpoint).parameters):
+            raise RuntimeError("Stage-1 B2 history/effort API missing; integrate before live R0")
         for dist, expected in (("mlx", "0.31.2"), ("mlx-lm", "0.31.3"), ("transformers", "5.12.1")):
             if version(dist) != expected:
                 raise RuntimeError(f"stack pin mismatch: {dist} requires {expected}, found {version(dist)}")
@@ -91,8 +91,7 @@ class MlxBackend:
             self.runtime, self.config, self.clock, episode_domain="align-r0",
             prepare_metadata=self.prepared, enable_thinking=True, prompt_cache="episode_prefix",
             sampler={"temperature": 1.0 if self.tag == "D" else 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0},
-            assistant_history="reasoning_content" if self.tag == "D" else None,
-            chat_template_kwargs={"reasoning_effort": effort} if effort is not None else None,
+            reasoning_effort=effort,
         )
 
     def encode(self, text):

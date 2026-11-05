@@ -11,7 +11,7 @@ import math
 import statistics
 
 from joulewise.align.apple.sampling import episode_seed
-from joulewise.align.interfaces import ChatMessage
+from joulewise.align.interfaces import ChatMessage, ChatResult
 
 PINS = {
     "N": {"name": "Qwen3-Next-80B-A3B-Thinking-4bit", "tag": "qwen3-next-80b-a3b-thinking",
@@ -64,8 +64,8 @@ def turn_row(backend, result, requested):
             "raw_text": result.raw_usage["raw_text"], "tool_calls": len(result.tool_calls)}
 
 
-def append_result(messages, result, task, *, strict=False):
-    messages.append(ChatMessage("assistant", result.raw_usage["raw_text"]))
+def append_result(backend, messages, result, task, *, strict=False):
+    messages.append(backend.endpoint.assistant_history_message(result))
     outputs = []
     for call in result.tool_calls:
         try:
@@ -106,7 +106,7 @@ def load_coherence(backend):
     echo_messages = [ChatMessage("user", ECHO_PROMPT)]
     first = backend.chat(echo_messages, ECHO_TOOLS, 4096, 94)
     first_row = turn_row(backend, first, 4096)
-    replies = append_result(echo_messages, first, EchoTask(), strict=True)
+    replies = append_result(backend, echo_messages, first, EchoTask(), strict=True)
     second_row = None
     if replies:
         second = backend.chat(echo_messages, ECHO_TOOLS, 4096, 94)
@@ -128,7 +128,12 @@ def template_rewrites(backend, *, transitions=12):
     for index in range(transitions):
         prior = backend.render(messages, ECHO_TOOLS)
         raw, emitted = backend.synthetic_completion(index)
-        messages.append(ChatMessage("assistant", raw))
+        from joulewise.align.apple.endpoint import parse_completion
+        visible, reasoning, calls, flags = parse_completion(
+            raw, reasoning_open=True, model_family=backend.config.model.family, tools=ECHO_TOOLS)
+        synthetic = ChatResult(visible, reasoning, calls, len(prior), 0, len(emitted), 0, 0, 0, 0,
+                               {"raw_text": raw})
+        messages.append(backend.endpoint.assistant_history_message(synthetic))
         messages.append(ChatMessage("tool", '{"value":"desk-check","ok":true}',
                                     name="r0_echo", tool_call_id=f"synthetic-{index}"))
         following = backend.render(messages, ECHO_TOOLS)
@@ -148,7 +153,7 @@ def generated_rewrites(backend, *, transitions=12):
         result = backend.chat(messages, ECHO_TOOLS, 4096, 95)
         row = turn_row(backend, result, 4096)
         turns.append(row)
-        replies = append_result(messages, result, EchoTask(), strict=True)
+        replies = append_result(backend, messages, result, EchoTask(), strict=True)
         if not replies:
             break
         following = backend.render(messages, ECHO_TOOLS)
@@ -185,7 +190,7 @@ def screen_episode(backend, tag, pair, seed_index, cap, *, max_turns=6, budget=1
         row = turn_row(backend, result, requested)
         rows.append({"turn": index, **row})
         used += row["tokens"]
-        row["tool_outputs"] = append_result(messages, result, task)
+        row["tool_outputs"] = append_result(backend, messages, result, task)
         if not result.tool_calls:
             break
     return {"pair": pair, "seed_index": seed_index, "seed": seed, "turns": rows,

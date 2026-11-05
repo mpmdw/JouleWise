@@ -53,9 +53,10 @@ class ShimTest(unittest.TestCase):
                                   prepare=lambda config: SimpleNamespace(ok=True, metadata={}),
                                   cleanup=lambda config: None)
         class Endpoint:
-            def __init__(self, *args, assistant_history=None, chat_template_kwargs=None, **kwargs):
-                self.history = assistant_history
-                self.kwargs = chat_template_kwargs
+            def __init__(self, *args, reasoning_effort=None, **kwargs):
+                self.effort = reasoning_effort
+            def assistant_history_message(self, result):
+                return result
         versions = {"mlx": "0.31.2", "mlx-lm": "0.31.3", "transformers": "5.12.1"}
         with tempfile.TemporaryDirectory() as tmp, \
                 patch("joulewise.align.apple.endpoint.MlxEndpoint", Endpoint), \
@@ -65,10 +66,9 @@ class ShimTest(unittest.TestCase):
                 patch.dict("sys.modules", {"mlx": SimpleNamespace(core=mx), "mlx.core": mx}):
             backend = MlxBackend("D", tmp, str(Path(tmp) / "shade"), FakeGuard())
             self.assertEqual(backend.config.model.context_window, 40960)
-            self.assertEqual(backend.endpoint.history, "reasoning_content")
-            self.assertIsNone(backend.endpoint.kwargs)
+            self.assertIsNone(backend.endpoint.effort)
             backend.new_session("medium")
-            self.assertEqual(backend.endpoint.kwargs, {"reasoning_effort": "medium"})
+            self.assertEqual(backend.endpoint.effort, "medium")
             upstream.assert_called_once_with(cache_dir=str(Path(tmp) / "shade"), allow_fetch=False)
             backend.close()
 
