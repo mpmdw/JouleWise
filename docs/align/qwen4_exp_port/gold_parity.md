@@ -168,6 +168,13 @@ Pass a local `.py` module to `--mlx-module`. A standalone module may be the port
 package-relative imports (such as `mlx_lm.models`) need a standalone wrapper
 that imports the port through its normal package context. Hash every separately imported port file with repeatable
 `--adapter-dependency` flags; a changed dependency invalidates resume.
+The coordinator passes these as `request["adapter_dependencies"]`, a map of
+absolute source paths to SHA256 digests, also recorded in `provenance.json`.
+The canonical adapter requires `qwen4_exp.py` and `canonical_converter.py`
+(or `align_convert_qwen4_exp.py`), verifies their frozen digests, and imports
+their source bytes by file location. Its worker metadata records both source
+paths/digests and checks the converter's canonical module pin. It never imports
+the model from `joulewise.align.models`.
 
 ```python
 GOLD_ADAPTER_VERSION = 1
@@ -342,6 +349,12 @@ JW_GOLD_CANONICAL_CONVERTER="$GOLD_CANONICAL/canonical_converter.py" \
 PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 \
 /private/tmp/jwsol/venv-both/bin/python -B -m unittest tests.test_qwen4_gold_stream
+
+JW_GOLD_CANONICAL_MODULE="$GOLD_CANONICAL/qwen4_exp.py" \
+JW_GOLD_CANONICAL_CONVERTER="$GOLD_CANONICAL/canonical_converter.py" \
+PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 \
+/private/tmp/jwsol/venv-both/bin/python -B -m unittest -v tests.test_qwen4_gold_canonical_adapter
 ```
 
 The combined native venv must contain Transformers 5.22.1, Torch, NumPy,
@@ -349,14 +362,22 @@ safetensors, MLX 0.31.2 and mlx-lm 0.31.3. The last two are the canonical
 converter's pins. Native tests cover the MLX sparse gather and canonical
 6-bit/group-64 quantization, bf16 passthrough, and per-tensor conversion resume.
 They skip when MLX or the explicit canonical paths are unavailable.
+The adapter module's native tests run `--make-tiny` through the actual parity
+workers for fp32 and bf16, checking every trace and all seven tiny units, then
+run the streaming driver with a local-only shard source, sparse PLE, byte-subset
+restaging, and completed-run resume. They require PASS under the unchanged
+tolerances. CPU-only tests cover converter mapping completeness against the
+official tiny index, packed/unpacked expert shapes, saved hash buffers and
+source provenance. Native MLX results remain unverified until this command runs
+on Metal; skipping is not parity evidence.
 
-Supply the lead's **gold/v1 canonical adapter**, not `qwen4_exp.py` itself:
+Use the repository's **gold/v1 canonical adapter** below:
 the canonical model file does not declare `run_gold`. Hash all separately
 imported adapter sources with additional `--adapter-dependency` flags.
 After the shared-shard ruling, the laptop command is:
 
 ```bash
-GOLD_ADAPTER=/absolute/local/path/to/canonical_gold_adapter.py
+GOLD_ADAPTER="$PWD/joulewise/align/qwen4_gold/canonical_adapter.py"
 GOLD_WORK="$PWD/runs/qwen4-gold-stream-20261105"
 
 env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE \
@@ -366,6 +387,7 @@ env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE \
   --mlx-python /private/tmp/jwsol/venv-mlx/bin/python \
   --mlx-module "$GOLD_ADAPTER" \
   --adapter-dependency "$GOLD_CANONICAL/qwen4_exp.py" \
+  --adapter-dependency "$GOLD_CANONICAL/canonical_converter.py" \
   --shared-shards restage --min-free-gb 25 --max-staging-gb 12 \
   --max-gb 12 --timeout 3600 --resume
 ```

@@ -19,7 +19,7 @@ from joulewise.align.qwen4_gold.stream_ple import (SparseCheckpoint, atomic_npy,
 HAS_ARRAYS = importlib.util.find_spec("numpy") is not None
 HAS_SAFE = importlib.util.find_spec("safetensors") is not None
 HAS_REF = importlib.util.find_spec("transformers") is not None and importlib.util.find_spec("torch") is not None
-HAS_MLX = importlib.util.find_spec("mlx") is not None
+HAS_MLX = importlib.util.find_spec("mlx") is not None and importlib.util.find_spec("mlx.core") is not None
 
 
 def options(work, resume=False):
@@ -575,7 +575,8 @@ class OfficialTinyPLETests(unittest.TestCase):
                     expected = np.load(resumed.state["chain"][previous][dtype + ":one"])
                     np.testing.assert_array_equal(actual, expected)
 
-    @unittest.skipUnless(HAS_MLX, "native Metal/MLX required; run on the lead's Mac")
+    @unittest.skipUnless(HAS_MLX and os.environ.get("JW_GOLD_CANONICAL_MODULE"),
+                         "native Metal/MLX and explicit canonical path required; run on the lead's Mac")
     def test_native_mlx_sparse_gather(self):
         import numpy as np
         import mlx.core as mx

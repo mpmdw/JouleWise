@@ -235,11 +235,12 @@ class Harness:
         self.args, self.checkpoint, self.prompts = args, checkpoint, prompts
         self.out = Path(args.output).resolve()
         self.out.mkdir(parents=True, exist_ok=True)
+        self.adapter_dependencies = {str(Path(p).resolve()): sha256(p) for p in args.adapter_dependency}
         self.fingerprint = digest({"schema": SCHEMA, "checkpoint": identity, "prompts": prompts,
                                    "dtype": args.dtypes, "modes": args.input_modes,
                                    "seed": args.seed, "random_scale": args.random_scale,
                                    "adapter": sha256(args.mlx_module),
-                                   "adapter_dependencies": {p: sha256(p) for p in args.adapter_dependency},
+                                   "adapter_dependencies": self.adapter_dependencies,
                                    "harness": {p.name: sha256(p) for p in PACKAGE.glob("*.py")}, "runtimes": runtimes,
                                    "ref_python": args.ref_python, "mlx_python": args.mlx_python,
                                    "max_gb": args.max_gb})
@@ -254,7 +255,8 @@ class Harness:
                     previous.replace(archived)
         write_json(self.out / "provenance.json", {"schema": SCHEMA, "fingerprint": self.fingerprint,
                    "checkpoint": identity, "prompts": prompts, "tolerances": TOLERANCES,
-                   "adapter": str(args.mlx_module), "runtimes": runtimes, "scope": "prefill only"})
+                   "adapter": str(args.mlx_module), "adapter_dependencies": self.adapter_dependencies,
+                   "runtimes": runtimes, "scope": "prefill only"})
 
     def case(self, unit, dtype, prompt, mode, hidden, compare=True, scale=None):
         import numpy as np
@@ -281,7 +283,8 @@ class Harness:
             request = {"schema": SCHEMA, "checkpoint": str(self.checkpoint.root), "unit": unit,
                        "dtype": dtype, "input_ids": [prompt["input_ids"]], "hidden": str(case_input) if case_input else None,
                        "input_mode": mode, "random_scale": scale, "seed": self.args.seed,
-                       "mlx_module": str(Path(self.args.mlx_module).resolve()), "backend": "reference",
+                       "mlx_module": str(Path(self.args.mlx_module).resolve()),
+                       "adapter_dependencies": self.adapter_dependencies, "backend": "reference",
                        "max_memory_bytes": int(self.args.max_gb*1024**3), "threads": 2,
                        "shard_guards": self.identity.get("stamps"),
                        "config_digest": digest(self.checkpoint.config),
