@@ -37,6 +37,7 @@ class SelectionTests(unittest.TestCase):
             "coverage": {"all_keys": {"sample_fraction": 1}}}
         summary = cli.markdown(report, "a"*64)
         self.assertIn("R1", summary)
+        self.assertIn("docs/align/council-2026-11-05/FINAL-DESIGN.md", summary)
         self.assertIn("TUNK", summary)
         self.assertNotIn('"smc_temperature"', summary)
         self.assertNotIn("Candidate campaign-policy", summary)

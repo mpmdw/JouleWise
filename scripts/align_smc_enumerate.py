@@ -26,6 +26,8 @@ def markdown(report, digest):
     result = report["response"]
     lines = ["# ALIGN R0 SMC inventory and step data", "",
              "Status: **PROVISIONAL**. R1's planning-turn step classifies sensors; R0 emits no pins.",
+             "Authority: `docs/align/council-2026-11-05/FINAL-DESIGN.md` §2.6 and V8 "
+             "on `origin/lane/2026-11-05-align-window-council` (with Amendment 1).",
              "", result["rule"], "",
              "| Key | Unit | Type | Idle median | Load median | Idle noise | Result |",
              "|---|---|---|---:|---:|---:|---|"]
