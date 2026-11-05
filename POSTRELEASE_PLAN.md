@@ -57,3 +57,23 @@ Line references below identify the base unless stated otherwise.
   eager accounting. Recommendation: consumption-based accounting after
   release, under a successor ruling to D-188. Blocked work: code and tests
   that would replace the explicitly retained compatibility policy.
+
+## c. L3 entries on temporary bracket copies — IMPLEMENT (cache lifetime)
+
+- What/where: `joulewise/b5_analysis/bracket.py:468` destroys the copied
+  member tree after evaluation, but nested strict validation can leave
+  `L3_reduce_dict` entries in the run store. That leaf is intentionally
+  path-bound (`joulewise/analysis_verified_store.py:1225`); those entries
+  cannot be reused on the next copy and can be exported after deletion.
+- Why: retaining dead entries grows the store without avoiding work.
+  Making all L3 entries path-free would be unsafe: failure text can contain
+  the caller's path (`tests/b5_analysis/test_vdl_sol_hunt3.py:338`).
+- Fix: evict only path-bound L3 entries rooted in this private member tree
+  as the tree's context exits, including exceptional exits. Preserve L1/L4
+  content-based entries, ordinary L3 entries, counters, defects and poison.
+- Test: synthetic store entries in a temporary member tree, a sibling
+  with the same name prefix and an ordinary tree; check exit and exception
+  cleanup, export omission, and preservation of other leaves and poison.
+- Semantics: cache retention only. No key, reduced value or decision changes.
+- Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_bracket_copies -q`
+  passed (2 tests; no worker pool or bundle reads).
