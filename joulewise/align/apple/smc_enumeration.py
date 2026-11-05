@@ -326,11 +326,11 @@ class GpuLoad:
 
     def start(self):
         import selectors
-        code = ("from joulewise.hazards.smc_enumeration import gpu_worker; "
+        code = ("from joulewise.align.apple.smc_enumeration import gpu_worker; "
                 "import sys; gpu_worker(int(sys.argv[1]))")
         self.process = subprocess.Popen([sys.executable, "-B", "-c", code, str(self.duration)],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        start_new_session=True)
+                                        start_new_session=True, cwd=Path(__file__).resolve().parents[3])
         try:
             with selectors.DefaultSelector() as selector:
                 selector.register(self.process.stdout, selectors.EVENT_READ)
@@ -338,8 +338,11 @@ class GpuLoad:
                     raise RuntimeError("MLX worker failed readiness")
             self.process.stdin.write(b"GO\n")
             self.process.stdin.flush()
-        except BaseException:
-            self.stop()
+        except BaseException as exc:
+            try:
+                self.stop()
+            except Exception as cleanup:
+                exc.add_note(f"MLX worker cleanup also failed: {type(cleanup).__name__}: {cleanup}")
             raise
 
     def check(self):
@@ -350,18 +353,24 @@ class GpuLoad:
         if self.process is None:
             return
         import signal
+        def send(sig):
+            try:
+                os.killpg(self.process.pid, sig)
+            except (ProcessLookupError, PermissionError):
+                # macOS may report EPERM for an exiting/zombie group. Reap it;
+                # if the child is still live, signal only our own child PID.
+                if self.process.poll() is None:
+                    try:
+                        self.process.send_signal(sig)
+                    except (ProcessLookupError, PermissionError):
+                        if self.process.poll() is None:
+                            raise
         try:
             if self.process.poll() is None:
-                try:
-                    os.killpg(self.process.pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
+                send(signal.SIGTERM)
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(self.process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            send(signal.SIGKILL)
             self.process.wait(timeout=5)
         finally:
             self.process.stdin.close()
