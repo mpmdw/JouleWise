@@ -38,6 +38,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO, Iterator, Literal, Mapping, TextIO
 
+from joulewise.strict_io import parse_finite_float as _strict_parse_finite_float
+
 from joulewise import analysis_run_cache as _run_cache
 
 
@@ -617,10 +619,7 @@ def _nonfinite_number(value: str) -> None:
 
 
 def _finite_float(value: str) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        _nonfinite_number(value)
-    return parsed
+    return _strict_parse_finite_float(value, _nonfinite_number)
 
 
 def _finite_int(value: str) -> int:

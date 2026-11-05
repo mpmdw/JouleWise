@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Sequence
 
+from joulewise.strict_io import parse_finite_float as _strict_parse_finite_float
+
 from joulewise.analysis_manifest import (
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V1_SCHEMA,
     validate_analysis_manifest,
@@ -453,10 +455,7 @@ def _reject_nonfinite_admission_number(value: str) -> None:
 
 
 def _parse_finite_admission_float(value: str) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        _reject_nonfinite_admission_number(value)
-    return parsed
+    return _strict_parse_finite_float(value, _reject_nonfinite_admission_number)
 
 
 def _parse_finite_admission_int(value: str) -> int:

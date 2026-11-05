@@ -116,3 +116,10 @@ def collect_exact_keys(value: Any, expected: set[str], where: str, errors: list[
     if extra:
         errors.append(f"{where}: unrecognized key(s): {', '.join(extra)}")
     return not missing and not extra
+
+
+def parse_finite_float(value: str, reject: Callable[[str], None]) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        reject(value)
+    return parsed

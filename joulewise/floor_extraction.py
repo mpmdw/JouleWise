@@ -45,10 +45,12 @@ from typing import Any, Callable, Literal, Mapping, Sequence, TYPE_CHECKING
 if TYPE_CHECKING:
     from joulewise.b5_analysis.kept_units import KeptUnits
 
+
 from joulewise.strict_io import (
     finite_or_none as _common_mode_finite,
     finite_or_none as _finite,
     is_lower_sha256 as _is_sha256,
+    parse_finite_float as _strict_parse_finite_float,
 )
 
 from joulewise.window_lineage import LOCATOR_BASENAME
@@ -1998,10 +2000,7 @@ def _reject_nonfinite_admission_number(value: str) -> None:
 
 
 def _parse_finite_admission_float(value: str) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        _reject_nonfinite_admission_number(value)
-    return parsed
+    return _strict_parse_finite_float(value, _reject_nonfinite_admission_number)
 
 
 def _parse_finite_admission_int(value: str) -> int:
