@@ -3,16 +3,22 @@
 Run **on the measurement Mac only**, with no armed/active chain and all agent
 apps/CLI sessions closed. This is selection data, not R1, thermal validation or
 an arm authorization. Authority: council `219fb1515`, FINAL-DESIGN §§2.1, 2.2,
-2.8 plus Amendment 1: **D only**; Qwen3-Next is dropped and Flash-Next is later. Keep the pinned stack: Python measurement venv, mlx 0.31.2, mlx-lm 0.31.3,
-transformers 5.12.1. First integrate/review Stage-1 B1/B2 from
-Stage-1 `d01288e25` (imported in this fix round); the production endpoint now
-accepts `reasoning_effort`. Integrate the SMC lane before live R0. Do not run these commands from an agent session.
+2.8 plus Amendment 1: **D only**; Qwen3-Next is dropped and Flash-Next is later.
+Keep the pinned stack: Python measurement venv, mlx 0.31.2, mlx-lm 0.31.3,
+transformers 5.12.1. Stage-1 B1/B2 from `d01288e25` is imported in this fix round;
+the production endpoint also accepts `reasoning_effort`. Review that integration
+and integrate the SMC lane before live R0. Do not run these commands from an
+agent session. Full Amendment 1 was verified at `6eb1ff5be` in local Git objects.
+**SMC qualification is blocked pending the step-duration ruling below.**
 
 1. In Terminal at the integrated checkout, set the interpreter and config.
    The paths below are **examples to edit**, never auto-discovered. Model
    sources must be complete, materialized directories (no symlinks); revision
    pins are built in. Prepare/download/hash the pinned mirrors separately;
    this script never downloads. SHADE must already have its pinned cache.
+
+   Set `anchor_source` to the materialized 30B anchor mirror at revision
+   `d388dead1515f5e085ef7a0431dd8fadf0886c57`; it is inventoried alongside D.
 
    Set `measurement_hw_model` to the lead-verified measurement Mac's exact
    `sysctl -n hw.model` value. The placeholder refuses model work. Every model
@@ -70,28 +76,50 @@ accepts `reasoning_effort`. Integrate the SMC lane before live R0. Do not run th
 
 4. Read `report.md` and its full `report.json`. Exit 0 means the selected
    checks passed; **`complete_r0: true` requires every check for D**.
-   Both files are updated after each check. Preserve failed/partial attempts.
+   Both files are updated at progress boundaries. Preserve failed/partial attempts.
+   Checkpoint `required` and ladder `fallback` are valid selection outcomes;
+   `decisions_pending_lead_action` must be resolved before R1. Template is
+   diagnostic-only. Inconclusive results prevent R0 completion.
    Local model SHA-256 lists authenticate the observed bytes only, not an HF
    revision. The SMC hook calls
-   `scripts/align_smc_enumerate.py --output DIR --gpu-step` with a 2,400 s timeout
-   for the roughly 1,500 s default step protocol. Exit 0 alone is insufficient:
-   `r0.json` must resolve distinct `s_fast`/`s_slow` sensor keys. Missing output,
-   unresolved selection or an unrecognized schema is inconclusive, never a pass.
-   The exact #658 output schema must be checked when that lane is integrated;
-   its source is absent from this clone's cached refs.
+   `scripts/align_smc_enumerate.py --output DIR --gpu-step --idle-seconds 600
+   --load-seconds 60 --recovery-seconds 600`, with a 2,400 s timeout.
+   #658 (`274fec2cb`) emits schema `joulewise.align_smc_r0.v1` with keys under
+   `response.s_fast`/`response.s_slow`. Exit 0 alone is insufficient; the adapter
+   checks selected keys and 1 Hz / >99% successful slots over at least 600 s.
+   **Current verdict remains inconclusive:** #658 requires slow tau >120 s and
+   tau shorter than the load duration, so the amendment's 60 s step cannot
+   resolve it. The lead must rule on an additional 600 s characterization
+   capture (recommended) or a revised qualification method before live R0.
 
 Interpretation: NLL uses the first 2,049 rendered benign SHADE IDs (2,048 next-token
 targets), ≤3.0 nats/token. Synthetic rewrite tables diagnose templates; **generated**
-transitions decide B7 (≥12 eligible transitions, D any closed-reasoning rewind;
-under Amendment 1). Insufficient transitions are inconclusive. D tries default xhigh,
-medium, low, stopping at the first pass. Episodes use spam/bank, indices 91–92, ≤6 turns/16,384 tokens. Screens admit only full-cap
-turns that fit this total. D envelopes must parse ≥95% with no unsupported-format
-flags. Long decode reaches 40,960 positions, logging
-memory every 256 tokens; failure retries metadata evaluation at simulated
-4,096-token boundaries and decode end. This is a diagnostic mitigation, not a
-production change. Memory uses full context, D floor budget 6,144,
-guess bar 45 decimal GB, no swap growth. Disk needs ≥80 decimal GB free
-after present weights and both offload hash matches (W1 two copies 37.2 GB;
-D windows 52.9 GB). R1 must freeze actual budgets and other slots. The lead
+transitions decide B7 (≥12 eligible transitions; any closed-reasoning rewind).
+Insufficient transitions are inconclusive. Coherence and echo are diagnostics;
+NLL is the load bar. D tries default xhigh, medium, low, stopping at the first
+pass. Episodes use spam/bank, indices 91–92, ≤6 turns/16,384 tokens. Screens
+admit only full-cap turns that fit this total. D envelopes must parse ≥95%
+with no unsupported-format flags. Reasoning quotes are excluded, capped
+incomplete envelopes are reported separately, and tool replies/errors are saved.
+
+Long decode reaches 40,960 positions, calling `mx.synchronize()` before active
+memory samples every 256 tokens. Growth uses the median of slopes over sample
+pairs at least 10k positions apart, excluding the pre-prefill baseline. Actual
+KV-array allocation growth is reported alongside total active-memory growth;
+raw samples remain in JSON. Failure retries metadata evaluation at simulated
+4,096-token boundaries and decode end. `metadata_absent_single_stream` records
+the pinned stack's usual absence of batched metadata. A passing retry that
+evaluated no arrays is inconclusive; it cannot set `metadata_eval_required`.
+Even evaluated-array success needs Stage-3/R1 production-boundary qualification.
+
+Memory uses full context, D floor budget 6,144, guess bar 45 decimal GB, no swap
+growth. Disk retains ≥80 decimal GB free and both offload hash matches.
+Amendment 1 estimates 37.4 GB for two W1 copies and 52.9 GB for D windows.
+The current whole-download total is not a pinned weight-file manifest; the
+lead must authenticate the revision before live qualification.
+R1 must freeze actual budgets and other slots. The lead
 reviews/commits the live record and handles B7, fallbacks, or a stack ruling
 before R1; no live gate is claimed by this implementation lane.
+Amendment 1 A3.6 separately requires #657's recorded native exactness/admission
+before enabling D's checkpoint safety path. Until then use the rebuild fallback;
+this runner's rewrite decision does not waive that gate.

@@ -1,123 +1,80 @@
 # ALIGN R0 desk-check implementation — 2026-11-05
 
-Branch: `lane/2026-11-05-align-r0-desk`, from pilot-9
-`c9a0a39437614176bf4e14ff1565a6e4537328fb`.
-Implementation: `5dd166d82` (`ALIGN R0: add guarded daytime desk checks and fake-backed tests`).
-This report is committed separately as the handoff. No push or merge.
+Original branch: `lane/2026-11-05-align-r0-desk`, implementation `5dd166d82`,
+handoff `49e78e178`. Fix branch: `fix/2026-11-05-pr661-r0`.
+Local commits only; no push or merge. The Fix round section below supersedes
+the original implementation assumptions.
 
 Authority: council commit `219fb151515383cbbcde887d096837a829c67396`,
 `docs/align/council-2026-11-05/FINAL-DESIGN.md`, blob
-`0a802a3097a20c9f4dd5e8823d858302ae596785`, especially §§2.1, 2.2, 2.8.
-Read the repository intake/safety conventions, M0, orchestration, targeted
-decision-log dependency policy, restart sections and queue fences. The explicit
-implementation brief selects this AGENT lane; coordination state remains
-lead-owned and was not edited or registered.
+`0a802a3097a20c9f4dd5e8823d858302ae596785`, especially §§2.1, 2.2, 2.8,
+plus Amendment 1 at `6eb1ff5be31bec330ae5af262c2b4c7601e7755e` (full text
+read with git show): D only; Next dropped, Flash-Next later. Cached refs omit
+this commit and #658, but both were located by enumerating Git object metadata
+and reading commit objects only. No fetch or outside worktree access occurred.
+Intake included AGENTS/CLAUDE, M0, orchestration, targeted decision-log policy,
+restart/stop-card and queue fences. The explicit brief selects this AGENT work.
+Coordination files and kernel tasks remain lead-owned and untouched.
 
-## Delivered
+## Current implementation
 
-- `scripts/align_r0_checks.py`: one unattended CLI with independently selectable
-  checks; incrementally saved JSON and Markdown; exclusive record directories,
-  a per-machine runner lock, per-check deadlines and nonzero failure/refusal exits.
-- `joulewise/align/r0.py`: fixed short-prompt/NLL/tool round trip, synthetic and
-  generated rewrite counts, generated-only B7 decision, D effort/N cap ladders,
-  envelope parse census, long-decode and memory decision bars, Markdown tables.
-- `joulewise/align/r0_mlx.py`: offline lazy backend using the production endpoint,
-  native generation/sampler and `EpisodePromptCache`. No pinned implementation
-  was changed. Full-context probes record MLX active/peak memory; #1632 retries
-  evaluate recurrent metadata at simulated boundaries. Stack/model pins are fixed.
-- `joulewise/align/r0_host.py`: shared agent-identity/custody census and daemon
-  helper reuse, additional hand-run chain census, latched refusals, explicit-root
-  file inventories, offload hash comparisons, disk figures, pmset/device probes,
-  and an optional call to the SMC lane's script. Census runs before model work,
-  between checks and at up to 15-second intervals during yielded decode tokens.
-- `docs/align/r0_desk_runbook.md` and `r0_desk.example.json`: one-page commands,
-  configuration, output interpretation and live dependencies.
-- `tests/align/test_r0_checks.py`, `test_r0_host.py`, `test_r0_mlx.py`: fake tasks,
-  transport/census, runtime/cache and array APIs. All fake reports identify the
-  injected backend and cannot set `complete_r0` true.
+- Guarded offline CLI with exclusive outputs, per-machine lock, independent
+  checks, per-attempt/episode/turn deadlines, incremental JSON/Markdown and
+  retained partial evidence. Native computation can delay Python signal delivery.
+- Stage-1 B1/B2 imported from `d01288e25`; R0 uses the workload's structured
+  assistant history. Optional effort passes through the production endpoint.
+- D-only load/NLL, diagnostic coherence/echo, template diagnostics, generated
+  B7 decision, effort ladder, visible-envelope census, long decode and memory.
+  `required`/`fallback` are decisions needing lead action; errors/inconclusive
+  evidence prevent completion. Synthetic/injected evidence cannot complete R0.
+- Synchronized active-memory samples, robust median long-span growth slope and
+  separate actual KV-array allocation slope. A retry counts evaluated metadata
+  arrays; absent single-stream metadata does not demonstrate a #1632 mitigation.
+- Default/environment/config custody roots, fail-closed missing roots, installed
+  or loaded night-agent detection, latched process/custody refusals, pinned host
+  model and 128 GiB minimum before loading. All census tests use synthetic roots.
+- Inventories/offload hashes and free-space gates. Exact remote revision/weight
+  identity remains unverified; see G9's disposition. Disk also hashes the 30B
+  anchor and reports the amended 37.4 GB W1 estimate. The SMC adapter uses the
+  actual #658 receipt schema and the required 60 s step. A verified source/spec
+  conflict prevents SMC qualification pending a lead ruling (G7 below).
 
-No models were loaded here. No network, real measurement data, B5 pipeline,
-SMC hardware enumeration, production census or full suite was run. All testing
-used tiny, generated local inputs. The existing endpoint regression module also
-uses synthetic native streams and generated bundles.
+No native models, hardware enumeration, real custody or measurement data were
+read. No network, block-5 pipeline or full suite ran. Controller, monitor, SMC
+reader and pinned MLX runtime remain unchanged. Imported template fixtures are
+code assets; no Flash-Next model is enabled or loaded.
 
-## Verification
+## Original verification (before this fix round)
 
-Run separately, never concurrently:
+The original 40-test total comprised **31 new R0 tests** (17 checks, 9 host,
+5 shim) and **9 pre-existing endpoint tests**. It did not mean 40 new R0 tests.
+The original modules passed separately, with the endpoint module taking
+24.328 s. Compileall, CLI help and diff whitespace checks also passed then.
+Final fix-round commands/results are recorded below, separately from this
+historical count.
 
-| Command | Final result |
-|---|---|
-| `python3.13 -B -m unittest tests.align.test_r0_checks` | 17 passed |
-| `python3.13 -B -m unittest tests.align.test_r0_host` | 9 passed |
-| `python3.13 -B -m unittest tests.align.test_r0_mlx` | 5 passed |
-| `python3.13 -B -m unittest tests.align.test_apple_endpoint` | 9 passed (24.328 s) |
-| `python3.13 -B -m compileall -q joulewise/align/r0*.py scripts/align_r0_checks.py tests/align/test_r0*.py` | passed |
-| `python3.13 -B scripts/align_r0_checks.py --help` | passed; no probes or model imports |
-| `git diff --cached --check` | passed before implementation commit |
+At review time, **CI was not green**: shard 12 failed in
+`b6.test_cold_pass_fixes`, with other shards still running. The executing review
+reports the same failure on #658 and #660; that is review-provided base-triage
+information, not a failure reverified here. No network/CI checks were performed
+in this fix session. The lead must obtain green CI or adjudicate the base
+failure before merge. No local test result in this report certifies CI.
 
-40 final passing targeted tests; total test time across development reruns was
-well below 20 minutes. Full-suite omission follows the user's explicit long-job
-constraint. Intermediate tests/review caught a pinned runtime cleanup-signature
-mismatch and the schema's positive `warmup_runs` requirement; both were fixed.
-One intermediate test had misplaced assertions/NameError; corrected before the
-final passing runs. The config's `warmup_runs=1` satisfies its schema; no controller
-warmup or telemetry campaign is launched by these desk scripts.
+## Native and integration gates
 
-## Choices, uncertainty and live blockers
+All native/hardware conclusions remain **PROVISIONAL / UNMEASURED**.
+On the pinned Metal host, outside this sandbox, the lead must run:
 
-1. **Stage 1 is absent at this base.** The runner checks for B2's endpoint
-   constructor fields and reports missing integration before loading. B1 is
-   exercised through real endpoint tool parsing, not duplicated here. These
-   fake tests do not certify real Qwen templates or the future Stage-1 API.
-2. **SMC hook interface is an integration assumption.** The thermal lane's remote
-   ref was not present in this clone. The hook expects
-   `scripts/align_smc_enumerate.py --output DIR`; absent is `unavailable`, bad exit
-   is failure. Confirm/adapt that invocation against the landed lane before the
-   live session. No sensor enumeration was duplicated.
-3. **Where the design is silent:** use the first 2,049 rendered benign spam SHADE
-   IDs for 2,048 teacher-forced NLL targets (fail if too short); inspect exact
-   prompt+generated ID prefixes; run 12 dedicated generated echo-tool transitions
-   separately from synthetic renderings; require at least 12 generated eligible
-   transitions for either model to waive B7. D excludes unclosed-reasoning
-   transitions. This N sample floor is conservative; no synthetic result can
-   waive the checkpoint. Synthetic rendering success is not a zero-rewrite bar.
-4. Ladder screens keep the 16,384-token ceiling by admitting only full-cap turns
-   that fit, avoiding a shortened final turn that could distort cap fractions.
-   SHADE tool exceptions return error messages to the model as production does;
-   the deterministic echo round trip is strict. Task resets get indices 91/92;
-   generation gets the council seed law. No capability judge/monitor is invoked.
-5. Memory uses the council's budget floors (N 8,192, D 6,144), not an inferred R1
-   budget. Input IDs are valid-vocabulary repeated neutral text, with prompt plus
-   forced decode exactly 40,960. Peak bars use decimal GB; they remain council
-   guesses. No live peak, swap, throughput, effort choice or quantization choice
-   is asserted. The fixed-ID stress uses greedy EOS-suppressed native decode.
-6. #1632 mitigation is diagnostic only: evaluation every 4,096 decoded tokens and
-   at decode end. A passing retest says evaluation is required, not that production
-   boundaries have been qualified. R1/Stage 3 must implement and verify it. Any
-   failed retest remains screen-only pending a separate stack-change ruling.
-7. Disk inventories require materialized regular-file roots, reject symlinks and
-   restricted subdirectories, and fail unreadable walks. Source manifests must
-   precede offload and be retained outside the source tree. No copy/deletion or
-   revision authentication is attempted. Local hashes document observed bytes;
-   a configured HF revision is not independent evidence of that revision.
-8. Host readiness records AC and both modern `powermode` and legacy
-   `lowpowermode` forms. It does not replace R1 lever adoption or arm readiness.
-   The census is a snapshot guard, not mutual exclusion against another program
-   starting later; long native load/prefill calls can only observe refusal when
-   Python regains control. Do not start agents/chains during the desk run.
+- `python -B -m unittest tests.align.test_r0_mlx_native`
+- `python -B -m unittest tests.align.test_xml_tool_calls` with optional Jinja2
+  available, so the seven real-template tests actually execute.
 
-No ruling question is needed to finish this implementation. Live qualification
-and the Stage-1/SMC integration interfaces remain open, explicitly unverified.
-The lead's next exact step is to integrate the reviewed Stage-1 and SMC lanes,
-confirm the SMC CLI, configure explicit local paths and existing offload manifests,
-then run the full runbook on the measurement Mac after all agents/chains exit.
-Review and commit that live record; resolve any required B7/fallback before R1.
-
-`RUN_STATE.md`, `TASK_QUEUE.md`, `docs/process/state_kernel.json` and
-`tests/test_gen_state.py` are untouched. Controller, monitor, SMC reader and
-pinned MLX runtime are untouched. All native/hardware conclusions remain
-**PROVISIONAL / UNMEASURED**. This implementation has not received the council's
-independent executing review or cold science review.
+The native test uses random tiny hybrid weights, a local synthetic vocabulary,
+real stream_generate, runtime generation and EpisodePromptCache; it downloads
+nothing. It was written but cannot be validated here (MLX absent). It does not
+project tiny-model allocator behavior to D scale. After the SMC ruling, lane
+integration and reviewed model pins, perform live R0 only from a clean measurement-Mac
+Terminal with all agents closed and no window armed. R1 remains separate.
 
 ## Fix round
 
@@ -191,9 +148,12 @@ observed failing before its fix; final commit mapping and checks follow below.
 - A1 / binding amendment: active pins, accepted config, CLI defaults and R0
   completion now require D only. Qwen3-Next cannot be requested or loaded through
   this CLI; Flash-Next is not added. Regression fails before/passes after. The
-  cached council ref lacks `FINAL-DESIGN-AMENDMENT-1.md`; no network is allowed,
-  so this applies the user's explicit amendment summary. Exact amendment text
-  and revised disk/member arithmetic remain unverified pending the lead's ref.
+  amendment was subsequently located at `6eb1ff5be` in local Git objects and
+  read in full. Added the A5 30B anchor inventory (`anchor_source`) and A1's
+  37.4 GB two-copy W1 figure; the disk regression fails before/passes after.
+  No N download field remains. #657's recorded native-exactness/admission gate
+  remains lead-owned before enabling the kit safety path; zero rewrites do not
+  waive it. This runner does not certify that separate gate.
 
 - G9 / LOW model bytes and host identity: all model subsets now require at
   least 128 GiB and an exact hw.model match to the lead-supplied
@@ -208,13 +168,104 @@ observed failing before its fix; final commit mapping and checks follow below.
   manifest/weight-total pin before live qualification. Existing file hashes and
   byte differences remain diagnostics, not a claim of revision authentication.
 
-- G7 / MEDIUM idle-only/exit-code-only SMC: request `--gpu-step`, allow 2,400 s
-  for the roughly 1,500 s protocol, and require resolved distinct s_fast/s_slow
-  values from r0.json. Missing, malformed or unrecognized receipt schemas are
-  inconclusive; exit 0 cannot certify thermometry. Regression fails before and
-  passes after for no receipt, two selected keys and unresolved slow key.
-  **Integration uncertainty:** #658 exists per the review, but neither its source
-  nor its ref is present locally. The adapter currently reads top-level
-  s_fast/s_slow keys named by the review. The exact receipt nesting/types and
-  step CLI remain to be checked against #658 before live use; unknown shapes
-  fail closed. Requested its local commit from the lead; no network fetch ran.
+- G7 / MEDIUM idle-only/exit-code-only SMC: source #658 was found at
+  `274fec2cb2fcc301798c91140e51c244c2469988` and inspected without running it.
+  The adapter uses `response.s_fast`/`response.s_slow`, checks receipt schema,
+  GPU-step provenance, distinct temperature keys and >99% successful 1 Hz slots
+  over at least 600 s. It invokes the amendment's 60 s load with 600 s idle and
+  recovery, and allows 2,400 s. Missing/malformed/unresolved evidence cannot
+  pass. The regression failed before and passes after, including actual-schema
+  parsing. **Qualification is intentionally inconclusive pending the ruling
+  below**; no idle-only or exit-code-only result can complete R0.
+
+- G10 / LOW report/PR-body evidence: corrected the 31+9 original count, removed
+  the false assertion that a no-metadata retry demonstrates mitigation, and
+  distinguished locally missing refs from the actual existence of #658. CI is
+  explicitly unverified/red at review time, with the b6 base failure attributed
+  to the review rather than independently confirmed. Two documentation
+  regressions failed before/pass after. No remote PR body was edited (no
+  network); the lead can copy this corrected handoff into it.
+
+### Finding-to-commit map
+
+| Review finding | Group / local commit | Disposition |
+|---|---|---|
+| HIGH endpoint API/history | G1 `203dbadbd` | Fixed; imported #659 and added effort/history parity regression |
+| HIGH memory transients | G2 `3b9ff0c56` | Fixed sampling/trend; D-scale projection explicitly refuted |
+| HIGH custody fail-open | G3 `901ab540f` | Fixed default/extras/missing-root admission |
+| MEDIUM metadata no-op | G2 `3b9ff0c56` | Fixed accounting; empty retry cannot claim mitigation |
+| MEDIUM deadline/partial loss | G4 `38908cad6` | Fixed incremental receipts and separate deadlines |
+| MEDIUM armed windows | G5 `c16c9de46` | Fixed plist/launchctl census |
+| MEDIUM envelope denominator | G6 `81d2cad0f` | Fixed visible/capped-envelope accounting |
+| MEDIUM SMC | G7 `ac0ac5fb7` | Known hook defects fixed; qualification blocked by source/spec conflict below |
+| LOW missing tool outputs | G6 `81d2cad0f` | Fixed tool reply/error evidence |
+| LOW load/status/template semantics | G8 `ebc632382` | Fixed diagnostic/decision outcomes |
+| LOW bytes/host identity | G9 `32545aba4` | Host fixed; exact weight/revision pin deferred as explained above |
+| LOW report accuracy | G10, this documentation commit | Corrected with regression and explicit CI/native limits |
+| Binding Amendment 1 | `99b2a5929`, `98786be0e` | D only, anchor inventory, amended disk estimate and authority receipt |
+
+### NEEDS_RULING — SMC step duration versus slow-class fit
+
+**Question:** may R0 run the required 60 s readability step plus a separate
+600 s characterization step before accepting the selected classes?
+
+**Evidence:** Amendment 1 A5.3 requires idle plus a 60 s load step and readable
+die/heatsink classes at 1 Hz with <1% errors over 10 min. #658's `rank()` requires
+`tau < min(load_duration, recovery_duration)`; `select_keys()` requires
+`tau > 120` for S_slow. Thus a 60 s load can never resolve its slow class.
+The earlier 600 s default would silently change the binding amendment.
+
+**Options considered:** (1) required 60 s readability capture plus a separate
+600 s characterization capture; (2) leave R0 inconclusive until the lead revises
+#658's class-fitting/qualification rule. **Recommendation:** option 1, with the
+lead confirming the design's die/slow class bars. No extra capture route was
+implemented without that ruling. **Blocked work:** a passing SMC verdict and
+complete live R0; no hardware work has been attempted. The asynchronous question
+remains pending; elapsed time is not approval.
+
+### Changed files
+
+- Production: `joulewise/align/r0.py`, `r0_host.py`, `r0_mlx.py`, `r0_runner.py`;
+  `joulewise/align/apple/endpoint.py`, `workload.py`, `xml_tool_calls.py`.
+- Tests: `tests/align/test_r0_checks.py`, `test_r0_host.py`, `test_r0_mlx.py`,
+  `test_r0_mlx_native.py`, `test_r0_integration.py`, `test_r0_progress.py`,
+  `test_r0_documentation.py`, `test_xml_tool_calls.py`; six imported Stage-1
+  JSON/template/provenance fixtures under `tests/align/fixtures/`.
+- Docs/config: `docs/align/r0_desk_runbook.md`, `r0_desk.example.json`, this report.
+
+Coordination state, `tests/test_gen_state.py`, raw evidence and live run bundles
+remain untouched. No sub-agents, external consults, network, push or merge.
+
+### Final verification
+
+Each test module ran separately; none ran concurrently. All touched modules
+were rerun. No full suite or live/native capture ran. Test execution, including
+regression-before-fix runs, stayed well under the ~20-minute budget.
+
+| Command | Result |
+|---|---|
+| `python3.13 -B -m unittest tests.align.test_r0_checks` | 25 passed |
+| `python3.13 -B -m unittest tests.align.test_r0_host` | 14 passed |
+| `python3.13 -B -m unittest tests.align.test_r0_mlx` | 5 passed |
+| `python3.13 -B -m unittest tests.align.test_r0_mlx_native` | 1 skipped: MLX absent; lead must run on Metal |
+| `python3.13 -B -m unittest tests.align.test_r0_integration` | 2 passed |
+| `python3.13 -B -m unittest tests.align.test_r0_progress` | 3 passed |
+| `python3.13 -B -m unittest tests.align.test_r0_documentation` | 2 passed |
+| `python3.13 -B -m unittest tests.align.test_xml_tool_calls` | 13 passed, 7 skipped: optional Jinja2 absent |
+| `python3.13 -B -m unittest tests.align.test_apple_endpoint` | 9 passed, 28.803 s |
+| `python3.13 -B -m unittest tests.align.test_apple_campaign` | 12 passed, 104.146 s |
+| `python3.13 -B -m compileall -q` on the seven changed production modules, R0 CLI and eight touched test modules | passed |
+| `python3.13 -B scripts/align_r0_checks.py --help` | passed; D-only CLI, no probes |
+| `git diff --check` and staged whitespace checks | passed |
+
+Total across the final module runs: **85 passed, 8 skipped** (93 discovered).
+The two pre-existing integration modules are included in that total, separately
+from the 51 passing R0 tests and 13 passing imported XML tests. Passing fakes
+establish control/data-flow behavior; they do not certify model, sensor, memory
+or thermal behavior on hardware.
+
+G10 commit title: `docs(r0): correct review evidence and record fix-round verification`.
+Next exact step: answer the SMC NEEDS_RULING question above. Then implement and
+verify the approved qualification route, supply the deferred authenticated
+weight pin, run the native/template gates, and obtain green CI or adjudicate
+its base failure. Only the lead, with agents closed, may run and commit live R0.
