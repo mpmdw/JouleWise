@@ -1616,6 +1616,9 @@ def _open_paper_input_impl(
     if not runs_root.is_dir():
         raise PaperCustodyRefusal("paper_custody_path_refused")
     try:
+        # TODO A346: select registration per block/role before enabling other
+        # blocks here. All current families require b5/analysis-r2 after release;
+        # see docs/process/freeze_p1_rebind.md (M1).
         repository, head = _mint_git_anchor(require_registered_analysis=True)  # F2; freeze_p1_rebind.md
     except IdentityPinProjectionError as exc:
         raise PaperCustodyRefusal("paper_custody_anchor_unavailable") from exc

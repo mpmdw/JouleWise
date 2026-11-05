@@ -36,6 +36,20 @@ simpler than adding a second registration-tag trust chain, and follows F3's
 existing re-tag/review procedure. Regression tests replay both forgery paths.
 The mint's clean-tree check remains.
 
+M1: after Phase 1 lands, **post-release paper and fill runs must execute
+from a clean `b5/analysis-r2` checkout**, not main. This applies to
+`build_results_fill_input.py`, `issue_reported_energy.py`,
+`produce_b5_disclosures.py`, `compare_b5_recompute.py`, and `open_paper_input`
+for every currently supported custody family. Main and unregistered block
+branches refuse `analysis_descendant_unruled`. The F3 successor procedure
+above is required for any later analysis checkout.
+
+TODO A346: select the registration by block or supply role before extending
+this custody seam to block 6/BYTES. Those role contracts are not yet wired;
+this fix does not invent mappings. `require_origin_main=True` now honors its
+name by requiring positive containment; it is independent of the registered
+analysis gate, which paper custody requests instead (F2).
+
 ## Rebind scope
 
 - `joulewise/identity_pins.py`: F2 release identity replaces remote-main

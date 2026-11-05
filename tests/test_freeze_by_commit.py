@@ -209,6 +209,11 @@ class CommitFreezeTests(unittest.TestCase):
         with mock.patch.object(pins, "_load_mint_module", return_value=module), \
              mock.patch.object(f, "load_registration", return_value=self.registration):
             self.assertEqual(pins._mint_git_anchor(require_registered_analysis=True), (self.repo, self.base))
+            for containment in (None, False):
+                module._actual_v2_git_state = lambda: (self.base, containment)
+                with self.assertRaises(pins.IdentityPinProjectionError):
+                    pins._mint_git_anchor(require_origin_main=True)
+            module._actual_v2_git_state = lambda: (self.base, True)
             self.assertEqual(pins._mint_git_anchor(require_origin_main=True), (self.repo, self.base))
             self.write("estimator.py", "on main alone\n")
             child = self.commit("unruled main change")
