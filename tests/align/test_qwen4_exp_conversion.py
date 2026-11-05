@@ -64,7 +64,7 @@ class TestConversion(unittest.TestCase):
     def test_save_convert_inventory_manifest_and_weight_values(self):
         import torch
         from safetensors import safe_open
-        from scripts.align_convert_qwen4_exp import convert, verify_manifest
+        from scripts.align_convert_qwen4_exp import convert, verify_manifest, load_verified_model
         from tests.align.qwen4_exp_reference import reference_model
         model = reference_model()
         with tempfile.TemporaryDirectory() as d:
@@ -74,8 +74,11 @@ class TestConversion(unittest.TestCase):
             output = root / "mlx"
             manifest = convert(source, output, "fp32", 32, "fp32")
             self.assertEqual(verify_manifest(output), manifest)
+            with self.assertRaisesRegex(ValueError, "Manifest pin mismatch"):
+                load_verified_model(output, "0" * 64)
             config = json.loads((output / "config.json").read_text())
             self.assertEqual(config["model_file"], "qwen4_exp.py")
+            self.assertEqual(config["max_position_embeddings"], 40960)
             self.assertEqual(config["ple_tables"]["1"]["rows"], 88)
             index = json.loads((output / "model.safetensors.index.json").read_text())["weight_map"]
             expected = parameter_shapes(model.config.to_dict())

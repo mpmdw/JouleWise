@@ -32,7 +32,7 @@ def mlx_checks(directory, dtype, quantized=False):
     import mlx.core as mx
     from mlx_lm.utils import load_model
     from mlx_lm.models import cache as api
-    from scripts.align_convert_qwen4_exp import convert, verify_manifest
+    from scripts.align_convert_qwen4_exp import convert, sha256, load_verified_model
     directory = Path(directory)
     gold = np.load(directory / "gold.npz")
     ids = gold["ids"].astype(np.int32)
@@ -40,8 +40,7 @@ def mlx_checks(directory, dtype, quantized=False):
     if quantized:
         path = directory / "mixed"
         convert(directory / "hf", path, "mixed", 32, "q4")
-    verify_manifest(path)
-    model, _ = load_model(path, strict=True)
+    model, _ = load_verified_model(path, sha256(path / "manifest.json"))
     model.eval()
     evidence = dict(dtype=dtype, quantized=quantized, checks=[])
     tol = TOLERANCES[dtype]

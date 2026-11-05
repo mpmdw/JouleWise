@@ -170,9 +170,13 @@ def tensor_chunks(key, entries, max_bytes=32 * 1024 * 1024):
             source._mmap.close()
 
 
-def verify_manifest(directory):
+def verify_manifest(directory, expected_manifest_sha256=None):
     directory = Path(directory)
+    if expected_manifest_sha256 is not None and sha256(directory / "manifest.json") != expected_manifest_sha256:
+        raise ValueError("Manifest pin mismatch")
     manifest = json.loads((directory / "manifest.json").read_text())
+    if any(Path(name).name != name or name in (".", "..") for name in manifest["files"]):
+        raise ValueError("Manifest payload names must be flat filenames")
     actual = {p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file()}
     if actual != set(manifest["files"]) | {"manifest.json"}:
         raise ValueError("Manifest file inventory mismatch")
@@ -180,6 +184,24 @@ def verify_manifest(directory):
         if sha256(directory / name) != expected:
             raise ValueError(f"Manifest SHA256 mismatch: {name}")
     return manifest
+
+
+def load_verified_model(directory, expected_manifest_sha256, lazy=False):
+    """Verify the externally pinned manifest before custom Python execution."""
+    manifest = verify_manifest(directory, expected_manifest_sha256)
+    import importlib.metadata
+    for package, version in (("mlx", "0.31.2"), ("mlx-lm", "0.31.3")):
+        if importlib.metadata.version(package) != version:
+            raise ValueError(f"Pinned stack mismatch: {package}")
+    if manifest["format"] != "joulewise-qwen4-exp-v1":
+        raise ValueError("Unsupported artifact format")
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        from mlx_lm.utils import load_model
+        return load_model(Path(directory), lazy=lazy, strict=True)
+    finally:
+        sys.dont_write_bytecode = previous
 
 
 def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage="q4"):
@@ -257,7 +279,7 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage="q4"
             weight_map[tensor] = name
     config_out = dict(model_type="qwen4_exp", architectures=["Model"], model_file="qwen4_exp.py",
                       text_config=c, jw_format="hf-zero-centered-v1", ple_tables=descriptors,
-                      jw_max_prefill_tokens=64, jw_context_cap=40960,
+                      jw_max_prefill_tokens=64, jw_context_cap=40960, max_position_embeddings=40960,
                       eos_token_id=c.get("eos_token_id"), tie_word_embeddings=c.get("tie_word_embeddings", False))
     if any(quantizers.values()):
         config_out["quantization"] = quantization

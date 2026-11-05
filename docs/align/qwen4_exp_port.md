@@ -77,3 +77,222 @@ python3 -B -m joulewise.align.models.qwen4_exp_memory tests/align/fixtures/qwen4
 Memory tests: `python3 -B -m unittest tests.align.test_qwen4_exp_memory` —
 2 PASS. Includes the actual kit cap, official expert/PLE parameter counts,
 mixed budget and context/chunk/bit-width tradeoffs.
+
+## Architecture and authority
+
+The authority is the supplied official Qwen/Hugging Face Transformers
+reference, not an existing MLX checkpoint. Source SHA256 pins at intake:
+
+| Local source | SHA256 |
+|---|---|
+| `transformers-qwen4_exp/modeling_qwen4_exp.py` | `3424f1b7a7e4d690c87a43758d791f37cede3fcb7e75f52e80ca498f9b84276e` |
+| `transformers-qwen4_exp/configuration_qwen4_exp.py` | `bb1d71db625fb50d1bf86589032edaa9c0f00f8ba2b9f1d06946aa0a8eeae246` |
+| `hf-flashnext/config.json` | `889658f2508e8c61d409b02e70e0d78d8d4452ec65aaafbe129805d213d2e74b` |
+
+The runtime consists of two owned files: `qwen4_exp.py` and
+`qwen4_exp_tables.py`. Conversion copies and hashes both. No imports from the
+community port, Transformers or mlx-vlm occur at runtime. NumPy handles host
+integer hashing and file rows; the only model backend dependencies are the
+pinned MLX/MLX-LM libraries. The package initializer imports no backend, so
+ordinary JouleWise and bare-Python CI remain usable.
+
+| Component | Reference derivation and implementation |
+|---|---|
+| DeltaNet | Official lines 389-617: normalized q/k, fp32 recurrent delta update, decay `exp(-exp(A_log) * softplus(a + dt_bias))`, sigmoid beta, depthwise causal conv and gated RMSNorm. Calls the pinned native gated-delta kernel with fp32 q/k/v and state, preserving the exact sum-plus-epsilon normalization. Small key dimensions use native ops. |
+| QSA | Lines 663-889: pool complete blocks of visible raw keys, normalize, rotate at block starts, score by summed positive q·k over index heads, choose budget/compression blocks and append the query's partial tail. Retains raw index keys in cache. Selected K/V are gathered per query for SDPA rather than building dense attention scores over the entire history. |
+| MoE | Lines 891-988: fp32 softmax router, normalized top-10 routing, 512 routed SwiGLU experts plus one sigmoid-gated shared expert. Pinned SwitchGLU stores separate gate/up/down tensors; conversion splits the fused gate/up on its penultimate axis. |
+| Hyper connections | Lines 990-1020: grouped RMSNorm over four streams, low-rank sigmoid mixing, stream mean and sigmoid block injection; final mixer returns one text stream. |
+| PLE | Lines 1028-1245: exact SplitMix64 multipliers, per-head prime vocabularies, XOR hashing with EOS resets, per-stream key/query gates and dilated depthwise convolution. Hash arithmetic stays CPU int64. |
+
+The unmerged community port was read only as a second opinion (SHA256
+`d6470a2131a64ff37024dfffd2b5bc8c3f4db625f0f3b1ceec7fe346852c1a87`).
+Ideas cross-checked there: per-row block alignment / query-local tails
+(`qwen4_exp.py:252-344`, re-derived from official 716-750); indexer-aware cache
+trim (901-925, re-derived from official cached raw-key use and pinned
+`KVCache.trim`); checking reconstructed hash constants (1173-1190, re-derived
+from official 1035-1100). Host mmap offload, streamed safetensors conversion,
+the strict tensor inventory and sparse K/V gather are owned designs. No
+community module was imported, executed or copied wholesale.
+
+## Deliberate differences and limits
+
+- **Text only.** Official `Qwen4ExpForCausalLM` lines 1568-1664 uses no MTP
+  module. Ordinary next-token logits therefore need neither the speculative
+  MTP head nor the vision tower. Their checkpoint keys are explicitly logged
+  as omissions. Image/video inputs and speculative MTP are unsupported.
+- **Norms retain raw HF weights.** Official RMSNorm lines 141-166 computes
+  normalization and `1 + weight` in fp32 before casting. This port does the
+  same. DeltaNet's gated norm remains conventional. There is no fold and no
+  guess about already-folded oMLX/Vontra weights. Only our explicit
+  `hf-zero-centered-v1` artifact representation is accepted.
+- **Padding is explicit initial left padding.** QSA groups begin at the first
+  real token of each row; padding cannot change block RoPE positions. The
+  public call accepts a boolean `attention_mask`. Holes, right padding and
+  padding introduced after cached tokens fail explicitly. All-padding rows
+  have their attention output discarded. Automatic BatchGenerator cache
+  merge is unsupported and raises rather than silently losing index state.
+- **Cache ownership.** Indexed layers subclass native KVCache; serialized
+  state is K, V, raw index keys, validity. Trimming crops all four together.
+  Recurrent layers subclass ArraysCache: convolution history, fp32 recurrence
+  `[B,Hv,Dv,Dk]` (native orientation, transpose of the official state), PLE
+  convolution history and int32 token history, plus offset metadata. Native
+  save/load sees registered class names. Recurrent state cannot be trimmed;
+  whole-hybrid rewrites rebuild or restore a snapshot. Indexer-dropping cache
+  quantization is explicitly refused.
+- **Disk PLE.** HF table shards stream in numeric order into a row-major
+  bf16/fp32 or row-affine q4/q8 table. Advanced NumPy indexing copies unique
+  gathered rows; only those rows are dequantized and transferred to MLX. The
+  mapped table never appears in `model.parameters()`. Large construction
+  without a disk descriptor is refused. q4 uses low nibble first, one fp32
+  scale and bias per row; this file format is independent of MLX weight
+  packing. mmap relies on normal OS page-cache eviction.
+- **Bounded single-stream operation.** Converted configurations expose the
+  40,960 runtime position limit at the top level, and enforce 64-token chunks
+  and the consumed-token cap. Batch-1 is the memory budget. Explicit padded
+  batches are for correctness testing and require their own memory estimate.
+  Existing ALIGN runtime warmup currently omits `prefill_step_size`; it must
+  be threaded through warmup and stream options before this artifact can be
+  admitted to a campaign. Anchor configuration and runtime code were not
+  changed in this task.
+
+## Conversion and integrity
+
+`scripts/align_convert_qwen4_exp.py` reads safetensors headers and at most
+about 32 MiB of fp32 row data per source slice (plus packed/copy buffers).
+It never constructs the full HF or MLX model. It accepts both the release's
+fused expert layout and `save_pretrained` per-expert tensors, nested
+`model.language_model` prefixes, monolithic PLE and `shard_N` PLE tensors.
+It validates all expected shapes and every text tensor, including indexer
+weights/norms and saved hash constants, before creating output.
+
+Supported profiles: `fp32`, `bf16`, `3`, `4`, `6`, `8`, `mixed`. Mixed uses
+q4 experts and q8 eligible other leaves; indexer, DeltaNet, norms, routers
+and convolutions remain bf16. Unsupported narrow quantization groups retain
+source precision. No parent Attention module is replaced by a quantized
+module. Indexer retention is enforced structurally, not inferred from an
+apparently coherent generation.
+
+Each output safetensors file holds one target tensor and its quantization
+metadata if applicable, written by slices. The index maps each tensor to its
+file. The completion manifest records input hashes, output payload hashes,
+stack pins, profile, omissions and norm representation. A failure leaves an
+incomplete directory without a completion manifest. The output directory
+must be new; never overwrite an existing converted artifact.
+
+The manifest hashes every converter output **except itself**; the CLI prints
+its SHA256 to pin in the lead's artifact ledger. Use
+`load_verified_model(directory, externally_recorded_manifest_sha256)` from
+the converter module to verify the externally pinned manifest, complete file
+inventory and every payload hash **before** executing custom Python. It also
+checks stack versions and suppresses bytecode-cache writes. Merely calling
+upstream `mlx_lm.load` does not perform these integrity checks. Keep artifacts
+immutable and launch with `PYTHONDONTWRITEBYTECODE=1`.
+
+## Evidence in this clone
+
+All checks are synthetic, offline and serial. No full suite, study pipeline,
+real measurement data, restricted directory or model checkpoint was read.
+
+| Check | Result |
+|---|---|
+| Row encoding/gathering, EOS/chunk hashing and bounds | 3 PASS |
+| Tiny HF save/convert, fused/per-expert names, bf16 indexer retention, omitted towers, missing-indexer refusal, manifest tampering | 3 PASS |
+| Component memory model and actual kit cap | 2 PASS |
+| Official reference fp32 and bf16 prefill vs stepwise | 2 PASS |
+| **MLX vs HF fp32/bf16 and mixed quantization** | **3 SKIPPED: sandbox has no Metal device** |
+
+The gold fixture has 194,564 parameters, two layer types, short sparse QSA
+budget overflow, EOS boundaries, nonzero PLE convolution and nonzero norm
+weights. HF self-consistency max absolute error is 7.45058e-08 in fp32 and
+0.0 in bf16. These values say nothing about the still-unrun MLX worker.
+
+Prospective acceptance bounds: fp32 atol 2e-5 / rtol 2e-4; bf16 atol .004 /
+rtol .02; mixed vs bf16 atol .04 / rtol .15 **and RMSE <= .012**. The MLX
+worker checks full prefill and stepwise gold logits, internal chunk/step
+parity, causality, left padding and cached continuation, attention trim and
+re-prefill, native recurrent snapshot/restore, and quantized output. Any
+failure must be investigated; these tolerances have not been empirically
+validated on MLX and must not be silently widened.
+
+Synthetic mmap evidence (warm files, separate fresh processes, 128 token
+lookups, 16 rows/token; RSS is process high-water, not GPU residency):
+
+| Table / mode | Peak RSS before → after (bytes) | Median / p95 lookup | Logical bytes/token |
+|---|---:|---:|---:|
+| 128 MiB bf16, dim 256, mmap | 38,617,088 → 70,270,976 | 44.646 / 55.342 µs | 8,192 |
+| Same, eager mapped + copy | 36,028,416 → 307,101,696 | 7.334 / 9.142 µs | 8,192 |
+| 32 MiB q4, dim 160, mmap | 38,600,704 → 62,390,272 | 68.126 / 161.798 µs | 1,408 |
+| Same q4, eager copy, identical row decoder | 37,961,728 → 105,168,896 | 38.896 / 51.081 µs | 1,408 |
+
+The older bf16 eager timing used direct gathering without deduplication;
+the q4 comparison uses identical lookup/dequantization and equal checksums.
+Creation warmed the files. Logical row bytes are not physical disk reads;
+cold real-model latency and SSD traffic remain unmeasured.
+
+## Target-Mac plan and release gates
+
+1. **First run the tiny gold gate on a device-capable Mac**, with the exact
+   pinned MLX interpreter and a separate Torch/Transformers interpreter:
+
+   ```sh
+   JW_QWEN_REF_PYTHON=/private/tmp/jwsol/venv-ref/bin/python \
+   JW_QWEN_MLX_PYTHON=/private/tmp/jwsol/venv-mlx/bin/python \
+   /private/tmp/jwsol/venv-ref/bin/python -B -m unittest tests.align.test_qwen4_exp_parity
+   ```
+
+   Required result: all five tests pass, **zero skips**, with worker error
+   logs retained. The environment-specific paths are examples from this
+   session; use existing appropriate venvs on the target, without modifying
+   the protected venvs. A fresh reviewer must audit implementation and tests
+   before release; no independent review was run in this offline task.
+
+2. Ed obtains the official HF bf16 checkpoint/tokenizer at an **immutable HF
+   revision**, separately authorizing any network transfer. That revision is
+   not supplied in this brief and remains to be resolved. Preserve full
+   input hashes. Budget roughly half a TB of disk plus margin for source and
+   converted copies; do not attempt real conversion/inference on this 24 GB
+   laptop. Download/conversion are preparation, never part of an energy run.
+
+3. On the 128 GB target, in the pinned venv, convert a local mirror:
+
+   ```sh
+   python -B scripts/align_convert_qwen4_exp.py artifacts/qwen4-exp-hf artifacts/qwen4-exp-mixed --profile mixed --group-size 64 --ple-storage q4
+   ```
+
+   Record the printed manifest SHA256, owned-module hashes, HF revision and
+   checkpoint hashes in the lead's model provenance. Validate the manifest
+   before loading. Also record the tokenizer and chat-template hashes. No
+   config or artifact can change after admission without new pins/tests.
+
+4. Wire `prefill_step_size=64` through model-specific warmup and stream
+   options, preserving anchor settings. Use batch 1 and the same 40,960-token
+   consumed-context cap. Run the actual endpoint/prompt-cache lifecycle,
+   including append, EOS, rewrite fallback and snapshot restoration, before
+   selecting this artifact for ALIGN. The current default warmup needs this
+   integration step; a successful standalone load is insufficient.
+
+5. Check real-model English/code coherence and greedy repeatability using
+   the official chat template. For NLL, freeze a non-study, public text
+   fixture and token IDs, compare a few short windows against the official
+   bf16 reference, and report mean/max logit errors, mean NLL and NLL delta.
+   The whole 354+ GB bf16 model cannot fit on the 128 GB Mac: use a verified
+   layer-wise CPU/disk-offload reference on short windows, or a separate
+   sufficiently large reference host. Do not use a second quantization as
+   the gold reference. Full-model q4 error/NLL acceptance must be agreed and
+   recorded before campaign admission; the tiny random tolerance is not an
+   empirical real-model quality bound.
+
+6. Measure cold and warm PLE lookup latency/physical reads, prefill tok/s,
+   decode tok/s, MLX peak allocated/cache memory, process RSS and total
+   memory pressure. Exercise short prompts, chunked 40,960 context, and
+   checkpoint/restore. Observe swap-used and swap-in/out counters throughout
+   admission and the eventual measurement. File-backed page-ins are expected
+   from PLE and are different from swap. Require zero swap use/activity and
+   sufficient OS/monitor headroom; abort on swap or memory pressure. If
+   reserve adequacy or quality fails, re-plan precision/chunking and re-pin;
+   do not continue an energy measurement with swapping.
+
+7. The lead owns the final real-model/peak-memory gate and a clean
+   agent-free measurement window. Do not start quiet-Mac collection from an
+   agent session. Cross-backend parity, real-model coherence/NLL, memory
+   peak, SSD behavior, integration and tok/s are all **OPEN** here.

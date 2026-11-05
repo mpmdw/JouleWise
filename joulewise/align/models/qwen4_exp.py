@@ -4,6 +4,9 @@ Authority: official transformers modeling_qwen4_exp.py. Vision and speculative
 MTP are intentionally absent. Norm weights retain the official zero-centered
 representation; there is no heuristic or irreversible `1 +` conversion.
 """
+# Architecture authority: Qwen Team / Hugging Face, Apache-2.0 reference.
+# This implementation is authored and maintained in JouleWise; the community
+# qwen4_exp module is neither imported nor executed.
 from dataclasses import dataclass, field, fields
 import importlib.util
 from pathlib import Path
@@ -149,6 +152,8 @@ class Qwen4ExpRecurrentCache(ArraysCache):
 
 class Qwen4ExpAttentionCache(KVCache):
     """Native KVCache plus raw QSA keys and token validity, trimmed together."""
+    # Peer cross-check: PR1788 qwen4_exp.py:901-925. Re-derived from official
+    # indexer.update_indexer (line 702) and pinned KVCache.trim, not copied.
     def __init__(self):
         super().__init__()
         self.raw_keys = self.valid = None
@@ -294,6 +299,8 @@ class GatedDeltaNet(nn.Module):
 
 
 class QSAIndexer(nn.Module):
+    # Peer cross-check: PR1788 qwen4_exp.py:252-344. Official lines 716-750
+    # define blocks over each query's visible list and append its own tail.
     def __init__(self, a):
         super().__init__()
         self._args = a

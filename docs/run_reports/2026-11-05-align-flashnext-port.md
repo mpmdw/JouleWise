@@ -125,3 +125,77 @@ Initial budget assertion caught chunk 256 exceeding target; fixed by using
 and enforcing chunk 64, without reducing the explicit runtime reserve.
 `git diff --check` passed. Full-model memory, allocator reserve adequacy,
 file-cache behavior, and swap absence remain target-Mac gates.
+
+## Stage 6 / final handoff
+
+Completed the design/deviation/source derivation document and target-Mac
+admission plan. Added externally pinned manifest verification before custom
+module execution, stack checks, bytecode suppression, and the top-level
+40,960 position limit read by the existing endpoint. Indexer/trim derivation
+comments cite the peer lines and authoritative official rules. No peer code
+was imported or executed. No independent fresh review was available/run;
+that remains a lead-owned pre-release obligation.
+
+Extended the bounded synthetic benchmark to q4 at the actual 160-element
+row width. Command: `/private/tmp/jwsol/venv-ref/bin/python -B
+scripts/align_benchmark_qwen4_ple.py --mib 32 --tokens 128 --storage q4
+--dim 160`. PASS, 1.16 s. 33,554,400-byte file; mmap peak RSS
+38,600,704 → 62,390,272 bytes vs eager 37,961,728 → 105,168,896 bytes.
+Identical decoder/checksum: mmap median/p95 68.1255/161.7984 us, eager
+38.896/51.0813 us, logical bytes/token 1,408. Unique 16-KiB page span
+21,004,288 bytes. Warm file only; no claim of cold physical read latency.
+
+Final serial checks (`REF=/private/tmp/jwsol/venv-ref/bin/python`):
+
+| Command | Result |
+|---|---|
+| `$REF -B -m unittest tests.align.test_qwen4_exp_tables` | 3 PASS, 0.159 s |
+| `OMP_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 $REF -B -m unittest tests.align.test_qwen4_exp_conversion` | 3 PASS, 5.861 s |
+| `python3 -B -m unittest tests.align.test_qwen4_exp_memory` | 2 PASS, 0.012 s |
+| `JW_QWEN_REF_PYTHON=$REF JW_QWEN_MLX_PYTHON=/private/tmp/jwsol/venv-mlx/bin/python $REF -B -m unittest tests.align.test_qwen4_exp_parity` | 2 PASS / 3 SKIP, 12.312 s |
+| `python3 -B -m unittest tests.align.test_pilot3_cache` | 12 PASS, 1.490 s; synthetic existing integration regression only |
+| `python3 -m compileall -q` on the new model directory, two scripts, reference helper and four new test modules | PASS |
+| `git diff --check` | PASS |
+
+A separate `resource.getrusage`-instrumented conversion-module run passed
+all 3 tests (5.109 s), peak process RSS **339,230,720 bytes**, well under the
+2 GB safety bound. No full suite or live job was started. New tests total
+10 passing / 3 skipped; with existing cache regression: 22 passing / 3
+skipped. Explicitly skipped MLX numerical gates are not passing evidence.
+
+Files touched (14):
+
+- `joulewise/align/models/__init__.py`
+- `joulewise/align/models/qwen4_exp.py`
+- `joulewise/align/models/qwen4_exp_tables.py`
+- `joulewise/align/models/qwen4_exp_memory.py`
+- `scripts/align_convert_qwen4_exp.py`
+- `scripts/align_benchmark_qwen4_ple.py`
+- `tests/align/fixtures/qwen4_exp_text_config.json`
+- `tests/align/qwen4_exp_reference.py`
+- `tests/align/test_qwen4_exp_tables.py`
+- `tests/align/test_qwen4_exp_conversion.py`
+- `tests/align/test_qwen4_exp_parity.py`
+- `tests/align/test_qwen4_exp_memory.py`
+- `docs/align/qwen4_exp_port.md`
+- this run report
+
+Final runtime source SHA256:
+`qwen4_exp.py`: `4f3163af0d2dd143d200cc0e69088d84225ccb9c6442708c1a5f36c41dae7ac6`;
+`qwen4_exp_tables.py`: `256465fdee44f039371b01541f15776e8db2274f1aa888eae7bca9ae1a7b83c6`.
+
+Stage commits: `9145fd4ce` architecture; `6c6c44af0` mmap;
+`3f80d5531` conversion; `6599011fe` gold tests; `fa1a417e5` memory;
+stage 6 is the commit containing this final handoff. Local only; no push.
+Coordination paths are unchanged against the base; anchor stack pins and
+runtime code are unchanged.
+
+**Next exact step:** run the documented split-venv parity command on a
+device-capable Mac; require five passes and zero skips, inspect every worker
+metric and fix any failures before real conversion. Then obtain a fresh
+review. Resolve the immutable HF revision, model-specific warmup/stream
+prefill option wiring, real-reference NLL acceptance and reference-host/
+offload strategy before admission. Real-model coherence/NLL, runtime cache
+correctness, q4 conversion, actual memory reserve/peak, page-cache pressure,
+no-swap operation and tok/s remain OPEN. The implementation is reviewable
+but is **not yet demonstrated to run correctly on the pinned MLX stack**.

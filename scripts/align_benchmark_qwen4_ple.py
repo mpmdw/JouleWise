@@ -11,7 +11,7 @@ import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from joulewise.align.models.qwen4_exp_tables import MMapTable, encode_rows
+from joulewise.align.models.qwen4_exp_tables import MMapTable, encode_rows, row_dtype
 
 
 def rss_bytes():
@@ -19,35 +19,34 @@ def rss_bytes():
     return int(value if sys.platform == "darwin" else value * 1024)
 
 
-def worker(path, mode, rows, dim, tokens):
+def worker(path, mode, rows, dim, tokens, storage):
     import numpy as np
     before = rss_bytes()
-    table = MMapTable(path, rows, dim, "bf16")
+    table = MMapTable(path, rows, dim, storage)
+    row_bytes = table.dtype.itemsize
     if mode == "eager":
         eager = np.array(table._map)
         # Ensure materialization; the mmap baseline never scans all rows.
-        checksum = int(eager.sum(dtype=np.uint64))
-    else:
-        checksum = 0
+        # Copy is complete and subsequently uses the same decoding algorithm.
+        table._map._mmap.close()
+        table._map = eager
+    checksum = 0
     loaded = rss_bytes()
     rng = np.random.default_rng(55)
     times, pages = [], set()
     for _ in range(tokens):
         ids = rng.integers(rows, size=(1, 16))
         start = time.perf_counter_ns()
-        if mode == "mmap":
-            result = table.lookup(ids)
-        else:
-            result = (eager[ids].astype(np.uint32) << 16).view(np.float32)
+        result = table.lookup(ids)
         checksum += float(result.sum())
         times.append((time.perf_counter_ns() - start) / 1000)
         for i in ids.ravel():
-            first, last = int(i) * dim * 2, (int(i) + 1) * dim * 2 - 1
+            first, last = int(i) * row_bytes, (int(i) + 1) * row_bytes - 1
             pages.update(range(first // 16384, last // 16384 + 1))
-    return dict(mode=mode, file_bytes=rows * dim * 2, tokens=tokens,
+    return dict(mode=mode, storage=storage, dim=dim, file_bytes=rows * row_bytes, tokens=tokens,
                 peak_rss_before_bytes=before, peak_rss_loaded_bytes=loaded, peak_rss_after_bytes=rss_bytes(),
                 lookup_us_median=float(np.median(times)), lookup_us_p95=float(np.percentile(times, 95)),
-                logical_bytes_per_token=16 * dim * 2,
+                logical_bytes_per_token=16 * row_bytes,
                 unique_page_span_bytes_16k=len(pages) * 16384,
                 checksum=checksum)
 
@@ -58,25 +57,29 @@ def main():
     p.add_argument("--path")
     p.add_argument("--mib", type=int, default=128)
     p.add_argument("--tokens", type=int, default=128)
+    p.add_argument("--storage", choices=("bf16", "fp32", "q4", "q8"), default="bf16")
+    p.add_argument("--dim", type=int, default=256)
     a = p.parse_args()
-    if not 1 <= a.mib <= 256 or not 1 <= a.tokens <= 4096:
-        p.error("Synthetic safety bounds: 1..256 MiB, 1..4096 tokens")
-    dim, rows = 256, a.mib * 1024 * 1024 // 512
+    if not 1 <= a.mib <= 256 or not 1 <= a.tokens <= 4096 or not 2 <= a.dim <= 512 or a.dim % 2:
+        p.error("Synthetic safety bounds: 1..256 MiB, 1..4096 tokens, even dimension 2..512")
+    dim = a.dim
+    rows = a.mib * 1024 * 1024 // row_dtype(dim, a.storage).itemsize
     if a.worker:
-        print(json.dumps(worker(a.path, a.worker, rows, dim, a.tokens)))
+        print(json.dumps(worker(a.path, a.worker, rows, dim, a.tokens, a.storage)))
         return
     import numpy as np
     with tempfile.TemporaryDirectory(prefix="jw-ple-", dir="/private/tmp") as d:
-        path = Path(d) / "synthetic.bf16"
+        path = Path(d) / "synthetic.bin"
         rng = np.random.default_rng(44)
         with path.open("wb") as out:
             for start in range(0, rows, 2048):
-                out.write(encode_rows(rng.standard_normal((min(2048, rows - start), dim)), "bf16").tobytes())
+                out.write(encode_rows(rng.standard_normal((min(2048, rows - start), dim)), a.storage).tobytes())
         reports = []
         for mode in ("mmap", "eager"):
             result = subprocess.check_output([sys.executable, "-B", __file__, "--worker", mode,
                                               "--path", str(path), "--mib", str(a.mib),
-                                              "--tokens", str(a.tokens)], text=True)
+                                              "--tokens", str(a.tokens), "--storage", a.storage,
+                                              "--dim", str(dim)], text=True)
             reports.append(json.loads(result))
         print(json.dumps(dict(synthetic_only=True, cold_disk_io=False,
                               note="File is warm from creation; RSS is process high-water RSS, not whole-machine page-cache residency.",
