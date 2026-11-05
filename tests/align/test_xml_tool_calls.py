@@ -95,7 +95,7 @@ def synthetic_prefix_probe(template, *, preserve_thinking=None, tool_chain=False
 
 
 def synthetic_endpoint_cache_probe(template, *, compact=False, multiple_parameters=False,
-                                   raw_history=False, dialogue=False):
+                                   raw_history=False, dialogue=False, endpoint_options=None):
     """Compare rendered next prompts with prior prompt + synthetic emitted bytes.
 
     UTF-8 bytes stand in for text only, never for the pinned model's token IDs.
@@ -126,7 +126,7 @@ def synthetic_endpoint_cache_probe(template, *, compact=False, multiple_paramete
     config = base_config()
     config = replace(config, model=replace(config.model, family="qwen3_8"),
                      hardware_target=replace(config.hardware_target, runtime_backend=RuntimeBackend.MLX))
-    endpoint = MlxEndpoint(runtime, config, clock, episode_domain="synthetic")
+    endpoint = MlxEndpoint(runtime, config, clock, episode_domain="synthetic", **(endpoint_options or {}))
     history = [ChatMessage("user", "query 0")]
     previous = b""
     rows = []

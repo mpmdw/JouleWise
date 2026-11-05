@@ -1,6 +1,5 @@
 """PR 659 regressions; native computation is replaced by synthetic streams."""
 from dataclasses import replace
-import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest

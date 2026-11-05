@@ -32,6 +32,8 @@ def _counterbalanced(specs: Sequence[EpisodeSpec]) -> tuple[tuple[EpisodeSpec, .
             **({"prompt_cache": spec.prompt_cache} if spec.prompt_cache is not None else {}),
             **({"sampler": spec.sampler} if spec.sampler is not None else {}),
             **({"max_episode_seconds": spec.max_episode_seconds} if spec.max_episode_seconds is not None else {}),
+            **({"assistant_history": spec.assistant_history} if spec.assistant_history is not None else {}),
+            **({"chat_template_kwargs": spec.chat_template_kwargs} if spec.chat_template_kwargs is not None else {}),
         }, sort_keys=True)
         cell = cells.setdefault(key, {"benign": deque(), "sabotage": deque()})
         cell[spec.condition].append(spec)

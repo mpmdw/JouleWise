@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
 
-from joulewise.align.apple.endpoint import MlxEndpoint
+from joulewise.align.apple.endpoint import MlxEndpoint, template_execution_policy
 from joulewise.align.apple.xml_tool_calls import validate_model_family
 from joulewise.align.apple.sampler import (
     NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping, _stamp_record, _restore_stamp,
@@ -59,10 +59,13 @@ class EpisodeSpec:
     prompt_cache: str | None = None
     sampler: Mapping[str, Any] | None = None
     max_episode_seconds: float | None = None
+    assistant_history: str | None = None
+    chat_template_kwargs: Mapping[str, Any] | None = None
 
     def to_text(self) -> str:
         value = asdict(self)
-        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds"):
+        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds",
+                    "assistant_history", "chat_template_kwargs"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -92,6 +95,7 @@ class EpisodeSpec:
             raise ValueError("seed must be an integer")
         if spec.enable_thinking is not None and type(spec.enable_thinking) is not bool:
             raise ValueError("enable_thinking must be boolean or null")
+        template_execution_policy(None, spec.assistant_history, spec.chat_template_kwargs, spec.enable_thinking)
         if spec.max_context_tokens is not None and (
             type(spec.max_context_tokens) is not int or spec.max_context_tokens <= 0
         ):
@@ -234,6 +238,10 @@ class EpisodeRuntimeAdapter:
                 "accounting_version": "represented_ids_v1",
                 "repetition": "observe_only",
             }
+        template_policy = template_execution_policy(
+            config.model.family, spec.assistant_history, spec.chat_template_kwargs, spec.enable_thinking)
+        if template_policy:
+            metadata["sampler"].setdefault("execution_policy", {}).update(template_policy)
         if spec.sampler is not None or spec.max_episode_seconds is not None:
             from joulewise.align.apple.sampling import SEED_LAW, TURN_SEED_LAW, SEED_BITS, seed_inputs
             policy = metadata["sampler"].setdefault("execution_policy", {})
@@ -300,6 +308,7 @@ class EpisodeRuntimeAdapter:
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
             enable_thinking=spec.enable_thinking, prompt_cache=spec.prompt_cache,
             sampler=spec.sampler,
+            assistant_history=spec.assistant_history, chat_template_kwargs=spec.chat_template_kwargs,
         )
         task = self.task
         from joulewise.align.runner import RepetitionObserver
