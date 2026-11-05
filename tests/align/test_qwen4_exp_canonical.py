@@ -1492,6 +1492,25 @@ class ValidationRound1Test(unittest.TestCase):
         got = run(model, [ids[20:23]], cache)
         self.assertEqual(float(np.abs(got - want).max()), 0.0)
 
+    def test_r1_batch_generator_protocol_fails_loudly(self):
+        """filter / extend / extract / merge / prepare / finalize raise on both
+        cache classes, so the 'unsupported, failing loudly' contract does not
+        depend on mlx-lm's _make_cache refusing KVCache subclasses."""
+        fx = self.fx
+        model = fx.model("fp32")
+        cache = model.make_cache(left_padding=[0, 2])
+        run(model, [fx.seqs["seq_a"][:6], [EOS, EOS] + fx.seqs["seq_a"][:4]], cache)
+        for c in (cache[0], cache[QSA_LAYERS[0]]):
+            calls = dict(filter=lambda: c.filter([0]), extend=lambda: c.extend(c), extract=lambda: c.extract(0),
+                         merge=lambda: type(c).merge([c, c]), prepare=lambda: c.prepare(lengths=[1, 1]),
+                         finalize=lambda: c.finalize())
+            for name, call in calls.items():
+                with self.subTest(cache=type(c).__name__, method=name):
+                    with self.assertRaises(NotImplementedError):
+                        call()
+        self.assertEqual(sorted({c.offset for c in cache}), [6])
+        self.assertEqual(cache[0].padding, (0, 2))
+
 
 if __name__ == "__main__":
     unittest.main()

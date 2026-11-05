@@ -692,6 +692,12 @@ def _uncsv(text: str):
     return None if not text else tuple(int(v) for v in text.split(","))
 
 
+def _unsupported_batching(*args, **kwargs):
+    raise NotImplementedError("qwen4_exp caches carry left padding and the QSA indexer state; BatchGenerator "
+                              "filter / extend / extract / merge / prepare / finalize are unsupported: rebuild "
+                              "the batch with make_cache(left_padding=...)")
+
+
 class Qwen4ExpLinearCache(ArraysCache):
     """GatedDeltaNet layer state: ``[conv, recurrent]`` (+ ``[ple_conv,
     ngram_context]`` on PLE layers). The recurrent state is fp32
@@ -758,15 +764,13 @@ class Qwen4ExpLinearCache(ArraysCache):
             raise ValueError("prompt-cache left padding disagrees with padding - offset")
         self.lengths = None
 
-    def filter(self, batch_indices):
-        raise NotImplementedError("qwen4_exp caches carry left padding; rebuild the batch instead")
-
-    def extend(self, other):
-        raise NotImplementedError("qwen4_exp caches carry left padding; rebuild the batch instead")
-
-    @classmethod
-    def merge(cls, caches):
-        raise NotImplementedError("qwen4_exp caches carry left padding; rebuild the batch instead")
+    # BatchGenerator protocol: unsupported, failing loudly here rather than
+    # relying on mlx-lm's _make_cache refusing KVCache subclasses. The
+    # inherited extract returned a plain ArraysCache without offset or
+    # padding, and prepare / finalize were accepted silently (finalize
+    # cleared the padding). Validation round 1, systems LOW.
+    filter = extend = extract = prepare = finalize = _unsupported_batching
+    merge = classmethod(_unsupported_batching)
 
 
 class Qwen4ExpQSACache(KVCache):
@@ -887,9 +891,8 @@ class Qwen4ExpQSACache(KVCache):
     def to_quantized(self, group_size: int = 64, bits: int = 4):
         raise NotImplementedError("KV-cache quantization would drop the QSA indexer state")
 
-    @classmethod
-    def merge(cls, caches):
-        raise NotImplementedError("qwen4_exp caches carry left padding; rebuild the batch instead")
+    filter = extend = extract = prepare = finalize = _unsupported_batching
+    merge = classmethod(_unsupported_batching)
 
     @property
     def nbytes(self):
