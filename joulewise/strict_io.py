@@ -71,3 +71,7 @@ def json_pretty_utf8_strict(value: Any) -> bytes:
 
 def json_utf8_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=True, separators=(',', ':')) .encode("utf-8")
+
+
+def json_utf8_bytes_strict(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(',', ':')) .encode("utf-8")

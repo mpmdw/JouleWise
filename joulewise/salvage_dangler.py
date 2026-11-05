@@ -25,6 +25,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import json_utf8_bytes_strict as _canonical_bytes
+
 from joulewise.authentication_io import (
     open_authentication_input,
     read_authentication_input,
@@ -185,16 +187,6 @@ _ALLOWED_FAILED_SUMMARY_NONNULL = frozenset(
 
 class SalvageAuthorizationError(ValueError):
     """The supplied evidence does not satisfy the closed D-100 license."""
-
-
-def _canonical_bytes(value: object) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
 
 
 def _canonical_sha256(value: object) -> str:

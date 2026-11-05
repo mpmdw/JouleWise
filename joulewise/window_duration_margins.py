@@ -18,7 +18,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
-from joulewise.strict_io import sha256_raw as _sha256
+
+from joulewise.strict_io import (
+    json_utf8_bytes_strict as _canonical_bytes,
+    sha256_raw as _sha256,
+)
 
 from joulewise.authentication_io import (
     V2AuthenticationInputError,
@@ -136,16 +140,6 @@ class _MemberObservation:
 
 def _refuse(reason: str, detail: str) -> None:
     raise WindowDurationMarginsRefusal(reason, detail)
-
-
-def _canonical_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
 
 
 def _canonical_sha256(value: Any) -> str:

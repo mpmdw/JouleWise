@@ -800,11 +800,6 @@ class NotReady(RuntimeError):
 # Bytes and JSON.
 # ---------------------------------------------------------------------------
 
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-                      allow_nan=False).encode("utf-8")
-
-
 def sha256_file(path: Path | str) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
@@ -852,7 +847,11 @@ def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
 # mint byte for byte; this set only decides what the harvest accepts.  It is
 # the core's own set, imported, so the harvest accepts exactly the mint's
 # drops and the two can never drift apart (one source).
-from joulewise.strict_io import sha256_raw as sha256_bytes
+
+from joulewise.strict_io import (
+    json_utf8_bytes_strict as canonical_json_bytes,
+    sha256_raw as sha256_bytes,
+)
 
 from joulewise.whole_window import (  # noqa: E402
     NEG8_DRIFT_MINIMUM_N,

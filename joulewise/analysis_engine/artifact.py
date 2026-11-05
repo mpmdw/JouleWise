@@ -14,7 +14,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from joulewise.strict_io import json_pretty_insertion_utf8_strict as render_claim_verdicts
+
+from joulewise.strict_io import (
+    json_pretty_insertion_utf8_strict as render_claim_verdicts,
+    json_utf8_bytes_strict as canonical_json_bytes,
+)
 
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
@@ -393,16 +397,6 @@ _CLAIMS_INDEX_KEY_ORDERS = {
 
 class ClaimArtifactError(ValueError):
     """Raised when a verdict artifact cannot be rendered or validated."""
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
 
 
 def calculate_claim_verdicts_id(value: Mapping[str, Any]) -> str:

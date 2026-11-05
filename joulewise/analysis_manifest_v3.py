@@ -21,7 +21,11 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
-from joulewise.strict_io import json_pretty_insertion_utf8_strict as render_manifest
+
+from joulewise.strict_io import (
+    json_pretty_insertion_utf8_strict as render_manifest,
+    json_utf8_bytes_strict as canonical_json_bytes,
+)
 
 from joulewise.calibration_ledger import _refuse_custody_override_mint
 from joulewise.calibration_bracketing import load_calibration_acceptance_bound
@@ -391,16 +395,6 @@ class AnalysisManifestFinalizationError(AnalysisManifestV3Error):
         self.reason_code = reason_code
         self.detail = detail
         super().__init__(f"{reason_code}: {detail}")
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
 
 
 def calculate_manifest_id(value: Mapping[str, Any]) -> str:
