@@ -99,3 +99,18 @@ Line references below identify the base unless stated otherwise.
   hardened. No ledger contents or numeric quantities change.
 - Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_bracket_snapshot -q`
   passed (5 tests, synthetic scalar snapshots; no processes spawned).
+
+## e. G9 should use is_sidecar_name — IMPLEMENT (test only)
+
+- What/where: `tests/b5_analysis/test_sensitivity_guard.py:219–222`,
+  `DriverIntegrationGuardTests.test_G9_full_driver_refuses_wider_context_before_registered_writer`,
+  ignores every output starting with `VDL_MODE_PREFIX`, including invalid
+  mode tokens and unrelated files with that prefix.
+- Why: G9 must exempt exactly the audit sidecars the driver recognizes.
+- Fix: replace the hand-written filter with `dry_run.is_sidecar_name`.
+- Test: invoke that G9 assertion with a synthetic in-memory driver result;
+  valid sidecars pass and malformed prefix lookalikes or writer outputs fail.
+  Stub fixture execution so no full pipeline or custody tree is created.
+- Semantics: test coverage only; no writer or release behavior changes.
+- Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_g9 -q`
+  passed (2 tests; the full driver is stubbed).
