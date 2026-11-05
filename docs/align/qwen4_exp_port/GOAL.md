@@ -52,3 +52,4 @@ The status log is appended below as phases complete.
   - Pre-committed fallback: 5-bit experts if the measured peak, swap counters or headroom fail on the Mac.
   - Disk: about 210 GB, so an external NVMe is required.
   - Quantization error is measured, never assumed: per-layer quantized vs bf16 on real weights, plus end-to-end against the hosted bf16 reference.
+- 2026-11-05: **P10 stretch (optional, after core validation): expert streaming.** All experts on SSD at 8-bit or bf16, with a RAM LRU cache of hot experts and the misses read on demand (M3 Max TB4 external at about 3 GB/s, internal at about 6 GB/s). The purpose is an on-device near-lossless quality reference that measures the 6-bit gap. It is NOT for ALIGN energy windows, where SSD I/O would confound energy. Reads do not wear flash. Upstreamable like PLE paging.
