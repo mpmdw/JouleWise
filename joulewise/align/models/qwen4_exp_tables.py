@@ -152,12 +152,40 @@ def parameter_shapes(config):
     return shapes
 
 
+MAXFIT_BITS = {"maxfit": 6, "maxfit5": 5}
+PROFILES = ("fp32", "bf16", "mixed", "3", "4", "6", "8", *MAXFIT_BITS)
+
+
+def ple_storage_for(profile, group_size=64, storage=None):
+    """Resolve profile defaults and refuse overrides that change maxfit policy."""
+    if profile not in PROFILES:
+        raise ValueError(f"Unknown precision profile: {profile}")
+    if profile in MAXFIT_BITS:
+        if group_size != 64:
+            raise ValueError("maxfit profiles require group_size=64")
+        if storage not in (None, "bf16"):
+            raise ValueError("maxfit profiles require ple_storage=bf16")
+        return "bf16"
+    if storage not in (None, "fp32", "bf16", "q4", "q8"):
+        raise ValueError(f"Unknown PLE storage: {storage}")
+    return storage or "q4"
+
+
 def quantization_for(key, shape, profile="mixed", group_size=64):
     """Pinned two-argument predicate policy, expressed without a backend import.
 
     Indexer, router, norms, convolutions and DeltaNet stay in source precision.
     Mixed: routed experts 4 bit; remaining eligible linears/embedding 8 bit.
+    Maxfit/maxfit5: only routed experts, 6/5 bit at group size 64; all other
+    floating weights are stored unquantized bf16 by the converter.
     """
+    ple_storage_for(profile, group_size)
+    if profile in MAXFIT_BITS:
+        if ".switch_mlp." not in key or not key.endswith(".weight") or len(shape) < 2:
+            return None
+        if shape[-1] % group_size:
+            raise ValueError(f"maxfit expert width must divide group_size=64: {key}")
+        return dict(bits=MAXFIT_BITS[profile], group_size=64, mode="affine")
     if profile in ("bf16", "fp32") or not key.endswith(".weight") or len(shape) < 2:
         return None
     if any(x in key for x in (".indexer.", ".linear_attn.", ".conv1d.", ".ngram_embedding.")) or key.endswith(

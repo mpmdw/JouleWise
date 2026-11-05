@@ -4,11 +4,36 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from joulewise.align.models.qwen4_exp_tables import parameter_shapes, quantization_for
+from joulewise.align.models.qwen4_exp_tables import parameter_shapes, ple_storage_for, quantization_for
 from tests.align.qwen4_exp_reference import tiny_config_dict
 
 
 class TestPolicy(unittest.TestCase):
+    def test_maxfit_quantizes_every_expert_and_no_other_tensor(self):
+        release = json.loads((Path(__file__).parent / "fixtures/qwen4_exp_text_config.json").read_text())
+        for config in (tiny_config_dict(), release):
+            for profile, bits in (("maxfit", 6), ("maxfit5", 5)):
+                for key, shape in parameter_shapes(config).items():
+                    with self.subTest(profile=profile, key=key):
+                        q = quantization_for(key, shape, profile)
+                        if ".switch_mlp." in key:
+                            self.assertEqual(q, dict(bits=bits, group_size=64, mode="affine"))
+                        else:
+                            self.assertIsNone(q)
+                self.assertEqual(ple_storage_for(profile), "bf16")
+
+    def test_maxfit_refuses_precision_policy_overrides(self):
+        from scripts.align_convert_qwen4_exp import convert
+        for profile in ("maxfit", "maxfit5"):
+            with self.assertRaisesRegex(ValueError, "group_size=64"):
+                quantization_for("model.embed_tokens.weight", (64, 64), profile, 32)
+            with self.assertRaisesRegex(ValueError, "expert width"):
+                quantization_for("model.layers.0.mlp.switch_mlp.up_proj.weight", (4, 32, 32), profile)
+            # Fail before touching checkpoint paths or importing a GPU backend.
+            for storage in ("q4", "q8", "fp32"):
+                with self.assertRaisesRegex(ValueError, "ple_storage=bf16"):
+                    convert("unused-source", "unused-output", profile, ple_storage=storage)
+
     def test_indexer_router_and_deltanet_never_quantized(self):
         shapes = parameter_shapes(tiny_config_dict())
         for key, shape in shapes.items():

@@ -204,7 +204,8 @@ def load_verified_model(directory, expected_manifest_sha256, lazy=False):
         sys.dont_write_bytecode = previous
 
 
-def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage="q4"):
+def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage=None):
+    ple_storage = rules.ple_storage_for(profile, group_size, ple_storage)
     import numpy as np
     checkpoint, output = Path(checkpoint), Path(output)
     if "restricted" in checkpoint.parts or "restricted" in output.parts:
@@ -305,9 +306,10 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("checkpoint", type=Path)
     p.add_argument("output", type=Path)
-    p.add_argument("--profile", choices=("fp32", "bf16", "mixed", "3", "4", "6", "8"), default="mixed")
+    p.add_argument("--profile", choices=rules.PROFILES, default="mixed")
     p.add_argument("--group-size", type=int, choices=(32, 64, 128), default=64)
-    p.add_argument("--ple-storage", choices=("fp32", "bf16", "q4", "q8"), default="q4")
+    p.add_argument("--ple-storage", choices=("fp32", "bf16", "q4", "q8"),
+                   help="default: bf16 for maxfit/maxfit5, q4 otherwise")
     a = p.parse_args()
     manifest = convert(a.checkpoint, a.output, a.profile, a.group_size, a.ple_storage)
     print(json.dumps(dict(output=str(a.output), payload_files=len(manifest["files"]),
