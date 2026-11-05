@@ -647,10 +647,24 @@ def conv_history_tail(full: mx.array, hist: int) -> mx.array:
 
 
 def rope_inv_freq(args: TextModelArgs) -> mx.array:
-    # [ref: Qwen4ExpTextRotaryEmbedding.compute_default_rope_parameters]
-    base = float(args.rope_parameters.get("rope_theta", 10000.0))
+    """[ref: Qwen4ExpTextRotaryEmbedding.compute_default_rope_parameters]
+    ``1 / base ** (arange(0, dim, 2) / dim)`` in float32, computed on the host.
+
+    The exponent and the reciprocal are float32 as in the reference; the pow
+    is evaluated in float64 and rounded once to float32 (its correctly
+    rounded value). mlx's float32 ``**`` differed from the reference by 1 ulp
+    on 11 of the 32 entries at the released config (rope_theta 1e7,
+    rotary_dim 64); the phase error is position x delta, so it grows with
+    context (2.65% of bf16 cos/sin entries differed over positions 0-262k).
+    torch's CPU float32 pow is not correctly rounded either, so a few other
+    (theta, dim) pairs keep 1-ulp entries; the released and test configs are
+    bit-identical to the reference (checked by the parity test).
+    """
+    base = np.float64(np.float32(args.rope_parameters.get("rope_theta", 10000.0)))
     dim = args.rotary_dim
-    return 1.0 / (base ** (mx.arange(0, dim, 2, dtype=_F32) / dim))
+    exponent = np.arange(0, dim, 2, dtype=np.float32) / np.float32(dim)
+    powed = np.power(base, exponent.astype(np.float64)).astype(np.float32)
+    return mx.array(np.float32(1.0) / powed)
 
 
 def rope_cos_sin(positions: mx.array, inv_freq: mx.array):

@@ -182,11 +182,20 @@ q4 halves it).
    shared expert, routed experts inside mlx-lm's `SwitchGLU`) still use
    `nn.silu` in the model dtype, which rounds after the sigmoid and after
    the multiply.
-5. **Fully padded query rows** attend to themselves so they stay finite.
+5. **RoPE inverse frequencies** are computed on the host: float32 exponent,
+   pow evaluated in float64 and rounded once to float32, float32 reciprocal.
+   That is bit-identical to the reference at the released config
+   (rope_theta 1e7, rotary_dim 64) and the test config. mlx's float32 pow
+   (used before) was 1 ulp off on 11 of the 32 entries; the phase error
+   grows with position, so at ~200k tokens a QSA layer drifted by 8.9e-4 in
+   fp32 and flipped indexer block selections in bf16. torch's CPU float32
+   pow is not correctly rounded either, so some other (theta, dim) pairs
+   keep 1-ulp entries (at most 1 ulp over the tested 15-pair sweep).
+6. **Fully padded query rows** attend to themselves so they stay finite.
    Their outputs are discarded, as in the reference.
-6. **N-gram table** lives off-GPU, optionally quantized (q8/q4). The
+7. **N-gram table** lives off-GPU, optionally quantized (q8/q4). The
    reference keeps it as a bf16 `nn.Embedding`.
-7. **Omitted:** MTP (the reference ignores `mtp.*`, so it does not change
+8. **Omitted:** MTP (the reference ignores `mtp.*`, so it does not change
    next-token logits), vision, `input_embeddings`, non-default RoPE (YaRN is
    refused, not approximated), KV-cache quantization, prompt-cache files, and
    mlx-lm `BatchGenerator` merge/filter.

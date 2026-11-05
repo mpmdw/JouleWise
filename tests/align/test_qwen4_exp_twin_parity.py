@@ -677,6 +677,23 @@ GDN_REAL_DIMS = {"hidden_size": 256, "linear_num_key_heads": 16, "linear_num_val
 for _seed in (1, 2, 3):
     REG_GDN[f"real_dims_s{_seed}"] = {"over": GDN_REAL_DIMS, "segments": [200, 1, 1, 1],
                                       "seed": _seed, "dtypes": ("fp32", "bf16")}
+# QSA attention layer (indexer included) vs the engine copy, prefill + cached
+# decode. "P" shifts every absolute RoPE position (queries, keys, block keys)
+# to emulate a long context without a P-token prefill.
+REG_QSA_REAL = {"head_dim": 256, "indexer_head_dim": 128, "num_attention_heads": 2,
+                "num_key_value_heads": 1, "indexer_budget": 32}
+REG_QSA = {
+    "real_far_fp32": {"over": REG_QSA_REAL, "chunks": [300, 1, 1], "seed": 7, "P": 200000},
+    "real_near_bf16": {"over": REG_QSA_REAL, "chunks": [300, 1, 1], "seed": 8, "P": 0,
+                       "dtype": "bf16"},
+    "real_far_bf16": {"over": REG_QSA_REAL, "chunks": [300, 1, 1], "seed": 8, "P": 250000,
+                      "dtype": "bf16"},
+}
+# RoPE inverse frequencies: (rope_theta, rotary_dim). The first two (released
+# config, test config) must be bit-identical; the rest are informational.
+REG_ROPE_EXACT = [(10000000, 64), (10000000, 16)]
+REG_ROPE_SWEEP = [(t, d) for t in (10000, 1000000, 10000000) for d in (16, 32, 64, 128, 256)]
+REG_ROPE_POSITIONS = (0, 262144, 7)      # arange: the released max_position_embeddings
 REG_TOL = {
     # rms(MLX bf16 - ref fp32) / rms(ref bf16 - ref fp32) for one DeltaNet layer
     # at the released head dims. Single-rounding silu measures 1.003-1.007;
@@ -685,7 +702,32 @@ REG_TOL = {
     # Elementwise bf16 silu vs torch: the port's mismatches must stay below
     # half of stock nn.silu's (measured 508 vs 1844 on GPU, 252 vs 1296 CPU).
     "silu_mismatch_vs_stock": 0.5,
+    # bf16 cos/sin over positions 0-262k vs the reference: fraction of entries
+    # that differ (torch-identical inv_freq: 9e-6; mlx pow: 2.65e-2).
+    "rope_bf16_mismatch_frac": 1e-4,
+    # QSA layer in bf16 at position ~250k vs the same layer at position 0
+    # (torch-identical inv_freq: 1.0x; mlx pow: 15x).
+    "qsa_bf16_far_over_near": 2.0,
 }
+
+
+def _qsa_cfg(over):
+    c = {"vocab_size": 64, "hidden_size": 64, "num_hidden_layers": 4,
+         "num_attention_heads": 4, "num_key_value_heads": 2, "head_dim": 64,
+         "linear_num_key_heads": 2, "linear_num_value_heads": 4,
+         "linear_key_head_dim": 16, "linear_value_head_dim": 16,
+         "moe_intermediate_size": 16, "shared_expert_intermediate_size": 16,
+         "num_experts": 4, "num_experts_per_tok": 2, "hc_count": 2, "hc_lowrank": 8,
+         "ple_layer_ids": [], "eos_token_id": EOS, "indexer_n_heads": 4, "indexer_kv_heads": 1,
+         "indexer_head_dim": 32, "indexer_budget": 8, "indexer_compress_ratio": 4,
+         "layer_types": ["linear_attention"] * 3 + ["full_attention"]}
+    c.update(over)
+    rot = int(c["head_dim"] * 0.25)
+    c["rope_parameters"] = {"mrope_interleaved": True,
+                            "mrope_section": {16: [4, 2, 2], 32: [8, 4, 4], 64: [11, 11, 10]}[rot],
+                            "partial_rotary_factor": 0.25, "rope_theta": 10000000,
+                            "rope_type": "default"}
+    return c
 # Tiny full model at the edges of the config space, converted like the main
 # checkpoint. Reference logits are an UNCACHED prefill: with
 # ple_conv_kernel_size 1 the reference's own cached PLE path raises.
@@ -764,6 +806,73 @@ def _ref_silu(reg: Path):
              y=torch.nn.functional.silu(t).float().numpy())
 
 
+def _ref_qsa(engine, reg: Path):
+    import numpy as np
+    import torch
+    from transformers.cache_utils import DynamicCache
+    from transformers.models.qwen4_exp.configuration_qwen4_exp import Qwen4ExpTextConfig
+
+    for name, case in REG_QSA.items():
+        cfgd = _qsa_cfg(case["over"])
+        cfg = Qwen4ExpTextConfig(**cfgd)
+        cfg._attn_implementation = "sdpa"
+        att = engine.Qwen4ExpTextAttention(cfg, 3).eval()
+        rot = engine.Qwen4ExpTextRotaryEmbedding(cfg)
+        gen = torch.Generator().manual_seed(case["seed"])
+        with torch.no_grad():
+            for _, p in att.named_parameters():
+                p.copy_(torch.randn(p.shape, generator=gen) * 0.2 if p.ndim == 1
+                        else torch.randn(p.shape, generator=gen) / p.shape[-1] ** 0.5)
+        dt = torch.bfloat16 if case.get("dtype") == "bf16" else torch.float32
+        att = att.to(dt)
+        chunks, P = case["chunks"], case.get("P", 0)
+        x_all = torch.randn(1, sum(chunks), cfgd["hidden_size"], generator=gen).to(dt)
+        captured = {}
+        indexer_forward = att.indexer.forward
+
+        def hook(*a, _f=indexer_forward, **k):
+            captured["sel"] = _f(*a, **k)
+            return captured["sel"]
+
+        att.indexer.forward = hook
+        cache = DynamicCache(config=cfg)
+        arrays = {"x": x_all.float().numpy(), "cfg": np.array(json.dumps(cfgd))}
+        arrays.update({"w::" + k: v.float().numpy() for k, v in att.state_dict().items()})
+        off = 0
+        for i, s in enumerate(chunks):
+            end = off + s
+            mask = (torch.arange(end)[None, :] <= torch.arange(off, end)[:, None])[None, None]
+            pos = torch.arange(end)[None, :] + P
+            cos, sin = rot(x_all[:, off:end], pos[None].expand(3, -1, -1))
+            with torch.no_grad():
+                o, _ = att(x_all[:, off:end], (cos, sin), mask, past_key_values=cache)
+            arrays[f"out{i}"] = o.float().numpy()
+            arrays[f"sel{i}"] = (captured["sel"] & mask).numpy()[0, 0]          # (S, L)
+            off = end
+        np.savez(reg / f"qsa_{name}.npz", **arrays)
+
+
+def _ref_rope(engine, reg: Path):
+    import types
+
+    import numpy as np
+    import torch
+    from transformers.models.qwen4_exp.configuration_qwen4_exp import Qwen4ExpTextConfig
+
+    arrays = {}
+    for theta, dim in REG_ROPE_EXACT + REG_ROPE_SWEEP:
+        cfg = types.SimpleNamespace(
+            rope_parameters={"rope_type": "default", "rope_theta": theta}, head_dim=dim,
+            hidden_size=dim, num_attention_heads=1)
+        inv, _ = engine.Qwen4ExpTextRotaryEmbedding.compute_default_rope_parameters(cfg)
+        arrays[f"inv::{theta}::{dim}"] = inv.numpy()
+    rot = engine.Qwen4ExpTextRotaryEmbedding(Qwen4ExpTextConfig(**_qsa_cfg(REG_QSA_REAL)))
+    pos = torch.arange(*REG_ROPE_POSITIONS)
+    cos, sin = rot(torch.zeros(1, 1, dtype=torch.bfloat16), pos[None, None].expand(3, 1, -1))
+    arrays.update(pos=pos.numpy(), cos_bf16=cos[0].float().numpy(), sin_bf16=sin[0].float().numpy())
+    np.savez(reg / "rope_ref.npz", **arrays)
+
+
 def _ref_edge(engine, reg: Path):
     import numpy as np
     import torch
@@ -796,6 +905,8 @@ def stage_ref_regress(work: Path):
     meta = {"validation": _ref_validation()}
     _ref_gdn(engine, reg)
     _ref_silu(reg)
+    _ref_qsa(engine, reg)
+    _ref_rope(engine, reg)
     meta["edge"] = _ref_edge(engine, reg)
     meta["peak_rss_bytes"] = _peak_rss()
     (reg / "ref_meta.json").write_text(json.dumps(meta, indent=2))
@@ -909,6 +1020,87 @@ def _mlx_silu(tw, reg: Path):
     return out
 
 
+def _mlx_qsa(tw, reg: Path):
+    """Run each REG_QSA case through the port's QSAAttention + QSACache and
+    compare outputs and the per-query token masks with the reference."""
+    import mlx.core as mx
+    import numpy as np
+
+    out = {}
+    orig_cos_sin, orig_mask = tw.rope_cos_sin, tw.QSAIndexer._mask
+    captured = {}
+
+    def mask_hook(self, iq, step, cache):
+        captured["mask"] = orig_mask(self, iq, step, cache)
+        return captured["mask"]
+
+    tw.QSAIndexer._mask = mask_hook
+    try:
+        for name, case in REG_QSA.items():
+            z = np.load(reg / f"qsa_{name}.npz")
+            args = tw.TextModelArgs.from_dict(json.loads(str(z["cfg"])))
+            dt = mx.bfloat16 if case.get("dtype") == "bf16" else mx.float32
+            att = tw.QSAAttention(args)
+            att.load_weights([(k[3:], mx.array(z[k]).astype(dt)) for k in z.files
+                              if k.startswith("w::")], strict=True)
+            P = case.get("P", 0)
+            tw.rope_cos_sin = lambda pos, inv, _p=P: orig_cos_sin(pos + _p, inv)
+            cache, inv = tw.QSACache(), tw.rope_inv_freq(args)
+            x_all = mx.array(z["x"]).astype(dt)
+            off, bad_rows, n_rows, max_abs, max_abs_same = 0, 0, 0, 0.0, 0.0
+            for i, s in enumerate(case["chunks"]):
+                end = off + s
+                step = tw._Step(1, s, off, np.zeros((1,), np.int64), inv)
+                o = np.array(att(x_all[:, off:end], step, cache).astype(mx.float32))[0]
+                m = captured["mask"]
+                if m is None or isinstance(m, str):            # dense: plain causal
+                    m = np.arange(end)[None, :] <= np.arange(off, end)[:, None]
+                else:
+                    m = np.array(m)[0, 0]
+                d = np.abs(o - z[f"out{i}"][0]).max(axis=-1)    # (S,)
+                same = (m == z[f"sel{i}"]).all(axis=-1)
+                bad_rows += int((~same).sum())
+                n_rows += s
+                max_abs = max(max_abs, float(d.max()))
+                if same.any():
+                    max_abs_same = max(max_abs_same, float(d[same].max()))
+                off = end
+            out[name] = {"mask_rows_mismatched": bad_rows, "rows": n_rows, "max_abs": max_abs,
+                         "max_abs_same_mask_rows": max_abs_same}
+    finally:
+        tw.rope_cos_sin, tw.QSAIndexer._mask = orig_cos_sin, orig_mask
+    return out
+
+
+def _mlx_rope(tw, reg: Path):
+    import types
+
+    import mlx.core as mx
+    import numpy as np
+
+    z = np.load(reg / "rope_ref.npz")
+
+    def inv_of(theta, dim):
+        ns = types.SimpleNamespace(rope_parameters={"rope_theta": theta}, rotary_dim=dim)
+        return np.array(tw.rope_inv_freq(ns))
+
+    def ulps(a, b):
+        return np.abs(a.view(np.int32).astype(np.int64) - b.view(np.int32).astype(np.int64))
+
+    exact = {}
+    for theta, dim in REG_ROPE_EXACT:
+        exact[f"{theta}/{dim}"] = int((ulps(inv_of(theta, dim), z[f"inv::{theta}::{dim}"]) > 0).sum())
+    sweep = {f"{t}/{d}": int(ulps(inv_of(t, d), z[f"inv::{t}::{d}"]).max()) for t, d in REG_ROPE_SWEEP}
+    args = tw.TextModelArgs.from_dict(_qsa_cfg(REG_QSA_REAL))
+    cos, sin = tw.rope_cos_sin(mx.array(z["pos"].astype(np.int32)), tw.rope_inv_freq(args))
+    got = np.stack([np.array(cos.astype(mx.bfloat16).astype(mx.float32)),
+                    np.array(sin.astype(mx.bfloat16).astype(mx.float32))])
+    ref = np.stack([z["cos_bf16"], z["sin_bf16"]])
+    return {"exact_differing_entries": exact, "sweep_max_ulps": sweep,
+            "cos_sin_bf16_mismatch_frac": float((got != ref).mean()),
+            "cos_sin_max_abs": float(np.abs(got - ref).max())}
+
+
 def _mlx_edge(reg: Path):
     import mlx.core as mx
     import numpy as np
@@ -946,6 +1138,8 @@ def stage_mlx_regress(work: Path):
     res["gdn"], gdn_outs = _mlx_gdn(tw, reg)
     res["gdn_bf16_noise"] = _mlx_gdn_bf16_noise(reg, gdn_outs)
     res["silu"] = _mlx_silu(tw, reg)
+    res["qsa"] = _mlx_qsa(tw, reg)
+    res["rope"] = _mlx_rope(tw, reg)
     res["edge"] = _mlx_edge(reg)
     res["peak_rss_bytes"] = _peak_rss()
     (reg / "mlx_results.json").write_text(json.dumps(res, indent=2))
@@ -1215,6 +1409,21 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
                 self.assertLessEqual(self._gdn(f"{name}/fp32/gpu")["max_abs"], TOL["fp32_vs_ref"])
                 self.assertLessEqual(r["rms_ratio"], REG_TOL["gdn_bf16_rms_over_noise"], r)
         self.assertEqual(len(self.reg["gdn_bf16_noise"]), 3)
+
+    def test_regress_rope_inv_freq_matches_reference(self):
+        r = self.reg["rope"]
+        self.assertEqual(r["exact_differing_entries"], {f"{t}/{d}": 0 for t, d in REG_ROPE_EXACT})
+        self.assertLessEqual(max(r["sweep_max_ulps"].values()), 1, r["sweep_max_ulps"])
+        self.assertLessEqual(r["cos_sin_bf16_mismatch_frac"], REG_TOL["rope_bf16_mismatch_frac"])
+
+    def test_regress_qsa_at_long_context_positions(self):
+        q = self.reg["qsa"]
+        far = q["real_far_fp32"]
+        self.assertEqual(far["mask_rows_mismatched"], 0)
+        self.assertLessEqual(far["max_abs"], TOL["fp32_vs_ref"])
+        near, far = q["real_near_bf16"], q["real_far_bf16"]
+        self.assertEqual(far["mask_rows_mismatched"], 0)
+        self.assertLessEqual(far["max_abs"], REG_TOL["qsa_bf16_far_over_near"] * near["max_abs"])
 
     def test_regress_kernel1_convs_cached_decode(self):
         # DeltaNet and PLE short convs with kernel 1, cached decode in uneven
