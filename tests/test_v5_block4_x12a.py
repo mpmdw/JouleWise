@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import network_time_off, v5_qualification as q
+from joulewise.hazards import network_time as network_time_off; from joulewise import qualification_readers as q
 from scripts import capture_t0_step as capture, restore_v5_null_reservation as restore
 from scripts import v5_s1_desk_closeout as desk
 from scripts import harvest_v5_g2b_window as g2b, harvest_v5_qualification as qualification

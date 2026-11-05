@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as ar, battery_float, night_gate, v5_qualification as q
+from joulewise import receipt_readers as ar; from joulewise import battery_float; from joulewise import night_gate; from joulewise import qualification_readers as q
 from joulewise.night_plan_writer import night_plan_mapping
 from scripts import assemble_v5_battery_boundaries as assembler
 from tests.test_battery_float import raw, UPDATE
@@ -215,7 +215,7 @@ class ClockSizingTests(unittest.TestCase):
 
     def test_r0_and_author_recheck_real_sizing_authority(self):
         from types import SimpleNamespace
-        from joulewise import arm_readiness_evidence_t0 as author, kernel_clock
+        from joulewise import receipt_formats as author; from joulewise import kernel_clock
         from scripts import capture_t0_step as capture
         from tests.test_arm_readiness_evidence_t0 import _clock_reference_value, TEST_BOOT_SESSION_ID
         from tests.test_kernel_clock import frequency_probe
@@ -284,7 +284,7 @@ class ClockSizingTests(unittest.TestCase):
 
     def test_g4_replays_real_binding_and_refuses_rehashed_short_maximum(self):
         from dataclasses import replace
-        from joulewise import kernel_clock, t0_rehearsal as t0
+        from joulewise import kernel_clock; from joulewise import process_observer as t0
         from tests.test_kernel_clock import frequency_probe
         from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
         root = FixtureBuilder(self.fixture.root / 'g4').build()
@@ -360,7 +360,7 @@ class StageLaunchBoundaryTests(unittest.TestCase):
             consume.assert_not_called()
 
     def test_author_attests_the_list_and_missing_list_cannot_publish(self):
-        from joulewise import arm_readiness_evidence_t0 as author
+        from joulewise import receipt_formats as author
         from tests.test_arm_readiness_evidence_t0 import make_t0_fixture, author_environment
         temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
         self.addCleanup(temporary.cleanup)

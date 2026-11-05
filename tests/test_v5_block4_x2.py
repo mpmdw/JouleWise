@@ -16,8 +16,8 @@ from unittest import mock
 
 from tests.git_fixture import init_git_fixture
 
-from joulewise import arm_readiness as ar
-from joulewise import network_time_off as off, v5_qualification as q
+from joulewise import receipt_readers as ar
+from joulewise.hazards import network_time as off; from joulewise import qualification_readers as q
 from scripts import harvest_v5_g2b_window as h, run_night as driver
 from tests import test_harvest_v5_g2b_window as harvest_tests
 put = harvest_tests.put
@@ -422,7 +422,7 @@ class NoMockDeskHeadTests(unittest.TestCase):
 class OffWitnessTests(unittest.TestCase):
     def test_permitted_setter_witness_and_unavailable_or_state_changing_results(self):
         from scripts import produce_t0_rehearsal_bundle as producer
-        from joulewise import t0_rehearsal as t0
+        from joulewise import process_observer as t0
         for code, stdout, expected in ((0, "  NETWORK Time is already OFF\n", True),
                 (0, "Network Time is already off.\n", True),
                 (0, "setUsingNetworkTime: Off\n", False), (1, "Network Time is already off", False),

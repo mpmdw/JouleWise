@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, night_gate
+from joulewise import receipt_readers as readiness; from joulewise import night_gate
 from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 from scripts import write_v5_qualification_plan as writer
 from tests.test_kernel_clock import frequency_probe
@@ -592,7 +592,7 @@ class PlanWriterTests(SizingTests):
                         night_gate.NightPlan.from_mapping(value)
                 else:
                     self.assertEqual("TRANSACTION_PACK", night_gate.NightPlan.from_mapping(value).receipt_class)
-                from joulewise.v5_qualification import authenticated_clock_budget
+                from joulewise.qualification_readers import authenticated_clock_budget
                 maximum, _refs = authenticated_clock_budget(
                     custody / self.pack.name / "arm_readiness.t0.inputs", self.pack)
                 self.assertEqual(maximum, 100.)
@@ -612,7 +612,7 @@ class PrerequisiteTests(unittest.TestCase):
         self.head = "a" * 40
         self.refs = {}
         self.controls = {}
-        from joulewise import t0_rehearsal as t0
+        from joulewise import process_observer as t0
         from scripts.check_v5_arm_abort import ABSENCE_KEYS, CONTROL_SCHEMA
         for label, at in (("a1", 1000), ("a2", 2000)):
             root = self.root / label; root.mkdir()

@@ -33,7 +33,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from joulewise import arm_readiness, controller, whole_window, window_lineage
+from joulewise import receipt_readers as arm_readiness; from joulewise import controller; from joulewise import whole_window; from joulewise import window_lineage
 from joulewise.clock import FakeClock
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy
 from scripts import run_campaign

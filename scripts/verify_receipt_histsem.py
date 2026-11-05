@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.arm_readiness import (  # noqa: E402
+from joulewise.receipt_readers import (  # noqa: E402
     HistoricalSemanticsError,
     render_json,
     verify_all_receipt_histsem,

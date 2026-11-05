@@ -21,9 +21,9 @@ import time
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author
-from joulewise import clock_reference, kernel_clock, night_gate, t0_rehearsal as t0
-from joulewise import v5_qualification as q
+from joulewise import receipt_readers as readiness; from joulewise import receipt_formats as author
+from joulewise import clock_reference; from joulewise import kernel_clock; from joulewise import night_gate; from joulewise import process_observer as t0
+from joulewise import qualification_readers as q
 from scripts import capture_t0_step as capture, write_v5_qualification_plan as writer
 from scripts import produce_t0_rehearsal_bundle as producer
 from tests import test_arm_readiness_evidence_t0 as af

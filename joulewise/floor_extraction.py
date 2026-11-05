@@ -142,7 +142,7 @@ from joulewise.analysis_engine.inputs import (
     window_evidence_precheck,
 )
 from joulewise.authentication_io import V2AuthenticationInputError, read_authentication_input
-from joulewise.arm_readiness import (
+from joulewise.receipt_readers import (
     LAUNCH_LINEAGE_REASON_CODES,
     LaunchLineageError,
     authenticate_bundle_launch_lineage,

@@ -26,14 +26,14 @@ from tests.test_arm_readiness_evidence_t0 import (
     author_environment,
     make_t0_fixture as _base_make_t0_fixture,
 )
-from joulewise import network_time_off, arm_readiness as readiness
+from joulewise.hazards import network_time as network_time_off; from joulewise import receipt_readers as readiness
 
 
 def make_t0_fixture():
     fixture = _base_make_t0_fixture()
     # This producer exercises X10's sizing replay at authoring. Update the
     # older shared fixture prospectively, rebinding each custody digest.
-    from joulewise import v5_qualification as q
+    from joulewise import qualification_readers as q
     from scripts import write_v5_qualification_plan as writer
     inputs = fixture[5]
     source_path = inputs / "clock-sizing-source.json"
@@ -90,7 +90,7 @@ class CaptureT0StepTests(unittest.TestCase):
         patcher = mock.patch.object(capture.kernel_clock, "read_kernel_frequency", return_value=frequency_probe())
         patcher.start()
         self.addCleanup(patcher.stop)
-        from joulewise import v5_qualification as q
+        from joulewise import qualification_readers as q
         def budget(inputs, pack):
             path = inputs / "kernel-frequency-binding.json"
             return 320., (q.reference(path),) if path.is_file() else ()

@@ -1,6 +1,7 @@
 """Focused driver tests against the real night-gate module."""
 
 from __future__ import annotations
+from tests import receipt_factory
 
 import hashlib
 import inspect
@@ -3928,7 +3929,7 @@ class ProbeSupervisorDetailTests(unittest.TestCase):
 class PackNightProducerTests(unittest.TestCase):
     """Real driver/file custody with mocked ARM author and live probes only."""
     def setUp(self):
-        from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author
+        from joulewise import receipt_readers as readiness; from joulewise import receipt_formats as author
         self.readiness, self.author = readiness, author
         self.driver = _load_driver()
         temporary = tempfile.TemporaryDirectory()
@@ -4256,7 +4257,7 @@ class PackNightProducerTests(unittest.TestCase):
             path.write_bytes(original)
 
     def test_no_go_on_arm_refusal(self):
-        self.readiness.generate_arm_receipt.side_effect = lambda *a, **k: {"status": "REFUSE", "arm_disposition": "NO_GO"}
+        self.receipt_factory.generate_arm_receipt.side_effect = lambda *a, **k: {"status": "REFUSE", "arm_disposition": "NO_GO"}
         code, calls = self.run_driver()
         self.assertEqual(self.driver.EXIT_REFUSED, code)
         self.assertEqual([], calls)
@@ -4284,7 +4285,7 @@ class PackNightProducerTests(unittest.TestCase):
         self.assertEqual(["census", "PLAN_BYTES"], self.events[:2])
         prepare.assert_not_called()
         self.author.author_arm_readiness_evidence_t0.assert_not_called()
-        self.readiness.generate_arm_receipt.assert_not_called()
+        self.receipt_factory.generate_arm_receipt.assert_not_called()
         night = self.custody / "night"
         for name in ("receipt.json", "refusal.json"):
             record = json.loads((night / name).read_text())
@@ -4307,7 +4308,7 @@ class PackNightProducerTests(unittest.TestCase):
             result = original(*args, **kwargs)
             self.readiness.committed_pack_tree_sha256.return_value = "f" * 64
             return result
-        self.readiness.generate_arm_receipt.side_effect = mutate_after_arm
+        self.receipt_factory.generate_arm_receipt.side_effect = mutate_after_arm
         code, calls = self.run_driver()
         self.assertEqual(self.driver.EXIT_REFUSED, code)
         self.assertEqual([], calls)
@@ -6546,7 +6547,7 @@ class CourierReapingTests(unittest.TestCase):
                 process.wait(timeout=5)
 
     def delivered_child(self, *, hang=False, code=0, budget=2, deadman_epoch_s=None):
-        from joulewise import t0_rehearsal as t0
+        from joulewise import process_observer as t0
         child = self.root / "courier.py"
         child.write_text(
             "from pathlib import Path\nimport time\n"
@@ -6799,7 +6800,7 @@ class QualificationT0StageCapTests(unittest.TestCase):
         return sources
 
     def capture(self, sources, operation):
-        from joulewise import v5_qualification as qualification
+        from joulewise import qualification_readers as qualification
         with mock.patch.object(qualification, 'authenticated_clock_budget', return_value=(100., sources)) as authenticate, \
              mock.patch.object(self.driver.t0_rehearsal, 'observed_run', side_effect=operation) as run, \
              mock.patch.object(self.driver, '_chain_environment', return_value={}):

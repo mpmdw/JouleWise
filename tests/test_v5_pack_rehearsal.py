@@ -13,7 +13,7 @@ import time
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, t0_rehearsal as t0
+from joulewise import receipt_readers as readiness; from joulewise import process_observer as t0
 from scripts import produce_t0_rehearsal_bundle as producer, rehearse_t0_unattended as reader
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_inventory, fixture_replay, _write_json
 

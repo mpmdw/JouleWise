@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, t0_rehearsal as rehearsal
+from joulewise import receipt_readers as readiness; from joulewise import process_observer as rehearsal
 from scripts import rehearse_t0_unattended as cli
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle, fixture_inventory, _write_json
 from tests.git_fixture import init_git_fixture

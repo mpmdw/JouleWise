@@ -115,7 +115,7 @@ class StageAndStreamSizingTests(unittest.TestCase):
             self.assertEqual(run_night.deadman_epoch(plan), deadman)
 
     def test_prerequisite_boundary_and_capture_share_authenticated_stage_cap(self):
-        from joulewise import v5_qualification
+        from joulewise import qualification_readers as v5_qualification
         from scripts import capture_t0_step
         fixture = fixtures.PlanWriterTests()
         fixture.setUp()
@@ -154,7 +154,7 @@ class WindowValidatorTests(unittest.TestCase):
         self.path.parent.mkdir(parents=True)
 
     def chain(self, sizing, *, window=None, marker='s1', qualification=True):
-        from joulewise import arm_readiness as readiness
+        from joulewise import receipt_readers as readiness
         window = self.plan.window_max_s if window is None else window
         fixed = sizing.get('fixed', {})
         latest = (1000 + fixed['t0_stage_cap']['seconds'] + fixed['pack_t0']['seconds']
@@ -165,7 +165,7 @@ class WindowValidatorTests(unittest.TestCase):
                 f'export NIGHT_CLOCK_SIZING_SHA256={readiness.sha256_bytes(readiness.render_json(sizing))}\n')
 
     def publish(self, sizing):
-        from joulewise import arm_readiness as readiness
+        from joulewise import receipt_readers as readiness
         self.path.write_bytes(readiness.render_json(sizing))
 
     def test_initial_and_runtime_validation_use_the_same_authenticated_cap(self):
@@ -237,7 +237,7 @@ class WindowValidatorTests(unittest.TestCase):
             plan, self.chain({}, window=3600), 'G2B_SHAKEDOWN'), 3740)
 
     def test_runtime_uses_authenticated_bytes_after_detection_not_an_untrusted_preview(self):
-        from joulewise import arm_readiness as readiness
+        from joulewise import receipt_readers as readiness
         self.publish(self.f.sizing)
         preview = copy.deepcopy(self.f.sizing)
         preview['fixed']['t0_stage_cap'] = self.f.allow(3480)

@@ -4,7 +4,7 @@ import re
 import unittest
 from pathlib import Path
 
-from joulewise import arm_readiness_evidence_t0 as evidence_t0
+from joulewise import receipt_formats as evidence_t0
 from scripts import capture_t0_step as capture
 
 

@@ -1912,7 +1912,7 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(record["checks"]["retry"]["inventory"][0]["route"], "retry" if passing else "cold_gate")
 
     def assert_clone_retry_route(self, cause, route):
-        from joulewise.arm_retry import classify_abort
+        from joulewise.window_policy import classify_abort
         self.assertNotEqual(classify_abort(cause), route)
         path = self.stage / "lifecycle/arm-attempts/000001/install.json"
         path.parent.mkdir(parents=True)

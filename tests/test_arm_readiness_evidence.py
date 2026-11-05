@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as evidence
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as evidence
 from tests.git_fixture import init_git_fixture
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID, sample_evidence
 

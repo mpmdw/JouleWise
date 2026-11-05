@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness
+from joulewise import receipt_readers as arm_readiness
 from joulewise import scheduler_gates as gates
 from tests.git_fixture import init_git_fixture
 

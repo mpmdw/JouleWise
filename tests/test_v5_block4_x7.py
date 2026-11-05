@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, calibration_ledger as ledger
-from joulewise import night_gate, v5_qualification as q
+from joulewise import receipt_readers as readiness; from joulewise import calibration_ledger as ledger
+from joulewise import night_gate; from joulewise import qualification_readers as q
 from scripts import restore_v5_null_reservation as restore
 
 
@@ -470,7 +470,7 @@ class WriterHistoryTests(unittest.TestCase):
             self.assertFalse(go_path.exists())
 
     def test_s2_assembly_and_desk_consume_authenticated_occurrence(self):
-        from joulewise import t0_rehearsal as t0
+        from joulewise import process_observer as t0
         from scripts import produce_t0_rehearsal_bundle as producer, v5_s1_desk_closeout as desk
         from tests.test_t0_rehearsal import FixtureBuilder
         f = self.fixture

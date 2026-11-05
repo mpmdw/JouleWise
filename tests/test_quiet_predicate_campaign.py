@@ -2005,7 +2005,7 @@ class BenchReplayFailClosedTests(unittest.TestCase):
             self.assertIn(campaign.NETWORK_TIME_RECORD_ENV, environment)
 
     def test_R6_the_systemsetup_stub_refuses_without_the_variable(self):
-        from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
+        from joulewise.receipt_readers import EXPECTED_NETWORK_TIME_OFF_STDOUT
         from scripts import sample_quiet_predicate_evidence as sampler
         argv = [str(self.STUB), "-n", str(self.STUB), "-setusingnetworktime", "off"]
         bare = {k: v for k, v in os.environ.items() if k != sampler.REPLAY_ENV}

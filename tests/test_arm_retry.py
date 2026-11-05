@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from joulewise import arm_retry, night_gate
+from joulewise import window_policy as arm_retry; from joulewise import night_gate
 from scripts import run_night
 
 

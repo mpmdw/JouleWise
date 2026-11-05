@@ -22,7 +22,7 @@ from typing import Callable
 
 from joulewise import battery_float, corecaptured_loop
 from joulewise.night_kinds import NIGHT_KINDS, kind_row
-from joulewise.arm_retry import successor_license
+from joulewise.window_policy import successor_license
 from joulewise.zero_capture_facts import zero_capture_facts
 
 KIND = kind_row("quiet_predicate_evidence").kind
@@ -1341,7 +1341,7 @@ print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record 
     root = Path(state["measurement_root"])
     records = json.loads(run([root / ".venv/bin/python", "-B", "-c", code], cwd=root, input=json.dumps(records)))
     return dict(verdict="fail" if any(r["route"] != "retry" for r in records) else "pass",
-                consulted="joulewise.arm_retry.classify_abort", inventory=records,
+                consulted="joulewise.window_policy.classify_abort", inventory=records,
                 limitation="Routing only; full retry_allowed clearance remains lead-owned.")
 
 
@@ -1389,7 +1389,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                     phase="arm_check", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                     plan_id=state.get("plan_id"),
                 )
-                from joulewise.v5_qualification import persist_battery_observation
+                from joulewise.qualification_readers import persist_battery_observation
                 retained = persist_battery_observation(
                     lifecycle_dir(candidate), f"battery-float-arm-check-{observed['monotonic_before_ns']}", observed, _raw)
                 try:
@@ -1827,7 +1827,7 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
                 phase="publish_install", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                 plan_id=state.get("plan_id"),
             )
-            from joulewise.v5_qualification import persist_battery_observation
+            from joulewise.qualification_readers import persist_battery_observation
             persist_battery_observation(attempt, "battery-float-at-publication", battery_observation, _battery_raw)
             try:
                 battery_float.require_pass(battery_observation)

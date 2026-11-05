@@ -9,7 +9,7 @@ from unittest import mock
 
 from tests.git_fixture import init_git_fixture
 
-from joulewise import arm_readiness as readiness, t0_rehearsal as t0
+from joulewise import receipt_readers as readiness; from joulewise import process_observer as t0
 from scripts import produce_t0_rehearsal_bundle as producer
 from scripts import v5_s1_desk_closeout as desk
 from tests.test_network_time_off import receipt

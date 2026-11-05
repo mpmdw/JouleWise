@@ -218,7 +218,7 @@ class PackIdentityCounterfactualTests(FixtureCase):
         self.assertEqual(checks(result, "pack.identity_mismatch"), ["pack_tree_digest"])
 
     def test_ported_digest_equals_arm_readiness_digest(self) -> None:
-        from joulewise import arm_readiness
+        from joulewise import receipt_readers as arm_readiness
 
         fixture = PackFixture(self.root)
         self.assertEqual(committed_pack_tree_sha256(fixture.pack), arm_readiness.committed_pack_tree_sha256(fixture.pack))
@@ -226,7 +226,7 @@ class PackIdentityCounterfactualTests(FixtureCase):
 
 class RealPackTests(unittest.TestCase):
     def test_committed_block5_packs_raise_no_pack_flags_and_match_the_d134_digest(self) -> None:
-        from joulewise import arm_readiness
+        from joulewise import receipt_readers as arm_readiness
 
         status = subprocess.run(("git", "-C", str(REPO), "status", "--porcelain", "--", *REAL_PACKS),
                                 capture_output=True, text=True, check=True).stdout

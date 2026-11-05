@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author
-from joulewise import v5_qualification as q, t0_rehearsal as t0
+from joulewise import receipt_readers as readiness; from joulewise import receipt_formats as author
+from joulewise import qualification_readers as q; from joulewise import process_observer as t0
 from scripts import capture_t0_step, write_v5_qualification_plan as writer
 from scripts.ed_session import capture_t0_anchor_positive_control as g10
 from tests import test_v5_qualification_plan as plan_fixture

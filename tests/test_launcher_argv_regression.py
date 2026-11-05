@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.arm_readiness import (
+from joulewise.receipt_readers import (
     FamilyPublicationError,
     _authenticate_confirmation_table,
     gnu_sidecar,

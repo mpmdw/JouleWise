@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import copy
 import hashlib
@@ -14,9 +15,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as evidence
-from joulewise.arm_readiness_evidence import (
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as evidence
+from joulewise.evidence_replay import (
     EvidenceAuthoringError,
     author_arm_readiness_evidence,
 )
@@ -1439,7 +1440,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         # binding the receipt names must refuse instead of replaying PASS with
         # mutated: false; restoring the bytes must replay PASS again.
         receipt_path = Path(result["receipt_path"])
-        replay = readiness.generate_freeze_receipt(
+        replay = receipt_factory.generate_freeze_receipt(
             pack,
             measurement_checkout=repository,
             predecessor_pack_root=predecessor,
@@ -1464,14 +1465,14 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 target.write_bytes(original + b"\n")
                 try:
                     with self.assertRaises(readiness.ArmReadinessError):
-                        readiness.generate_freeze_receipt(
+                        receipt_factory.generate_freeze_receipt(
                             pack,
                             measurement_checkout=repository,
                             predecessor_pack_root=predecessor,
                         )
                 finally:
                     target.write_bytes(original)
-                restored = readiness.generate_freeze_receipt(
+                restored = receipt_factory.generate_freeze_receipt(
                     pack,
                     measurement_checkout=repository,
                     predecessor_pack_root=predecessor,

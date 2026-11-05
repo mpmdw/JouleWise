@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory, pack_go_factory
 
 import copy
 import hashlib
@@ -10,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
+import joulewise.receipt_readers as readiness
 from tests.git_fixture import init_git_fixture
 from tests.test_arm_readiness_schemas import (
     TEST_BOOT_SESSION_ID,
@@ -149,11 +150,11 @@ def install_pack_night_launch_inputs(pack, arm_path, manifest_path, custody,
         (night_dir / name).unlink(missing_ok=True)
     with mock.patch.object(readiness, "_verify_arm_receipt"), \
          mock.patch.object(readiness, "_current_boot_session_id", return_value=arm["boot_session_id"]), \
-         mock.patch.object(driver, "_pack_no_retry"), \
-         mock.patch.object(driver, "_pack_launch_references", return_value=references), \
-         mock.patch.object(driver, "_pack_evidence", return_value=[]):
-        prepared = driver._prepare_pack_night(parsed_plan, plan_path, plan_path.read_bytes())
-        driver._produce_pack_go(parsed_plan, plan_path, plan_path.read_bytes(), prepared, state, receipt, probes)
+         mock.patch.object(driver, "_pack_no_retry", create=True), \
+         mock.patch.object(driver, "_pack_launch_references", return_value=references, create=True), \
+         mock.patch.object(driver, "_pack_evidence", return_value=[], create=True):
+        prepared = pack_go_factory.prepare(driver, parsed_plan, plan_path, plan_path.read_bytes())
+        pack_go_factory.produce(driver, parsed_plan, plan_path, plan_path.read_bytes(), prepared, state, receipt, probes)
     go = readiness.parse_json_bytes(go_path.read_bytes())
     return {"night_plan": plan_path, "go_receipt": go_path, "authenticated_go_receipt": go,
             "go_receipt_sha256": artifact(go_path)["sha256"], "step6_confirmation_table": table,
@@ -492,7 +493,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         ), mock.patch.object(
             readiness, "_root_policy_refusals", return_value=([], set())
         ):
-            return readiness._consume_launch_capability(**inputs)
+            return receipt_factory._consume_launch_capability(**inputs)
 
     def _consume(
         self, token: bytes = b"t" * 32, **overrides: object
@@ -509,10 +510,10 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
-            settled = readiness.record_launch_lifecycle_event(
+            settled = receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "settle"
             )
         return consumption_path, settled
@@ -593,13 +594,13 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "settle"
             )
-            completed = readiness.record_launch_lifecycle_event(
+            completed = receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "completion"
             )
         lineage = readiness.authenticate_launch_lineage(
@@ -696,14 +697,14 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
             with mock.patch.object(
                 readiness, "_exclusive_write", side_effect=fail_bound_primary
             ):
                 with self.assertRaises(readiness.LaunchLineageError) as caught:
-                    readiness.record_launch_lifecycle_event(
+                    receipt_factory.record_launch_lifecycle_event(
                         self.pack, consumption_path, "settle"
                     )
             self.assertEqual(
@@ -719,7 +720,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             )
             self.assertFalse(bound_locator.exists())
             with self.assertRaises(readiness.LaunchLineageError) as replay:
-                readiness.record_launch_lifecycle_event(
+                receipt_factory.record_launch_lifecycle_event(
                     self.pack, consumption_path, "settle"
                 )
         self.assertEqual(
@@ -740,11 +741,11 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
             with self.assertRaises(readiness.LaunchLineageError) as caught:
-                readiness.record_launch_lifecycle_event(
+                receipt_factory.record_launch_lifecycle_event(
                     self.pack, consumption_path, "settle"
                 )
         self.assertEqual(caught.exception.reason_code, "launch_consumption_invalid")
@@ -760,7 +761,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             return_value=TEST_BOOT_SESSION_ID,
         ):
             with self.assertRaises(readiness.LaunchLineageError) as replay:
-                readiness.record_launch_lifecycle_event(
+                receipt_factory.record_launch_lifecycle_event(
                     self.pack, consumption_path, "settle"
                 )
         self.assertEqual(
@@ -1426,7 +1427,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 self.assertFalse(consumption_dir.exists())
 
         with self.assertRaises(TypeError):
-            readiness._consume_launch_capability(
+            receipt_factory._consume_launch_capability(
                 self.pack,
                 self.arm_path,
                 self.custody,
@@ -1455,7 +1456,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "completion"
             )
         with self.assertRaises(readiness.LaunchLineageError) as completed:
@@ -1485,10 +1486,10 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         ), mock.patch.object(
             readiness.time, "monotonic_ns", side_effect=(110, 120)
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "settle"
             )
         with mock.patch.object(readiness.time, "monotonic_ns", return_value=10_000):
@@ -1610,7 +1611,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            started = readiness.record_launch_lifecycle_event(
+            started = receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
         with self.assertRaises(readiness.LaunchLineageError) as incomplete:
@@ -1630,10 +1631,10 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
-            settled = readiness.record_launch_lifecycle_event(
+            settled = receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "settle"
             )
         with self.assertRaises(readiness.LaunchLineageError) as incomplete:
@@ -1660,13 +1661,13 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "start", handoff_token=token
             )
-            readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "settle"
             )
-            completed = readiness.record_launch_lifecycle_event(
+            completed = receipt_factory.record_launch_lifecycle_event(
                 self.pack, consumption_path, "completion"
             )
 
@@ -2205,7 +2206,7 @@ class PackNightConsumerTests(unittest.TestCase):
 
     def test_six_sentinel_inputs_cannot_be_omitted_even_without_conditional_paths(self):
         import inspect
-        signature = inspect.signature(readiness._consume_launch_capability)
+        signature = inspect.signature(receipt_factory._consume_launch_capability)
         for key in ("night_plan", "go_receipt", "authenticated_go_receipt", "go_receipt_sha256",
                     "step6_confirmation_table", "expected_confirmation_digest"):
             with self.subTest(key=key):
@@ -2221,7 +2222,7 @@ class PackNightConsumerTests(unittest.TestCase):
                 self.assertFalse(self.consumption.exists())
 
     def test_four_case_purpose_root_table_through_consumer(self):
-        from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
+        from joulewise.process_observer import REHEARSAL_WINDOW_PREFIX
         # Production id/rehearsal purpose, prefixed id/production roots,
         # prefixed id/disjoint roots, and normal production authority.
         for rehearsal, prefixed, collision, expected in (
@@ -2299,10 +2300,10 @@ class PackNightConsumerTests(unittest.TestCase):
         self.fixture.arm_path.unlink()
         with mock.patch.object(readiness, "_verify_arm_receipt") as verify:
             with self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_purpose_on_production_id"):
-                readiness._consume_launch_capability(**self.inputs)
+                receipt_factory._consume_launch_capability(**self.inputs)
             self.inputs["go_receipt_sha256"] = "0" * 64
             with self.assertRaisesRegex(readiness.LaunchLineageError, "^sha256$"):
-                readiness._consume_launch_capability(**self.inputs)
+                receipt_factory._consume_launch_capability(**self.inputs)
         verify.assert_not_called()
         self.assertFalse(self.consumption.exists())
 
@@ -2436,8 +2437,8 @@ class PackNightConsumerTests(unittest.TestCase):
                 action()
             self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
         token = b"t" * 32
-        readiness.record_launch_lifecycle_event(self.fixture.pack, self.consumption, "start", handoff_token=token)
-        settled = readiness.record_launch_lifecycle_event(self.fixture.pack, self.consumption, "settle")
+        receipt_factory.record_launch_lifecycle_event(self.fixture.pack, self.consumption, "start", handoff_token=token)
+        settled = receipt_factory.record_launch_lifecycle_event(self.fixture.pack, self.consumption, "settle")
         self.assertEqual(readiness.authenticate_launch_lineage(settled["launch_lineage"],
             require_completion=False, require_current_boot=False)["pack_id"], self.fixture.arm["pack"]["pack_id"])
         with self.assertRaises(readiness.LaunchLineageError) as caught:
@@ -2695,7 +2696,7 @@ class PackNightConsumerTests(unittest.TestCase):
 
     def test_rehearsal_prefix_is_shared_by_gate_and_consumer(self):
         from types import SimpleNamespace
-        from joulewise import night_gate, t0_rehearsal
+        from joulewise import night_gate; from joulewise import process_observer as t0_rehearsal
         arm = copy.deepcopy(self.fixture.arm)
         plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
         go = {"purpose": "G2B_SHAKEDOWN"}

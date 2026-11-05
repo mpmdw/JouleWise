@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, battery_float, v5_qualification as q
+from joulewise import receipt_readers as readiness; from joulewise import battery_float; from joulewise import qualification_readers as q
 from scripts import assemble_v5_battery_boundaries as assembler, harvest_v5_g2b_window as harvest
 from scripts import run_campaign, run_night
 
@@ -28,7 +28,7 @@ class ConsumerTests(unittest.TestCase):
             self.assertEqual(load.call_args.kwargs['head_pin_path'], Path('/explicit/pin'))
 
     def test_chain_exports_native_selected_ledger_and_shared_off_path(self):
-        from joulewise.arm_readiness_evidence_t0 import WINDOW_ENV_KEYS
+        from joulewise.receipt_formats import WINDOW_ENV_KEYS
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             chain = root / 'chain.zsh'
@@ -168,7 +168,7 @@ class G10CustodyTests(unittest.TestCase):
     def test_real_g10_verifier_replays_retained_tree_and_refuses_support_mutation(self):
         from tests.test_t0_anchor_positive_control import PositiveControlTests
         from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
-        from joulewise import t0_rehearsal as t0, arm_readiness_evidence_t0 as author
+        from joulewise import process_observer as t0; from joulewise import receipt_formats as author
         control = PositiveControlTests(); control.setUp(); self.addCleanup(control.doCleanups)
         self.assertEqual(control.run_control()['status'], 'DISCHARGED')
         head = subprocess.check_output(['git', '-C', str(control.repository), 'rev-parse', 'HEAD'], text=True).strip()

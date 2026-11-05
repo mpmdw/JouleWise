@@ -16,10 +16,10 @@ from unittest import mock
 
 from tests.git_fixture import init_git_fixture
 
-from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author, night_gate
-from joulewise.dwell import final_clean_dwell
+from joulewise import receipt_readers as readiness; from joulewise import receipt_formats as author; from joulewise import night_gate
+from joulewise.hazards.dwell import final_clean_dwell
 from joulewise import prewindow
-from joulewise import t0_rehearsal as t0, v5_qualification as q
+from joulewise import process_observer as t0; from joulewise import qualification_readers as q
 from scripts import capture_t0_step as capture, run_night, write_v5_qualification_plan as writer
 from scripts.ed_session import capture_t0_anchor_positive_control as g10
 from tests.test_arm_readiness_schemas import arm_context

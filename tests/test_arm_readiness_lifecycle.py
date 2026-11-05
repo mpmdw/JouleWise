@@ -17,22 +17,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as evidence_module
-from joulewise.arm_readiness import (
-    ArmReadinessError,
-    _pack_record,
-    generate_arm_receipt,
-    generate_dry_run_receipt,
-    generate_freeze_receipt,
-    gnu_sidecar,
-    render_json,
-    reviewed_main,
-    scan_receipt_namespace,
-    validate_freeze_receipt,
-    verify_arm_receipt,
-    verify_receipt,
-)
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as evidence_module
+from joulewise.receipt_readers import ArmReadinessError, _pack_record, gnu_sidecar, render_json, reviewed_main, scan_receipt_namespace, validate_freeze_receipt, verify_arm_receipt, verify_receipt; from tests.receipt_factory import generate_arm_receipt, generate_dry_run_receipt, generate_freeze_receipt
 from scripts import generate_arm_readiness as arm_readiness_cli
 from tests.git_fixture import init_git_fixture
 from tests.fixtures.arm_clock import coherent_clock_anchor
@@ -862,7 +849,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         clear_initial_arm(custody, pack.name)
         install_passing_freeze(repo, pack)
-        from joulewise.arm_readiness import generate_arm_receipt, generate_dry_run_receipt
+        from tests.receipt_factory import generate_arm_receipt, generate_dry_run_receipt
 
         dry = generate_dry_run_receipt(
             pack,
@@ -874,7 +861,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         install_passing_evidence(pack, custody)
         context = sample_arm(Path(temporary.name).resolve() / "context")["arm_context"]
         with mock.patch(
-            "joulewise.arm_readiness.verify_frozen_projection",
+            "joulewise.receipt_readers.verify_frozen_projection",
             side_effect=synthetic_identity_verifier,
         ):
             arm_result = generate_arm_receipt(pack, context, custody)
@@ -1504,7 +1491,7 @@ with mock.patch.object(
         histsem.start()
         self.addCleanup(histsem.stop)
         rederive = mock.patch(
-            "joulewise.arm_readiness_evidence._r1_rederive_at_arm",
+            "joulewise.evidence_replay._r1_rederive_at_arm",
             return_value=None,
         )
         rederive.start()
@@ -3151,7 +3138,7 @@ class PostSupersessionLayeringTests(unittest.TestCase):
 class PackNightT0InventoryTests(unittest.TestCase):
     """Exercise the GO inventory authenticator without the launch-fixture seam."""
     def setUp(self):
-        from joulewise import arm_readiness_evidence_t0 as author
+        from joulewise import receipt_formats as author
         from tests.test_arm_readiness_schemas import sample_evidence
         self.author = author
         self.temporary = tempfile.TemporaryDirectory()

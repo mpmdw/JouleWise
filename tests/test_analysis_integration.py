@@ -40,7 +40,7 @@ from joulewise.analysis_manifest_v3 import (
     finalize_prospective_analysis_manifest_v3,
     normalized_realized_stack_identity,
 )
-from joulewise.arm_readiness import LaunchLineageError
+from joulewise.receipt_readers import LaunchLineageError
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.inputs import (

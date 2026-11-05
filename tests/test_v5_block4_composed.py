@@ -9,8 +9,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author
-from joulewise import t0_rehearsal as t0
+from joulewise import receipt_readers as readiness; from joulewise import receipt_formats as author
+from joulewise import process_observer as t0
 from scripts import produce_t0_rehearsal_bundle as producer
 from tests import test_t0_rehearsal as historical
 from tests import test_v5_s1_desk_closeout as desk_fixture

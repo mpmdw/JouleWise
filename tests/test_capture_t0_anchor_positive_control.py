@@ -7,8 +7,8 @@ import time
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, network_time_off
-from joulewise import v5_qualification as q
+from joulewise import receipt_readers as readiness; from joulewise.hazards import network_time as network_time_off
+from joulewise import qualification_readers as q
 from scripts import collect_clock_reference
 from scripts.ed_session import capture_t0_anchor_positive_control as g10
 from tests import test_t0_anchor_positive_control as legacy

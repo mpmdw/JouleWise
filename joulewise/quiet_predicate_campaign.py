@@ -14,9 +14,9 @@ import subprocess
 import sys
 import time
 
-from joulewise import battery_float, night_gate, network_time_off
+from joulewise import battery_float; from joulewise import night_gate; from joulewise.hazards import network_time as network_time_off
 from joulewise.night_kinds import kind_row
-from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
+from joulewise.receipt_readers import EXPECTED_NETWORK_TIME_OFF_STDOUT
 
 PROTOCOL_PATH = night_gate.QPE01_PILOT_REGISTRATION_PATH
 CHAIN_PATH = night_gate.EVIDENCE_CHAIN_PATH

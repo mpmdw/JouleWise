@@ -54,7 +54,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.calibration_exits import RefusalCode, emit_calibration_refusal  # noqa: E402
 from joulewise.calibration_epoch_continuation import acceptance_judged_epochs  # noqa: E402
-from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
+from joulewise import receipt_readers as arm_readiness_module  # noqa: E402
 from joulewise import battery_float  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,

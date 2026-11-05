@@ -68,7 +68,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import battery_float, quiet_admission, network_time_off
+from joulewise import battery_float; from joulewise import quiet_admission; from joulewise.hazards import network_time as network_time_off
 from joulewise.adapters import powermetrics as pm
 from joulewise.clock import ClockStamp
 from joulewise.uncertainty_evidence import (

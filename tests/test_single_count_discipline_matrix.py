@@ -163,7 +163,7 @@ class DisciplineMatrixTests(unittest.TestCase):
         the mint, its hash gate, suite selection, and result refusal stay real.
         The relocation targets separately cover process and repository custody.
         """
-        from joulewise import arm_readiness_evidence as evidence
+        from joulewise import evidence_replay as evidence
         from tests import test_mint_floor_artifact_generalized as fixture
 
         module = "tests.test_mint_floor_artifact_generalized"

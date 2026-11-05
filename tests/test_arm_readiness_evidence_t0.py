@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import contextlib
 import hashlib
@@ -21,15 +22,15 @@ from types import ModuleType, SimpleNamespace
 from typing import Mapping
 from unittest import mock
 
-from joulewise import network_time_off, kernel_clock
+from joulewise.hazards import network_time as network_time_off; from joulewise import kernel_clock
 from tests.test_kernel_clock import frequency_probe
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as generic_evidence
-import joulewise.arm_readiness_evidence_t0 as t0
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as generic_evidence
+import joulewise.receipt_formats as t0
 import joulewise.adapters.mlx_runtime as mlx_runtime
 import joulewise.calibration_ledger as ledger
 import joulewise.identity_pins as identity_pins
-from joulewise.arm_readiness_evidence_t0 import (
+from joulewise.receipt_formats import (
     T0EvidenceAuthoringError,
     author_arm_readiness_evidence_t0,
 )
@@ -383,7 +384,7 @@ def _patched_sys_module(name: str, module: object):
             sys.modules[name] = previous
 
 
-from joulewise import v5_qualification as _qualification
+from joulewise import qualification_readers as _qualification
 _REAL_CLOCK_BUDGET = _qualification.authenticated_clock_budget
 
 
@@ -402,7 +403,7 @@ def fixture_clock_budget(inputs, pack):
 
 def install_clock_sizing_inputs(repository, pack, custody, *, maximum=320.):
     """Source-bound synthetic sizing; the small test pack has a specified roster."""
-    from joulewise import v5_qualification as q, night_gate
+    from joulewise import qualification_readers as q; from joulewise import night_gate
     from scripts import write_v5_qualification_plan as writer
     root = custody / pack.name / t0._INPUT_DIRECTORY
     window = custody / 'window-plan'
@@ -2631,7 +2632,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 ),
             ),
         ):
-            arm = readiness.generate_arm_receipt(pack, context, custody)
+            arm = receipt_factory.generate_arm_receipt(pack, context, custody)
         self.assertEqual(arm["status"], "PASS", arm)
         self.assertEqual(arm["arm_disposition"], "GO")
 
@@ -2676,7 +2677,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 return_value=(authored_at + short_horizon_ns + 1),
             ),
         ):
-            arm = readiness.generate_arm_receipt(pack, context, custody)
+            arm = receipt_factory.generate_arm_receipt(pack, context, custody)
         self.assertEqual(arm["status"], "REFUSE", arm)
         self.assertEqual(arm["arm_disposition"], "NO_GO")
         self.assertIn("readiness_record_expired", arm["reason_codes"])

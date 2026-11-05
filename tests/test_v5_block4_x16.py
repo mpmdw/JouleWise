@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import night_gate, v5_qualification as q
+from joulewise import night_gate; from joulewise import qualification_readers as q
 from scripts import harvest_v5_g2b_window as harvest, run_night as driver
 from tests import test_v5_block4_x7 as x7, test_v5_block4_x12a as x12a
 

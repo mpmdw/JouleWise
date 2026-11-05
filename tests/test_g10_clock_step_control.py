@@ -25,7 +25,7 @@ import tempfile
 import time
 import unittest
 
-from joulewise import kernel_clock, network_time_off
+from joulewise import kernel_clock; from joulewise.hazards import network_time as network_time_off
 from tests.live_hw import live_hw_only
 
 

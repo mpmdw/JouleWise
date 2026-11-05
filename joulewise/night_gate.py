@@ -1209,7 +1209,7 @@ class PackNightRefusal(ValueError):
 
 
 def _pack_bytes(path: Path, field: str, expected: str | None = None) -> bytes:
-    from joulewise import arm_readiness as readiness
+    from joulewise import receipt_readers as readiness
     try:
         if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
             raise PackNightRefusal(field + ": non-absolute or symlinked")
@@ -1224,7 +1224,7 @@ def _pack_bytes(path: Path, field: str, expected: str | None = None) -> bytes:
 
 
 def _pack_object(path: Path, field: str, expected: str | None = None):
-    from joulewise import arm_readiness as readiness
+    from joulewise import receipt_readers as readiness
     raw = _pack_bytes(path, field, expected)
     try:
         value = readiness.parse_json_bytes(raw)
@@ -1236,7 +1236,7 @@ def _pack_object(path: Path, field: str, expected: str | None = None):
 
 
 def _pack_digest(plan: NightPlan, arm=None) -> Path:
-    from joulewise import arm_readiness as readiness
+    from joulewise import receipt_readers as readiness
     binding = plan.pack_night
     root = Path(binding["pack_root"])
     if (not root.is_absolute() or root.name != binding["pack_id"]
@@ -1259,7 +1259,7 @@ def _pack_digest(plan: NightPlan, arm=None) -> Path:
 
 
 def _authenticate_pack_records(plan: NightPlan):
-    from joulewise import arm_readiness as readiness
+    from joulewise import receipt_readers as readiness
     custody = Path(plan.custody_root)
     if not custody.is_absolute() or any(p.is_symlink() for p in (custody, *custody.parents)):
         raise PackNightRefusal("custody_root: non-absolute or symlinked")
@@ -1352,78 +1352,12 @@ def _authenticate_pack_records(plan: NightPlan):
     return {"root": root, **records}
 
 
-def _pack_no_retry(plan: NightPlan, boot: str, written: Path | None = None):
-    from joulewise import arm_readiness as readiness
-    pack_custody = Path(plan.custody_root) / plan.pack_night["pack_id"]
-    for directory in (pack_custody, pack_custody / "arm_readiness.receipts", pack_custody / "arm_readiness.consumptions"):
-        if directory.is_symlink():
-            raise PackNightRefusal("arm_receipt: symlinked namespace")
-    for path in pack_custody.rglob("*.consumed.json"):
-        value = _pack_object(path, "consumption")
-        if not isinstance(value.get("boot_session_id"), str):
-            raise PackNightRefusal("consumption.boot_session_id")
-        if value.get("boot_session_id") == boot:
-            raise PackNightRefusal("arm_receipt: consumption this boot")
-    namespace = pack_custody / "arm_readiness.receipts"
-    if not namespace.exists():
-        return
-    for entry in readiness.scan_receipt_namespace(namespace, "arm"):
-        if entry["receipt"]["boot_session_id"] != boot:
-            continue
-        if written is None or entry["number"] > int(written.stem.removeprefix("arm-")):
-            raise PackNightRefusal("arm_receipt: higher-numbered unconsumed receipt or re-arm this boot")
 
 
-def _pack_evidence(plan: NightPlan, arm_state):
-    from joulewise import arm_readiness as readiness
-    from joulewise import arm_readiness_evidence_t0 as t0_author
-    custody = Path(plan.custody_root)
-    pack_custody = custody / plan.pack_night["pack_id"]
-    # Gate replay uses the ARM's recorded inventory, independently of the author
-    # row census below. The driver also binds its immediate author result.
-    recorded_paths = [str(pack_custody / item["path"]) for item in arm_state["arm"]["evidence"]
-                      if item.get("namespace") == "WINDOW_CUSTODY"
-                      and Path(item["path"]).parent == Path(t0_author._EVIDENCE_DIRECTORY)]
-    paths = arm_state.get("authored", {}).get("receipt_paths", recorded_paths)
-    expected_paths = {str(pack_custody / t0_author._EVIDENCE_DIRECTORY / t0_author._receipt_name(row)) for row in t0_author._EXPECTED_ROWS}
-    if not isinstance(paths, list) or len(paths) != 15 or any(not isinstance(path, str) for path in paths) or set(paths) != expected_paths or len(recorded_paths) != 15 or set(recorded_paths) != expected_paths:
-        raise PackNightRefusal("t0_evidence.receipt_paths")
-    arm_paths = {str(pack_custody / item["path"]): item["sha256"]
-                 for item in arm_state["arm"]["evidence"] if item.get("namespace") == "WINDOW_CUSTODY"}
-    records = []
-    inputs = {}
-    for text in paths:
-        if text not in arm_paths:
-            raise PackNightRefusal("t0_evidence: author receipt absent from ARM")
-        path = Path(text)
-        value = _pack_object(path, "t0_evidence", arm_paths[text])
-        for fact in value.get("facts", []):
-            if fact.get("source_kind") != "PROBE":
-                continue
-            source = _pack_object(pack_custody / fact["source_path"], "t0_evidence.source", fact["source_sha256"])
-            for item in source.get("input_artifacts", []):
-                if item["path"] in inputs and inputs[item["path"]] != item["sha256"]:
-                    raise PackNightRefusal("t0_evidence.source: conflicting input digest")
-                inputs[item["path"]] = item["sha256"]
-        records.append(path)
-    # This is the author's exact capture inventory, not a caller glob or subset.
-    records.extend(pack_custody / "arm_readiness.t0.inputs" / name for name in t0_author._CAPTURE_FILES.values())
-    result = []
-    for path in records:
-        expected = arm_paths.get(str(path), inputs.get(str(path)))
-        if expected is None:
-            raise PackNightRefusal("t0_evidence.capture: absent from author attestation")
-        raw = _pack_bytes(path, "t0_evidence", expected)
-        try:
-            relative = path.resolve(strict=True).relative_to(custody.resolve(strict=True)).as_posix()
-        except ValueError as exc:
-            raise PackNightRefusal("t0_evidence.path") from exc
-        result.append({"path": relative, "sha256": readiness.sha256_bytes(raw)})
-    return sorted(result, key=lambda item: item["path"])
 
 
 def _pack_rehearsal_roots(plan, arm, purpose):
-    from joulewise import arm_readiness as readiness, t0_rehearsal
+    from joulewise import receipt_readers as readiness, receipt_formats as t0_rehearsal
     window_id = arm["pack"]["window_id"]
     prefixed = isinstance(window_id, str) and window_id.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX)
     if prefixed != (purpose == "T0_REHEARSAL"):
@@ -1495,7 +1429,7 @@ def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
     pack_t0 = None
     if (plan.receipt_class == "TRANSACTION_PACK" and purpose == "G2B_SHAKEDOWN"
             and marker in {"s1", "s2"} and isinstance(plan.pack_night, Mapping)):
-        from joulewise import arm_readiness as readiness
+        from joulewise import receipt_readers as readiness
         # During initial staging the writer has verified sizing but has not
         # published its custody file yet. Runtime uses the same chain-pinned
         # bytes. Older packs without a stage allowance keep the original cap.
@@ -1510,7 +1444,7 @@ def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
         inner = sizing.get("sizing", sizing) if isinstance(sizing, Mapping) else {}
         fixed = inner.get("fixed", {}) if isinstance(inner, Mapping) else {}
         if isinstance(fixed, Mapping) and "t0_stage_cap" in fixed:
-            from scripts import write_v5_qualification_plan as writer
+            from joulewise import qualification_readers as writer
             expected_sizing = chain_literal(chain_text, "NIGHT_CLOCK_SIZING_SHA256")
             if re.fullmatch(r"[0-9a-f]{64}", expected_sizing) is None:
                 raise PackNightRefusal("qualification stage sizing pin")
@@ -1538,7 +1472,7 @@ def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
 
 def authenticate_arm_context(plan, context=None, *, legacy_rehearsal=False):
     """Bind qualification context bytes through the already pinned chain."""
-    from joulewise import arm_readiness as readiness
+    from joulewise import receipt_readers as readiness
     text = _pack_bytes(Path(plan.chain_path), "window_chain").decode("utf-8")
     legacy_rehearsal = legacy_rehearsal and "export V5_QUALIFICATION_OCCURRENCE=" not in text
     path = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
@@ -1572,51 +1506,6 @@ def authenticate_arm_context(plan, context=None, *, legacy_rehearsal=False):
     return pinned
 
 
-def _evaluate_pack_conditions(plan, probes, rows, arm_path):
-    """Derive C1/C2 from bound custody bytes, never caller condition labels."""
-    from joulewise import arm_readiness as readiness
-
-    prepared = _authenticate_pack_records(plan)
-    deadline = qualification_start_deadline(
-        plan, _pack_bytes(Path(plan.chain_path), "qualification_chain").decode("utf-8"),
-        prepared["authorization_record"]["purpose"])
-    if deadline is not None and _clock_value(probes, "epoch") > deadline:
-        raise PlanError("night_window_expired", "qualification latest chain start exceeded")
-    rows["C1"] = _MutableCondition("PASS", None,
-        [plan.pack_night[key]["path"] for key in ("authorization_record", "confirmation_record")],
-        dict(prepared["authorization_record"]))
-    if arm_path is None:
-        raise PackNightRefusal("arm_receipt: exact driver-written path required", missing=True)
-    path = Path(arm_path)
-    custody = Path(plan.custody_root) / plan.pack_night["pack_id"]
-    if (path.parent != custody / "arm_readiness.receipts"
-            or re.fullmatch(r"arm-[0-9]{4,}\.json", path.name) is None):
-        raise PackNightRefusal("arm_receipt.path")
-    confirmation = prepared["confirmation_record"]
-    verified = readiness._verify_arm_receipt(prepared["root"], path, require_unconsumed=True,
-        step6_confirmation_table=confirmation["table_path"],
-        expected_confirmation_digest=confirmation["table_sha256"])
-    if verified.get("status") != "PASS" or verified.get("arm_disposition") != "GO":
-        raise PackNightRefusal("arm_receipt: replay did not return PASS/GO")
-    arm = _pack_object(path, "arm_receipt", verified["receipt_sha256"])
-    _pack_digest(plan, arm)
-    if (arm["status"] != "PASS" or arm["arm_disposition"] != "GO"
-            or arm["pack"]["plan_id"] != (readiness._pack_record(prepared["root"])["plan_id"]
-                                           if plan.previous_attempt is not None else plan.plan_id)
-            or arm["reviewed_main"]["head_commit"] != plan.repo_head):
-        raise PackNightRefusal("arm_receipt.plan/HEAD/custody/disposition")
-    authenticate_arm_context(plan, arm["arm_context"],
-                             legacy_rehearsal=prepared["authorization_record"]["purpose"] == "T0_REHEARSAL")
-    if (arm["boot_session_id"] != readiness._current_boot_session_id()
-            or _clock_value(probes, "monotonic") >= arm["valid_until_monotonic_ns"]):
-        raise PackNightRefusal("arm_receipt.boot/expiry")
-    _pack_rehearsal_roots(plan, arm, prepared["authorization_record"]["purpose"])
-    _pack_no_retry(plan, arm["boot_session_id"], path)
-    evidence = _pack_evidence(plan, {"arm": arm})
-    rows["C2"] = _MutableCondition("PASS", None,
-        [str(path), *(item["path"] for item in evidence)],
-        {"arm_sha256": verified["receipt_sha256"]})
-    return arm
 
 def _check_static_start(plan, probes, rows, evidence):
     if (
@@ -1672,20 +1561,7 @@ def _check_static_start(plan, probes, rows, evidence):
             rows,
             Refusal("night_plan_stale", "plan is older than 36 hours", ()),
         )
-    # magistrate provisional reading, activation 152c9255 record 00 item 51,
-    # pending final pass: T0_REHEARSAL measures nothing and retains its
-    # separate production-custody disjointness rule.
-    rehearsal = False
-    if (plan.authored_epoch_s >= MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
-            and plan.receipt_class == "TRANSACTION_PACK" and plan.pack_night is not None):
-        locator = plan.pack_night["authorization_record"]
-        try:
-            authorization = _pack_object(Path(locator["path"]), "authorization_record",
-                                         locator["sha256"])
-            rehearsal = authorization.get("purpose") == "T0_REHEARSAL"
-        except (PackNightRefusal, OSError, ValueError):
-            pass  # Unauthenticated purpose cannot exempt a pack plan.
-    if plan.authored_epoch_s >= MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S and not rehearsal:
+    if plan.authored_epoch_s >= MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S:
         try:
             custody_root = MEASUREMENT_ROOT_CUSTODY_ROOT.resolve(strict=True)
             measurement_root = Path(plan.measurement_root)
@@ -2273,42 +2149,26 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     A v4 caller must use the supervised driver bind loop; no one-shot call can
     authorize an interval plan.
     """
-    del pack_conditions
+    del pack_conditions, pack_arm_receipt
     if plan.receipt_class == HAZARD_PACK:
         raise PlanError("night_receipt_class_invalid",
                         "HAZARD_PACK windows are armed by joulewise.hazards in the driver, never by evaluate_night")
     rows = _initial_conditions(plan.receipt_class)
     evidence = []
-    pack_arm = None
     if plan.quiet_admission is not None:
         raise PlanError("night_probe_error", "v4 requires supervised interval admission in run_night")
     for check in (_check_static_start, _check_census, _check_chain_identity):
         refused = check(plan, probes, rows, evidence)
         if refused is not None:
             return refused
-    if plan.receipt_class == "TRANSACTION_PACK" and plan.pack_night is None:
-        return _finish(
-            plan,
-            probes,
-            rows,
-            Refusal(
-                "night_refused_class_unbuilt",
-                "stage 3 not implemented: TRANSACTION_PACK is pack-bound and stays under E-10 (ruling R-10)",
-                (),
-            ),
-        )
-
     if plan.receipt_class == "TRANSACTION_PACK":
-        try:
-            pack_arm = _evaluate_pack_conditions(plan, probes, rows, pack_arm_receipt)
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, ImportError) as exc:
-            return _finish(plan, probes, rows, Refusal(
-                getattr(exc, "reason", "launch_go_receipt_invalid"), str(exc), ()))
+        return _finish(plan, probes, rows, Refusal(
+            "night_refused_class_unbuilt", "TRANSACTION_PACK issuance is retired; historical records remain readable", ()))
 
     refused = _check_machine(plan, probes, rows, evidence)
     if refused is not None:
         return refused
-    refused = _check_clock(plan, probes, rows, evidence, pack_arm=pack_arm)
+    refused = _check_clock(plan, probes, rows, evidence)
     if refused is not None:
         return refused
     refused = _check_registration(plan, probes, rows, evidence)

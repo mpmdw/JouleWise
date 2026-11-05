@@ -10,7 +10,7 @@ import time
 
 OFF_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off")
 BOOT_ARGV = ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid")
-SCHEMA = "joulewise.network_time_off.v1"
+SCHEMA = "joulewise.hazards.network_time.v1"
 EXPECTED_STDOUT = "setUsingNetworkTime: Off\n"
 """The wording macOS prints when the setter switches network time from On to Off."""
 # What the receipt must prove is the end state: network time is Off.  macOS

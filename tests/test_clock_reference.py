@@ -11,7 +11,7 @@ from contextlib import redirect_stderr
 from decimal import Decimal
 from unittest import mock
 
-from joulewise import arm_readiness as readiness
+from joulewise import receipt_readers as readiness
 from joulewise import clock_reference
 from scripts import collect_clock_reference as cli
 

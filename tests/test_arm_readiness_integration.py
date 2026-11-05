@@ -15,23 +15,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as evidence_author
-import joulewise.arm_readiness_evidence_t0 as t0_evidence_author
-from joulewise.arm_readiness import (
-    ASSURANCE,
-    EVIDENCE_RECEIPT_SCHEMA,
-    IDENTITY_PIN_PROJECTION_REASON_CODES,
-    READINESS_REASON_CODES,
-    ArmReadinessError,
-    committed_pack_tree_sha256,
-    generate_arm_receipt,
-    gnu_sidecar,
-    load_registry,
-    render_json,
-    reviewed_main,
-    verify_arm_receipt,
-)
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as evidence_author
+import joulewise.receipt_formats as t0_evidence_author
+from joulewise.receipt_readers import ASSURANCE, EVIDENCE_RECEIPT_SCHEMA, IDENTITY_PIN_PROJECTION_REASON_CODES, READINESS_REASON_CODES, ArmReadinessError, committed_pack_tree_sha256, gnu_sidecar, load_registry, render_json, reviewed_main, verify_arm_receipt; from tests.receipt_factory import generate_arm_receipt
 from joulewise.identity_pins import IdentityPinProjectionError
 from tests.fixtures.arm_clock import coherent_clock_anchor
 from tests.test_arm_readiness_dry_run import install_passing_freeze
@@ -393,7 +380,7 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             make_t0_fixture,
             passing_probe,
         )
-        from joulewise import kernel_clock, v5_qualification
+        from joulewise import kernel_clock; from joulewise import qualification_readers as v5_qualification
         from tests.test_kernel_clock import frequency_probe
         self.enterContext(mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=frequency_probe()))
         self.enterContext(mock.patch.object(v5_qualification, "authenticated_clock_budget", side_effect=fixture_clock_budget))

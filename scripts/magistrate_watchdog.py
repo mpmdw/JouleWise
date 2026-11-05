@@ -46,7 +46,7 @@ from joulewise.night_gate import (  # noqa: E402
     PlanError,
     agent_census,
 )
-from joulewise.arm_retry import (  # noqa: E402
+from joulewise.window_policy import (  # noqa: E402
     terminal_window_release,
     terminal_zero_capture_refusal,
 )

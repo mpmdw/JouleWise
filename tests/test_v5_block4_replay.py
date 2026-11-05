@@ -1,3 +1,4 @@
+from tests import receipt_factory
 """DESK ONLY: committed-GAMMA preparation and the block-4 joined replay.
 
 Before GAMMA is frozen (main), the joined acceptance cases SKIP at the D-134
@@ -26,9 +27,9 @@ import time
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as ar, night_gate, t0_rehearsal
-from joulewise import arm_readiness_evidence_t0 as t0_author
-from joulewise import v5_qualification as q
+from joulewise import receipt_readers as ar; from joulewise import night_gate; from joulewise import process_observer as t0_rehearsal
+from joulewise import receipt_formats as t0_author
+from joulewise import qualification_readers as q
 from joulewise.night_plan_writer import write_night_plan
 from scripts import harvest_v5_g2b_window as g2b, run_night as driver
 from scripts import harvest_v5_qualification as qualification
@@ -379,7 +380,7 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
         confirmation = q.read(Path(inputs["confirmation"]["record"]["path"]))
         if not self.frozen:
             with self.assertRaises(ar.ArmReadinessError) as caught:
-                ar.generate_arm_receipt(self.pack, arm_context(self.root),
+                receipt_factory.generate_arm_receipt(self.pack, arm_context(self.root),
                     inputs["plan"]["custody_root"], step6_confirmation_table=confirmation["table_path"],
                     expected_confirmation_digest=inputs["confirmation"]["expected_confirmation_digest"])
             self.assertEqual(caught.exception.reason_code, "readiness_freeze_receipt_unreadable")
@@ -387,7 +388,7 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
             return
         context_root = self.root / "arm-diagnostic-context"
         context_root.mkdir()
-        result = ar.generate_arm_receipt(self.pack, arm_context(context_root),
+        result = receipt_factory.generate_arm_receipt(self.pack, arm_context(context_root),
             inputs["plan"]["custody_root"], step6_confirmation_table=confirmation["table_path"],
             expected_confirmation_digest=inputs["confirmation"]["expected_confirmation_digest"])
         if result["receipt_path"] is None:
@@ -454,7 +455,7 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
         self.assertEqual(record["freeze_receipt"], writer.locator(self.pack / freeze["path"]))
         # desk.under_lease_rehearsal: the real dry run (real reservation CLI and
         # ledger writer lifecycle against a synthetic ledger).
-        dry = ar.generate_dry_run_receipt(self.pack, a1.custody, "a1", self.root / "a1-dry-run")
+        dry = receipt_factory.generate_dry_run_receipt(self.pack, a1.custody, "a1", self.root / "a1-dry-run")
         self.assertEqual((dry["status"], dry["reason_codes"]), ("PASS", []))
         # a1 ARM-only exactly as the record's recipe invokes it.
         self.assertEqual(record["recipe"]["arm_argv"][-4:], [str(writer.REPO_ROOT / "scripts/check_v5_arm_abort.py"),

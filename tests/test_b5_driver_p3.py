@@ -26,7 +26,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_retry
+from joulewise import window_policy as arm_retry
 from joulewise.b5 import driver as b5_driver
 from tests import process_reaper
 from tests.test_b5_driver import Harness, load_driver

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import ast
 import copy
@@ -13,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness as readiness
+from joulewise import receipt_readers as readiness
 from joulewise import scheduler_gates
 from tests.git_fixture import init_git_fixture
 
@@ -589,13 +590,13 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
                 # No predecessor: the gate is not consulted at all -- the
                 # bootstrap case. Execution stops at the patched _plan_tree.
                 with self.assertRaises(readiness.ArmReadinessError):
-                    readiness.generate_freeze_receipt(
+                    receipt_factory.generate_freeze_receipt(
                         root / "d117_floor_qwen3-1p7b_v5",
                         measurement_checkout=ROOT,
                     )
                 self.assertEqual(calls, [])
 
-                refusal = readiness.generate_freeze_receipt(
+                refusal = receipt_factory.generate_freeze_receipt(
                     root / "d117_floor_qwen25_1p5b_v6",
                     measurement_checkout=ROOT,
                     predecessor_pack_root=root / "d117_floor_qwen3-1p7b_v5",

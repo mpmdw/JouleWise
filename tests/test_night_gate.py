@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import copy
 import hashlib
@@ -268,7 +269,7 @@ class PackPreArmIdentityTests(unittest.TestCase):
                     self.assertEqual("launch_go_receipt_invalid", refusal["reason"])
                     self.assertEqual("measurement_root: launcher is not the planned clone", refusal["detail"])
                     fixture.author.author_arm_readiness_evidence_t0.assert_not_called()
-                    fixture.readiness.generate_arm_receipt.assert_not_called()
+                    fixture.receipt_factory.generate_arm_receipt.assert_not_called()
                     self.assertFalse(fixture.arm_path.exists())
                     self.assertEqual([], list(fixture.custody.rglob("arm_readiness.receipts/*.json")))
                     self.assertFalse((fixture.custody / "night/go_receipt.json").exists())

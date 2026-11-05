@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, battery_float, network_time_off
-from joulewise import arm_readiness_evidence_t0 as author
+from joulewise import receipt_readers as readiness; from joulewise import battery_float; from joulewise.hazards import network_time as network_time_off
+from joulewise import receipt_formats as author
 from joulewise.night_gate import NightPlan
 from scripts import check_v5_arm_abort as checker
 from scripts import write_v5_qualification_plan as writer

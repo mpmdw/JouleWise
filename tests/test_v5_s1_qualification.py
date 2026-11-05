@@ -10,7 +10,7 @@ from unittest import mock
 
 from tests.git_fixture import init_git_fixture
 
-from joulewise import arm_readiness as readiness, t0_rehearsal as t0
+from joulewise import receipt_readers as readiness; from joulewise import process_observer as t0
 from scripts import produce_t0_rehearsal_bundle as producer, rehearse_t0_unattended as loader
 from tests import test_t0_rehearsal as historical
 from tests.git_fixture import init_git_fixture
@@ -46,7 +46,7 @@ class QualificationSubsetTests(unittest.TestCase):
                 self.assertEqual(t0.evaluate_g1(self.bundle()).status.value, expected)
 
     def test_g1_registered_table_covers_all_native_absence_probes(self):
-        from joulewise import arm_readiness_evidence_t0 as author
+        from joulewise import receipt_formats as author
         argv_roster = [list(producer.night_gate.AGENT_CENSUS_ARGV),
                       ["/usr/bin/pgrep", "-x", "caffeinate"],
                       ["/usr/bin/pgrep", "-lf", author._BROWSER_CENSUS_PATTERN],
@@ -374,7 +374,7 @@ class QualificationSubsetTests(unittest.TestCase):
         self.assertEqual(result.status.value, "FAIL"); self.assertIn("OFF identity", result.message)
 
     def test_g9_authenticates_h_pin_against_real_git_objects_and_stop(self):
-        from joulewise import v5_qualification as q, calibration_ledger as ledger
+        from joulewise import qualification_readers as q; from joulewise import calibration_ledger as ledger
         repository = Path(self.temp.name).resolve() / "head-replay"; repository.mkdir()
         pin = repository / "configs/calibration/calibration_ledger_head.json"; pin.parent.mkdir(parents=True)
         pin.write_bytes(readiness.render_json({"ledger_schema": ledger.LEDGER_SCHEMA, "sequence": 0, "head_digest": ledger.GENESIS_DIGEST}))

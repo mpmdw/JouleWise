@@ -16,7 +16,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness, identity_pins
+from joulewise import receipt_readers as arm_readiness; from joulewise import identity_pins
 from joulewise.bundle import RunBundleWriter
 from joulewise.clock import FakeClock
 from joulewise.schemas import BenchmarkConfig

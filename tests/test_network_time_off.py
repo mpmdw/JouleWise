@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from joulewise import network_time_off as nt
+from joulewise.hazards import network_time as nt
 
 
 def receipt(**changes):

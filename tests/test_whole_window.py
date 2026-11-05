@@ -1,6 +1,7 @@
 """Two-scope authenticated whole-window consumption regressions."""
 
 from __future__ import annotations
+from tests import receipt_factory
 
 import copy
 import hashlib
@@ -12,8 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import joulewise.arm_readiness as arm_readiness
-from joulewise.arm_readiness import LaunchLineageError
+import joulewise.receipt_readers as arm_readiness
+from joulewise.receipt_readers import LaunchLineageError
 from joulewise.floor_extraction import extract_absolute_cell
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
@@ -1042,7 +1043,7 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            arm_readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 launch.pack,
                 consumption_path,
                 "completion",

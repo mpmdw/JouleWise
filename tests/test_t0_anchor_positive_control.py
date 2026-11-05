@@ -13,7 +13,7 @@ import time
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, kernel_clock, network_time_off, t0_rehearsal, v5_qualification
+from joulewise import receipt_readers as readiness; from joulewise import kernel_clock; from joulewise.hazards import network_time as network_time_off; from joulewise import process_observer as t0_rehearsal; from joulewise import qualification_readers as v5_qualification
 from tests.test_kernel_clock import frequency_probe
 from joulewise.clock_reference import ClockAnchor
 from scripts import author_arm_evidence_t0 as author_cli, collect_clock_reference

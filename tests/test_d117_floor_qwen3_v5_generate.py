@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise import arm_readiness, calibration_bracketing, identity_pins
+from joulewise import receipt_readers as arm_readiness; from joulewise import calibration_bracketing; from joulewise import identity_pins
 from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.paper_reported_energy import _validate_registered_spec, registration_sha256

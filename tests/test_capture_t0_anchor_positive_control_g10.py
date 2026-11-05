@@ -1,7 +1,7 @@
 """Native custody replay checks for measured-offset G10 scheduling."""
 import unittest
 
-from joulewise import arm_readiness as readiness
+from joulewise import receipt_readers as readiness
 from scripts.ed_session import capture_t0_anchor_positive_control as g10
 from tests.test_capture_t0_anchor_positive_control import ControlFixture
 

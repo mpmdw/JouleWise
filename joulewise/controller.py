@@ -683,7 +683,7 @@ def _load_instrument_calibration_attachment(
         raise ValueError("instrument calibration evidence is invalid JSON") from exc
     from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH  # noqa: PLC0415
 
-    from joulewise.arm_readiness import LAUNCH_LINEAGE_LOCATOR_BASENAME  # noqa: PLC0415
+    from joulewise.receipt_readers import LAUNCH_LINEAGE_LOCATOR_BASENAME  # noqa: PLC0415
 
     bracket_provenance = None
     g2b_provenance = None
@@ -832,7 +832,7 @@ def _g2b_auxiliary_config_matches(
     ``errors`` (HAZARD, PLAN2 row 5): when given, an exception that makes the
     match False is recorded there as ``"<type>: <text>"`` instead of vanishing.
     """
-    from joulewise.arm_readiness import LaunchLineageError  # noqa: PLC0415
+    from joulewise.receipt_readers import LaunchLineageError  # noqa: PLC0415
 
     try:
         source, raw = _cli_config_source(config)
@@ -894,7 +894,7 @@ def _authenticate_g2b_pre_slot_attachment(
     session/slot/plan/custody/digest/T1 term stays a refusal, and a battery
     phase whose record names a raw digest must still carry those bytes.
     """
-    from joulewise.arm_readiness import (  # noqa: PLC0415
+    from joulewise.receipt_readers import (  # noqa: PLC0415
         authenticate_campaign_launch_lineage, _plan_tree, _repo_for_pack,
     )
     from joulewise.calibration_ledger import (  # noqa: PLC0415

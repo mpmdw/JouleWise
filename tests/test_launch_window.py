@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests import evidence_factory
+from tests import receipt_factory
 
 import argparse
 import copy
@@ -17,8 +19,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness
-from joulewise import arm_readiness_evidence_t0 as t0_evidence
+from joulewise import receipt_readers as arm_readiness
+from joulewise import receipt_formats as t0_evidence
 from joulewise import clock_reference
 from joulewise.analysis_engine import inputs as analysis_inputs
 from joulewise import floor_extraction, whole_window
@@ -560,8 +562,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         expected_arm_status="PASS",
     ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path, Path]:
         from datetime import datetime
-        from joulewise import network_time_off
-        from joulewise import arm_readiness_evidence as generic_evidence
+        from joulewise.hazards import network_time as network_time_off
+        from joulewise import evidence_replay as generic_evidence
         from tests.test_arm_readiness_evidence_author import make_author_fixture
         from tests.test_arm_readiness_evidence_t0 import (
             SYNTHETIC_UTC_NOW,
@@ -759,7 +761,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
                 return_value=TEST_BOOT_SESSION_ID,
             ),
         ):
-            authored = generic_evidence.author_arm_readiness_evidence(pack)
+            authored = generic_evidence_factory.author_arm_readiness_evidence(pack)
         self.assertEqual(authored["status"], "PASS", authored)
         pack_relative = pack.relative_to(repository).as_posix()
         git(
@@ -781,7 +783,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
                 return_value=TEST_BOOT_SESSION_ID,
             ),
         ):
-            frozen = arm_readiness.generate_freeze_receipt(
+            frozen = receipt_factory.generate_freeze_receipt(
                 pack,
                 # D-154 R-3 (MINT-CHECKOUT-DECLARATION-01): the mint requires an
                 # explicit operator declaration; the fixture's own repository is
@@ -1420,7 +1422,7 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         ), mock.patch.object(
             arm_readiness, "_gate_receipt_histsem", return_value=None
         ), mock.patch(
-            "joulewise.arm_readiness_evidence._r1_rederive_at_arm",
+            "joulewise.evidence_replay._r1_rederive_at_arm",
             return_value=None,
         ):
             (repository / "dependency.txt").write_text("stable\n")
@@ -1473,7 +1475,7 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             )
             # D-154 R-3: the mint requires an explicit operator declaration;
             # this fixture's own repository is its declared measurement checkout.
-            minted = arm_readiness.generate_freeze_receipt(
+            minted = receipt_factory.generate_freeze_receipt(
                 pack, measurement_checkout=repository
             )
             self.assertTrue(minted["mutated"])
@@ -2287,7 +2289,7 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
 
     @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
     def test_cli_then_callee_go_mutation_is_detected_by_the_real_callee(self):
-        real_consume = arm_readiness._consume_launch_capability
+        real_consume = receipt_factory._consume_launch_capability
         def mutate_then_consume(**inputs):
             path = Path(inputs["go_receipt"])
             path.write_bytes(path.read_bytes() + b" ")
@@ -2362,7 +2364,7 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         This pins the required production-entry behavior, not a substitute
         validator. The consumer admission must run before the absent ARM is accessed.
         """
-        from joulewise import t0_rehearsal
+        from joulewise import process_observer as t0_rehearsal
 
         window_id = t0_rehearsal.REHEARSAL_WINDOW_PREFIX + "g7-fixture"
         parent = Path(self.fixture.temporary.name).resolve() / "home/night-custody"
@@ -2493,7 +2495,7 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
     @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
     def test_valid_rehearsal_class_refused_by_production_entry_and_consumer(self):
         """B4: real six-key rehearsal authority, never a malformed GO surrogate."""
-        from joulewise import t0_rehearsal
+        from joulewise import process_observer as t0_rehearsal
         from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
 
         with tempfile.TemporaryDirectory() as temporary:

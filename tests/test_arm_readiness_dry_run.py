@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests import evidence_factory
+from tests import receipt_factory
 
 import copy
 import hashlib
@@ -10,20 +12,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as evidence_author
-from joulewise.arm_readiness import (
-    ASSURANCE,
-    _latest_dry_run,
-    _pack_record,
-    committed_pack_tree_sha256,
-    generate_dry_run_receipt,
-    gnu_sidecar,
-    render_json,
-    reviewed_main,
-    validate_freeze_receipt,
-    validate_dry_run_receipt,
-)
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as evidence_author
+from joulewise.receipt_readers import ASSURANCE, _latest_dry_run, _pack_record, committed_pack_tree_sha256, gnu_sidecar, render_json, reviewed_main, validate_freeze_receipt, validate_dry_run_receipt; from tests.receipt_factory import generate_dry_run_receipt
 from tests.test_arm_readiness_lifecycle import (
     PACK_NAME,
     git,
@@ -551,7 +542,7 @@ class ArmReadinessDryRunTests(unittest.TestCase):
         self.assertIsNone(code)
 
     def test_production_minted_dry_run_survives_repository_relocation(self) -> None:
-        from joulewise import arm_readiness_evidence as evidence
+        from joulewise import evidence_replay as evidence
         from tests.test_arm_readiness_evidence_author import make_author_fixture
 
         family = {
@@ -578,7 +569,7 @@ class ArmReadinessDryRunTests(unittest.TestCase):
             git(repository, "add", ".gitignore")
             git(repository, "commit", "-qm", "ignore interpreter bytecode")
             git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
-            authored = evidence.author_arm_readiness_evidence(pack)
+            authored = evidence_factory.author_arm_readiness_evidence(pack)
             self.assertEqual(authored["status"], "PASS", authored)
             pack_relative = pack.relative_to(repository).as_posix()
             git(
@@ -593,7 +584,7 @@ class ArmReadinessDryRunTests(unittest.TestCase):
             predecessor = predecessor_pack_root(repository, pack.name)
             # D-154 R-3: the mint requires an explicit operator declaration;
             # this fixture's own repository is its declared measurement checkout.
-            frozen = readiness.generate_freeze_receipt(
+            frozen = receipt_factory.generate_freeze_receipt(
                 pack,
                 measurement_checkout=repository,
                 predecessor_pack_root=predecessor,

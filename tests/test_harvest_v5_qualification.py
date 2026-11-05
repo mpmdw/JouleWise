@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, v5_qualification as q
+from joulewise import receipt_readers as readiness; from joulewise import qualification_readers as q
 from scripts import harvest_v5_qualification as h
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle, fixture_replay
 from tests.test_v5_block4_x7 import bind_history_fixture, put

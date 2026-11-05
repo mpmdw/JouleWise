@@ -12,7 +12,7 @@ import unittest
 from unittest import mock
 from contextlib import redirect_stdout
 
-from joulewise import arm_readiness as readiness, battery_float, v5_qualification as q
+from joulewise import receipt_readers as readiness; from joulewise import battery_float; from joulewise import qualification_readers as q
 from scripts import harvest_v5_g2b_window as h
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture, _make_sliced_one_block_verdict
 from tests.test_battery_float import raw as battery_raw, UPDATE

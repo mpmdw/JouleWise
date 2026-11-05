@@ -883,7 +883,7 @@ def committed_pack_sha256(pack_root: Path | str) -> str:
     pack-identity collector, which recomputes it from preserved bytes.
     """
 
-    from joulewise.arm_readiness import committed_pack_tree_sha256  # noqa: PLC0415
+    from joulewise.receipt_readers import committed_pack_tree_sha256  # noqa: PLC0415
 
     return committed_pack_tree_sha256(Path(pack_root))
 

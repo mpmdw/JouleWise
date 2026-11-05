@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.arm_readiness import (
+from joulewise.receipt_readers import (
     ROW_REGISTRY_RELATIVE_PATH,
     ArmReadinessError,
     applicability_for_row,

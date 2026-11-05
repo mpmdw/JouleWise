@@ -211,3 +211,8 @@ def _contains(parent: Path, child: Path) -> bool:
 def _slug(value: str) -> str:
     return value.lower().replace("_", "-").replace(".", "-")
 
+
+
+def _evidence_id(row_id: str) -> str:
+    return f"arm-t0-{_slug(row_id)}-v1"
+

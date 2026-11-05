@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any, Mapping
 from unittest import mock
 
-from joulewise import arm_readiness as readiness
+from joulewise import receipt_readers as readiness
 from joulewise import clock_reference
 from joulewise import kernel_clock
 from tests.test_kernel_clock import frequency_probe
-from joulewise import network_time_off
-from joulewise import t0_rehearsal as rehearsal
+from joulewise.hazards import network_time as network_time_off
+from joulewise import process_observer as rehearsal
 from scripts import rehearse_t0_unattended as cli
 
 
@@ -155,7 +155,7 @@ def fixture_bundle(root):
 
 def install_t0_inventory(fixture):
     """Synthetic probe bytes; the production T0 inventory authenticator stays real."""
-    from joulewise import arm_readiness_evidence_t0 as author
+    from joulewise import receipt_formats as author
     from tests.test_arm_readiness_schemas import sample_evidence
     root = fixture.custody / fixture.pack.name
     if Path(fixture.arm["arm_context"]["custody_root"]) == fixture.custody:
@@ -707,7 +707,7 @@ class T0RehearsalTests(unittest.TestCase):
     def test_g4_replays_versioned_drift_step_and_slew_from_raw_custody(self):
         from dataclasses import replace
         from fractions import Fraction
-        from joulewise import v5_qualification as qualification
+        from joulewise import qualification_readers as qualification
         from tests.test_v5_qualification_plan import PlanWriterTests
 
         plan_fixture = PlanWriterTests()
