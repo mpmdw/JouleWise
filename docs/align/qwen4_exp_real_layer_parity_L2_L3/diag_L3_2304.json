@@ -1,0 +1,380 @@
+{
+ "tokens": 2304,
+ "sparse_from_query": 2051,
+ "rows_differing": 14,
+ "sparse_rows": 253,
+ "rows": [
+  {
+   "query": 2051,
+   "visible_blocks": 513,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 2,
+   "ref_only_blocks": [
+    443
+   ],
+   "ref_only_scores": [
+    0.0
+   ],
+   "port_only_blocks": [
+    249
+   ],
+   "port_only_scores": [
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2052,
+   "visible_blocks": 513,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 2,
+   "ref_only_blocks": [
+    389
+   ],
+   "ref_only_scores": [
+    0.0
+   ],
+   "port_only_blocks": [
+    171
+   ],
+   "port_only_scores": [
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2053,
+   "visible_blocks": 513,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 3,
+   "ref_only_blocks": [
+    466
+   ],
+   "ref_only_scores": [
+    0.0
+   ],
+   "port_only_blocks": [
+    148
+   ],
+   "port_only_scores": [
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2054,
+   "visible_blocks": 513,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 11,
+   "ref_only_blocks": [
+    412
+   ],
+   "ref_only_scores": [
+    0.0
+   ],
+   "port_only_blocks": [
+    63
+   ],
+   "port_only_scores": [
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2057,
+   "visible_blocks": 514,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 5,
+   "ref_only_blocks": [
+    290
+   ],
+   "ref_only_scores": [
+    0.0
+   ],
+   "port_only_blocks": [
+    260
+   ],
+   "port_only_scores": [
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2058,
+   "visible_blocks": 514,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 5,
+   "ref_only_blocks": [
+    383
+   ],
+   "ref_only_scores": [
+    0.0
+   ],
+   "port_only_blocks": [
+    307
+   ],
+   "port_only_scores": [
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2060,
+   "visible_blocks": 515,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 4,
+   "ref_only_blocks": [
+    453
+   ],
+   "ref_only_scores": [
+    0.0
+   ],
+   "port_only_blocks": [
+    267
+   ],
+   "port_only_scores": [
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2061,
+   "visible_blocks": 515,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 7,
+   "ref_only_blocks": [
+    476,
+    498
+   ],
+   "ref_only_scores": [
+    0.0,
+    0.0
+   ],
+   "port_only_blocks": [
+    173,
+    326
+   ],
+   "port_only_scores": [
+    0.0,
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2065,
+   "visible_blocks": 516,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 7,
+   "ref_only_blocks": [
+    221,
+    498,
+    502
+   ],
+   "ref_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "port_only_blocks": [
+    33,
+    37,
+    209
+   ],
+   "port_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2067,
+   "visible_blocks": 517,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 8,
+   "ref_only_blocks": [
+    338,
+    377
+   ],
+   "ref_only_scores": [
+    0.0,
+    0.0
+   ],
+   "port_only_blocks": [
+    15,
+    17
+   ],
+   "port_only_scores": [
+    0.0,
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2075,
+   "visible_blocks": 519,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 11,
+   "ref_only_blocks": [
+    221,
+    354,
+    379
+   ],
+   "ref_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "port_only_blocks": [
+    124,
+    178,
+    181
+   ],
+   "port_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2078,
+   "visible_blocks": 519,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 15,
+   "ref_only_blocks": [
+    395,
+    435,
+    446
+   ],
+   "ref_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "port_only_blocks": [
+    252,
+    279,
+    280
+   ],
+   "port_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2082,
+   "visible_blocks": 520,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 10,
+   "ref_only_blocks": [
+    47,
+    378
+   ],
+   "ref_only_scores": [
+    0.0,
+    0.0
+   ],
+   "port_only_blocks": [
+    5,
+    7
+   ],
+   "port_only_scores": [
+    0.0,
+    0.0
+   ],
+   "tail_equal": true
+  },
+  {
+   "query": 2087,
+   "visible_blocks": 522,
+   "kept": 512,
+   "boundary_scores": [
+    0.0,
+    0.0
+   ],
+   "zero_score_blocks": 13,
+   "ref_only_blocks": [
+    364,
+    369,
+    394
+   ],
+   "ref_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "port_only_blocks": [
+    73,
+    111,
+    119
+   ],
+   "port_only_scores": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tail_equal": true
+  }
+ ],
+ "zero_score_blocks_per_sparse_query": {
+  "min": 0,
+  "max": 26,
+  "mean": 4.83794466403162
+ },
+ "peak_footprint_gb": 1.247
+}
