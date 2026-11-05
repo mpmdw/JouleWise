@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from joulewise.hazards import smc, smc_enumeration as r0, temperature
+from joulewise.align.apple import smc_reader as smc, smc_enumeration as r0, thermal as temperature
 from joulewise.hazards.base import Context
 from joulewise.hazards.base import write_create_once
 from joulewise.hazards.monitor import Journal

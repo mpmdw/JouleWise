@@ -220,11 +220,6 @@ def build_checkout(root: Path, *, behavior: dict[str, Any] | None = None, git: b
     (measurement / "configs/campaign_policies").mkdir()
     (measurement / "configs/campaign_policies/quiet_mac_p2_production.json").symlink_to(
         REPO_ROOT / "configs/campaign_policies/quiet_mac_p2_production.json")
-    # The monitor resolves and byte-checks the pack's campaign policy inside
-    # the measurement checkout. Copy these static config bytes so the fixture
-    # exercises that boundary rather than escaping through a symlink.
-    (measurement / "configs/campaign_policies/quiet_mac_p2_b5.json").write_bytes(
-        (REPO_ROOT / "configs/campaign_policies/quiet_mac_p2_b5.json").read_bytes())
     (measurement / "docs/phase_2").mkdir(parents=True)
     (measurement / "docs/phase_2/window_runbook.md").symlink_to(REPO_ROOT / "docs/phase_2/window_runbook.md")
     (measurement / "configs/calibration").mkdir()

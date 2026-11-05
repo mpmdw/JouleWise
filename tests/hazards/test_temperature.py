@@ -1,8 +1,6 @@
-"""Synthetic-only SMC journal, pinned policy, custody and desk-reader checks."""
+"""Synthetic-only ALIGN samples, config slots and desk coverage checks."""
 from __future__ import annotations
 
-import copy
-import hashlib
 import json
 import tempfile
 import unittest
@@ -18,6 +16,9 @@ NS = 10 ** 9
 
 
 class FakeSensors:
+    def close(self):
+        pass
+
     def read(self, selected):
         values = {"TG0D": 50.0, "TH0P": 34.0, "F0Ac": 0, "F1Ac": 1200}
         return {"values": {k: values[k] for k in selected}, "errors": {}}
@@ -71,46 +72,11 @@ class TemperatureTests(unittest.TestCase):
                 temperature.validate_policy({**POLICY, field: bad})
         self.assertEqual(temperature.validate_policy({**POLICY, "fan_keys": []})["fan_keys"], [])
 
-    def test_campaign_policy_extension_roundtrips_and_old_policy_omits_it(self):
+    def test_campaign_policy_does_not_own_align_config_slots(self):
         raw = json.loads(Path("tests/fixtures/campaign_policy_test.json").read_text())
-        legacy = CampaignPolicy.from_mapping(raw).to_dict()
-        self.assertNotIn("smc_temperature", legacy)
-        policy = CampaignPolicy.from_mapping({**raw, "smc_temperature": POLICY})
-        self.assertEqual(policy.to_dict()["smc_temperature"], POLICY)
+        self.assertNotIn("smc_temperature", CampaignPolicy.from_mapping(raw).to_dict())
         with self.assertRaises(SchemaError):
-            CampaignPolicy.from_mapping({**raw, "smc_temperature": {}})
-
-    def test_monitor_journal_uses_existing_custody_shape_and_desk_reader(self):
-        from joulewise.b5.harvest import read_monitor_journal
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            mac = FakeMac(root)
-            config = monitor.build_config(custody_dir=root, tree_roots=[4000], disk_targets=[],
-                                          smc_temperature=POLICY)
-            mon = monitor.Monitor(config, ctx=base.Context(clocks=mac.clocks, run=mac.runner),
-                                  smc_reader=FakeSensors())
-            mon.open_session()
-            self.assertIn("temperature", mon.fast_tasks)
-            start = mac.clocks.monotonic_ns()
-            mon.tick(start, names=["temperature"])
-            mac.clocks.advance(3)
-            mon.tick(mac.clocks.monotonic_ns(), names=["temperature"])
-            mon.close_session("test")
-            path = root / "hazards/monitor/temperature.jsonl"
-            lines, error = monitor.read_journal(path)
-            self.assertIsNone(error)
-            self.assertEqual([line["kind"] for line in lines], ["session_start", "reading", "reading", "session_end"])
-            self.assertEqual(lines[0]["values"]["smc_temperature"], POLICY)
-            expected_hash = hashlib.sha256(base.canonical_json(config)).hexdigest()
-            self.assertEqual(lines[0]["values"]["config_sha256"], expected_hash)
-            readings, malformed = read_monitor_journal(path, "temperature")
-            self.assertEqual(malformed, 0)
-            self.assertEqual(len(readings), 2)
-            for line in lines:
-                base.Stamp.from_json(line["started"])
-                base.Stamp.from_json(line["finished"])
-            self.assertLess(lines[-1]["values"]["coverage"]["all_keys"]["sample_fraction"], 1)
-            self.assertIn("temperature", monitor.load_journals(root))
+            CampaignPolicy.from_mapping({**raw, "smc_temperature": POLICY})
 
     def test_disabled_monitor_has_no_new_journal_or_probe(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -128,55 +94,3 @@ class TemperatureTests(unittest.TestCase):
         result = temperature.coverage(lines, 0, 7 * NS, ["TG0D"])["all_keys"]
         self.assertEqual(result["sample_fraction"], 4 / 7)
         self.assertEqual(result["gaps_ns"], [[2 * NS, 5 * NS]])
-
-
-class DriverPolicyTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.pack = self.root / "pack"
-        self.pack.mkdir()
-        self.policy = json.loads(Path("tests/fixtures/campaign_policy_test.json").read_text())
-        self.policy["smc_temperature"] = copy.deepcopy(POLICY)
-        self.raw = json.dumps(self.policy).encode()
-        (self.root / "policy.json").write_bytes(self.raw)
-        self.binding = {"path": "policy.json", "sha256": hashlib.sha256(self.raw).hexdigest()}
-        self.plan = SimpleNamespace(measurement_root=str(self.root), hazard_window={
-            "pack": {"pack_root": str(self.pack)}, "thresholds": {}, "bindings": {},
-            "runs_roots": {"claim": str(self.root / "runs"), "bound": str(self.root / "bound")},
-            "window_env": {"path": str(self.root / "window.env")}})
-
-    def write_tree(self):
-        (self.pack / "plan_tree.json").write_text(json.dumps({"campaign_policy": self.binding}))
-
-    def test_driver_reads_pinned_policy_and_passes_it_to_monitor(self):
-        from joulewise.b5.driver import MonitorRequest, production_seams
-        self.write_tree()
-        request = MonitorRequest(self.plan, self.root / "plan.json", self.root, self.root / "night", 123)
-        seam = production_seams(Path.cwd())
-        argv = seam.monitor_argv(request)
-        self.assertIn("--config", argv)
-        config = json.loads((self.root / "hazards/monitor/config.json").read_text())
-        self.assertEqual(config["smc_temperature"], POLICY)
-        self.assertEqual(seam.monitor_argv(request), argv)
-        # Config custody is create-once: an existing different key set is an error.
-        config["smc_temperature"]["s_fast"] = "TC0D"
-        (self.root / "hazards/monitor/config.json").write_text(json.dumps(config))
-        with self.assertRaisesRegex(ValueError, "existing monitor config"):
-            seam.monitor_argv(request)
-
-    def test_changed_policy_cannot_silently_disable_journaling(self):
-        from joulewise.b5.driver import monitor_temperature_policy
-        self.write_tree()
-        (self.root / "policy.json").write_text("{}")
-        with self.assertRaisesRegex(ValueError, "SHA-256"):
-            monitor_temperature_policy(self.plan)
-
-    def test_legacy_pack_is_disabled_and_absolute_policy_is_rejected(self):
-        from joulewise.b5.driver import monitor_temperature_policy
-        self.assertIsNone(monitor_temperature_policy(self.plan))
-        self.binding["path"] = str(self.root / "policy.json")
-        self.write_tree()
-        with self.assertRaisesRegex(ValueError, "relative"):
-            monitor_temperature_policy(self.plan)

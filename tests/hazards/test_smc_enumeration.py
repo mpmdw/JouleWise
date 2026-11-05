@@ -13,7 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from joulewise.hazards import base, smc, smc_enumeration as r0
+from joulewise.hazards import base
+from joulewise.align.apple import smc_reader as smc, smc_enumeration as r0
 from joulewise.measurement_liveness import Census
 from joulewise.night_gate import ProbeResult
 from scripts import align_smc_enumerate as cli
@@ -23,7 +24,7 @@ from tests.hazards.test_smc import FakeTransport
 
 class IndexedTransport(FakeTransport):
     def __init__(self, *, broken_index=None):
-        super().__init__({"#KEY": ("ui32", struct.pack("<I", 7)),
+        super().__init__({"#KEY": ("ui32", struct.pack(">I", 7)),
                           "TG0D": ("flt ", struct.pack("<f", 45)),
                           "TH0P": ("sp78", struct.pack(">h", 33 * 256)),
                           "F0Ac": ("fpe2", struct.pack(">H", 1200 * 4)),
@@ -41,14 +42,36 @@ class IndexedTransport(FakeTransport):
 
 
 class EnumerationTests(unittest.TestCase):
+    def test_observed_apple_silicon_count_bytes(self):
+        transport = IndexedTransport()
+        transport.keys["#KEY"] = ("ui32", bytes.fromhex("0000086e"))
+        self.assertEqual(smc.Reader(transport).read_key("#KEY"), (2158, None))
+        original = transport.call
+        def indexed(request):
+            if request.data8 == smc.CMD_GET_KEY_BY_INDEX and request.data32 >= len(transport.keys):
+                return smc.SMCKeyData(key=smc.fourcc("PSTR"))
+            return original(request)
+        transport.call = indexed
+        self.assertTrue(smc.Reader(transport).enumerate_sensors()["complete"])
+        # This exception must not byte-swap normal battery integer readings.
+        self.assertEqual(smc.decode("ui16", struct.pack("<H", 13264)), 13264)
+        self.assertEqual(smc.decode("ui32", struct.pack("<I", 117)), 117)
+
+    def test_observed_ioft_bytes(self):
+        transport = FakeTransport({"TG0B": ("ioft", bytes.fromhex("9999270000000000"))})
+        value, error = smc.Reader(transport).read_key("TG0B")
+        self.assertIsNone(error)
+        self.assertAlmostEqual(value, 39.6, places=4)
+
     def test_index_enumeration_does_not_assume_model_keys(self):
         reader = smc.Reader(IndexedTransport())
         result = reader.enumerate_sensors()
         self.assertTrue(result["complete"])
-        self.assertEqual([s["key"] for s in result["keys"]], ["F0Ac", "TG0D", "TH0P"])
+        self.assertEqual([s["key"] for s in result["keys"]], ["F0Ac", "FNum", "TG0D", "TH0P"])
         self.assertIn("TBAD", result["errors"])
+        self.assertEqual(result["unsupported_types"]["TBAD"]["data_type"], "ch8*")
         self.assertEqual(result["keys"][0]["initial_value"], 1200)
-        self.assertEqual(result["keys"][2]["initial_value"], 33)
+        self.assertEqual(result["keys"][3]["initial_value"], 33)
         self.assertEqual(smc.decode("sp78", struct.pack(">h", -256)), -1)
 
     def test_failed_count_or_index_is_not_complete(self):
@@ -214,7 +237,6 @@ class CaptureTests(unittest.TestCase):
         load.stop.assert_called_once()
 
     def test_cli_fake_capture_writes_json_markdown_and_compatible_journal(self):
-        from joulewise.b5.harvest import read_monitor_journal
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "r0"
             result = cli.main(["--output", str(output), "--seconds", "5"], reader_factory=lambda: self.reader,
@@ -226,8 +248,8 @@ class CaptureTests(unittest.TestCase):
             self.assertEqual(report["hardware"]["hw.model"], "FAKE")
             self.assertIn(hashlib.sha256(raw).hexdigest(), (output / "summary.md").read_text())
             self.assertEqual(report["coverage"]["all_keys"]["sample_fraction"], 1)
-            readings, malformed = read_monitor_journal(output / "samples.jsonl", "temperature")
-            self.assertEqual((len(readings), malformed), (5, 0))
+            readings = [json.loads(line) for line in (output / "samples.jsonl").read_text().splitlines()]
+            self.assertEqual(len(readings), 5)
 
     def test_cli_refuses_before_output_creation_or_backend_construction(self):
         with tempfile.TemporaryDirectory() as temporary:

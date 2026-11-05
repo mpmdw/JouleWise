@@ -34,8 +34,6 @@ battery     1 s      SMC battery current B0AC (and B0AV, PDTR, PSTR, PPBR)
                      line also carries the SMC read taken with it
 thermal     5 s      OS thermal pressure level (notify_get_state in process;
                      notifyutil when that fails)
-temperature 1 s      optional campaign-pinned SMC fast/slow temperature keys
-                     and fan RPM, in temperature.jsonl
 contention  10 s     ps interval, CPU-s/s outside the tree, host CPU ticks
                      (in process); raw ps (gzip)
 disk        60 s     statvfs; ``disk.low`` marker below 10 GiB
@@ -79,7 +77,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.desk_compress import read_bytes
-from joulewise.hazards import battery, clock, contention, disk, smc, temperature, thermal
+from joulewise.hazards import battery, clock, contention, disk, smc, thermal
 from joulewise.hazards.base import (
     Context, Stamp, canonical_json, sha256_hex, write_create_once,
 )
@@ -107,9 +105,8 @@ DEFAULT_CADENCE: dict[str, float] = {"clock_s": 1.0, "frequency_s": 5.0, "batter
                                      "self_s": 30.0}
 # In production the in-process samplers run on their own thread (Monitor.run):
 # the clock, the 1 s SMC battery current (about 75 us in process) and the
-# thermal level, plus the optional temperature sidecar. Subprocess probes
-# (ioreg, ps) and the rest run on the main thread. These tuples, plus the
-# optional task in Monitor.fast_tasks, name every task in Monitor.due.
+# thermal level.  The subprocess probes (ioreg, ps) and the rest run on the
+# main thread.  Together the two tuples name every task in ``Monitor.due``.
 FAST_TASKS = ("clock", "battery_smc", "thermal")
 SLOW_TASKS = ("battery", "contention", "disk", "self")
 
@@ -118,8 +115,7 @@ def build_config(*, custody_dir: Path | str, tree_roots: Sequence[int],
                  disk_targets: Sequence[Mapping[str, Any]], low_bytes: int = disk.DEFAULT_THRESHOLDS["low_bytes"],
                  cpu_limit_s_per_s: float = contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"],
                  cadence: Mapping[str, float] | None = None,
-                 tree_root_files: Sequence[str] = (), clock_step_ns: int | None = None,
-                 smc_temperature: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                 tree_root_files: Sequence[str] = (), clock_step_ns: int | None = None) -> dict[str, Any]:
     """The monitor's whole input; the driver writes it once as ``monitor/config.json``.
 
     ``tree_root_files`` (PLAN2 row 10) name JSON files whose ``pgid`` becomes a
@@ -144,8 +140,6 @@ def build_config(*, custody_dir: Path | str, tree_roots: Sequence[int],
         config["tree_root_files"] = [str(path) for path in tree_root_files]
     if clock_step_ns is not None:
         config["clock_step_ns"] = int(clock_step_ns)
-    if smc_temperature is not None:
-        config["smc_temperature"] = temperature.validate_policy(smc_temperature)
     return config
 
 
@@ -168,8 +162,6 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(files, list) or not all(isinstance(item, str) and Path(item).is_absolute()
                                               for item in files):
         raise ValueError("monitor config tree_root_files must be a list of absolute paths")
-    if "smc_temperature" in config:
-        temperature.validate_policy(config["smc_temperature"])
     return dict(config)
 
 
@@ -237,9 +229,7 @@ def read_journal(path: Path) -> tuple[list[dict[str, Any]], str | None]:
 
 def load_journals(custody_dir: Path | str) -> dict[str, list[dict[str, Any]]]:
     directory = monitor_dir(custody_dir)
-    present = any((directory / name).exists() for name in ("temperature.jsonl", "temperature.jsonl.zst"))
-    names = (*JOURNALS, "temperature") if present else JOURNALS
-    return {name: read_journal(directory / f"{name}.jsonl")[0] for name in names}
+    return {name: read_journal(directory / f"{name}.jsonl")[0] for name in JOURNALS}
 
 
 # --------------------------------------------------------------------------
@@ -275,7 +265,7 @@ class Monitor:
         self.counts = {"battery_polls": 0, "battery_poll_failures": 0, "battery_ioreg_reads": 0,
                        "smc_reads": 0}
         self.host_reader = host_reader
-        self.cadence = dict(self.config["cadence"])
+        self.cadence = self.config["cadence"]
         step = self.config.get("clock_step_ns")
         # A config without a usable step keeps the module default (never a stop).
         self.clock_skew_max_ns = clock.window_skew_max_ns(
@@ -283,21 +273,13 @@ class Monitor:
         self.tree_roots = tuple(self.config["tree_roots"])
         self.stopping = False
         first = self.ctx.stamp()
-        self.temperature_policy = self.config.get("smc_temperature")
-        self.temperature_keys = temperature.keys(self.temperature_policy) if self.temperature_policy else ()
-        self.temperature_coverage = temperature.Coverage(first.monotonic_ns, self.temperature_keys)
-        self.journal_names = (*JOURNALS, "temperature") if self.temperature_policy else JOURNALS
-        self.fast_tasks = (*FAST_TASKS, "temperature") if self.temperature_policy else FAST_TASKS
         self.session = f"{os.getpid()}-{first.monotonic_ns}"
         self.journals = {name: Journal(self.directory / f"{name}.jsonl", fsync_interval_s=FSYNC_INTERVAL_S)
-                         for name in self.journal_names}
+                         for name in JOURNALS}
         self.tree_root_files = {str(path): None for path in self.config.get("tree_root_files", [])}
-        self.seq = {name: 0 for name in self.journal_names}
+        self.seq = {name: 0 for name in JOURNALS}
         self.due = {name: first.monotonic_ns for name in ("clock", "battery_smc", "battery",
                                                           "thermal", "contention", "disk", "self")}
-        if self.temperature_policy:
-            self.due["temperature"] = first.monotonic_ns
-            self.cadence["temperature_s"] = 1.0
         self.next_frequency_ns = first.monotonic_ns
         self.last_update_time: int | None = None
         self.previous_snapshot: contention.Snapshot | None = None
@@ -335,20 +317,16 @@ class Monitor:
     # -- lifecycle ------------------------------------------------------------
 
     def open_session(self, argv: Sequence[str] = ()) -> None:
-        for name in self.journal_names:
+        for name in JOURNALS:
             self._write(name, "session_start", values={
                 "pid": os.getpid(), "pgid": os.getpgrp(), "ppid": os.getppid(),
                 "argv": list(argv), "config_sha256": sha256_hex(canonical_json(self.config)),
-                "tree_roots": list(self.tree_roots), "cadence": dict(self.cadence),
-                **({"smc_temperature": self.temperature_policy} if name == "temperature" else {})})
+                "tree_roots": list(self.tree_roots), "cadence": dict(self.cadence)})
 
     def close_session(self, reason: str) -> None:
         self._self_cost()
-        for name in self.journal_names:
-            values = {"reason": reason}
-            if name == "temperature":
-                values["coverage"] = self.temperature_coverage.report(self.ctx.clocks.monotonic_ns())
-            self._write(name, "session_end", values=values)
+        for name in JOURNALS:
+            self._write(name, "session_end", values={"reason": reason})
         for journal in self.journals.values():
             journal.close()
 
@@ -371,7 +349,7 @@ class Monitor:
         if not fast_thread:
             self._loop(None, deadline)
             return
-        fast = threading.Thread(target=self._loop, args=(self.fast_tasks, deadline),
+        fast = threading.Thread(target=self._loop, args=(FAST_TASKS, deadline),
                                 name="hazard-monitor-fast", daemon=True)
         fast.start()
         try:
@@ -381,7 +359,7 @@ class Monitor:
             fast.join()
 
     def _loop(self, names: Sequence[str] | None, deadline: int | None) -> None:
-        keys = list(self.due) if names is None else [name for name in names if name in self.due]
+        keys = list(self.due) if names is None else list(names)
         while not self.stopping:
             now = self.ctx.clocks.monotonic_ns()
             if deadline is not None and now >= deadline:
@@ -399,14 +377,11 @@ class Monitor:
     def tick(self, now_ns: int, names: Sequence[str] | None = None) -> None:
         for name, task in (("clock", self._clock), ("battery_smc", self._battery_smc),
                            ("battery", self._battery),
-                           ("temperature", self._temperature),
                            ("thermal", self._thermal), ("contention", self._contention),
                            ("disk", self._disk), ("self", self._self_cost)):
             if self.stopping:
                 return
             if names is not None and name not in names:
-                continue
-            if name not in self.due:
                 continue
             if now_ns >= self.due[name]:
                 period_ns = int(self.cadence[f"{name}_s"] * 1e9)  # battery re-plans itself
@@ -438,15 +413,6 @@ class Monitor:
     def _smc_read(self) -> Mapping[str, Any]:
         with self._smc_lock:
             return self.smc_reader.read()
-
-    def _temperature(self) -> None:
-        started = self.ctx.stamp()
-        with self._smc_lock:
-            values = temperature.sample(self.smc_reader, self.temperature_keys)
-        finished = self.ctx.stamp()
-        self.temperature_coverage.observe(started.monotonic_ns, finished.monotonic_ns, values)
-        self._write("temperature", "reading", started=started, finished=finished, values=values,
-                    error="; ".join(f"{k}: {v}" for k, v in values["errors"].items()) or None)
 
     def _battery_smc(self) -> None:
         """The 1 s SMC read of the battery current, journaled whatever it returned."""
@@ -700,8 +666,6 @@ def run_forever(config_path: Path, argv: Sequence[str] = ()) -> int:
         monitor.run(fast_thread=True)
     finally:
         monitor.close_session(f"signal {getattr(monitor, 'stop_signal', None)}")
-        if smc_reader is not None:
-            smc_reader.close()
     return 0
 
 

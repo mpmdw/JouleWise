@@ -58,10 +58,11 @@ class EpisodeSpec:
     prompt_cache: str | None = None
     sampler: Mapping[str, Any] | None = None
     max_episode_seconds: float | None = None
+    thermal: Mapping[str, Any] | None = None
 
     def to_text(self) -> str:
         value = asdict(self)
-        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds"):
+        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds", "thermal"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -82,6 +83,9 @@ class EpisodeSpec:
             raise ValueError("mock_turns must contain mappings")
         obj["mock_turns"] = tuple(mock_turns)
         spec = cls(**obj)
+        if spec.thermal is not None:
+            from joulewise.align.apple.thermal import validate_policy
+            validate_policy(spec.thermal)
         if spec.condition not in ("benign", "sabotage"):
             raise ValueError("unknown episode condition")
         for value in (spec.max_turns, spec.max_tokens):
@@ -127,10 +131,14 @@ class EpisodeRuntimeAdapter:
         self.prepared: dict[str, Any] = {}
         self._runtime_ready = False
         self._failed_episode_result: RuntimeResult | None = None
+        self.thermal = None
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> AdapterResult:
+        if self.thermal is not None:
+            self.thermal.stop()
+            self.thermal = None
         self.flags = []
         self.prepared = {}
         self.spec = None
@@ -164,6 +172,12 @@ class EpisodeRuntimeAdapter:
                 message=self.flags[-1], metadata={"align_episode_flags": list(self.flags)},
             )
         try:
+            if self.spec.thermal is not None:
+                from joulewise.align.apple.thermal import Sidecar
+                if context is None:
+                    raise ValueError("ALIGN thermal sidecar requires a member bundle context")
+                self.thermal = Sidecar(context.outputs_dir, self.spec.thermal)
+                self.thermal.start()
             if config.hardware_target.runtime_backend == RuntimeBackend.MLX:
                 source = Path(config.model.source or "").expanduser()
                 if not config.model.source or not source.is_dir():
@@ -184,8 +198,14 @@ class EpisodeRuntimeAdapter:
             self.prepared["max_context_tokens"] = min(
                 x for x in (native_limit, self.spec.max_context_tokens) if x is not None
             ) if native_limit is not None or self.spec.max_context_tokens is not None else None
+            if not result.ok and self.thermal is not None:
+                self.thermal.stop()
+                self.thermal = None
             return replace(result, metadata=self.prepared)
         except Exception as exc:
+            if self.thermal is not None:
+                self.thermal.stop()
+                self.thermal = None
             self.flags.append(f"runtime_unavailable:{type(exc).__name__}:{exc}")
             return AdapterResult(
                 ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
@@ -245,6 +265,8 @@ class EpisodeRuntimeAdapter:
                               seed_task_pair=self.task.task_pair if self.task is not None else spec.task_kwargs.get("task_pair"))
             if spec.max_episode_seconds is not None:
                 policy["max_episode_seconds"] = spec.max_episode_seconds
+        if spec.thermal is not None:
+            metadata["sampler"].setdefault("execution_policy", {})["thermal"] = dict(spec.thermal)
         metadata["output_policy"] = {
             "name": "agent_episode",
             "requested_tokens": spec.max_turns * spec.max_tokens,
@@ -591,9 +613,12 @@ class EpisodeRuntimeAdapter:
     def cleanup(
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> AdapterResult:
-        if self.runtime is None:
-            return AdapterResult(ok=True)
-        result = self.runtime.cleanup(config, context)
+        try:
+            result = (self.runtime.cleanup(config, context) if self.runtime is not None else AdapterResult(ok=True))
+        finally:
+            if self.thermal is not None:
+                self.thermal.stop()
+                self.thermal = None
         if self._failed_episode_result is not None:
             failed = self._failed_episode_result
             return replace(result, metadata={
