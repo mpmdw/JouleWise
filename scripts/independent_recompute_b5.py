@@ -1251,6 +1251,10 @@ def contrast_stats(d, D=0.0):
               "t_star": None, "metrology_interval_j": [None, None], "D_j": D,
               "decision_interval_j": [None, None], "t_stat": None, "p": 1.0}
     if n < 2:
+        # D-190: explain only the genuinely absent estimator values. D and p
+        # retain this program's existing representation and are still compared
+        # as numeric vs null where the engine has no estimate.
+        result["null_reason"] = {"outcome": "not_estimable", "codes": ["insufficient_complete_blocks"]}
         return result
     mean, s = statistics.fmean(d), statistics.stdev(d)
     se = s / math.sqrt(n)
@@ -1444,8 +1448,13 @@ def make_floors(window, phase, chosen, reported, bound=None):
         forms[form] = result
     absolute = forms["absolute"]["drift_widened_guarded_floor_j"]
     comparative = forms["comparative"]["drift_widened_guarded_floor_j"]
-    return forms, {"floor_abs_j": absolute, "floor_cmp_j": comparative,
-                   "floor_gate_j": max(absolute, comparative) if all(finite(v) for v in (absolute, comparative)) else None}
+    cell = {"floor_abs_j": absolute, "floor_cmp_j": comparative,
+            "floor_gate_j": max(absolute, comparative) if all(finite(v) for v in (absolute, comparative)) else None}
+    if not window.diagnostic and reported["status"] == "below_minimum" and absolute is None and comparative is None:
+        # Independent source-health reason, matching the registered resolution
+        # code for an existing source cell whose eligibility is not claim_ready.
+        cell["null_reason"] = {"outcome": "not_resolvable", "codes": ["cell_not_claim_ready"]}
+    return forms, cell
 
 
 def contrast_floor(cells, phase):
@@ -1453,7 +1462,16 @@ def contrast_floor(cells, phase):
     values = [c.get("floor_gate_j") for c in sides.values()]
     value = max(values) if all(finite(v) for v in values) else None
     attained = [pack for pack, cell in sides.items() if value is not None and cell.get("floor_gate_j") == value]
-    return {"floor_gate_j": value, "attained_by": attained, "sides": sides}
+    result = {"floor_gate_j": value, "attained_by": attained, "sides": sides}
+    unavailable = [cell for cell in sides.values() if cell.get("floor_gate_j") is None]
+    reasons = [cell.get("null_reason") for cell in unavailable]
+    if value is None and reasons and all(
+            isinstance(reason, dict) and set(reason) == {"outcome", "codes"}
+            and reason["outcome"] == "not_resolvable" and isinstance(reason["codes"], list) and reason["codes"]
+            and all(isinstance(code, str) for code in reason["codes"]) for reason in reasons):
+        result["null_reason"] = {"outcome": "not_resolvable",
+                                 "codes": sorted({code for reason in reasons for code in reason["codes"]})}
+    return result
 
 
 def number(value):
