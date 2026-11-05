@@ -1,0 +1,19 @@
+{
+  "cosine": 1.0,
+  "fraction_within": 1.0,
+  "max_abs": 0.0,
+  "max_relative": 0.0,
+  "pass": true,
+  "purpose": "real BF16 n-gram row-loader smoke only; no PLE hash-id or MLX parity claim",
+  "relative_l2": 0.0,
+  "rows": [
+    0,
+    3,
+    17
+  ],
+  "shape": [
+    3,
+    160
+  ],
+  "tensor": "model.language_model.layers.1.ple.ple_embedding.ngram_embedding.shard_0.weight"
+}

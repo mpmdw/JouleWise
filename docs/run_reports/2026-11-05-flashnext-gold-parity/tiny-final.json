@@ -1,0 +1,770 @@
+{
+  "cases": [
+    {
+      "artifacts": {
+        "input.npy": "40dd64a77b90384c9e43fd34a4b2864b12bf40aa7689e95b715b865a88339a5d",
+        "mlx/output.npy": "40dd64a77b90384c9e43fd34a4b2864b12bf40aa7689e95b715b865a88339a5d",
+        "reference/final.norm.npy": "e8e360591380fb1c0507c53b90aa9ff397d70f2e1c1b570fdb70ab39b54a0b1d",
+        "reference/output.npy": "bff39730eefb5a02595236e0d3a6824ed7a4243c874252b402084e7e08fef384"
+      },
+      "case": "tokens-a-fp32-real",
+      "fingerprint": "82b566b4841f698dea50ba83c30969b227046fdf84f3fb94f4b43bd69280558f",
+      "input_mode": "real",
+      "input_sha256": "40dd64a77b90384c9e43fd34a4b2864b12bf40aa7689e95b715b865a88339a5d",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12576325632,
+        "elapsed_seconds": 0.2146333750570193,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 37289984,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 37289984,
+        "parent_peak_bytes": 40140800,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 338984960,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12576374784,
+        "elapsed_seconds": 2.883650708012283,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 338984960,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 338984960,
+        "parent_peak_bytes": 40091648,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "56dac9873dca92d049be10f148d1fe630dc07be9a962e5f9c5117ce08b3fb69b",
+        "mlx/output.npy": "56dac9873dca92d049be10f148d1fe630dc07be9a962e5f9c5117ce08b3fb69b",
+        "reference/final.norm.npy": "a5f81acdc0023c68906bedccdd69bf627af4d45167ffc188f3bc8e14d3cf9902",
+        "reference/output.npy": "2ff8aa36f6649e1cb2994ea3612e77169e8a617459594a5b2fb4248b7f849831"
+      },
+      "case": "tokens-a-fp32-random",
+      "fingerprint": "7a035556aa5d6c41df7f3cb23a3da9ccf0f9ff4566e9cf0f0e25f7e97703680d",
+      "input_mode": "random",
+      "input_sha256": "56dac9873dca92d049be10f148d1fe630dc07be9a962e5f9c5117ce08b3fb69b",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2098106670891866,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 38141952,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 38141952,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 342097920,
+      "random_scale": 0.021522977118325893,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.2809646669775248,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 342097920,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 342097920,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "59ac4a3765d016a2380590110c3d8110df81a2f6151a4be4650c41227c0f990c",
+        "mlx/output.npy": "59ac4a3765d016a2380590110c3d8110df81a2f6151a4be4650c41227c0f990c",
+        "reference/final.norm.npy": "4ff3bf1163f65a33f24f1676919f359fd17339a89d7b0746b5ca3721dc2b84d9",
+        "reference/output.npy": "16f8aea5ade75d8afca990ff04ce8d4b2078ed8a6695c6104c908f5c165c0642"
+      },
+      "case": "tokens-b-fp32-real",
+      "fingerprint": "0d4c50ddaca653bc3f67217a6343bb2862796dbf575cbe7718d88be93bbf247f",
+      "input_mode": "real",
+      "input_sha256": "59ac4a3765d016a2380590110c3d8110df81a2f6151a4be4650c41227c0f990c",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.20978941698558629,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 32931840,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 32931840,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 340475904,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 2.6712859999388456,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 340475904,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 340475904,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "4c7163efe8e0e39b1490ff43bf303b94b14b07185d43877cd1fed5f2ef1b1a15",
+        "mlx/output.npy": "4c7163efe8e0e39b1490ff43bf303b94b14b07185d43877cd1fed5f2ef1b1a15",
+        "reference/final.norm.npy": "25599e4b8fcbbe1f509451b6efd0b218c722bd562480b5eae77bd77744563496",
+        "reference/output.npy": "32c942e88fd13390055536c057e1d8e254839cd2c72532684e2142e2223dab17"
+      },
+      "case": "tokens-b-fp32-random",
+      "fingerprint": "f82af397820e98973f5e0295fa07ead3f871018048040b74f48717625a65ddf0",
+      "input_mode": "random",
+      "input_sha256": "4c7163efe8e0e39b1490ff43bf303b94b14b07185d43877cd1fed5f2ef1b1a15",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2175432499498129,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 32079872,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 32079872,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 336723968,
+      "random_scale": 0.020700962290638846,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.305709416978061,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 336723968,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 336723968,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "bbfaad6e3e95c70a17daf0f8a4addab227a6a499476dd531897a0326e9b01f78",
+        "mlx/output.npy": "bbfaad6e3e95c70a17daf0f8a4addab227a6a499476dd531897a0326e9b01f78",
+        "reference/final.norm.npy": "f4aeb0622958ad687032c72131a1076d62d0c3714b21f5d28d45ea6033ee9941",
+        "reference/output.npy": "eb7b5352eba29fe8694171cf05527ac3826f106356f916af0cbb94a959b1c800"
+      },
+      "case": "tokens-a-bf16-real",
+      "fingerprint": "4673a3a2183b937456bca129384979ef044b3bb8860e086cddb18b22c4ae742d",
+      "input_mode": "real",
+      "input_sha256": "bbfaad6e3e95c70a17daf0f8a4addab227a6a499476dd531897a0326e9b01f78",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2133742499863729,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36159488,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36159488,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 344293376,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.310771416989155,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 344293376,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 344293376,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "1d26480766bd96dd589137c07d0352d6610802d9ad7077f2dd7f25eb14a70db2",
+        "mlx/output.npy": "1d26480766bd96dd589137c07d0352d6610802d9ad7077f2dd7f25eb14a70db2",
+        "reference/final.norm.npy": "7467a388065f0a4ad572efac6bb0bef63b645e452cecdb4f50bd324ab163ff8e",
+        "reference/output.npy": "40ded5f7ed60862a2a6e1f30cc6fc1df37090d14830b0788311475c75f9576ff"
+      },
+      "case": "tokens-a-bf16-random",
+      "fingerprint": "058140522eca45606b5c05b8ad174f25b414365cd0e7256cf89258567c0ad5d1",
+      "input_mode": "random",
+      "input_sha256": "1d26480766bd96dd589137c07d0352d6610802d9ad7077f2dd7f25eb14a70db2",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.20847295899875462,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 35422208,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 35422208,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 344604672,
+      "random_scale": 0.02151827785697619,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.305159624898806,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 344604672,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 344604672,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "df95e3482e0cbb235ced6472b0df4a8876a2e49bde08b82d29c550e5fe5bd279",
+        "mlx/output.npy": "df95e3482e0cbb235ced6472b0df4a8876a2e49bde08b82d29c550e5fe5bd279",
+        "reference/final.norm.npy": "7fa41d67c0e2bd2a92922688affab69e0ebf40a3dfdb385c5c9eb91c7fccd166",
+        "reference/output.npy": "a62113412152350fd92be4cff7ade02e7a482f3f20c3d2497f2f90d9fb970cc6"
+      },
+      "case": "tokens-b-bf16-real",
+      "fingerprint": "b73dfcf3943c8e0d35bdf17a54d407fa8f16efc0bb4041bf0936ac38a9a32602",
+      "input_mode": "real",
+      "input_sha256": "df95e3482e0cbb235ced6472b0df4a8876a2e49bde08b82d29c550e5fe5bd279",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.21566004201304168,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 33193984,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 33193984,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 344555520,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.474497333052568,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 344555520,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 344555520,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "14104eabff4783c51f8bcfc68be255c04d631b6b30a8c604189b12e0a4ca143d",
+        "mlx/output.npy": "14104eabff4783c51f8bcfc68be255c04d631b6b30a8c604189b12e0a4ca143d",
+        "reference/final.norm.npy": "6583e2ef7af50ed40f48063c88895cd71f8dc6365656386f70464b3ff5f3b612",
+        "reference/output.npy": "1b770348c4797ec0274d4597b05b9b9a5358027096188f4236380eb40eebe5de"
+      },
+      "case": "tokens-b-bf16-random",
+      "fingerprint": "10799f98dba1d8f0f36eaab970f6d7dd58ede6cbdaa4afc3a07f258a8e49c007",
+      "input_mode": "random",
+      "input_sha256": "14104eabff4783c51f8bcfc68be255c04d631b6b30a8c604189b12e0a4ca143d",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            64
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            32
+          ]
+        }
+      },
+      "missing_traces": [
+        "final.norm"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.20905337505973876,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36470784,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36470784,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 347455488,
+      "random_scale": 0.020700831920365866,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.494554042001255,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 347455488,
+          "reads": [
+            {
+              "name": "model.hyper_connection_mixer.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.hyper_connection_mixer.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 347455488,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "final.norm": "final.norm.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "final"
+    }
+  ],
+  "completed_cases": 8,
+  "expected_cases": 8,
+  "fingerprint": "bba02191736e8996b41af2ec6c2ede463541507b094662b864579be51ba59519",
+  "schema": "qwen4-gold/v1",
+  "status": "INCOMPLETE_OR_FAILED",
+  "unit": "final"
+}

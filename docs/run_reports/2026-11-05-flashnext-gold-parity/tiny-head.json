@@ -1,0 +1,658 @@
+{
+  "cases": [
+    {
+      "artifacts": {
+        "input.npy": "bff39730eefb5a02595236e0d3a6824ed7a4243c874252b402084e7e08fef384",
+        "mlx/output.npy": "bff39730eefb5a02595236e0d3a6824ed7a4243c874252b402084e7e08fef384",
+        "reference/output.npy": "e3caf730c420671919afa5e8ab6ab3bf31140803a8280c241a282354525fcfa5"
+      },
+      "case": "tokens-a-fp32-real",
+      "fingerprint": "2bdc180251e52800ca70c74cc20c40b70d71aae23881f3242b5a7366ea83a9d6",
+      "input_mode": "real",
+      "input_sha256": "bff39730eefb5a02595236e0d3a6824ed7a4243c874252b402084e7e08fef384",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12576194560,
+        "elapsed_seconds": 0.21582787507213652,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36667392,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36667392,
+        "parent_peak_bytes": 40271872,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 339492864,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12576210944,
+        "elapsed_seconds": 3.2972500000614673,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 339492864,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 339492864,
+        "parent_peak_bytes": 40255488,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "head"
+    },
+    {
+      "artifacts": {
+        "input.npy": "26580fdf873a3baf22d2324302c8e5cc01ccd279456343a9f7b8c4edf44b65b5",
+        "mlx/output.npy": "26580fdf873a3baf22d2324302c8e5cc01ccd279456343a9f7b8c4edf44b65b5",
+        "reference/output.npy": "237d745bcdbec5ea109921b0272e90877478da837157e0f3201ca19f8cd97f78"
+      },
+      "case": "tokens-a-fp32-random",
+      "fingerprint": "d20bdc431a42cd43365c9b0a2b579f6019fdd6068faa597d9defa3f863d2327e",
+      "input_mode": "random",
+      "input_sha256": "26580fdf873a3baf22d2324302c8e5cc01ccd279456343a9f7b8c4edf44b65b5",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.20760170801077038,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36274176,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36274176,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 343719936,
+      "random_scale": 0.499334409655061,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.271666625048965,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 343719936,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 343719936,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "head"
+    },
+    {
+      "artifacts": {
+        "input.npy": "16f8aea5ade75d8afca990ff04ce8d4b2078ed8a6695c6104c908f5c165c0642",
+        "mlx/output.npy": "16f8aea5ade75d8afca990ff04ce8d4b2078ed8a6695c6104c908f5c165c0642",
+        "reference/output.npy": "8d33bf0dec96bba065e255f31f063ab1295fcc9e9d4f8b4022cde0d3ee2bd476"
+      },
+      "case": "tokens-b-fp32-real",
+      "fingerprint": "a0f3eb3b126b1af9a6a1dc67be5530b7731c655a4f04d1aa9cd6b1212295fa6f",
+      "input_mode": "real",
+      "input_sha256": "16f8aea5ade75d8afca990ff04ce8d4b2078ed8a6695c6104c908f5c165c0642",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.21429391705896705,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 33521664,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 33521664,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 335593472,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 2.878853500005789,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 335593472,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 335593472,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "head"
+    },
+    {
+      "artifacts": {
+        "input.npy": "d5f81446cf3fa198b05de45ac2251abfd0c2631733da04756dab95c667ce1246",
+        "mlx/output.npy": "d5f81446cf3fa198b05de45ac2251abfd0c2631733da04756dab95c667ce1246",
+        "reference/output.npy": "e1be77aed16b7147d14fd45bf025771e13d9879fe99fd04b7be922799afc307a"
+      },
+      "case": "tokens-b-fp32-random",
+      "fingerprint": "a6d03aff5faa9b0627454a6117b9b478b310b0ada14f03bc9d7818bf2dd62b42",
+      "input_mode": "random",
+      "input_sha256": "d5f81446cf3fa198b05de45ac2251abfd0c2631733da04756dab95c667ce1246",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2151325420709327,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 34340864,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 34340864,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 336248832,
+      "random_scale": 0.49917121081632,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 2.878660540911369,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 336248832,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 336248832,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "head"
+    },
+    {
+      "artifacts": {
+        "input.npy": "eb7b5352eba29fe8694171cf05527ac3826f106356f916af0cbb94a959b1c800",
+        "mlx/output.npy": "eb7b5352eba29fe8694171cf05527ac3826f106356f916af0cbb94a959b1c800",
+        "reference/output.npy": "0ae552f1bb2fa310edd0a1ae7d35198ace037919fb375f448d108dcfe431dbf4"
+      },
+      "case": "tokens-a-bf16-real",
+      "fingerprint": "4357a884701ba7f703a5c2af2d76c6a1d8558d30bb978104e77ab4d9882d3345",
+      "input_mode": "real",
+      "input_sha256": "eb7b5352eba29fe8694171cf05527ac3826f106356f916af0cbb94a959b1c800",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2044274581130594,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 34275328,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 34275328,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 338919424,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 2.885688583017327,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 338919424,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 338919424,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "head"
+    },
+    {
+      "artifacts": {
+        "input.npy": "8986e122ab0b05b8104fb94149a4a450d68b29bfcee96fe6aecf6d7f28b1743b",
+        "mlx/output.npy": "8986e122ab0b05b8104fb94149a4a450d68b29bfcee96fe6aecf6d7f28b1743b",
+        "reference/output.npy": "7cf4bb859c17d5ff74097bdf084cc61c549d83e4593476eef4de62c14e0c1bee"
+      },
+      "case": "tokens-a-bf16-random",
+      "fingerprint": "8d89baad9d55fb34eec18afc68165fd371fa459fe891fd64275442616cd857d3",
+      "input_mode": "random",
+      "input_sha256": "8986e122ab0b05b8104fb94149a4a450d68b29bfcee96fe6aecf6d7f28b1743b",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            9,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            9,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2174440830713138,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 33734656,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 33734656,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 342802432,
+      "random_scale": 0.4992806787593395,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.279337500105612,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 342802432,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 342802432,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "head"
+    },
+    {
+      "artifacts": {
+        "input.npy": "a62113412152350fd92be4cff7ade02e7a482f3f20c3d2497f2f90d9fb970cc6",
+        "mlx/output.npy": "a62113412152350fd92be4cff7ade02e7a482f3f20c3d2497f2f90d9fb970cc6",
+        "reference/output.npy": "beaa253187c6d426b23f33e0d6921a73ebc5cdb0cd72665aac8cc39b4cde94bf"
+      },
+      "case": "tokens-b-bf16-real",
+      "fingerprint": "26a61f58aa25e0d85f3fca3eeadfafbee0f533f72fc64031fd313b3bb675a038",
+      "input_mode": "real",
+      "input_sha256": "a62113412152350fd92be4cff7ade02e7a482f3f20c3d2497f2f90d9fb970cc6",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2074524579802528,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 35143680,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 35143680,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 339263488,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.275531542021781,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 339263488,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 339263488,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "head"
+    },
+    {
+      "artifacts": {
+        "input.npy": "f339f5b0443b47639afd17b4bda016cdf876eaee8fd8dbdaa594841287ff61e8",
+        "mlx/output.npy": "f339f5b0443b47639afd17b4bda016cdf876eaee8fd8dbdaa594841287ff61e8",
+        "reference/output.npy": "1a6b06618020833b570d46df310fbccdadfb4bb8991711899319bb71956db962"
+      },
+      "case": "tokens-b-bf16-random",
+      "fingerprint": "8051595139fcd66464673afb0ed7e144fec4e1de81c01bc2fa81a8b18cdb828d",
+      "input_mode": "random",
+      "input_sha256": "f339f5b0443b47639afd17b4bda016cdf876eaee8fd8dbdaa594841287ff61e8",
+      "metrics": {
+        "output": {
+          "candidate": [
+            1,
+            8,
+            32
+          ],
+          "pass": false,
+          "reason": "shape_mismatch",
+          "reference": [
+            1,
+            8,
+            128
+          ]
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2162017918890342,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36339712,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36339712,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 343408640,
+      "random_scale": 0.49920807314021237,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.2912235830444843,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 343408640,
+          "reads": [
+            {
+              "name": "lm_head.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 128, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 343408640,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "head"
+    }
+  ],
+  "completed_cases": 8,
+  "expected_cases": 8,
+  "fingerprint": "bba02191736e8996b41af2ec6c2ede463541507b094662b864579be51ba59519",
+  "schema": "qwen4-gold/v1",
+  "status": "INCOMPLETE_OR_FAILED",
+  "unit": "head"
+}

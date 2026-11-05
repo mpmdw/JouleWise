@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "case": "tokens-a-fp32-real",
+      "reason": "reference chain incomplete",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "c03c0a1c3df661c7af485c869899210c84cac446be2e7566b9cda41bb026ca78"
+      },
+      "case": "tokens-a-fp32-random",
+      "fingerprint": "6c6da80d96f566a2106bd91de4c53f9a0803c931f79ae0412c65a7532d9f88d3",
+      "input_mode": "random",
+      "input_sha256": "c03c0a1c3df661c7af485c869899210c84cac446be2e7566b9cda41bb026ca78",
+      "metrics": {},
+      "peak_bytes": 0,
+      "random_scale": 1.0,
+      "reference": {
+        "error": "worker_failed",
+        "exit_code": 1,
+        "log": "/private/tmp/jwflash-gold-real-final/final/tokens-a-fp32-random/reference/worker.log",
+        "peak_rss_bytes": 0
+      },
+      "reference_valid": false,
+      "schema": "qwen4-gold/v1",
+      "status": "REFERENCE_ERROR",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "final"
+    },
+    {
+      "case": "tokens-b-fp32-real",
+      "reason": "reference chain incomplete",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "4c29b45c92e8659f396f9087b9946eeaf49ac3df1e8625ca9944a21b0d769273"
+      },
+      "case": "tokens-b-fp32-random",
+      "fingerprint": "c21843bf71966af187d937b2e4e99e7173f7d88c3c641da67ba6e850aaf81530",
+      "input_mode": "random",
+      "input_sha256": "4c29b45c92e8659f396f9087b9946eeaf49ac3df1e8625ca9944a21b0d769273",
+      "metrics": {},
+      "peak_bytes": 0,
+      "random_scale": 1.0,
+      "reference": {
+        "error": "worker_failed",
+        "exit_code": 1,
+        "log": "/private/tmp/jwflash-gold-real-final/final/tokens-b-fp32-random/reference/worker.log",
+        "peak_rss_bytes": 0
+      },
+      "reference_valid": false,
+      "schema": "qwen4-gold/v1",
+      "status": "REFERENCE_ERROR",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "final"
+    },
+    {
+      "case": "tokens-a-bf16-real",
+      "reason": "reference chain incomplete",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "c03c0a1c3df661c7af485c869899210c84cac446be2e7566b9cda41bb026ca78"
+      },
+      "case": "tokens-a-bf16-random",
+      "fingerprint": "af1eac379d9bd8c45e0b51bd3ee4284b751a29fa3dcec7d2aa3c087b5858d26f",
+      "input_mode": "random",
+      "input_sha256": "c03c0a1c3df661c7af485c869899210c84cac446be2e7566b9cda41bb026ca78",
+      "metrics": {},
+      "peak_bytes": 0,
+      "random_scale": 1.0,
+      "reference": {
+        "error": "worker_failed",
+        "exit_code": 1,
+        "log": "/private/tmp/jwflash-gold-real-final/final/tokens-a-bf16-random/reference/worker.log",
+        "peak_rss_bytes": 0
+      },
+      "reference_valid": false,
+      "schema": "qwen4-gold/v1",
+      "status": "REFERENCE_ERROR",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "final"
+    },
+    {
+      "case": "tokens-b-bf16-real",
+      "reason": "reference chain incomplete",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "final"
+    },
+    {
+      "artifacts": {
+        "input.npy": "4c29b45c92e8659f396f9087b9946eeaf49ac3df1e8625ca9944a21b0d769273"
+      },
+      "case": "tokens-b-bf16-random",
+      "fingerprint": "ee339c20fcb9efbcb1a12bd19fe646df7eaa0c291c86bb5ec3cd1e8769c864a5",
+      "input_mode": "random",
+      "input_sha256": "4c29b45c92e8659f396f9087b9946eeaf49ac3df1e8625ca9944a21b0d769273",
+      "metrics": {},
+      "peak_bytes": 0,
+      "random_scale": 1.0,
+      "reference": {
+        "error": "worker_failed",
+        "exit_code": 1,
+        "log": "/private/tmp/jwflash-gold-real-final/final/tokens-b-bf16-random/reference/worker.log",
+        "peak_rss_bytes": 0
+      },
+      "reference_valid": false,
+      "schema": "qwen4-gold/v1",
+      "status": "REFERENCE_ERROR",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "final"
+    }
+  ],
+  "completed_cases": 8,
+  "expected_cases": 8,
+  "fingerprint": "c5199ec6e236c78a4f83a171e940a0557411ed3c2dc76b877ac3b82ccfc39f5d",
+  "schema": "qwen4-gold/v1",
+  "status": "INCOMPLETE_OR_FAILED",
+  "unit": "final"
+}

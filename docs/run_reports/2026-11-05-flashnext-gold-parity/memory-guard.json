@@ -1,0 +1,6 @@
+{
+  "error": "memory_guard",
+  "exit_code": 86,
+  "log": "/private/tmp/jwflash-gold-memory-guard/worker.log",
+  "peak_rss_bytes": 0
+}

@@ -1,0 +1,43 @@
+{
+  "coverage": {
+    "dtypes": [
+      "fp32",
+      "bf16"
+    ],
+    "endpoints": true,
+    "full_48_layer_gold": false,
+    "input_modes": [
+      "random",
+      "real"
+    ],
+    "layers": [
+      2,
+      3
+    ]
+  },
+  "fingerprint": "c5199ec6e236c78a4f83a171e940a0557411ed3c2dc76b877ac3b82ccfc39f5d",
+  "schema": "qwen4-gold/v1",
+  "status": "INCOMPLETE_OR_FAILED",
+  "units": [
+    {
+      "status": "INCOMPLETE_OR_FAILED",
+      "unit": "embed"
+    },
+    {
+      "status": "INCOMPLETE_OR_FAILED",
+      "unit": "2"
+    },
+    {
+      "status": "INCOMPLETE_OR_FAILED",
+      "unit": "3"
+    },
+    {
+      "status": "INCOMPLETE_OR_FAILED",
+      "unit": "final"
+    },
+    {
+      "status": "INCOMPLETE_OR_FAILED",
+      "unit": "head"
+    }
+  ]
+}

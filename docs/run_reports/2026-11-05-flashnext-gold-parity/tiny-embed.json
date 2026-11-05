@@ -1,0 +1,674 @@
+{
+  "cases": [
+    {
+      "artifacts": {
+        "mlx/embedding.npy": "2c3fb4974ddfd0af83f28a43f0136e5b3d79635bbe4738828b70a14bc0785472",
+        "mlx/output.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "reference/embedding.npy": "2c3fb4974ddfd0af83f28a43f0136e5b3d79635bbe4738828b70a14bc0785472",
+        "reference/output.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4"
+      },
+      "case": "tokens-a-fp32-real",
+      "fingerprint": "242b295144ecdd779cb5feb5e9dda504736c956f7dd3044ffd51937cab6271b6",
+      "input_mode": "real",
+      "input_sha256": null,
+      "metrics": {
+        "embedding": {
+          "cosine": 1.0,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        },
+        "output": {
+          "cosine": 1.0,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12577587200,
+        "elapsed_seconds": 0.21402874996419996,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 34029568,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 1, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(5, 6, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(11, 12, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(17, 18, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(23, 24, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(29, 30, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(31, 32, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(37, 38, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(41, 42, None), slice(None, None, None))"
+            }
+          ]
+        },
+        "observed_peak_bytes": 34029568,
+        "parent_peak_bytes": 38879232,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 334954496,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12577652736,
+        "elapsed_seconds": 2.694979542051442,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 334954496,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 1, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(5, 6, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(11, 12, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(17, 18, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(23, 24, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(29, 30, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(31, 32, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(37, 38, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(41, 42, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 334954496,
+        "parent_peak_bytes": 38813696,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "embed"
+    },
+    {
+      "artifacts": {
+        "mlx/embedding.npy": "1661dada54be244327b80b5556b71c83b15979d138e043dca92e7769bad24c0b",
+        "mlx/output.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "reference/embedding.npy": "1661dada54be244327b80b5556b71c83b15979d138e043dca92e7769bad24c0b",
+        "reference/output.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011"
+      },
+      "case": "tokens-b-fp32-real",
+      "fingerprint": "244b6bbb7b10f6c0166a838cb6e3a60ee262f9e1f3b0137660b286ef18a38e93",
+      "input_mode": "real",
+      "input_sha256": null,
+      "metrics": {
+        "embedding": {
+          "cosine": 0.9999999999999999,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        },
+        "output": {
+          "cosine": 1.0,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.21429925004485995,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36388864,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(47, 48, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(53, 54, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(59, 60, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(61, 62, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(67, 68, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(71, 72, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(73, 74, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(79, 80, None), slice(None, None, None))"
+            }
+          ]
+        },
+        "observed_peak_bytes": 36388864,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 345522176,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.083923958009109,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 345522176,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(47, 48, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(53, 54, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(59, 60, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(61, 62, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(67, 68, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(71, 72, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(73, 74, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(79, 80, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 345522176,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "embed"
+    },
+    {
+      "artifacts": {
+        "mlx/embedding.npy": "2c3fb4974ddfd0af83f28a43f0136e5b3d79635bbe4738828b70a14bc0785472",
+        "mlx/output.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "reference/embedding.npy": "2c3fb4974ddfd0af83f28a43f0136e5b3d79635bbe4738828b70a14bc0785472",
+        "reference/output.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4"
+      },
+      "case": "tokens-a-bf16-real",
+      "fingerprint": "8ea076293b0b98bdc7cd9e7c0476bf9df8ba718bfd077cd1009f100ab1e52946",
+      "input_mode": "real",
+      "input_sha256": null,
+      "metrics": {
+        "embedding": {
+          "cosine": 1.0,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        },
+        "output": {
+          "cosine": 1.0,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.21668220800347626,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 33292288,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 1, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(5, 6, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(11, 12, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(17, 18, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(23, 24, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(29, 30, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(31, 32, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(37, 38, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(41, 42, None), slice(None, None, None))"
+            }
+          ]
+        },
+        "observed_peak_bytes": 33292288,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 343605248,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.08670866698958,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 343605248,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(0, 1, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(5, 6, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(11, 12, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(17, 18, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(23, 24, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(29, 30, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(31, 32, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(37, 38, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(41, 42, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 343605248,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "embed"
+    },
+    {
+      "artifacts": {
+        "mlx/embedding.npy": "1661dada54be244327b80b5556b71c83b15979d138e043dca92e7769bad24c0b",
+        "mlx/output.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "reference/embedding.npy": "1661dada54be244327b80b5556b71c83b15979d138e043dca92e7769bad24c0b",
+        "reference/output.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011"
+      },
+      "case": "tokens-b-bf16-real",
+      "fingerprint": "836f893f676d13962c04483a30d68f941132d2767f1b93b3d9f6331255cb7458",
+      "input_mode": "real",
+      "input_sha256": null,
+      "metrics": {
+        "embedding": {
+          "cosine": 0.9999999999999999,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        },
+        "output": {
+          "cosine": 1.0,
+          "fraction_within": 1.0,
+          "max_abs": 0.0,
+          "max_relative": 0.0,
+          "pass": true,
+          "relative_l2": 0.0
+        }
+      },
+      "missing_traces": [],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.20918933302164078,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36356096,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(47, 48, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(53, 54, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(59, 60, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(61, 62, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(67, 68, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(71, 72, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(73, 74, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(79, 80, None), slice(None, None, None))"
+            }
+          ]
+        },
+        "observed_peak_bytes": 36356096,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 343605248,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.0730335420230404,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 343605248,
+          "reads": [
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(47, 48, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(53, 54, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(59, 60, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(61, 62, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(67, 68, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(71, 72, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(73, 74, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.embed_tokens.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(79, 80, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 343605248,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "embedding": "embedding.npy",
+          "output": "output.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "embed"
+    }
+  ],
+  "completed_cases": 4,
+  "expected_cases": 4,
+  "fingerprint": "bba02191736e8996b41af2ec6c2ede463541507b094662b864579be51ba59519",
+  "schema": "qwen4-gold/v1",
+  "status": "INCOMPLETE_OR_FAILED",
+  "unit": "embed"
+}
