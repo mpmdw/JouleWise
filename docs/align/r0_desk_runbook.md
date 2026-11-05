@@ -14,6 +14,10 @@ accepts `reasoning_effort`. Integrate the SMC lane before live R0. Do not run th
    pins are built in. Prepare/download/hash the pinned mirrors separately;
    this script never downloads. SHADE must already have its pinned cache.
 
+   Set `measurement_hw_model` to the lead-verified measurement Mac's exact
+   `sysctl -n hw.model` value. The placeholder refuses model work. Every model
+   subset requires this identity plus at least 128 GiB physical RAM before load.
+
    ```sh
    PY="$PWD/.venv/bin/python"
    mkdir -p .desk/align-r0

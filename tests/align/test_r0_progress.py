@@ -11,6 +11,10 @@ from tests.align.test_r0_checks import FakeBackend, FakeGuard, config_at
 
 
 class ProgressTest(unittest.TestCase):
+    def setUp(self):
+        gate = patch("joulewise.align.r0_runner.host_identity", return_value={"status": "pass", "fake": True})
+        gate.start()
+        self.addCleanup(gate.stop)
     def test_second_attempt_timeout_keeps_first_and_incremental_samples(self):
         calls = []
         with tempfile.TemporaryDirectory() as tmp:

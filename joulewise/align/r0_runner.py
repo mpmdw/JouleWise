@@ -14,7 +14,7 @@ import time
 
 from joulewise.align import r0
 from joulewise.align.r0_host import (
-    QuietGuard, Refused, command, disk_census, host_snapshot, inventory, smc_enumeration,
+    QuietGuard, Refused, command, disk_census, host_snapshot, host_identity, inventory, smc_enumeration,
 )
 
 CHECKS = ("host", "disk", "smc", "load", "template", "generated", "ladder", "long-decode", "memory")
@@ -34,10 +34,12 @@ def _path(value):
 
 
 def validate_config(config):
-    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads"}:
+    if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads", "measurement_hw_model"}:
         raise ValueError("unknown R0 config field")
     if config.get("schema") != "joulewise.align.r0.config.v1" or set(config.get("models", {})) != {"D"}:
         raise ValueError("R0 config requires schema v1 and D only (Amendment 1)")
+    if not isinstance(config.get("measurement_hw_model"), str) or not config["measurement_hw_model"].strip():
+        raise ValueError("measurement_hw_model must pin the measurement Mac's hw.model")
     for entry in config["models"].values():
         if set(entry) != {"source"}:
             raise ValueError("model entries contain only source; council pins cannot be overridden")
@@ -143,9 +145,16 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                          ("smc", lambda: smc_enumeration(REPO, output / "smc"))):
             if name in checks:
                 receipt(name, None, fn)
+        model_checks = [c for c in checks if c not in {"host", "disk", "smc"}]
+        host_ok = (not model_checks or receipt("host-identity", None,
+                   lambda: host_identity(config["measurement_hw_model"]))["status"] == "pass")
         for tag in models:
             wanted = [c for c in checks if c not in {"host", "disk", "smc"}]
             if not wanted:
+                continue
+            if not host_ok:
+                for name in wanted:
+                    receipt(name, tag, lambda: {"status": "blocked", "reason": "measurement host identity/capacity gate failed"})
                 continue
             backend = None
             try:

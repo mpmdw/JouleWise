@@ -194,3 +194,16 @@ observed failing before its fix; final commit mapping and checks follow below.
   cached council ref lacks `FINAL-DESIGN-AMENDMENT-1.md`; no network is allowed,
   so this applies the user's explicit amendment summary. Exact amendment text
   and revised disk/member arithmetic remain unverified pending the lead's ref.
+
+- G9 / LOW model bytes and host identity: all model subsets now require at
+  least 128 GiB and an exact hw.model match to the lead-supplied
+  `measurement_hw_model` config pin, before importing/loading native models.
+  The example has a refusing placeholder; no hardware identifier was guessed.
+  Host-capacity/identity and load-blocking regressions fail before/pass after.
+  **Remaining disposition:** exact weight/revision authentication is deferred.
+  The only supplied pin is a whole-download total (includes tokenizer/config
+  bytes), not a safetensors-only total or pinned manifest. Treating it as the
+  weight total would reject valid mirrors; hashing an unpinned local manifest
+  cannot establish remote identity. Lead must supply a revision-authenticated
+  manifest/weight-total pin before live qualification. Existing file hashes and
+  byte differences remain diagnostics, not a claim of revision authentication.

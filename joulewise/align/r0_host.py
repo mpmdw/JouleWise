@@ -180,6 +180,18 @@ def swap_bytes(run=command):
     return int(float(match[1]) * {"K": 1024, "M": 1024**2, "G": 1024**3}[match[2]])
 
 
+def host_identity(expected_model, run=command):
+    """Always gate native model work, including CLI subsets, on host capacity."""
+    try:
+        memory = int(run(("/usr/sbin/sysctl", "-n", "hw.memsize")).strip())
+        model = run(("/usr/sbin/sysctl", "-n", "hw.model")).strip()
+    except Exception as exc:
+        return {"status": "fail", "error": str(exc)}
+    return {"status": "pass" if memory >= 128 * 1024**3 and model == expected_model else "fail",
+            "hw_memsize": memory, "hw_model": model, "expected_hw_model": expected_model,
+            "minimum_memory_bytes": 128 * 1024**3}
+
+
 def host_snapshot(run=command):
     probes = {"pmset_custom": ("/usr/bin/pmset", "-g", "custom"),
               "pmset_battery": ("/usr/bin/pmset", "-g", "batt"),

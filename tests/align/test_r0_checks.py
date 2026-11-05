@@ -87,10 +87,24 @@ class FakeBackend:
 def config_at(root):
     return {"schema": "joulewise.align.r0.config.v1", "models": {
             "D": {"source": str(root / "D")}}, "shade_cache": str(root / "shade"),
-            "disk_path": str(root), "custody_parents": [str(root / "custody")], "offloads": []}
+            "disk_path": str(root), "custody_parents": [str(root / "custody")], "offloads": [],
+            "measurement_hw_model": "MacSynthetic"}
 
 
 class R0ChecksTest(unittest.TestCase):
+    def setUp(self):
+        gate = patch("joulewise.align.r0_runner.host_identity", return_value={"status": "pass", "fake": True})
+        gate.start()
+        self.addCleanup(gate.stop)
+
+    def test_wrong_host_blocks_all_model_loads_even_if_host_check_not_selected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("joulewise.align.r0_runner.host_identity", return_value={"status": "fail"}), \
+                    patch.object(FakeBackend, "__init__") as load:
+                report = execute(config_at(root), root, ["load"], ["D"], guard=FakeGuard(), backend_factory=FakeBackend)
+            load.assert_not_called()
+            self.assertEqual(report["status"], "fail")
     def test_rewrite_counts_consumed_output_not_just_prior_prompt(self):
         self.assertEqual(r0.rewrite([1, 2], [3, 4], [1, 2, 9])["rewritten_prefix_tokens"], 2)
         self.assertEqual(r0.rewrite([1], [2, 3], [1, 2, 3, 4])["rewritten_prefix_tokens"], 0)

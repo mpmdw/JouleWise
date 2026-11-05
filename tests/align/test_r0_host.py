@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.align.r0 import PINS
-from joulewise.align.r0_host import QuietGuard, Refused, disk_census, host_snapshot, inventory, smc_enumeration, swap_bytes
+from joulewise.align.r0_host import QuietGuard, Refused, disk_census, host_snapshot, host_identity, inventory, smc_enumeration, swap_bytes
 from joulewise.measurement_liveness import Census
 from tests.align.test_r0_checks import config_at
 
@@ -155,6 +155,14 @@ class R0HostTest(unittest.TestCase):
         self.assertEqual(swap_bytes(lambda argv: "total = 0.00M used = 1.50M free = 1M"), 1572864)
         with self.assertRaises(ValueError):
             swap_bytes(lambda argv: "unavailable")
+
+    def test_host_identity_requires_pinned_model_and_128_gib_before_loading(self):
+        for memory, model, status in ((24 * 1024**3, "MacSynthetic", "fail"),
+                                     (128 * 1024**3, "WrongMac", "fail"),
+                                     (128 * 1024**3, "MacSynthetic", "pass")):
+            def run(argv):
+                return str(memory) if "hw.memsize" in argv else model
+            self.assertEqual(host_identity("MacSynthetic", run=run)["status"], status)
 
     def test_readiness_handles_current_and_legacy_power_mode_spellings(self):
         for setting, expected in (("powermode 0", "pass"), ("powermode 2", "pass"),
