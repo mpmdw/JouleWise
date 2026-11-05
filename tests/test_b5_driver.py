@@ -1084,8 +1084,7 @@ class UnitTests(unittest.TestCase):
                 validate_config=lambda config: config,
                 monitor_dir=lambda custody: Path(custody) / "hazards" / "monitor")
             with mock.patch.dict(sys.modules, {"joulewise.hazards": types.ModuleType("joulewise.hazards"),
-                                               "joulewise.hazards.monitor": fake}), mock.patch.object(
-                    b5_driver, "monitor_temperature_policy", return_value=None):
+                                               "joulewise.hazards.monitor": fake}):
                 sys.modules["joulewise.hazards"].monitor = fake
                 request = b5_driver.MonitorRequest(plan, root / "plan.json", root, root / "night", 42)
                 monitor = seams.monitor_argv(request)

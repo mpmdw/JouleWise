@@ -671,7 +671,6 @@ class CampaignPolicy:
     calibration_bracketing: CalibrationBracketingPolicy
     idle_admission_extension: IdleAdmissionExtension | None = None
     post_window_sampling_dwell_s: float = 1.0
-    smc_temperature: dict[str, Any] | None = None
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "CampaignPolicy":
@@ -691,7 +690,6 @@ class CampaignPolicy:
                     "calibration_bracketing",
                     "idle_admission_extension",
                     "post_window_sampling_dwell_s",
-                    "smc_temperature",
                 }
             ),
         )
@@ -739,12 +737,6 @@ class CampaignPolicy:
             raise SchemaError(
                 "production calibration_bracketing.require_bracket must be true"
             )
-        from joulewise.hazards.temperature import validate_policy as validate_temperature_policy
-        try:
-            temperature_policy = (validate_temperature_policy(data["smc_temperature"])
-                                  if "smc_temperature" in data else None)
-        except ValueError as exc:
-            raise SchemaError(str(exc)) from exc
         return cls(
             schema_version=schema_version,
             policy_id=_require_string(data.get("policy_id"), "campaign_policy.policy_id"),
@@ -758,7 +750,6 @@ class CampaignPolicy:
             idle_admission=admission,
             cooldown=CooldownPolicy.from_mapping(data.get("cooldown")),
             calibration_bracketing=calibration_bracketing,
-            smc_temperature=temperature_policy,
             idle_admission_extension=extension,
             post_window_sampling_dwell_s=(
                 _optional_float(
@@ -772,8 +763,6 @@ class CampaignPolicy:
 
     def to_dict(self) -> dict[str, Any]:
         result = _enum_to_value(asdict(self))
-        if self.smc_temperature is None:
-            result.pop("smc_temperature")
         # Preserve historical policy metadata and normalized digests at zero.
         if self.idle_admission.retry_backoff_s == 0:
             result["idle_admission"].pop("retry_backoff_s")

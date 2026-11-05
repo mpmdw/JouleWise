@@ -1,185 +1,156 @@
-# ALIGN SMC temperature journal and R0 desk procedure
+# ALIGN SMC inventory and in-process thermometry
 
-Implementation is **PROVISIONAL**, tested with fake hardware only. The target
-is the M3 Max Mac15,9 (128 GB). No M4 Air key names or readings establish
-which M3 Max sensors measure a die, GPU cluster, heatsink or skin.
+Binding authority: `docs/align/council-2026-11-05/FINAL-DESIGN.md` §2.6,
+§2.8 B4/B5 and V8, on `origin/lane/2026-11-05-align-window-council`.
+The fix round read that file at council commit
+`6eb1ff5be31bec330ae5af262c2b4c7601e7755e` through Git's authorized shared
+object store. `FINAL-DESIGN-AMENDMENT-1.md` was absent from the named ref and
+reachable history available to this clone; the lead must supply its commit.
+The user's binding amendment summary applies: window 1 is Qwen3.8-27B only;
+Qwen3-Next is dropped and Flash-Next is later. This thermometry code selects
+no model or window roster.
 
-PR #666 fix round: numeric extensions and index enumeration live in
-`joulewise/align/apple/smc.py`, using the unchanged hazard SMC transport.
-The optional temperature monitor is an ALIGN-local subclass in
-`joulewise/align/apple/temperature_monitor.py`. A temperature-pinned campaign
-selects `scripts/align_temperature_monitor.py`; other campaigns keep the
-original launcher. The core `hazards/smc.py` and `hazards/monitor.py` bytes
-are restored to their pre-#658 pilot-9 base; no pin rebind is claimed.
+Hardware validation remains **PROVISIONAL**. No live capture was run in the
+fix round. Synthetic regressions use the review's observed bytes, rather
+than treating fixtures as hardware validation.
 
-## R0 on the measurement Mac
+## R0: inventory and step data
 
-Run in a separate, quiet desk session after every Codex/Claude session has
-exited and every measurement chain and collector has stopped. This is a
-diagnostic step-response capture, not a campaign or a claim. Never launch it
-from an agent session. Use the measurement environment's existing MLX install;
-the tool never downloads or loads a model.
-Use the interpreter with that existing installation (for example, replace
-`python3.13` below with `.venv/bin/python` if that is the measurement environment).
-
-Set `JOULEWISE_CUSTODY_PARENT` to the same custody parent used by acquisition.
-If acquisition uses multiple parents, set
-`JOULEWISE_ADDITIONAL_CUSTODY_PARENTS` to the corresponding JSON array too.
-The tool reuses `night_gate.agent_census` (including executable-identity
-filtering) and `measurement_liveness.census`; an additional process snapshot
-rejects direct powermetrics, monitor, campaign and chain processes. Failed or
-indeterminate probes refuse. Checks run before the backend opens, after
-enumeration, at each phase boundary and on a five-second schedule while
-sampling (probe latency can add gaps). These are snapshot checks, not an atomic interprocess lease: keep
-launches sequential and do not start another collector during R0.
-
-From the reviewed measurement checkout, choose a fresh diagnostic output path:
+After every agent session and measurement chain has ended, the lead can run
+this on the Mac15,9, using the existing interpreter with MLX installed:
 
 ```sh
-# Inventory and idle samples only; no GPU work, no fast/slow proposals.
+# Idle inventory only. This opens the real SMC: never run during agent work.
 python3.13 -B scripts/align_smc_enumerate.py \
-  --output desk-custody/align-r0-inventory-UNIQUE --seconds 60
+  --output desk-custody/align-r0-idle-UNIQUE --seconds 60
 
-# Full step: 300 s idle, 600 s GPU load, 600 s idle recovery (~25 min).
+# R0's 60-second diagnostic load; this does not classify or pin sensors.
 python3.13 -B scripts/align_smc_enumerate.py \
   --output desk-custody/align-r0-step-UNIQUE --gpu-step \
-  --idle-seconds 300 --load-seconds 600 --recovery-seconds 600
+  --idle-seconds 300 --load-seconds 60 --recovery-seconds 600
 ```
 
-The second command explicitly opts into repeated 2048 x 2048 float32 MLX
-GPU matmuls in an isolated child. Import and allocation precede the load
-phase clock; the child signals readiness before the parent starts sampling
-that phase. A worker exception or early exit fails the capture. Normal stop,
-census failure, SIGINT, SIGHUP and SIGTERM clean up the child process group;
-the child also bounds its own loop. SIGKILL cannot run parent cleanup; the
-child's bound is the remaining backstop. Matrix size, dtype and phase bounds
-are recorded. No thermal controller or model is started.
+R0 uses command 8 to inventory every readable T* and F* key. Fan RPM keys
+are F?Ac; other F* keys retain their native values/units. ALIGN's reader in
+`joulewise/align/apple/smc_reader.py` subclasses the unchanged hazard Reader
+and uses its transport, cache and reconnection seams. Additional decoding
+stays local: big-endian `sp78` / `fpe2`, little-endian signed int64 / 65536
+for `ioft`, and **big-endian ui32 for #KEY only**. Ordinary integer keys
+remain little-endian. The review's `00 00 08 6e` is 2,158 keys; interpreting
+it as little-endian gave 1,846,018,048 and prevented enumeration entirely.
 
-Outputs are `samples.jsonl`, `r0.json` and `summary.md` in the new directory.
-The JSON records hardware model/memory, enumerated key metadata and failures,
-actual three-clock sample stamps, phase bounds, journal SHA-256, coverage and
-rankings. Failed captures return 3 and preserve partial journal bytes; they
-must not be treated as completed R0 results or silently retried into success.
-Existing output directories are refused. A failed key read is null with a
-reason; an incomplete index enumeration fails the capture.
+`samples.jsonl`, `r0.json` and `summary.md` retain key/type/raw-byte evidence,
+values/errors, three clocks, phase bounds, idle/load medians, unsupported
+types, journal digest and per-key coverage. Capture completion is not a
+thermometry pass: `thermometry_bar` is `PENDING_R1_CLASSIFICATION`.
+R0 emits no S_fast/S_slow picks or campaign-policy snippet. Failed captures
+return 3 and preserve partial samples; existing output directories refuse.
+The load is an explicitly requested, bounded 2048×2048 float32 MLX matmul
+child, ready before the load clock starts. The child starts from the checkout
+regardless of the caller's directory. Cleanup re-polls exiting groups on
+EPERM, reaps children and preserves the primary readiness error.
 
-## Written selection rule
+Admission fails on agents, measurement owners, direct collectors, missing
+custody parents or unmeasured/over-limit CPU contention outside the tool's
+own process tree. Configure the real custody-parent environment explicitly;
+missing directories are never treated as an empty census. A stateful probe
+reuses `hazards.contention` snapshots and host ticks. Both per-process and
+aggregate outside CPU use the campaign default of 0.05 CPU-s/s. The tool's
+own controlled load is a descendant and is excluded. The initial CPU check
+measures one second; later checks reuse snapshots. All periodic quiet-check
+evidence is retained. Raw `pmset -g`, `-g custom`, `-g batt`, active power
+mode fields, AC state and the OS notify thermal level are recorded before
+and after capture; unavailable readings remain explicit null/error data.
+There is no direct GPU-utilization measurement or GPU exclusivity lease.
 
-Enumerate SMC keys through `#KEY` and command 8; candidate temperatures have
-names `T***`, and fan speed keys have names `F?Ac`. Read supported numeric
-types, including `flt `, legacy `sp78` temperatures and `fpe2` RPM. Log
-unreadable candidates. Names alone never establish sensor location. Values
-outside -40..150 degrees C or below zero RPM are treated as invalid; a fan
-stopped at zero RPM is valid.
+## R1: planning-turn classification
 
-For each temperature key:
+R1's actual planning-turn step, rather than the fixed R0 matmul, supplies the
+input to `smc_enumeration.rank(capture, stage="r1")`. The default
+`rank(capture)` is R0 inventory only and always returns null selections.
 
-1. Require at least five valid samples and at least 90% unique successful
-   one-second slots in **each** of idle, load and recovery. Reads spanning
-   multiple slots do not supply coverage.
-2. Baseline is mean idle temperature; noise is idle population standard
-   deviation, with a 1e-6 degree C denominator floor. Fit a first-order heating
-   pulse and its exponential recovery jointly on actual sample times. The
-   JSON reports fitted asymptotic amplitude, observed peak rise, tau, noise,
-   amplitude/noise and R-squared. The fit uses a logarithmic tau grid with
-   refinement, with no numpy/scipy dependency.
-3. Require positive amplitude greater than three idle noise standard
-   deviations, R-squared at least 0.8, and a resolved tau above 0.3 s and
-   below **both** the load and recovery durations. Weak, poor-fit, unresolved
-   and incomplete traces receive a reason rather than a forced selection.
-4. Among those candidates, propose **S_fast** with the largest amplitude/noise
-   and **tau <30 s**, and **S_slow** with the largest amplitude/noise and
-   **tau >120 s**. Exact 30 s and 120 s boundaries are excluded. Ties use
-   lexical key order. Fans are reported, never ranked as temperature keys.
+- ΔT is the final 10% load median minus the idle median.
+- Heating t63 is the first 63.2% rise crossing. Cooling τ is the first
+  1/e crossing measured relative to the first observed recovery value/time,
+  including when a few initial reads fail. Crossings interpolate
+  timestamps between adjacent valid readings; no exponential model is fitted.
+- S_fast has the largest ΔT with t63 ≤ 5 s. S_slow has the longest τ among
+  keys with ΔT ≥ 3 °C and τ ≤ 300 s. Lexical keys break ties. Keys with
+  τ > 300 s are recorded and excluded from gating. RPM/raw F* values never
+  enter temperature selection.
+- Each phase needs at least five valid samples, ≥99% coverage and **<1%**
+  failed reads. Unresolved recovery is not assigned a τ. An idle series with
+  fewer than three distinct values is rejected as stale. Noise is a quality
+  gate: ΔT must exceed three times max(idle SD, sensor quantum, 0.05 °C).
+  The quantum includes the type's resolution and minimum observed idle step.
+  Noise ratios never order candidates.
 
-Fan keys receive the same response/noise fit in their native RPM units for
-inspection; they are always excluded from S_fast/S_slow selection.
+The additional data-quality choices are conservative implementation filters,
+not newly registered measurement admission constants. Inspect their retained
+reasons and raw traces in R1. A null pick or identical fast/slow pick does
+not supply the required distinct die/heatsink pair; do not invent a pin.
+Sensor locations, refresh behavior and thermometry acceptance require lead
+verification on the Mac15,9. If the design's thermometry bar fails, follow its
+IOHID/X4 ruling; this tool does not authorize thermal-control claims.
 
-Inventory-only captures make no fast/slow proposal. Missing classes yield
-null; no complete campaign-policy snippet is produced. Short steps cannot
-resolve slow responses. First-order fits do not provide anatomical identity,
-confidence intervals or proof of a sensor's hardware refresh rate. Real
-multi-timescale responses may fail the quality filter. Review the full trace
-and hardware identity before accepting a proposal, particularly near the
-time-constant boundaries. The R0 quality filters are diagnostic rules, not
-new campaign admission or scientific eligibility thresholds.
+## Sidecar and the #666 integration contract
 
-## Pinning the campaign policy
+`joulewise/align/apple/thermal.py` owns the in-process sidecar. The five
+core files modified by the rejected PR (`hazards/smc.py`, `hazards/monitor.py`,
+`schemas.py`, `b5/driver.py`, `b5/harvest.py`) are restored byte-for-byte to
+PR #658's base `c9a0a3943`. No temperature journal is added to custody hazards,
+and no temperature field is added to CampaignPolicy.
 
-When both roles are resolved, `summary.md` includes a candidate extension
-with actual key names, all readable fan keys and the SHA-256 of `r0.json`:
+The optional ALIGN `EpisodeSpec.thermal` slot has the existing sensor-map
+shape `{s_fast, s_slow, fan_keys, r0_sha256}`. Key names come from R1; the
+R0 digest is provenance only. The slot is omitted when unset, preserving
+anchor spec bytes and legacy identity. When set, the slot is included in
+the ALIGN execution identity, and `EpisodeRuntimeAdapter.prepare` starts
+`thermal.Sidecar` before native runtime preparation. Cleanup stops it in a
+finally block, including runtime cleanup failure; failed preparation closes
+it immediately. It therefore covers idle, warmup, gates, episode and holds.
 
-```json
-{
-  "smc_temperature": {
-    "s_fast": "Txxx",
-    "s_slow": "Tyyy",
-    "fan_keys": ["F0Ac", "F1Ac"],
-    "r0_sha256": "<64 lowercase hex characters, SHA-256 of r0.json>"
-  }
-}
+Public surfaces for #666:
+
+| Surface | Contract / migration |
+|---|---|
+| `thermal.Sidecar(outputs_dir, config, *, reader=None, ctx=None)` | One in-process reader/thread; `start()`, `tick()`, `stop()`; `start(background=False)` is a test seam. Writes create-once `outputs/align_thermal.jsonl`. |
+| `Sidecar.readings` | Recent reading rows, deque of 3,600; collector appends concurrently. Gate integration must synchronize any iteration (collector `_lock`) or add an accessor. |
+| `Sidecar.event(kind, values)` | Records `align_thermal_gate` or `align_thermal_hold` phase boundaries with timestamps. #666 owns gate decisions, RuntimeEvent emission and attribution. This PR supplies collection, not G0/G1/H algorithms. |
+| `thermal.validate_policy`, `keys`, `sample`, `Coverage`, `coverage` | Existing function names and calling signatures preserved. `sample` adds raw/type evidence under `readings`. Validation is of an ALIGN slot, despite the legacy helper name. |
+| `hazards.temperature`, `hazards.smc_enumeration` | Compatibility imports of the single ALIGN implementations; no second collector. New code should import `align.apple` directly. |
+| `smc_reader.Reader` | Enumeration lives here; `hazards.smc.Reader.enumerate_sensors`, `CMD_GET_KEY_BY_INDEX` and the added hazard decoders are removed to restore pinned code. `read/read_key/close` retain normal signatures, with additive raw metadata. |
+| `rank(capture, *, stage="r0")` | Return shape retained; explicit R1 stage now required for selection. `amplitude` aliases measured ΔT, `observed_rise` remains; `t63_s` is added, τ is cooling-only. Retired `fit_r2` and `amplitude_to_noise` are null. |
+| Campaign/monitor hooks | Removed: `CampaignPolicy.smc_temperature`, `monitor_temperature_policy`, `monitor.build_config(smc_temperature=...)`, optional hazard journal loading and `harvest.OBSERVATION_KIND["temperature"]`. The new `Monitor.temperature_*`, `fast_tasks` and `journal_names` attributes are also removed. #666 must move any uses to the ALIGN slot/sidecar. |
+| R0 CLI | Existing options retained; default load duration is now 60 s. Output schema name retained, with additive host/quality fields; sensor picks are always null. |
+
+The sidecar schema is `joulewise.align_thermal.v1`; R0 retains its existing hazard-shaped diagnostic rows. Every journal row has monotonic, raw-monotonic and epoch stamps. Reading
+rows contain sensors, units, per-key type/raw hex/value/error, and aggregate
+error text. Writes flush each row and fsync every five seconds and on stop.
+Thread/journal failures surface on teardown and remain recorded when writable.
+
+Coverage uses the sampling grid with 100 ms tolerance, unique nominal ticks
+and excluded partial edge cells; near-grid boundaries snap within that
+same tolerance. Reads crossing a caller's slot boundary remain valid; reads
+lasting over one second do not. `max_interval_ns` reports actual consecutive
+valid sample intervals including both span edges. `gaps_ns` now contains
+actual sample-free intervals exceeding 1.1 s, rather than merged missing
+caller-anchored cells. #666 must use `max_interval_ns <= 2e9` for the design's
+maximum-gap bar. A span with no complete cells reports a null fraction;
+never interpret that as a pass. Constant valid temperatures count for
+coverage; rejecting stale idle sensors is a separate R1 classification rule.
+
+## Native checks still required
+
+In a clean, lead-controlled session after agents exit, on the Mac15,9:
+
+```sh
+# Use the locked measurement interpreter with MLX available; clear synthetic-only mode.
+JW_B5_SYNTHETIC_ONLY=0 JW_LIVE_HW=1 python3.13 -B -m unittest tests.align.test_smc_native
 ```
 
-The names above are placeholders. Add the reviewed extension to the
-campaign policy, then regenerate/re-pin that policy's SHA-256 descriptor in
-the pack's `plan_tree.json` using the normal lead-owned pack workflow. Do
-not modify an already collected pack. The driver resolves that descriptor
-inside the measurement checkout, checks its byte hash and validates the
-policy before writing `hazards/monitor/config.json`. The config is
-create-once and mismatches refuse reuse. The temperature policy and R0 pin
-are copied into the journal's session header. The R0 hash is a provenance
-pin; the acquisition driver does not follow a path to, or re-run, R0.
-
-Omitting the extension keeps old campaigns' monitor probes, journal list and
-policy serialization unchanged. An empty `fan_keys` array is permitted for
-fanless hosts; do not use that to omit the M3 Max's fans. The acquisition
-driver uses the existing hazard monitor lifecycle: it starts before the
-episode chain, restarts under the supervisor, and stops after the chain's
-group is proven gone and the existing post-chain hold completes. Temperature
-read failures are disclosed in the journal; they do not add an admission gate.
-
-## Journal and coverage
-
-The optional file is `<custody>/hazards/monitor/temperature.jsonl`, with the
-existing `joulewise.hazard_journal.v1` envelope: module, session, sequence,
-kind, started/finished stamps, values, error and raw. Values contain `source`,
-`sensors` (native keys), `units` (`degC` / `rpm`) and per-key `errors`.
-It uses the monitor's append/write/fsync policy and fast sampling thread,
-sharing the existing SMC reader under its lock. Cadence is fixed at 1 Hz.
-The SMC client is closed at shutdown. All three stamps are retained:
-CLOCK_REALTIME, `time.monotonic_ns()` and CLOCK_MONOTONIC_RAW, the same clock
-domains used by controller spans and the KM003C stream.
-
-Session-end bookkeeping includes per-key and all-keys coverage. The
-denominator is `ceil(span_seconds)` one-second slots, including partial
-edge slots. The numerator counts distinct valid slots; duplicate reads do
-not repair gaps. A read must finish in its starting slot. Constant valid
-temperatures and zero RPM count. Missing slots are merged into explicit
-half-open `gaps_ns` intervals. Unexpected process death can omit the end
-record; recompute over the desired energy/episode span, including restarts:
-
-```python
-from joulewise.hazards import monitor, temperature
-
-rows, parse_note = monitor.read_journal(custody / "hazards/monitor/temperature.jsonl")
-# Review parse_note, especially a crash-truncated final line.
-stats = temperature.coverage(rows, episode_start_ns, episode_end_ns,
-                             [s_fast, s_slow, *fan_keys])
-```
-
-`monitor.load_journals` includes the optional journal when present, and
-`b5.harvest.read_monitor_journal(path, "temperature")` accepts its readings
-and bookkeeping. Existing harvest flags/eligibility and desk-table columns
-are unchanged; the lead must define any future temperature gate separately.
-The general coverage helper accepts compressed desk journals through the
-existing `monitor.read_journal` reader.
-
-## Still requiring live verification
-
-On Mac15,9: enumeration/index and byte-order compatibility, readable keys,
-anatomical interpretation, response fits and reproducibility, hardware
-publication cadence, fan coverage, actual monitor overhead and one-second
-coverage under episodes, GPU worker readiness/execution, signal cleanup and
-quiet-census behavior in the launch environment. Fake evidence closes none
-of these live gates. No historical pilot temperature or pilot level-step
-attribution can be recovered from this implementation.
+This checks native #KEY/enumeration and the real MLX worker's readiness,
+checkout import and cleanup. Then run R0 and the separate R1 planning-turn
+classification/coverage/overhead checks. Neither native check was executed
+in this sandbox. The module gates hardware on explicit opt-in and MLX on
+importability; it never attempts a CPU fallback.

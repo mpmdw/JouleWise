@@ -675,33 +675,6 @@ def _plan_clock_step_ns(window: Mapping[str, Any]) -> int | None:
     return None
 
 
-def monitor_temperature_policy(plan: Any) -> dict[str, Any] | None:
-    """Resolve the pack's byte-pinned campaign policy in the measurement checkout.
-
-    Legacy/fixture packs without a plan tree have no optional sidecar. An
-    existing descriptor must be relative, contained, readable and hash-correct;
-    a broken pin must never silently disable a requested journal.
-    """
-    tree_path = Path(plan.hazard_window["pack"]["pack_root"]) / "plan_tree.json"
-    if not tree_path.exists():
-        return None
-    binding = json.loads(tree_path.read_text()).get("campaign_policy")
-    if binding is None:
-        return None
-    root = Path(plan.measurement_root).resolve()
-    relative = Path(binding["path"])
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError("campaign policy path must be relative to the measurement checkout")
-    path = (root / relative).resolve()
-    if not path.is_relative_to(root):
-        raise ValueError("campaign policy escapes the measurement checkout")
-    raw = path.read_bytes()
-    if hashlib.sha256(raw).hexdigest() != binding["sha256"]:
-        raise ValueError("monitor campaign policy SHA-256 mismatch")
-    from joulewise.schemas import CampaignPolicy
-    return CampaignPolicy.from_mapping(json.loads(raw)).smc_temperature
-
-
 def production_seams(repo_root: Path) -> Seams:
     """The production seams; ``repo_root`` is the driver's own checkout."""
 
@@ -711,13 +684,6 @@ def production_seams(repo_root: Path) -> Seams:
         """Write the monitor's config once (lane L1's format) and return its command line."""
 
         from joulewise.hazards import monitor as hazard_monitor
-        temperature_policy = monitor_temperature_policy(request.plan)
-        monitor_script = 'hazard_monitor.py'
-        temperature_args = {}
-        if temperature_policy is not None:
-            from joulewise.align.apple import temperature_monitor as hazard_monitor
-            monitor_script = 'align_temperature_monitor.py'
-            temperature_args['smc_temperature'] = temperature_policy
         window = request.plan.hazard_window
         thresholds = window["thresholds"]
         # PLAN2 row 10: the chain's process-group leader (night/chain.started)
@@ -729,15 +695,12 @@ def production_seams(repo_root: Path) -> Seams:
             low_bytes=int(thresholds.get("disk", {}).get("low_bytes", DISK_LOW_BYTES_DEFAULT)),
             cpu_limit_s_per_s=float(thresholds.get("contention", {}).get("cpu_limit_s_per_s", 0.05)),
             tree_root_files=(str(Path(request.night_dir) / "chain.started"),),
-            clock_step_ns=_plan_clock_step_ns(window),
-            **temperature_args)
+            clock_step_ns=_plan_clock_step_ns(window))
         path = hazard_monitor.monitor_dir(request.custody_root) / "config.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             _create_once(path, hazard_monitor.validate_config(config))
-        elif json.loads(path.read_text()) != hazard_monitor.validate_config(config):
-            raise ValueError("existing monitor config differs from the pinned policy/config")
-        return [*TASKPOLICY_ARGV, sys.executable, "-B", str(repo_root / 'scripts' / monitor_script),
+        return [*TASKPOLICY_ARGV, sys.executable, "-B", str(repo_root / "scripts/hazard_monitor.py"),
                 "--config", str(path)]
 
     def collectors_argv(request: CollectorRequest) -> list[str]:
