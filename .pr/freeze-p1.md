@@ -12,7 +12,7 @@ Impact statement:
 
 | # | Gate | Evidence |
 | --- | --- | --- |
-| 1 | Independent review by a non-author, with an executing lens | NOT-RUN |
+| 1 | Independent review by a non-author, with an executing lens | Initial Opus 5.5 executing review found B1/H1/M1/M2/L1–L5; delta review pending |
 | 2 | Whole suite on the merged tree | NOT-RUN |
 | 3 | CI green on the final head | NOT-RUN |
 | 4 | Cold final pass on calibration/claim/custody admission code | NOT-RUN |
@@ -84,6 +84,14 @@ A whole-tree digest census is excluded because it indexes measurement data.
 The allowed source/config/Markdown old-digest search covers pins beyond the
 census's Kind-P set. No real-data equivalence or hardware validation is claimed.
 
+Final serial evidence: clamp 33 passed, freeze identity 14 passed, frozen
+Git trees 4 passed with a stray exported override, paper custody 33 passed,
+digest census 23 passed, repin 47 passed / 2 unsafe checks skipped.
+**154 passed, 2 safety skips; no failures.** About 7.9 minutes of total test
+time including earlier runs. Syntax, all 11 rebind rows, generated-state and
+whitespace checks passed. The audit classified 13 hits for 31 old digests
+across 9,912 allowed files; no additional live constraint was found in scope.
+
 ## Fix round 1
 
 | Finding | Commit | Disposition |
@@ -95,7 +103,7 @@ census's Kind-P set. No real-data equivalence or hardware validation is claimed.
 | L1 | `6ef50adc4` | Warn on absent content pointers and print registry-refresh remedy. |
 | L2 | `25aa848d2` | Check collection imports at b5/collection too. |
 | L3 | `2dd765162` | Close AttributeError at the identity boundary. |
-| L4 | Pending report-refresh commit | Correct branch, commits, actual changed files and verification claims. |
+| L4 | `e7dee0da9` | Correct branch, commits, actual changed files and verification claims. |
 | L5 | `36337b39b` | Clear stray exported registration in frozen-tree test setup. |
 
 ## Original implementation plan (historical; strict F3 supersedes its descendant route)

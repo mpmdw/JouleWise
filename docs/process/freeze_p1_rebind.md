@@ -88,16 +88,16 @@ New modules, tests and registration metadata have no predecessor to rebind.
 | Path | SHA-256 at analysis-r2 | SHA-256 after Phase 1 |
 | --- | --- | --- |
 | `configs/pins/registry.json` | `2482eee5eb846d597cf9d1e69893b41c2851bb8cb6acc4234345f79510eb190c` | `bfc1cef5724d1ec87e7816b48df83480ab52a5ecf33daa76021cdbdb1a5dd92c` |
-| `joulewise/identity_pins.py` | `a102a7712559d62294db46836da9f900ee5281701ae366bf08c69287cc99e109` | `0f679b5e2609cc4f8e12acf38f8527fbbadaf1df4be6b51bfb3df50c56edc480` |
-| `joulewise/paper_custody.py` | `f2d3273e71b30f7a55e8eafcf4ebf7eb0afce64946ae9c7cbc224e8748ea2966` | `eab2452bd5bd5092e3bf9a5c6ec4cb9de5dbbd1e51dbaa529fe10213318ecede` |
+| `joulewise/identity_pins.py` | `a102a7712559d62294db46836da9f900ee5281701ae366bf08c69287cc99e109` | `ad67633fbef04122ed3af9c034c6f8688015add31c89f300f1e3b38c61cba8fe` |
+| `joulewise/paper_custody.py` | `f2d3273e71b30f7a55e8eafcf4ebf7eb0afce64946ae9c7cbc224e8748ea2966` | `067dcc7029c6452e053a7a2cc56e7db7ed1c05baa1bc33bb8381314f18a72a40` |
 | `scripts/digest_pin_census.py` | `59be516f789a994d82d47a8ca3a79b45307265e43384b1f4ec3c55b089a604e0` | `4edac808870cc09ef798c02e749ee58efb7b3d9a4bfe7caca6a0c998e1d44c36` |
-| `scripts/repin.py` | `ff4f2bbe9be92a0b7b6f7641a951fd361633516991ba63d99a141de027af4398` | `4ce661de4d7439d06c45b6822ab46a7a17c433c5423370373650bda46a1909ee` |
+| `scripts/repin.py` | `ff4f2bbe9be92a0b7b6f7641a951fd361633516991ba63d99a141de027af4398` | `4d8deb934909208d8df5522d152be47f8871c157951f5147418848ff7ec19eb0` |
 | `tests/b5_analysis/joined_s10.py` | `296abb2746977db1ca9733d5b1b87457d792728aa8e6695611b0821ec48df11c` | `bb2abe80acf1f3cc536a87cd30f98fbb80e5e76190c07c89e8e742d3ce9232b0` |
-| `tests/b5_analysis/test_frozen_files.py` | `523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d` | `21d5664ec208281c85f43a7ef5d91f81e780115fd954798942a23d1a998d806b` |
+| `tests/b5_analysis/test_frozen_files.py` | `523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d` | `f114a7830ed1119756aadcae17cf5bd2563454a72627aa9ba027820232b30016` |
 | `tests/test_digest_pin_census.py` | `5c83e04bc139f0b0d9b854e5d33394f98a95c0fb3557554be490d4ff8f9972ab` | `bdf8e98a552fda692c558e6d558060320c256df1629d7b83e3c4455681e7e0a4` |
-| `tests/test_repin.py` | `b15f3fb7498b00b4f880fe1b081a93ecd4db1ebaf9fa6c83830c4ac5ef75f3ad` | `7373df8cd28e63258fc36aae3135e53c91f2235d43f3916429346f4caf6a93ca` |
-
+| `tests/test_repin.py` | `b15f3fb7498b00b4f880fe1b081a93ecd4db1ebaf9fa6c83830c4ac5ef75f3ad` | `5e478dc8da10564d35c8eba77b784dadf8c76a2242006e40129d5f8befd091cb` |
 | `tests/test_whole_window_inverted_corner_clamp.py` | `ab154bb78045669bce32b55177bb2101aa602ffc19a613650db069565ba25dfa` | `e648a0b1b7df84de10b494c895580c17f39b0a38440e974dd73952cd8596c9b0` |
+| `tests/test_paper_custody.py` | `359b0930d78242f298c547f435d30535088493bf98d0c43d4665b709c69758b5` | `61b9a5cf247c96598c71c5ddc4a72b6fa7e3745c027b4f04420b5ba0251edd98` |
 
 B1 (PR #649 fix round 1): retire the test module's worktree-byte pin on
 `tests/b5_analysis/test_frozen_files.py`. F1's registered Git trees preserve
@@ -125,3 +125,23 @@ F4 activation and the tag/locked-environment reproduction rehearsal remain
 open gates; this preparation is not a claim that either passed. Phase-2
 pruning, L9-ENV-3 mirror removal and block-6/BYTES addenda are outside this
 Phase-1 brief.
+
+## Fix-round audit and small findings
+
+The final before/after table includes the clamp and custody tests (B1/M1).
+L2 checks collection imports at both the collection and active-analysis tags;
+L5 clears/restores the exported registration override in test setup. L3
+closes AttributeError from malformed registration at the anchor boundary.
+L1 warns when a `#sha256/` pointer is absent and prints the registry-refresh
+command after a family rewrite. It does not run a broad census automatically.
+
+The B1 old-digest search and exact hit dispositions are recorded in
+`docs/run_reports/2026-11-05-freeze-p1-old-digest-audit.json`. It checks all
+predecessor file digests for PR-changed paths at the pre-PR base, r2 and the
+initial implementation, over allowed source/config/Markdown files, beyond
+Kind-P pins. Remaining occurrences are historical seal provenance, this
+rebind table, and the retained informational Kind-B census row for the retired
+test pin. That row is not admission authority (`is_checked` is false for
+`source_digest`); L1 reports its absent pointer. Regenerating the whole census
+would index forbidden measurement artifacts, so it is not done in this lane.
+No other live old-digest constraint was found in the inspected tree.

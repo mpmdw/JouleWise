@@ -1,0 +1,283 @@
+{
+  "bases": [
+    "92026c1849c0f053e56bdac6110c079211db2c31",
+    "929fc65c9ce3ff82f0311d28acf76a682edd466f",
+    "2e0528ad8"
+  ],
+  "scope": "Tracked regular source, Markdown and config JSON files; measurement artifacts, restricted directories and symlinks excluded. New files have no old digest.",
+  "files_searched": 9912,
+  "old_digests": {
+    "61fb37243ed6ac48215fa2fba13b838c2b9fc64c152041a92acd89149d2331ae": [
+      {
+        "path": "RUN_STATE.md",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "RUN_STATE.md",
+        "base": "2e0528ad8"
+      }
+    ],
+    "eb4457a3f926e3afdee47ed5a4960136d3979c1580a2c3cdfe5d1303a2287982": [
+      {
+        "path": "RUN_STATE.md",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "b3a983cde5e0ebfc4bb08d80713bdf40fa5c52ab039f70990acc29fd34f2792b": [
+      {
+        "path": "TASK_QUEUE.md",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "TASK_QUEUE.md",
+        "base": "2e0528ad8"
+      }
+    ],
+    "cfff8b2be132b7fbaa4f5574d3f85d12dad2bd067fba8866c569da06de3331dd": [
+      {
+        "path": "TASK_QUEUE.md",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "e5be97447e679c960fbefe7703beb4e28204dfd951831900a5bb301d06842f03": [
+      {
+        "path": "configs/analysis/b5/freeze_commits.json",
+        "base": "2e0528ad8"
+      }
+    ],
+    "2482eee5eb846d597cf9d1e69893b41c2851bb8cb6acc4234345f79510eb190c": [
+      {
+        "path": "configs/pins/registry.json",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "configs/pins/registry.json",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "bfc1cef5724d1ec87e7816b48df83480ab52a5ecf33daa76021cdbdb1a5dd92c": [
+      {
+        "path": "configs/pins/registry.json",
+        "base": "2e0528ad8"
+      }
+    ],
+    "0c12cfe941270c81e299d7b3d1f2ac79ac094a5f70cce92e3af91499cd2a00b4": [
+      {
+        "path": "docs/process/freeze_p1_rebind.md",
+        "base": "2e0528ad8"
+      }
+    ],
+    "400e01247e6ad3655d51d7815ce9401bfe33d423ff4e1dd6fc4fb6a60a0035dc": [
+      {
+        "path": "docs/process/state_kernel.json",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "docs/process/state_kernel.json",
+        "base": "2e0528ad8"
+      }
+    ],
+    "5f716b14feacb35beb8b452a3c7528fba20abd36a472894abf9657925fb2c485": [
+      {
+        "path": "docs/process/state_kernel.json",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "0a90e9b3eedb5db7692e06dfb54902a516b2248e5024bd4a2d1d5c0ab0d52048": [
+      {
+        "path": "docs/run_reports/2026-11-05-freeze-by-commit-p1.md",
+        "base": "2e0528ad8"
+      }
+    ],
+    "e47a0c609aed49eda99e355d18322c2f6bfd2ce34d7f168b32ab0143cc8e03b6": [
+      {
+        "path": "joulewise/freeze_by_commit.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "a102a7712559d62294db46836da9f900ee5281701ae366bf08c69287cc99e109": [
+      {
+        "path": "joulewise/identity_pins.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "joulewise/identity_pins.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "0f679b5e2609cc4f8e12acf38f8527fbbadaf1df4be6b51bfb3df50c56edc480": [
+      {
+        "path": "joulewise/identity_pins.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "f2d3273e71b30f7a55e8eafcf4ebf7eb0afce64946ae9c7cbc224e8748ea2966": [
+      {
+        "path": "joulewise/paper_custody.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "joulewise/paper_custody.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "eab2452bd5bd5092e3bf9a5c6ec4cb9de5dbbd1e51dbaa529fe10213318ecede": [
+      {
+        "path": "joulewise/paper_custody.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "59be516f789a994d82d47a8ca3a79b45307265e43384b1f4ec3c55b089a604e0": [
+      {
+        "path": "scripts/digest_pin_census.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "scripts/digest_pin_census.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "4edac808870cc09ef798c02e749ee58efb7b3d9a4bfe7caca6a0c998e1d44c36": [
+      {
+        "path": "scripts/digest_pin_census.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "ff4f2bbe9be92a0b7b6f7641a951fd361633516991ba63d99a141de027af4398": [
+      {
+        "path": "scripts/repin.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "scripts/repin.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "4ce661de4d7439d06c45b6822ab46a7a17c433c5423370373650bda46a1909ee": [
+      {
+        "path": "scripts/repin.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "296abb2746977db1ca9733d5b1b87457d792728aa8e6695611b0821ec48df11c": [
+      {
+        "path": "tests/b5_analysis/joined_s10.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "tests/b5_analysis/joined_s10.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "bb2abe80acf1f3cc536a87cd30f98fbb80e5e76190c07c89e8e742d3ce9232b0": [
+      {
+        "path": "tests/b5_analysis/joined_s10.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d": [
+      {
+        "path": "tests/b5_analysis/test_frozen_files.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "tests/b5_analysis/test_frozen_files.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "21d5664ec208281c85f43a7ef5d91f81e780115fd954798942a23d1a998d806b": [
+      {
+        "path": "tests/b5_analysis/test_frozen_files.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "5c83e04bc139f0b0d9b854e5d33394f98a95c0fb3557554be490d4ff8f9972ab": [
+      {
+        "path": "tests/test_digest_pin_census.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "tests/test_digest_pin_census.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "bdf8e98a552fda692c558e6d558060320c256df1629d7b83e3c4455681e7e0a4": [
+      {
+        "path": "tests/test_digest_pin_census.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "ef0a02a7ea0b08fe09ed025fd0f56c274a3b454632055be70651c0a313e3a7f1": [
+      {
+        "path": "tests/test_freeze_by_commit.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "359b0930d78242f298c547f435d30535088493bf98d0c43d4665b709c69758b5": [
+      {
+        "path": "tests/test_paper_custody.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "tests/test_paper_custody.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      },
+      {
+        "path": "tests/test_paper_custody.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "b15f3fb7498b00b4f880fe1b081a93ecd4db1ebaf9fa6c83830c4ac5ef75f3ad": [
+      {
+        "path": "tests/test_repin.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "tests/test_repin.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      }
+    ],
+    "7373df8cd28e63258fc36aae3135e53c91f2235d43f3916429346f4caf6a93ca": [
+      {
+        "path": "tests/test_repin.py",
+        "base": "2e0528ad8"
+      }
+    ],
+    "ab154bb78045669bce32b55177bb2101aa602ffc19a613650db069565ba25dfa": [
+      {
+        "path": "tests/test_whole_window_inverted_corner_clamp.py",
+        "base": "92026c1849c0f053e56bdac6110c079211db2c31"
+      },
+      {
+        "path": "tests/test_whole_window_inverted_corner_clamp.py",
+        "base": "929fc65c9ce3ff82f0311d28acf76a682edd466f"
+      },
+      {
+        "path": "tests/test_whole_window_inverted_corner_clamp.py",
+        "base": "2e0528ad8"
+      }
+    ]
+  },
+  "matches": [
+    "configs/campaigns/v5_claim_25g83/sealed_inventory.json:470:    \"joulewise/identity_pins.py\": \"a102a7712559d62294db46836da9f900ee5281701ae366bf08c69287cc99e109\",",
+    "configs/pins/registry.json:35453:      [\"#sha256/523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d\", \"source_digest\", 1816],",
+    "docs/process/freeze_p1_rebind.md:90:| `configs/pins/registry.json` | `2482eee5eb846d597cf9d1e69893b41c2851bb8cb6acc4234345f79510eb190c` | `bfc1cef5724d1ec87e7816b48df83480ab52a5ecf33daa76021cdbdb1a5dd92c` |",
+    "docs/process/freeze_p1_rebind.md:91:| `joulewise/identity_pins.py` | `a102a7712559d62294db46836da9f900ee5281701ae366bf08c69287cc99e109` | `ad67633fbef04122ed3af9c034c6f8688015add31c89f300f1e3b38c61cba8fe` |",
+    "docs/process/freeze_p1_rebind.md:92:| `joulewise/paper_custody.py` | `f2d3273e71b30f7a55e8eafcf4ebf7eb0afce64946ae9c7cbc224e8748ea2966` | `067dcc7029c6452e053a7a2cc56e7db7ed1c05baa1bc33bb8381314f18a72a40` |",
+    "docs/process/freeze_p1_rebind.md:93:| `scripts/digest_pin_census.py` | `59be516f789a994d82d47a8ca3a79b45307265e43384b1f4ec3c55b089a604e0` | `4edac808870cc09ef798c02e749ee58efb7b3d9a4bfe7caca6a0c998e1d44c36` |",
+    "docs/process/freeze_p1_rebind.md:94:| `scripts/repin.py` | `ff4f2bbe9be92a0b7b6f7641a951fd361633516991ba63d99a141de027af4398` | `4d8deb934909208d8df5522d152be47f8871c157951f5147418848ff7ec19eb0` |",
+    "docs/process/freeze_p1_rebind.md:95:| `tests/b5_analysis/joined_s10.py` | `296abb2746977db1ca9733d5b1b87457d792728aa8e6695611b0821ec48df11c` | `bb2abe80acf1f3cc536a87cd30f98fbb80e5e76190c07c89e8e742d3ce9232b0` |",
+    "docs/process/freeze_p1_rebind.md:96:| `tests/b5_analysis/test_frozen_files.py` | `523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d` | `f114a7830ed1119756aadcae17cf5bd2563454a72627aa9ba027820232b30016` |",
+    "docs/process/freeze_p1_rebind.md:97:| `tests/test_digest_pin_census.py` | `5c83e04bc139f0b0d9b854e5d33394f98a95c0fb3557554be490d4ff8f9972ab` | `bdf8e98a552fda692c558e6d558060320c256df1629d7b83e3c4455681e7e0a4` |",
+    "docs/process/freeze_p1_rebind.md:98:| `tests/test_repin.py` | `b15f3fb7498b00b4f880fe1b081a93ecd4db1ebaf9fa6c83830c4ac5ef75f3ad` | `5e478dc8da10564d35c8eba77b784dadf8c76a2242006e40129d5f8befd091cb` |",
+    "docs/process/freeze_p1_rebind.md:99:| `tests/test_whole_window_inverted_corner_clamp.py` | `ab154bb78045669bce32b55177bb2101aa602ffc19a613650db069565ba25dfa` | `e648a0b1b7df84de10b494c895580c17f39b0a38440e974dd73952cd8596c9b0` |",
+    "docs/process/freeze_p1_rebind.md:100:| `tests/test_paper_custody.py` | `359b0930d78242f298c547f435d30535088493bf98d0c43d4665b709c69758b5` | `61b9a5cf247c96598c71c5ddc4a72b6fa7e3745c027b4f04420b5ba0251edd98` |"
+  ],
+  "dispositions": {
+    "configs/campaigns/v5_claim_25g83/sealed_inventory.json": "Historical collection provenance. F1 validates this digest at the registered collection commit, not against current main.",
+    "configs/pins/registry.json": "Retired informational source_digest Kind-B pointer only. No current test literal remains and census.is_checked returns false; L1 warns on the absent pointer. Broad census refresh excluded for blinding.",
+    "docs/process/freeze_p1_rebind.md": "Explicit historical before/after rebind table; no live byte constraint."
+  },
+  "live_old_digest_constraints_found": 0,
+  "limits": "No claim about excluded measurement/restricted content. The complete tracked allowed source/config/Markdown search was inspected; no measurement contents were opened."
+}

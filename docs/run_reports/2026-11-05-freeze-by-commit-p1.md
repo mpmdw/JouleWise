@@ -34,7 +34,7 @@ acceptance reissue. Phase 2 and mirror removal remain outside this repair.
 | L2 | `25aa848d2` | Collection import check reads b5/collection as well as active analysis. |
 | L3 | `2dd765162` | AttributeError becomes a closed identity-anchor refusal, with regression. |
 | L5 | `36337b39b` | FrozenFilesTests clears/restores the exported registration variable in setUp. |
-| L4 | This report's refresh commit; exact ID in .pr/freeze-p1.md | Replaced obsolete branch/commit/pytest claims; reconciled actual files and gates. |
+| L4 | `e7dee0da9` | Replaced obsolete branch/commit/pytest claims; reconciled actual files and gates. |
 
 H1 chooses the review's simpler alternative: F3 already requires a new
 `b5/analysis-r<k>` tag for a ruled fix. A local ruling document, descendant
@@ -76,7 +76,8 @@ require_registered_analysis=True instead, retaining the clean-tree gate.
   test_freeze_by_commit.py, test_paper_custody.py, test_repin.py;
   tests/b5_analysis/test_frozen_files.py.
 - Records: .pr/freeze-p1.md, docs/process/freeze_p1_rebind.md, this report,
-  RUN_STATE.md, TASK_QUEUE.md and docs/process/state_kernel.json.
+  RUN_STATE.md, TASK_QUEUE.md, docs/process/state_kernel.json, and the
+  machine-readable old-digest audit under docs/run_reports/.
 
 The kernel's A346 status is now partial; its note records the fix and open
 gates. TASK_QUEUE generated rows were regenerated from it; RUN_STATE adds a
@@ -91,21 +92,45 @@ All tests use Python 3.13 stdlib unittest, one process/module at a time, with
 `TMPDIR=$TMPDIR` (the existing /private/tmp/jwsol/freeze-p1-fix1/tmp).
 No pytest, package installation or full-suite command was attempted this round.
 Final serial checks are recorded here; no unrun gate is marked green.
+Final source diff review found no additional changes needed.
 
 | Command (common prefix TMPDIR=$TMPDIR) | Result |
 | --- | --- |
-| python3.13 -B -m unittest tests.test_whole_window_inverted_corner_clamp -q | 33 tests, OK, 117.734 s; final rerun pending |
+| python3.13 -B -m unittest tests.test_whole_window_inverted_corner_clamp -q | 33 tests, OK, 124.600 s (final rerun) |
 | python3.13 -B -m unittest tests.test_freeze_by_commit -q | 14 tests, OK, 9.279 s |
 | JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT=ffffffffffffffffffffffffffffffffffffffff python3.13 -B -m unittest tests.b5_analysis.test_frozen_files -q | 4 tests, OK, 4.599 s |
 | python3.13 -B -m unittest tests.test_paper_custody -q | 33 tests, OK, 69.165 s; 147 owner-source, 5 grant-policy and 4 refusal-AST mutations killed |
-| python3.13 -B -m unittest tests.test_digest_pin_census -q | Final serial run in progress |
-| python3.13 -B /private/tmp/run-freeze-p1-repin.py | Pending; module loader excludes two unsafe real-tree tests |
+| python3.13 -B -m unittest tests.test_digest_pin_census -q | 23 tests, OK, 92.989 s |
+| python3.13 -B /private/tmp/run-freeze-p1-repin.py | 49 discovered, 47 passed, 2 skipped, 47.906 s |
 | python3.13 -B scripts/gen_state.py --check | PASS |
-| git diff --check | PASS before record refresh; final check pending |
+| PYTHONPYCACHEPREFIX=$TMPDIR/freeze-p1-pycache python3.13 -m compileall -q joulewise tests | PASS; bytecode stays under /private/tmp |
+| git diff --check | PASS |
 
-Additional pre-final freeze tests passed (12 tests, 4.873 s). Runner times,
-not wall-clock estimates, are used for the total. The final ledger update will
-record total test time, syntax and the last whitespace check.
+Final requested-module total: **154 passed, 2 safety skips**, no failures.
+Additional pre-final runs also passed: clamp 33 tests / 117.734 s, freeze
+identity 12 tests / 4.873 s. Total runner-reported test time for this entire
+fix round is **471.145 s (about 7.9 minutes)**, under the 20-minute budget.
+The final clamp rerun also sets GIT_CONFIG_GLOBAL=/dev/null and
+GIT_CONFIG_NOSYSTEM=1. Tests ran serially. Syntax compilation, all 11 rebind
+rows, generated state, the nine finding-to-commit mappings and final diff
+whitespace were verified. No test failure was hidden by the two exclusions.
+
+The repin runner loads the requested module and marks exactly the following
+two methods skipped before running it. Reproduce from this clone with:
+
+```sh
+TMPDIR=$TMPDIR python3.13 -B - <<'PYREPIN'
+import unittest
+from tests import test_repin
+for name in ("test_committed_registry_kind_p_rows_are_current",
+             "test_real_generator_families_pass"):
+    cls = test_repin.RealTreeTests
+    setattr(cls, name, unittest.skip("blind offline lane; see report")(getattr(cls, name)))
+result = unittest.TextTestRunner().run(
+    unittest.defaultTestLoader.loadTestsFromModule(test_repin))
+raise SystemExit(not result.wasSuccessful())
+PYREPIN
+```
 
 Safety exclusions from test_repin: the real registry freshness test hashes
 archived measurement outputs (including analysis/rpt001-v1 and paper/trace
@@ -117,13 +142,32 @@ No whole-tree digest census was run: it indexes measurement artifacts.
 
 ## Old-digest audit (B1)
 
-Final audit update pending. Preliminary search covers every old file digest
-for paths changed by the PR, from the pre-PR base, r2 and initial implementation
-commit (not just Kind-P census targets). It searches tracked regular source,
-Markdown and config JSON files, including PR/record content. It excludes
-measurement artifacts, restricted directories and symlinks. The final report
-will record all matches and their dispositions. No claim is made about
-unopened measurement/restricted content.
+Audited **31 distinct old SHA-256 digests** for every existing file changed
+by the PR at the pre-PR base, analysis-r2 and initial implementation commit.
+New files have no predecessor at an absent base. `rg -n -F -f <patterns> --
+<explicit tracked paths>` searched **9,912** regular source, Markdown and
+config JSON files. This exceeds the pin census's Kind-P/Kind-A scope. Git
+index modes exclude symlinks; restricted paths and measurement artifacts are
+excluded before file reads. No measurement-data census ran.
+
+The machine-readable record is
+[2026-11-05-freeze-p1-old-digest-audit.json](2026-11-05-freeze-p1-old-digest-audit.json).
+It records the base-to-file digest map, exact grep hits and dispositions.
+All **13 matching lines** are accounted for:
+
+- Eleven are the explicit old/new rebind rows in freeze_p1_rebind.md.
+- One is the collection seal's historical identity_pins.py digest. F1 reads
+  that provenance against b5/collection, never against main's current bytes.
+- One is the retained informational Kind-B source_digest pointer for the
+  retired clamp-test pin in configs/pins/registry.json. Its current test
+  literal is gone, and census.is_checked is false; it is not a live test or
+  admission constraint. L1 warns on its absent pointer. A broad regeneration
+  would read forbidden evidence, so this informational history is retained.
+
+**No other live old-digest constraint was found in the inspected tree.**
+The audit does not claim anything about unopened measurement/restricted
+content. All 11 rebind rows were also checked independently against exact r2
+Git blobs and current bytes.
 
 ## Remaining gates and next action
 
@@ -133,7 +177,7 @@ The previous executing review found the issues addressed here; its final delta
 review remains the owning lead's next step. The full suite remains prohibited
 in this session. No quiet-machine or hardware gate was attempted.
 
-Next: complete the final local verification ledger and commit map, then hand
-these local commits to the PR #649 lead for delta review. Keep A346 partial,
+Next: hand these local commits and the completed verification ledger to the
+PR #649 lead for delta review. Keep A346 partial,
 F4 and block/role selection open. Land only after block-5 release and the
 remaining owning-lead gates. Do not push from this offline lane.
