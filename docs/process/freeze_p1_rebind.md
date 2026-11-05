@@ -77,10 +77,10 @@ analysis gate, which paper custody requests instead (F2).
 
 M2: the registration is independently pinned by full literal triples in
 `RegistrationAuthorityTests`, cross-checked by prefix against pre-existing
-Git-object records: origin/main's RUN_STATE item 146 (collection object
+Git-object records: PR base `92026c184`'s RUN_STATE item 146 (collection object
 `dbf91f4ba`, commit `c27485347`), its r2 tag entry (`929fc65c9`), and the
 original-analysis annotated tag message (commit/tree). The test reads
-RUN_STATE with `git show origin/main:RUN_STATE.md`, never from the worktree,
+RUN_STATE with `git show 92026c184:RUN_STATE.md`, never from the worktree,
 and verifies all three annotated tag objects against its independent full
 triples. No coordination-file table supplies authority for this PR.
 

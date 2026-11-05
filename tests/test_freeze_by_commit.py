@@ -304,8 +304,9 @@ class RegistrationAuthorityTests(unittest.TestCase):
         registration = json.loads((f.ROOT / f.REGISTRATION).read_bytes())
         self.assertEqual(registration["active_analysis"], "b5/analysis-r2")
         self.assertEqual(registration["tags"], expected)
+        # Fixed pre-PR evidence: later main edits must not change this cross-check.
         upstream_state = subprocess.check_output(
-            ["git", "-C", str(f.ROOT), "show", "origin/main:RUN_STATE.md"],
+            ["git", "-C", str(f.ROOT), "show", "92026c184:RUN_STATE.md"],
             text=True,
         )
         record = upstream_state.split(
