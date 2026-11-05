@@ -164,3 +164,10 @@ observed failing before its fix; final commit mapping and checks follow below.
   loaded-without-plist and observation-error regressions (fail before/pass
   after). Guard tests mock home and launchctl, so no real LaunchAgent path
   was inspected. This remains a snapshot, not protection against later arming.
+
+- G6 / MEDIUM envelope census + LOW lost tool replies: turn evidence now keeps
+  endpoint-visible text, and only that text enters the denominator. Incomplete
+  capped envelopes are counted separately; complete malformed envelopes and
+  unsupported-format flags still fail. Ladder rows retain tool outputs/errors.
+  Reasoning-quote/capped-tail and tool-error evidence regressions fail before
+  and pass after.

@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import statistics
 
 from joulewise.align.apple.sampling import episode_seed
@@ -61,7 +62,8 @@ def turn_row(backend, result, requested):
             "hit_cap": any(f.startswith("turn_token_budget_reached:") for f in flags),
             "closed_reasoning": "unclosed_reasoning_span" not in flags,
             "flags": flags, "prompt_token_ids": prompt, "output_token_ids": output,
-            "raw_text": result.raw_usage["raw_text"], "tool_calls": len(result.tool_calls)}
+            "raw_text": result.raw_usage["raw_text"], "visible_text": result.content,
+            "tool_calls": len(result.tool_calls)}
 
 
 def append_result(backend, messages, result, task, *, strict=False):
@@ -188,9 +190,9 @@ def screen_episode(backend, tag, pair, seed_index, cap, *, max_turns=6, budget=1
             break
         result = backend.chat(messages, task.tool_schemas(), requested, seed)
         row = turn_row(backend, result, requested)
-        rows.append({"turn": index, **row})
         used += row["tokens"]
         row["tool_outputs"] = append_result(backend, messages, result, task)
+        rows.append({"turn": index, **row})
         if not result.tool_calls:
             break
     return {"pair": pair, "seed_index": seed_index, "seed": seed, "turns": rows,
@@ -234,13 +236,21 @@ def tool_envelopes(results):
             for value in obj:
                 visit(value)
     visit(results)
-    attempted = sum(max(t["raw_text"].count("<tool_call>"), t["tool_calls"]) for t in turns)
+    attempted, truncated = 0, 0
+    for turn in turns:
+        visible = turn["visible_text"]  # authoritative endpoint reasoning split
+        opened = visible.count("<tool_call>")
+        complete = len(re.findall(r"<tool_call>.*?</tool_call>", visible, re.S))
+        tail = max(0, opened - complete) if turn.get("hit_cap") else 0
+        truncated += tail
+        attempted += max(opened - tail, turn["tool_calls"])
     parsed = sum(t["tool_calls"] for t in turns)
     unsupported = any("unsupported_tool_call_format" in t["flags"] for t in turns)
     malformed = sum(any(f.startswith("malformed_tool_call:") for f in t["flags"]) for t in turns)
     fraction = parsed / attempted if attempted else 0
     return {"status": "pass" if attempted and fraction >= 0.95 and not unsupported else "fail",
             "attempted_envelopes": attempted, "parsed_calls": parsed, "parse_fraction": fraction,
+            "truncated_envelopes": truncated,
             "malformed_turns": malformed, "unsupported_format": unsupported}
 
 

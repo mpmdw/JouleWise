@@ -186,12 +186,29 @@ class R0ChecksTest(unittest.TestCase):
             r0.append_result(backend, [], result, task, strict=True)
 
     def test_envelope_denominator_and_unsupported_flags(self):
-        row = {"raw_text": "<tool_call>a</tool_call><tool_call>broken", "tool_calls": 1, "flags": []}
+        row = {"raw_text": "unused", "visible_text": "<tool_call>a</tool_call><tool_call>broken", "tool_calls": 1, "flags": []}
         self.assertEqual(r0.tool_envelopes([row])["parse_fraction"], 0.5)
         self.assertEqual(r0.tool_envelopes([row])["status"], "fail")
-        row.update(raw_text="<tool_call>a</tool_call>", flags=["unsupported_tool_call_format"])
+        row.update(visible_text="<tool_call>a</tool_call>", flags=["unsupported_tool_call_format"])
         self.assertEqual(r0.tool_envelopes([row])["status"], "fail")
         self.assertEqual(r0.tool_envelopes([])["status"], "fail")
+
+    def test_envelope_census_excludes_reasoning_quotes_and_reports_capped_tail(self):
+        row = {"raw_text": "thought <tool_call>quoted</think><tool_call>real</tool_call><tool_call>cut",
+               "visible_text": "<tool_call>real</tool_call><tool_call>cut",
+               "tool_calls": 1, "flags": ["turn_token_budget_reached:0"], "hit_cap": True}
+        result = r0.tool_envelopes([row])
+        self.assertEqual(result["attempted_envelopes"], 1)
+        self.assertEqual(result["truncated_envelopes"], 1)
+        self.assertEqual(result["status"], "pass")
+
+    def test_ladder_evidence_retains_tool_errors(self):
+        task = FakeTask()
+        task.call_tool = Mock(side_effect=ValueError("saved tool failure"))
+        backend = FakeBackend()
+        with patch.object(backend, "task", return_value=task):
+            result = r0.screen_episode(backend, "D", r0.PAIRS[0], 91, 4096, max_turns=1)
+        self.assertIn("saved tool failure", result["turns"][0]["tool_outputs"][0])
 
     def test_long_decode_retests_metadata_eval_and_checks_growth(self):
         backend = FakeBackend()
