@@ -101,13 +101,49 @@ a fixture-backed regression. Qwen3.8 remains **153,944,192 B/checkpoint**,
 Neither weights' quantization nor config precision proves cache dtype; the
 Metal-blocked native runtime dtype check remains outstanding.
 
+## Item 3 — resource probe, attempt and extrapolation
+
+Added `--benchmark` and MLX-free `--estimate-only` modes to the native driver.
+The benchmark measures synchronous `_snapshot`/`_restore`, three warmups then
+25 samples, with suffix mutation outside timing. It excludes duplicate snapshot
+no-ops and reports operation-local active MLX memory, raw wall times, allocator
+cache and process peak RSS. It never constructs a model from a real config.
+
+Benchmark execution: **exit 1**, same Metal initialization error, before any
+timed operation. Peak process RSS at failure was **36,634,624 B (34.94 MiB)**.
+This is measured failed-preflight resource use, **not** tiny-model or copy cost.
+No native wall time, allocated snapshot memory or timing extrapolation is
+available. The long seven-worker job was not inspected or modified.
+
+Config-only estimate mode: **PASS**, four family/dtype rows, timing fields null.
+bf16-history projections (all state recurrence float32):
+
+| Quantity | Next | Qwen3.8 / qwen3_5 |
+|---|---:|---:|
+| Tiny copied recurrent arrays | 26,880 B | 39,744 B |
+| Real copied recurrent arrays | 77,266,944 B | 153,944,064 B |
+| Real/tiny byte ratio | 2,874.5143 | 3,873.3913 |
+| Three snapshot array sets during replacement | 231,800,832 B | 461,832,192 B |
+| Four sets including active recurrence, conservative allowance | 309,067,776 B | 615,776,256 B |
+
+Two-retained payload is listed under item 2. Three/four-set figures exclude
+weights, KV, offsets, Python/allocator overhead and kernel workspace; they are
+not RSS bounds. Real-layer counts are 12× and 16× the three-linear-layer tiny
+models, so fixed object overhead also scales differently from array bytes.
+Future timing output includes `tiny_median_ms × real_state_bytes / tiny_state_bytes`
+as an explicit byte-proportional scenario, not a prediction or confidence bound.
+Under the current blocker it correctly reports no timing numbers.
+
 ## Verification / remaining work
 
 - `python3.13 -B -m py_compile scripts/align_cache_checkpoint_native.py`: PASS.
 - `python3.13 -B -m unittest tests.align.test_cache_checkpoint`: 11 PASS (0.008 s).
+- `PYTHONPATH=. python3.13 -B scripts/align_cache_checkpoint_native.py --estimate-only`:
+  PASS, four config-only rows. Initial invocation without `PYTHONPATH=.` failed
+  to resolve `joulewise`; the documented command above corrects the invocation.
+- Supplied interpreter, same driver with `--benchmark`: exit 1, Metal blocked.
 - `git diff --check`: PASS.
 - Native commands above: blocked/error, not passed or skipped numerical gates.
 
-Item 3 (resource probe/extrapolation) and item 4 (suite integration) follow in
-separate commits. Metal-visible execution is required
+Item 4 (suite integration) follows in a separate commit. Metal-visible execution is required
 before any numerical exactness, measured native cost or production claim.

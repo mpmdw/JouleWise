@@ -10,8 +10,11 @@ import gc
 import importlib
 import importlib.metadata
 import json
+from pathlib import Path
 import resource
+import statistics
 import sys
+import time
 
 from joulewise.align.apple.prompt_cache import (
     EpisodePromptCache, _arrays, checkpoint_size_from_config,
@@ -23,6 +26,30 @@ FAMILIES = ("qwen3_next", "qwen3_5")
 REWRITES = (143, 257, 560)
 STEP = 512
 MIB = 1024 ** 2
+CONFIG_FIXTURES = {"qwen3_next": "qwen3_next_config.json", "qwen3_5": "qwen38_config.json"}
+
+
+def payload_projection(family, dtype_name, timings=None):
+    """Config-only memory arithmetic; optional timing scenario, never a forecast."""
+    if dtype_name not in ("float32", "bfloat16"):
+        raise ValueError(dtype_name)
+    itemsize = 4 if dtype_name == "float32" else 2
+    fixture = Path(__file__).resolve().parents[1] / "tests/align/fixtures" / CONFIG_FIXTURES[family]
+    real = checkpoint_size_from_config(json.loads(fixture.read_text()), conv_itemsize=itemsize)
+    tiny = checkpoint_size_from_config(tiny_config(family), conv_itemsize=itemsize)
+    ratio = real["state_bytes"] / tiny["state_bytes"]
+    # Production policy retains two copies; replacement briefly holds three.
+    result = dict(family=family, dtype=dtype_name, config_fixture=CONFIG_FIXTURES[family],
+                  tiny=tiny, real=real, state_byte_ratio=ratio,
+                  two_retained_payload_bytes=2 * real["checkpoint_bytes"],
+                  replacement_snapshot_array_bytes=3 * real["state_bytes"],
+                  replacement_plus_active_recurrent_array_bytes=4 * real["state_bytes"],
+                  byte_proportional_timing_ms=None)
+    if timings is not None:
+        result["byte_proportional_timing_ms"] = {
+            op: values["median_ms"] * ratio for op, values in timings.items()
+        }
+    return result
 
 
 def tiny_config(family):
@@ -223,18 +250,91 @@ class NativeProbe:
         self.mx.clear_cache()
         self.check_memory()
 
+    def benchmark(self, family, dtype_name, samples=25):
+        """Time synchronized snapshot/restore, excluding the forward prefill.
+
+        Warm allocator, three untimed warmups, one operation per sample. Report
+        operation-local MLX active-memory high water and process-wide peak RSS.
+        No claim that a contended laptop provides production latency evidence.
+        """
+        mx = self.mx
+        model, config = self.model(family, dtype_name)
+        state = EpisodePromptCache(model)
+        prefix = [1 + (i % 23) for i in range(STEP)]
+        delta, metadata = state.prepare(prefix + [31], stable_prefix_ids=prefix)
+        state.prefill_checkpoint(delta, metadata)
+        # The suffix [31] is intentionally unconsumed; the cache is at STEP.
+        state.verify_length(STEP)
+        expected = checkpoint_size_from_config(config, conv_itemsize=4 if dtype_name == "float32" else 2)
+        if state.checkpoints[-1].state_bytes != expected["state_bytes"]:
+            raise AssertionError("benchmark native payload differs from formula")
+        timings = {}
+        for operation in ("checkpoint", "restore"):
+            rows = []
+            for iteration in range(samples + 3):
+                if operation == "checkpoint":
+                    # Force a new copy rather than the duplicate-offset no-op.
+                    state.checkpoints.clear()
+                else:
+                    tail = [50] * 17
+                    self.feed(model, state.cache, tail)
+                    state.finish(prefix + tail, [], {})
+                mx.synchronize()
+                before = mx.get_active_memory()
+                mx.reset_peak_memory()
+                start = time.perf_counter_ns()
+                if operation == "checkpoint":
+                    state._snapshot()
+                else:
+                    state._restore(state.checkpoints[-1])
+                mx.synchronize()
+                elapsed_ms = (time.perf_counter_ns() - start) / 1e6
+                after = mx.get_active_memory()
+                peak = mx.get_peak_memory()
+                if iteration >= 3:
+                    rows.append(dict(ms=elapsed_ms, active_before_bytes=before,
+                                     active_after_bytes=after, peak_active_bytes=peak,
+                                     peak_extra_active_bytes=max(0, peak - before)))
+                self.check_memory()
+                state.verify_length(STEP)
+            timings[operation] = dict(
+                samples=samples, median_ms=statistics.median(r["ms"] for r in rows),
+                min_ms=min(r["ms"] for r in rows), max_ms=max(r["ms"] for r in rows),
+                max_extra_active_bytes=max(r["peak_extra_active_bytes"] for r in rows),
+                samples_raw=rows,
+            )
+        return dict(family=family, dtype=dtype_name, timings=timings,
+                    checkpoint_payload_bytes=expected["checkpoint_bytes"],
+                    peak_rss_bytes=self.check_memory(), mlx_cache_bytes=mx.get_cache_memory(),
+                    projection=payload_projection(family, dtype_name, timings),
+                    timing_projection_caveat="byte proportional scenario only; tiny fixed overhead and bandwidth do not scale uniformly")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--family", choices=FAMILIES, action="append")
+    parser.add_argument("--benchmark", action="store_true", help="measure copy/restore instead of logits")
+    parser.add_argument("--estimate-only", action="store_true", help="config arithmetic; does not import MLX")
+    parser.add_argument("--samples", type=int, default=25)
     args = parser.parse_args()
+    if not 1 <= args.samples <= 100:
+        parser.error("--samples must be between 1 and 100")
+    if args.estimate_only:
+        for family in args.family or FAMILIES:
+            for dtype in ("float32", "bfloat16"):
+                print(json.dumps({"projection": payload_projection(family, dtype)}))
+        return 0
     try:
         with NativeProbe() as probe:
             for family in args.family or FAMILIES:
                 for dtype in ("float32", "bfloat16"):
-                    for boundary in (STEP, 73):
-                        probe.exactness(family, dtype, boundary)
+                    if args.benchmark:
+                        print(json.dumps({"benchmark": probe.benchmark(family, dtype, args.samples)}), flush=True)
                         probe.release()
+                    else:
+                        for boundary in (STEP, 73):
+                            probe.exactness(family, dtype, boundary)
+                            probe.release()
         print(json.dumps({"status": "passed", "pins": PINS}))
         return 0
     except (RuntimeError, AssertionError, MemoryError, ImportError) as error:

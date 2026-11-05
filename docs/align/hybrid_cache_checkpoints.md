@@ -120,6 +120,49 @@ PY
 
 ## Exactness gate and limitations
 
+**2026-11-05 follow-up:** the pinned installation is now available at
+`/private/tmp/jwsol/venv-mlx/bin/python`, but this sandbox cannot obtain a Metal
+device. Both exactness and timing stop before model creation. See
+`docs/run_reports/2026-11-05-align-cache-checkpoint-native.md` for attempted
+commands and the new two-family inference-mode gate. The historical test
+description below records the original implementation, not successful evidence.
+
+## Resource probe and extrapolation
+
+The offline driver also accepts `--benchmark`. It times actual `_snapshot` and
+`_restore` calls on each tiny model/dtype, with explicit synchronization before
+and after, three warmups and 25 samples (maximum selectable 100). Prefix and
+suffix forwards occur outside each timed operation. Duplicate-offset no-op
+snapshots are excluded. Output includes raw samples, median/min/max, active
+MLX memory before/after, operation-local peak extra active memory, allocator
+cache and process peak RSS. A seven-token decode is part of the exactness gate;
+the benchmark uses a 17-token suffix to mutate state between restores.
+
+```sh
+PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  /private/tmp/jwsol/venv-mlx/bin/python -B scripts/align_cache_checkpoint_native.py --benchmark
+PYTHONPATH=. python3.13 -B scripts/align_cache_checkpoint_native.py --estimate-only
+```
+
+The second command imports no MLX and reads only the retained config fixtures.
+For bf16 history / fp32 recurrence, the tiny state payloads are 26,880 B (Next)
+and 39,744 B (Qwen3.5). The corresponding real/tiny array-byte ratios are
+2,874.5143 and 3,873.3913. Multiplying a measured tiny copy time by this ratio
+is only a **byte-proportional scenario**, not a production prediction or bound:
+Python layer overhead, allocator behavior, copy bandwidth and contention differ.
+Timing projections remain null until actual timings exist.
+
+For real configs, two retained snapshots occupy the table's payload. Snapshot
+replacement can briefly retain three copied sets of recurrent arrays:
+231,800,832 B (Next), 461,832,192 B (Qwen3.8). Including the active recurrence
+gives a conservative four-set planning allowance of 309,067,776 B and
+615,776,256 B, respectively. This excludes weights, KV arrays, Python objects,
+allocator overhead, offsets and kernel workspaces, so it is not process RSS.
+Restoration copies layers successively; four whole sets are a conservative
+planning allowance, not a measured restore peak. Real models were not loaded.
+
+### Historical initial gate description
+
 `tests.align.test_cache_checkpoint` uses a synthetic in-place recurrence to
 check isolation, repeated restoration, correct checkpoint selection, eviction,
 fallback, offsets, per-turn accounting, identity and prefill-phase integration.
