@@ -44,3 +44,11 @@ The status log is appended below as phases complete.
 - 2026-11-05: Ed approved item 11 (offload everything on the MBP to the cloud, full bf16 on its SSD). Runbook and gold-parity harness lanes started.
 - 2026-11-05: MBP SSD = 1 TB (Ed). The lead revised item 11's plan to a STREAMING gold pass: per layer group, download its shards, run gold parity, convert, then delete the bf16. Peak free disk is about 110-120 GB (converted model about 95 GB plus the largest working unit). Minimal verified offload to about 150 GB free; no wipe needed. The block-5 originals stay on-device until after the release.
 - 2026-11-05 11:20Z: P1/P2, the Sol port (`lane/2026-11-05-align-flashnext-port`, e9f5ed799) PASSES native gold parity against transformers 5.22.1: fp32 max abs 6.0e-8 prefill and stepwise; bf16 0.00195; prefill==stepwise, padding, snapshot/restore and trim exact. Conversion tests 3/3, zero skips. Native tests run by the lead because the Codex sandbox has no Metal. Waiting on the Opus twin for the differential.
+- 2026-11-05: **Target precision, Ed: "as close to the full fp16 as i can get".** Computed with the port's memory model from the real config at 40,960 context:
+  - experts bf16: 256 GB peak; experts 8-bit: 142.9 GB. Both are impossible on 128 GB.
+  - **experts 6-bit (group 64) with every other weight in native bf16: 108.0 GB weights, 112.7 GB peak**, under the 115.4 GB default GPU working set.
+  - experts 5-bit: 97.6 GB peak.
+  - DEFAULT: 6-bit experts, everything else bf16 (4.9B params), and the n-gram table bf16 ON DISK (102.4 GB, paged; page cache at most about 21.5 GB worst case, made of evictable file pages, not swap).
+  - Pre-committed fallback: 5-bit experts if the measured peak, swap counters or headroom fail on the Mac.
+  - Disk: about 210 GB, so an external NVMe is required.
+  - Quantization error is measured, never assumed: per-layer quantized vs bf16 on real weights, plus end-to-end against the hosted bf16 reference.
