@@ -54,13 +54,12 @@ class TemperatureTests(unittest.TestCase):
         self.assertEqual(report["all_keys"]["expected_samples"], 7)
         self.assertEqual(report["all_keys"]["valid_samples"], 3)
         self.assertEqual(report["per_key"]["TG0D"]["sample_fraction"], 4 / 7)
-        self.assertEqual(report["all_keys"]["gaps_ns"], [[100 * NS, 101 * NS],
-                         [103 * NS, 105 * NS], [106 * NS, 107 * NS]])
+        self.assertEqual(report["all_keys"]["gaps_ns"], [[102 * NS, 105 * NS], [105 * NS, 107 * NS]])
 
     def test_empty_and_partial_spans(self):
         counter = temperature.Coverage(0, ["TG0D"])
         self.assertIsNone(counter.report(0)["all_keys"]["sample_fraction"])
-        self.assertEqual(counter.report(NS + 1)["all_keys"]["expected_samples"], 2)
+        self.assertEqual(counter.report(NS + 1)["all_keys"]["expected_samples"], 1)
         with self.assertRaises(ValueError):
             counter.report(-1)
 
@@ -93,4 +92,4 @@ class TemperatureTests(unittest.TestCase):
                   "values": values} for i in (0, 1, 5, 6)]
         result = temperature.coverage(lines, 0, 7 * NS, ["TG0D"])["all_keys"]
         self.assertEqual(result["sample_fraction"], 4 / 7)
-        self.assertEqual(result["gaps_ns"], [[2 * NS, 5 * NS]])
+        self.assertEqual(result["gaps_ns"], [[NS, 5 * NS]])

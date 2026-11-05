@@ -171,58 +171,71 @@ class Sidecar:
 
 
 class Coverage:
-    """Unique successful slots / ceil(span seconds); never interpolate.
+    """Successful nominal ticks on the sampling grid, not the caller's span.
 
-    Slots are [start+i seconds, start+(i+1) seconds). A read belongs to the
-    slot where it started, provided it finished inside that same slot. Late
-    and duplicate reads cannot repair missed slots. Constant valid readings
-    count: unlike battery publications, a constant temperature is legitimate.
+    A 100 ms tolerance admits scheduler/read jitter. Partial edge cells are
+    excluded (boundaries within that tolerance snap to the grid). Duplicates
+    count once; calls lasting over one period never fill ticks. Separately,
+    actual sample midpoints, including both span edges, bound the longest
+    interval. No temperature value is interpolated or carried across a gap.
     """
+    tolerance_ns = NS // 10
 
     def __init__(self, start_ns: int, selected: Sequence[str]):
         self.start_ns = start_ns
-        self.slots: dict[str, set[int]] = {k: set() for k in selected}
+        self.grid_ns = None
+        self.times: dict[str, set[int]] = {k: set() for k in selected}
+        self.common: set[int] = set()
 
     def observe(self, started_ns: int, finished_ns: int, values: Mapping[str, Any]) -> None:
-        slot = (started_ns - self.start_ns) // NS
-        if slot < 0 or finished_ns < started_ns or (finished_ns - self.start_ns) // NS != slot:
+        if finished_ns < started_ns or finished_ns - started_ns > NS:
             return
-        for key in self.slots:
-            if key not in values.get("errors", {}) and valid_value(key, values.get("sensors", {}).get(key)):
-                self.slots[key].add(slot)
+        self.grid_ns = min(self.grid_ns, started_ns) if self.grid_ns is not None else started_ns
+        stamp = (started_ns + finished_ns) // 2
+        good = []
+        for key in self.times:
+            valid = key not in values.get("errors", {}) and valid_value(key, values.get("sensors", {}).get(key))
+            good.append(valid)
+            if valid:
+                self.times[key].add(stamp)
+        if good and all(good):
+            self.common.add(stamp)
 
     def report(self, end_ns: int) -> dict[str, Any]:
         if end_ns < self.start_ns:
             raise ValueError("temperature span ends before it starts")
-        expected = (end_ns - self.start_ns + NS - 1) // NS
+        grid = self.start_ns if self.grid_ns is None else self.grid_ns
+        def nearest(t):
+            return (t - grid + NS//2) // NS
+        def boundary(t):
+            snapped = grid + nearest(t) * NS
+            return snapped if abs(t - snapped) <= self.tolerance_ns else t
+        first = -((grid - boundary(self.start_ns)) // NS)
+        last = (boundary(end_ns) - grid) // NS
+        expected = max(0, last - first) if end_ns > self.start_ns else 0
 
-        def stats(good):
-            good = {i for i in good if 0 <= i < expected}
-            gaps = []
-            for slot in range(expected):
-                if slot in good:
-                    continue
-                lo, hi = self.start_ns + slot * NS, min(end_ns, self.start_ns + (slot + 1) * NS)
-                if gaps and gaps[-1][1] == lo:
-                    gaps[-1][1] = hi
-                else:
-                    gaps.append([lo, hi])
-            return {"expected_samples": expected, "valid_samples": len(good),
-                    "sample_fraction": len(good) / expected if expected else None,
-                    "gaps_ns": gaps}
-
-        common = set.intersection(*self.slots.values()) if self.slots else set()
-        return {"clock": "monotonic_ns", "period_ns": NS, "span_ns": [self.start_ns, end_ns],
-                "all_keys": stats(common), "per_key": {k: stats(v) for k, v in self.slots.items()}}
+        def stats(times):
+            ticks = {nearest(t) for t in times
+                     if first <= nearest(t) < last
+                     and abs(t - (grid + nearest(t)*NS)) <= self.tolerance_ns}
+            points = sorted({self.start_ns, end_ns, *(t for t in times if self.start_ns <= t <= end_ns)})
+            intervals = list(zip(points, points[1:]))
+            gaps = [[a, b] for a, b in intervals if b-a > NS+self.tolerance_ns]
+            return {"expected_samples": expected, "valid_samples": len(ticks),
+                    "sample_fraction": len(ticks)/expected if expected else None,
+                    "gaps_ns": gaps, "max_interval_ns": max((b-a for a, b in intervals), default=0)}
+        return {"clock": "monotonic_ns", "period_ns": NS, "tolerance_ns": self.tolerance_ns,
+                "sampling_grid_ns": grid, "edge_policy": "partial cells excluded; near-grid edges snapped",
+                "span_ns": [self.start_ns, end_ns], "all_keys": stats(self.common),
+                "per_key": {key: stats(times) for key, times in self.times.items()}}
 
 
 def coverage(lines: Sequence[Mapping[str, Any]], start_ns: int, end_ns: int,
              selected: Sequence[str]) -> dict[str, Any]:
-    """Desk-side recomputation over any span, including monitor restarts."""
+    """Recompute on the journal's own grid, including bracketing edge samples."""
     counter = Coverage(start_ns, selected)
-    for row in lines:
-        if row.get("module") == "temperature" and row.get("kind") == "reading":
-            started, finished = row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"]
-            if start_ns <= started < end_ns and finished <= end_ns:
-                counter.observe(started, finished, row["values"])
+    readings = sorted((r for r in lines if r.get("module") == "temperature" and r.get("kind") == "reading"),
+                      key=lambda r: r["started"]["monotonic_ns"])
+    for row in readings:
+        counter.observe(row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"], row["values"])
     return counter.report(end_ns)
