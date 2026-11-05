@@ -7,14 +7,17 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
+from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.adapters.mock_runtime import MockRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion
 from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES
 from joulewise.align.endpoints import AssistantMessage
-from joulewise.align.interfaces import ChatMessage, ToolCallRequest
+from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.clock import FakeClock
-from tests.align.test_apple_campaign import base_config
+from joulewise.schemas import RuntimeBackend
+from tests.align.test_apple_campaign import as_config, base_config, episode_spec
 
 try:
     import jinja2
@@ -48,7 +51,7 @@ def parse(text, **kwargs):
     return parse_completion(text, model_family="qwen3_5_moe", tools=TOOLS, **kwargs)
 
 
-def template_renderer():
+def template_renderer(fixture="qwen38_chat_template.jinja"):
     environment = jinja2.sandbox.ImmutableSandboxedEnvironment(
         trim_blocks=True, lstrip_blocks=True, extensions=["jinja2.ext.loopcontrols"])
     # Match HF's JSON filter rather than Jinja's HTML-safe JSON default.
@@ -57,7 +60,7 @@ def template_renderer():
     def fail(message):
         raise ValueError(message)
     environment.globals["raise_exception"] = fail
-    return environment.from_string((FIXTURES / "qwen38_chat_template.jinja").read_text())
+    return environment.from_string((FIXTURES / fixture).read_text())
 
 
 def synthetic_prefix_probe(template, *, preserve_thinking=None, tool_chain=False):
@@ -91,18 +94,39 @@ def synthetic_prefix_probe(template, *, preserve_thinking=None, tool_chain=False
     return rows
 
 
-def synthetic_endpoint_cache_probe(template, *, compact=False, multiple_parameters=False):
+def synthetic_endpoint_cache_probe(template, *, compact=False, multiple_parameters=False,
+                                   raw_history=False, dialogue=False):
     """Compare rendered next prompts with prior prompt + synthetic emitted bytes.
 
     UTF-8 bytes stand in for text only, never for the pinned model's token IDs.
     Include the consumed EOS spelling, without inventing a post-EOS newline.
+    Only native computation is replaced; chat, generation and history are real.
     """
     class Tokenizer:
+        eos_token_ids = {0}
+
         def apply_chat_template(self, messages, **kwargs):
             return template.render(messages=messages, **kwargs)
+
+        def encode(self, text, **kwargs):
+            return list(text.encode())  # Synthetic byte IDs, not Qwen token IDs.
+
+    clock = FakeClock()
+    runtime = MlxRuntimeAdapter(clock)
+    runtime._model, runtime._tokenizer = object(), Tokenizer()
+    emitted = ""
+
+    def stream_generate(*args, **kwargs):
+        for character in emitted:  # All probe emissions are ASCII.
+            clock.sleep(.001)
+            yield SimpleNamespace(token=ord(character), text=character, finish_reason=None)
+        yield SimpleNamespace(token=0, text="", finish_reason="stop")
+
+    runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
     config = base_config()
-    config = replace(config, model=replace(config.model, family="qwen3_8"))
-    endpoint = MlxEndpoint(SimpleNamespace(_tokenizer=Tokenizer()), config, FakeClock(), episode_domain="synthetic")
+    config = replace(config, model=replace(config.model, family="qwen3_8"),
+                     hardware_target=replace(config.hardware_target, runtime_backend=RuntimeBackend.MLX))
+    endpoint = MlxEndpoint(runtime, config, clock, episode_domain="synthetic")
     history = [ChatMessage("user", "query 0")]
     previous = b""
     rows = []
@@ -124,9 +148,16 @@ def synthetic_endpoint_cache_probe(template, *, compact=False, multiple_paramete
             wire = wire.replace("</function>", (
                 "<parameter=count>1</parameter>" if compact else
                 "<parameter=count>\n1\n</parameter>\n") + "</function>")
-        emitted = f"reason {turn}\n</think>\n\n" + wire
+        emitted = f"reason {turn}\n</think>\n\n" + (f"answer {turn}" if dialogue else wire)
         previous = prompt + emitted.encode() + b"<|im_end|>"
-        history.extend([ChatMessage("assistant", emitted), ChatMessage("tool", f"result {turn}")])
+        result = endpoint.chat(history, tools=TOOLS, max_tokens=512, temperature=0, seed=None)
+        if any(flag.startswith(("endpoint_error:", "malformed_tool_call:")) for flag in endpoint.flags):
+            raise AssertionError(endpoint.flags)
+        if not raw_history and endpoint.turn_provenance[-1]["generation"]["prior_hidden_prefill_tokens"] != 8 * turn:
+            raise AssertionError("separate historical reasoning was not counted exactly once")
+        assistant = (ChatMessage("assistant", emitted) if raw_history else
+                     endpoint.assistant_history_message(result))
+        history.extend([assistant, ChatMessage("user" if dialogue else "tool", f"result {turn}")])
     return rows
 
 
@@ -274,9 +305,83 @@ class XmlToolCallTests(unittest.TestCase):
                              json.dumps(fixture["trace"], sort_keys=True).encode())
 
     def test_fixture_digest(self):
-        provenance = json.loads((FIXTURES / "qwen38_chat_template.provenance.json").read_text())
-        self.assertEqual(hashlib.sha256((FIXTURES / "qwen38_chat_template.jinja").read_bytes()).hexdigest(),
-                         provenance["sha256"])
+        for name in ("qwen38_chat_template", "flashnext_chat_template"):
+            provenance = json.loads((FIXTURES / f"{name}.provenance.json").read_text())
+            self.assertEqual(hashlib.sha256((FIXTURES / f"{name}.jinja").read_bytes()).hexdigest(),
+                             provenance["sha256"])
+
+    def test_endpoint_stores_split_history_only_for_xml_families(self):
+        class Tokenizer:
+            def apply_chat_template(self, messages, **kwargs):
+                self.messages = messages
+                return "rendered"
+        raw = "plan\n</think>\n\n" + xml()
+        content, reasoning, calls, _ = parse(raw, reasoning_open=True, reasoning_tokens=1)
+        result = ChatResult(content, reasoning, calls, 0, 0, 0, 0, 0, None, 0,
+                            raw_usage={"raw_text": raw})
+        tokenizer = Tokenizer()
+        config = base_config()
+        for family in (*sorted(XML_MODEL_FAMILIES), "qwen3_moe", "qwen3_next", None):
+            with self.subTest(family=family):
+                endpoint = MlxEndpoint(SimpleNamespace(_tokenizer=tokenizer),
+                    replace(config, model=replace(config.model, family=family, name="Qwen3.8-27B")),
+                    FakeClock(), episode_domain="synthetic")
+                stored = endpoint.assistant_history_message(result)
+                endpoint._render_prompt([ChatMessage("user", "Do it"), stored], TOOLS)
+                item = tokenizer.messages[-1]
+                if family in XML_MODEL_FAMILIES:
+                    self.assertEqual(stored.reasoning_content, "plan\n")
+                    self.assertEqual(stored.content, "")
+                    self.assertEqual(item["reasoning_content"], "plan\n")
+                    self.assertEqual(item["content"], "")
+                    self.assertEqual(item["tool_calls"][0]["function"]["arguments"], {"text": "hello"})
+                else:
+                    self.assertIs(type(stored), ChatMessage)
+                    self.assertEqual(item, {"role": "assistant", "content": raw})
+
+    def test_structured_visible_think_tags_are_not_split_again(self):
+        class Tokenizer:
+            def apply_chat_template(self, messages, **kwargs):
+                return json.dumps(messages)
+        config = base_config()
+        endpoint = MlxEndpoint(SimpleNamespace(_tokenizer=Tokenizer()),
+            replace(config, model=replace(config.model, family="qwen3_8")),
+            FakeClock(), episode_domain="synthetic")
+        visible = "Explain literal <think> and </think> tags."
+        for reasoning in ("", "already separated"):
+            result = ChatResult(visible, reasoning, (), 0, 0, 0, 0, 0, None, 0)
+            history = [ChatMessage("user", "Explain"), endpoint.assistant_history_message(result)]
+            item = json.loads(endpoint._render_prompt(history, TOOLS))[-1]
+            self.assertEqual(item["content"], visible)
+            self.assertEqual(item["reasoning_content"], reasoning)
+
+    def test_workload_stores_separate_fields_and_replays_next_turn(self):
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+        for family in ("qwen3_5", "qwen3_moe", "qwen3_next"):
+            with self.subTest(family=family):
+                call = (xml("<parameter=step>0</parameter>", "lookup")
+                        if family in XML_MODEL_FAMILIES else
+                        '<tool_call>{"name":"lookup","arguments":{"step":0}}</tool_call>')
+                raw = "<think>plan</think>" + call
+                spec = replace(episode_spec(hidden=False), max_turns=2, mock_turns=(
+                    {"content": raw, "completion_tokens": 100, "reasoning_tokens": 1},
+                    {"content": "Done", "completion_tokens": 10},
+                ))
+                config = as_config(spec, "synthetic-history")
+                config = replace(config, model=replace(config.model, family=family))
+                clock = FakeClock()
+                runtime = EpisodeRuntimeAdapter(MockRuntimeAdapter(clock), clock)
+                self.assertTrue(runtime.prepare(config).ok)
+                result = runtime.run_workload(config)
+                rows = [json.loads(line) for line in result.output_artifacts["align_transcript.jsonl"].splitlines()]
+                self.assertEqual([row["role"] for row in rows],
+                                 ["system", "user", "assistant", "tool", "assistant"])
+                if family in XML_MODEL_FAMILIES:
+                    self.assertEqual(rows[2]["reasoning_content"], "plan")
+                    self.assertEqual(rows[2]["content"], "")
+                    self.assertEqual(rows[2]["tool_calls"][0]["name"], "lookup")
+                else:
+                    self.assertEqual(rows[2], asdict(ChatMessage("assistant", raw)))
 
 
 @unittest.skipIf(jinja2 is None, "real template rendering needs optional Jinja2")
@@ -387,6 +492,27 @@ class QwenTemplateTests(unittest.TestCase):
         self.assertEqual([r["rewritten_suffix_bytes"] for r in multiple], [0] * 5)
         compact = synthetic_endpoint_cache_probe(self.template, compact=True)
         self.assertEqual([r["rewritten_suffix_bytes"] for r in compact], [83] * 5)
+
+    def test_both_real_templates_replay_six_split_assistant_turns(self):
+        def unsplit(endpoint, messages, tools):
+            # Reproduce the council's content-only history mapping, bypassing
+            # the existing raw-history compatibility splitter as well.
+            return endpoint.runtime._tokenizer.apply_chat_template(
+                [{"role": message.role, "content": message.content} for message in messages],
+                tools=list(tools), tokenize=False, add_generation_prompt=True)
+
+        for fixture in ("qwen38_chat_template.jinja", "flashnext_chat_template.jinja"):
+            template = template_renderer(fixture)
+            for dialogue in (False, True):
+                with self.subTest(template=fixture, dialogue=dialogue):
+                    rows = synthetic_endpoint_cache_probe(template, dialogue=dialogue)
+                    self.assertEqual([r["rewritten_suffix_bytes"] for r in rows], [0] * 5)
+                    self.assertEqual(rows, synthetic_endpoint_cache_probe(
+                        template, raw_history=True, dialogue=dialogue))
+                    with patch.object(MlxEndpoint, "_render_xml_prompt", unsplit):
+                        garbled = synthetic_endpoint_cache_probe(template, raw_history=True, dialogue=dialogue)
+                    self.assertEqual([r["rewritten_suffix_bytes"] for r in garbled],
+                                     [37 if dialogue else 119] * 5)
 
 
 if __name__ == "__main__":

@@ -351,9 +351,7 @@ class EpisodeRuntimeAdapter:
                     # Integer token counts establish that a model call returned work.
                     model_returned_tokens |= result.completion_tokens > 0
                     events.extend(endpoint.events[event_start:])
-                    transcript.append(ChatMessage(
-                        "assistant", str(result.raw_usage.get("raw_text", result.content))
-                    ))
+                    transcript.append(endpoint.assistant_history_message(result))
                     calls: list[ToolCall] = []
                     observed_calls = []
                     for call_index, call in enumerate(result.tool_calls):

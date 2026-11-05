@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import replace
+from dataclasses import asdict, dataclass, replace
 from functools import wraps
 from typing import Any, Mapping, Sequence
 
@@ -100,7 +100,22 @@ def _split_reasoning(text: str, *, stop_at_tool_call: bool = False) -> tuple[str
     return "".join(visible), "\n".join(hidden), tuple(flags)
 
 
-def _xml_history_reasoning(text, tools):
+@dataclass(frozen=True)
+class _XmlAssistantMessage(ChatMessage):
+    """Template-ready history, distinguished from legacy raw completions."""
+
+    reasoning_content: str = ""
+    tool_calls: tuple[ToolCallRequest, ...] = ()
+
+
+def _xml_history_reasoning(message, tools):
+    # The endpoint already split generated text using the actual prompt's
+    # think opener. Do not reinterpret visible prose in structured history.
+    if isinstance(message, _XmlAssistantMessage):
+        return message.content, message.reasoning_content, ()
+    if getattr(message, "reasoning_text", ""):
+        return message.content, message.reasoning_text, ()
+    text = message.content
     parts = _split_reasoning(text, stop_at_tool_call=True)
     # Stored raw completions can omit the template-prefilled opening think
     # tag. A thought may itself quote a call. Prefer the explicit close only
@@ -270,6 +285,25 @@ class MlxEndpoint:
         }, sort_keys=True)
         self._prepare_flags = tuple(self.flags)
 
+    def assistant_history_message(self, result: ChatResult) -> ChatMessage:
+        """Retain separate reasoning for templates that require that field.
+
+        JSON families keep their original raw-completion history byte for byte.
+        """
+        if self.config.model.family in XML_MODEL_FAMILIES:
+            content = result.content
+            if result.tool_calls and "<tool_call>" in content:
+                content = content[:content.index("<tool_call>")].rstrip()
+            return _XmlAssistantMessage("assistant", content,
+                reasoning_content=result.reasoning_text, tool_calls=result.tool_calls)
+        return ChatMessage("assistant", str(result.raw_usage.get("raw_text", result.content)))
+
+    def _mock_prompt_text(self, messages):
+        return json.dumps([
+            asdict(message) if isinstance(message, _XmlAssistantMessage) else message.__dict__
+            for message in messages
+        ], sort_keys=True)
+
     def _render_prompt(self, messages, tools):
         if self.config.model.family in XML_MODEL_FAMILIES:
             return self._render_xml_prompt(messages, tools)
@@ -293,7 +327,7 @@ class MlxEndpoint:
             if message.tool_call_id:
                 item["tool_call_id"] = message.tool_call_id
             if message.role == "assistant":
-                visible, reasoning, _ = _xml_history_reasoning(message.content, tools)
+                visible, reasoning, _ = _xml_history_reasoning(message, tools)
                 calls = getattr(message, "tool_calls", ())
                 if "<tool_call>" in visible:
                     parsed, flags = parse_xml_calls(visible, tools)
@@ -307,7 +341,7 @@ class MlxEndpoint:
                         calls = calls or parsed
                         visible = visible[:visible.index("<tool_call>")].rstrip()
                 item["content"] = visible
-                item["reasoning_content"] = reasoning or getattr(message, "reasoning_text", "")
+                item["reasoning_content"] = reasoning
                 if calls:
                     item["tool_calls"] = [{"id": call.call_id, "type": "function", "function": {
                         "name": call.name, "arguments": json.loads(call.arguments_json),
@@ -325,7 +359,7 @@ class MlxEndpoint:
             if "prompt_tokens" in script:
                 count = int(script["prompt_tokens"])
             else:
-                count = len(json.dumps([m.__dict__ for m in messages], sort_keys=True).split())
+                count = len(self._mock_prompt_text(messages).split())
             return count
         from joulewise.adapters.mlx_runtime import _encode
         return len(_encode(self.runtime._tokenizer, self._render_prompt(messages, tools), add_special_tokens=False))
@@ -354,12 +388,12 @@ class MlxEndpoint:
         xml_family = self.config.model.family in XML_MODEL_FAMILIES
 
         def history_reasoning(message):
-            return (_xml_history_reasoning(message.content, tools) if xml_family
+            return (_xml_history_reasoning(message, tools) if xml_family
                     else _split_reasoning(message.content))
 
         prior_hidden = any(
             message.role == "assistant" and (history_reasoning(message)[0] != message.content
-                or (xml_family and bool(getattr(message, "reasoning_text", ""))))
+                or (xml_family and bool(history_reasoning(message)[1])))
             for message in messages
         )
         prior_hidden_prefill_tokens: int | None = None if prior_hidden else 0
@@ -380,9 +414,7 @@ class MlxEndpoint:
                     output_tokens=emitted_tokens,
                 )
                 if profile.prompt_tokens is None:
-                    profile = replace(profile, prompt_text=json.dumps(
-                        [message.__dict__ for message in messages], sort_keys=True
-                    ))
+                    profile = replace(profile, prompt_text=self._mock_prompt_text(messages))
                 result = self.runtime.run_workload(replace(self.config, workload_profile=profile))
                 new_events = result.events
                 text = str(script.get("content", result.output_artifacts.get("response.txt", "")))
@@ -433,7 +465,8 @@ class MlxEndpoint:
                     if prior_hidden:
                         scrubbed = [
                             replace(message, content=history_reasoning(message)[0], **(
-                                {"reasoning_text": ""} if xml_family and hasattr(message, "reasoning_text") else {}
+                                {field: "" for field in ("reasoning_text", "reasoning_content")
+                                 if xml_family and hasattr(message, field)}
                             ))
                             if message.role == "assistant" else message
                             for message in messages
