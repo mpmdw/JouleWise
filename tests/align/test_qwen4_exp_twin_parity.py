@@ -688,7 +688,16 @@ REG_QSA = {
                        "dtype": "bf16"},
     "real_far_bf16": {"over": REG_QSA_REAL, "chunks": [300, 1, 1], "seed": 8, "P": 250000,
                       "dtype": "bf16"},
+    # Top-k ties. relu-zero block scores straddle the boundary on some rows
+    # (seed 3: query 36 has two 0.0 blocks for one slot); and a degenerate
+    # construction where many blocks score exactly the same.
+    "ties_relu_zero": {"over": {"indexer_budget": 32}, "chunks": [300, 1, 1], "seed": 3},
+    "ties_degenerate": {"over": {"indexer_budget": 16}, "chunks": [64, 1], "seed": 0,
+                        "tie": "partial"},
 }
+# Router at the released expert geometry (512 experts, top-10) in bf16.
+REG_ROUTER = {"hidden_size": 256, "num_experts": 512, "num_experts_per_tok": 10, "tokens": 64,
+              "seed": 8}
 # RoPE inverse frequencies: (rope_theta, rotary_dim). The first two (released
 # config, test config) must be bit-identical; the rest are informational.
 REG_ROPE_EXACT = [(10000000, 64), (10000000, 16)]
@@ -823,10 +832,28 @@ def _ref_qsa(engine, reg: Path):
             for _, p in att.named_parameters():
                 p.copy_(torch.randn(p.shape, generator=gen) * 0.2 if p.ndim == 1
                         else torch.randn(p.shape, generator=gen) / p.shape[-1] ** 0.5)
+            if case.get("tie"):
+                # Indexer q.k < 0 on every non-RoPE dim and 0 on the RoPE dims
+                # -> relu-zero scores; "partial": head 0 random, so some blocks
+                # score > 0 and the rest tie exactly.
+                d, h, rd = cfgd["indexer_head_dim"], cfgd["indexer_n_heads"], int(cfgd["head_dim"] * 0.25)
+                w = att.indexer.index_qk_proj.weight
+                a = torch.randn(cfgd["hidden_size"], generator=gen)
+                w.zero_()
+                for head in range(h):
+                    w[head * d + rd:(head + 1) * d] = -a / a.norm()
+                w[h * d + rd:(h + 1) * d] = a / a.norm()
+                att.indexer.q_layernorm.weight.zero_()
+                att.indexer.k_layernorm.weight.zero_()
+                if case["tie"] == "partial":
+                    w[0:d] = torch.randn(d, cfgd["hidden_size"], generator=gen) / cfgd["hidden_size"] ** 0.5
         dt = torch.bfloat16 if case.get("dtype") == "bf16" else torch.float32
         att = att.to(dt)
         chunks, P = case["chunks"], case.get("P", 0)
-        x_all = torch.randn(1, sum(chunks), cfgd["hidden_size"], generator=gen).to(dt)
+        x_all = torch.randn(1, sum(chunks), cfgd["hidden_size"], generator=gen)
+        if case.get("tie"):
+            x_all = x_all + 3 * a / a.norm()
+        x_all = x_all.to(dt)
         captured = {}
         indexer_forward = att.indexer.forward
 
@@ -850,6 +877,40 @@ def _ref_qsa(engine, reg: Path):
             arrays[f"sel{i}"] = (captured["sel"] & mask).numpy()[0, 0]          # (S, L)
             off = end
         np.savez(reg / f"qsa_{name}.npz", **arrays)
+
+
+def _ref_router(engine, reg: Path):
+    import numpy as np
+    import torch
+    from transformers.models.qwen4_exp.configuration_qwen4_exp import Qwen4ExpTextConfig
+
+    c = REG_ROUTER
+    cfg = Qwen4ExpTextConfig(**dict(REG_LAYER_BASE, hidden_size=c["hidden_size"],
+                                    num_experts=c["num_experts"],
+                                    num_experts_per_tok=c["num_experts_per_tok"]))
+    router = engine.Qwen4ExpTextTopKRouter(cfg)
+    gen = torch.Generator().manual_seed(c["seed"])
+    with torch.no_grad():
+        router.weight.copy_(torch.randn(c["num_experts"], c["hidden_size"], generator=gen)
+                            * 3.0 / c["hidden_size"] ** 0.5)
+    router = router.to(torch.bfloat16)
+    x = torch.randn(c["tokens"], c["hidden_size"], generator=gen).to(torch.bfloat16)
+    with torch.no_grad():
+        logits, scores, idx = router(x)
+    np.savez(reg / "router_ref.npz", x=x.float().numpy(), w=router.weight.detach().float().numpy(),
+             logits=logits.float().numpy(), scores=scores.float().numpy(), idx=idx.numpy())
+
+
+def _ref_topk_tie_order():
+    """torch.topk on zero ties (one positive entry, k=2): which zero it keeps."""
+    import torch
+
+    s = torch.zeros(20)
+    gen = torch.Generator().manual_seed(0)
+    s[torch.randperm(20, generator=gen)[:1]] = torch.rand(1, generator=gen) + 0.1
+    kept = sorted(i for i in s.topk(2).indices.tolist() if s[i] == 0)
+    return {"scores": s.tolist(), "k": 2, "zero_kept": kept,
+            "lowest_zero": [i for i in range(20) if s[i] == 0][:len(kept)]}
 
 
 def _ref_rope(engine, reg: Path):
@@ -907,6 +968,8 @@ def stage_ref_regress(work: Path):
     _ref_silu(reg)
     _ref_qsa(engine, reg)
     _ref_rope(engine, reg)
+    _ref_router(engine, reg)
+    meta["torch_topk_tie_order"] = _ref_topk_tie_order()
     meta["edge"] = _ref_edge(engine, reg)
     meta["peak_rss_bytes"] = _peak_rss()
     (reg / "ref_meta.json").write_text(json.dumps(meta, indent=2))
@@ -1020,9 +1083,37 @@ def _mlx_silu(tw, reg: Path):
     return out
 
 
+def _classify_mask_row(m_tw, m_ref, scores, t, r, k):
+    """Compare one query row's token masks. Returns "same", "tie" (they differ
+    only in complete blocks whose port score ties the k-th score, and the
+    reference keeps exactly k blocks) or "other"; plus whether a tie
+    straddles the top-k boundary on this row."""
+    import numpy as np
+
+    n_t = (t + 1) // r
+    tied, boundary = set(), False
+    if scores is not None and n_t > k:
+        sc = scores[:n_t]
+        kth = np.sort(sc)[::-1][k - 1]
+        tol = 1e-5 * max(1.0, abs(float(kth)))
+        is_tied = np.abs(sc - kth) <= tol
+        above = int((sc > kth + tol).sum())
+        boundary = bool(is_tied.sum() > 1 and above < k < above + is_tied.sum())
+        tied = set(np.nonzero(is_tied)[0].tolist())
+    diff = np.nonzero(m_tw != m_ref)[0]
+    if diff.size == 0:
+        return "same", boundary
+    ref_blocks = int(m_ref[:n_t * r].reshape(n_t, r)[:, 0].sum()) if n_t else 0
+    if diff.max() < n_t * r and set((diff // r).tolist()) <= tied and ref_blocks == min(k, n_t):
+        return "tie", boundary
+    return "other", boundary
+
+
 def _mlx_qsa(tw, reg: Path):
     """Run each REG_QSA case through the port's QSAAttention + QSACache and
-    compare outputs and the per-query token masks with the reference."""
+    compare outputs and per-query token masks with the reference, tie-aware:
+    torch.topk's tie order is unspecified, so rows may legitimately keep a
+    different one of several exactly tied blocks."""
     import mlx.core as mx
     import numpy as np
 
@@ -1043,11 +1134,14 @@ def _mlx_qsa(tw, reg: Path):
             att = tw.QSAAttention(args)
             att.load_weights([(k[3:], mx.array(z[k]).astype(dt)) for k in z.files
                               if k.startswith("w::")], strict=True)
+            att.indexer.record_selection = True                 # block scores, for ties
             P = case.get("P", 0)
             tw.rope_cos_sin = lambda pos, inv, _p=P: orig_cos_sin(pos + _p, inv)
             cache, inv = tw.QSACache(), tw.rope_inv_freq(args)
             x_all = mx.array(z["x"]).astype(dt)
-            off, bad_rows, n_rows, max_abs, max_abs_same = 0, 0, 0, 0.0, 0.0
+            r, k = args.indexer_compress_ratio, args.block_topk
+            kinds = {"same": 0, "tie": 0, "other": 0}
+            off, n_rows, n_boundary, max_abs, max_abs_same = 0, 0, 0, 0.0, 0.0
             for i, s in enumerate(case["chunks"]):
                 end = off + s
                 step = tw._Step(1, s, off, np.zeros((1,), np.int64), inv)
@@ -1057,19 +1151,71 @@ def _mlx_qsa(tw, reg: Path):
                     m = np.arange(end)[None, :] <= np.arange(off, end)[:, None]
                 else:
                     m = np.array(m)[0, 0]
+                sel = att.indexer._last_selection
+                scores = None if sel is None else np.array(sel.scores)[0]
                 d = np.abs(o - z[f"out{i}"][0]).max(axis=-1)    # (S,)
-                same = (m == z[f"sel{i}"]).all(axis=-1)
-                bad_rows += int((~same).sum())
+                for q in range(s):
+                    kind, boundary = _classify_mask_row(m[q], z[f"sel{i}"][q],
+                                                        None if scores is None else scores[q],
+                                                        off + q, r, k)
+                    kinds[kind] += 1
+                    n_boundary += boundary
+                    if kind == "same":
+                        max_abs_same = max(max_abs_same, float(d[q]))
                 n_rows += s
                 max_abs = max(max_abs, float(d.max()))
-                if same.any():
-                    max_abs_same = max(max_abs_same, float(d[same].max()))
                 off = end
-            out[name] = {"mask_rows_mismatched": bad_rows, "rows": n_rows, "max_abs": max_abs,
+            out[name] = {"rows": n_rows, "mask_rows_mismatched": kinds["tie"] + kinds["other"],
+                         "mask_rows_tie_only": kinds["tie"], "mask_rows_non_tie": kinds["other"],
+                         "rows_with_boundary_tie": n_boundary, "max_abs": max_abs,
                          "max_abs_same_mask_rows": max_abs_same}
     finally:
         tw.rope_cos_sin, tw.QSAIndexer._mask = orig_cos_sin, orig_mask
     return out
+
+
+def _mlx_router(tw, reg: Path):
+    """Router selection vs the reference, tie-aware: every expert chosen by
+    one engine and not the other must tie the k-th reference logit exactly."""
+    import types
+
+    import mlx.core as mx
+    import numpy as np
+
+    z = np.load(reg / "router_ref.npz")
+    c = REG_ROUTER
+    k = c["num_experts_per_tok"]
+    blk = tw.SparseMoeBlock(types.SimpleNamespace(
+        hidden_size=c["hidden_size"], moe_intermediate_size=16, shared_expert_intermediate_size=16,
+        num_experts=c["num_experts"], num_experts_per_tok=k, norm_topk_prob=True))
+    blk.load_weights([("gate.weight", mx.array(z["w"]).astype(mx.bfloat16))], strict=False)
+    logits, inds, scores = blk.route(mx.array(z["x"]).astype(mx.bfloat16))
+    lg, ids = np.array(logits.astype(mx.float32)), np.array(inds)
+    sc = np.array(scores.astype(mx.float32))
+    ref_lg, ref_ids, ref_sc = z["logits"], z["idx"], z["scores"]
+    n_boundary = n_differ = n_non_tie = 0
+    for t in range(len(ids)):
+        kth = np.sort(ref_lg[t])[::-1][k - 1]
+        above, tied = int((ref_lg[t] > kth).sum()), int((ref_lg[t] == kth).sum())
+        n_boundary += above < k < above + tied
+        diff = set(ids[t].tolist()) ^ set(ref_ids[t].tolist())
+        n_differ += bool(diff)
+        n_non_tie += any(ref_lg[t, e] != kth or lg[t, e] != ref_lg[t, e] for e in diff)
+    return {"tokens": int(len(ids)), "logits_bitwise_frac": float((lg == ref_lg).mean()),
+            "tokens_with_boundary_tie": n_boundary, "tokens_expert_set_differs": n_differ,
+            "tokens_non_tie_difference": n_non_tie,
+            "sorted_weights_max_abs": float(np.abs(np.sort(sc, -1) - np.sort(ref_sc, -1)).max())}
+
+
+def _mlx_topk_tie_order(tw, ref_meta):
+    import mlx.core as mx
+    import numpy as np
+
+    r = ref_meta["torch_topk_tie_order"]
+    scores = np.array(r["scores"], np.float32)
+    m = np.array(tw.topk_mask_lowest_index(mx.array(scores[None]), r["k"]))[0]
+    return {"port_zero_kept": [i for i in np.nonzero(m)[0].tolist() if scores[i] == 0],
+            "torch_zero_kept": r["zero_kept"], "lowest_zero": r["lowest_zero"]}
 
 
 def _mlx_selection_retention(tw):
@@ -1167,6 +1313,9 @@ def stage_mlx_regress(work: Path):
     res["qsa"] = _mlx_qsa(tw, reg)
     res["rope"] = _mlx_rope(tw, reg)
     res["selection_retention"] = _mlx_selection_retention(tw)
+    res["router"] = _mlx_router(tw, reg)
+    ref_meta = json.loads((reg / "ref_meta.json").read_text())
+    res["topk_tie_order"] = _mlx_topk_tie_order(tw, ref_meta)
     res["edge"] = _mlx_edge(reg)
     res["peak_rss_bytes"] = _peak_rss()
     (reg / "mlx_results.json").write_text(json.dumps(res, indent=2))
@@ -1444,13 +1593,42 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
         self.assertLessEqual(r["cos_sin_bf16_mismatch_frac"], REG_TOL["rope_bf16_mismatch_frac"])
 
     def test_regress_qsa_at_long_context_positions(self):
+        # Mask comparisons are tie-aware (see test_regress_qsa_mask_differences_are_ties);
+        # output bounds apply to rows whose masks agree.
         q = self.reg["qsa"]
         far = q["real_far_fp32"]
-        self.assertEqual(far["mask_rows_mismatched"], 0)
-        self.assertLessEqual(far["max_abs"], TOL["fp32_vs_ref"])
+        self.assertEqual(far["mask_rows_non_tie"], 0)
+        self.assertLessEqual(far["max_abs_same_mask_rows"], TOL["fp32_vs_ref"])
         near, far = q["real_near_bf16"], q["real_far_bf16"]
-        self.assertEqual(far["mask_rows_mismatched"], 0)
-        self.assertLessEqual(far["max_abs"], REG_TOL["qsa_bf16_far_over_near"] * near["max_abs"])
+        self.assertEqual(far["mask_rows_non_tie"], 0)
+        self.assertLessEqual(far["max_abs_same_mask_rows"],
+                             REG_TOL["qsa_bf16_far_over_near"] * near["max_abs_same_mask_rows"])
+
+    def test_regress_qsa_mask_differences_are_ties(self):
+        # torch.topk's tie order is unspecified (and not lowest-index even for
+        # small CPU inputs), so the port's lowest-index rule may keep a
+        # different one of several exactly tied blocks. Every other mask
+        # difference is a bug, and rows with equal masks must match tightly.
+        for name, r in self.reg["qsa"].items():
+            with self.subTest(case=name):
+                self.assertEqual(r["mask_rows_non_tie"], 0, r)
+                self.assertLessEqual(r["mask_rows_tie_only"], r["rows_with_boundary_tie"], r)
+                if "bf16" not in name:
+                    self.assertLessEqual(r["max_abs_same_mask_rows"], TOL["fp32_vs_ref"])
+        for name in ("ties_relu_zero", "ties_degenerate"):
+            self.assertGreater(self.reg["qsa"][name]["rows_with_boundary_tie"], 0)
+        t = self.reg["topk_tie_order"]
+        self.assertEqual(t["port_zero_kept"], t["lowest_zero"])
+
+    def test_regress_router_selection_differences_are_ties(self):
+        # bf16 router logits tie exactly at the top-10 boundary on some tokens
+        # at 512 experts; mx.argpartition and torch.topk may keep different
+        # tied experts (same weight). Anything else is a bug.
+        r = self.reg["router"]
+        self.assertGreaterEqual(r["logits_bitwise_frac"], 0.999)
+        self.assertGreater(r["tokens_with_boundary_tie"], 0)
+        self.assertEqual(r["tokens_non_tie_difference"], 0, r)
+        self.assertLessEqual(r["sorted_weights_max_abs"], 1e-3)
 
     def test_regress_qsa_selection_not_retained_by_default(self):
         r = self.reg["selection_retention"]

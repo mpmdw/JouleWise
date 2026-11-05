@@ -77,9 +77,12 @@ tokens), QSA reduces exactly to causal attention, and the port then skips
 scoring.
 
 **MoE.** The router softmax, top-10 and renormalisation run in fp32, as in
-the reference. Stock mlx-lm Qwen MoE does this in bf16, which ties and flips
-routes among 512 experts. Experts go through `SwitchGLU`, plus the sigmoid
-`shared_expert_gate` × shared expert.
+the reference (stock mlx-lm Qwen MoE does them in bf16). This matches the
+reference's numerics but does not remove routing ties: the router logits are
+bf16 in both engines, and the fp32 softmax keeps exact logit ties. At 512
+experts, top-10, an exact tie at the boundary is common, and the two engines
+can keep different tied experts (deviation 3). Experts go through
+`SwitchGLU`, plus the sigmoid `shared_expert_gate` × shared expert.
 
 **PLE n-gram layer (decoder layer 2).** The hash ids are computed on the host
 in exact int64: splitmix multipliers, 16 prime head vocabularies after 20M,
@@ -165,13 +168,29 @@ q4 halves it).
    reference uses its chunked algorithm. They are mathematically identical,
    with fp32-level differences (≤6e-6 here).
 2. **QSA top-k ties.** These break toward the lowest block index, which is
-   deterministic. `torch.topk` leaves tie order unspecified (lowest-first for
-   small CPU inputs, not for large ones). Exact ties need every head's score
-   to be ≤ 0 for several blocks at the boundary.
-3. **Positions** are always padding-aware. They equal the reference under
+   deterministic. `torch.topk` leaves tie order unspecified and does not
+   pick the lowest index even for small CPU inputs (zeros(20) with one
+   positive entry, k=2, keeps index 1). Exact ties do occur: relu makes a
+   block score exactly 0.0 whenever every indexer head's dot product is
+   ≤ 0. In a random-weight fp32 probe (300-token prefill, budget 8 blocks)
+   one query row kept a different zero-score block than the reference, and
+   that row's output moved by 0.19; all other rows matched to 4e-7.
+   Comparisons with the reference (exact masks, tight logits) must
+   therefore be tie-aware; the parity test's are.
+3. **Router top-k ties.** The router logits are bf16 (as in the reference),
+   so exact ties at the top-10 boundary are common at 512 experts: in a
+   random-weight probe at the released geometry, 5 of 64 tokens had one,
+   and on all 5 `mx.argpartition` kept a different tied expert than
+   `torch.topk`. The swapped expert has the same routing weight, but its
+   output differs: in the review's 40-token probe, max |Δy| on the swapped
+   tokens was 0.05-0.09, against 0.031 bf16 noise on the others. Neither
+   engine specifies a tie order (MLX's is the same on CPU and GPU and
+   across batch shapes). In a full bf16 model the engines' own drift flips
+   near-ties anyway.
+4. **Positions** are always padding-aware. They equal the reference under
    `generate()`, which derives positions from the attention mask. They differ
    from a bare reference `forward()` on a padded batch without `position_ids`.
-4. **bf16 rounding points.** The port accumulates in fp32 and rounds once
+5. **bf16 rounding points.** The port accumulates in fp32 and rounds once
    where the reference CPU kernels' accumulation is unspecified: depthwise
    convs, the expert weighted sum (the reference uses bf16 `index_add_` in
    expert order), the hyper-connection stream mean and the PLE gate dot
@@ -182,7 +201,7 @@ q4 halves it).
    shared expert, routed experts inside mlx-lm's `SwitchGLU`) still use
    `nn.silu` in the model dtype, which rounds after the sigmoid and after
    the multiply.
-5. **RoPE inverse frequencies** are computed on the host: float32 exponent,
+6. **RoPE inverse frequencies** are computed on the host: float32 exponent,
    pow evaluated in float64 and rounded once to float32, float32 reciprocal.
    That is bit-identical to the reference at the released config
    (rope_theta 1e7, rotary_dim 64) and the test config. mlx's float32 pow
@@ -191,11 +210,11 @@ q4 halves it).
    fp32 and flipped indexer block selections in bf16. torch's CPU float32
    pow is not correctly rounded either, so some other (theta, dim) pairs
    keep 1-ulp entries (at most 1 ulp over the tested 15-pair sweep).
-6. **Fully padded query rows** attend to themselves so they stay finite.
+7. **Fully padded query rows** attend to themselves so they stay finite.
    Their outputs are discarded, as in the reference.
-7. **N-gram table** lives off-GPU, optionally quantized (q8/q4). The
+8. **N-gram table** lives off-GPU, optionally quantized (q8/q4). The
    reference keeps it as a bf16 `nn.Embedding`.
-8. **Omitted:** MTP (the reference ignores `mtp.*`, so it does not change
+9. **Omitted:** MTP (the reference ignores `mtp.*`, so it does not change
    next-token logits), vision, `input_embeddings`, non-default RoPE (YaRN is
    refused, not approximated), KV-cache quantization, prompt-cache files, and
    mlx-lm `BatchGenerator` merge/filter.
@@ -415,8 +434,12 @@ core with its slightly different 8-bit set, and a 57.6 / 32.0 GB table.
    wired into the harness.
 8. **Route A (Qwen's FP8 n-gram bytes verbatim) is not implemented.** The
    converter encodes the bf16 n-gram parts to f32/bf16/q8/q4 only.
-9. **QSA tie-break.** Exact score ties at the top-512 boundary follow the
-   lowest-index rule, which the reference does not specify.
+9. **Tie-breaks.** Exact ties at the QSA top-512 block boundary (lowest
+   index) and at the router top-10 boundary (`mx.argpartition` order) are
+   deterministic in the port, but the reference's `torch.topk` order is
+   unspecified, so they cannot be matched in general (deviations 2 and 3).
+   Exact-mask or tight-logit comparisons against the reference must be
+   tie-aware.
 10. **Unsupported:** MTP / speculative decoding, vision, YaRN or other RoPE
     scaling, KV quantization, prompt-cache files, mlx-lm batch generation.
 11. **CPU-pinned quantization makes artifacts host-specific.** A conversion

@@ -690,8 +690,13 @@ def topk_mask_lowest_index(scores: mx.array, k: int) -> mx.array:
     """Boolean mask of the top-``k`` entries along the last axis.
 
     Ties at the k-th value are broken toward the LOWEST index (deterministic).
-    ``torch.topk`` leaves tie order unspecified; on CPU it picks lowest index
-    for small inputs, which is what the parity test exercises.
+    ``torch.topk`` leaves tie order unspecified and does not reliably pick the
+    lowest index, even for small CPU inputs (zeros(20) with one positive
+    entry, k=2, returns index 1). Exact ties do occur in QSA: relu makes a
+    block score exactly 0.0 whenever every indexer head's dot product is
+    <= 0, so zero-score blocks straddling the top-k boundary can be kept
+    differently from the reference. Comparisons with the reference must be
+    tie-aware (the parity test's are).
     """
     n = scores.shape[-1]
     kth = mx.partition(scores, n - k, axis=-1)[..., n - k:n - k + 1]
@@ -1157,7 +1162,11 @@ class SparseMoeBlock(nn.Module):
     """[ref: Qwen4ExpTextSparseMoeBlock + TopKRouter]
 
     Router softmax/top-k/renormalisation run in fp32 (the reference does
-    ``softmax(dtype=float)``); mlx-lm's stock Qwen MoE uses bf16 here.
+    ``softmax(dtype=float)``); mlx-lm's stock Qwen MoE uses bf16 here. The
+    router logits themselves are bf16 in both engines, so exact logit ties at
+    the top-k boundary are common at 512 experts and the fp32 softmax keeps
+    them. ``mx.argpartition`` and ``torch.topk`` break such ties differently
+    (neither specifies an order): the swapped expert carries the same weight.
     """
 
     def __init__(self, args: TextModelArgs):
@@ -1169,7 +1178,8 @@ class SparseMoeBlock(nn.Module):
         self.shared_expert = MLP(args.hidden_size, args.shared_expert_intermediate_size)
         self.shared_expert_gate = nn.Linear(args.hidden_size, 1, bias=False)
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def route(self, x: mx.array):
+        """[ref: Qwen4ExpTextTopKRouter.forward] -> (logits, expert ids, weights)."""
         logits = self.gate(x)
         probs = mx.softmax(logits.astype(_F32), axis=-1)
         k = self.top_k
@@ -1177,7 +1187,10 @@ class SparseMoeBlock(nn.Module):
         scores = mx.take_along_axis(probs, inds, axis=-1)
         if self.norm_topk_prob:
             scores = scores / scores.sum(axis=-1, keepdims=True)
-        scores = scores.astype(logits.dtype)
+        return logits, inds, scores.astype(logits.dtype)
+
+    def __call__(self, x: mx.array) -> mx.array:
+        _, inds, scores = self.route(x)
         y = self.switch_mlp(x, inds)
         y = (y * scores[..., None]).astype(_F32).sum(axis=-2).astype(x.dtype)
         shared = mx.sigmoid(self.shared_expert_gate(x)) * self.shared_expert(x)
