@@ -27,3 +27,33 @@ Line references below identify the base unless stated otherwise.
 - Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_step4 -q`
   passed (5 tests; no processes spawned). Pytest is unavailable in both
   installed Python versions; no packages were installed or downloaded.
+
+## b. Eager whole-window deadline accounting — NEEDS-LEAD (plan only)
+
+- What/where: `joulewise/whole_window.py:2159–2190` calls
+  `member_map` with default `account=True`, then consumes the results;
+  `joulewise/analysis_member_pool.py:466–579` reports the entire batch before
+  consumption. The compatibility rule is explicit at
+  `joulewise/analysis_member_pool.py:68–73` and
+  `tests/b5_analysis/test_vdl_sol_hunt.py:209–235`.
+- Why: an unconsumed worker's deadline firing or unavailable observer can
+  replace an earlier authentication refusal. The lead retained that r1
+  behavior for r2 equivalence. Correcting it changes refusal decisions or
+  ordering protected by D-188; no production or existing test change here.
+- Proposed fix: at this whole-window call site use `member_map(...,
+  account=False)` and `consume(..., account=True)` at each dominated
+  member's serial position. Account the current consumed outcome even when
+  read-census replay raises; never account a later, unconsumed outcome.
+  Keep idempotent reporting, poison rules, and the defect side channel.
+  Do not change the pool's default globally or mutate historical records.
+- Proposed tests: first-member census refusal followed by (separately) a
+  deadline-firing and an observer-unavailable worker; neither later outcome
+  changes the first refusal, observation count or physics/store state.
+  A consumed firing still counts once; a consumed unavailable observer
+  still fails closed. Exercise the real whole-window caller and compare
+  serial and pooled results on synthetic bundles.
+- Ruling needed: authorize consumption-based accounting for a named future
+  analysis version, with the refusal-order deviation disclosed, or retain
+  eager accounting. Recommendation: consumption-based accounting after
+  release, under a successor ruling to D-188. Blocked work: code and tests
+  that would replace the explicitly retained compatibility policy.
