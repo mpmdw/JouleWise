@@ -254,7 +254,7 @@ def identical_pair(a, b):
         return {'status': 'inconclusive', 'token_identical': None, 'reason': 'token identity unavailable'}
     identity = a.get('tokens') is not None and a['tokens'] == b.get('tokens')
     if not identity:
-        return {'status': 'fail', 'exclusion': 'X5', 'token_identical': False}
+        return {'status': 'excluded', 'exclusion': 'X5', 'token_identical': False}
     energy = (a['turn_owned_j'] + b['turn_owned_j'])/2
     delta = b['turn_owned_j']-a['turn_owned_j']
     ca, cb = a.get('decode_clocks_mhz', []), b.get('decode_clocks_mhz', [])
@@ -474,10 +474,11 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
                   'pass' if release_checks and all(release_checks) else 'fail' if release_checks else 'inconclusive'])
     pair_results = [identical_pair(a, b) for a, b in pairs
                     if 'thermal.state_unobserved' not in a.get('flags', []) and 'thermal.state_unobserved' not in b.get('flags', [])]
+    eligible_pairs = [p['status'] for p in pair_results if p['status'] != 'excluded']
     results = {'U1': {'status': combine(checks), 'thermal_excluded_members': excluded,
                       'turn_admissions': admissions, 'g1_h_timeouts': timeouts, 'g0_timeouts': g0_timeouts},
                'U2': {'status': u2, 'g0_slow_range_c': range_c},
-               'U3': {'status': combine([p['status'] for p in pair_results]) if pair_results else 'inconclusive', 'pairs': pair_results},
+               'U3': {'status': combine(eligible_pairs) if eligible_pairs else 'inconclusive', 'pairs': pair_results},
                'U4': u4 or {'status': 'inconclusive', 'reason': 'requires cross-window evidence'},
                'U5': u5 or {'status': 'inconclusive', 'reason': 'requires pair s_r and state sensitivity evidence'},
                'U6': u6 or {'status': 'inconclusive', 'reason': 'requires frozen-fit benign residuals'}}

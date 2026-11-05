@@ -34,6 +34,17 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def test_x5_pairs_are_printed_but_do_not_fail_u3(self):
+        a, b = member(), member('divergent')
+        b['tokens'] = [[4]]
+        pair = desk.identical_pair(a, b)
+        self.assertEqual(pair['status'], 'excluded')
+        self.assertEqual(pair['exclusion'], 'X5')
+        result = desk.acceptance([a], pairs=[(a, b), (a, a)])['U3']
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['pairs'][0], pair)
+        self.assertEqual(desk.acceptance([a], pairs=[(a, b)])['U3']['status'], 'inconclusive')
+
     def test_tolerated_thermal_exclusion_does_not_fail_included_turns_or_release_range(self):
         valid = [member(str(i)) for i in range(3)]
         for flag in ('thermal.os_level_nonzero', 'thermal.start_gate_timeout',
