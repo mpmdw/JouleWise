@@ -142,7 +142,7 @@ def execute_smoke(snapshot: Path, scratch: Path) -> None:
         flush=True,
     )
     executable_boundary(
-        snapshot, "JOULEWISE_MARKED_BIN", "node_modules/.bin/marked", "Node/Marked"
+        snapshot, "JOULEWISE_MARKED_BIN", "site_capsule/node_modules/.bin/marked", "Node/Marked"
     )
     executable_boundary(
         snapshot,
