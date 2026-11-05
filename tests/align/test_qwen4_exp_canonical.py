@@ -56,7 +56,7 @@ REPO = Path(__file__).resolve().parents[2]
 MODULE_FILE = REPO / "joulewise" / "align" / "models" / "qwen4_exp.py"
 CONVERTER_FILE = REPO / "scripts" / "align_convert_qwen4_exp.py"
 WORK_ROOT = Path(os.environ.get("JW_CANON_WORK", Path(os.environ.get("TMPDIR", "/tmp")) / "qwen4exp_canonical"))
-REF_VERSION = "canonical-ref-v3"
+REF_VERSION = "canonical-ref-v4"
 
 EOS = 1
 TEXT = {
@@ -110,9 +110,13 @@ BF16_VS_B16_RATIO = 1.5
 # RMS (fused and explicit norms alike; the prototype's 1.000 was at hidden 96).
 # The QSA attention core is not bitwise reproducible even inside torch (D9):
 # reported, not gated, but its block selection must be identical.
+# Router logits / expert sets / MoE: every router-logit difference must be
+# explained by fp32 accumulation order under cancellation and every expert-set
+# difference by an exact tie; the MoE floor applies to rows with equal expert
+# sets (the corrected bf16 reference of validation round 1 has one of each).
 BITWISE_MIN = {"attn_hc.mixed": 0.998, "attn_hc.weights": 0.999, "mlp_hc.mixed": 0.998,
                "mlp_hc.weights": 0.999, "ple": 0.999, "mix.linear": 0.95, "moe": 0.99,
-               "mixer": 0.999, "head": 0.999, "router.logits": 1.0}
+               "mixer": 0.999, "head": 0.999, "router.logits": 0.99}
 
 
 def _skip_reason():
@@ -382,16 +386,28 @@ class Reference:
                 state["model." + k[len("model.language_model."):]] = v
             elif k.startswith("lm_head."):
                 state[k] = v
+        # from_pretrained's own non-persistent buffers (dtype and value).
+        buffers = {"model." + k[len("model.language_model."):]: v.clone()
+                   for k, v in loaded.named_buffers() if k.startswith("model.language_model.")}
         tcfg = copy.deepcopy(loaded.config.text_config)
         tcfg._attn_implementation = "sdpa"
         del loaded
 
         def make(dtype):
-            m = Qwen4ExpForCausalLM(tcfg).eval()
+            # As from_pretrained(dtype=...) builds a model: parameters created
+            # in `dtype`, non-persistent buffers by their own code (RoPE
+            # inv_freq stays fp32), then the checkpoint's values. NOT
+            # `.to(dtype)`, which also rounds inv_freq to bf16 (validation
+            # round 1, numerics MEDIUM).
+            m = Qwen4ExpForCausalLM._from_config(tcfg, dtype=dtype).eval()
             missing, unexpected = m.load_state_dict(state, strict=False)
             if [k for k in missing if "rotary_emb" not in k] or unexpected:
                 raise RuntimeError(f"reference load: missing={missing} unexpected={unexpected}")
-            return m.to(dtype)
+            for name, buf in m.named_buffers():
+                want = buffers.get(name)
+                if want is None or buf.dtype != want.dtype or not torch.equal(buf, want):
+                    raise RuntimeError(f"reference buffer {name} differs from from_pretrained's")
+            return m
 
         return make
 
@@ -480,6 +496,12 @@ class Reference:
             out.update({f"{tag}D.{k}": v for k, v in res.items()})
             with TopkSpy(m, torch, force_lowest_index=True):
                 capture(m, torch, seqs["seq_a"], tag, out)
+            if tag == "b16":
+                # A 4101-token bf16 prefill for (b)'s long-context bound.
+                with TopkSpy(m, torch, force_lowest_index=True) as spy, torch.no_grad():
+                    out["b16.longk_prefill"] = m(input_ids=torch.tensor([seqs["longk"]]),
+                                                 use_cache=False).logits[0].float().numpy()
+                meta["ties"]["longk_b16"] = dict(topk_calls=spy.calls, straddling_ties=spy.straddling)
             if tag == "f32":
                 # Forced exact ties: zero one indexer projection, so every
                 # visible block scores exactly 0.
@@ -711,6 +733,8 @@ def noise_table(fx):
     n["long_chunked"] = n["long_prefill"]
     n["padded_row0"] = diff(r16["padded"][0], r32["padded"][0])["max_abs"]
     n["padded_row1"] = diff(r16["padded"][1, PAD_B:], r32["padded"][1, PAD_B:])["max_abs"]
+    if "longk_prefill" in r16:
+        n["longk_prefill"] = diff(r16["longk_prefill"], r32["longk_prefill"])["max_abs"]
     return n
 
 
@@ -782,10 +806,15 @@ class CanonicalParityTest(unittest.TestCase):
 
     # ---------------------------------------------------------------- (b)
     def test_b_bf16_within_reference_noise(self):
+        """Includes a 4101-token prefill: the reference's own bf16 error grows
+        with position, so the bound is tightest at long context."""
         fx = self.fx
         noise = noise_table(fx)
         vs32 = compare(self.port("bf16"), refs(fx, "f32"))
         vs16 = compare(self.port("bf16"), refs(fx, "b16"))
+        longk = run(fx.model("bf16"), [fx.seqs["longk"]])[0]
+        vs32["longk_prefill"] = diff(longk, fx.ref["f32.longk_prefill"])
+        vs16["longk_prefill"] = diff(longk, fx.ref["b16.longk_prefill"])
         table = {k: dict(noise=noise[k], vs_ref_f32=vs32[k]["max_abs"], ratio_f32=vs32[k]["max_abs"] / noise[k],
                          vs_ref_b16=vs16[k]["max_abs"], ratio_b16=vs16[k]["max_abs"] / noise[k],
                          cos_f32=vs32[k]["cos"]) for k in noise}
@@ -862,12 +891,14 @@ class CanonicalParityTest(unittest.TestCase):
         fx = self.fx
         iso = self._isolated("bf16", "b16")
         cap = lambda k: fx.ref[f"b16.cap.{k}"]
-        rows, worst = {}, {}
+        bits16 = lambda a: np.ascontiguousarray(a, dtype=np.float32).view(np.uint32) >> 16
+        import mlx.core as mx
+        gate_w = [np.array(layer.mlp.gate.weight.astype(mx.float32)) for layer in fx.model("bf16").layers]
+        rows, worst, unexplained = {}, {}, {"router.logits": 0, "router.experts": 0}
         for i in range(N_LAYERS):
             p = f"L{i}."
             pairs = [("attn_hc.mixed", p + "attn_hc.mixed"), ("attn_hc.weights", p + "attn_hc.weights"),
-                     ("mlp_hc.mixed", p + "mlp_hc.mixed"), ("mlp_hc.weights", p + "mlp_hc.weights"),
-                     ("moe", p + "moe.out")]
+                     ("mlp_hc.mixed", p + "mlp_hc.mixed"), ("mlp_hc.weights", p + "mlp_hc.weights")]
             pairs.append(("mix.qsa" if i in QSA_LAYERS else "mix.linear", p + "mix.out"))
             if i in PLE_LAYERS:
                 pairs.append(("ple", p + "ple.out"))
@@ -877,12 +908,38 @@ class CanonicalParityTest(unittest.TestCase):
                 frac = bitwise(a, cap(rkey))
                 rows[f"L{i}.{comp}"] = dict(bitwise=frac, max_abs=diff(a, cap(rkey))["max_abs"])
                 worst[comp] = min(worst.get(comp, 1.0), frac)
-            logits = cap(p + "router.logits")
-            frac = bitwise(iso[p + "router.logits"], logits)
-            worst["router.logits"] = min(worst.get("router.logits", 1.0), frac)
-            ref_e = np.sort(cap(p + "router.experts").reshape(-1, TEXT["num_experts_per_tok"]), -1)
-            same = float((iso[p + "router.experts"] == ref_e).all(-1).mean())
-            worst["router.experts"] = min(worst.get("router.experts", 1.0), same)
+            # Router logits: a bf16 GEMM with fp32 accumulation. An element may
+            # differ only where the exact (fp64) dot product lies within the
+            # fp32 accumulation error bound of the bf16 rounding midpoint
+            # (heavy cancellation), so either rounding is legitimate.
+            k = TEXT["num_experts_per_tok"]
+            x = cap(p + "moe.in").reshape(-1, TEXT["hidden_size"]).astype(np.float64)
+            w = np.array(gate_w[i], dtype=np.float64)
+            exact, bound = x @ w.T, TEXT["hidden_size"] * 2.0 ** -24 * (np.abs(x) @ np.abs(w).T)
+            rl = cap(p + "router.logits").reshape(exact.shape)
+            pl = iso[p + "router.logits"].reshape(exact.shape)
+            flips = bits16(pl) != bits16(rl)
+            explained = np.abs(exact - (pl.astype(np.float64) + rl) / 2) <= bound
+            rows[f"L{i}.router.logits"] = dict(bitwise=float((~flips).mean()), flips=int(flips.sum()),
+                                               unexplained=int((flips & ~explained).sum()))
+            worst["router.logits"] = min(worst.get("router.logits", 1.0), float((~flips).mean()))
+            unexplained["router.logits"] += int((flips & ~explained).sum())
+            # Expert sets: a row may differ only on an exact k-th = (k+1)-th
+            # fp32-probability tie in the reference, or where its logits carry
+            # an explained flip; the MoE output is gated on the other rows.
+            ref_e = np.sort(cap(p + "router.experts").reshape(-1, k), -1)
+            differ = (iso[p + "router.experts"] != ref_e).any(-1)
+            probs = np.exp(rl - rl.max(-1, keepdims=True))
+            srt = -np.sort(-(probs / probs.sum(-1, keepdims=True)).astype(np.float32), -1)
+            tie = (srt[:, k - 1] == srt[:, k]) | flips.any(-1)
+            rows[f"L{i}.router.experts"] = dict(rows_differing=int(differ.sum()), tied=int((differ & tie).sum()))
+            worst["router.experts"] = min(worst.get("router.experts", 1.0), float((~differ).mean()))
+            unexplained["router.experts"] += int((differ & ~tie).sum())
+            moe, rmoe = iso[p + "moe"].reshape(cap(p + "moe.out").shape)[0], cap(p + "moe.out")[0]
+            frac = bitwise(moe[~differ], rmoe[~differ])
+            rows[f"L{i}.moe"] = dict(bitwise_on_equal_expert_rows=frac, rows_excluded=int(differ.sum()),
+                                     max_abs=diff(moe, rmoe)["max_abs"])
+            worst["moe"] = min(worst.get("moe", 1.0), frac)
             if i in QSA_LAYERS:
                 ref_sel = self._ref_blocks(cap(p + "sel")[0])
                 port_sel = [frozenset(np.nonzero(iso[p + "sel_blocks"][t])[0].tolist()) for t in range(LEN_A)]
@@ -890,11 +947,11 @@ class CanonicalParityTest(unittest.TestCase):
                 worst[f"qsa_selection_rows_differing.L{i}"] = diffs
         for comp, rkey in (("mixer", "mixer.out"), ("head", "head.out")):
             worst[comp] = bitwise(iso[comp].reshape(cap(rkey).shape), cap(rkey))
-        fx.record("c_isolated_bf16", dict(min_over_layers=worst, per_layer=rows))
+        fx.record("c_isolated_bf16", dict(min_over_layers=worst, per_layer=rows, unexplained=unexplained))
         for comp, floor in BITWISE_MIN.items():
             with self.subTest(component=comp):
                 self.assertGreaterEqual(worst[comp], floor, f"{comp}: {worst[comp]:.4f} < {floor}")
-        self.assertEqual(worst["router.experts"], 1.0)
+        self.assertEqual(unexplained, {"router.logits": 0, "router.experts": 0})
         for i in QSA_LAYERS:
             self.assertEqual(worst[f"qsa_selection_rows_differing.L{i}"], 0)
 
@@ -1283,6 +1340,24 @@ class ValidationRound1Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.fx = fixture()
+
+    # ----------------------------------------- numerics MEDIUM (reference)
+    def test_r1_bf16_reference_is_built_as_from_pretrained(self):
+        """The bf16 reference was `.to(torch.bfloat16)` of an fp32 model, which
+        also rounds the non-persistent RoPE inv_freq to bf16 (max relative
+        error 3.3e-3); from_pretrained(dtype=torch.bfloat16) keeps it fp32.
+        Both references must carry from_pretrained's buffers exactly (dtype
+        and value); text_models() raises otherwise."""
+        import torch
+        fx = self.fx
+        fx.reference.build_checkpoint()
+        make = fx.reference.text_models()
+        for dtype in (torch.float32, torch.bfloat16):
+            with self.subTest(dtype=str(dtype)):
+                m = make(dtype)
+                self.assertEqual(m.model.rotary_emb.inv_freq.dtype, torch.float32)
+                self.assertEqual(m.lm_head.weight.dtype, dtype)
+                del m
 
     # ------------------------------------------------- systems HIGH (indexer)
     def test_r1_dense_regime_indexer_writes_run_with_their_token(self):
