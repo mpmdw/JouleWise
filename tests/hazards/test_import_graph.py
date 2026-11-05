@@ -150,11 +150,11 @@ class ImportGraphTests(unittest.TestCase):
                        "joulewise.quiet_admission", "joulewise.prewindow"):
             self.assertIn(reused, paths)
 
-    def test_the_analyzer_sees_the_measurement_core_reach_arm_readiness(self):
-        # Positive control: bundle.py imports arm_readiness at module level, so a
-        # hazard module importing the core directly would be caught.
-        paths = reachable(["joulewise.bundle"], own_functions=set())
-        self.assertIn("joulewise.arm_readiness", paths)
+    def test_measurement_core_reaches_shared_readers_without_retired_modules(self):
+        paths = reachable(["joulewise.bundle"], own_functions={"joulewise.bundle"})
+        self.assertIn("joulewise.receipt_readers", paths)
+        self.assertFalse(any(is_retired(name) for name in paths))
+        # The cadence adapter is still confined to its bounded child process.
         paths = reachable(["joulewise.hazards.instrument"], own_functions={"joulewise.hazards.instrument"})
         self.assertNotIn("joulewise.adapters.powermetrics", paths)
         child = imports("joulewise.hazards.instrument", functions=True)

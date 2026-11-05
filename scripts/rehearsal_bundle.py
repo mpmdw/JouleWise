@@ -1,0 +1,252 @@
+"""Read one stored supervised-rehearsal custody bundle without issuing a verdict."""
+from __future__ import annotations
+
+import os
+from pathlib import Path, PurePosixPath
+from typing import Mapping
+
+from joulewise import receipt_readers as readiness
+from joulewise import rehearsal_readers as t0_rehearsal
+from joulewise.receipt_readers import _production_inventory as _read_production_inventory
+
+MANIFEST_NAME = "t0-rehearsal-bundle.json"
+
+
+MANIFEST_SCHEMA = "joulewise.t0_unattended_rehearsal_bundle.v1"
+
+
+QUALIFICATION_MANIFEST_NAME = "s1-qualification-bundle.json"
+
+
+QUALIFICATION_MANIFEST_SCHEMA = "joulewise.v5_s1_qualification_bundle.v1"
+
+
+RECORD_NAMES = frozenset(
+    {
+        "execution",
+        "hid_idle",
+        "d149_go",
+        "g7_control",
+        "rehearsal_receipt",
+        "process_lineage",
+        "lifecycle",
+        "falsifier_controls",
+        "positive_control",
+    }
+)
+
+
+_MANIFEST_KEYS = {
+    "schema_version",
+    "t0_namespace",
+    "records",
+    "production_roots",
+}
+
+
+class BundleLoadError(ValueError):
+    """The custody root cannot describe an evidence bundle safely."""
+
+
+def _safe_relative(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise BundleLoadError(f"{label} must be a nonempty relative POSIX path")
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts or "." in path.parts:
+        raise BundleLoadError(f"{label} must stay inside the custody root")
+    return path.as_posix()
+
+
+def _regular_bytes(path: Path, *, label: str) -> bytes:
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise OSError("not a regular non-symlink file")
+        return path.read_bytes()
+    except OSError as exc:
+        raise BundleLoadError(f"{label} is unreadable: {path}: {exc}") from exc
+
+
+def _artifact(root: Path, path: Path) -> t0_rehearsal.EvidenceArtifact:
+    raw = _regular_bytes(path, label="custody artifact")
+    relative = path.relative_to(root).as_posix()
+    value: object | None = None
+    parse_error: str | None = None
+    if path.suffix == ".json":
+        try:
+            value = readiness.parse_json_bytes(raw, require_canonical=True)
+        except readiness.ArmReadinessError as exc:
+            parse_error = str(exc)
+    return t0_rehearsal.EvidenceArtifact(
+        relative_path=relative,
+        path=path,
+        raw=raw,
+        sha256=readiness.sha256_bytes(raw),
+        value=value,
+        parse_error=parse_error,
+    )
+
+
+def _crawl(root: Path) -> tuple[tuple[t0_rehearsal.EvidenceArtifact, ...], tuple[str, ...]]:
+    artifacts = []
+    issues = []
+    for directory, directory_names, file_names in os.walk(root, followlinks=False):
+        current = Path(directory)
+        kept_directories = []
+        for name in sorted(directory_names):
+            candidate = current / name
+            if candidate.is_symlink():
+                issues.append(f"custody contains symlink directory: {candidate.relative_to(root)}")
+            else:
+                kept_directories.append(name)
+        directory_names[:] = kept_directories
+        for name in sorted(file_names):
+            candidate = current / name
+            if candidate.is_symlink() or not candidate.is_file():
+                issues.append(f"custody contains non-regular artifact: {candidate.relative_to(root)}")
+                continue
+            artifacts.append(_artifact(root, candidate))
+    return tuple(artifacts), tuple(issues)
+
+
+def _production_inventory(plan):
+    """Preserve the bundle loader's byte-reader seam and error vocabulary."""
+    try:
+        return _read_production_inventory(
+            plan,
+            read_bytes=lambda path: _regular_bytes(path, label="production custody inventory"))
+    except ValueError as exc:
+        raise BundleLoadError(str(exc)) from exc
+
+
+def load_evidence_bundle(root: Path | str, *, home=None, inventory=None,
+                         manifest_name=MANIFEST_NAME, require_observed=False) -> t0_rehearsal.EvidenceBundle:
+    """Read one fixed-layout custody tree without synthesizing evidence."""
+
+    try:
+        original = Path(root)
+        if not original.is_absolute() or any(p.is_symlink() for p in (original, *original.parents)):
+            raise BundleLoadError("custody root must be absolute and non-symlink")
+        custody = original.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise BundleLoadError(f"custody root is unavailable: {root}: {exc}") from exc
+    if custody.is_symlink() or not custody.is_dir():
+        raise BundleLoadError("custody root must be a regular directory")
+    qualification = manifest_name == QUALIFICATION_MANIFEST_NAME
+    if manifest_name not in {MANIFEST_NAME, "t0-rehearsal-initial.json", QUALIFICATION_MANIFEST_NAME}:
+        raise BundleLoadError("invalid rehearsal manifest name")
+    provenance_path = custody / "rehearsal-provenance.json"
+    if require_observed:
+        try:
+            provenance = readiness.parse_json_bytes(_regular_bytes(provenance_path, label="producer provenance"), require_canonical=True)
+            if (provenance.get("schema_version") != "joulewise.t0_rehearsal_producer_provenance.v1"
+                    or provenance.get("proof_scope") != ("OBSERVED_G2B_SHAKEDOWN" if qualification else "OBSERVED_REHEARSAL")):
+                raise BundleLoadError("fixture or unlabelled evidence cannot be presented as real rehearsal")
+            for reference in provenance["source_records"]:
+                path = Path(reference["path"])
+                if readiness.sha256_bytes(_regular_bytes(path, label="producer source")) != reference["sha256"]:
+                    raise BundleLoadError("producer source digest mismatch")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise BundleLoadError(str(exc)) from exc
+    manifest_path = custody / manifest_name
+    manifest_raw = _regular_bytes(manifest_path, label="rehearsal bundle manifest")
+    try:
+        manifest_value = readiness.parse_json_bytes(
+            manifest_raw, require_canonical=True
+        )
+    except readiness.ArmReadinessError as exc:
+        raise BundleLoadError(f"bundle manifest is not canonical strict JSON: {exc}") from exc
+    if (
+        not isinstance(manifest_value, Mapping)
+        or set(manifest_value) != _MANIFEST_KEYS
+        or manifest_value.get("schema_version") != (QUALIFICATION_MANIFEST_SCHEMA if qualification else MANIFEST_SCHEMA)
+    ):
+        raise BundleLoadError("bundle manifest schema or exact keys are invalid")
+    records = manifest_value.get("records")
+    expected_names = RECORD_NAMES - {"g7_control", "rehearsal_receipt"} if qualification else RECORD_NAMES - {"g7_control"}
+    if (not isinstance(records, Mapping)
+            or set(records) not in ((expected_names,) if qualification else (RECORD_NAMES, expected_names))):
+        raise BundleLoadError("bundle manifest record census is not exact")
+    record_paths = {
+        name: _safe_relative(records[name], label=f"records.{name}")
+        for name in sorted(expected_names)
+    }
+    control_artifact = None
+    if "g7_control" in records:
+        locator = records["g7_control"]
+        if (not isinstance(locator, Mapping) or set(locator) != {"path", "sha256"}
+                or not isinstance(locator["path"], str)):
+            raise BundleLoadError("g7_control locator must be {path, sha256}")
+        control_path = Path(locator["path"])
+        expected = custody.with_name(custody.name + "-g7-control") / "night/g7_refusal.json"
+        if control_path != expected or any(p.is_symlink() for p in (control_path, *control_path.parents)):
+            raise BundleLoadError("g7_control must name the sibling control artifact")
+        control_raw = _regular_bytes(control_path, label="g7_control")
+        if readiness.sha256_bytes(control_raw) != locator["sha256"]:
+            raise BundleLoadError("g7_control sha256 mismatch")
+        control_artifact = _artifact(control_path.parent, control_path)
+        if control_artifact.raw != control_raw:
+            raise BundleLoadError("g7_control changed during load")
+        # Absolute record identity distinguishes external control from local records.
+        from dataclasses import replace
+        control_artifact = replace(control_artifact, relative_path=str(control_path))
+        record_paths["g7_control"] = str(control_path)
+    namespace_relative = _safe_relative(
+        manifest_value.get("t0_namespace"), label="t0_namespace"
+    )
+    namespace = custody / PurePosixPath(namespace_relative)
+    try:
+        namespace_resolved = namespace.resolve(strict=True)
+        namespace_resolved.relative_to(custody)
+    except (OSError, ValueError) as exc:
+        raise BundleLoadError(f"T-0 namespace is unavailable or escapes custody: {exc}") from exc
+    if not namespace_resolved.is_dir() or namespace_resolved.is_symlink():
+        raise BundleLoadError("T-0 namespace must be a regular directory")
+
+    production_items = manifest_value.get("production_roots")
+    if not isinstance(production_items, list):
+        raise BundleLoadError("production_roots must be a list")
+    try:
+        # The pack GO retains the plan's repo/measurement pins. G5 separately
+        # authenticates that GO; the loader must not substitute its own HEAD.
+        if inventory is None:
+            go = readiness.parse_json_bytes(_regular_bytes(
+                custody / record_paths["d149_go"], label="pack GO inventory pins"))
+            inventory = _production_inventory(go)
+        production_roots = readiness.production_custody_roots(
+            home=Path.home() if home is None else home,
+            inventory=inventory,
+        )
+        recorded = {}
+        for item in production_items:
+            if (not isinstance(item, Mapping) or set(item) != {"role", "path"}
+                    or not isinstance(item["role"], str) or item["role"] in recorded
+                    or not isinstance(item["path"], str) or not Path(item["path"]).is_absolute()):
+                raise ValueError("invalid census record")
+            recorded[item["role"]] = Path(item["path"]).resolve(strict=False)
+        if recorded != {item.role: item.path for item in production_roots}:
+            raise ValueError("census mismatch")
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise BundleLoadError("production-root census incomplete") from exc
+
+    artifacts, crawl_issues = _crawl(custody)
+    if control_artifact is not None:
+        artifacts = (*artifacts, control_artifact)
+    manifest_artifact = next(
+        (item for item in artifacts if item.relative_path == manifest_name), None
+    )
+    if manifest_artifact is None:
+        raise BundleLoadError("manifest disappeared during custody census")
+    load_issues = list(crawl_issues)
+    known_paths = {item.relative_path for item in artifacts}
+    for name, relative in record_paths.items():
+        if relative not in known_paths:
+            load_issues.append(f"declared {name} record is absent: {relative}")
+    return t0_rehearsal.EvidenceBundle(
+        custody_root=custody,
+        t0_namespace_root=namespace_resolved,
+        manifest=manifest_artifact,
+        artifacts=artifacts,
+        record_paths=record_paths,
+        production_roots=tuple(production_roots),
+        load_issues=tuple(load_issues),
+    )

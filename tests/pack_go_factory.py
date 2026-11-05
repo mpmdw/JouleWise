@@ -124,17 +124,21 @@ _originals = {name: value for name, value in list(globals().items())
               if callable(value) and getattr(value, "__module__", None) == __name__}
 
 def produce(driver, *args, **kwargs):
-    namespace = dict(vars(driver))
+    from joulewise import night_gate
+    namespace = {**vars(night_gate), **vars(driver)}
     from joulewise import receipt_formats
     namespace["t0_author"] = receipt_formats
     for name, original in _originals.items():
+        if name in namespace:
+            continue
         namespace[name] = FunctionType(original.__code__, namespace, name,
                                        original.__defaults__, original.__closure__)
         namespace[name].__kwdefaults__ = original.__kwdefaults__
     return namespace["_produce_pack_go"](*args, **kwargs)
 
 def prepare(driver, *args, **kwargs):
-    namespace = dict(vars(driver))
+    from joulewise import night_gate
+    namespace = {**vars(night_gate), **vars(driver)}
     function = _originals["_prepare_pack_night"]
     return FunctionType(function.__code__, namespace, function.__name__,
                         function.__defaults__)(*args, **kwargs)
