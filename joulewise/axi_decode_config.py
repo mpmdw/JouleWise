@@ -26,7 +26,9 @@ IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 EVENT_TOP_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
 
+
 from joulewise.strict_io import (
+    json_pretty_utf8 as normalized_json_bytes,
     sha256_value as sha256_bytes,
 )
 
@@ -36,10 +38,6 @@ class AxiSchemaError(ValueError):
 
 def canonical_json_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def normalized_json_bytes(value: Any) -> bytes:
-    return (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def _int(value: Any, where: str, minimum: int = 0) -> int:
