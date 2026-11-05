@@ -511,6 +511,8 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
     specs = {lid - 1: rules.NgramHashSpec(targs, i) for i, lid in enumerate(targs.ple_layer_ids)}
     if set(tables) != set(specs):
         raise ValueError(f"n-gram tables for layers {sorted(tables)}, config expects {sorted(specs)}")
+    for spec in specs.values():  # refuse an unusable record format before writing anything
+        rules.ngram_record_layout(ple_storage, spec.head_dim, ngram_group_size)
 
     quantizers = {k: rules.quantization_for(k[:-len(".weight")], shape, profile, group_size)
                   for k, shape in expected.items() if k.endswith(".weight")}
@@ -608,10 +610,12 @@ def main():
     p.add_argument("--group-size", type=int, choices=(32, 64, 128), default=64)
     p.add_argument("--ple-storage", choices=("f32", "bf16", "q8", "q4"),
                    help="n-gram table format (default: bf16 for maxfit*/bf16, f32 for fp32, q4 for mixed)")
+    p.add_argument("--ngram-group-size", type=int, default=32,
+                   help="q8/q4 n-gram record group size (must divide the n-gram head dim)")
     p.add_argument("--shard-gb", type=float, default=SHARD_BYTES / 2 ** 30,
                    help="maximum weight shard size in GiB (a larger single tensor gets its own shard)")
     a = p.parse_args()
-    manifest = convert(a.checkpoint, a.output, a.profile, a.group_size, a.ple_storage,
+    manifest = convert(a.checkpoint, a.output, a.profile, a.group_size, a.ple_storage, a.ngram_group_size,
                        shard_bytes=int(a.shard_gb * 2 ** 30))
     print(json.dumps(dict(output=str(a.output), payload_files=len(manifest["files"]),
                           manifest_sha256=sha256(a.output / "manifest.json"))))

@@ -581,25 +581,32 @@ class Reference:
         return out, meta
 
     def compute_dequantized(self, dequant, tag):
-        """fp32 reference with the routed experts replaced by ``dequant``
-        (layer -> (gate_up [E, 2I, H], down [E, H, I]) fp32 arrays)."""
+        """fp32 and bf16 references with the routed experts replaced by
+        ``dequant`` (layer -> (gate_up [E, 2I, H], down [E, H, I]) fp32
+        arrays; the bf16 model holds them rounded to bf16):
+        {"f32": scenarios, "b16": scenarios}."""
         import numpy as np
         path = self.work / f"ref_{tag}.npz"
         if path.exists():
             data = np.load(path)
-            return {k: data[k] for k in data.files}
+            out = {"f32": {}, "b16": {}}
+            for k in data.files:
+                out[k.split(".", 1)[0]][k.split(".", 1)[1]] = data[k]
+            return out
         torch = self._torch()
-        m = self.text_models()(torch.float32)
-        with torch.no_grad():
-            for i, (gu, dn) in dequant.items():
-                ex = m.model.layers[i].mlp.experts
-                ex.gate_up_proj.copy_(torch.from_numpy(gu))
-                ex.down_proj.copy_(torch.from_numpy(dn))
-        seqs = sequences()
-        with TopkSpy(m, torch, force_lowest_index=True):
-            res = self.scenarios(m, seqs, {}, tag, full=False)
-        np.savez(path, **res)
-        return res
+        out = {}
+        for name, dtype in (("f32", torch.float32), ("b16", torch.bfloat16)):
+            m = self.text_models()(dtype)
+            with torch.no_grad():
+                for i, (gu, dn) in dequant.items():
+                    ex = m.model.layers[i].mlp.experts
+                    ex.gate_up_proj.copy_(torch.from_numpy(gu))
+                    ex.down_proj.copy_(torch.from_numpy(dn))
+            with TopkSpy(m, torch, force_lowest_index=True):
+                out[name] = self.scenarios(m, sequences(), {}, tag, full=False)
+            del m
+        np.savez(path, **{f"{name}.{k}": v for name, res in out.items() for k, v in res.items()})
+        return out
 
 
 # ===========================================================================
@@ -1252,49 +1259,136 @@ class CanonicalParityTest(unittest.TestCase):
             self.assertLessEqual(abs(effect[k] - ref_effect[k]), FP32_TOL, k)
 
     # ---------------------------------------------------------------- (f)
-    def test_f_maxfit_quantized_within_bound(self):
-        """maxfit = 6-bit group-64 routed experts, everything else bf16.
-        Bound: the quantized port must match the fp32 REFERENCE run with the
-        same dequantized expert weights within the bf16 bound of (b): the only
-        remaining difference is bf16 compute. The quantization effect itself
-        (maxfit vs bf16 port, vs fp32 REF) is measured and recorded."""
+    def _expert_quantized_bound(self, profile, bits):
+        """``profile`` = ``bits``-bit group-64 routed experts, everything else
+        bf16. Bound, (b)'s on the same weights: the quantized port vs the fp32
+        REFERENCE run with the same dequantized expert weights (dequantized in
+        fp32, exactly the kernel's scale * q + bias) must stay within 1.25x
+        that reference's own bf16 error (the bf16 reference with those weights
+        vs the fp32 one): the only remaining difference is bf16 compute,
+        including bf16 flips of near-tied experts that the reference's own
+        bf16 run shares. The quantization effect itself (vs the bf16 port, vs
+        fp32 REF) is measured and recorded."""
         import mlx.core as mx
         import numpy as np
-        fx = self.fx
-        model = fx.model("maxfit")
-        bits = {}
-        dequant = {}
         from mlx.utils import tree_flatten
+        fx = self.fx
+        model = fx.model(profile)
+        layout, dequant = {}, {}
         for i, layer in enumerate(model.layers):
             sw = layer.mlp.switch_mlp
             for name in ("gate_up_proj", "down_proj"):
                 lin = getattr(sw, name)
-                bits[f"L{i}.{name}"] = (type(lin).__name__, lin.bits, lin.group_size)
-            gu = mx.dequantize(sw.gate_up_proj.weight, sw.gate_up_proj.scales, sw.gate_up_proj.biases,
-                               group_size=64, bits=6)
-            dn = mx.dequantize(sw.down_proj.weight, sw.down_proj.scales, sw.down_proj.biases,
-                               group_size=64, bits=6)
-            dequant[i] = (np.array(gu.astype(mx.float32)), np.array(dn.astype(mx.float32)))
+                layout[f"L{i}.{name}"] = (type(lin).__name__, lin.bits, lin.group_size)
+            exact = lambda lin: np.array(mx.dequantize(lin.weight, lin.scales.astype(mx.float32),
+                                                       lin.biases.astype(mx.float32), group_size=64, bits=bits))
+            dequant[i] = (exact(sw.gate_up_proj), exact(sw.down_proj))
         quantized = sorted({k.rsplit(".", 1)[0] for k, v in tree_flatten(model.parameters())
                             if k.endswith(".scales")})
-        self.assertTrue(all(v == ("QuantizedSwitchLinear", 6, 64) for v in bits.values()), bits)
+        self.assertTrue(all(v == ("QuantizedSwitchLinear", bits, 64) for v in layout.values()), layout)
         self.assertTrue(all(".switch_mlp." in k for k in quantized), quantized)
         self.assertEqual(len(quantized), 2 * N_LAYERS)
-        ref_q = fx.reference.compute_dequantized(dequant, "q6-" + fx.conv_dir.name)
+        refq = fx.reference.compute_dequantized(dequant, f"q{bits}-" + fx.conv_dir.name)
+        ref_q, ref_q16 = refq["f32"], refq["b16"]
         r = port_scenarios(model, fx.seqs)
         noise = noise_table(fx)
         table = {}
         for k in ("prefill", "stepwise", "long_prefill"):
             d = diff(r[k], ref_q[k])
-            table[k] = dict(vs_ref_q6_f32=d["max_abs"], ratio=d["max_abs"] / noise[k], cos=d["cos"],
+            own = diff(ref_q16[k], ref_q[k])["max_abs"]
+            table[k] = dict(vs_ref_dequantized_f32=d["max_abs"], ref_dequantized_bf16_noise=own,
+                            ratio=d["max_abs"] / own, cos=d["cos"],
+                            ratio_to_unquantized_noise=d["max_abs"] / noise[k],
                             quant_effect_vs_bf16_port=diff(r[k], self.port("bf16")[k])["max_abs"],
                             quant_effect_vs_ref_f32=diff(r[k], refs(fx, "f32")[k])["max_abs"],
-                            ref_q6_vs_ref_f32=diff(ref_q[k], refs(fx, "f32")[k])["max_abs"],
-                            noise=noise[k])
-        fx.record("f_maxfit", table)
+                            ref_dequantized_vs_ref_f32=diff(ref_q[k], refs(fx, "f32")[k])["max_abs"])
+        fx.record(f"f_{profile}", table)
         for k, row in table.items():
             with self.subTest(scenario=k):
                 self.assertLessEqual(row["ratio"], BF16_VS_F32_RATIO, f"{k}: {row}")
+
+    def test_f_maxfit_quantized_within_bound(self):
+        """maxfit (the GOAL target): 6-bit group-64 routed experts."""
+        self._expert_quantized_bound("maxfit", 6)
+
+    def test_f_maxfit5_quantized_within_bound(self):
+        """maxfit5 (the 5-bit fallback), same bound (validation round 1: the
+        profile was listed as delivered without test evidence)."""
+        self._expert_quantized_bound("maxfit5", 5)
+
+    def test_f_mixed_profile_layout_codec_and_sanity(self):
+        """``mixed``: experts 4-bit, other wide linears 8-bit, selection-
+        critical and small modules float, q4 n-gram records. A lossy recipe
+        with no reference-derived bound; checked: the layout the policy
+        promises (as loaded), the q4 records within the codec's error bound of
+        the bf16 source rows, finite logits and a loose cosine floor vs the
+        fp32 REF. The fixture's n-gram head dim is 16, so it converts with
+        ngram_group_size=16 (the default 32 refuses it, as it should)."""
+        import mlx.core as mx
+        import numpy as np
+        fx = self.fx
+        conv = fx.converter()
+        with self.assertRaises(ValueError):
+            conv.convert(fx.reference.ckpt, fx.conv_dir / "mixed-default-group", profile="mixed")
+        self.assertFalse((fx.conv_dir / "mixed-default-group").exists(), "refused before writing")
+        options = dict(ngram_group_size=16)
+        model = fx.model("mixed", convert_options=options)
+        rules = g(model, "quantization_for")
+        layout = {}
+        for path, module in model.named_modules():
+            if not hasattr(module, "weight") or module.weight.ndim < 2 or path.endswith("ple_embedding"):
+                continue
+            shape = (*module.weight.shape[:-1], module.weight.shape[-1] * 32 // module.bits) \
+                if hasattr(module, "bits") else module.weight.shape
+            want = rules(path, shape, "mixed")
+            got = (module.bits, module.group_size) if hasattr(module, "bits") else None
+            layout[path] = got
+            with self.subTest(module=path):
+                self.assertEqual(got, None if not want else (want["bits"], want["group_size"]))
+        bits = {v for k, v in layout.items() if ".switch_mlp." in k}
+        self.assertEqual(bits, {(4, 64)})
+        self.assertIsNone(layout["language_model.model.layers.0.mlp.gate"])
+        self.assertEqual(layout["language_model.lm_head"], (8, 64))
+        # q4 n-gram records vs the bf16 source rows, per-group error bound.
+        enc_src = fx.model("bf16").ngram_tables()
+        for layer, table in model.ngram_tables().items():
+            self.assertEqual(table.fmt, "q4")
+            ids = np.arange(table.rows)
+            x = enc_src[layer].gather(ids)
+            y = table.gather(ids)
+            xg = x.reshape(len(ids), -1, 16)
+            lo, hi = xg.min(-1), xg.max(-1)
+            bound = 0.5 * (hi - lo) / 15 + np.abs(lo) * 2 ** -10 + (hi - lo) * 2 ** -9 + 1e-6
+            err = np.abs(y.reshape(xg.shape) - xg).max(-1)
+            self.assertTrue(bool((err <= bound).all()), float((err - bound).max()))
+        out = run(model, [fx.seqs["seq_a"]])[0]
+        d = diff(out, refs(fx, "f32")["prefill"])
+        fx.record("f_mixed", dict(prefill_vs_ref_f32=d, quantized=sorted(k for k, v in layout.items() if v)))
+        self.assertTrue(bool(np.isfinite(out).all()))
+        self.assertGreaterEqual(d["cos"], 0.99)
+
+    def test_ngram_record_codec_error_bounds(self):
+        """f32 and bf16 records are exact (bf16: on bf16-representable rows);
+        q8 / q4 decode within half a quantization step plus the fp16 rounding
+        of the stored scale and bias, per group."""
+        import numpy as np
+        model = self.fx.model("fp32")
+        enc, dec = g(model, "encode_ngram_rows"), g(model, "decode_ngram_rows")
+        rng = np.random.default_rng(11)
+        x = rng.standard_normal((257, 64)).astype(np.float32) * rng.uniform(0.01, 30, (257, 1)).astype(np.float32)
+        x[0] = 0.0
+        x[1, :32] = 2.5  # a constant group
+        self.assertTrue(np.array_equal(dec(enc(x, "f32", 32), "f32", 64, 32), x))
+        xb = ((x.view(np.uint32) >> 16) << 16).view(np.float32)
+        self.assertTrue(np.array_equal(dec(enc(xb, "bf16", 32), "bf16", 64, 32), xb))
+        for fmt, levels in (("q8", 255), ("q4", 15)):
+            for group in (16, 32, 64):
+                with self.subTest(fmt=fmt, group=group):
+                    y = dec(enc(x, fmt, group), fmt, 64, group)
+                    xg, yg = x.reshape(len(x), -1, group), y.reshape(len(x), -1, group)
+                    lo, hi = xg.min(-1), xg.max(-1)
+                    bound = 0.5 * (hi - lo) / levels + np.abs(lo) * 2 ** -10 + (hi - lo) * 2 ** -9 + 1e-6
+                    self.assertTrue(bool((np.abs(yg - xg).max(-1) <= bound).all()))
 
     # ---------------------------------------------------------------- (g)
     def test_g_long_context_sparse_kernel_prefill(self):
