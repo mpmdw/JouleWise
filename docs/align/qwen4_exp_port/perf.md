@@ -11,7 +11,7 @@ Code:
 - `joulewise/align/models/qwen4_exp_kernel_bench.py` holds the per-layer
   microbenchmarks at real dims, plus a full-depth synthetic model.
 - `tests/align/test_qwen4_exp_kernels.py` checks every fast path against a
-  literal pure-MLX reference (26 tests).
+  literal pure-MLX reference (27 tests).
 - `scripts/qwen4_exp_kernels_torch_check.py` cross-checks real-dim layers
   against the official transformers reference.
 - `perf_m4_2026-11-05/*.json` holds the raw results behind every number below.

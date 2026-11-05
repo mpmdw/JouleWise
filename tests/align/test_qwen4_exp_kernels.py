@@ -378,6 +378,22 @@ class QSATests(unittest.TestCase):
         ref = mx.fast.scaled_dot_product_attention(qq, kbuf[:, :, :Td], vbuf[:, :, :Td], scale=D**-0.5, mask=causal)
         self.assertLess(_maxabs(out, ref), 2e-5)
 
+    def test_sparse_decode_gather_batch2(self):
+        cfg = _tiny_qsa()
+        B, T = 2, 50
+        qk, qw, kw = _qsa_inputs(cfg, B, T, seed=88)
+        q, raw = K.qsa_split_qk(qk, qw, cfg)
+        bk = K.QSAIndexerCache(cfg).update(raw, kw)
+        idx = K.qsa_decode_token_indices(q[:, -1:], bk, T - 1, cfg)
+        mx.random.seed(89)
+        qq = mx.random.normal((B, 6, 1, 64))
+        kk = mx.random.normal((B, 2, T + 3, 64))
+        vv = mx.random.normal((B, 2, T + 3, 64))
+        out = K.qsa_sparse_decode_attention(qq, kk, vv, idx, 0.125)
+        mask = (mx.arange(T)[None, :, None] == idx[:, None, :]).any(-1)[:, None, None, :]
+        ref = mx.fast.scaled_dot_product_attention(qq, kk[:, :, :T], vv[:, :, :T], scale=0.125, mask=mask)
+        self.assertLess(_maxabs(out, ref), 1e-5)
+
     def test_decode_attention_paths_agree(self):
         cfg = _tiny_qsa()
         T = 58
