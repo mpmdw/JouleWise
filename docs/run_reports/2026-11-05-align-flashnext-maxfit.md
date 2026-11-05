@@ -115,3 +115,57 @@ The lead must rerun `tests.align.test_qwen4_exp_parity` on a Metal-capable
 machine with native mlx 0.31.2 / mlx-lm 0.31.3 and the reference interpreter
 set separately if required. The new bounds have not been calibrated against
 native observations; treat a failing gate as an unresolved finding.
+
+## Item 5 — documentation and final review
+
+Updated `docs/align/qwen4_exp_port.md` with the precision ruling, both peak
+and headroom estimates, hardware-limit API, bf16 PLE disk/lookup/streaming
+semantics, manifest shard spans, native tolerance gates, maxfit conversion
+command and explicit maxfit5 fallback. Removed the old 80 GB target framing.
+The target-Mac gate now requires all seven parity tests with zero skips.
+
+Final checks:
+
+- `PYTHONPYCACHEPREFIX=/private/tmp/jwsol/port-maxfit/tmp/pycache python3.13
+  -m compileall -q joulewise tests scripts/align_convert_qwen4_exp.py`: PASS.
+- `python3.13 -B -m joulewise.align.models.qwen4_exp_memory
+  tests/align/fixtures/qwen4_exp_text_config.json --chunk-tokens 64
+  --gpu-working-set-bytes 115400000000`: PASS; JSON reports both bf16 PLE
+  profiles and exactly the peaks/headroom above.
+- `git diff --check`: PASS. Reviewed the complete implementation diff and
+  targeted tests. The final focused-module totals are **15 PASS / 5 SKIP**;
+  native MLX tests are the only skips. No full suite was run, per the brief's
+  shared-machine load restriction. Test execution totaled well under a minute
+  across the reported module runs, far below the 20-minute cap.
+
+Files touched (only these nine tracked paths):
+
+- `joulewise/align/models/qwen4_exp_tables.py`
+- `joulewise/align/models/qwen4_exp_memory.py`
+- `scripts/align_convert_qwen4_exp.py`
+- `tests/align/test_qwen4_exp_conversion.py`
+- `tests/align/test_qwen4_exp_memory.py`
+- `tests/align/test_qwen4_exp_tables.py`
+- `tests/align/test_qwen4_exp_parity.py`
+- `docs/align/qwen4_exp_port.md`
+- `docs/run_reports/2026-11-05-align-flashnext-maxfit.md`
+
+Commit sequence from original lane head `e9f5ed799`:
+
+1. `e5ac62993` — expert-only maxfit precision profiles.
+2. `7b717d75b` — maxfit peaks against the GPU working set.
+3. `bf7d44acc` — bf16 PLE streaming and manifest spans.
+4. `8e6bfbf03` — native maxfit fidelity and bf16-retention gates.
+5. The documentation commit containing this final report.
+
+Open gates/uncertainty: native 5/6-bit packing and gather-QMM execution,
+numerical tolerances, real-model quality, actual GPU/physical peaks, page
+cache/SSD behavior and zero swap remain unverified. Maxfit has little GPU
+margin and a conservative physical estimate above 128 GB; no admission claim
+is made. No new policy ruling is needed to complete this implementation.
+
+Next exact step (lead, outside this sandbox): run the documented
+split-interpreter `tests.align.test_qwen4_exp_parity` command on a Metal-capable
+Mac with the pinned MLX stack, require seven passes and zero skips, and retain
+the emitted error evidence. Then perform the documented real-model admission
+checks before any campaign. Nothing was pushed.

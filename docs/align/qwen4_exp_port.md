@@ -4,6 +4,16 @@
 This is owned code for mlx **0.31.2** / mlx-lm **0.31.3**, loaded through the
 pinned library's `config.json` `model_file` seam. No stack pin changes.
 
+Ed's 2026-11-05 precision decision ("as close to the full fp16 as i can get")
+selects **maxfit**: routed `switch_mlp` experts alone are affine 6-bit, group
+size 64. **Every other floating weight is native, unquantized bf16**:
+attention, QSA indexer, DeltaNet, routers/gates, shared experts,
+hyper-connections, embeddings/head, PLE projections/convolution and norms.
+The PLE table is **bf16 on disk**, accessed through mmap. **maxfit5** is the
+fallback with only the routed experts reduced to 5-bit, still group size 64.
+Neither profile permits a different group size or PLE storage. Existing CLI
+defaults remain compatible; select these profiles explicitly.
+
 ## Memory planning
 
 `joulewise.align.models.qwen4_exp_memory.memory_model` enumerates every text
@@ -11,7 +21,30 @@ tensor from the local HF config. The release has **176,943,899,520 text
 parameters**: 120,795,955,200 routed expert parameters, 51,200,245,760 PLE table
 parameters, and 4,947,698,560 others. Vision/MTP are omitted.
 
-The table below is **decimal GB (10^9 bytes)**, group size 64, bf16 retained
+At context 40,960, chunk 64 and batch 1, the selected profiles have these
+**decimal GB (10^9 bytes)** planning estimates, including bf16 affine
+scales/biases and the unmeasured 3 GB runtime reserve:
+
+| Component / constraint | maxfit | maxfit5 |
+|---|---:|---:|
+| Routed experts (6 / 5 bits, group 64) | 98.146713600 | 83.047219200 |
+| All other resident weights (bf16) | 9.895397120 | 9.895397120 |
+| **Resident weight total** | **108.042110720** | **92.942616320** |
+| Cache/state + chunk workspace | 4.637355528 | 4.637355528 |
+| **Estimated GPU peak** | **112.679466248** | **97.579971848** |
+| **Headroom vs 115.4 GB GPU working set** | **2.720533752** | **17.820028152** |
+| PLE table on disk (bf16) | 102.400491520 | 102.400491520 |
+| Physical upper estimate, including PLE pages | 134.154302728 | 119.054808328 |
+
+Memory is a hardware constraint. `memory_model` returns a JSON-serializable
+`MemoryReport` with `fits_gpu_working_set(limit_bytes)`, replacing the old
+80 GB budget flag. JSON fields `gpu_working_set_limit_bytes`,
+`gpu_working_set_headroom_bytes` and `fits_gpu_working_set` use 115,400,000,000
+bytes by default; supply `gpu_working_set_limit_bytes` to the function or
+`--gpu-working-set-bytes` to the CLI for a different device limit. Headroom is
+signed and equality fits. These estimates do not establish actual GPU peaks.
+
+For comparison, the earlier profiles below use group size 64, bf16 retained
 tensors and bf16 affine scales/biases. Columns 8/6/4/3 quantize eligible leaves
 at that width; indexer, DeltaNet, routers, norms and convolutions remain bf16.
 Mixed means routed experts q4 and other eligible leaves q8. No table column
@@ -53,18 +86,23 @@ scores/DeltaNet buffers, activations and one layer's cache growth copy. Chunk
 `jw_max_prefill_tokens=64` and `jw_context_cap=40960`; pass
 `prefill_step_size=64` to generation (mlx-lm's default is too large).
 
-The q4 offloaded table occupies **28,160,135,168 disk bytes**, including one
-fp32 scale and bias per 160-element row. BF16 disk storage is 102,400,491,520
-bytes; q8 is 53,760,258,048 bytes. Only gathered rows become MLX arrays.
-At q4 a token gathers 16 rows / **1,408 logical bytes** before duplicates.
+The selected profiles' bf16 offloaded table occupies **102,400,491,520 disk
+bytes**. At 160 elements per row, a token gathers 16 rows / **5,120 logical
+bytes** before duplicates. BF16 rows have no scales/biases and undergo no
+affine dequantization: only gathered uint16 payloads expand to fp32 and are
+cast to the activation dtype in the PLE module. For legacy profiles, q4 uses
+28,160,135,168 bytes including per-row fp32 scale/bias (1,408 logical bytes
+per token); q8 uses 53,760,258,048 bytes.
 
 **Offload does not eliminate physical page-cache memory.** A uniform-access
-estimate over 40,960 tokens touches about 8.93 GB of 16-KiB file pages. The
-conservative page-span upper bound is 21.47 GB, giving a combined mixed
-physical estimate of **101.35 GB before OS/other processes**, despite a
-79.88 GB model peak. File pages are reclaimable; neither the page-cache
-estimate nor the 3 GB reserve is a hard allocation bound. Model budget fits
-the requested ~80 GB and the stated 115.4 GB GPU working set **on paper**.
+estimate over 40,960 tokens touches about **10.19 GB** of 16-KiB file pages
+with bf16 PLE (8.93 GB with q4). The conservative page-span upper bound is
+21.47 GB. Maxfit's physical upper estimate is **134.15 GB before OS/other
+processes**, exceeding the target's 128 GB despite its estimated GPU fit;
+maxfit5 is 119.05 GB. File pages are reclaimable; neither the page-cache
+estimate nor the 3 GB reserve is a hard allocation bound. The small 2.72 GB
+maxfit GPU margin also needs real validation. Both profiles fit the stated
+115.4 GB GPU working set **on paper**.
 Actual peak and zero swap must be measured before an ALIGN window. A model
 estimate alone cannot guarantee that a machine never swaps.
 
@@ -75,8 +113,9 @@ python3 -B -m joulewise.align.models.qwen4_exp_memory tests/align/fixtures/qwen4
 ```
 
 Memory tests: `python3 -B -m unittest tests.align.test_qwen4_exp_memory` —
-2 PASS. Includes the actual kit cap, official expert/PLE parameter counts,
-mixed budget and context/chunk/bit-width tradeoffs.
+3 PASS. Includes the actual kit cap, official expert/PLE parameter counts,
+maxfit precision/storage, hardware-limit boundaries and signed headroom,
+JSON serialization and context/chunk/bit-width tradeoffs.
 
 ## Architecture and authority
 
@@ -141,7 +180,8 @@ community module was imported, executed or copied wholesale.
   quantization is explicitly refused.
 - **Disk PLE.** HF table shards stream in numeric order into a row-major
   bf16/fp32 or row-affine q4/q8 table. Advanced NumPy indexing copies unique
-  gathered rows; only those rows are dequantized and transferred to MLX. The
+  gathered rows; bf16 rows expand by bit conversion, and q4/q8 rows are
+  dequantized. Only gathered rows transfer to MLX. The
   mapped table never appears in `model.parameters()`. Large construction
   without a disk descriptor is refused. q4 uses low nibble first, one fp32
   scale and bias per row; this file format is independent of MLX weight
@@ -158,14 +198,18 @@ community module was imported, executed or copied wholesale.
 ## Conversion and integrity
 
 `scripts/align_convert_qwen4_exp.py` reads safetensors headers and at most
-about 32 MiB of fp32 row data per source slice (plus packed/copy buffers).
+about 32 MiB of row data per source slice (plus packed/copy buffers).
 It never constructs the full HF or MLX model. It accepts both the release's
 fused expert layout and `save_pretrained` per-expert tensors, nested
 `model.language_model` prefixes, monolithic PLE and `shard_N` PLE tensors.
 It validates all expected shapes and every text tensor, including indexer
 weights/norms and saved hash constants, before creating output.
 
-Supported profiles: `fp32`, `bf16`, `3`, `4`, `6`, `8`, `mixed`. Mixed uses
+Supported profiles: `fp32`, `bf16`, `3`, `4`, `6`, `8`, `mixed`, **`maxfit`**,
+**`maxfit5`**. Maxfit/maxfit5 quantize every routed expert to 6/5-bit at group
+64 and store all other weights and PLE in bf16; omitted `--ple-storage`
+selects bf16 for these two profiles. Incompatible storage/group overrides and
+expert widths fail explicitly. Mixed uses
 q4 experts and q8 eligible other leaves; indexer, DeltaNet, norms, routers
 and convolutions remain bf16. Unsupported narrow quantization groups retain
 source precision. No parent Attention module is replaced by a quantized
@@ -178,6 +222,15 @@ file. The completion manifest records input hashes, output payload hashes,
 stack pins, profile, omissions and norm representation. A failure leaves an
 incomplete directory without a completion manifest. The output directory
 must be new; never overwrite an existing converted artifact.
+
+For the 102.4 GB bf16 PLE output, one source shard is mapped at a time and
+bounded slices append to a single row-major `.bf16.bin` file per layer.
+Existing bf16 payloads copy unchanged, including exact stored bits, without
+fp32 expansion/re-rounding. Other floating inputs round to bf16 in bounded
+slices. The manifest's `ple_tables` records descriptors, total byte sizes and
+each source shard's input filename/tensor and output row/byte ranges, alongside
+the input/output hashes. No whole-table concatenation or eager GPU allocation
+is needed. The flat file preserves the existing mmap lookup contract.
 
 The manifest hashes every converter output **except itself**; the CLI prints
 its SHA256 to pin in the lead's artifact ledger. Use
@@ -195,11 +248,11 @@ real measurement data, restricted directory or model checkpoint was read.
 
 | Check | Result |
 |---|---|
-| Row encoding/gathering, EOS/chunk hashing and bounds | 3 PASS |
-| Tiny HF save/convert, fused/per-expert names, bf16 indexer retention, omitted towers, missing-indexer refusal, manifest tampering | 3 PASS |
-| Component memory model and actual kit cap | 2 PASS |
+| BF16 mmap exact bits/no affine metadata; row encoding/gathering, EOS/chunk hashing and bounds | 4 PASS |
+| Maxfit policies for every tiny/release tensor, bf16 shard streaming/spans, tiny HF conversion/dtypes, strict inventory and manifest tampering | 6 PASS |
+| Component memory model, maxfit peaks/headroom and actual kit cap | 3 PASS |
 | Official reference fp32 and bf16 prefill vs stepwise | 2 PASS |
-| **MLX vs HF fp32/bf16 and mixed quantization** | **3 SKIPPED: sandbox has no Metal device** |
+| **MLX vs HF fp32/bf16; mixed, maxfit and maxfit5 vs native bf16** | **5 SKIPPED: no MLX in selected sandbox interpreter; native Metal unavailable here** |
 
 The gold fixture has 194,564 parameters, two layer types, short sparse QSA
 budget overflow, EOS boundaries, nonzero PLE convolution and nonzero norm
@@ -207,7 +260,13 @@ weights. HF self-consistency max absolute error is 7.45058e-08 in fp32 and
 0.0 in bf16. These values say nothing about the still-unrun MLX worker.
 
 Prospective acceptance bounds: fp32 atol 2e-5 / rtol 2e-4; bf16 atol .004 /
-rtol .02; mixed vs bf16 atol .04 / rtol .15 **and RMSE <= .012**. The MLX
+rtol .02; mixed vs bf16 atol .04 / rtol .15 **and RMSE <= .012**;
+**maxfit vs bf16 atol .008 / rtol .03 and RMSE <= .002**;
+**maxfit5 vs bf16 atol .016 / rtol .06 and RMSE <= .004**. The maxfit workers
+also check every non-expert weight's native bf16 dtype and bitwise equality
+to baseline, packed expert dtypes/shapes and native module bits/groups,
+bf16 scale/bias metadata, exhaustive artifact inventories and bf16 PLE disk
+lengths. The MLX
 worker checks full prefill and stepwise gold logits, internal chunk/step
 parity, causality, left padding and cached continuation, attention trim and
 re-prefill, native recurrent snapshot/restore, and quantized output. Any
@@ -240,7 +299,7 @@ cold real-model latency and SSD traffic remain unmeasured.
    /private/tmp/jwsol/venv-ref/bin/python -B -m unittest tests.align.test_qwen4_exp_parity
    ```
 
-   Required result: all five tests pass, **zero skips**, with worker error
+   Required result: all seven tests pass, **zero skips**, with worker error
    logs retained. The environment-specific paths are examples from this
    session; use existing appropriate venvs on the target, without modifying
    the protected venvs. A fresh reviewer must audit implementation and tests
@@ -249,20 +308,23 @@ cold real-model latency and SSD traffic remain unmeasured.
 2. Ed obtains the official HF bf16 checkpoint/tokenizer at an **immutable HF
    revision**, separately authorizing any network transfer. That revision is
    not supplied in this brief and remains to be resolved. Preserve full
-   input hashes. Budget roughly half a TB of disk plus margin for source and
-   converted copies; do not attempt real conversion/inference on this 24 GB
+   input hashes. Budget roughly 565 GB of disk plus margin for bf16 source and
+   maxfit converted copies; do not attempt real conversion/inference on this 24 GB
    laptop. Download/conversion are preparation, never part of an energy run.
 
 3. On the 128 GB target, in the pinned venv, convert a local mirror:
 
    ```sh
-   python -B scripts/align_convert_qwen4_exp.py artifacts/qwen4-exp-hf artifacts/qwen4-exp-mixed --profile mixed --group-size 64 --ple-storage q4
+   python -B scripts/align_convert_qwen4_exp.py artifacts/qwen4-exp-hf artifacts/qwen4-exp-maxfit --profile maxfit --group-size 64 --ple-storage bf16
    ```
 
    Record the printed manifest SHA256, owned-module hashes, HF revision and
    checkpoint hashes in the lead's model provenance. Validate the manifest
    before loading. Also record the tokenizer and chat-template hashes. No
    config or artifact can change after admission without new pins/tests.
+   If maxfit cannot pass the hardware gate, create a separate new artifact
+   with `--profile maxfit5 --group-size 64 --ple-storage bf16` and repeat its
+   gates; never substitute q4/q8 PLE or quantize non-expert weights.
 
 4. Wire `prefill_step_size=64` through model-specific warmup and stream
    options, preserving anchor settings. Use batch 1 and the same 40,960-token
@@ -278,8 +340,8 @@ cold real-model latency and SSD traffic remain unmeasured.
    The whole 354+ GB bf16 model cannot fit on the 128 GB Mac: use a verified
    layer-wise CPU/disk-offload reference on short windows, or a separate
    sufficiently large reference host. Do not use a second quantization as
-   the gold reference. Full-model q4 error/NLL acceptance must be agreed and
-   recorded before campaign admission; the tiny random tolerance is not an
+   the gold reference. Full-model maxfit/maxfit5 error/NLL acceptance must be
+   agreed and recorded before campaign admission; the tiny random tolerance is not an
    empirical real-model quality bound.
 
 6. Measure cold and warm PLE lookup latency/physical reads, prefill tok/s,
@@ -296,3 +358,6 @@ cold real-model latency and SSD traffic remain unmeasured.
    agent-free measurement window. Do not start quiet-Mac collection from an
    agent session. Cross-backend parity, real-model coherence/NLL, memory
    peak, SSD behavior, integration and tok/s are all **OPEN** here.
+
+Implementation and exact focused-check results:
+[maxfit run report](../run_reports/2026-11-05-align-flashnext-maxfit.md).
