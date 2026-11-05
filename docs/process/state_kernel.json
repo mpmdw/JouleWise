@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review",
-    "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
+    "label": "Block-5 post-release branch prepared; accounting NEEDS-LEAD and successor NEEDS-ED; integration held until release",
+    "path": "docs/run_reports/2026-11-05-b5-post-release-fixes.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -861,17 +861,45 @@
         "label": "Explicit user-directed preparation on 2026-11-05; retrospective deferred items",
         "path": "POSTRELEASE_PLAN.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "Lead rules on the consumption-based accounting proposal in plan item b.",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "B5-POSTRELEASE-ACCOUNTING-RULING"
+        },
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "Ed rules on the explicitly unadopted successor draft in plan item g.",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D178-SUCCESSOR-RATIFICATION"
+        },
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "Block 5 is released before integration of this branch.",
+          "scope": "live_promotion",
+          "state": "pending",
+          "strength": "hard",
+          "target": "BLOCK5-RELEASE"
+        }
+      ],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Prepare the seven block-5 post-release items in POSTRELEASE_PLAN.md on an isolated branch; keep scientific ambiguities as NEEDS-LEAD and the D-178 successor as NEEDS-ED.",
+      "goal": "Review the seven-item block-5 post-release branch and integrate only after release and the remaining gates; item b needs a lead ruling and item g needs Ed ratification.",
       "id": "B5-POSTRELEASE-FIXES-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
       "rank": 347,
-      "status": "active",
-      "status_note": "Preparation selected by explicit user direction, overriding lane rank. No network, measurement inputs, restricted paths or full-suite run; at most two test workers. Do not merge before the block-5 release.",
+      "status": "partial",
+      "status_note": "2026-11-05 preparation complete: a, c, d, e and f implemented; b NEEDS-LEAD and g NEEDS-ED remain plan/draft only. 104 targeted tests passed under the user no-network/no-full-suite fence. Separate local Git metadata and a bundle carry the seven commits because this checkout .git is read-only. See the dated run report; no merge or scientific-result claim.",
       "stop_card": null
     },
     "BATTERY-FLOAT-GATE-01": {
@@ -11477,5 +11505,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-25"
+  "updated": "2026-11-05"
 }

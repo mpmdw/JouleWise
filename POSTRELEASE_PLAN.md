@@ -120,7 +120,7 @@ Line references below identify the base unless stated otherwise.
 - What/where: step-11 emitters in `joulewise/b5_analysis/sensitivity.py:37`,
   `:153`, `:294`, `joulewise/b5_analysis/disclosures.py:186`, `:237` and
   `scripts/produce_b5_disclosures.py:37` lack exact tooling entries in
-  `configs/analysis/b5/dry_run_refusal_classes.json:51` and `:196`.
+  `configs/analysis/b5/dry_run_refusal_classes.json:51` and `:166` (base).
 - Why: malformed provenance or a broken sensitivity invariant becomes an
   unclassified refusal. D-190 already distinguishes these defects from the
   registered null scientific states.
@@ -140,3 +140,42 @@ Line references below identify the base unless stated otherwise.
   quantity, claim verdict or scientific outcome is changed. Post-release only.
 - Verification: `python3 -m unittest tests.b5_analysis.test_postrelease_step11_codes -q`
   passed (7 tests; no analysis pipeline or worker pool).
+
+## g. D-178 successor with explicit non-issuable rows — NEEDS-ED (draft only)
+
+- What/where: `docs/decision_log.md:11674` (D-178),
+  `docs/contracts/paper_claim_side_bound.md:110–136`,
+  `joulewise/analysis_engine/claim_side_bound.py:89–155`, and D-189/D-190.
+  The current v2 producer is all-or-nothing and cannot represent an
+  authenticated non-issuable contrast as a row.
+- Why: absence of a numeric sidecar should have an explicit typed account
+  without inventing a bound or turning a legitimate state into a defect.
+- Draft fix: append an unnumbered, explicitly non-binding NEEDS-ED successor
+  proposal to the decision log. Describe discriminated issued/non-issuable
+  rows, exact input bindings, all legitimate states and defect precedence.
+  Explain the future-version departure from D-189's no-sidecar rule and keep
+  the released v2 path unchanged. Do not allocate a decision ID or implement
+  a schema, producer, custody role, renderer or registry change.
+- Proposed tests after ratification: synthetic mixed issued/non-issuable
+  contrasts with exact row order/coverage; every legitimate state; earlier
+  provenance defects; exact numeral copying; no fabricated numeric authority;
+  unchanged release-tag behavior and outcome blinding.
+- Ruling needed: Ed decides whether to adopt the proposal, the future wire
+  and custody versions, and whether the future driver emits the typed
+  account. Blocked work: all implementation of the proposed successor.
+
+## Verification and handoff limits
+
+- `tests.b5_analysis.test_leaf_bracket`: 20 tests passed in 320.250 s on the
+  synthetic archived fixtures, including cache hits, changed inputs,
+  path/containment checks and the fallback regression. This is fixture
+  evidence, not live hardware or real-data equivalence.
+- `tests.b5_analysis.test_vdl_core`: 63 tests passed in 42.640 s, covering
+  the shared store's existing key, authentication, replay and poison rules.
+- No full suite, block-5 pipeline, network operation or real measurement
+  input is part of this preparation. Independent review, CI, the cold pass
+  and post-release integration remain outstanding.
+- This sandbox marks the checkout's `.git` read-only. The requested branch
+  and commits are held in independent local metadata at
+  `/private/tmp/jw-b5-postrelease-20261105.git`; the working files are in this
+  checkout. A prerequisite bundle is the handoff for a writable checkout.
