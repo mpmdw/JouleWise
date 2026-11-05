@@ -111,3 +111,11 @@ class SelectionTests(unittest.TestCase):
         result = r0.rank(data, stage="r1")
         self.assertIsNone(result["s_fast"])
         self.assertIsNone(result["s_slow"])
+
+    def test_allowed_missing_initial_cooling_reads_do_not_shift_tau(self):
+        data = capture({"THEA": (299, 299, 8, .001)})
+        for row in data["samples"][900:905]:
+            row["values"]["errors"]["THEA"] = "read failed"
+        result = r0.rank(data, stage="r1")
+        self.assertEqual(result["s_slow"], "THEA")
+        self.assertAlmostEqual(result["ranking"][0]["tau_s"], 299, delta=1)

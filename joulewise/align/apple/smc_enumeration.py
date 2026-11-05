@@ -298,6 +298,10 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         t63 = _crossing(heating, baseline + (1-math.exp(-1))*rise, rising=True) if rise > 0 else None
         peak = cooling[0][1] - baseline
         tau = _crossing(cooling, baseline + peak/math.e, rising=False) if peak > 0 else None
+        if tau is not None:
+            # The reference peak is the first observed recovery value. Missing
+            # initial reads move that reference, not the physical decay time.
+            tau -= cooling[0][0]
         row.update(t63_s=t63, tau_s=tau)
         row["eligible"] = (sensor["unit"] == "degC" and rise > 3*floor
                            and t63 is not None and tau is not None and tau <= 300)
