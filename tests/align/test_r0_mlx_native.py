@@ -34,8 +34,9 @@ class NativeMemoryTest(unittest.TestCase):
             linear_key_head_dim=8, linear_value_head_dim=8,
             linear_conv_kernel_dim=4, num_experts=0, num_experts_per_tok=0,
             decoder_sparse_step=1, shared_expert_intermediate_size=64,
-            moe_intermediate_size=32, rms_norm_eps=1e-6,
-            rope_theta=10000, partial_rotary_factor=1.0, tie_word_embeddings=True))
+            moe_intermediate_size=32, mlp_only_layers=[], rms_norm_eps=1e-6,
+            rope_theta=10000, partial_rotary_factor=1.0, max_position_embeddings=65536,
+            tie_word_embeddings=True))
         model = Model(args)
         mx.eval(model.parameters())
         raw = Tokenizer(models.WordLevel({"<unk>": 0, "<eos>": 1,
