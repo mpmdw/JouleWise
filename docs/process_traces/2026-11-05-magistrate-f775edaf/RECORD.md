@@ -31,3 +31,4 @@
 - No window armed: item 170 holds protocol v3 (no pilot 10) until the laptop lead or Ed commits the v4 window-1 plan; R0 desk checks and R1 rehearsal are interactive-session work.
 - Pilot 8 and 9 roots left on disk, not offloaded (item 170, PR #665 runbook). Disk 94 GB free.
 - `DESK_DONE` written with the pin commit sha.
+- Ed emailed with the pilot-9 read (Gmail `1a1ad0eb79b0043b`, thread `1a198fafa8fc12ba`). No pending watchdog notice, so no `notice.ack`. Canonical fast-forwarded to `c5eb3ecad` (no night label or plist). This activation exits.
