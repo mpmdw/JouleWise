@@ -56,7 +56,7 @@ REPO = Path(__file__).resolve().parents[2]
 MODULE_FILE = REPO / "joulewise" / "align" / "models" / "qwen4_exp.py"
 CONVERTER_FILE = REPO / "scripts" / "align_convert_qwen4_exp.py"
 WORK_ROOT = Path(os.environ.get("JW_CANON_WORK", Path(os.environ.get("TMPDIR", "/tmp")) / "qwen4exp_canonical"))
-REF_VERSION = "canonical-ref-v4"
+REF_VERSION = "canonical-ref-v5"
 
 EOS = 1
 TEXT = {
@@ -108,15 +108,18 @@ BF16_VS_B16_RATIO = 1.5
 # ordered differently from torch's chunked rule). At hidden 192 the HC stream
 # mix keeps ~0.1% one-ulp flips from the fp32 reduction order of the 192-wide
 # RMS (fused and explicit norms alike; the prototype's 1.000 was at hidden 96).
-# The QSA attention core is not bitwise reproducible even inside torch (D9):
-# reported, not gated, but its block selection must be identical.
+# The QSA layer against torch's SDPA core is reported, not gated: torch's CPU
+# bf16 SDPA rounds the unnormalised probabilities to bf16 before P.V, MLX's
+# fused SDPA keeps them fp32 (validation round 1; canonical.md). It is gated
+# against the same layer with an fp32-probability core
+# (Fp32ProbabilityAttention), and its block selection must be identical.
 # Router logits / expert sets / MoE: every router-logit difference must be
 # explained by fp32 accumulation order under cancellation and every expert-set
 # difference by an exact tie; the MoE floor applies to rows with equal expert
 # sets (the corrected bf16 reference of validation round 1 has one of each).
 BITWISE_MIN = {"attn_hc.mixed": 0.998, "attn_hc.weights": 0.999, "mlp_hc.mixed": 0.998,
                "mlp_hc.weights": 0.999, "ple": 0.999, "mix.linear": 0.95, "moe": 0.99,
-               "mixer": 0.999, "head": 0.999, "router.logits": 0.99}
+               "mixer": 0.999, "head": 0.999, "router.logits": 0.99, "mix.qsa_vs_fp32P_core": 0.99}
 
 
 def _skip_reason():
@@ -299,6 +302,43 @@ class RouterTieSpy:
     def __exit__(self, *exc):
         for h in self.hooks:
             h.remove()
+        return False
+
+
+class Fp32ProbabilityAttention:
+    """Swap the reference's SDPA for an attention core that keeps fp32 scores
+    and fp32 probabilities through P.V and rounds once: the rounding order of
+    MLX's fused SDPA at head_dim 64 and of its decode kernel. torch's CPU bf16
+    SDPA rounds the unnormalised probabilities to bf16 before P.V instead
+    (validation round 1: the QSA core's ~0.5 bitwise agreement), so (c)
+    gates the port's QSA layer against this core, not against torch's."""
+
+    def __init__(self, torch):
+        self.torch = torch
+
+    def __enter__(self):
+        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+        torch = self.torch
+
+        def attention(module, query, key, value, attention_mask, scaling, dropout=0.0, **kwargs):
+            rep = module.num_key_value_groups
+            k = key.repeat_interleave(rep, dim=1).float()
+            v = value.repeat_interleave(rep, dim=1).float()
+            s = torch.matmul(query.float(), k.transpose(2, 3)) * scaling
+            if attention_mask is not None:
+                if attention_mask.dtype == torch.bool:
+                    s = s.masked_fill(~attention_mask, float("-inf"))
+                else:
+                    s = s + attention_mask.float()
+            out = torch.matmul(torch.softmax(s, dim=-1), v).to(query.dtype)
+            return out.transpose(1, 2).contiguous(), None
+
+        self.registry = ALL_ATTENTION_FUNCTIONS
+        self.registry["sdpa"] = attention
+        return self
+
+    def __exit__(self, *exc):
+        del self.registry["sdpa"]
         return False
 
 
@@ -497,7 +537,14 @@ class Reference:
             with TopkSpy(m, torch, force_lowest_index=True):
                 capture(m, torch, seqs["seq_a"], tag, out)
             if tag == "b16":
-                # A 4101-token bf16 prefill for (b)'s long-context bound.
+                # QSA layers with an fp32-probability attention core (see
+                # Fp32ProbabilityAttention), and a 4101-token bf16 prefill
+                # for (b)'s long-context bound.
+                extra = {}
+                with TopkSpy(m, torch, force_lowest_index=True), Fp32ProbabilityAttention(torch):
+                    capture(m, torch, seqs["seq_a"], "b16P", extra)
+                out.update({k: v for k, v in extra.items()
+                            if any(k in (f"b16P.cap.L{i}.mix.in", f"b16P.cap.L{i}.mix.out") for i in QSA_LAYERS)})
                 with TopkSpy(m, torch, force_lowest_index=True) as spy, torch.no_grad():
                     out["b16.longk_prefill"] = m(input_ids=torch.tensor([seqs["longk"]]),
                                                  use_cache=False).logits[0].float().numpy()
@@ -864,6 +911,9 @@ class CanonicalParityTest(unittest.TestCase):
                     last = layer.self_attn.indexer.last
                     res[p + "sel_blocks"] = np.array(last.blocks)[0]
                     res[p + "sel_scores"] = np.array(last.scores)[0]
+                    if f"{tag}P.cap.{p}mix.in" in fx.ref:  # vs the fp32-probability core
+                        xp = to(fx.ref[f"{tag}P.cap.{p}mix.in"])
+                        res[p + "mix_fp32P"] = arr(layer.self_attn(xp, ctx(1, LEN_A), model.make_cache()[i]))
                 else:
                     res[p + "mix"] = arr(layer.linear_attn(x, ctx(1, LEN_A), caches[i]))
                 xm = to(cap(p + "moe.in"))
@@ -945,6 +995,9 @@ class CanonicalParityTest(unittest.TestCase):
                 port_sel = [frozenset(np.nonzero(iso[p + "sel_blocks"][t])[0].tolist()) for t in range(LEN_A)]
                 diffs = sum(1 for t in range(LEN_A) if (t + 1) // RATIO > TOPK and ref_sel[t] != port_sel[t])
                 worst[f"qsa_selection_rows_differing.L{i}"] = diffs
+                fp32p = bitwise(iso[p + "mix_fp32P"].reshape(cap(p + "mix.out").shape), fx.ref[f"b16P.cap.{p}mix.out"])
+                rows[f"L{i}.mix.qsa_vs_fp32P_core"] = dict(bitwise=fp32p)
+                worst["mix.qsa_vs_fp32P_core"] = min(worst.get("mix.qsa_vs_fp32P_core", 1.0), fp32p)
         for comp, rkey in (("mixer", "mixer.out"), ("head", "head.out")):
             worst[comp] = bitwise(iso[comp].reshape(cap(rkey).shape), cap(rkey))
         fx.record("c_isolated_bf16", dict(min_over_layers=worst, per_layer=rows, unexplained=unexplained))
