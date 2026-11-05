@@ -156,7 +156,6 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
         ("idle", idle_s), ("load", load_s), ("recovery", recovery_s)]
     samples, phase_records = [], []
     load = None
-    next_check = start.monotonic_ns
     try:
         for phase, duration in phases:
             quiet_check()
@@ -165,6 +164,7 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                 load.start()  # worker readiness includes import/allocation, before the step clock
             phase_start = ctx.stamp()
             origin = phase_start.monotonic_ns
+            next_check = origin + 5 * temperature.NS
             end = origin + duration * temperature.NS
             phase_records.append({"phase": phase, "start_s": (origin - start.monotonic_ns) / 1e9,
                                   "end_s": (end - start.monotonic_ns) / 1e9})
@@ -176,9 +176,6 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                 if now < due:
                     ctx.clocks.sleep(min((due - now) / 1e9, 0.25))
                     continue
-                if now >= next_check:
-                    quiet_check()
-                    next_check = now + 5 * temperature.NS
                 if load is not None:
                     load.check()
                 started = ctx.stamp()
@@ -194,6 +191,12 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                 due += temperature.NS
                 if due <= finished.monotonic_ns:
                     due = origin + ((finished.monotonic_ns - origin) // temperature.NS + 1) * temperature.NS
+                # Phase admission already ran just before origin. Do periodic
+                # work after a sample, during the remaining tick budget, so a
+                # 70-330 ms census cannot shift the readings off their grid.
+                if finished.monotonic_ns >= next_check:
+                    quiet_check()
+                    next_check = ctx.clocks.monotonic_ns() + 5 * temperature.NS
             if load is not None:
                 load.check()
                 load.stop()

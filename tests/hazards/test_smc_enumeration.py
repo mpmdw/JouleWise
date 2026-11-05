@@ -131,6 +131,18 @@ class CaptureTests(unittest.TestCase):
             self.assertEqual(row["values"]["units"]["TH0P"], "degC")
         self.assertEqual([r["elapsed_s"] for r in result["samples"]], list(range(5)))
 
+    def test_periodic_census_cost_does_not_shift_the_sampling_grid(self):
+        from joulewise.align.apple import thermal
+        def quiet():
+            self.clock.advance(.3)  # observed census costs are 70-330 ms
+            return {}
+        result = r0.collect(self.reader, seconds=12, idle_s=5, load_s=5, recovery_s=5,
+                            gpu_step=False, quiet_check=quiet, ctx=self.ctx, sink=lambda _: None)
+        report = thermal.coverage(result["samples"], result["started"]["monotonic_ns"],
+                                   result["finished"]["monotonic_ns"], ["TG0D"])
+        self.assertEqual(report["all_keys"]["sample_fraction"], 1)
+        self.assertEqual(len(result["samples"]), 12)
+
     def test_refusal_precedes_smc_access(self):
         reader = mock.Mock()
         with self.assertRaises(r0.NotQuiet):
@@ -144,7 +156,7 @@ class CaptureTests(unittest.TestCase):
         def quiet():
             nonlocal calls
             calls += 1
-            if calls == 7:
+            if calls == 5:
                 raise r0.NotQuiet("new agent")
         with self.assertRaises(r0.NotQuiet):
             r0.collect(self.reader, seconds=5, idle_s=5, load_s=10, recovery_s=5, gpu_step=True,
@@ -192,7 +204,7 @@ class CaptureTests(unittest.TestCase):
         def quiet():
             nonlocal calls
             calls += 1
-            if calls == 4:
+            if calls == 3:
                 raise InterruptedError("synthetic SIGTERM")
             return {}
         before = signal.getsignal(signal.SIGTERM)
