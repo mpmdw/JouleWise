@@ -40,11 +40,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-
 from joulewise.strict_io import (
     is_lower_sha256 as _lowercase_sha256,
     is_sha256 as _sha256_hex,
 )
+
 
 from joulewise.authentication_io import (
     open_authentication_input,

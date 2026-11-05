@@ -90,6 +90,14 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
+from joulewise.strict_io import (
+    fsync_directory as _fsync_directory,
+    json_pretty_utf8_strict as render_json,
+    sha256_raw as sha256_bytes,
+    unique_json_pairs as _no_duplicate_pairs,
+)
+
+
 HAZARD_LINEAGE_SCHEMA = "joulewise.hazard_window_lineage.v1"
 HAZARD_LOCATOR_SCHEMA = "joulewise.hazard_window_lineage_locator.v1"
 LAUNCH_RECORD_SCHEMA = "joulewise.hazard_window_launch.v1"
@@ -186,16 +194,6 @@ UNRECORDABLE_FIELDS = frozenset({"pack_sha256", "collection_boot_session_id", "a
 
 _SHA256_HEX = frozenset("0123456789abcdef")
 
-
-
-
-
-from joulewise.strict_io import (
-    fsync_directory as _fsync_directory,
-    json_pretty_utf8_strict as render_json,
-    sha256_raw as sha256_bytes,
-    unique_json_pairs as _no_duplicate_pairs,
-)
 
 class HazardLineageError(ValueError):
     """A refusal by the hazard-path lineage, with a registered reason code."""

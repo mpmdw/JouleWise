@@ -16,6 +16,7 @@ from typing import Any
 
 from joulewise.strict_io import sha256_text as _sha256_text
 
+
 from joulewise.suite import (
     ORDER_POLICY_MANIFEST,
     SUITE_SCHEMA_VERSION,

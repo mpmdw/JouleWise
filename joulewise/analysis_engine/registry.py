@@ -15,11 +15,6 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
-
-
-
-
-
 from joulewise.strict_io import (
     json_pretty_utf8 as normalized_json_bytes,
     json_utf8_bytes as canonical_json_bytes,
@@ -28,6 +23,7 @@ from joulewise.strict_io import (
     sha256_value as sha256_bytes,
     unique_json_pairs as _reject_duplicate_admission_keys,
 )
+
 
 from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import AXI_VALIDATOR_REASON_CODES

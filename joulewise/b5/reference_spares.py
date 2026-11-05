@@ -34,6 +34,9 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import sha256_raw as sha256_bytes
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SPARE_RETRY_SCHEMA = "joulewise.b5_reference_spare_retry.v1"
 SPARES_REL = "configs/campaigns/window_reference_spares_v5"
@@ -46,8 +49,6 @@ SLOTS: dict[str, tuple[str, str, str, int]] = {
     "end": (f"{REFERENCES_REL}/end_triplet", "end_triplet_spares", "neg8-window-end-spare", 3),
 }
 
-
-from joulewise.strict_io import sha256_raw as sha256_bytes
 
 class SpareError(ValueError):
     """The committed reference bytes cannot give the spares; nothing was written."""

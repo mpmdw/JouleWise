@@ -23,6 +23,7 @@ import math
 
 from joulewise.strict_io import is_finite_float_projection as _finite
 
+
 from joulewise.bundle_read import TracePoint, Window
 from joulewise.reduce import _integrate
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from joulewise.strict_io import finite_or_none as _finite
 
+
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,

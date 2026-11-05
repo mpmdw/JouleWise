@@ -33,11 +33,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-
 from joulewise.strict_io import (
     parse_finite_float as _strict_parse_finite_float,
     parse_finite_int as _strict_parse_finite_int,
 )
+
 
 from joulewise.whole_window import (  # noqa: E402
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,

@@ -11,11 +11,11 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-
 from joulewise.strict_io import (
     is_lower_sha256 as _is_sha256,
     sha256_raw as _sha256,
 )
+
 
 from joulewise.controller import _config_sha256 as runner_config_sha256
 from joulewise.schemas import BenchmarkConfig, SchemaError

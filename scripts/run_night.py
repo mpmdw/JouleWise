@@ -47,12 +47,12 @@ sys.path.insert(0, str(REPO_ROOT))
 # Eager imports cover every formerly lazy run/dead-man/rehearse dependency,
 # so importing this driver during preflight catches failures before installation.
 
-
 from joulewise.strict_io import (
     fsync_directory as _fsync_path,
     json_pretty_ascii as _json_bytes,
     sha256_path_bytes as _sha256_path,
 )
+
 
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author

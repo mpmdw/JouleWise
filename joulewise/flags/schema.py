@@ -50,6 +50,12 @@ import sys
 import time
 from typing import Any, Iterable, Mapping
 
+from joulewise.strict_io import (
+    json_utf8_bytes_strict as canonical_json_bytes,
+    sha256_raw as sha256_hex,
+)
+
+
 FLAG_SCHEMA = "joulewise.flag.v1"
 
 FAMILIES = (
@@ -98,12 +104,6 @@ FLAG_ID_RE = re.compile(r"^[0-9a-f]{20}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 DETAIL_MAX = 2000
 
-
-
-from joulewise.strict_io import (
-    json_utf8_bytes_strict as canonical_json_bytes,
-    sha256_raw as sha256_hex,
-)
 
 class FlagSchemaError(ValueError):
     """A record does not conform to ``joulewise.flag.v1``."""

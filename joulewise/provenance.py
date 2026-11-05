@@ -9,6 +9,9 @@ import stat
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import is_sha256 as sha256_hex_shape
+
+
 PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.prompt_token_ids.v1"
 SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.suite_prompt_token_ids.v1"
 MODEL_ARTIFACT_HASH_DOMAIN = "joulewise.model_artifact_identity.v1"
@@ -23,8 +26,6 @@ MODEL_WEIGHT_SUFFIXES = (
 FIXED_BUDGET_EXACT = "fixed_budget_exact"
 FIXED_BUDGET_INCOMPLETE = "fixed_budget_incomplete"
 
-
-from joulewise.strict_io import is_sha256 as sha256_hex_shape
 
 def sha256_hex(data: bytes | str) -> str:
     if isinstance(data, str):

@@ -10,6 +10,9 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from joulewise.strict_io import sha256_text as _sha256_text
+
+
 
 WORKLOAD_PROFILE_SCHEMA = "joulewise.workload_profile.v1"
 PROMPT_ID_RE = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
@@ -37,8 +40,6 @@ _TOP_KEYS = frozenset(
 )
 _PROMPT_KEYS = frozenset({"prompt_id", "text", "text_utf8_sha256"})
 
-
-from joulewise.strict_io import sha256_text as _sha256_text
 
 @dataclass(frozen=True)
 class WorkloadProfileRefusal:

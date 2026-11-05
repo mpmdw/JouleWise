@@ -7,6 +7,9 @@ import json
 import math
 import re
 
+from joulewise.strict_io import json_ascii_bytes_strict as _canon
+
+
 LEVELS = [1, 2, 3, 4, 5]
 RETRY_STAGES = ["initial", "whole_block", "single_problem", "single_retry", "ceiling_violation"]
 EDGES = [
@@ -28,8 +31,6 @@ ROSTER_SCHEMA = "joulewise.scored_roster.v3"
 REGISTRATION_KEYS = frozenset("schema mode registration_id plan_id scorer_id arm arm_to_family role_to_model_id sizing_receipt_sha256 predictions_sha256 alpha n_boot seed floor_j anchor_j cap_tokens block_size item_ids_by_level envelope_s interior_s pitch_s offset_s guard_s s_per_token_upper prefill_s ceiling_s delta_upper_j_per_block_slot budget_j declared_sensitivities".split())
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
 
-
-from joulewise.strict_io import json_ascii_bytes_strict as _canon
 
 class RegistrationRefusal(ValueError):
     def __init__(self, code, detail=""):

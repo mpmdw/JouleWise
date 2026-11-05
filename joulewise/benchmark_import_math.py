@@ -11,6 +11,7 @@ from typing import Any, Mapping, Sequence
 
 from joulewise.strict_io import json_ascii_text as canonical_json
 
+
 from joulewise.benchmark_import import (
     EMPTY_THINK_PREFIX, PINNED_QWEN3_TOKENIZER_ID,
     REVIEWED_QWEN3_CHAT_TEMPLATE_SHA256, REVIEWED_QWEN3_TOKENIZER_JSON_SHA256,

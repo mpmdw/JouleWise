@@ -27,6 +27,7 @@ from typing import Any
 
 from joulewise.strict_io import json_utf8_bytes_strict as _canonical_bytes
 
+
 from joulewise.authentication_io import (
     open_authentication_input,
     read_authentication_input,

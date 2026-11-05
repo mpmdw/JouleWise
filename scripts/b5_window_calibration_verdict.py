@@ -52,8 +52,9 @@ EVENTS = "events.jsonl"
 VERIFIER = "joulewise.powermetrics_fiducial.verify_stored_evidence_physics"
 EXIT_VERIFIED, EXIT_NOT_VERIFIED, EXIT_USAGE, EXIT_EXISTS = 0, 1, 2, 3
 
-
 from joulewise.strict_io import sha256_raw as _sha256
+
+
 
 def default_output(pre_calibration_dir: Path) -> Path:
     return Path(pre_calibration_dir).parent / VERDICT_BASENAME

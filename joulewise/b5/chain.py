@@ -95,6 +95,9 @@ import shlex
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import sha256_raw as sha256_bytes
+
+
 CHAIN_SCHEMA = "joulewise.b5_chain.v1"
 CHAIN_INTERFACE = "b5-hazard-chain-v1"
 # The registered settle, 60 s before the pre slot and before every collection
@@ -126,9 +129,6 @@ STAGE_JOURNAL = "chain-stages.jsonl"
 NEG8_COLLECTED_MANIFEST = "neg8-settled-corpus.collected.json"
 NEG8_COLLECTED_SUMMARY = "neg8-settled-corpus.collected.summary.json"
 TERMINAL_BOUNDARY = "post-bracket-terminal-boundary.json"
-
-
-from joulewise.strict_io import sha256_raw as sha256_bytes
 
 
 @dataclasses.dataclass(frozen=True)

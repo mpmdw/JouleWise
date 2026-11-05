@@ -18,13 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
-
-
 from joulewise.strict_io import (
     is_finite_float_projection as _finite_number,
     json_utf8_bytes_strict as _canonical_bytes,
     sha256_raw as _sha256,
 )
+
 
 from joulewise.authentication_io import (
     V2AuthenticationInputError,

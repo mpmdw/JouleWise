@@ -21,13 +21,12 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
-
-
 from joulewise.strict_io import (
     collect_exact_keys as _exact_keys,
     json_pretty_insertion_utf8_strict as render_manifest,
     json_utf8_bytes_strict as canonical_json_bytes,
 )
+
 
 from joulewise.calibration_ledger import _refuse_custody_override_mint
 from joulewise.calibration_bracketing import load_calibration_acceptance_bound

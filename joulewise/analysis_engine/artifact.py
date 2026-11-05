@@ -14,13 +14,12 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-
-
 from joulewise.strict_io import (
     collect_exact_keys as _exact_keys,
     json_pretty_insertion_utf8_strict as render_claim_verdicts,
     json_utf8_bytes_strict as canonical_json_bytes,
 )
+
 
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,

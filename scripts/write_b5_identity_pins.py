@@ -88,13 +88,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-
-
 from joulewise.strict_io import (
     atomic_write_bytes as _atomic_write,
     relative_inside as _strict_relative_inside,
     sha256_raw as sha256_bytes,
 )
+
 
 from joulewise.flags.collect import (  # noqa: E402
     IDENTITY_PINS_SCHEMA,

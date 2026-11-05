@@ -42,11 +42,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from joulewise.b5_analysis.kept_units import KeptUnits
-
-
-
 from joulewise.strict_io import (
     finite_or_none as _common_mode_finite,
     finite_or_none as _finite,
@@ -54,6 +49,10 @@ from joulewise.strict_io import (
     parse_finite_float as _strict_parse_finite_float,
     parse_finite_int as _strict_parse_finite_int,
 )
+
+
+if TYPE_CHECKING:
+    from joulewise.b5_analysis.kept_units import KeptUnits
 
 from joulewise.window_lineage import LOCATOR_BASENAME
 

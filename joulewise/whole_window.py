@@ -28,6 +28,7 @@ from typing import Any, Callable, Literal
 
 from joulewise.strict_io import is_lower_sha256 as _sha256_text
 
+
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
     read_authentication_input,

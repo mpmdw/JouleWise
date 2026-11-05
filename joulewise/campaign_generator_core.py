@@ -15,13 +15,14 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import sha256_data as sha256_bytes
+
+
 
 _generation_write_boundary_observer: (
     Callable[[Path, tuple[Path, ...]], None] | None
 ) = None
 
-
-from joulewise.strict_io import sha256_data as sha256_bytes
 
 def render_json(value: Any, transform: Callable[[Any], Any]) -> bytes:
     """Return the canonical bytes used by campaign generator artifacts."""

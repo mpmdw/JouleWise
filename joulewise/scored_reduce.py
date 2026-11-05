@@ -8,7 +8,9 @@ import math
 import re
 
 import joulewise.scored_registration as sr
+
 from joulewise.strict_io import json_ascii_bytes_strict as _canon
+
 
 from joulewise.scored_packer import executed_status, verify_executed_roster
 

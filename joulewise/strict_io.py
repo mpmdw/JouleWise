@@ -46,7 +46,7 @@ def sha256_path_bytes(path: Path) -> str:
 
 
 def json_ascii_bytes_strict(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=False, separators=(',', ':')) .encode("utf-8")
+    return json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=False, separators=(',', ':')).encode("utf-8")
 
 
 def json_ascii_text(value: Any) -> str:
@@ -54,27 +54,27 @@ def json_ascii_text(value: Any) -> str:
 
 
 def json_pretty_ascii(value: Any) -> bytes:
-    return (json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=True, indent=2) + "\n") .encode("utf-8")
+    return (json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=True, indent=2) + "\n").encode("utf-8")
 
 
 def json_pretty_insertion_utf8_strict(value: Any) -> bytes:
-    return (json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2) + "\n") .encode("utf-8")
+    return (json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2) + "\n").encode("utf-8")
 
 
 def json_pretty_utf8(value: Any) -> bytes:
-    return (json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=True, indent=2) + "\n") .encode("utf-8")
+    return (json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=True, indent=2) + "\n").encode("utf-8")
 
 
 def json_pretty_utf8_strict(value: Any) -> bytes:
-    return (json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, indent=2) + "\n") .encode("utf-8")
+    return (json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, indent=2) + "\n").encode("utf-8")
 
 
 def json_utf8_bytes(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=True, separators=(',', ':')) .encode("utf-8")
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=True, separators=(',', ':')).encode("utf-8")
 
 
 def json_utf8_bytes_strict(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(',', ':')) .encode("utf-8")
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode("utf-8")
 
 
 def is_lower_sha256(value: Any) -> bool:

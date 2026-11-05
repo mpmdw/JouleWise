@@ -19,6 +19,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import (
+    json_pretty_ascii as _json_bytes,
+    sha256_file,
+)
+
+
 
 POLICY_SCHEMA = "joulewise.publication_privacy.v1"
 TRANSFORMATION_SCHEMA = "joulewise.publication_transformation.v1"
@@ -318,12 +324,6 @@ _POWER_TRACE_INTERVAL_COLUMNS = (
     "interval_end_s",
 )
 
-
-
-from joulewise.strict_io import (
-    json_pretty_ascii as _json_bytes,
-    sha256_file,
-)
 
 class PrivacyAuditError(RuntimeError):
     """Raised when a private bundle contains an unreviewed publication surface."""

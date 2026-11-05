@@ -24,6 +24,9 @@ from typing import Iterable, Sequence
 
 from .distributions import student_t_cdf, student_t_quantile, two_sided_student_t_p_value
 
+from joulewise.strict_io import require_finite as _finite_number
+
+
 
 __all__ = [
     "DeterministicBoundTerm",
@@ -46,8 +49,6 @@ RUNTIME_TOKEN_SOURCES = frozenset({"runtime_observed", "server_usage"})
 _INDEPENDENT_RUN = "independent_run"
 _VARIANCE_NEGATIVE_TOLERANCE = 1.0e-12
 
-
-from joulewise.strict_io import require_finite as _finite_number
 
 @dataclass(frozen=True)
 class Interval:

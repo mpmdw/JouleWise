@@ -15,6 +15,13 @@ from dataclasses import asdict, dataclass
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import (
+    json_pretty_utf8 as normalized_json_bytes,
+    json_utf8_bytes as canonical_json_bytes,
+    sha256_value as sha256_bytes,
+)
+
+
 
 AXI_CONFIG_EXTENSION = "joulewise.axi_decode_config.v1"
 EVENT_SEMANTICS_VERSION = "joulewise.events.v2"
@@ -25,14 +32,6 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 EVENT_TOP_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
-
-
-
-from joulewise.strict_io import (
-    json_pretty_utf8 as normalized_json_bytes,
-    json_utf8_bytes as canonical_json_bytes,
-    sha256_value as sha256_bytes,
-)
 
 class AxiSchemaError(ValueError):
     """An AXI config or v2 wire object violates the frozen schema."""

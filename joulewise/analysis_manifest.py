@@ -17,6 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import (
+    json_utf8_bytes as canonical_json_bytes,
+    sha256_value as sha256_bytes,
+)
+
+
 
 SCHEMA_VERSION = "joulewise.analysis_manifest.v1"
 REGISTRY_SCHEMA_VERSION = "joulewise.analysis_registry.v1"
@@ -158,12 +164,6 @@ REGISTRY_SAMPLING_KEYS = {"design", "planned_n_blocks", "freeze_basis"}
 AUTHORIZED_PLANNED_N_BLOCKS = {5, 10}
 REGISTRY_FREEZE_BASIS = "window_a_variance_mde_before_campaign_execution"
 
-
-
-from joulewise.strict_io import (
-    json_utf8_bytes as canonical_json_bytes,
-    sha256_value as sha256_bytes,
-)
 
 class AnalysisManifestError(ValueError):
     """Raised when a registry or generated manifest is invalid."""

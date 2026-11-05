@@ -25,6 +25,7 @@ from typing import Any
 
 from joulewise.strict_io import sha256_file as _sha256_file
 
+
 from joulewise.adapters.suite_control import SuiteItemResult, execute_suite
 from joulewise.clock import Clock
 from joulewise.interfaces import (

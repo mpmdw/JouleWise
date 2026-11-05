@@ -24,13 +24,12 @@ from pathlib import Path, PurePosixPath
 from types import ModuleType
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-
-
 from joulewise.strict_io import (
     json_pretty_utf8_strict as _render_json,
     json_utf8_bytes_strict as canonical_json_bytes,
     sha256_value as _sha256_bytes,
 )
+
 
 from joulewise.provenance import model_artifact_identity
 from joulewise.schemas import BenchmarkConfig, SchemaError

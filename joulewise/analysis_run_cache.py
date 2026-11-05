@@ -31,12 +31,13 @@ import hashlib
 import itertools
 from typing import Any, Iterator
 
+from joulewise.strict_io import sha256_data as sha256
+
+
 _ACTIVE: "_RunCaches | None" = None
 _SERIALS = itertools.count(1)
 GRAMMAR_VERDICT_MEMO = "authentication_io.grammar_ok"
 
-
-from joulewise.strict_io import sha256_data as sha256
 
 class _RunCaches:
     def __init__(self, physics_store: dict | None, memos: dict | None = None, workers: int = 1):

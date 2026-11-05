@@ -21,11 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Sequence
 
-
 from joulewise.strict_io import (
     parse_finite_float as _strict_parse_finite_float,
     parse_finite_int as _strict_parse_finite_int,
 )
+
 
 from joulewise.analysis_manifest import (
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V1_SCHEMA,

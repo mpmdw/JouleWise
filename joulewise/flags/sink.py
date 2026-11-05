@@ -21,6 +21,7 @@ from typing import Any, Iterable, Mapping
 
 from joulewise.strict_io import fsync_directory_best_effort_path as _fsync_directory
 
+
 from joulewise.flags.schema import (
     SCOPE_KEYS,
     make_flag,

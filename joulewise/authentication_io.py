@@ -38,11 +38,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO, Iterator, Literal, Mapping, TextIO
 
-
 from joulewise.strict_io import (
     parse_finite_float as _strict_parse_finite_float,
     parse_finite_int as _strict_parse_finite_int,
 )
+
 
 from joulewise import analysis_run_cache as _run_cache
 

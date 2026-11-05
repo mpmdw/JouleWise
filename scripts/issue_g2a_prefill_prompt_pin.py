@@ -20,6 +20,7 @@ from joulewise.strict_io import (
     sha256_raw as _sha256,
 )
 
+
 from joulewise.adapters.mlx_runtime import _encode
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.night_gate import chain_literal

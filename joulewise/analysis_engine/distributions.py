@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import math
 
+from joulewise.strict_io import require_finite as _finite_float
+
+
 __all__ = [
     "exact_sign_flip_p_value",
     "student_t_cdf",
@@ -23,8 +26,6 @@ _BETA_FPMIN = 1.0e-300
 _BETA_MAX_ITERATIONS = 10_000
 _MAX_EXACT_SIGN_FLIP_BLOCKS = 20
 
-
-from joulewise.strict_io import require_finite as _finite_float
 
 def _validated_df(df: int) -> int:
     if isinstance(df, bool) or not isinstance(df, int) or df < 1:

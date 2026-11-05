@@ -19,6 +19,7 @@ from typing import Any, Mapping, Sequence
 
 from joulewise.strict_io import json_ascii_text as _canonical_json
 
+
 from joulewise.gensuite import tokenizer_id_for
 from joulewise.model_panel import load_model_panel
 from joulewise.suite import (

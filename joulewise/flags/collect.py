@@ -65,11 +65,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-
 from joulewise.strict_io import (
     is_lower_sha256 as _is_sha256_hex,
     sha256_file as _sha256_file,
 )
+
 
 from joulewise.flags.schema import (
     FlagSchemaError,

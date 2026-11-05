@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from joulewise.strict_io import json_ascii_text as canonical_output
 
+
 from joulewise.quiet_guard import (  # noqa: E402
     GuardEngine,
     GuardError,

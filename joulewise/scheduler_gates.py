@@ -25,6 +25,7 @@ from typing import Any
 
 from joulewise.strict_io import json_pretty_ascii as render_json
 
+
 from joulewise import arm_readiness
 from joulewise.arm_readiness import _fsync_directory
 

@@ -48,11 +48,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-
 from joulewise.strict_io import (
     fsync_directory as _fsync_directory,
     sha256_raw as _sha256,
 )
+
 
 from joulewise import night_gate
 from joulewise.b5 import chain as b5_chain

@@ -18,6 +18,7 @@ from typing import Any, Mapping
 
 from joulewise.strict_io import is_finite_float_projection as _is_finite_number
 
+
 from joulewise.axi_decode_config import (
     AXI_CONFIG_EXTENSION,
     EVENT_SEMANTICS_VERSION,

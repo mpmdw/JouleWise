@@ -36,6 +36,13 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import (
+    fsync_directory_best_effort_directory as fsync_directory,
+    json_ascii_bytes_strict as canonical_json,
+    sha256_data as sha256_hex,
+)
+
+
 PASS = "PASS"
 REFUSE = "REFUSE"
 UNMEASURED = "UNMEASURED"
@@ -53,14 +60,6 @@ C_LOCALE_ENV = {"LC_ALL": "C"}
 # --------------------------------------------------------------------------
 # Clocks
 
-
-
-
-from joulewise.strict_io import (
-    fsync_directory_best_effort_directory as fsync_directory,
-    json_ascii_bytes_strict as canonical_json,
-    sha256_data as sha256_hex,
-)
 
 @dataclasses.dataclass(frozen=True)
 class Stamp:

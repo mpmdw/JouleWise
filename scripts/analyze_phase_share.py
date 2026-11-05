@@ -26,6 +26,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.strict_io import sha256_path_bytes as _sha256
 
+
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.phase_share import (
     Interval,

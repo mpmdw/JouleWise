@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 
 from joulewise.strict_io import sha256_file
 
+
 from joulewise.bundle_read import BundleReader
 from joulewise.cli import validate_bundle
 from joulewise.publication_privacy import (

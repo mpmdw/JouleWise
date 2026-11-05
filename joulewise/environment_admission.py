@@ -11,6 +11,7 @@ from typing import Any
 
 from joulewise.strict_io import finite_or_none as _finite_number
 
+
 from joulewise.authentication_io import (
     read_authentication_input,
     read_authentication_text,

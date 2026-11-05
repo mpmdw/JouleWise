@@ -55,6 +55,7 @@ if str(ROOT) not in sys.path:
 
 from joulewise.strict_io import sha256_data as _sha256_bytes
 
+
 from joulewise.measurement_liveness import (  # noqa: E402
     observe_identity, publish_campaign, remove_campaign,
 )

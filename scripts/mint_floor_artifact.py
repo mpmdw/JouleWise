@@ -27,6 +27,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.strict_io import sha256_raw as _sha256
 
+
 from joulewise.authentication_io import (  # noqa: E402
     V2AuthenticationInputError,
     read_authentication_input,

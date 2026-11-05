@@ -26,11 +26,11 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-
 from joulewise.strict_io import (
     json_pretty_ascii as _json_bytes,
     sha256_value as _sha256_bytes,
 )
+
 
 from joulewise.adapters.mlx_runtime import _encode as runtime_encode  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
