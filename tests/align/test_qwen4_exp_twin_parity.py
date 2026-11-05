@@ -247,6 +247,22 @@ def _write_fused_expert_checkpoint(src: Path, dst: Path, config) -> Path:
     return dst
 
 
+def _engine_text_model(engine, full, text_cfg):
+    """The engine copy's text decoder + lm_head, loaded with ``full``'s weights."""
+    m = engine.Qwen4ExpForCausalLM(text_cfg).eval()
+    sd = {}
+    for k, v in full.state_dict().items():
+        if k.startswith("model.language_model."):
+            sd["model." + k[len("model.language_model."):]] = v
+        elif k.startswith("lm_head."):
+            sd[k] = v
+    missing, unexpected = m.load_state_dict(sd, strict=False)
+    real_missing = [k for k in missing if "rotary_emb" not in k]
+    if real_missing or unexpected:
+        raise RuntimeError(f"engine load: missing={real_missing} unexpected={unexpected}")
+    return m
+
+
 def stage_ref(work: Path):
     import numpy as np
     import torch
@@ -282,18 +298,7 @@ def stage_ref(work: Path):
     tcfg._attn_implementation = "sdpa"
 
     def engine_model(text_cfg):
-        m = engine.Qwen4ExpForCausalLM(text_cfg).eval()
-        sd = {}
-        for k, v in full.state_dict().items():
-            if k.startswith("model.language_model."):
-                sd["model." + k[len("model.language_model."):]] = v
-            elif k.startswith("lm_head."):
-                sd[k] = v
-        missing, unexpected = m.load_state_dict(sd, strict=False)
-        real_missing = [k for k in missing if "rotary_emb" not in k]
-        if real_missing or unexpected:
-            raise RuntimeError(f"engine load: missing={real_missing} unexpected={unexpected}")
-        return m
+        return _engine_text_model(engine, full, text_cfg)
 
     ref = engine_model(tcfg)
     seq_a = _tokens(7, LEN_A, eos_at=(5, 21))
@@ -637,6 +642,38 @@ REG_VALIDATION = {
 }
 
 
+# Layer-level probes: a 2-layer text config (DeltaNet + QSA) whose single
+# layer under test is built from the engine copy and from the port.
+REG_LAYER_BASE = {
+    "vocab_size": 64, "hidden_size": 64, "num_hidden_layers": 2,
+    "num_attention_heads": 2, "num_key_value_heads": 1, "head_dim": 32,
+    "linear_num_key_heads": 2, "linear_num_value_heads": 6,
+    "linear_key_head_dim": 32, "linear_value_head_dim": 32, "linear_conv_kernel_dim": 4,
+    "moe_intermediate_size": 16, "shared_expert_intermediate_size": 16,
+    "num_experts": 4, "num_experts_per_tok": 2, "hc_count": 2, "hc_lowrank": 8,
+    "ple_layer_ids": [], "indexer_n_heads": 2, "indexer_kv_heads": 1, "indexer_head_dim": 32,
+    "indexer_budget": 8, "indexer_compress_ratio": 4, "output_gate_type": "sigmoid",
+    "eos_token_id": EOS, "rms_norm_eps": 1e-6,
+    "layer_types": ["linear_attention", "full_attention"],
+}
+# GatedDeltaNet with a cache, fed in segments (multi-token and single-token
+# calls). Defaults: dtypes ("fp32",), devices ("gpu",).
+REG_GDN = {
+    # control at the released kernel size
+    "k4_segments": {"over": {}, "segments": [2, 70, 1, 1, 64, 3, 1], "seed": 0},
+    # kernel 1: zero-length conv history (the cache kept the whole sequence)
+    "k1_segments": {"over": {"linear_conv_kernel_dim": 1}, "segments": [3, 1, 1, 4], "seed": 0},
+}
+# Tiny full model at the edges of the config space, converted like the main
+# checkpoint. Reference logits are an UNCACHED prefill: with
+# ple_conv_kernel_size 1 the reference's own cached PLE path raises.
+REG_EDGE_TEXT = dict(
+    TINY_TEXT_CONFIG, num_hidden_layers=4, ple_layer_ids=[2],
+    layer_types=["linear_attention"] * 3 + ["full_attention"],
+    linear_conv_kernel_dim=1, ple_conv_kernel_size=1)
+REG_EDGE_CUTS = [0, 2, 3, 4, 9, 10, 11, 12, 18, 19, 20, 35, 36, 37, 38, 39, 40, 41]
+
+
 def _ref_validation():
     from transformers.models.qwen4_exp.configuration_qwen4_exp import Qwen4ExpTextConfig
     out = {}
@@ -649,13 +686,82 @@ def _ref_validation():
     return out
 
 
+def _ref_gdn(engine, reg: Path):
+    import copy
+
+    import numpy as np
+    import torch
+    from transformers.cache_utils import DynamicCache
+    from transformers.models.qwen4_exp.configuration_qwen4_exp import Qwen4ExpTextConfig
+
+    for name, case in REG_GDN.items():
+        cfgd = dict(REG_LAYER_BASE, **case["over"])
+        cfg = Qwen4ExpTextConfig(**cfgd)
+        layer = engine.Qwen4ExpTextGatedDeltaNet(cfg, 0).eval()
+        gen = torch.Generator().manual_seed(case["seed"])
+        with torch.no_grad():
+            for n, p in layer.named_parameters():
+                shape = tuple(p.shape)
+                if n == "A_log":
+                    v = torch.log(torch.rand(*shape, generator=gen) * 15 + 1)
+                elif n == "dt_bias":
+                    v = torch.rand(*shape, generator=gen) + 0.5
+                elif n == "norm.weight":
+                    v = 1 + torch.randn(*shape, generator=gen) * 0.2
+                elif "conv1d" in n:
+                    v = torch.randn(*shape, generator=gen) * 0.3
+                else:
+                    v = torch.randn(*shape, generator=gen) / shape[-1] ** 0.5
+                p.copy_(v)
+        segments = case["segments"]
+        x = torch.randn(1, sum(segments), cfgd["hidden_size"], generator=gen)
+        arrays = {"x": x.numpy(), "cfg": np.array(json.dumps(cfgd)), "segments": np.array(segments)}
+        arrays.update({"w::" + n: p.detach().numpy().copy() for n, p in layer.named_parameters()})
+        for dt_name in case.get("dtypes", ("fp32",)):
+            dt = torch.bfloat16 if dt_name == "bf16" else torch.float32
+            m = copy.deepcopy(layer).to(dt)
+            cache = DynamicCache(config=cfg)
+            off = 0
+            with torch.no_grad():
+                for i, s in enumerate(segments):
+                    o = m(x[:, off:off + s].to(dt), cache_params=cache, attention_mask=None)
+                    arrays[f"{dt_name}::out{i}"] = o.float().numpy()
+                    off += s
+        np.savez(reg / f"gdn_{name}.npz", **arrays)
+
+
+def _ref_edge(engine, reg: Path):
+    import numpy as np
+    import torch
+    from transformers import Qwen4ExpConfig, Qwen4ExpForConditionalGeneration
+
+    cfg = Qwen4ExpConfig(text_config=dict(REG_EDGE_TEXT), vision_config=dict(TINY_VISION_CONFIG))
+    cfg._attn_implementation = "sdpa"
+    cfg.text_config._attn_implementation = "sdpa"
+    full = Qwen4ExpForConditionalGeneration(cfg).eval()
+    _randomize(full, torch, seed=99)
+    full.save_pretrained(reg / "edge_ckpt", max_shard_size="30KB")
+    tcfg = full.config.text_config
+    tcfg._attn_implementation = "sdpa"
+    ref = _engine_text_model(engine, full, tcfg)
+    ids = _tokens(3, REG_EDGE_CUTS[-1], eos_at=(4, 17))
+    with torch.no_grad():
+        logits = ref(input_ids=torch.tensor([ids]), use_cache=False).logits[0].float().numpy()
+    np.savez(reg / "edge_ref.npz", logits=logits, ids=np.array(ids))
+    return {}
+
+
 def stage_ref_regress(work: Path):
     import torch
 
     torch.set_num_threads(2)
+    torch.manual_seed(0)
     reg = work / "regress"
     reg.mkdir(parents=True, exist_ok=True)
+    engine = _load_engine_module()
     meta = {"validation": _ref_validation()}
+    _ref_gdn(engine, reg)
+    meta["edge"] = _ref_edge(engine, reg)
     meta["peak_rss_bytes"] = _peak_rss()
     (reg / "ref_meta.json").write_text(json.dumps(meta, indent=2))
 
@@ -671,11 +777,97 @@ def _mlx_validation(tw):
     return out
 
 
+def _mlx_gdn(tw, reg: Path):
+    """Run each REG_GDN case through the port's GatedDeltaNet with an
+    ArraysCache, segment by segment, on each requested device."""
+    import mlx.core as mx
+    import numpy as np
+    from mlx_lm.models.cache import ArraysCache
+
+    dts = {"fp32": mx.float32, "bf16": mx.bfloat16}
+    out, outs = {}, {}
+    prev_device = mx.default_device()
+    for name, case in REG_GDN.items():
+        z = np.load(reg / f"gdn_{name}.npz")
+        cfgd = json.loads(str(z["cfg"]))
+        segments = [int(s) for s in z["segments"]]
+        args = tw.TextModelArgs.from_dict(cfgd)
+        for dt_name in case.get("dtypes", ("fp32",)):
+            dt = dts[dt_name]
+            for dev in case.get("devices", ("gpu",)):
+                key = f"{name}/{dt_name}/{dev}"
+                mx.set_default_device(mx.gpu if dev == "gpu" else mx.cpu)
+                try:
+                    layer = tw.GatedDeltaNet(args)
+                    weights = []
+                    for k in z.files:
+                        if k.startswith("w::"):
+                            a = z[k]
+                            if k == "w::conv1d.weight":
+                                a = np.moveaxis(a, 2, 1)        # torch (C, 1, K) -> (C, K, 1)
+                            weights.append((k[3:], mx.array(a).astype(dt)))
+                    layer.load_weights(weights, strict=True)
+                    cache = ArraysCache(size=2)
+                    x = mx.array(z["x"]).astype(dt)
+                    inv = tw.rope_inv_freq(args)
+                    off, seg_max, rows = 0, [], []
+                    for i, s in enumerate(segments):
+                        step = tw._Step(1, s, off, np.zeros((1,), np.int64), inv)
+                        o = layer(x[:, off:off + s], step, cache)
+                        mx.eval(o, cache[0], cache[1])
+                        o = np.array(o.astype(mx.float32))
+                        rows.append(o)
+                        seg_max.append(float(np.abs(o - z[f"{dt_name}::out{i}"]).max()))
+                        off += s
+                    out[key] = {"seg_max_abs": seg_max, "max_abs": max(seg_max),
+                                "ref_scale": float(max(np.abs(z[f"{dt_name}::out{i}"]).max()
+                                                       for i in range(len(segments)))),
+                                "conv_cache_len": int(cache[0].shape[1]),
+                                "kernel": args.linear_conv_kernel_dim}
+                    outs[key] = rows
+                except Exception as exc:  # noqa: BLE001 -- a crash is a recorded failure
+                    out[key] = {"error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+                finally:
+                    mx.set_default_device(prev_device)
+    return out, outs
+
+
+def _mlx_edge(reg: Path):
+    import mlx.core as mx
+    import numpy as np
+    from mlx_lm.models.cache import ArraysCache
+    from mlx_lm.utils import load_model
+
+    model, _ = load_model(reg / "edge_mlx_fp32")
+    z = np.load(reg / "edge_ref.npz")
+    ids, ref = [int(t) for t in z["ids"]], z["logits"]
+
+    def run(chunk, cache=None):
+        o = model(mx.array([chunk]), cache=cache)
+        mx.eval(o)
+        return np.array(o.astype(mx.float32))[0]
+
+    prefill = run(ids)
+    cache = model.make_cache()
+    stepped = np.concatenate([run(ids[a:b], cache)
+                              for a, b in zip(REG_EDGE_CUTS[:-1], REG_EDGE_CUTS[1:])])
+    ple = {lid - 1 for lid in REG_EDGE_TEXT["ple_layer_ids"]}
+    arrays = [(i, c) for i, c in enumerate(cache) if isinstance(c, ArraysCache)]
+    return {
+        "prefill_vs_ref_uncached": _diff(prefill, ref),
+        "cached_segments_vs_ref_uncached": _diff(stepped, ref),
+        "deltanet_conv_cache_lens": sorted({int(c[0].shape[1]) for _, c in arrays}),
+        "ple_conv_cache_lens": sorted({int(c[2].shape[1]) for i, c in arrays if i in ple}),
+    }
+
+
 def stage_mlx_regress(work: Path):
     from joulewise.align.models import qwen4_exp_twin as tw
 
     reg = work / "regress"
     res = {"validation": _mlx_validation(tw)}
+    res["gdn"], _ = _mlx_gdn(tw, reg)
+    res["edge"] = _mlx_edge(reg)
     res["peak_rss_bytes"] = _peak_rss()
     (reg / "mlx_results.json").write_text(json.dumps(res, indent=2))
 
@@ -743,6 +935,9 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
         }
         for name, extra in attribution.items():
             _convert(ckpt, cls.work / name, "--dtype", "bfloat16", "--group-size", "32", *extra)
+        reg = cls.work / "regress"
+        cls.manifests["edge"] = _convert(reg / "edge_ckpt", reg / "edge_mlx_fp32", "--dtype", "float32",
+                                         "--no-quantize", "--ngram-format", "f32")
         _run(VENV_MLX, me, "mlx", str(cls.work))
         _run(VENV_MLX, me, "mlx_regress", str(cls.work))
         cls.ref_meta = json.loads((cls.work / "ref_meta.json").read_text())
@@ -910,8 +1105,32 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
                     self.assertIsNotNone(ref[name], "reference accepted a case it should reject")
                 self.assertEqual(got[name] is None, ref[name] is None, (got[name], ref[name]))
 
+    def _gdn(self, key):
+        r = self.reg["gdn"][key]
+        self.assertNotIn("error", r, r.get("error"))
+        return r
 
-STAGES = {"ref": stage_ref, "mlx": stage_mlx,
+    def test_regress_deltanet_conv_cache_kernel_sizes(self):
+        # Cached segments at kernel 4 (control) and kernel 1 (zero-length
+        # history): outputs match the reference and the conv cache holds
+        # exactly K-1 positions.
+        for name in ("k4_segments", "k1_segments"):
+            with self.subTest(case=name):
+                r = self._gdn(f"{name}/fp32/gpu")
+                self.assertLessEqual(r["max_abs"], TOL["fp32_vs_ref"], r["seg_max_abs"])
+                self.assertEqual(r["conv_cache_len"], r["kernel"] - 1)
+
+    def test_regress_kernel1_convs_cached_decode(self):
+        # DeltaNet and PLE short convs with kernel 1, cached decode in uneven
+        # segments vs the reference's uncached prefill.
+        r = self.reg["edge"]
+        self.assertLessEqual(r["prefill_vs_ref_uncached"]["max_abs"], TOL["fp32_vs_ref"])
+        self.assertLessEqual(r["cached_segments_vs_ref_uncached"]["max_abs"], TOL["fp32_vs_ref"])
+        self.assertEqual(r["deltanet_conv_cache_lens"], [0])
+        self.assertEqual(r["ple_conv_cache_lens"], [0])
+
+
+STAGES ={"ref": stage_ref, "mlx": stage_mlx,
           "ref_regress": stage_ref_regress, "mlx_regress": stage_mlx_regress}
 
 if __name__ == "__main__":

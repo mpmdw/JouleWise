@@ -624,6 +624,16 @@ class DepthwiseConv(nn.Module):
         return acc.astype(full.dtype)
 
 
+def conv_history_tail(full: mx.array, hist: int) -> mx.array:
+    """The last ``hist`` positions of ``full`` (B, T, C): the conv cache.
+
+    ``full[:, -hist:]`` would keep the WHOLE sequence when ``hist == 0``
+    (kernel size 1), so the cache would grow every call and the next call's
+    conv would read the oldest tokens instead of the new ones.
+    """
+    return full[:, full.shape[1] - hist:, :]
+
+
 def rope_inv_freq(args: TextModelArgs) -> mx.array:
     # [ref: Qwen4ExpTextRotaryEmbedding.compute_default_rope_parameters]
     base = float(args.rope_parameters.get("rope_theta", 10000.0))
@@ -881,7 +891,7 @@ class GatedDeltaNet(nn.Module):
             conv_state = mx.zeros((B, hist, self.conv_dim), dtype=qkv.dtype)
         full = mx.concatenate([conv_state, qkv], axis=1)
         if cache is not None:
-            cache[0] = full[:, -hist:, :]
+            cache[0] = conv_history_tail(full, hist)
         conv = nn.silu(self.conv1d(full, S))
 
         q, k, v = mx.split(conv, [self.key_dim, 2 * self.key_dim], axis=-1)
@@ -1173,7 +1183,7 @@ class PLELayer(nn.Module):
             state = mx.zeros((B, hist, gated_normed.shape[-1]), dtype=gated_normed.dtype)
         full = mx.concatenate([state, gated_normed], axis=1)
         if cache is not None:
-            cache[2] = full[:, -hist:, :]
+            cache[2] = conv_history_tail(full, hist)
         return gated + nn.silu(self.conv1d(full, S))
 
 
