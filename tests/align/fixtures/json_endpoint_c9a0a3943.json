@@ -1,0 +1,133 @@
+{
+  "base_commit": "c9a0a39437614176bf4e14ff1565a6e4537328fb",
+  "note": "Frozen from the original endpoint loaded directly from the base Git object; synthetic mock generation and tokenizer-argument bytes only.",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Do it",
+      "name": null,
+      "tool_call_id": null
+    },
+    {
+      "role": "assistant",
+      "content": "<think>plan</think>\n<tool_call>{\"name\":\"update\",\"arguments\":{\"text\":\"é\"}}</tool_call>",
+      "name": null,
+      "tool_call_id": null
+    },
+    {
+      "role": "assistant",
+      "content": "{ \"text\": \"é\" }",
+      "name": "update",
+      "tool_call_id": "a"
+    },
+    {
+      "role": "tool",
+      "content": "ok",
+      "name": null,
+      "tool_call_id": "a"
+    }
+  ],
+  "scripts": [
+    {
+      "content": "<think>plan</think><tool_call>{\"name\":\"update\",\"arguments\":{\"text\":\"hello\"}}</tool_call>",
+      "completion_tokens": 100,
+      "reasoning_tokens": 1
+    },
+    {
+      "content": "<tool_call>{\"name\":\"end_task\",\"arguments\":{}}</tool_call>",
+      "completion_tokens": 100
+    },
+    {
+      "content": "<function=unknown>test</function>",
+      "completion_tokens": 100
+    }
+  ],
+  "rendered": "{\"kwargs\": {\"add_generation_prompt\": true, \"enable_thinking\": true, \"tokenize\": false, \"tools\": [{\"function\": {\"name\": \"update\", \"parameters\": {\"additionalProperties\": false, \"properties\": {\"active\": {\"type\": \"boolean\"}, \"amount\": {\"type\": \"number\"}, \"count\": {\"type\": \"integer\"}, \"empty\": {\"type\": \"null\"}, \"meta\": {\"additionalProperties\": false, \"properties\": {\"name\": {\"type\": \"string\"}}, \"required\": [\"name\"], \"type\": \"object\"}, \"mode\": {\"enum\": [\"read\", \"write\"], \"type\": \"string\"}, \"rows\": {\"items\": {\"type\": \"integer\"}, \"type\": \"array\"}, \"text\": {\"type\": \"string\"}}, \"required\": [\"text\"], \"type\": \"object\"}}, \"type\": \"function\"}, {\"function\": {\"name\": \"end_task\", \"parameters\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, \"type\": \"function\"}]}, \"messages\": [{\"content\": \"Do it\", \"role\": \"user\"}, {\"content\": \"<think>plan</think>\\n<tool_call>{\\\"name\\\":\\\"update\\\",\\\"arguments\\\":{\\\"text\\\":\\\"é\\\"}}</tool_call>\", \"role\": \"assistant\", \"tool_calls\": [{\"function\": {\"arguments\": \"{ \\\"text\\\": \\\"é\\\" }\", \"name\": \"update\"}, \"id\": \"a\", \"type\": \"function\"}]}, {\"content\": \"ok\", \"role\": \"tool\", \"tool_call_id\": \"a\"}]}",
+  "trace": [
+    {
+      "content": "<tool_call>{\"name\":\"update\",\"arguments\":{\"text\":\"hello\"}}</tool_call>",
+      "reasoning_text": "plan",
+      "tool_calls": [
+        {
+          "call_id": "0-b8280317f9a9f0211d46b9dc54d3c8b2ea4903e9472efa4ce60a6e6dab94d94d",
+          "name": "update",
+          "arguments_json": "{\"text\":\"hello\"}"
+        }
+      ],
+      "prompt_tokens": 36,
+      "cached_prompt_tokens": 0,
+      "completion_tokens": 100,
+      "reasoning_tokens": 1,
+      "start_ns": 0,
+      "first_token_ns": 36000000,
+      "end_ns": 1036000000,
+      "raw_usage": {
+        "joulewise": {
+          "flags": [
+            "model_revision_unpinned",
+            "prior_hidden_prefill_count_unavailable:mock_scripted_prompt",
+            "synthetic_mock_runtime"
+          ],
+          "finish_reason": "stop"
+        },
+        "cache_policy": "full_prompt_each_turn",
+        "raw_text": "<think>plan</think><tool_call>{\"name\":\"update\",\"arguments\":{\"text\":\"hello\"}}</tool_call>"
+      }
+    },
+    {
+      "content": "<tool_call>{\"name\":\"end_task\",\"arguments\":{}}</tool_call>",
+      "reasoning_text": "",
+      "tool_calls": [
+        {
+          "call_id": "1-deadf6d320d3e01f07c83d9912b39f5cf080fdee3184a60eb7b896f3b9d53f98",
+          "name": "end_task",
+          "arguments_json": "{}"
+        }
+      ],
+      "prompt_tokens": 36,
+      "cached_prompt_tokens": 0,
+      "completion_tokens": 100,
+      "reasoning_tokens": 0,
+      "start_ns": 1036000000,
+      "first_token_ns": 1072000000,
+      "end_ns": 2072000000,
+      "raw_usage": {
+        "joulewise": {
+          "flags": [
+            "model_revision_unpinned",
+            "prior_hidden_prefill_count_unavailable:mock_scripted_prompt",
+            "synthetic_mock_runtime"
+          ],
+          "finish_reason": "stop"
+        },
+        "cache_policy": "full_prompt_each_turn",
+        "raw_text": "<tool_call>{\"name\":\"end_task\",\"arguments\":{}}</tool_call>"
+      }
+    },
+    {
+      "content": "<function=unknown>test</function>",
+      "reasoning_text": "",
+      "tool_calls": [],
+      "prompt_tokens": 36,
+      "cached_prompt_tokens": 0,
+      "completion_tokens": 100,
+      "reasoning_tokens": 0,
+      "start_ns": 2072000000,
+      "first_token_ns": 2108000000,
+      "end_ns": 3108000000,
+      "raw_usage": {
+        "joulewise": {
+          "flags": [
+            "model_revision_unpinned",
+            "prior_hidden_prefill_count_unavailable:mock_scripted_prompt",
+            "synthetic_mock_runtime",
+            "unsupported_tool_call_format"
+          ],
+          "finish_reason": "stop"
+        },
+        "cache_policy": "full_prompt_each_turn",
+        "raw_text": "<function=unknown>test</function>"
+      }
+    }
+  ]
+}

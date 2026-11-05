@@ -35,6 +35,8 @@ def _counterbalanced(specs: Sequence[EpisodeSpec]) -> tuple[tuple[EpisodeSpec, .
             **{key: getattr(spec, key) for key in ("max_episode_decode_tokens", "deadman_s")
                if getattr(spec, key) is not None},
             **{key: getattr(spec, key) for key in ('thermal', 'warmup_condition') if getattr(spec, key) is not None},
+            **({"assistant_history": spec.assistant_history} if spec.assistant_history is not None else {}),
+            **({"chat_template_kwargs": spec.chat_template_kwargs} if spec.chat_template_kwargs is not None else {}),
         }, sort_keys=True)
         cell = cells.setdefault(key, {"benign": deque(), "sabotage": deque()})
         cell[spec.condition].append(spec)

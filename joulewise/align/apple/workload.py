@@ -20,6 +20,8 @@ from typing import Any, Mapping
 
 from joulewise.align.apple.endpoint import MlxEndpoint
 from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman, budget_record
+from joulewise.align.apple.endpoint import MlxEndpoint, template_execution_policy
+from joulewise.align.apple.xml_tool_calls import validate_model_family
 from joulewise.align.apple.sampler import (
     NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping, _stamp_record, _restore_stamp,
 )
@@ -64,11 +66,14 @@ class EpisodeSpec:
     deadman_s: float | None = None
     thermal: Mapping[str, Any] | None = None
     warmup_condition: Condition | None = None
+    assistant_history: str | None = None
+    chat_template_kwargs: Mapping[str, Any] | None = None
 
     def to_text(self) -> str:
         value = asdict(self)
         for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds",
-                    "max_episode_decode_tokens", "deadman_s", "thermal", "warmup_condition"):
+                    "max_episode_decode_tokens", "deadman_s", "thermal", "warmup_condition",
+                    "assistant_history", "chat_template_kwargs"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -98,6 +103,7 @@ class EpisodeSpec:
             raise ValueError("seed must be an integer")
         if spec.enable_thinking is not None and type(spec.enable_thinking) is not bool:
             raise ValueError("enable_thinking must be boolean or null")
+        template_execution_policy(None, spec.assistant_history, spec.chat_template_kwargs, spec.enable_thinking)
         if spec.max_context_tokens is not None and (
             type(spec.max_context_tokens) is not int or spec.max_context_tokens <= 0
         ):
@@ -236,6 +242,9 @@ class EpisodeRuntimeAdapter:
             result = self.runtime.prepare(config, context)
             self._runtime_ready = result.ok
             self.prepared = dict(result.metadata)
+            if result.ok:
+                validate_model_family(config.model.family, self.prepared,
+                                      getattr(self.runtime, "_model_config", None))
             self.prepared["max_position_embeddings"] = native_limit
             self.prepared["max_context_tokens"] = min(
                 x for x in (native_limit, self.spec.max_context_tokens) if x is not None
@@ -293,6 +302,10 @@ class EpisodeRuntimeAdapter:
                 "accounting_version": "represented_ids_v1",
                 "repetition": "observe_only",
             }
+        template_policy = template_execution_policy(
+            config.model.family, spec.assistant_history, spec.chat_template_kwargs, spec.enable_thinking)
+        if template_policy:
+            metadata["sampler"].setdefault("execution_policy", {}).update(template_policy)
         if spec.sampler is not None or spec.max_episode_seconds is not None:
             from joulewise.align.apple.sampling import SEED_LAW, TURN_SEED_LAW, SEED_BITS, seed_inputs
             policy = metadata["sampler"].setdefault("execution_policy", {})
@@ -385,6 +398,7 @@ class EpisodeRuntimeAdapter:
             **({'thermal': self.thermal} if self.thermal is not None else {}),
             **({"deadman": deadman, "enforce_turn_cap": True}
                if deadman is not None or spec.max_episode_decode_tokens is not None else {}),
+            assistant_history=spec.assistant_history, chat_template_kwargs=spec.chat_template_kwargs,
         )
         task = self.task
         from joulewise.align.runner import RepetitionObserver
@@ -455,9 +469,7 @@ class EpisodeRuntimeAdapter:
                     decode_tokens_used += result.completion_tokens
                     model_returned_tokens |= result.completion_tokens > 0
                     events.extend(endpoint.events[event_start:])
-                    transcript.append(ChatMessage(
-                        "assistant", str(result.raw_usage.get("raw_text", result.content))
-                    ))
+                    transcript.append(endpoint.assistant_history_message(result))
                     calls: list[ToolCall] = []
                     observed_calls = []
                     thermal_abort = self.thermal is not None and any(

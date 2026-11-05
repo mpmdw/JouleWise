@@ -1,0 +1,11 @@
+{
+  "repository": "mlx-community/Qwen3.8-27B-8bit",
+  "revision": "main",
+  "revision_is_mutable": true,
+  "source_file": "chat_template.jinja",
+  "local_source": ".hf-qwen38/chat_template.jinja",
+  "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+  "measurement_mac_pinned_revision": "815b83c0",
+  "pinned_revision_template_verified": false,
+  "note": "Supplied offline in the task clone, fetched from main. Verify this template and its digest against revision 815b83c0 on the measurement Mac before measurement. Qwen3.5 compatibility is protocol-based; no separate Qwen3.5 template was supplied."
+}
