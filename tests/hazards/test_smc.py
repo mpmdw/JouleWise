@@ -89,7 +89,7 @@ class EncodingTests(unittest.TestCase):
 
     def test_decode_refuses_unknown_types_and_short_data(self):
         with self.assertRaises(ValueError):
-            smc.decode("sp78", b"\x00\x00")
+            smc.decode("zzzz", b"\x00\x00")
         with self.assertRaises(ValueError):
             smc.decode("flt ", b"\x00\x00")
 
@@ -173,7 +173,7 @@ class ReaderTests(unittest.TestCase):
                     self.assertIn("replied 48 bytes", error)
 
     def test_nan_and_unsupported_types_are_errors(self):
-        keys = {"PDTR": ("flt ", struct.pack("<f", math.nan)), "B0AC": ("sp78", b"\x00\x10")}
+        keys = {"PDTR": ("flt ", struct.pack("<f", math.nan)), "B0AC": ("zzzz", b"\x00\x10")}
         result = smc.Reader(FakeTransport(keys)).read(("PDTR", "B0AC"))
         self.assertEqual(result["values"], {"PDTR": None, "B0AC": None})
         self.assertIn("nan", result["errors"]["PDTR"])

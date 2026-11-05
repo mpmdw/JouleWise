@@ -2365,7 +2365,7 @@ def assess_members(tasks: Sequence[Mapping[str, Any]], *, workers: int = 1) -> l
 
 JOURNAL_SCHEMA = "joulewise.hazard_journal.v1"
 MONITOR_MODULES = ("battery", "thermal", "contention", "clock", "disk")
-OBSERVATION_KIND = {"battery": "reading", "thermal": "reading", "clock": "reading", "disk": "reading",
+OBSERVATION_KIND = {"battery": "reading", "thermal": "reading", "temperature": "reading", "clock": "reading", "disk": "reading",
                     "contention": "interval"}
 BOOKKEEPING_KINDS = frozenset({"session_start", "session_end", "snapshot", "event", "cost"})
 STAMP_KEYS = ("wall_ns", "monotonic_ns", "monotonic_raw_ns")
