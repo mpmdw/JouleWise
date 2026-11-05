@@ -11,6 +11,8 @@ import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from joulewise.strict_io import finite_or_none as _finite
+
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
@@ -232,13 +234,6 @@ def ordered_reason_codes(reason_codes: Iterable[str]) -> list[str]:
         remaining.difference_update(selected)
     result.extend(sorted(remaining))
     return result
-
-
-def _finite(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    converted = float(value)
-    return converted if math.isfinite(converted) else None
 
 
 def _interval(value: Any) -> tuple[float, float] | None:

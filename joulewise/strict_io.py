@@ -83,3 +83,10 @@ def is_lower_sha256(value: Any) -> bool:
 
 def is_sha256(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdefABCDEF" for c in value)
+
+
+def finite_or_none(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None

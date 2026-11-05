@@ -9,6 +9,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import finite_or_none as _finite_number
+
 from joulewise.authentication_io import (
     read_authentication_input,
     read_authentication_text,
@@ -110,13 +112,6 @@ def post_run_environment_refusals(
     ):
         return ("environment_admission_failed",)
     return ()
-
-
-def _finite_number(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    converted = float(value)
-    return converted if math.isfinite(converted) else None
 
 
 def _attempt_capture_interval(

@@ -29,6 +29,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
+from joulewise.strict_io import finite_or_none as _common_mode_finite
+
 from joulewise.aggregate import student_t_critical_95
 from joulewise.arm_readiness import LAUNCH_LINEAGE_SCHEMA
 from joulewise.authentication_io import (
@@ -720,13 +722,6 @@ def validate_common_mode_estimator_registration(value: object) -> bool:
 
 def _common_mode_refuse(reason: str, detail: str) -> None:
     raise CommonModeEstimatorRefusal(reason, detail)
-
-
-def _common_mode_finite(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    converted = float(value)
-    return converted if math.isfinite(converted) else None
 
 
 def _common_mode_window_is_strictly_noncollapsed(

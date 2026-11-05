@@ -44,7 +44,12 @@ from typing import Any, Callable, Literal, Mapping, Sequence, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from joulewise.b5_analysis.kept_units import KeptUnits
-from joulewise.strict_io import is_lower_sha256 as _is_sha256
+
+from joulewise.strict_io import (
+    finite_or_none as _common_mode_finite,
+    finite_or_none as _finite,
+    is_lower_sha256 as _is_sha256,
+)
 
 from joulewise.window_lineage import LOCATOR_BASENAME
 
@@ -333,13 +338,6 @@ class _CommonModeBlockInputs:
 
 def _common_mode_refuse(reason: str, detail: str) -> None:
     raise CommonModeEstimatorRefusal(reason, detail)
-
-
-def _common_mode_finite(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    converted = float(value)
-    return converted if math.isfinite(converted) else None
 
 
 def _common_mode_clean_values(
@@ -1978,13 +1976,6 @@ def _read_summary(
     if not isinstance(parsed, Mapping):
         return None, digest, "summary_unreadable"
     return parsed, digest, None
-
-
-def _finite(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    converted = float(value)
-    return converted if math.isfinite(converted) else None
 
 
 def _reject_duplicate_admission_keys(
