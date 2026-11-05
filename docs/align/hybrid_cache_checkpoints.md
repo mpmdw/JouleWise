@@ -44,6 +44,14 @@ fix the value per model for the **whole series before its first measured window*
 Enabling checkpointing splits the prefill and changes the computation schedule
 and token trajectory of **every hybrid turn**, including turn zero and turns
 without a restore. Enabling it after W1 invalidates exact W1 seed replays.
+Identity and endpoint use the same `hybrid_checkpoint_policy(config, limit)`
+resolver. A hybrid cache whose config has no policy runs with limit zero;
+cache-class detection alone cannot enable checkpoints. The supported nested
+types include `qwen3_5_moe_text`, exercised with the review-retained
+mlx-community/Qwen3.5-122B-A10B-4bit config at revision `e9c67b08`:
+`tests/align/fixtures/qwen35_122b_config.json`, SHA-256
+`fc1c3921b5146143cda7a5feed445cc31c8929cc3f164f967ec6340b448086eb`.
+That provenance is supplied by the review, not fetched again in this fix round.
 Checkpoints above a branch's reused prefix are
 discarded before any suffix can overwrite their KV history. Unknown cache
 classes, rotating/quantized attention caches, disk persistence, speculative

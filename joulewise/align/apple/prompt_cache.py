@@ -23,7 +23,7 @@ def hybrid_checkpoint_policy(config, checkpoint_limit=DEFAULT_CHECKPOINT_LIMIT):
     if not checkpoint_limit:
         return None
     cfg = (config or {}).get("text_config", config or {})
-    if cfg.get("model_type") in {"qwen3_next", "qwen3_5_text", "qwen3_5", "qwen3_5_moe"}:
+    if cfg.get("model_type") in {"qwen3_next", "qwen3_5_text", "qwen3_5", "qwen3_5_moe", "qwen3_5_moe_text"}:
         return {"policy": CHECKPOINT_POLICY, "limit": checkpoint_limit,
                 "boundary": "closed_history_token_prefix", "prefill_step_size": 512}
     return None
