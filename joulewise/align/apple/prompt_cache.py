@@ -13,14 +13,18 @@ from dataclasses import dataclass
 
 
 CHECKPOINT_POLICY = "hybrid_boundary_v1"
-DEFAULT_CHECKPOINT_LIMIT = 2
+DEFAULT_CHECKPOINT_LIMIT = 0
 
 
-def hybrid_checkpoint_policy(config):
-    """Fixed identity addition only for supported hybrid model configs."""
+def hybrid_checkpoint_policy(config, checkpoint_limit=DEFAULT_CHECKPOINT_LIMIT):
+    """Shared identity/runtime policy; None/zero preserve rebuild-only execution."""
+    if checkpoint_limit is not None and (type(checkpoint_limit) is not int or checkpoint_limit < 0):
+        raise ValueError("hybrid_checkpoint_limit must be a nonnegative integer or null")
+    if not checkpoint_limit:
+        return None
     cfg = (config or {}).get("text_config", config or {})
     if cfg.get("model_type") in {"qwen3_next", "qwen3_5_text", "qwen3_5", "qwen3_5_moe"}:
-        return {"policy": CHECKPOINT_POLICY, "limit": DEFAULT_CHECKPOINT_LIMIT,
+        return {"policy": CHECKPOINT_POLICY, "limit": checkpoint_limit,
                 "boundary": "closed_history_token_prefix", "prefill_step_size": 512}
     return None
 

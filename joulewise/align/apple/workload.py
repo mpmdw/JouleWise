@@ -58,10 +58,13 @@ class EpisodeSpec:
     prompt_cache: str | None = None
     sampler: Mapping[str, Any] | None = None
     max_episode_seconds: float | None = None
+    # Fix per model before its first measured window; splitting the prefill
+    # changes every hybrid turn's computation schedule and token trajectory.
+    hybrid_checkpoint_limit: int | None = 0
 
     def to_text(self) -> str:
         value = asdict(self)
-        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds"):
+        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds", "hybrid_checkpoint_limit"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -81,6 +84,9 @@ class EpisodeSpec:
         ):
             raise ValueError("mock_turns must contain mappings")
         obj["mock_turns"] = tuple(mock_turns)
+        # Omission is the legacy identity (effective limit zero). New specs
+        # serialize their explicit default 0; None round-trips as omission.
+        obj.setdefault("hybrid_checkpoint_limit", None)
         spec = cls(**obj)
         if spec.condition not in ("benign", "sabotage"):
             raise ValueError("unknown episode condition")
@@ -97,6 +103,10 @@ class EpisodeSpec:
             raise ValueError("max_context_tokens must be a positive integer or null")
         if spec.prompt_cache not in (None, "episode_prefix"):
             raise ValueError("prompt_cache must be episode_prefix or null")
+        if spec.hybrid_checkpoint_limit is not None and (
+            type(spec.hybrid_checkpoint_limit) is not int or spec.hybrid_checkpoint_limit < 0
+        ):
+            raise ValueError("hybrid_checkpoint_limit must be a nonnegative integer or null")
         if type(spec.temperature) not in (int, float) or not math.isfinite(spec.temperature):
             raise ValueError("temperature must be numeric and finite")
         if spec.sampler is not None:
@@ -231,12 +241,14 @@ class EpisodeRuntimeAdapter:
                 "repetition": "observe_only",
             }
             from joulewise.align.apple.prompt_cache import hybrid_checkpoint_policy
-            checkpoint = hybrid_checkpoint_policy(getattr(self.runtime, "_model_config", None))
+            checkpoint = hybrid_checkpoint_policy(getattr(self.runtime, "_model_config", None), spec.hybrid_checkpoint_limit)
             if checkpoint is not None:
                 metadata["sampler"]["execution_policy"].update(
                     fallback="checkpoint_then_whole_cache_rebuild_on_untrimmable_rewrite",
                     checkpoint=checkpoint,
                 )
+        if spec.hybrid_checkpoint_limit is not None:
+            metadata["sampler"].setdefault("execution_policy", {})["hybrid_checkpoint_limit"] = spec.hybrid_checkpoint_limit
         if spec.sampler is not None or spec.max_episode_seconds is not None:
             from joulewise.align.apple.sampling import SEED_LAW, TURN_SEED_LAW, SEED_BITS, seed_inputs
             policy = metadata["sampler"].setdefault("execution_policy", {})
@@ -303,6 +315,7 @@ class EpisodeRuntimeAdapter:
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
             enable_thinking=spec.enable_thinking, prompt_cache=spec.prompt_cache,
             sampler=spec.sampler,
+            hybrid_checkpoint_limit=spec.hybrid_checkpoint_limit,
         )
         task = self.task
         from joulewise.align.runner import RepetitionObserver

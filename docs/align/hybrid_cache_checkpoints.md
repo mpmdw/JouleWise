@@ -34,10 +34,17 @@ copy remains reusable. Native offsets must agree with the token ledger before
 and after restoration. A partial or failed operation invalidates the episode
 cache through the existing endpoint error path.
 
-The default ring keeps the last **two** checkpoints. The internal constructor's
-`checkpoint_limit=N` accepts nonnegative integers; zero preserves rebuild-only
-behavior. The endpoint uses the fixed default, recorded in the hybrid model's
-execution-policy identity. Checkpoints above a branch's reused prefix are
+`EpisodeSpec.hybrid_checkpoint_limit` defaults to **0**, preserving rebuild-only
+behavior. A positive integer explicitly enables that many retained checkpoints;
+`None` omits the field from serialized specs and execution policy and also
+disables checkpointing. Legacy specs lacking the field retain that omission.
+An explicit value is hashed in `execution_policy.hybrid_checkpoint_limit`;
+enabled hybrid models also record the resolved checkpoint policy. Choose and
+fix the value per model for the **whole series before its first measured window**.
+Enabling checkpointing splits the prefill and changes the computation schedule
+and token trajectory of **every hybrid turn**, including turn zero and turns
+without a restore. Enabling it after W1 invalidates exact W1 seed replays.
+Checkpoints above a branch's reused prefix are
 discarded before any suffix can overwrite their KV history. Unknown cache
 classes, rotating/quantized attention caches, disk persistence, speculative
 generation and batched requests are outside this implementation.

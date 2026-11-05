@@ -172,7 +172,7 @@ class NativeProbe:
         """
         mx = self.mx
         model, config = self.model(family, dtype_name)
-        state = EpisodePromptCache(model)
+        state = EpisodePromptCache(model, checkpoint_limit=2)
         prefix = [1 + (i % 23) for i in range(boundary)]
         old_prompt = prefix + [31] * (REWRITES[0] - 7)
         delta, metadata = state.prepare(old_prompt, stable_prefix_ids=prefix)
@@ -266,7 +266,7 @@ class NativeProbe:
         """
         mx = self.mx
         model, config = self.model(family, dtype_name)
-        state = EpisodePromptCache(model)
+        state = EpisodePromptCache(model, checkpoint_limit=2)
         prefix = [1 + (i % 23) for i in range(STEP)]
         delta, metadata = state.prepare(prefix + [31], stable_prefix_ids=prefix)
         state.prefill_checkpoint(delta, metadata)

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint
-from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+from joulewise.align.apple.workload import EpisodeRuntimeAdapter, EpisodeSpec
 from joulewise.align.apple.prompt_cache import (
     EpisodePromptCache, checkpoint_size_from_config, hybrid_checkpoint_policy,
 )
@@ -102,7 +102,7 @@ class CheckpointTests(unittest.TestCase):
         self.addCleanup(self.api.stop)
         self.addCleanup(self.core.stop)
         self.model = HybridModel()
-        self.cache = EpisodePromptCache(self.model)
+        self.cache = EpisodePromptCache(self.model, checkpoint_limit=2)
 
     def turn(self, ids, boundary=None, *, output=(7, 0)):
         delta, metadata = self.cache.prepare(ids, stable_prefix_ids=ids[:boundary] if boundary else None)
@@ -180,7 +180,7 @@ class CheckpointTests(unittest.TestCase):
         self.cache.cache[1].represented_tokens.pop()
         with self.assertRaisesRegex(ValueError, 'cache_offset_mismatch'):
             self.cache.prepare([1, 2, 3, 91])
-        self.cache = EpisodePromptCache(self.model)
+        self.cache = EpisodePromptCache(self.model, checkpoint_limit=2)
         self.turn([1, 2, 3, 90], 3)
         self.cache.cache[1].trim = lambda n: n - 1
         with self.assertRaisesRegex(ValueError, 'cache_checkpoint_wrong_trim'):
@@ -200,6 +200,7 @@ class CheckpointTests(unittest.TestCase):
         clock = FakeClock()
         runtime = MlxRuntimeAdapter(clock)
         runtime._model, runtime._tokenizer = HybridModel(clock), Tokenizer()
+        runtime._model_config = {'model_type': 'qwen3_next'}
         records = []
         generate = runtime._generate
 
@@ -219,7 +220,8 @@ class CheckpointTests(unittest.TestCase):
         runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
         config = base_config()
         config = replace(config, hardware_target=replace(config.hardware_target, runtime_backend=RuntimeBackend.MLX))
-        endpoint = MlxEndpoint(runtime, config, clock, episode_domain='synthetic', prompt_cache='episode_prefix')
+        endpoint = MlxEndpoint(runtime, config, clock, episode_domain='synthetic', prompt_cache='episode_prefix',
+                               hybrid_checkpoint_limit=2)
         for ids in ([1, 2, 3], [1, 2, 3, 8]):
             result = endpoint.chat([ChatMessage('user', json.dumps(ids))], max_tokens=8, temperature=0., seed=1)
             self.assertFalse(any(f.startswith('endpoint_error') for f in endpoint.flags), endpoint.flags)
@@ -237,11 +239,49 @@ class CheckpointTests(unittest.TestCase):
 
 
 class CompatibilityAndSizingTests(unittest.TestCase):
+    def test_checkpoint_limit_is_explicit_validated_and_part_of_identity(self):
+        spec = episode_spec(hidden=False)
+        self.assertEqual(spec.hybrid_checkpoint_limit, 0)
+        self.assertEqual(EpisodeSpec.from_text(spec.to_text()).hybrid_checkpoint_limit, 0)
+        runtime = SimpleNamespace(name='synthetic', _model_config={'model_type': 'qwen3_next'})
+        adapter = EpisodeRuntimeAdapter(runtime, FakeClock())
+        policies = []
+        for limit in (None, 0, 1, 2):
+            requested = replace(spec, prompt_cache='episode_prefix', hybrid_checkpoint_limit=limit)
+            text = requested.to_text()
+            self.assertEqual('hybrid_checkpoint_limit' in json.loads(text), limit is not None)
+            policy = adapter.identity_projection_metadata(as_config(requested, 'policy'))['sampler']['execution_policy']
+            self.assertEqual('hybrid_checkpoint_limit' in policy, limit is not None)
+            if limit is not None:
+                self.assertEqual(policy['hybrid_checkpoint_limit'], limit)
+            if limit:
+                self.assertEqual(policy['checkpoint']['limit'], limit)
+            else:
+                self.assertNotIn('checkpoint', policy)
+                self.assertEqual(policy['fallback'], 'whole_cache_rebuild_on_untrimmable_rewrite')
+            policies.append(json.dumps(policy, sort_keys=True))
+        self.assertEqual(len(set(policies)), 4)
+        for invalid in (-1, True, 1.5, '2'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                EpisodeSpec.from_text(replace(spec, hybrid_checkpoint_limit=invalid).to_text())
+
+    def test_cache_constructor_defaults_to_rebuild_only(self):
+        with patch('joulewise.align.apple.prompt_cache.native_cache_api', return_value=HybridAPI()):
+            cache = EpisodePromptCache(HybridModel())
+            delta, metadata = cache.prepare([1, 2, 3], stable_prefix_ids=[1, 2])
+        self.assertEqual(cache.checkpoint_limit, 0)
+        self.assertIsNone(cache._checkpoint_length)
+        self.assertEqual(delta, [1, 2, 3])
+        self.assertNotIn('cache_checkpoint_policy', metadata)
+
     def test_nonhybrid_append_only_endpoint_bytes_match_base_commit(self):
         class LegacyEndpointCache(LegacyCache):
             # Adapt only the new call sites; the baseline reconciliation and
             # finish implementations are the untouched c9a0a394 source fixture.
             hybrid = False
+
+            def __init__(self, model, **kwargs):
+                super().__init__(model)
 
             def prefill_checkpoint(self, delta, metadata):
                 return delta
@@ -273,8 +313,8 @@ class CompatibilityAndSizingTests(unittest.TestCase):
         self.assertEqual(result['checkpoint_bytes'], 153944192)
         fp32 = checkpoint_size_from_config(cfg, conv_itemsize=4)
         self.assertEqual(fp32['state_bytes'] - result['state_bytes'], 48 * 61440)
-        self.assertIsNotNone(hybrid_checkpoint_policy(cfg))
-        self.assertIsNotNone(hybrid_checkpoint_policy({'model_type': 'qwen3_next'}))
+        self.assertIsNotNone(hybrid_checkpoint_policy(cfg, 2))
+        self.assertIsNotNone(hybrid_checkpoint_policy({'model_type': 'qwen3_next'}, 2))
         self.assertIsNone(hybrid_checkpoint_policy({'model_type': 'qwen3_moe'}))
         self.assertIsNone(hybrid_checkpoint_policy(None))
 
@@ -282,7 +322,7 @@ class CompatibilityAndSizingTests(unittest.TestCase):
         runtime = SimpleNamespace(name='synthetic', _model_config={'model_type': 'qwen3_moe'})
         adapter = EpisodeRuntimeAdapter(runtime, FakeClock())
         adapter.prepared = {'version': 'synthetic'}
-        config = as_config(replace(episode_spec(hidden=False), prompt_cache='episode_prefix'), 'synthetic-policy')
+        config = as_config(replace(episode_spec(hidden=False), prompt_cache='episode_prefix', hybrid_checkpoint_limit=2), 'synthetic-policy')
         anchor = adapter.identity_projection_metadata(config)['sampler']['execution_policy']
         self.assertEqual(anchor['fallback'], 'whole_cache_rebuild_on_untrimmable_rewrite')
         self.assertNotIn('checkpoint', anchor)

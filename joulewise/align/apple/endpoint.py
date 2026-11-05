@@ -196,6 +196,7 @@ class MlxEndpoint:
         enable_thinking: bool | None = None,
         prompt_cache: str | None = None,
         sampler: Mapping[str, Any] | None = None,
+        hybrid_checkpoint_limit: int | None = 0,
     ) -> None:
         self.runtime = runtime
         self.config = config
@@ -209,6 +210,9 @@ class MlxEndpoint:
             raise ValueError("unknown prompt cache policy")
         self.cache_policy = prompt_cache or "full_prompt_each_turn"
         self._episode_cache = None
+        from joulewise.align.apple.prompt_cache import hybrid_checkpoint_policy
+        self._checkpoint_policy = hybrid_checkpoint_policy(
+            getattr(runtime, "_model_config", None), hybrid_checkpoint_limit)
         self.events: list[Any] = []
         self.turn_provenance: list[Mapping[str, Any]] = []
         self.flags: list[str] = []
@@ -371,9 +375,11 @@ class MlxEndpoint:
                 def reconcile_prompt(ids):
                     from joulewise.align.apple.prompt_cache import EpisodePromptCache
                     if self._episode_cache is None:
-                        self._episode_cache = EpisodePromptCache(self.runtime._model)
+                        self._episode_cache = EpisodePromptCache(
+                            self.runtime._model,
+                            checkpoint_limit=self._checkpoint_policy['limit'] if self._checkpoint_policy else 0)
                     delta, observed = self._episode_cache.prepare(ids)
-                    if self._episode_cache.hybrid:
+                    if self._episode_cache.hybrid and self._checkpoint_policy:
                         # Snapshot before the assistant generation preamble,
                         # whose think markers can disappear on the next render.
                         closed = self._render_prompt(messages, tools, add_generation_prompt=False)
