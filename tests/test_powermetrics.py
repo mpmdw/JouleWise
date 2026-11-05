@@ -144,6 +144,48 @@ def completed(command: list[str], returncode: int = 0, stderr: bytes = b""):
     return subprocess.CompletedProcess(command, returncode, stdout=b"", stderr=stderr)
 
 
+def capture_popen(capture, streaming=None):
+    """Route finite CLI captures to communicate, retaining each stream fake."""
+    real_popen = subprocess.Popen
+
+    class CaptureProcess:
+        def __init__(self, command):
+            self.command = command
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            # POSIX Popen returncodes use minus the terminating signal:
+            # -15 is -SIGTERM.
+            self.returncode = -15
+
+        def communicate(self, timeout=None):
+            if self.returncode is not None:
+                return b"", b""
+            result = capture(self.command, timeout=timeout)
+            self.returncode = result.returncode
+            return result.stdout, result.stderr
+
+    def launch(command, **kwargs):
+        # subprocess is a shared module: bundle/platform helpers still need
+        # real processes when only the powermetrics seam is patched.
+        if "/usr/bin/powermetrics" not in command:
+            return real_popen(command, **kwargs)
+        # sudo's own -n has no numeric argument; only the sampler's -n COUNT
+        # denotes a finite capture (both the capability probe and idle).
+        bounded = any(
+            flag == "-n" and value.isdecimal()
+            for flag, value in zip(command, command[1:])
+        )
+        if not bounded and streaming is not None:
+            return streaming(command, **kwargs)
+        return CaptureProcess(command)
+
+    return launch
+
+
 class PowermetricsParserTests(unittest.TestCase):
     def test_fixture_framing_and_plist_documents(self) -> None:
         data = FIXTURE.read_bytes()
@@ -519,12 +561,15 @@ class PowermetricsAdapterTests(unittest.TestCase):
             for weight, value in zip(weights, expected_totals, strict=True)
         ) / (1.0 - q)
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
         adapter = PowermetricsTelemetryAdapter(FakeClock())
-        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.Popen",
+            side_effect=capture_popen(fake_capture),
+        ):
             baseline = adapter.measure_idle(make_config())
 
         metadata = adapter.device_metadata(make_config())
@@ -552,7 +597,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
     def test_measure_idle_preserves_raw_and_rich_idle_artifacts_with_context(self) -> None:
         fixture = FIXTURE.read_bytes()
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -570,7 +615,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 logs_dir=root / "logs",
                 outputs_dir=root / "outputs",
             )
-            with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+            with patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture),
+            ):
                 adapter.measure_idle(config, context)
                 adapter.measure_idle(config, context)
 
@@ -610,7 +658,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
     def test_measure_idle_rich_write_failure_does_not_break_baseline(self) -> None:
         fixture = FIXTURE.read_bytes()
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -629,7 +677,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture),
+                ),
                 patch(
                     "joulewise.adapters.powermetrics.write_derived_artifact",
                     side_effect=BundleError("boom"),
@@ -647,7 +698,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
     def test_measure_idle_rich_write_oserror_does_not_break_baseline(self) -> None:
         fixture = FIXTURE.read_bytes()
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -666,7 +717,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture),
+                ),
                 patch(
                     "joulewise.adapters.powermetrics.write_derived_artifact",
                     side_effect=OSError("disk full"),
@@ -682,11 +736,14 @@ class PowermetricsAdapterTests(unittest.TestCase):
             )
 
     def test_start_sampling_permission_denied_names_exact_sudoers_line(self) -> None:
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             return completed(command, returncode=1, stderr=b"sudo: a password is required\n")
 
         adapter = PowermetricsTelemetryAdapter(FakeClock())
-        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.Popen",
+            side_effect=capture_popen(fake_capture),
+        ):
             result = adapter.start_sampling(make_config())
 
         self.assertFalse(result.ok)
@@ -702,11 +759,11 @@ class PowermetricsAdapterTests(unittest.TestCase):
         )
 
     def test_sampler_probe_not_found_records_probe_failure_metadata(self) -> None:
-        def fake_run(command, **kwargs):
-            raise FileNotFoundError("powermetrics")
-
         adapter = PowermetricsTelemetryAdapter(FakeClock())
-        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.Popen",
+            side_effect=FileNotFoundError("powermetrics"),
+        ):
             result = adapter.start_sampling(make_config())
 
         self.assertFalse(result.ok)
@@ -721,11 +778,14 @@ class PowermetricsAdapterTests(unittest.TestCase):
         )
 
     def test_sampler_probe_timeout_records_probe_failure_metadata(self) -> None:
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             raise subprocess.TimeoutExpired(command, timeout=kwargs["timeout"])
 
         adapter = PowermetricsTelemetryAdapter(FakeClock())
-        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.Popen",
+            side_effect=capture_popen(fake_capture),
+        ):
             result = adapter.start_sampling(make_config())
 
         self.assertFalse(result.ok)
@@ -740,11 +800,14 @@ class PowermetricsAdapterTests(unittest.TestCase):
         )
 
     def test_run_fails_at_idle_without_fabricated_baseline_or_warmup(self) -> None:
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             return completed(command, returncode=1, stderr=b"sudo: a password is required\n")
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+            with patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture),
+            ):
                 bundle_path, summary = run_benchmark(make_config(), Path(tmp), FakeClock())
 
             self.assertEqual(summary.status, RunStatus.FAILED)
@@ -768,7 +831,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         clock = FakeClock(start=100.0)
         adapter = PowermetricsTelemetryAdapter(clock)
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -808,8 +871,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, FakePopen),
+                ),
             ):
                 start = adapter.start_sampling(config, context)
                 self.assertTrue(start.ok)
@@ -841,7 +906,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         operational_now = [0.0]
         instances = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -886,8 +951,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
             drain_sleep=fake_sleep,
         )
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", AppendingPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, AppendingPopen),
+            ),
             patch(
                 "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
                 return_value=derive_powermetrics_clock_evidence_v2,
@@ -1001,7 +1068,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         operational_now = [0.0]
         instances = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -1039,8 +1106,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
             drain_sleep=fake_sleep,
         )
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", R4LagPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, R4LagPopen),
+            ),
             patch(
                 "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
                 return_value=derive_powermetrics_clock_evidence_v2,
@@ -1263,7 +1332,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         clock = FakeClock(start=rebase_endpoint_s - FIXTURE_D0_S)
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -1292,8 +1361,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
             ),
         )
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", BracketedPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, BracketedPopen),
+            ),
             patch(
                 "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
                 return_value=derive_powermetrics_clock_evidence_v2,
@@ -1375,7 +1446,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         adapter = PowermetricsTelemetryAdapter(clock)
         instances = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -1400,10 +1471,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 return b"", b""
 
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch(
                 "joulewise.adapters.powermetrics.subprocess.Popen",
-                PollingExceptionPopen,
+                side_effect=capture_popen(fake_capture, PollingExceptionPopen),
             ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
@@ -1433,7 +1503,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         operational_now = [0.0]
         instances = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -1495,8 +1565,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
             drain_monotonic=lambda: operational_now[0],
         )
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", GrowingPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, GrowingPopen),
+            ),
             patch.object(Path, "read_bytes", deadline_consuming_read),
             patch(
                 "joulewise.adapters.powermetrics.parse_powermetrics_records",
@@ -1542,7 +1614,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         operational_now = [0.0]
         instances = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -1576,8 +1648,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
             drain_sleep=fake_sleep,
         )
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", SilentPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, SilentPopen),
+            ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -1614,7 +1688,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             ),
         )
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -1637,8 +1711,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 return b"", b""
 
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", BracketedPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, BracketedPopen),
+            ),
             patch(
                 "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
                 return_value=derive_powermetrics_clock_evidence_v2,
@@ -1681,7 +1757,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         clock = FakeClock(start=100.0)
         adapter = PowermetricsTelemetryAdapter(clock)
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -1713,8 +1789,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, FakePopen),
+                ),
                 patch(
                     "joulewise.adapters.powermetrics.write_derived_artifact",
                     side_effect=BundleError("boom"),
@@ -1735,7 +1813,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         adapter = PowermetricsTelemetryAdapter(FakeClock(start=100.0))
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -1768,10 +1846,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
             )
             with (
                 patch(
-                    "joulewise.adapters.powermetrics.subprocess.run",
-                    side_effect=fake_run,
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, FakePopen),
                 ),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
             ):
                 self.assertTrue(adapter.start_sampling(config, context).ok)
                 with patch(
@@ -1799,7 +1876,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         adapter = PowermetricsTelemetryAdapter(FakeClock(start=100.0))
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -1832,10 +1909,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
             )
             with (
                 patch(
-                    "joulewise.adapters.powermetrics.subprocess.run",
-                    side_effect=fake_run,
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, FakePopen),
                 ),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
             ):
                 self.assertTrue(adapter.start_sampling(config, context).ok)
                 with patch.object(
@@ -1872,7 +1948,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             workload_profile={"output_tokens": 300},
             sampling={"power_hz": 2.0, "idle_seconds": 5.0},
         )
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             if "-o" not in command:
                 return completed(command)
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
@@ -1908,12 +1984,8 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
                 with (
                     patch(
-                        "joulewise.adapters.powermetrics.subprocess.run",
-                        side_effect=fake_run,
-                    ),
-                    patch(
                         "joulewise.adapters.powermetrics.subprocess.Popen",
-                        FakePopen,
+                        side_effect=capture_popen(fake_capture, FakePopen),
                     ),
                     patch(
                         "joulewise.adapters.powermetrics.write_raw_artifact",
@@ -1944,7 +2016,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         clock = FakeClock(start=100.0)
         adapter = PowermetricsTelemetryAdapter(clock)
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -1976,8 +2048,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, FakePopen),
+                ),
                 patch(
                     "joulewise.adapters.powermetrics.write_derived_artifact",
                     side_effect=OSError("disk full"),
@@ -1998,7 +2072,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         adapter = PowermetricsTelemetryAdapter(FakeClock(start=10.0))
         garbage_stream = FIXTURE.read_bytes() + b"\0garbage"
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -2032,8 +2106,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", GarbagePopen),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, GarbagePopen),
+                ),
             ):
                 self.assertTrue(adapter.start_sampling(config, context).ok)
                 samples = adapter.stop_sampling(config, context)
@@ -2059,7 +2135,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         clock = FakeClock(start=10.0)
         state: dict[str, bytes] = {}
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             if "-o" in command:
                 Path(command[command.index("-o") + 1]).write_bytes(
                     FIXTURE.read_bytes()
@@ -2093,8 +2169,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", TruncatedTailPopen),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, TruncatedTailPopen),
+                ),
             ):
                 bundle_path, summary = run_benchmark(config, Path(tmp), clock)
 
@@ -2135,7 +2213,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         clock = FakeClock(start=100.0)
         adapter = PowermetricsTelemetryAdapter(clock)
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -2167,8 +2245,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, FakePopen),
+                ),
             ):
                 self.assertTrue(adapter.start_sampling(config, context).ok)
                 adapter.stop_sampling(config, context)
@@ -2180,7 +2260,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         config = make_config()
         adapter = PowermetricsTelemetryAdapter(FakeClock(start=10.0))
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -2214,8 +2294,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 outputs_dir=root / "outputs",
             )
             with (
-                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-                patch("joulewise.adapters.powermetrics.subprocess.Popen", CorruptPopen),
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.Popen",
+                    side_effect=capture_popen(fake_capture, CorruptPopen),
+                ),
             ):
                 self.assertTrue(adapter.start_sampling(config, context).ok)
                 with self.assertRaises(ValueError):
@@ -2229,33 +2311,38 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
                 self.returncode = 0
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(CORRUPT_PLIST)
             return completed(command)
 
         adapter = PowermetricsTelemetryAdapter(FakeClock())
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, FakePopen),
+            ),
         ):
             self.assertTrue(adapter.start_sampling(make_config()).ok)
 
     def test_probe_timeout_is_structured_unknown_error(self) -> None:
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             raise subprocess.TimeoutExpired(command, timeout=kwargs["timeout"])
 
         adapter = PowermetricsTelemetryAdapter(FakeClock())
-        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.Popen",
+            side_effect=capture_popen(fake_capture),
+        ):
             result = adapter.start_sampling(make_config())
         self.assertFalse(result.ok)
         self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
 
     def test_probe_missing_binary_is_telemetry_unavailable(self) -> None:
-        def fake_run(command, **kwargs):
-            raise FileNotFoundError("sudo")
-
         adapter = PowermetricsTelemetryAdapter(FakeClock())
-        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.Popen",
+            side_effect=FileNotFoundError("sudo"),
+        ):
             result = adapter.start_sampling(make_config())
         self.assertFalse(result.ok)
         self.assertEqual(result.failure_reason, FailureReason.TELEMETRY_UNAVAILABLE)
@@ -2268,7 +2355,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         config = make_config()
         adapter = PowermetricsTelemetryAdapter(FakeClock())
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -2288,8 +2375,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 return b"", b""
 
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, FakePopen),
+            ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             samples = adapter.stop_sampling(config, context=None)
@@ -2299,7 +2388,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         fixture = FIXTURE.read_bytes()
         sleep_calls = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -2327,8 +2416,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
         adapter = PowermetricsTelemetryAdapter(FakeClock(start=200.0))
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", DelayedPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, DelayedPopen),
+            ),
             patch("joulewise.adapters.powermetrics.time.sleep", side_effect=fake_sleep),
         ):
             result = adapter.start_sampling(make_config())
@@ -2340,7 +2431,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
     def test_start_sampling_readiness_timeout_is_structured_and_terminates(self) -> None:
         instances = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
@@ -2366,8 +2457,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
         adapter = PowermetricsTelemetryAdapter(FakeClock())
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", NeverReadyPopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, NeverReadyPopen),
+            ),
             patch("joulewise.adapters.powermetrics.READINESS_TIMEOUT_S", 0.0),
         ):
             result = adapter.start_sampling(make_config())
@@ -2380,7 +2473,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
     def test_start_sampling_readiness_fast_path_does_not_sleep(self) -> None:
         fixture = FIXTURE.read_bytes()
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return completed(command)
 
@@ -2394,8 +2487,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
         adapter = PowermetricsTelemetryAdapter(FakeClock())
         with (
-            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", ImmediatePopen),
+            patch(
+                "joulewise.adapters.powermetrics.subprocess.Popen",
+                side_effect=capture_popen(fake_capture, ImmediatePopen),
+            ),
             patch("joulewise.adapters.powermetrics.time.sleep") as sleep,
         ):
             result = adapter.start_sampling(make_config())
@@ -2407,14 +2502,17 @@ class PowermetricsAdapterTests(unittest.TestCase):
         fixture = FIXTURE.read_bytes()
         capture_calls = []
 
-        def fake_run(command, **kwargs):
+        def fake_capture(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
             capture_calls.append((command, kwargs["timeout"]))
             return completed(command)
 
         config = make_config(sampling={"power_hz": 600.0, "idle_seconds": 60.0})
         adapter = PowermetricsTelemetryAdapter(FakeClock())
-        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+        with patch(
+            "joulewise.adapters.powermetrics.subprocess.Popen",
+            side_effect=capture_popen(fake_capture),
+        ):
             adapter.measure_idle(config)
 
         command, timeout = capture_calls[-1]
