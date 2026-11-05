@@ -1,8 +1,8 @@
 """ALIGN in-process SMC sidecar, config slots and coverage.
 
 Sensor names do not establish die/heatsink identity. R0 proposals remain
-PROVISIONAL until checked on the measurement machine. No admission thresholds
-or scientific eligibility rules are installed by this diagnostic sidecar.
+PROVISIONAL until checked on the measurement machine. The optional
+thermal_gates session consumes the Sidecar; sensor-only slots remain diagnostic collectors.
 """
 from __future__ import annotations
 
@@ -72,16 +72,18 @@ def sample(reader: Any, selected: Sequence[str]) -> dict[str, Any]:
 class Sidecar:
     """One reader/thread, from adapter prepare to teardown, bundle-local only.
 
-    Gate/hold logic is supplied by the gate lane. It can inspect ``readings``
-    and record phase boundaries with ``event``; this collector invents no gate.
+    ThermalSession consumes ``snapshot()`` and records boundaries with
+    ``event``; this collector itself invents no gate. A null outputs directory
+    is the in-memory synthetic-clock seam, never used for a measured member.
     ``tick`` and ``start(background=False)`` are deterministic test seams.
     """
-    def __init__(self, outputs_dir: Path, config: Mapping[str, Any], *, reader=None, ctx=None):
+    def __init__(self, outputs_dir: Path | None, config: Mapping[str, Any], *, reader=None, ctx=None,
+                 status_reader=None):
         from joulewise.hazards.base import Context
         from joulewise.align.apple.smc_reader import Reader
         self.config = validate_policy(config)
         self.selected = keys(self.config)
-        self.path = Path(outputs_dir) / "align_thermal.jsonl"
+        self.path = Path(outputs_dir) / "align_thermal.jsonl" if outputs_dir is not None else None
         self.reader = reader if reader is not None else Reader()
         self.ctx = ctx if ctx is not None else Context()
         self.readings = deque(maxlen=3600)
@@ -91,6 +93,13 @@ class Sidecar:
         self._file = None
         self._error = None
         self._seq = 0
+        self.status_reader = status_reader
+        self._closed = False
+
+    def snapshot(self):
+        """A stable reading snapshot; callers never iterate the live deque."""
+        with self._lock:
+            return tuple(self.readings)
 
     def _write(self, kind, values, started=None, finished=None):
         with self._lock:
@@ -101,16 +110,18 @@ class Sidecar:
                    "session": self.session, "seq": self._seq, "started": started.to_json(),
                    "finished": finished.to_json(), "values": values, "raw": [],
                    "error": "; ".join(values.get("errors", {}).values()) or None}
-            self._file.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
-            self._file.flush()
-            if finished.monotonic_ns - self._synced_ns >= 5 * NS:
-                os.fsync(self._file.fileno())
-                self._synced_ns = finished.monotonic_ns
+            if self._file is not None:
+                self._file.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
+                self._file.flush()
+                if finished.monotonic_ns - self._synced_ns >= 5 * NS:
+                    os.fsync(self._file.fileno())
+                    self._synced_ns = finished.monotonic_ns
             return row
 
     def start(self, *, background=True):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = self.path.open("x", encoding="utf-8")
+        if self.path is not None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._file = self.path.open("x", encoding="utf-8")
         stamp = self.ctx.stamp()
         self.session = f"align-{stamp.monotonic_ns}"
         self._synced_ns = stamp.monotonic_ns
@@ -125,13 +136,21 @@ class Sidecar:
             started = self.ctx.stamp()
             values = sample(self.reader, self.selected)
             finished = self.ctx.stamp()
+            # Status parsing must stay outside the SMC read bracket.
+            if self.status_reader is not None:
+                try:
+                    values['status'] = dict(self.status_reader())
+                except Exception as exc:
+                    values['status'] = {'error': f'{type(exc).__name__}:{exc}'}
             self.counter.observe(started.monotonic_ns, finished.monotonic_ns, values)
             row = self._write("reading", values, started, finished)
             self.readings.append(row)
             return row
 
     def _loop(self):
-        due = self.ctx.clocks.monotonic_ns()
+        due = self.counter.start_ns
+        if self.readings:
+            due = self.readings[-1]['started']['monotonic_ns'] + NS
         try:
             while not self._stop.is_set():
                 delay = (due - self.ctx.clocks.monotonic_ns()) / NS
@@ -152,6 +171,9 @@ class Sidecar:
         return self._write(kind, dict(values))
 
     def stop(self):
+        if self._closed:
+            return
+        self._closed = True
         self._stop.set()
         if self._thread is not None:
             self._thread.join()
