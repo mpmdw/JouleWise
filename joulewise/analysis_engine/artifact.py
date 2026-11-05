@@ -14,6 +14,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from joulewise.strict_io import json_pretty_insertion_utf8_strict as render_claim_verdicts
+
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
@@ -407,12 +409,6 @@ def calculate_claim_verdicts_id(value: Mapping[str, Any]) -> str:
     body = dict(value)
     body.pop("claim_verdicts_id", None)
     return "cv-" + hashlib.sha256(canonical_json_bytes(body)).hexdigest()
-
-
-def render_claim_verdicts(value: Mapping[str, Any]) -> bytes:
-    return (
-        json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
-    ).encode("utf-8")
 
 
 def _exact_keys(value: Any, expected: set[str], where: str, errors: list[str]) -> bool:

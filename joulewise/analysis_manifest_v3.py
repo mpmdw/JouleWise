@@ -21,6 +21,8 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import json_pretty_insertion_utf8_strict as render_manifest
+
 from joulewise.calibration_ledger import _refuse_custody_override_mint
 from joulewise.calibration_bracketing import load_calibration_acceptance_bound
 
@@ -405,12 +407,6 @@ def calculate_manifest_id(value: Mapping[str, Any]) -> str:
     body = dict(value)
     body.pop("manifest_id", None)
     return "am-" + hashlib.sha256(canonical_json_bytes(body)).hexdigest()
-
-
-def render_manifest(value: Mapping[str, Any]) -> bytes:
-    return (
-        json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
-    ).encode("utf-8")
 
 
 def _exact_keys(value: Any, expected: set[str], where: str, errors: list[str]) -> bool:
