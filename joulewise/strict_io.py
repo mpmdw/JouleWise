@@ -27,3 +27,7 @@ def sha256_raw(raw: bytes) -> str:
 
 def sha256_data(data: bytes) -> str:
     return sha256_value(data)
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()

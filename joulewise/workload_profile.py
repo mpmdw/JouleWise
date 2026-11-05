@@ -38,6 +38,8 @@ _TOP_KEYS = frozenset(
 _PROMPT_KEYS = frozenset({"prompt_id", "text", "text_utf8_sha256"})
 
 
+from joulewise.strict_io import sha256_text as _sha256_text
+
 @dataclass(frozen=True)
 class WorkloadProfileRefusal:
     reason: str
@@ -68,10 +70,6 @@ class WorkloadProfile:
     license: str
     prompts: tuple[Mapping[str, str], ...]
     prompt_set_sha256: str
-
-
-def _sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def prompt_set_projection(prompts: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...]) -> list[dict[str, str]]:

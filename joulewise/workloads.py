@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import sha256_text as _sha256_text
+
 from joulewise.suite import (
     ORDER_POLICY_MANIFEST,
     SUITE_SCHEMA_VERSION,
@@ -172,10 +174,6 @@ def parameters_hash(
         block["order_policy"] = order_policy
     payload = json.dumps(block, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
-
-
-def _sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def affine_item_id(n_iter: int, item_index: int) -> str:
