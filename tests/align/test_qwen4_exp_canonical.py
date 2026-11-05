@@ -1511,6 +1511,32 @@ class ValidationRound1Test(unittest.TestCase):
         self.assertEqual(sorted({c.offset for c in cache}), [6])
         self.assertEqual(cache[0].padding, (0, 2))
 
+    def test_r1_caches_work_across_two_loaded_module_copies(self):
+        """Every load runs the module as a fresh anonymous module and rebinds
+        mlx_lm.models.cache.Qwen4Exp*Cache, so load_prompt_cache returns the
+        last-loaded copy's classes. Another model's snapshot / restore /
+        forward must accept them (dispatch on the format marker)."""
+        import numpy as np
+        from mlx_lm.models.cache import load_prompt_cache, save_prompt_cache
+        fx = self.fx
+        ids = fx.seqs["seq_a"]
+        model = fx.model("fp32")
+        cache = model.make_cache()
+        run(model, [ids[:30]], cache)
+        path = fx.ref_dir / "r1_cross_module_cache.safetensors"
+        save_prompt_cache(str(path), cache)
+        other, _ = fx.converter().load_verified_model(fx.converted("fp32"), fx.manifest_pin("fp32"))
+        loaded = load_prompt_cache(str(path))
+        self.assertIsNot(type(loaded[0]), type(cache[0]), "precondition: classes of another module copy")
+        self.assertIs(type(loaded[0]), type(other.make_cache()[0]))
+        snap = model.snapshot_cache(loaded)
+        a = run(model, [ids[30:33]], loaded)
+        model.restore_cache(loaded, snap)
+        b = run(model, [ids[30:33]], loaded)
+        want = run(model, [ids[30:33]], cache)
+        self.assertEqual(float(np.abs(a - want).max()), 0.0)
+        self.assertEqual(float(np.abs(b - want).max()), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

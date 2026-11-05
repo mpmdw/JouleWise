@@ -717,6 +717,8 @@ class Qwen4ExpLinearCache(ArraysCache):
     (mlx-lm #1632; validation round 1, systems MEDIUM).
     """
 
+    qwen4_exp_cache = (FORMAT_VERSION, "linear")
+
     def __init__(self, size: int, left_padding: Optional[Sequence[int]] = None):
         self.padding = tuple(int(p) for p in left_padding) if left_padding and any(left_padding) else None
         self.offset = 0
@@ -787,6 +789,8 @@ class Qwen4ExpQSACache(KVCache):
       length are recomputed when they complete again.
     * ``padding``: constant per-row left padding (host ints).
     """
+
+    qwen4_exp_cache = (FORMAT_VERSION, "qsa")
 
     def __init__(self, left_padding: Optional[Sequence[int]] = None):
         super().__init__()
@@ -900,8 +904,19 @@ class Qwen4ExpQSACache(KVCache):
 
 
 # mlx-lm 0.31.3's load_prompt_cache resolves cache classes in its own globals.
+# Every load of this file (mlx-lm runs it as an anonymous module) rebinds them,
+# so with two models in one process load_prompt_cache returns the last-loaded
+# module's classes: the code below dispatches on the ``qwen4_exp_cache``
+# marker, never on class identity (validation round 1, systems LOW).
 _cache_api.Qwen4ExpLinearCache = Qwen4ExpLinearCache
 _cache_api.Qwen4ExpQSACache = Qwen4ExpQSACache
+
+
+def cache_kind(c) -> Optional[str]:
+    """``"linear"`` / ``"qsa"`` for this format's caches from any loaded copy
+    of this module, else None."""
+    marker = getattr(type(c), "qwen4_exp_cache", None)
+    return marker[1] if isinstance(marker, tuple) and marker[:1] == (FORMAT_VERSION,) else None
 
 
 def make_layer_caches(args: TextModelArgs, left_padding: Optional[Sequence[int]] = None):
@@ -927,9 +942,10 @@ def snapshot_cache(cache: List[Any]) -> List[Any]:
     are never rewritten, so offsets + slot references restore exactly."""
     snap = []
     for c in cache:
-        if isinstance(c, Qwen4ExpQSACache):
+        kind = cache_kind(c)
+        if kind == "qsa":
             snap.append(("qsa", c.offset, c.padding, _batch([c.keys])))
-        elif isinstance(c, Qwen4ExpLinearCache):
+        elif kind == "linear":
             snap.append(("linear", list(c.cache), c.offset, c.padding, _batch(c.cache)))
         else:
             raise TypeError(f"unsupported cache type {type(c).__name__}")
@@ -946,16 +962,14 @@ def restore_cache(cache: List[Any], snap: List[Any]) -> None:
     if len({entry[1] if entry[0] == "qsa" else entry[2] for entry in snap}) > 1:
         raise ValueError("snapshot offsets disagree")
     for c, entry in zip(cache, snap):
+        if cache_kind(c) != entry[0]:
+            raise ValueError("snapshot layer kinds do not match the cache")
         if entry[0] == "qsa":
-            if not isinstance(c, Qwen4ExpQSACache):
-                raise ValueError("snapshot layer kinds do not match the cache")
             _, offset, padding, batch = entry
             if c.offset < offset:
                 raise ValueError("cannot restore a QSA cache forward in time")
             now = _batch([c.keys])
         else:
-            if not isinstance(c, Qwen4ExpLinearCache):
-                raise ValueError("snapshot layer kinds do not match the cache")
             _, _, _, padding, batch = entry
             now = _batch(c.cache)
         if c.padding != padding:
@@ -1770,7 +1784,9 @@ class TextModel(nn.Module):
         if len(offsets) != 1:
             raise ValueError(f"hybrid cache offsets disagree: {sorted(offsets)}")
         c0 = cache[0]
-        lp = (c0.lp(B) if isinstance(c0, Qwen4ExpQSACache)
+        if any(cache_kind(c) is None for c in cache):
+            raise TypeError("qwen4_exp needs the caches of make_cache()")
+        lp = (c0.lp(B) if cache_kind(c0) == "qsa"
               else (np.asarray(c0.padding, np.int64) if c0.padding is not None else np.zeros((B,), np.int64)))
         ssm = create_ssm_mask(inputs, cache[self._first_linear]) if self._first_linear is not None else None
         ctx = _Context(B, S, c0.offset, lp, self._inv_freq, ssm, self._prefill_min_kv, self._decode_min_kv,
