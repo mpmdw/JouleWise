@@ -216,11 +216,12 @@ def markdown_report(report):
         absolute = f"{max(m['max_abs'] for m in metrics):.6g}" if metrics else "—"
         cosine = f"{min(m['cosine'] for m in metrics):.9g}" if metrics else "—"
         lines.append(f"| {row['case']} | {row['status']} | {absolute} | {cosine} | {row.get('peak_bytes',0)/1024**3:.3f} |")
-        if row.get("reason"):
-            lines += ["", row["reason"], ""]
+    reasons = sorted({row["reason"] for row in report["cases"] if row.get("reason")})
+    if reasons:
+        lines += ["", "Blocked case reasons: " + "; ".join(reasons), ""]
     lines += ["", "Tolerances (all required traces must pass elementwise and cosine gates):", "", json.dumps(TOLERANCES), "",
               "fp32: 1e-4 absolute/relative permits differing reduction order. bf16: 0.03125 absolute/relative",
-              "permits about four unit-roundoff steps near one; cosine >= 0.999 constrains aggregate drift.",
+              "allows eight bf16 representable steps at |reference|=1 (atol+rtol); cosine >= 0.999 constrains aggregate drift.",
               "These provisional engineering bounds are fixed before comparison and are never fitted to results.",
               "Router expert sets, PLE hash ids and QSA masks must agree exactly. See case JSON for metrics, missing traces and failures.", ""]
     return "\n".join(lines)

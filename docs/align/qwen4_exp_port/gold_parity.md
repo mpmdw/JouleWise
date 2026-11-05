@@ -249,9 +249,10 @@ include maximum absolute error,
 maximum relative error (denominator floor `1e-12`), relative L2 error, cosine,
 and fraction within tolerance. Zero versus zero has cosine 1; a zero/nonzero
 pair has cosine 0. Expert sets, PLE ids and QSA masks require exact agreement.
-Fp32's bound accommodates reduction order. BF16's approximately four
-unit-roundoff steps near one is a **provisional engineering bound**, with cosine
-also constraining aggregate error. It is not a theorem about deep-model quality
+Fp32's bound accommodates reduction order. Each BF16 allowance is four representable steps near one (`0.03125 = 4*2^-7`);
+the combined `atol+rtol*abs(a)` allowance is eight such steps at `abs(a)=1`
+(sixteen unit roundoffs). This is a **provisional engineering bound**, with
+cosine also constraining aggregate error. It is not a theorem about deep-model quality
 and is never automatically widened. Inspect failures against fp32 and the
 individual trace; do not fit a bound to a failing port.
 
@@ -286,8 +287,8 @@ PASS, including when a particular embedding trace happens to match exactly.
 
 ## Local execution evidence (2026-11-05)
 
-See the dated run report for exact commands, hashes, counts, peak memory and
-limitations. Neither independent port branch was present in this clone when
+See the [dated run report](../../run_reports/2026-11-05-flashnext-gold-parity.md)
+for exact commands, hashes, counts, peak memory and limitations. Neither independent port branch was present in this clone when
 checked; local executions used the explicit stub. The sandbox cannot initialize
 MLX's Metal device, even when requesting the CPU device. Consequently local
 Torch execution and harness self-tests must not be presented as MLX parity.

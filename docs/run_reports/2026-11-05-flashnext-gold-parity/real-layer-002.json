@@ -1,0 +1,3860 @@
+{
+  "cases": [
+    {
+      "case": "tokens-a-fp32-real",
+      "reason": "missing or failed reference predecessor; no synthetic substitute",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "2"
+    },
+    {
+      "artifacts": {
+        "input.npy": "60379f8c62b95da712b0edd3336817f91f72922634bb5ad121b206c8f60021c5",
+        "mlx/output.npy": "60379f8c62b95da712b0edd3336817f91f72922634bb5ad121b206c8f60021c5",
+        "reference/attention.gated_norm.npy": "6c8a3a0328425e82857a17174a5a4c0b8029be633ee5bd6f71360137bde287e3",
+        "reference/attention.npy": "59e4f6e8bde0685b0329819209aabb19cb408e5c60b771e50c86a612e6de6b52",
+        "reference/attn.inject.npy": "615fcddeb9f36d2cd1fa01de3487560eb172bd1858fe37142cdd079118da965c",
+        "reference/attn.mix.npy": "7d94bbc9e1e47ca0ee58063f9e346fe11be93689791bb4f97e9ebb600af2a541",
+        "reference/attn.norm.npy": "79c3a7bfeb4f8e1235075882f2e045c2b6036030f8b2eaa1984d55ed2834d509",
+        "reference/attn.residual.npy": "60379f8c62b95da712b0edd3336817f91f72922634bb5ad121b206c8f60021c5",
+        "reference/attn.streams.npy": "5c111b3b69481d45f61057771843ee0018e674ca8b8597fe2de343bb0639295a",
+        "reference/mlp.inject.npy": "f7b6f0e4863dbd586ae0fada6277618168714d682abff71e91a6e41ef237fed0",
+        "reference/mlp.mix.npy": "c1c9b6a33478419707b93de0f52bb585dd3fbb062a00c95d4ab1ffbb0574cedc",
+        "reference/mlp.norm.npy": "76f9a2c7f5579d5a098abbf1749864bdf673e5e45b9fd6cfa1fa0c151641dfe9",
+        "reference/mlp.residual.npy": "5c111b3b69481d45f61057771843ee0018e674ca8b8597fe2de343bb0639295a",
+        "reference/mlp.streams.npy": "99b6267a161b3ae6a7acae2051248ea0fac7bc4fe4a31c8be34dc55da10a5e3d",
+        "reference/moe.npy": "517c64d1f0a5811f197086bd0fd7b75543e38f3dfdd63053e0fe307cb10608e3",
+        "reference/output.npy": "99b6267a161b3ae6a7acae2051248ea0fac7bc4fe4a31c8be34dc55da10a5e3d",
+        "reference/router.experts.npy": "267db83641149883c8245e5e526c2b64a75c18f95cbe0435aaaff9891120ed69",
+        "reference/router.logits.npy": "56d549b9e1cf64c353222dc962014d46e597c34ced733a27f7386dd207456188",
+        "reference/router.weights.npy": "53c7cc0f7a54cf073f3a4649c51477e4fa4de58e086595f6a279225b638b0bed"
+      },
+      "case": "tokens-a-fp32-random",
+      "fingerprint": "98d01f7281c3647159d57b79d9307008656de4ec1110d4f067a59c39a6c04d8b",
+      "input_mode": "random",
+      "input_sha256": "60379f8c62b95da712b0edd3336817f91f72922634bb5ad121b206c8f60021c5",
+      "metrics": {
+        "output": {
+          "cosine": 0.9983102051769878,
+          "fraction_within": 0.004372829861111111,
+          "max_abs": 0.4760763943195343,
+          "max_relative": 63365.55052264808,
+          "pass": false,
+          "relative_l2": 0.05811455394056392
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 0.21625404199585319,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 38420480,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 38420480,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 980385792,
+      "random_scale": 1.0,
+      "reference": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 6.552550832973793,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 980385792,
+          "reads": [
+            {
+              "name": "model.language_model.layers.2.linear_attn.dt_bias",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.A_log",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.conv1d.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.out_proj.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_z.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_b.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_a.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert_gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(15, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(15, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(36, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(36, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(49, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(49, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(72, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(72, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(84, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(84, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(92, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(92, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(105, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(105, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(141, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(141, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(146, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(146, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(154, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(154, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(158, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(158, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(164, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(164, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(192, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(192, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(202, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(202, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(210, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(210, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(215, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(215, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(226, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(226, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(233, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(233, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(239, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(239, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(256, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(256, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(264, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(264, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(276, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(276, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(279, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(279, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(315, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(315, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(342, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(342, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(343, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(343, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(351, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(351, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(374, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(374, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(379, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(379, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(380, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(380, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(382, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(382, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(387, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(387, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(390, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(390, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(393, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(393, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(427, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(427, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(430, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(430, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(431, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(431, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(441, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(441, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(445, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(445, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(458, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(458, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(463, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(463, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(472, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(472, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(479, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(479, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(483, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(483, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(492, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(492, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(493, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(493, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(495, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(495, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(508, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(508, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(510, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(510, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 980385792,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "2"
+    },
+    {
+      "case": "tokens-b-fp32-real",
+      "reason": "missing or failed reference predecessor; no synthetic substitute",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "2"
+    },
+    {
+      "artifacts": {
+        "input.npy": "25038f055d6e345921dd2296742f756328b301e6a92e7ea0cea3d6e734d27932",
+        "mlx/output.npy": "25038f055d6e345921dd2296742f756328b301e6a92e7ea0cea3d6e734d27932",
+        "reference/attention.gated_norm.npy": "d2cf5249a538b694d7df5b177fe13f6d471a564dad149762b82984027576dca4",
+        "reference/attention.npy": "4ef1523597d8640a7000aa3de6aa08558e545780c3b1dcb0c5ad41b633adcb60",
+        "reference/attn.inject.npy": "194cdefd5fb80d919baaaf7e84fa9fd3802b5895834f32344a97d5d83d59d931",
+        "reference/attn.mix.npy": "86ad5e06de7db75b6b37a2e3d6c791c66ace9c313d7ed084816e924f2a91ce56",
+        "reference/attn.norm.npy": "3a661fa2e1ca9848dba3e0cd0eb2e8b06a26179c1273a61de75fda8b1d0a761c",
+        "reference/attn.residual.npy": "25038f055d6e345921dd2296742f756328b301e6a92e7ea0cea3d6e734d27932",
+        "reference/attn.streams.npy": "8aa592e35e99eca373f130911ae34fd229406c45608ca6f7675180e6cb2d16fc",
+        "reference/mlp.inject.npy": "54cd8898b98f0f2c7a8097d505cba8a1ff5cfe2fee0c1bd3f95d3fe39b0a107d",
+        "reference/mlp.mix.npy": "2fb1ae723563f4e6b799965a285ba0a42e81a59529767ae17d8b5b1d6293a9e8",
+        "reference/mlp.norm.npy": "e7f3092f31fc25001f1943c6087b0627999aba48caab4c32dcf9f9a5bfa4bcde",
+        "reference/mlp.residual.npy": "8aa592e35e99eca373f130911ae34fd229406c45608ca6f7675180e6cb2d16fc",
+        "reference/mlp.streams.npy": "99fadc9c371b6cb39622fbfddfb1ec3d5f90923feda35ead4d12323f6ccace63",
+        "reference/moe.npy": "63cf75b48745deddeb723b9ae77985a84fb362454fce70618b09837c807c6b09",
+        "reference/output.npy": "99fadc9c371b6cb39622fbfddfb1ec3d5f90923feda35ead4d12323f6ccace63",
+        "reference/router.experts.npy": "791c599ef25352838d2afae048807d2109ea1ee7d200a4da90ecab26680e8d8b",
+        "reference/router.logits.npy": "2da1f4e523946d2f39ed9115d8c8c5863db99b20c4de4593893af044721941db",
+        "reference/router.weights.npy": "1971321c5e55bffbc8b28b9703cdcecaa44f6ce74d791846da0c6fa7645bc81a"
+      },
+      "case": "tokens-b-fp32-random",
+      "fingerprint": "01a75e66a793d85c304995e2a45c072d62d8e3b7ca1db09471db19b9f6e7c68a",
+      "input_mode": "random",
+      "input_sha256": "25038f055d6e345921dd2296742f756328b301e6a92e7ea0cea3d6e734d27932",
+      "metrics": {
+        "output": {
+          "cosine": 0.9977035274915115,
+          "fraction_within": 0.00341796875,
+          "max_abs": 0.5809858739376068,
+          "max_relative": 35540.37030042918,
+          "pass": false,
+          "relative_l2": 0.06773412419014928
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 0.21225950005464256,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36175872,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36175872,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 962510848,
+      "random_scale": 1.0,
+      "reference": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 6.007644416997209,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 962510848,
+          "reads": [
+            {
+              "name": "model.language_model.layers.2.linear_attn.dt_bias",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.A_log",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.conv1d.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.out_proj.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_z.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_b.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_a.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert_gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(0, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(0, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(24, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(24, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(37, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(37, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(38, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(38, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(52, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(52, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(57, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(57, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(64, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(64, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(71, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(71, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(73, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(73, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(77, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(77, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(95, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(95, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(122, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(122, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(129, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(129, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(138, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(138, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(147, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(147, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(155, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(155, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(159, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(159, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(185, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(185, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(201, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(201, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(230, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(230, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(234, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(234, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(235, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(235, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(236, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(236, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(257, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(257, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(262, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(262, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(272, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(272, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(286, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(286, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(288, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(288, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(297, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(297, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(302, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(302, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(309, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(309, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(321, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(321, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(346, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(346, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(349, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(349, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(360, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(360, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(361, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(361, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(372, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(372, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(377, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(377, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(383, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(383, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(388, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(388, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(394, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(394, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(411, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(411, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(425, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(425, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(439, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(439, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(456, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(456, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(480, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(480, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(484, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(484, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(486, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(486, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(497, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(497, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(500, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(500, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 962510848,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "2"
+    },
+    {
+      "case": "tokens-a-bf16-real",
+      "reason": "missing or failed reference predecessor; no synthetic substitute",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "2"
+    },
+    {
+      "artifacts": {
+        "input.npy": "60379f8c62b95da712b0edd3336817f91f72922634bb5ad121b206c8f60021c5",
+        "mlx/output.npy": "60379f8c62b95da712b0edd3336817f91f72922634bb5ad121b206c8f60021c5",
+        "reference/attention.gated_norm.npy": "dc0eb24f1de50ee5c93ffea8af4b6c18b0e5da609de4df8da7b22d7d24b33100",
+        "reference/attention.npy": "cd7ce4207604f6f0d3244b007f9c23c9f2db0c47247489f03153e18e7a0024e7",
+        "reference/attn.inject.npy": "b4c943001a132228694c3c2973ca77dad2d43f3db2ae9da07529fd91368dd602",
+        "reference/attn.mix.npy": "39781cb4392ad9069279ec4c4d86ac77f553ca96af86e119a2aa20607eb64500",
+        "reference/attn.norm.npy": "1efb551f6103bff7b0ac59310ed030e41db127a998dffa9db6adf3cc821cab34",
+        "reference/attn.residual.npy": "275f1cdf997e5dd92bb6c26613ee3d23c6af95d5d03908a59f2981e9ead0593c",
+        "reference/attn.streams.npy": "0b7ee74bb24250bd848174e8bcce819c425746f1bc1ccc01f92c5e7c710ee8c2",
+        "reference/mlp.inject.npy": "e1a31aa312b2d01ce929e2637d80df3a6030a77f41164dfe8045bb3f26e3590a",
+        "reference/mlp.mix.npy": "7e26caedc00b753ed7c01588e0a0bad82ae39c59e3b53c80ba3f7b01a941331c",
+        "reference/mlp.norm.npy": "a23f2f5d25de536f2dce16ef2ef624ad5099de1f3bc65b9e47643c432d93cf88",
+        "reference/mlp.residual.npy": "0b7ee74bb24250bd848174e8bcce819c425746f1bc1ccc01f92c5e7c710ee8c2",
+        "reference/mlp.streams.npy": "201ead759d038ff954bb8845da5c6e14ed4fdf1dcef66ec6ec4cd78493e62bfd",
+        "reference/moe.npy": "5fcb8b8af537f45338a80fcee6a9cf10c412368de3fd97f20f3002f0b5ee4f8d",
+        "reference/output.npy": "201ead759d038ff954bb8845da5c6e14ed4fdf1dcef66ec6ec4cd78493e62bfd",
+        "reference/router.experts.npy": "af0d5719d42db9a727fc3130c4708153511ee561aa7d74a1ab938d3769c59b7d",
+        "reference/router.logits.npy": "dfbc7b578dab8a361bceab9bf4d45e079ffa66598ab7997dc0bb843933d934ef",
+        "reference/router.weights.npy": "02ff4d0767feef6375ba663a69e4b96ac2b290331ba69e1118634cd1d6a60a05"
+      },
+      "case": "tokens-a-bf16-random",
+      "fingerprint": "718c1c13f7bab20ecfdbdc0ec0bf0d6ee79ba46c9f26eed72c549f21cf082450",
+      "input_mode": "random",
+      "input_sha256": "60379f8c62b95da712b0edd3336817f91f72922634bb5ad121b206c8f60021c5",
+      "metrics": {
+        "output": {
+          "cosine": 0.9983087061088423,
+          "fraction_within": 0.7091037326388889,
+          "max_abs": 0.47622185945510864,
+          "max_relative": 34683752804.99458,
+          "pass": false,
+          "relative_l2": 0.05814065098110534
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 0.2130008750827983,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 37191680,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 37191680,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 625524736,
+      "random_scale": 1.0,
+      "reference": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 6.785672749974765,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 625524736,
+          "reads": [
+            {
+              "name": "model.language_model.layers.2.linear_attn.dt_bias",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.A_log",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.conv1d.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.out_proj.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_z.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_b.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_a.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert_gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(15, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(15, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(36, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(36, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(49, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(49, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(72, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(72, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(84, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(84, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(92, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(92, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(105, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(105, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(117, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(117, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(141, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(141, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(146, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(146, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(154, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(154, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(158, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(158, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(164, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(164, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(192, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(192, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(202, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(202, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(210, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(210, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(215, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(215, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(226, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(226, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(233, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(233, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(239, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(239, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(256, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(256, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(264, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(264, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(276, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(276, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(279, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(279, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(315, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(315, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(342, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(342, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(343, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(343, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(351, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(351, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(374, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(374, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(379, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(379, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(380, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(380, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(382, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(382, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(387, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(387, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(390, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(390, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(393, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(393, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(427, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(427, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(430, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(430, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(431, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(431, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(441, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(441, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(445, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(445, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(458, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(458, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(463, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(463, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(472, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(472, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(479, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(479, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(483, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(483, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(492, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(492, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(493, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(493, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(495, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(495, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(508, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(508, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(510, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(510, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 625524736,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "2"
+    },
+    {
+      "case": "tokens-b-bf16-real",
+      "reason": "missing or failed reference predecessor; no synthetic substitute",
+      "status": "BLOCKED_REAL_INPUT",
+      "unit": "2"
+    },
+    {
+      "artifacts": {
+        "input.npy": "25038f055d6e345921dd2296742f756328b301e6a92e7ea0cea3d6e734d27932",
+        "mlx/output.npy": "25038f055d6e345921dd2296742f756328b301e6a92e7ea0cea3d6e734d27932",
+        "reference/attention.gated_norm.npy": "9985344b7a6c8977fba929d3b55bf747ade7511dac53d7f22c18c78a29b4c950",
+        "reference/attention.npy": "63ef1bd8f581c93180b87e5599e47401cfbafdb561d99e456da6ac13ac47d989",
+        "reference/attn.inject.npy": "caaf801aa0cfb8bca35cb9b1c85391e10026c1c6d0c36cd50f17064b0c63b086",
+        "reference/attn.mix.npy": "83c732aef9a2cfd54f57911b03e6a75b2927e7707eeccbfd36716deed869bcf7",
+        "reference/attn.norm.npy": "8dd1bcd6696f1c15fe823f7fa38517eb3bd38b242a67aa8de5040c10270c66f0",
+        "reference/attn.residual.npy": "c83185e74cb4df94142a2e638c8d5cc1129b12f2f42f909cb32cb8df4e3dec67",
+        "reference/attn.streams.npy": "8741dc6091c1a7701becbdb9495e8586bc9ea6b63804467fc6370d103558f6d8",
+        "reference/mlp.inject.npy": "bac8c33ecad792d87ba245b35fdecaca6794e9ed4439c414b19eb6bb1602d884",
+        "reference/mlp.mix.npy": "b2bc664732b9620d8dd9fdeb6a871bae598afd564f95d1b36c1bb5454c818323",
+        "reference/mlp.norm.npy": "68df09e1c77e34d8c2996d26aad0a24cd1ab2610658bdeb18c1ac5c338074056",
+        "reference/mlp.residual.npy": "8741dc6091c1a7701becbdb9495e8586bc9ea6b63804467fc6370d103558f6d8",
+        "reference/mlp.streams.npy": "ac7109045ffe40d04cc14a8a3f7c824cb762569819bf7d986d75b24d5b098f83",
+        "reference/moe.npy": "c026dec3f3d0f0ca6e2bbe5caa898a0f12ef523d2ed58f2c8da141aadca6003a",
+        "reference/output.npy": "ac7109045ffe40d04cc14a8a3f7c824cb762569819bf7d986d75b24d5b098f83",
+        "reference/router.experts.npy": "47b066b0d267e8ec47dbeb80f7bc7d2362927656cb65ed323111e269d758d060",
+        "reference/router.logits.npy": "a5d39a645c74ae99f8cf4e7e608064220a44ccb3e2f492ad44664c997c5dc9d3",
+        "reference/router.weights.npy": "c76fa813b5c06563ce2bff259aaa95639cedd3823144b40be415ca2597834d34"
+      },
+      "case": "tokens-b-bf16-random",
+      "fingerprint": "39b8d20df4fd20057745429b2834abf9e9ca9660fbcda048f2b393fd6c84ac45",
+      "input_mode": "random",
+      "input_sha256": "25038f055d6e345921dd2296742f756328b301e6a92e7ea0cea3d6e734d27932",
+      "metrics": {
+        "output": {
+          "cosine": 0.9977072800090148,
+          "fraction_within": 0.66270751953125,
+          "max_abs": 0.5787567496299744,
+          "max_relative": 182746112346.64917,
+          "pass": false,
+          "relative_l2": 0.06767899802152595
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 0.21642387507017702,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36618240,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36618240,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 614236160,
+      "random_scale": 1.0,
+      "reference": {
+        "child_budget_bytes": 12502220800,
+        "elapsed_seconds": 6.14917887491174,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 614236160,
+          "reads": [
+            {
+              "name": "model.language_model.layers.2.linear_attn.dt_bias",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.A_log",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.conv1d.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.out_proj.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_z.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_b.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.linear_attn.in_proj_a.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.shared_expert_gate.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00057-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(0, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(0, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(24, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(24, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(28, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(37, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(37, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(38, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(38, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(52, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(52, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(57, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(57, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(64, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(64, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(71, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(71, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(73, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(73, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(77, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(77, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(79, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(95, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(95, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(107, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(122, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(122, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(129, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(129, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(138, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(138, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(147, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(147, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(155, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(155, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(159, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(159, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(168, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(181, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(185, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(185, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(186, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(198, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(201, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(201, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(205, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(213, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(230, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(230, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(234, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(234, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(235, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(235, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(236, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(236, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(242, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(243, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(252, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(257, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(257, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(262, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(262, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(263, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(267, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(272, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(272, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(286, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(286, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(288, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(288, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(297, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(297, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(302, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(302, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(309, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(309, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(311, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(321, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(321, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(339, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(341, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(346, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(346, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(349, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(349, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(360, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(360, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(361, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(361, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(370, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(372, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(372, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(377, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(377, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(383, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(383, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(388, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(388, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(394, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(394, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(411, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(411, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(418, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(425, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(425, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(439, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(439, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(456, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(456, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(467, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(480, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(480, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(481, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(484, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(484, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(486, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(486, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(497, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(497, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(500, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(500, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(507, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.gate_up_proj",
+              "shard": "model-00058-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.language_model.layers.2.mlp.experts.down_proj",
+              "shard": "model-00059-of-00131.safetensors",
+              "slice": "(511, slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 614236160,
+        "parent_peak_bytes": 114245632,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "2"
+    }
+  ],
+  "completed_cases": 8,
+  "expected_cases": 8,
+  "fingerprint": "c5199ec6e236c78a4f83a171e940a0557411ed3c2dc76b877ac3b82ccfc39f5d",
+  "schema": "qwen4-gold/v1",
+  "status": "INCOMPLETE_OR_FAILED",
+  "unit": "2"
+}

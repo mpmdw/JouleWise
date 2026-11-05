@@ -1,0 +1,2322 @@
+{
+  "cases": [
+    {
+      "artifacts": {
+        "input.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "mlx/output.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "reference/attention.gated_norm.npy": "4741e1a65f62f6a93a77b89433f1c51799e02d60889a3933670125daea8fd7f9",
+        "reference/attention.npy": "ba27921feb4036d192d9f65885adbef887baa15d1134138ef065a41bbcd62618",
+        "reference/attn.inject.npy": "57eae894d71d48d14b9f8fdb26e7cc96c53b11352f1821b7210505019dd90933",
+        "reference/attn.mix.npy": "da04ddc7defb0674bc58c57cadda5cf8443cea06362b8349a270aaeb1bcaf40a",
+        "reference/attn.norm.npy": "ee9b9cdd7f411993d28719367b4476a178187f0ab26119d0a240fe4a72b2268e",
+        "reference/attn.residual.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "reference/attn.streams.npy": "441ba936b44796b8b83d60faba9c7c6a116f1aa8b18bbb217e202586a0cc9983",
+        "reference/mlp.inject.npy": "4f3bee85938521444ac3830a4c4393fe576e64f92bc7f2e0d6f1b9298adcc5fd",
+        "reference/mlp.mix.npy": "888dd26f0ed74c83f0089d12a64399b461a65677dbd036b2e3e9c1887e6f105b",
+        "reference/mlp.norm.npy": "a7055f43925af58ed7f36657543586e918988bf2d8a9ea0f80cac8a576e14c85",
+        "reference/mlp.residual.npy": "441ba936b44796b8b83d60faba9c7c6a116f1aa8b18bbb217e202586a0cc9983",
+        "reference/mlp.streams.npy": "8c63c5b7c071f9a96aa23ce85109f7d6fbd0404f568a0a15b63520201576483b",
+        "reference/moe.npy": "715c9fc6dd566da72997619d4d0a5c7bca25b3a6c344f3c99cb389f40a065b29",
+        "reference/output.npy": "8c63c5b7c071f9a96aa23ce85109f7d6fbd0404f568a0a15b63520201576483b",
+        "reference/router.experts.npy": "e071c542f74e9250400b1aef4480cf3d1fd105820633e607933b4b57afbb5b1e",
+        "reference/router.logits.npy": "a6090424ce867bd9087b5ef6a8ec8af6809c5908f8d83f61d97b500302a018e7",
+        "reference/router.weights.npy": "00bd591a3dd7180aae3daef4becc0033cfe576e39421ac4c6ed5ea1ac3b708dc"
+      },
+      "case": "tokens-a-fp32-real",
+      "fingerprint": "ca75dad4835813bbf4602a0a09bcc7296f6cfb6f9ffa2ff5a84fbba0b684ca34",
+      "input_mode": "real",
+      "input_sha256": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999279304507258,
+          "fraction_within": 0.4878472222222222,
+          "max_abs": 0.001271890476346016,
+          "max_relative": 4.351651466589954,
+          "pass": false,
+          "relative_l2": 0.012014419621116653
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12577275904,
+        "elapsed_seconds": 0.2164250829955563,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 33341440,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 33341440,
+        "parent_peak_bytes": 39190528,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 335413248,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12577390592,
+        "elapsed_seconds": 2.6830089159775525,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 335413248,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 335413248,
+        "parent_peak_bytes": 39075840,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "0"
+    },
+    {
+      "artifacts": {
+        "input.npy": "62b1f9f2880f9394d64d1e87c0d54b7dd1c88a9dc94d6c461eca47628bcc0367",
+        "mlx/output.npy": "62b1f9f2880f9394d64d1e87c0d54b7dd1c88a9dc94d6c461eca47628bcc0367",
+        "reference/attention.gated_norm.npy": "53e7fe1f490615247cad303d0ebdf55f25a2dacdb0743ba0e9df235791d3878f",
+        "reference/attention.npy": "93e322c76795f596739612cc42d1a364a275528d8833679887499ff04bb5e8cc",
+        "reference/attn.inject.npy": "7ffd1a8ed59e7383d86be55832ce7d15980c0f8a0619c8b9b688697ee8e76d8f",
+        "reference/attn.mix.npy": "84fe414f847484797fe225011c41639207120b36489c4531219bca055daf844f",
+        "reference/attn.norm.npy": "b698735b174f23ca1a35ea1b85ffd0dc49b3846c10afdbb0204806afec79490d",
+        "reference/attn.residual.npy": "62b1f9f2880f9394d64d1e87c0d54b7dd1c88a9dc94d6c461eca47628bcc0367",
+        "reference/attn.streams.npy": "7c071c45654e3d2d8deb91ea26ccdff67c70ad5f3261537d7454c32e9cd4520c",
+        "reference/mlp.inject.npy": "6d0cf3324b936406288280369e8f674dab30b82b3254923663fc36654b4583c1",
+        "reference/mlp.mix.npy": "b4bd93e033eb890f3fae7af7642a4c22c8710f5fc6c656c7c02af1c059021b17",
+        "reference/mlp.norm.npy": "5e474533ae60f9453caa67d2f0263a1c0169644a68f9da84b2bc7c5c7650328f",
+        "reference/mlp.residual.npy": "7c071c45654e3d2d8deb91ea26ccdff67c70ad5f3261537d7454c32e9cd4520c",
+        "reference/mlp.streams.npy": "97e0e5ff519833dfcb8358ed5222c048d3f6ba3514289787421451511ecc9047",
+        "reference/moe.npy": "3fd275b0136d86ce4d67a8cdbb6eb1b8ce7c05ff66b49b474193f523ce349550",
+        "reference/output.npy": "97e0e5ff519833dfcb8358ed5222c048d3f6ba3514289787421451511ecc9047",
+        "reference/router.experts.npy": "69e2c9501c70b328bf8e4e97e9a0f665e022efa1468f1d5ae019e34dc0f43cf2",
+        "reference/router.logits.npy": "7af56c1c796ca26dc6f339111c82e6f9b4d6e47e18e586e9a0dc9faf679192ab",
+        "reference/router.weights.npy": "a41a544cb364ab4e6f4f14b2ecd247e76b5bb35b4e173ed9b853d5b73e0fe91f"
+      },
+      "case": "tokens-a-fp32-random",
+      "fingerprint": "8911cdd313e7e182c8f30a1b900c55496a402d6abef0f0d3add64d48d7a679d4",
+      "input_mode": "random",
+      "input_sha256": "62b1f9f2880f9394d64d1e87c0d54b7dd1c88a9dc94d6c461eca47628bcc0367",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999831645395965,
+          "fraction_within": 0.7222222222222222,
+          "max_abs": 0.0004386194050312042,
+          "max_relative": 1.329798263015234,
+          "pass": false,
+          "relative_l2": 0.005804836848305529
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573573120,
+        "elapsed_seconds": 0.21440445794723928,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 34144256,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 34144256,
+        "parent_peak_bytes": 42893312,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 347766784,
+      "random_scale": 0.020711298441861002,
+      "reference": {
+        "child_budget_bytes": 12573622272,
+        "elapsed_seconds": 3.0969799590529874,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 347766784,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 347766784,
+        "parent_peak_bytes": 42844160,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "0"
+    },
+    {
+      "artifacts": {
+        "input.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "mlx/output.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "reference/attention.gated_norm.npy": "829c762387846be2f8ce1bf9dd2ddc987c7c9600a6191a44af15c1840ec1f1d9",
+        "reference/attention.npy": "2050dc1db08d0c81dc9c7bc8b571b50f9428a9b0895e094d318d84afaaf567d3",
+        "reference/attn.inject.npy": "23c803037af365e4dbc30d55496153463dc7a510bf4fe5fc1f96434ba271a4e8",
+        "reference/attn.mix.npy": "7f6b050b4b4ee959b0882fce0274b1380c428654099630d04eb573614134f23b",
+        "reference/attn.norm.npy": "a8160e32389879cb0ba3b8cc21bac7b22807a942af3d1ba34934d4bdf12349dc",
+        "reference/attn.residual.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "reference/attn.streams.npy": "9903a7861e491e13d2758b876dad609e44c3a99fcf8cf1a15c189b43f4e1d4cb",
+        "reference/mlp.inject.npy": "2ddf733df035eb1f927c54ee60aa0bb304772717d757258729a9bb4d2292899f",
+        "reference/mlp.mix.npy": "d3e70abe18e986702d87cade51111bdaf290be81e737bf8e3ce316eb549029ed",
+        "reference/mlp.norm.npy": "59ff713a28eb49047e5dde3dfa095cc23f11ba255c9e2e89eabb7eca62575fde",
+        "reference/mlp.residual.npy": "9903a7861e491e13d2758b876dad609e44c3a99fcf8cf1a15c189b43f4e1d4cb",
+        "reference/mlp.streams.npy": "5d6b3203cf310df63db15543ce7e57a6f12a540b988c5d1e80938977e9ba4d48",
+        "reference/moe.npy": "cb430425208a6eeefbefc316a1a532c582d2c98b29e674ef8e28520addd82246",
+        "reference/output.npy": "5d6b3203cf310df63db15543ce7e57a6f12a540b988c5d1e80938977e9ba4d48",
+        "reference/router.experts.npy": "046568a911282175a07689fb1a60982d0fb4a889a551b8b3b3dad3ae8282dbaf",
+        "reference/router.logits.npy": "eb19fe031b53ba631a3ecb16848f477055918a24f4895bf9fa3ecc85f18c5cfd",
+        "reference/router.weights.npy": "83bfb9349c5fa35c5c164bf9ea87946f7c4b1930f83877889045806a8a74136d"
+      },
+      "case": "tokens-b-fp32-real",
+      "fingerprint": "95db5d4728ed235e5a427998617737bbeb5655596d7e89b0b45291597b16341a",
+      "input_mode": "real",
+      "input_sha256": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999321643338734,
+          "fraction_within": 0.408203125,
+          "max_abs": 0.0009346120059490204,
+          "max_relative": 5.470052605103633,
+          "pass": false,
+          "relative_l2": 0.011647709638665736
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2152263750322163,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 33832960,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 33832960,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 347881472,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.0681893329601735,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 347881472,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 347881472,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "0"
+    },
+    {
+      "artifacts": {
+        "input.npy": "d99a09e2e37c869a7dd9d2ae4439cc0c2fb8499fda2670a95437eedf7d4c89ab",
+        "mlx/output.npy": "d99a09e2e37c869a7dd9d2ae4439cc0c2fb8499fda2670a95437eedf7d4c89ab",
+        "reference/attention.gated_norm.npy": "523802e56a13411cf9e4b14a3e8ebb59116841dffd717927913b4c918589f47f",
+        "reference/attention.npy": "2624ae6544c7142c62002e22b7143ed9507a67b020a80d8c0d24e7cf358ff640",
+        "reference/attn.inject.npy": "ab437ceaa059b353ccd204664a2b4dc5948c6c66751dfb99746e12b01cb5b75b",
+        "reference/attn.mix.npy": "b16a81d370602f725a9aa6ff21661ba56f290f1738af7aae4a35265527ac21ba",
+        "reference/attn.norm.npy": "9bd349aee13f44fc69409f532b9868212cca8a423142a56221179450141d6acc",
+        "reference/attn.residual.npy": "d99a09e2e37c869a7dd9d2ae4439cc0c2fb8499fda2670a95437eedf7d4c89ab",
+        "reference/attn.streams.npy": "a212a9722ca4ee3f5ab6284c5c58e97eea2b0014cb2e4b0bfe28cb23e3a8bc91",
+        "reference/mlp.inject.npy": "0a21e86e4389ebc505cd220b2761cf69aadd19cfcd52124b7b361c42db1fbc37",
+        "reference/mlp.mix.npy": "115f4798924d627266fbfdc4a207cbbc9320858a792a4d815e96a36ebb39bccc",
+        "reference/mlp.norm.npy": "6325b9e61e4769f4e84ee641b6f7eb9dc017f20ec5dc4254d60b3cbe5f02b36b",
+        "reference/mlp.residual.npy": "a212a9722ca4ee3f5ab6284c5c58e97eea2b0014cb2e4b0bfe28cb23e3a8bc91",
+        "reference/mlp.streams.npy": "3770cd97d942bc892bcfaf6fd90a90fbe263fe3c1fe419f477db06ad10e02e6c",
+        "reference/moe.npy": "f6ba73db51777c81ed88be98480e71378f570f77e30444ddb26c5461c659cebd",
+        "reference/output.npy": "3770cd97d942bc892bcfaf6fd90a90fbe263fe3c1fe419f477db06ad10e02e6c",
+        "reference/router.experts.npy": "e680772b810a9174e4a82c080691e87348df51c77a4f4007fa0ae279253bf810",
+        "reference/router.logits.npy": "f2fe43c19a609e143668780a20f7f40cac55db53c62a61d3b992e97eff16a590",
+        "reference/router.weights.npy": "204b7bafc2e47dd565ab0a912b74f30ecf9ece46c13627cb979adc03d4dd1942"
+      },
+      "case": "tokens-b-fp32-random",
+      "fingerprint": "86dfb5dd0e6bd15f25b69979e814455097bba576e7e65cb1709613725a0d4900",
+      "input_mode": "random",
+      "input_sha256": "d99a09e2e37c869a7dd9d2ae4439cc0c2fb8499fda2670a95437eedf7d4c89ab",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999907550426792,
+          "fraction_within": 0.7421875,
+          "max_abs": 0.00029257312417030334,
+          "max_relative": 0.9540013468691846,
+          "pass": false,
+          "relative_l2": 0.0043058223005048735
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.21163433394394815,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 34750464,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 34750464,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 344178688,
+      "random_scale": 0.020587926621674118,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.2829937080387026,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 344178688,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 344178688,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.0001,
+        "cosine_min": 0.999999,
+        "rtol": 0.0001
+      },
+      "unit": "0"
+    },
+    {
+      "artifacts": {
+        "input.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "mlx/output.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "reference/attention.gated_norm.npy": "61195f4420910ade28974c5ee6b5076dab614515da0bf1e6e133e458792c359c",
+        "reference/attention.npy": "1f11b1cf99876a6975d81f5f5382cc0f9a44b1e6d48bb44e0443a4c31b88f4d6",
+        "reference/attn.inject.npy": "ec0e228d322e85021c3dfcc6de098cbe722c8d0db1241f52941a8d190bf83223",
+        "reference/attn.mix.npy": "60aa08f48efdaba6986e2515832be17bef0a80957cd1cedc605f9b5f072c7922",
+        "reference/attn.norm.npy": "cdd676ead8b2d68c1021d6530a0a339786bdcde58f692954e32a4919b295c739",
+        "reference/attn.residual.npy": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+        "reference/attn.streams.npy": "eebb56027c350f104612e300508e70d088d9128ea4350c3cbc3c0ca95c8b9c2c",
+        "reference/mlp.inject.npy": "88bd0fb8f4c4594221ad108e05d3989066fc063132596145b731f41db30e692e",
+        "reference/mlp.mix.npy": "2917da86a4660cb837445472530c7f39501b61c00316fa1adaf9be21bd898776",
+        "reference/mlp.norm.npy": "43bfd17e84be8aba3881d8cb4025ec068b0c144becd570812265ca3e9baace7f",
+        "reference/mlp.residual.npy": "eebb56027c350f104612e300508e70d088d9128ea4350c3cbc3c0ca95c8b9c2c",
+        "reference/mlp.streams.npy": "3c9e8eb14b8ea686ac6414ce9d886a4559e372fb505cb881a63a54ce3573ca00",
+        "reference/moe.npy": "cc1ef9858189b292581ba9097aa6ae2c7df751b6b5f3986e96f5c4cd5b2ec152",
+        "reference/output.npy": "3c9e8eb14b8ea686ac6414ce9d886a4559e372fb505cb881a63a54ce3573ca00",
+        "reference/router.experts.npy": "e071c542f74e9250400b1aef4480cf3d1fd105820633e607933b4b57afbb5b1e",
+        "reference/router.logits.npy": "76e9d7979bfa53db49fc07f72167a571cbfd008dd2492df9cc4d854ba3d69931",
+        "reference/router.weights.npy": "a81c1395333e01e673c927543790c00fc73bf3959c96107275babb357f9bcb6c"
+      },
+      "case": "tokens-a-bf16-real",
+      "fingerprint": "317843fb6b82d85153e40975145992ff067aac4eb429633a2194bf9ac97d71ba",
+      "input_mode": "real",
+      "input_sha256": "ec1d8de3b3742730f8f26ff5bec7ec893be549e00ef6cb5e154bea5cf05195f4",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999265635932036,
+          "fraction_within": 1.0,
+          "max_abs": 0.001220703125,
+          "max_relative": 4.508196721311475,
+          "pass": true,
+          "relative_l2": 0.012121226529924702
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.20798512501642108,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 34029568,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 34029568,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 342261760,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 2.8673429579939693,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 342261760,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 342261760,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "0"
+    },
+    {
+      "artifacts": {
+        "input.npy": "62b1f9f2880f9394d64d1e87c0d54b7dd1c88a9dc94d6c461eca47628bcc0367",
+        "mlx/output.npy": "62b1f9f2880f9394d64d1e87c0d54b7dd1c88a9dc94d6c461eca47628bcc0367",
+        "reference/attention.gated_norm.npy": "837070b7a47b46ecaad7cae476dd563e28831cdc97e84a1679fcb75ee82fe9a7",
+        "reference/attention.npy": "b7e69567d16c4cb8a8b222d2f710466be72611e74922f635f625485c14f288b0",
+        "reference/attn.inject.npy": "a70f87999ebef0300830836635f884690ae9e2cc65cee179030fa59e5d60a9bd",
+        "reference/attn.mix.npy": "617583424fb585a23ca931e0e557fdb769c274765001ec6321aed4fa2877421f",
+        "reference/attn.norm.npy": "6c92deeace0817e4315307226a9f9b3d8cd898805de433d32bc5d40498cefdfe",
+        "reference/attn.residual.npy": "d3f19786827d4ce0379808848f995ae4af64d26340f443a961025b4560cd89f8",
+        "reference/attn.streams.npy": "b9ae39776c8954b4c0f3649d5551203275c8d1c728232a4bd35990ac76bb5244",
+        "reference/mlp.inject.npy": "1b4553e630673006f62fe2a5581cbe0aa79f8e2bb64a8b7d8ae30b27aa9f4f4a",
+        "reference/mlp.mix.npy": "0363a221c73d69cf95ba7f5c6d9342040cfd9a7bb22f5c253db8fef3d27a894d",
+        "reference/mlp.norm.npy": "f46e5f95f7650c351202c700fe5c8762e131a16f058ede11b57fc9a01a9f8aec",
+        "reference/mlp.residual.npy": "b9ae39776c8954b4c0f3649d5551203275c8d1c728232a4bd35990ac76bb5244",
+        "reference/mlp.streams.npy": "54e4a46eaa9c9bec97babd71ec88be9804e8f77bb951b55b2cf4edda41692c5f",
+        "reference/moe.npy": "e83f87ee3679c245cda93df37c3dc4052f3be48345232aa9986cec73ea3565f4",
+        "reference/output.npy": "54e4a46eaa9c9bec97babd71ec88be9804e8f77bb951b55b2cf4edda41692c5f",
+        "reference/router.experts.npy": "69e2c9501c70b328bf8e4e97e9a0f665e022efa1468f1d5ae019e34dc0f43cf2",
+        "reference/router.logits.npy": "1f37ff7dd7051f92d9fc6d33e8e7f1176f888b3567cb08d31c97b2d85fc224c7",
+        "reference/router.weights.npy": "96dbdd58454c5878f0bc0a6a060e675c2e3278fed3bcdb7fc6439d2937ab9da3"
+      },
+      "case": "tokens-a-bf16-random",
+      "fingerprint": "33b7ec7ebc1261d143ef37646cfbfc61173d60dab1e865a73ac31534458dc923",
+      "input_mode": "random",
+      "input_sha256": "62b1f9f2880f9394d64d1e87c0d54b7dd1c88a9dc94d6c461eca47628bcc0367",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999806756498729,
+          "fraction_within": 1.0,
+          "max_abs": 0.00046964921057224274,
+          "max_relative": 1.3435618082682292,
+          "pass": true,
+          "relative_l2": 0.006216794685322604
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.21139754098840058,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36175872,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36175872,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 338509824,
+      "random_scale": 0.020711298441861002,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 2.701106167049147,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 338509824,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 338509824,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "0"
+    },
+    {
+      "artifacts": {
+        "input.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "mlx/output.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "reference/attention.gated_norm.npy": "202ec0346737c8e96bc934543413ff6b616d1b5bf33d7dec4774a8403dc8b461",
+        "reference/attention.npy": "4da6841ea2f547d0ef1ea83dbbc66b05710c91b728386b98d54657ce4acc073b",
+        "reference/attn.inject.npy": "6014a1e6598729ed1f64290afc34b41afb03a1de8f5174d33ffd0329b3b9c48e",
+        "reference/attn.mix.npy": "a9a3e76a36106a601c3681f9abe1976f29ad3a6689ff24f71246b2968680763a",
+        "reference/attn.norm.npy": "d5dd9b9a5a28a383feaabdefc51ff2a74a80d5b09a66f1ff06581d47f51e72f4",
+        "reference/attn.residual.npy": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+        "reference/attn.streams.npy": "ae3c264627fa41ea091551fbda4906c3ff4164275e99ee2435b8f7fe28c7d28c",
+        "reference/mlp.inject.npy": "81315782a4bb22e2049f00c1214c11f924835d36d501c6107033b98685df2c42",
+        "reference/mlp.mix.npy": "9a3979e9fe9c986ec5223c6ad0c74aa979a5f009f27a6b7e749d44992cfab05f",
+        "reference/mlp.norm.npy": "fe4baa97f30d8ab639156b0a8583cb7026ee4366b856a16bed07c4afaab729dc",
+        "reference/mlp.residual.npy": "ae3c264627fa41ea091551fbda4906c3ff4164275e99ee2435b8f7fe28c7d28c",
+        "reference/mlp.streams.npy": "e0186a1274f4332603c83fc8f04a22fedb5d47d13538915f63f0dbbe4d7ef4d8",
+        "reference/moe.npy": "562604798b914c978c6a8a04d097ea3721531cae2527b23619035e3e7efa2f36",
+        "reference/output.npy": "e0186a1274f4332603c83fc8f04a22fedb5d47d13538915f63f0dbbe4d7ef4d8",
+        "reference/router.experts.npy": "046568a911282175a07689fb1a60982d0fb4a889a551b8b3b3dad3ae8282dbaf",
+        "reference/router.logits.npy": "219b9e4055206d1f7d30bbb89bbf5766cd105de50e95fce628dc5f9e061995c9",
+        "reference/router.weights.npy": "20bf4680cec28e3c2d8e5d088bf58dd3001b1f88cc293d4fb0a398ecd9625d5b"
+      },
+      "case": "tokens-b-bf16-real",
+      "fingerprint": "54bf9dcd0e05cce775e6a8882d576b76e84c5701daefbb3e29d9f8192a104deb",
+      "input_mode": "real",
+      "input_sha256": "d6c83a8e0f3ce6fdfbb9a77bc113bc06fbd6c2052b6cf81164dd94f1e8b4b011",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999308807395582,
+          "fraction_within": 1.0,
+          "max_abs": 0.0009765625,
+          "max_relative": 5.25,
+          "pass": true,
+          "relative_l2": 0.011757347854384675
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.21119837497826666,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 34848768,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 34848768,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 346472448,
+      "random_scale": null,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.2798160000238568,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 346472448,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 346472448,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "0"
+    },
+    {
+      "artifacts": {
+        "input.npy": "d99a09e2e37c869a7dd9d2ae4439cc0c2fb8499fda2670a95437eedf7d4c89ab",
+        "mlx/output.npy": "d99a09e2e37c869a7dd9d2ae4439cc0c2fb8499fda2670a95437eedf7d4c89ab",
+        "reference/attention.gated_norm.npy": "4238f1e8b6ddef77167b6289134ee86820356107475a9c131f98f1388a3ff3cf",
+        "reference/attention.npy": "0051e9ee25e66a8eaa4392d0feec684cc65259d75025b54123b2064780d52324",
+        "reference/attn.inject.npy": "7f15178d8737236e30f43c986519541a558853bf26c6ad5c7a556c94de19a6c2",
+        "reference/attn.mix.npy": "59fc9b3f17496801e3ebf5e5c20c4aba4b41cf2867db8933eb43d42ec56f54fe",
+        "reference/attn.norm.npy": "048e87040c48b7454d1a1aacf5c6e183f4b331231305d8a07ad23d1043ea8786",
+        "reference/attn.residual.npy": "06f06541609fc5f3cb6cf63e7401e82b7fe9cd87b72ab52149c267950308abc6",
+        "reference/attn.streams.npy": "aaa52d1d0e14af0d0a6885100c49434d1557d39e87a619ec799948ae806470c5",
+        "reference/mlp.inject.npy": "f22082f162016be39aa6eb53930b3a1592b84db9d21b01c5439dd9af5ea4da6d",
+        "reference/mlp.mix.npy": "77f5e2f136a5d8efba9b73c97d8a791b044303c321ffc4af0cd6c6071445d1c1",
+        "reference/mlp.norm.npy": "51059fdade3d713c2f5c808f68f297d766a11f7c9b27549904b4967ef8b4776f",
+        "reference/mlp.residual.npy": "aaa52d1d0e14af0d0a6885100c49434d1557d39e87a619ec799948ae806470c5",
+        "reference/mlp.streams.npy": "2c3a40cfd1cb39bfb447b4e588035a569f534515dff637fad6a9868f77a43621",
+        "reference/moe.npy": "c8a9344c9a4dc7fc1380d3fc65b1850e5c5651bdfbd24e48b7a856e21db50e13",
+        "reference/output.npy": "2c3a40cfd1cb39bfb447b4e588035a569f534515dff637fad6a9868f77a43621",
+        "reference/router.experts.npy": "e680772b810a9174e4a82c080691e87348df51c77a4f4007fa0ae279253bf810",
+        "reference/router.logits.npy": "1f9fb197bed4b8bf174bad2843c77d0ca48ed51b2c2394625da3aa001756eb42",
+        "reference/router.weights.npy": "b50c1d3b131600c1b51ca33111f528ab0a2e7b49d8ddb228911dbda5e9df38ca"
+      },
+      "case": "tokens-b-bf16-random",
+      "fingerprint": "dc6fc6b09c2168bbd406f4b2a091ef0ca8388dd798149f74f0c22ffec0f5b98e",
+      "input_mode": "random",
+      "input_sha256": "d99a09e2e37c869a7dd9d2ae4439cc0c2fb8499fda2670a95437eedf7d4c89ab",
+      "metrics": {
+        "output": {
+          "cosine": 0.9999894689929563,
+          "fraction_within": 1.0,
+          "max_abs": 0.00036059319972991943,
+          "max_relative": 0.9537622278386896,
+          "pass": true,
+          "relative_l2": 0.004593701718434046
+        }
+      },
+      "missing_traces": [
+        "attention",
+        "attention.gated_norm",
+        "attn.inject",
+        "attn.mix",
+        "attn.norm",
+        "attn.residual",
+        "attn.streams",
+        "mlp.inject",
+        "mlp.mix",
+        "mlp.norm",
+        "mlp.residual",
+        "mlp.streams",
+        "moe",
+        "router.experts",
+        "router.logits",
+        "router.weights"
+      ],
+      "mlx": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 0.2078183339908719,
+        "metadata": {
+          "adapter_kind": "stub",
+          "device": "numpy stub",
+          "peak_rss_bytes": 36372480,
+          "reads": [],
+          "reason": "port adapter not supplied"
+        },
+        "observed_peak_bytes": 36372480,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "output": "output.npy"
+        }
+      },
+      "peak_bytes": 348946432,
+      "random_scale": 0.020587926621674118,
+      "reference": {
+        "child_budget_bytes": 12573360128,
+        "elapsed_seconds": 3.29499633400701,
+        "metadata": {
+          "device": "cpu",
+          "experts": "official forward with sliced storage",
+          "peak_rss_bytes": 348946432,
+          "reads": [
+            {
+              "name": "model.layers.0.linear_attn.dt_bias",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.A_log",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.conv1d.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.linear_attn.out_proj.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_qkv.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_z.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_b.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.linear_attn.in_proj_a.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.shared_expert_gate.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.hc_norm.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.attn_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00001-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.hc_norm.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None),)"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.0.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.1.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.2.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.gate_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.up_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            },
+            {
+              "name": "model.layers.0.mlp.experts.3.down_proj.weight",
+              "shard": "model-00002-of-00005.safetensors",
+              "slice": "(slice(None, None, None), slice(None, None, None))"
+            }
+          ],
+          "reference_source_sha256": "e57b3617e71e81ecb7e5ae3b420c45b5aee80d76a07aa8c88b797c2642f1f5df",
+          "torch": "2.15.0",
+          "transformers": "5.22.1"
+        },
+        "observed_peak_bytes": 348946432,
+        "parent_peak_bytes": 43106304,
+        "schema": "qwen4-gold/v1",
+        "traces": {
+          "attention": "attention.npy",
+          "attention.gated_norm": "attention.gated_norm.npy",
+          "attn.inject": "attn.inject.npy",
+          "attn.mix": "attn.mix.npy",
+          "attn.norm": "attn.norm.npy",
+          "attn.residual": "attn.residual.npy",
+          "attn.streams": "attn.streams.npy",
+          "mlp.inject": "mlp.inject.npy",
+          "mlp.mix": "mlp.mix.npy",
+          "mlp.norm": "mlp.norm.npy",
+          "mlp.residual": "mlp.residual.npy",
+          "mlp.streams": "mlp.streams.npy",
+          "moe": "moe.npy",
+          "output": "output.npy",
+          "router.experts": "router.experts.npy",
+          "router.logits": "router.logits.npy",
+          "router.weights": "router.weights.npy"
+        }
+      },
+      "reference_valid": true,
+      "schema": "qwen4-gold/v1",
+      "status": "STUB_NOT_VALIDATED",
+      "tolerances": {
+        "atol": 0.03125,
+        "cosine_min": 0.999,
+        "rtol": 0.03125
+      },
+      "unit": "0"
+    }
+  ],
+  "completed_cases": 8,
+  "expected_cases": 8,
+  "fingerprint": "bba02191736e8996b41af2ec6c2ede463541507b094662b864579be51ba59519",
+  "schema": "qwen4-gold/v1",
+  "status": "INCOMPLETE_OR_FAILED",
+  "unit": "0"
+}
