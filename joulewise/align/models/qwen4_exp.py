@@ -557,7 +557,7 @@ class Model(nn.Module):
         return self.model.embed_tokens.as_linear(x) if self.args.tie_word_embeddings else self.lm_head(x)
 
     def sanitize(self, weights):
-        out, shards = {}, {}
+        out, shards, experts = {}, {}, {}
         for original, value in weights.items():
             key = tables.canonical_name(original)
             if key is None:
@@ -574,6 +574,11 @@ class Model(nn.Module):
                 base = tables.SHARD_RE.sub(".ngram_embedding.weight", key)
                 shards.setdefault(base, {})[int(match[1])] = value
                 continue
+            expert = tables.EXPERT_RE.search(key)
+            if expert:
+                base = tables.EXPERT_RE.sub(f".mlp.switch_mlp.{expert[2]}_proj.weight", key)
+                experts.setdefault(base, {})[int(expert[1])] = value
+                continue
             if key.endswith("mlp.experts.gate_up_proj"):
                 gate, up = mx.split(value, 2, axis=-2)
                 base = key[:-len("experts.gate_up_proj")]
@@ -589,6 +594,10 @@ class Model(nn.Module):
             if sorted(parts) != list(range(len(parts))):
                 raise ValueError(f"Non-contiguous PLE shards: {key}")
             out[key] = mx.concatenate([parts[i] for i in range(len(parts))], axis=0)
+        for key, parts in experts.items():
+            if sorted(parts) != list(range(self.args.num_experts)):
+                raise ValueError(f"Missing expert tensors: {key}")
+            out[key] = mx.stack([parts[i] for i in range(len(parts))])
         if self.args.tie_word_embeddings:
             out.pop("lm_head.weight", None)
         return out
@@ -598,5 +607,7 @@ class Model(nn.Module):
         # Keeping the whole Attention module unmodified preserves the indexer.
         # Only its leaf projections may be replaced by quantized linears.
         def predicate(path, module):
-            return hasattr(module, "to_quantized") and not path.endswith(("mlp.gate", "shared_expert_gate"))
+            if not hasattr(module, "to_quantized"):
+                return False
+            return tables.quantization_for(path + ".weight", module.weight.shape, "mixed", 64) or False
         return predicate

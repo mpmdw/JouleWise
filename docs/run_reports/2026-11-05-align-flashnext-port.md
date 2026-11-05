@@ -48,3 +48,29 @@ unique 16-KiB page spans 29,327,360 bytes over 128 requests. Eager median
 disk bandwidth, GPU resident memory or whole-machine page-cache residency.
 An initial `/bin/ps` RSS probe was sandbox-denied; replaced it with standard
 `getrusage` high-water RSS. No permission bypass. `git diff --check` passed.
+
+## Stage 3
+
+Added streaming converter and shared quantization policy/shape inventory.
+Mixed profile: routed experts q4, eligible other linears/embeddings q8;
+indexer, DeltaNet, routers, convolutions and norms retain bf16. Narrow
+low-rank projections that do not divide the group size retain bf16.
+N-gram shards stream directly into the separate CPU table. The converter
+copies both owned runtime files and tokenizer assets, hashes every payload
+file, and writes its completion manifest last. The manifest cannot hash
+itself; pin its SHA256 externally (the CLI prints it).
+
+Tiny `transformers.save_pretrained` produced per-expert tensors rather than
+the release's fused tensors. Added both layouts, plus nested official
+prefixes and sharded PLE. Rejected missing indexer tensors before writing
+output. Unquantized conversion requires no working MLX device.
+
+`OMP_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+venv-ref/bin/python -B -m unittest tests.align.test_qwen4_exp_conversion`:
+3 tests PASS (6.106 s). Exact fp32/bf16 indexer retention, fused gate split,
+per-expert stacking, official prefixes, PLE shards, intentional MTP/vision
+omission, manifest tamper detection, and mixed-policy decisions. Initial
+failures exposed the saved per-expert layout and tiny rank/group mismatch;
+both fixed. Quantized tensor conversion is **PENDING MLX device access**.
+`git diff --check` passed. No full suite run, per the explicit machine-load
+restriction.

@@ -73,6 +73,7 @@ def ngram_ids(ids, previous, config, ple_index=0):
 
 CONSTANTS = ("layer_multipliers", "ngram_heads_vocab_sizes", "ngram_heads_offsets")
 SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
+EXPERT_RE = re.compile(r"\.mlp\.experts\.(\d+)\.(gate|up|down)_proj\.weight$")
 
 
 def canonical_name(key):
@@ -84,6 +85,90 @@ def canonical_name(key):
         tail = key[len("language_model."):]
         return tail if tail.startswith(("model.", "lm_head.")) else "model." + tail
     return key
+
+
+def parameter_shapes(config):
+    """Expected text tensors, independently enumerated from official modules."""
+    c = text_config(config)
+    h, hc, rank = c["hidden_size"], c.get("hc_count", 4), c.get("hc_lowrank", 320)
+    e, m, sm = c["num_experts"], c["moe_intermediate_size"], c["shared_expert_intermediate_size"]
+    shapes = {"model.embed_tokens.weight": (c["vocab_size"], h)}
+    if not c.get("tie_word_embeddings", False):
+        shapes["lm_head.weight"] = (c["vocab_size"], h)
+
+    def linear(path, ins, outs, bias=False):
+        shapes[path + ".weight"] = (outs, ins)
+        if bias:
+            shapes[path + ".bias"] = (outs,)
+
+    def hyper(path, combine=True):
+        shapes[path + ".hc_norm.weight"] = (hc * h,)
+        linear(path + ".input_mix_weight_down", hc * h, rank)
+        linear(path + ".input_mix_weight_up", rank, hc * h)
+        if combine:
+            linear(path + ".block_inject_weight", hc * h, hc)
+
+    types = c.get("layer_types") or ["linear_attention" if (i + 1) % c.get("full_attention_interval", 4)
+                                    else "indexed_attention" for i in range(c["num_hidden_layers"])]
+    for i, layer_type in enumerate(types):
+        p = f"model.layers.{i}."
+        hyper(p + "attn_hyper_connection")
+        hyper(p + "mlp_hyper_connection")
+        linear(p + "mlp.gate", h, e)
+        for name, dims in (("gate", (e, m, h)), ("up", (e, m, h)), ("down", (e, h, m))):
+            shapes[p + f"mlp.switch_mlp.{name}_proj.weight"] = dims
+        for name, ins, outs in (("gate", h, sm), ("up", h, sm), ("down", sm, h)):
+            linear(p + f"mlp.shared_expert.{name}_proj", ins, outs)
+        linear(p + "mlp.shared_expert_gate", h, 1)
+        if layer_type == "linear_attention":
+            nh, kh = c["linear_num_value_heads"], c["linear_num_key_heads"]
+            kd, vd = kh * c["linear_key_head_dim"], nh * c["linear_value_head_dim"]
+            for name, outs in (("qkv", kd * 2 + vd), ("z", vd), ("a", nh), ("b", nh)):
+                linear(p + "linear_attn.in_proj_" + name, h, outs)
+            linear(p + "linear_attn.out_proj", vd, h)
+            shapes[p + "linear_attn.conv1d.weight"] = (kd * 2 + vd, c["linear_conv_kernel_dim"], 1)
+            shapes[p + "linear_attn.A_log"] = shapes[p + "linear_attn.dt_bias"] = (nh,)
+            shapes[p + "linear_attn.norm.weight"] = (c["linear_value_head_dim"],)
+        else:
+            d, qh, kvh = c["head_dim"], c["num_attention_heads"], c["num_key_value_heads"]
+            for name, ins, outs in (("q", h, qh * d * 2), ("k", h, kvh * d),
+                                    ("v", h, kvh * d), ("o", qh * d, h)):
+                linear(p + f"self_attn.{name}_proj", ins, outs, c.get("attention_bias", False))
+            shapes[p + "self_attn.q_norm.weight"] = shapes[p + "self_attn.k_norm.weight"] = (d,)
+            di = c["indexer_head_dim"]
+            linear(p + "self_attn.indexer.index_qk_proj", h, (c["indexer_n_heads"] + 1) * di)
+            shapes[p + "self_attn.indexer.q_layernorm.weight"] = (di,)
+            shapes[p + "self_attn.indexer.k_layernorm.weight"] = (di,)
+        if i + 1 in c.get("ple_layer_ids", []):
+            layout = ngram_layout(c, c["ple_layer_ids"].index(i + 1))
+            shapes[p + "ple.ple_embedding.ngram_embedding.weight"] = (layout["rows"], layout["dim"])
+            ed = c.get("ple_embed_dim", h)
+            linear(p + "ple.key_proj", ed, hc * h)
+            linear(p + "ple.value_proj", ed, h)
+            for name in ("key", "query", "conv"):
+                shapes[p + f"ple.norm_{name}.weight"] = (hc * h,)
+            shapes[p + "ple.conv1d.weight"] = (hc * h, c["ple_conv_kernel_size"], 1)
+    hyper("model.hyper_connection_mixer", False)
+    return shapes
+
+
+def quantization_for(key, shape, profile="mixed", group_size=64):
+    """Pinned two-argument predicate policy, expressed without a backend import.
+
+    Indexer, router, norms, convolutions and DeltaNet stay in source precision.
+    Mixed: routed experts 4 bit; remaining eligible linears/embedding 8 bit.
+    """
+    if profile in ("bf16", "fp32") or not key.endswith(".weight") or len(shape) < 2:
+        return None
+    if any(x in key for x in (".indexer.", ".linear_attn.", ".conv1d.", ".ngram_embedding.")) or key.endswith(
+            ("mlp.gate.weight", "shared_expert_gate.weight")):
+        return None
+    if shape[-1] % group_size:
+        return None  # retain narrow low-rank projections in source precision
+    bits = (4 if ".switch_mlp." in key else 8) if profile == "mixed" else int(profile)
+    if bits not in (3, 4, 6, 8):
+        raise ValueError("Supported weight bits: 3, 4, 6, 8")
+    return dict(bits=bits, group_size=group_size, mode="affine")
 
 
 def row_dtype(dim, storage, group_size=None):
