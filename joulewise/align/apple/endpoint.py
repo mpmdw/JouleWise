@@ -109,6 +109,11 @@ class _XmlAssistantMessage(ChatMessage):
     reasoning_content: str = ""
     tool_calls: tuple[ToolCallRequest, ...] = ()
 
+    @property
+    def reasoning_text(self):
+        """Shared transcript/monitor channel; serialize only the stored field."""
+        return self.reasoning_content
+
 
 def _xml_history_reasoning(message, tools):
     # The endpoint already split generated text using the actual prompt's
@@ -470,7 +475,7 @@ class MlxEndpoint:
                         scrubbed = [
                             replace(message, content=history_reasoning(message)[0], **(
                                 {field: "" for field in ("reasoning_text", "reasoning_content")
-                                 if xml_family and hasattr(message, field)}
+                                 if xml_family and field in getattr(message, "__dataclass_fields__", {})}
                             ))
                             if message.role == "assistant" else message
                             for message in messages

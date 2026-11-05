@@ -8,6 +8,8 @@ from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion
 from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES
 from joulewise.align.interfaces import ChatMessage
+from joulewise.align.endpoints import _coalesce_assistant_calls
+from joulewise.align.shade.monitor import render_transcript
 from joulewise.clock import FakeClock
 from joulewise.schemas import RuntimeBackend
 from tests.align.test_apple_campaign import base_config
@@ -43,6 +45,18 @@ def endpoint(family="qwen3_8", text="", finish_reason="length", **kwargs):
 
 
 class XmlFixRoundTests(unittest.TestCase):
+    def test_xml_history_reasoning_survives_monitor_and_call_coalescing(self):
+        ep = endpoint(text="private plan</think>" + xml(), finish_reason="stop")
+        result = ep.chat([ChatMessage("user", "x")], tools=TOOLS,
+                         max_tokens=1024, temperature=0, seed=None)
+        message = ep.assistant_history_message(result)
+        self.assertEqual(getattr(message, "reasoning_text", ""), "private plan")
+        transcript = [message, ChatMessage("assistant", '{"text":"hello"}',
+                                         name="update", tool_call_id=result.tool_calls[0].call_id)]
+        self.assertEqual(_coalesce_assistant_calls(transcript)[0].reasoning_text, "private plan")
+        self.assertIn("<thinking>private plan</thinking>", render_transcript(transcript, visibility="full"))
+        self.assertNotIn("private plan", render_transcript(transcript, visibility="no_scratchpad"))
+
     def test_unverified_122b_template_is_explicitly_unsupported(self):
         for family in ("qwen3_5_moe", "qwen3_5_moe_text", "qwen3.5_moe"):
             with self.subTest(family=family):
