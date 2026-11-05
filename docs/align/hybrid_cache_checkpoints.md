@@ -87,7 +87,7 @@ model arrays; that check has **not run** in the implementation clone.
 | Model / evidence | Linear / full layers | Conv bytes/layer | Recurrent bytes/layer | Payload/checkpoint | Two retained |
 |---|---:|---:|---:|---:|---:|
 | Qwen3.8-27B, clone-provided config fixture | 48 / 16 | 61,440 | 3,145,728 | 153,944,192 B (146.8126 MiB) | 293.6252 MiB |
-| Qwen3-Next-80B-A3B, **unverified shape assumptions only** | 36 / 12 | 49,152 | 2,097,152 | 77,267,040 B (73.6876 MiB) | 147.3752 MiB |
+| Qwen3-Next-80B-A3B, clone-provided mlx-community config fixture | 36 / 12 | 49,152 | 2,097,152 | 77,267,040 B (73.6876 MiB) | 147.3752 MiB |
 
 Qwen3.8 uses Hk=16, Hv=48, Dk=Dv=128, kernel=4 and 64 layers.
 `tests/align/fixtures/qwen38_config.json` is a byte-for-byte copy of this clone's
@@ -96,22 +96,25 @@ Qwen3.8 uses Hk=16, Hv=48, Dk=Dv=128, kernel=4 and 64 layers.
 Its `mamba_ssm_dtype` says float32. External publication/revision provenance was
 not independently checked offline.
 
-The Next row is conditional arithmetic for 48 layers, full attention every
-fourth layer, Hk=16, Hv=32, Dk=Dv=128 and kernel=4. **The published Next
-config.json was unavailable in this clone; this row is not a verified
-config-derived model result.** Obtain that config inside the clone and rerun
-`checkpoint_size_from_config` before accepting its model-specific memory claim.
-No fixture purporting to be the missing published config has been invented.
+The Next row is now computed from the user-supplied mlx-community
+`.hf-next/config.json`: 48 layers, full attention every fourth layer, Hk=16,
+Hv=32, Dk=Dv=128 and kernel=4. The byte-identical retained fixture is
+`tests/align/fixtures/qwen3_next_config.json`, SHA-256
+`f5a5422b8e3d47733f0073ff22dec1dc4a7832fec5fc1cf36eba31ace03cf0c4`.
+The real config confirms the earlier conditional arithmetic. Its upstream
+revision/publication provenance was not independently authenticated offline.
+Config shape verification does not verify live runtime cache dtypes.
 
-Reproduce the Qwen3.8 calculation without model or measurement data:
+Reproduce both calculations without model or measurement data:
 
 ```sh
 python3.13 -B - <<'PY'
 import json
 from pathlib import Path
 from joulewise.align.apple.prompt_cache import checkpoint_size_from_config
-cfg = json.loads(Path('tests/align/fixtures/qwen38_config.json').read_text())
-print(checkpoint_size_from_config(cfg))
+for name in ('qwen38_config.json', 'qwen3_next_config.json'):
+    cfg = json.loads((Path('tests/align/fixtures') / name).read_text())
+    print(name, checkpoint_size_from_config(cfg))
 PY
 ```
 

@@ -292,6 +292,24 @@ class CompatibilityAndSizingTests(unittest.TestCase):
         self.assertEqual(hybrid['checkpoint']['policy'], 'hybrid_boundary_v1')
         self.assertEqual(hybrid['fallback'], 'checkpoint_then_whole_cache_rebuild_on_untrimmable_rewrite')
 
+    def test_next_supplied_config_payload(self):
+        import hashlib
+        raw = (Path(__file__).with_name('fixtures') / 'qwen3_next_config.json').read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),
+                         'f5a5422b8e3d47733f0073ff22dec1dc4a7832fec5fc1cf36eba31ace03cf0c4')
+        cfg = json.loads(raw)
+        self.assertEqual(cfg['model_type'], 'qwen3_next')
+        result = checkpoint_size_from_config(cfg)
+        self.assertEqual(result, dict(
+            linear_layers=36, attention_layers=12,
+            conv_bytes_per_layer=49152, recurrent_bytes_per_layer=2097152,
+            state_bytes=77266944, offset_bytes=96, checkpoint_bytes=77267040,
+            state_itemsize=4, conv_itemsize=2,
+        ))
+        self.assertEqual(2 * result['checkpoint_bytes'], 154534080)
+        self.assertEqual(checkpoint_size_from_config(cfg, conv_itemsize=4)['checkpoint_bytes'],
+                         79036512)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -77,12 +77,37 @@ fixed dimensions and a 900 MiB process peak-RSS guard between evaluated stages.
 MLX's memory setting is explicitly a **guideline**, not a hard RSS cap. Cases
 are sequential. Production-config models are never instantiated.
 
+## Item 2 — supplied-config sizing
+
+Retained a byte-identical `.hf-next/config.json` copy at
+`tests/align/fixtures/qwen3_next_config.json` (22,138 bytes), SHA-256
+`f5a5422b8e3d47733f0073ff22dec1dc4a7832fec5fc1cf36eba31ace03cf0c4`.
+User identifies the source as mlx-community; no upstream revision was verified
+without network. Qwen3.8's supplied config still matches the earlier fixture
+hash `8f80874ac3ad8fa386d3f6dc0ea85377f703376e009a03dee0360e08e289a25d`.
+
+For Next: 36 recurrent / 12 full-attention layers, Hk=16, Hv=32, Dk=Dv=128,
+convolution kernel=4. bf16 history + fp32 recurrence gives:
+
+- Convolution: **49,152 B/layer**; recurrence: **2,097,152 B/layer**.
+- Recurrent arrays: **77,266,944 B**; twelve logical u64 offsets: **96 B**.
+- One checkpoint: **77,267,040 B = 73.6875916 MiB**.
+- Two retained: **154,534,080 B = 147.3751831 MiB**.
+- fp32 convolution sensitivity: **79,036,512 B/checkpoint**.
+
+Updated the design's conditional Next row to supplied-config evidence and added
+a fixture-backed regression. Qwen3.8 remains **153,944,192 B/checkpoint**,
+**293.6252441 MiB/two**. These are payload estimates, not measured residency.
+Neither weights' quantization nor config precision proves cache dtype; the
+Metal-blocked native runtime dtype check remains outstanding.
+
 ## Verification / remaining work
 
 - `python3.13 -B -m py_compile scripts/align_cache_checkpoint_native.py`: PASS.
+- `python3.13 -B -m unittest tests.align.test_cache_checkpoint`: 11 PASS (0.008 s).
 - `git diff --check`: PASS.
 - Native commands above: blocked/error, not passed or skipped numerical gates.
 
-Item 2 (config sizing), item 3 (resource probe/extrapolation), and item 4 (suite
-integration) follow in separate commits. Metal-visible execution is required
+Item 3 (resource probe/extrapolation) and item 4 (suite integration) follow in
+separate commits. Metal-visible execution is required
 before any numerical exactness, measured native cost or production claim.
