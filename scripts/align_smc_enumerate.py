@@ -23,27 +23,26 @@ from joulewise.hazards.monitor import Journal
 
 def markdown(report, digest):
     result = report["response"]
-    lines = ["# ALIGN R0 SMC desk report", "", "Status: **PROVISIONAL**. Sensor locations are unverified.",
-             "", result["rule"], "", f"S_fast: `{result['s_fast']}`; S_slow: `{result['s_slow']}`.",
-             "", "| Key | Unit | Amplitude | Idle noise | Tau (s) | A/noise | R2 | Result |",
-             "|---|---|---:|---:|---:|---:|---:|---|"]
+    lines = ["# ALIGN R0 SMC inventory and step data", "",
+             "Status: **PROVISIONAL**. R1's planning-turn step classifies sensors; R0 emits no pins.",
+             "", result["rule"], "",
+             "| Key | Unit | Type | Idle median | Load median | Idle noise | Result |",
+             "|---|---|---|---:|---:|---:|---|"]
     def number(v):
         return "—" if v is None else f"{v:.5g}"
     for row in result["ranking"]:
-        cells = [row["key"], row["unit"], *(number(row[k]) for k in (
-            "amplitude", "noise", "tau_s", "amplitude_to_noise", "fit_r2")), row["reason"]]
+        medians = row.get("phase_medians", {})
+        cells = [row["key"], row["unit"], row.get("data_type", "unknown"),
+                 number(medians.get("idle")), number(medians.get("load")),
+                 number(row["noise"]), row["reason"]]
         lines.append("| " + " | ".join(cells) + " |")
+    lines += ["", "Unsupported sensor types (retained, not silently dropped):"]
+    for key, evidence in sorted(report["inventory"].get("unsupported_types", {}).items()):
+        lines.append(f"- `{key}`: `{evidence.get('data_type')}`; {evidence['error']}")
     lines += ["", f"R0 JSON SHA-256: `{digest}`.",
               f"Complete-sensor sample fraction: {report['coverage']['all_keys']['sample_fraction']}",
-              "", "Review all per-key coverage and gaps in the JSON. Fans are never temperature candidates."]
-    if result["s_fast"] and result["s_slow"]:
-        policy = {"smc_temperature": {"s_fast": result["s_fast"], "s_slow": result["s_slow"],
-                   "fan_keys": [s["key"] for s in report["inventory"]["keys"] if s["unit"] == "rpm"],
-                   "r0_sha256": digest}}
-        lines += ["", "Candidate campaign-policy extension (review on Mac15,9 before pinning):", "", "```json",
-                  json.dumps(policy, indent=2), "```"]
-    else:
-        lines += ["", "No complete policy proposal: a required time-constant class was not resolved."]
+              "", "Review per-key errors/coverage and raw step data in the JSON/journal. "
+              "Thermometry and sensor identity remain pending R1; no thermal-control claim is authorized."]
     return "\n".join(lines) + "\n"
 
 
@@ -63,7 +62,7 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
     parser.add_argument("--seconds", type=int, default=60, help="inventory-only idle sample duration")
     parser.add_argument("--gpu-step", action="store_true", help="opt in to fixed 2048x2048 MLX matmul; no model")
     parser.add_argument("--idle-seconds", type=int, default=300)
-    parser.add_argument("--load-seconds", type=int, default=600)
+    parser.add_argument("--load-seconds", type=int, default=60)
     parser.add_argument("--recovery-seconds", type=int, default=600)
     args = parser.parse_args(argv)
     if min(args.seconds, args.idle_seconds, args.load_seconds, args.recovery_seconds) <= 0:
@@ -85,6 +84,7 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
                              sink=journal.write, load_factory=load_factory)
         selected = [s["key"] for s in capture["inventory"]["keys"]]
         report = {"schema": "joulewise.align_smc_r0.v1", "status": "PROVISIONAL",
+                  "thermometry_bar": "PENDING_R1_CLASSIFICATION",
                   "hardware": metadata(), "admission": admission, "gpu_step": args.gpu_step,
                   "gpu_load": {"backend": "mlx", "shape": [2048, 2048], "dtype": "float32"}
                               if args.gpu_step else None,

@@ -1,4 +1,4 @@
-"""R0 desk capture and deterministic first-order temperature response ranking.
+"""R0 inventory capture and R1 model-free physical step classification.
 
 Standard library only. MLX is imported solely by the explicitly requested GPU
 worker, never by the journal, enumeration, ranking, or tests.
@@ -19,12 +19,12 @@ from typing import Any
 from joulewise.align.apple import thermal as temperature
 from joulewise.hazards.base import Context
 
-RULE = ("Among readable temperature keys with >=90% valid one-second slots in each phase, "
-        "positive fitted amplitude >3 idle standard deviations and pulse-fit R2 >=0.8, "
-        "choose the largest amplitude/noise separately for tau <30 s (S_fast) and tau >120 s "
-        "(S_slow); ties sort by key. Noise floor is 1e-6 degC. "
-        "Tau must be resolved within both the load and recovery durations. "
-        "Names/physical locations remain PROVISIONAL; no qualifying key means no proposal.")
+RULE = ("FINAL-DESIGN §2.6: R0 emits inventory/step data only; R1's planning-turn step "
+        "classifies sensors. S_fast: largest physical rise ΔT with t63 <=5 s. "
+        "S_slow: longest cooling tau <=300 s among keys with ΔT >=3 degC. "
+        "Keys with tau >300 s are recorded, not gated. Each phase needs >=99% "
+        "coverage and <1% read errors. Constant/stale idle series are rejected; "
+        "noise is a quality gate with a >=0.05 degC/sensor-quantum floor, never a ranking ratio.")
 
 
 class NotQuiet(RuntimeError):
@@ -144,93 +144,112 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
             "started": start.to_json(), "finished": ctx.stamp().to_json()}
 
 
-def _pulse(t: float, tau: float, load_duration: float) -> float:
-    return -math.expm1(-t / tau) if t <= load_duration else (
-        -math.expm1(-load_duration / tau) * math.exp(-(t - load_duration) / tau))
+def _crossing(points, threshold, *, rising):
+    """First observed threshold crossing, linearly interpolated between samples."""
+    for index, (t, value) in enumerate(points):
+        if (value >= threshold) if rising else (value <= threshold):
+            if index == 0:
+                return t
+            before_t, before_value = points[index - 1]
+            if value == before_value:
+                return t
+            return before_t + (t - before_t) * (threshold - before_value) / (value - before_value)
+    return None
 
 
-def rank(capture: Mapping[str, Any]) -> dict[str, Any]:
-    """Fit baseline + A*(1-exp(-t/tau)), then its exponential recovery.
+def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
+    """Inventory by default. Only explicit R1 planning-turn data selects keys.
 
-    Tau search is log-spaced then refined; no scipy/numpy. A is the fitted
-    asymptotic rise, distinct from observed peak rise. Reject unidentifiable
-    or poor fits rather than labeling an unresolved sensor as a slow sensor.
+    Heating t63 and cooling tau are independent model-free crossings. ΔT is
+    the final 10% load median minus the idle median, not an extrapolated fit.
+    Legacy response fields remain present (retired fit/ratio values are null).
     """
+    if stage not in ("r0", "r1"):
+        raise ValueError("classification stage must be r0 or r1")
     phases = {p["phase"]: p for p in capture["phases"]}
+    origin = capture["started"]["monotonic_ns"]
     rows = []
     for sensor in capture["inventory"]["keys"]:
         key = sensor["key"]
         row = {**sensor, "amplitude": None, "observed_rise": None, "noise": None,
+               "noise_floor": None, "idle_distinct_values": 0, "t63_s": None,
                "tau_s": None, "amplitude_to_noise": None, "fit_r2": None, "eligible": False,
-               "phase_coverage": {}, "reason": "no GPU step"}
+               "phase_coverage": {}, "phase_read_error_fraction": {}, "phase_medians": {},
+               "reason": "R0 inventory/step data only; R1 planning-turn classification required"}
         rows.append(row)
         good = {p: [] for p in phases}
-        for sample in capture["samples"]:
-            value = sample["values"]["sensors"].get(key)
-            bounds = phases[sample["phase"]]
-            t = sample["elapsed_s"]
-            finished_s = (sample["finished"]["monotonic_ns"] - capture["started"]["monotonic_ns"]) / 1e9
-            same_slot = (int(t - bounds["start_s"]) == int(finished_s - bounds["start_s"]))
-            if (key not in sample["values"]["errors"] and temperature.valid_value(key, value)
-                    and bounds["start_s"] <= t <= finished_s < bounds["end_s"] and same_slot):
-                good[sample["phase"]].append((t, value))
         for phase, bounds in phases.items():
-            slots = {int(t - bounds["start_s"]) for t, _ in good[phase]
-                     if bounds["start_s"] <= t < bounds["end_s"]}
-            row["phase_coverage"][phase] = len(slots) / round(bounds["end_s"] - bounds["start_s"])
-        idle = [v for _, v in good["idle"]]
+            phase_rows = [r for r in capture["samples"] if r["phase"] == phase]
+            span_start = origin + round(bounds["start_s"] * 1e9)
+            span_end = origin + round(bounds["end_s"] * 1e9)
+            counter = temperature.Coverage(span_start, [key])
+            failures = 0
+            for sample in phase_rows:
+                value = sample["values"]["sensors"].get(key)
+                started = sample["started"]["monotonic_ns"]
+                finished = sample["finished"]["monotonic_ns"]
+                valid = (key not in sample["values"]["errors"] and temperature.valid_value(key, value)
+                         and span_start <= started <= finished < span_end
+                         and finished - started <= temperature.NS)
+                if valid:
+                    good[phase].append(((started - origin) / 1e9, value))
+                    counter.observe(started, finished, sample["values"])
+                else:
+                    failures += 1
+            row["phase_coverage"][phase] = counter.report(span_end)["all_keys"]["sample_fraction"] or 0
+            row["phase_read_error_fraction"][phase] = failures / len(phase_rows) if phase_rows else 1
+            good[phase].sort()
+            row["phase_medians"][phase] = statistics.median(v for _, v in good[phase]) if good[phase] else None
+        idle = [v for _, v in good.get("idle", [])]
         row["noise"] = statistics.pstdev(idle) if idle else None
+        row["idle_distinct_values"] = len(set(idle))
+        if stage == "r0":
+            continue
         if set(phases) != {"idle", "load", "recovery"}:
+            row["reason"] = "R1 requires idle, planning-turn load and recovery"
             continue
-        if any(len(good[p]) < 5 or row["phase_coverage"][p] < .9 for p in phases):
-            row["reason"] = "insufficient phase coverage (need >=90% and >=5 samples per phase)"
+        if any(len(good[p]) < 5 or row["phase_coverage"][p] < .99 or
+               row["phase_read_error_fraction"][p] >= .01 for p in phases):
+            row["reason"] = "insufficient phase coverage or >=1% read errors"
             continue
-        baseline = statistics.mean(idle)
+        if len(set(idle)) < 3:
+            row["reason"] = "constant/stale idle series (need >=3 distinct values)"
+            continue
+        baseline = statistics.median(idle)
+        observed_quantum = min(b-a for a, b in zip(sorted(set(idle)), sorted(set(idle))[1:]))
+        quantum = max({"sp78": 1/256, "fpe2": .25, "ioft": 1/65536,
+                       "ui8 ": 1, "ui16": 1, "ui32": 1}.get(sensor.get("data_type"), 0),
+                      float(sensor.get("quantum", 0)), observed_quantum)
+        floor = max(.05, quantum, row["noise"])
+        row["noise_floor"] = floor
         onset = phases["load"]["start_s"]
         duration = phases["load"]["end_s"] - onset
-        # Use actual recovery onset; transition latency is retained, not collapsed.
+        tail = [v for t, v in good["load"] if t >= onset + .9 * duration]
+        rise = statistics.median(tail) - baseline if tail else 0
+        row.update(amplitude=rise, observed_rise=rise)
+        heating = [(t-onset, v) for t, v in good["load"]]
         recovery_onset = phases["recovery"]["start_s"]
-        recovery_duration = phases["recovery"]["end_s"] - recovery_onset
-        observations = [(t - onset, v - baseline) for p in ("load", "recovery") for t, v in good[p]]
-        row["observed_rise"] = max(v for _, v in observations)
-
-        def fit(tau):
-            response = [_pulse(t, tau, recovery_onset - onset) for t, _ in observations]
-            denom = sum(x * x for x in response)
-            amplitude = sum(x * v for x, (_, v) in zip(response, observations)) / denom
-            sse = sum((v - amplitude * x) ** 2 for x, (_, v) in zip(response, observations))
-            return sse, tau, amplitude
-
-        upper = 2 * max(duration, recovery_duration)
-        grid = [math.exp(math.log(.25) + i * math.log(upper / .25) / 100) for i in range(101)]
-        best = min(fit(tau) for tau in grid)
-        factor = math.log(upper / .25) / 100
-        best = min(fit(best[1] * math.exp(factor * i / 20)) for i in range(-20, 21))
-        sse, tau, amplitude = best
-        mean = statistics.mean(v for _, v in observations)
-        total = sum((v - mean) ** 2 for _, v in observations)
-        r2 = 1 - sse / total if total > 0 else 0.0
-        noise = max(row["noise"], 1e-6)
-        row.update(amplitude=amplitude, tau_s=tau, amplitude_to_noise=amplitude / noise, fit_r2=r2)
-        resolved = amplitude > 3 * noise and r2 >= .8 and .3 < tau < min(duration, recovery_duration)
-        row["eligible"] = sensor["unit"] == "degC" and resolved
-        row["reason"] = ("fan RPM response; excluded from temperature selection" if sensor["unit"] != "degC"
-                         else "resolved pulse response" if resolved else "weak, poor-fit or unresolved pulse response")
-
-    ordered = sorted(rows, key=lambda r: (-(r["amplitude_to_noise"] or 0), r["key"]))
-
-    proposed = select_keys(ordered)
-    return {"rule": RULE, "ranking": ordered, **proposed, "status": "PROVISIONAL"}
+        cooling = [(t-recovery_onset, v) for t, v in good["recovery"]]
+        t63 = _crossing(heating, baseline + (1-math.exp(-1))*rise, rising=True) if rise > 0 else None
+        peak = cooling[0][1] - baseline
+        tau = _crossing(cooling, baseline + peak/math.e, rising=False) if peak > 0 else None
+        row.update(t63_s=t63, tau_s=tau)
+        row["eligible"] = (sensor["unit"] == "degC" and rise > 3*floor
+                           and t63 is not None and tau is not None and tau <= 300)
+        row["reason"] = ("model-free R1 step response" if row["eligible"] else
+                         "non-temperature, weak rise, unresolved cooling, or tau >300 s; recorded only")
+    ordered = sorted(rows, key=lambda r: (-(r["observed_rise"] or 0), r["key"]))
+    proposed = select_keys(ordered) if stage == "r1" else {"s_fast": None, "s_slow": None}
+    return {"rule": RULE, "ranking": ordered, **proposed, "stage": stage, "status": "PROVISIONAL"}
 
 
 def select_keys(rows: Sequence[Mapping[str, Any]]) -> dict[str, str | None]:
-    """Strict class boundaries and lexical tie-break, independently of fitting."""
-    ordered = sorted(rows, key=lambda r: (-(r["amplitude_to_noise"] or 0), r["key"]))
-
-    def choose(predicate):
-        return next((r["key"] for r in ordered if r["eligible"] and predicate(r["tau_s"])), None)
-
-    return {"s_fast": choose(lambda tau: tau < 30), "s_slow": choose(lambda tau: tau > 120)}
+    """FINAL-DESIGN §2.6; inclusive physical boundaries, lexical ties."""
+    usable = [r for r in rows if r["eligible"] and r.get("tau_s") is not None and r["tau_s"] <= 300]
+    fast = [r for r in usable if r.get("t63_s") is not None and r["t63_s"] <= 5]
+    slow = [r for r in usable if r["observed_rise"] >= 3]
+    return {"s_fast": min(fast, key=lambda r: (-r["observed_rise"], r["key"]))["key"] if fast else None,
+            "s_slow": min(slow, key=lambda r: (-r["tau_s"], r["key"]))["key"] if slow else None}
 
 
 class GpuLoad:
