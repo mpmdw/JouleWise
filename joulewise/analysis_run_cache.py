@@ -36,6 +36,8 @@ _SERIALS = itertools.count(1)
 GRAMMAR_VERDICT_MEMO = "authentication_io.grammar_ok"
 
 
+from joulewise.strict_io import sha256_data as sha256
+
 class _RunCaches:
     def __init__(self, physics_store: dict | None, memos: dict | None = None, workers: int = 1):
         self.physics_store = physics_store
@@ -177,10 +179,6 @@ def stats() -> dict[str, dict[str, int]]:
     if _ACTIVE is None:
         return {}
     return {"hits": dict(_ACTIVE.hits), "misses": dict(_ACTIVE.misses)}
-
-
-def sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 _CANONICAL_KEY_DOMAIN = b"joulewise.analysis_run_cache.canonical_key.v2\0"

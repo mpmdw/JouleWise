@@ -53,6 +53,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise.strict_io import sha256_data as _sha256_bytes
+
 from joulewise.measurement_liveness import (  # noqa: E402
     observe_identity, publish_campaign, remove_campaign,
 )
@@ -1328,10 +1330,6 @@ def _bundle_config_binding_problem(
     if observed != expected:
         return "bundle config does not match its registered campaign config"
     return None
-
-
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:

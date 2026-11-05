@@ -54,6 +54,8 @@ C_LOCALE_ENV = {"LC_ALL": "C"}
 # Clocks
 
 
+from joulewise.strict_io import sha256_data as sha256_hex
+
 @dataclasses.dataclass(frozen=True)
 class Stamp:
     """One instant read on the three clocks, in nanoseconds."""
@@ -184,10 +186,6 @@ class RawRef:
 
     def to_json(self) -> dict[str, Any]:
         return {"name": self.name, "sha256": self.sha256, "size": self.size, "path": self.path}
-
-
-def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def write_create_once(path: Path, data: bytes) -> None:

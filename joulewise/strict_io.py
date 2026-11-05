@@ -23,3 +23,7 @@ def sha256_value(value: bytes) -> str:
 
 def sha256_raw(raw: bytes) -> str:
     return sha256_value(raw)
+
+
+def sha256_data(data: bytes) -> str:
+    return sha256_value(data)

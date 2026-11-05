@@ -21,6 +21,8 @@ _generation_write_boundary_observer: (
 ) = None
 
 
+from joulewise.strict_io import sha256_data as sha256_bytes
+
 def render_json(value: Any, transform: Callable[[Any], Any]) -> bytes:
     """Return the canonical bytes used by campaign generator artifacts."""
 
@@ -37,12 +39,6 @@ def make_render_json(transform: Callable[[Any], Any]) -> Callable[[Any], bytes]:
 
     bound_render_json.shared_implementation = render_json  # type: ignore[attr-defined]
     return bound_render_json
-
-
-def sha256_bytes(data: bytes) -> str:
-    """Return the lowercase SHA-256 digest of *data*."""
-
-    return hashlib.sha256(data).hexdigest()
 
 
 def sidecar_bytes(digest: str, filename: str) -> bytes:
