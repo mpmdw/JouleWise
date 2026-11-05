@@ -1,18 +1,16 @@
-"""Derive D-134 ARM_ONLY evidence from T-0 artifacts and fresh probes.
+"""Physical T-0 probes, arithmetic and stored-evidence authentication.
 
-The public author accepts only the committed pack and the D-134 custody root.
-It never accepts conclusions, evidence paths, hashes, probe output, or row
-states.  Governed machine-authored command captures live in the private
-custody input namespace.  Fresh current-state conditions are probed again here;
-historical E-step captures are authenticated for canonical bytes, same-boot
-freshness, and ordering.  Faithful invocation remains a trusted-operator
-limitation: v1 cannot detect deliberate operator fabrication.
+Retained from the retired receipt issuer for physical checks and historical
+reader equivalence. Importing this module collects nothing. Probe calls must
+receive synthetic seams in agent-run tests; real measurements require a quiet
+session. Receipt publication belongs exclusively to synthetic test factories.
 """
 
 from __future__ import annotations
+from joulewise.receipt_formats import (WINDOW_ENV_KEYS, WindowEnvironmentParseError, _CAPTURE_FILES, _CAPTURE_KEYS, _COMMAND_SCHEMA, _EVIDENCE_DIRECTORY, _EXPECTED_ROWS, _INPUT_DIRECTORY, _MAX_T0_SEQUENCE_AGE_NS, _ROW_KIND, _evidence_id, _receipt_name, _slug, parse_window_environment)
 
 import copy as _copy
-from joulewise import network_time_off as _network_time_off
+from joulewise.hazards import network_time as _network_time_off
 import inspect as _inspect
 import json as _json
 import os as _os
@@ -23,7 +21,7 @@ import signal as _signal
 import subprocess as _subprocess
 import tempfile as _tempfile
 import time as _time
-from joulewise.dwell import final_clean_dwell as _final_clean_dwell
+from joulewise.hazards.dwell import final_clean_dwell as _final_clean_dwell
 from joulewise import prewindow as _prewindow
 from dataclasses import dataclass as _dataclass, field as _field, replace as _replace
 from datetime import datetime as _datetime
@@ -36,7 +34,7 @@ from typing import (
     Sequence as _Sequence,
 )
 
-from joulewise import arm_readiness as _readiness
+from joulewise import receipt_readers as _readiness
 from joulewise import battery_float as _battery_float
 from joulewise import calibration_ledger as _ledger
 from joulewise import clock_reference as _clock_reference
@@ -45,17 +43,13 @@ from joulewise import identity_pins as _identity
 
 
 _SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
-_COMMAND_SCHEMA = "joulewise.arm_readiness_t0_command_capture.v1"
 _LAUNCH_SCHEMA = "joulewise.arm_readiness_t0_launch_manifest.v1"
-_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
 _SOURCE_DIRECTORY = "arm_readiness.t0.sources"
-_EVIDENCE_DIRECTORY = "arm_readiness.evidence"
 # Live machine state can change between authoring and ARM consumption.  Keep
 # that unavoidable TOCTOU window bounded to the expected arm-sequence length.
 _VOLATILE_EVIDENCE_VALIDITY_NS = 20 * 60 * 1_000_000_000
 _NONVOLATILE_EVIDENCE_VALIDITY_NS = 6 * 60 * 60 * 1_000_000_000
 _MIN_IDLE_NS = 600 * 1_000_000_000
-_MAX_T0_SEQUENCE_AGE_NS = 60 * 60 * 1_000_000_000
 _MIN_BACKUP_FREE_BYTES = 20 * 1024**3
 _PROBE_TIMEOUT_SECONDS = 45
 # The battery-float probe carries its own ruled bound (final texts v1.1 §5.1).
@@ -81,35 +75,6 @@ _AUTHORING_ARTIFACTS = (
     "scripts/capture_t0_step.py",
     "scripts/collect_clock_reference.py",
 )
-WINDOW_ENV_KEYS = frozenset(
-    {
-        "MEASUREMENT_REPO",
-        "WINDOW_ID",
-        "BRACKET_SESSION_ID",
-        "FROZEN_PLAN",
-        "PACK_ROOT",
-        "PACK_ID",
-        "PLAN_ID",
-        "EVIDENCE_ROOT_ID",
-        "IDENTITY_EPOCH_JSON",
-        "T1_BINDINGS_JSON",
-        "PRE_ATTEMPT_ID",
-        "POST_ATTEMPT_ID",
-        "RUNS_ROOT",
-        "BOUND_RUNS_ROOT",
-        "CALIBRATION_LEDGER",
-        "LEDGER_HEAD_PIN",
-        "ARM_READINESS_CUSTODY_ROOT",
-        "CUSTODY_ROOT",
-        "WINDOW_CUSTODY_ROOT",
-        "QUARANTINE_ROOT",
-        "CLAIM_BACKUP_DEST",
-        "BOUND_BACKUP_DEST",
-        "WAIVER_PATH",
-        "POWER_POLICY",
-        "SETTLE_S",
-    }
-)
 _INTERNAL_ROWS = frozenset(
     {
         "desk.identity_pin_projection",
@@ -117,40 +82,6 @@ _INTERNAL_ROWS = frozenset(
         "desk.under_lease_rehearsal",
     }
 )
-_EXPECTED_ROWS = (
-    "clock.correct_and_prior_state",
-    "clock.network_time_off",
-    "desk.terminal_review",
-    "t0.background_quiet",
-    "t0.campaign_lock_absent",
-    "t0.display_thermal_idle",
-    "t0.fresh_roots_waivers",
-    "t0.ledger_reservation",
-    "t0.machine_readiness",
-    "t0.no_stray_keepawake",
-    "t0.offline_inputs",
-    "t0.passwordless_powermetrics",
-    "t0.power_path",
-    "t0.single_launch_capability",
-    "t0.storage_backup_capacity",
-)
-_ROW_KIND = {
-    "clock.correct_and_prior_state": "CLOCK_ATTESTATION",
-    "clock.network_time_off": "CLOCK_PROBE",
-    "desk.terminal_review": "TERMINAL_REVIEW",
-    "t0.background_quiet": "MAINTENANCE_CENSUS",
-    "t0.campaign_lock_absent": "ROOT_PREFLIGHT",
-    "t0.display_thermal_idle": "MACHINE_PREFLIGHT",
-    "t0.fresh_roots_waivers": "ROOT_PREFLIGHT",
-    "t0.ledger_reservation": "LEDGER_RESERVATION",
-    "t0.machine_readiness": "MACHINE_PREFLIGHT",
-    "t0.no_stray_keepawake": "PROCESS_CENSUS",
-    "t0.offline_inputs": "OFFLINE_INPUT_INVENTORY",
-    "t0.passwordless_powermetrics": "POWERMETRICS_PROBE",
-    "t0.power_path": "POWER_PREFLIGHT",
-    "t0.single_launch_capability": "LAUNCH_RECIPE",
-    "t0.storage_backup_capacity": "BACKUP_PREFLIGHT",
-}
 _VOLATILE_EVIDENCE_KINDS = frozenset(
     {
         "BACKUP_PREFLIGHT",
@@ -184,14 +115,6 @@ if (
 _PUBLICATION_COMPLETION_MARKER = (
     "evidence-t0-t0-storage-backup-capacity.json.sha256"
 )
-_CAPTURE_FILES = {
-    "clock-reference": "clock-reference.json",
-    "clock-disable": "clock-disable.json",
-    "quiet-mac-prep": "quiet-mac-prep.json",
-    "prewindow-check": "prewindow-check.json",
-    "ledger-readiness": "ledger-readiness.json",
-    "ledger-reservation": "ledger-reservation.json",
-}
 _CAPTURE_ORDER = tuple(_CAPTURE_FILES)
 _RUNBOOK_ARTIFACT_REASON_CODES = {
     "arm_context": "evidence_author_t0_arm_context_missing",
@@ -225,18 +148,6 @@ _SOURCE_KEYS = {
 }
 _ARTIFACT_KEYS = {"path", "sha256"}
 _SOURCE_FACT_KEYS = {"fact_id", "value"}
-_CAPTURE_KEYS = {
-    "schema_version",
-    "step_id",
-    "argv",
-    "cwd",
-    "exit_code",
-    "stdout",
-    "stderr",
-    "started_monotonic_ns",
-    "finished_monotonic_ns",
-    "boot_session_id",
-}
 _CLOCK_REFERENCE_KEYS = {
     "schema_version",
     "sample_policy_id",
@@ -282,12 +193,6 @@ class T0EvidenceAuthoringError(ValueError):
         self.reason_code = reason_code
 
 
-class WindowEnvironmentParseError(ValueError):
-    """Boundary-neutral refusal from the shared exact window.env parser."""
-
-    def __init__(self, detail: str) -> None:
-        super().__init__(detail)
-        self.detail = detail
 
 
 @_dataclass(frozen=True)
@@ -387,20 +292,14 @@ def _missing_artifact(
     return _refuse(kind, _RUNBOOK_ARTIFACT_REASON_CODES[artifact_class], detail)
 
 
-def _slug(value: str) -> str:
-    return value.lower().replace("_", "-").replace(".", "-")
 
 
 def _source_path(row_id: str) -> str:
     return f"{_SOURCE_DIRECTORY}/{_slug(row_id)}.json"
 
 
-def _receipt_name(row_id: str) -> str:
-    return f"evidence-t0-{_slug(row_id)}.json"
 
 
-def _evidence_id(row_id: str) -> str:
-    return f"arm-t0-{_slug(row_id)}-v1"
 
 
 def _regular_bytes(path: _Path, *, kind: str, label: str) -> bytes:
@@ -460,7 +359,7 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
     timeout_s = _PROBE_TIMEOUT_OVERRIDES.get(tuple(argv), _PROBE_TIMEOUT_SECONDS)
     try:
         with _tempfile.TemporaryFile() as stdout, _tempfile.TemporaryFile() as stderr:
-            from joulewise.t0_rehearsal import observed_popen
+            from joulewise.process_observer import observed_popen
             process = observed_popen(
                 list(argv),
                 cwd=cwd,
@@ -794,7 +693,7 @@ def _authenticate_clock_sizing(context: _Context, r0: dict[str, _Any], *, kind: 
     binding_path = context.custody_pack_root / _INPUT_DIRECTORY / "kernel-frequency-binding.json"
     if (_readiness.requires_t0_frequency_gate(context.pack_root)
             or binding_path.exists() or binding_path.is_symlink()):
-        from joulewise.v5_qualification import authenticated_clock_budget, reference
+        from joulewise.qualification_readers import authenticated_clock_budget, reference
         try:
             maximum, refs = authenticated_clock_budget(binding_path.parent, context.pack_root)
             if r0["t_stream_max_s"] != maximum:
@@ -826,43 +725,6 @@ def _arm_context(
     return result
 
 
-def parse_window_environment(raw: bytes) -> dict[str, str]:
-    """Parse the exact 25-key T-0 window environment contract."""
-
-    try:
-        text = raw.decode("utf-8", errors="strict")
-    except UnicodeDecodeError as exc:
-        raise WindowEnvironmentParseError("window.env is not UTF-8") from exc
-    values: dict[str, str] = {}
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        match = _re.fullmatch(r"([A-Z][A-Z0-9_]*)=(.*)", stripped)
-        if match is None:
-            raise WindowEnvironmentParseError(
-                f"window.env contains a non-assignment line: {stripped!r}"
-            )
-        name, raw_value = match.groups()
-        try:
-            parts = _shlex.split(raw_value, posix=True)
-        except ValueError as exc:
-            raise WindowEnvironmentParseError(
-                f"window.env value for {name} is malformed"
-            ) from exc
-        if len(parts) != 1 or "$" in parts[0] or name in values:
-            raise WindowEnvironmentParseError(
-                f"window.env value for {name} is ambiguous"
-            )
-        values[name] = parts[0]
-    missing = WINDOW_ENV_KEYS - set(values)
-    unknown = set(values) - WINDOW_ENV_KEYS
-    if missing or unknown:
-        raise WindowEnvironmentParseError(
-            "window.env exact keys differ; "
-            f"missing={sorted(missing)!r}, unknown={sorted(unknown)!r}"
-        )
-    return values
 
 
 def _parse_window_environment(raw: bytes, *, kind: str) -> dict[str, str]:
@@ -2275,29 +2137,6 @@ def _publication_complete(source_dir: _Path, evidence_dir: _Path) -> bool:
     )
 
 
-def _publish_staged_namespaces(
-    staged_sources: _Path,
-    staged_evidence: _Path,
-    staged_marker: _Path,
-    source_dir: _Path,
-    evidence_dir: _Path,
-) -> None:
-    """Publish two directories with a last-written authenticated marker.
-
-    APFS cannot atomically rename two sibling destinations as one transaction.
-    Crash matrix: before rename 1 leaves the full pre-state; after rename 1
-    leaves sources only, so required ARM rows are absent; after rename 2 leaves
-    the evidence receipt without its marker/sidecar, so discovery refuses the
-    namespace as unreadable; during rename 3, atomic rename leaves either that
-    detectable marker-absent state or the complete state; after rename 3 the
-    full governed set is visible.  Never roll back a partial publication:
-    process death cannot make rollback reliable, while marker absence is an
-    unambiguous recovery signal.
-    """
-
-    _os.replace(staged_sources, source_dir)
-    _os.replace(staged_evidence, evidence_dir)
-    _os.replace(staged_marker, evidence_dir / _PUBLICATION_COMPLETION_MARKER)
 
 
 def _authenticate_existing(
@@ -2404,200 +2243,15 @@ def _authenticate_existing(
     }
 
 
-def author_arm_readiness_evidence_t0(
-    pack_root: _Path | str,
-    custody_root: _Path | str,
-) -> dict[str, _Any]:
-    """Author all fifteen evidence-backed ARM_ONLY row receipts."""
-
-    root = _Path(pack_root).resolve(strict=True)
-    repository = _readiness._repo_for_pack(root).resolve(strict=True)
-    if repository != _RUNNING_REPOSITORY.resolve(strict=True):
-        raise _refuse(
-            "AUTHORING_SET",
-            "evidence_author_t0_repository_mismatch",
-            "pack repository differs from the executing T-0 evidence author",
-        )
-    custody = _Path(custody_root).resolve(strict=True)
-    if not custody.is_dir() or custody.is_symlink():
-        raise _underivable("AUTHORING_SET", "custody root is not a regular directory")
-    reviewed = _readiness.reviewed_main(root)
-    if not reviewed["clean"] or not reviewed["exact_match"]:
-        raise _refuse(
-            "AUTHORING_SET",
-            "evidence_author_t0_reviewed_tree_mismatch",
-            "reviewed checkout is dirty or differs from local/origin main",
-        )
-    head = reviewed["head_commit"]
-    head_tree = reviewed["head_tree_oid"]
-    if _GIT_RE.fullmatch(str(head)) is None or _GIT_RE.fullmatch(str(head_tree)) is None:
-        raise _underivable("AUTHORING_SET", "reviewed HEAD/tree identity is unavailable")
-    tree, _tree_raw = _readiness._plan_tree(root)
-    try:
-        frozen_plan = _readiness.resolve_frozen_plan(root, tree)
-    except _readiness.ArmReadinessError as exc:
-        raise _underivable(
-            "AUTHORING_SET", f"R2 frozen-plan reference is invalid: {exc}"
-        ) from exc
-    try:
-        pack_sha = _readiness.committed_pack_tree_sha256(root)
-    except _readiness.ArmReadinessError as exc:
-        raise _refuse("AUTHORING_SET", "evidence_author_t0_pack_uncommitted", str(exc)) from exc
-    boot_session, boot_probe = _boot_probe(repository)
-    context = _DerivationContext(
-        pack_root=root,
-        repository=repository,
-        custody_root=custody,
-        custody_pack_root=custody / root.name,
-        tree=tree,
-        pack_sha256=pack_sha,
-        plan_sha256=_readiness.sha256_bytes(frozen_plan[3]),
-        head_commit=str(head),
-        head_tree_oid=str(head_tree),
-        boot_session_id=boot_session,
-        boot_probe=boot_probe,
-    )
-    context.values["frozen_plan"] = frozen_plan
-    rows = _required_rows(context)
-    _require_window_chain_presence(context, kind="CLOCK_ATTESTATION")
-    source_dir = context.custody_pack_root / _SOURCE_DIRECTORY
-    evidence_dir = context.custody_pack_root / _EVIDENCE_DIRECTORY
-    if source_dir.exists() or evidence_dir.exists():
-        if not _publication_complete(source_dir, evidence_dir):
-            raise _refuse(
-                "AUTHORING_SET",
-                "evidence_author_t0_publication_incomplete",
-                "T-0 publication is incomplete; recovery must preserve and inspect "
-                "the marker-absent namespace",
-            )
-        return _authenticate_existing(context, rows)
-    derived: list[_DerivedRow] = []
-    for row in rows:
-        row_id = str(row["row_id"])
-        try:
-            item = _DERIVERS[row_id](context)
-        except T0EvidenceAuthoringError:
-            raise
-        except Exception as exc:
-            raise _underivable(_ROW_KIND[row_id], f"unexpected derivation failure: {exc}") from exc
-        if item.row_id != row_id or item.kind != _ROW_KIND[row_id]:
-            raise _refuse(_ROW_KIND[row_id], "evidence_author_t0_internal_error", "deriver returned the wrong row/kind")
-        derived.append(item)
-    _validate_capture_order(context)
-    issued_at = context.clock.utc_now()
-    validity_origin = context.clock.monotonic_ns()
-    sources: dict[str, bytes] = {}
-    receipts: dict[str, bytes] = {}
-    semantic: dict[str, _Mapping[str, _Any]] = {}
-    definitions = {row["row_id"]: row for row in rows}
-    for item in derived:
-        source_raw = _source_bytes(context, item)
-        sources[f"{_slug(item.row_id)}.json"] = source_raw
-        receipt = _assemble_receipt(
-            context,
-            item,
-            source_raw,
-            issued_at_utc=issued_at,
-            valid_until_monotonic_ns=(
-                validity_origin + _validity_horizon_ns(item.kind)
-            ),
-        )
-        if not _readiness._predicate_passes(
-            receipt,
-            definitions[item.row_id]["predicate_id"],
-            expected_plan_sha256=context.plan_sha256,
-            # Issuance proves the published numeric relations; the separate
-            # live anchor check belongs only to original ARM evaluation.
-            live_clock_anchor=_readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
-        ):
-            raise _refuse(item.kind, "evidence_author_t0_predicate_refused", f"derived facts do not satisfy {item.row_id}")
-        raw = _readiness.render_json(receipt)
-        name = _receipt_name(item.row_id)
-        receipts[name] = raw
-        receipts[f"{name}.sha256"] = _readiness.gnu_sidecar(_readiness.sha256_bytes(raw), name)
-        semantic[receipt["evidence_id"]] = receipt
-    _reauthenticate_artifacts(context, derived)
-    if _readiness.reviewed_main(root) != reviewed or _readiness.committed_pack_tree_sha256(root) != pack_sha:
-        raise _refuse("AUTHORING_SET", "evidence_author_t0_input_changed", "HEAD, tree, or pack changed during derivation")
-    second_boot, _second_boot_probe = _boot_probe(repository)
-    if second_boot != boot_session:
-        raise _refuse("AUTHORING_SET", "evidence_author_t0_input_changed", "boot session changed during derivation")
-
-    context.custody_pack_root.mkdir(parents=True, exist_ok=True)
-    staging = _Path(_tempfile.mkdtemp(prefix=".arm-readiness-t0-", dir=context.custody_pack_root))
-    try:
-        staged_sources = staging / _SOURCE_DIRECTORY
-        staged_evidence = staging / _EVIDENCE_DIRECTORY
-        staged_sources.mkdir()
-        staged_evidence.mkdir()
-        for name, raw in sources.items():
-            (staged_sources / name).write_bytes(raw)
-        for name, raw in receipts.items():
-            (staged_evidence / name).write_bytes(raw)
-        items, discovered, refusals = _readiness._discover_evidence(
-            root,
-            staging,
-            pack_sha256=pack_sha,
-            head_commit=head,
-            boot_session_id=boot_session,
-            now_monotonic_ns=context.clock.monotonic_ns(),
-            include_pack=False,
-        )
-        if refusals or set(discovered) != set(semantic):
-            raise _refuse("AUTHORING_SET", "evidence_author_t0_validation_failed", f"staged discovery refused: {refusals!r}")
-        for receipt in discovered.values():
-            _readiness.validate_evidence_receipt(receipt)
-        if source_dir.exists() or evidence_dir.exists():
-            raise _refuse("AUTHORING_SET", "evidence_author_t0_output_collision", "T-0 output namespace appeared during derivation")
-        marker_in_directory = staged_evidence / _PUBLICATION_COMPLETION_MARKER
-        if not marker_in_directory.is_file() or marker_in_directory.is_symlink():
-            raise _refuse(
-                "AUTHORING_SET",
-                "evidence_author_t0_internal_error",
-                "staged publication completion marker is absent",
-            )
-        staged_marker = staging / _PUBLICATION_COMPLETION_MARKER
-        _os.replace(marker_in_directory, staged_marker)
-        try:
-            _publish_staged_namespaces(
-                staged_sources,
-                staged_evidence,
-                staged_marker,
-                source_dir,
-                evidence_dir,
-            )
-        except Exception as exc:
-            raise _refuse(
-                "AUTHORING_SET",
-                "evidence_author_t0_publication_interrupted",
-                "T-0 publication was interrupted; the completion marker records "
-                "whether recovery sees a partial or complete namespace",
-            ) from exc
-        paths = [str(context.custody_pack_root / item["path"]) for item in sorted(items, key=lambda value: value["evidence_id"])]
-    finally:
-        _shutil.rmtree(staging, ignore_errors=True)
-    return {
-        "status": "PASS",
-        "authored_rows": [row["row_id"] for row in rows],
-        "authored_kinds": sorted(set(_ROW_KIND[row["row_id"]] for row in rows)),
-        "receipt_paths": paths,
-        "mutated": True,
-    }
 
 
-def _assert_public_author_signature() -> None:
-    parameters = tuple(_inspect.signature(author_arm_readiness_evidence_t0).parameters)
-    if parameters != ("pack_root", "custody_root"):
-        raise AssertionError("public T-0 evidence author must accept exactly pack_root and custody_root")
 
 
-_assert_public_author_signature()
 
 
 __all__ = [
     "T0EvidenceAuthoringError",
     "WINDOW_ENV_KEYS",
     "WindowEnvironmentParseError",
-    "author_arm_readiness_evidence_t0",
     "parse_window_environment",
 ]

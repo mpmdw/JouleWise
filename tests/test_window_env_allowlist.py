@@ -4,8 +4,8 @@ import re
 import unittest
 from pathlib import Path
 
-from joulewise import receipt_formats as evidence_t0
-from scripts import capture_t0_step as capture
+from joulewise import physical_checks as evidence_t0
+from types import SimpleNamespace; from joulewise import receipt_formats as capture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,12 +52,8 @@ class WindowEnvAllowlistTests(unittest.TestCase):
     def _assert_refused_at_both_boundaries(
         self, raw: bytes, *, detail: str
     ) -> None:
-        with self.assertRaises(capture.CaptureT0Error) as capture_caught:
-            capture._parse_window_environment(raw)
-        self.assertEqual(
-            capture_caught.exception.reason_code,
-            "evidence_author_t0_capture_environment_invalid",
-        )
+        with self.assertRaises(capture.WindowEnvironmentParseError) as capture_caught:
+            capture.parse_window_environment(raw)
         self.assertEqual(str(capture_caught.exception), detail)
 
         with self.assertRaises(
@@ -74,7 +70,7 @@ class WindowEnvAllowlistTests(unittest.TestCase):
     def test_example_block_only_is_accepted(self) -> None:
         example = documented_window_env_keys()
         raw = _environment_bytes(example)
-        capture_parsed = capture._parse_window_environment(raw)
+        capture_parsed = capture.parse_window_environment(raw)
         author_parsed = evidence_t0._parse_window_environment(
             raw, kind=EVIDENCE_KIND
         )
@@ -95,7 +91,7 @@ class WindowEnvAllowlistTests(unittest.TestCase):
 
     def test_shared_contract_is_identical_and_exact_at_both_boundaries(self) -> None:
         self.assertIs(capture.WINDOW_ENV_KEYS, evidence_t0.WINDOW_ENV_KEYS)
-        self.assertIs(capture._ENV_KEYS, evidence_t0.WINDOW_ENV_KEYS)
+        self.assertIs(capture.parse_window_environment, evidence_t0.parse_window_environment)
         self.assertEqual(set(documented_window_env_keys()), evidence_t0.WINDOW_ENV_KEYS)
 
         for missing in evidence_t0.WINDOW_ENV_KEYS:

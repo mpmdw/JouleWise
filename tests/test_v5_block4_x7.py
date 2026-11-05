@@ -10,8 +10,8 @@ import unittest
 from unittest import mock
 
 from joulewise import receipt_readers as readiness; from joulewise import calibration_ledger as ledger
-from joulewise import night_gate; from joulewise import qualification_readers as q
-from scripts import restore_v5_null_reservation as restore
+from joulewise import night_gate; from tests import qualification_factory as q
+from joulewise import qualification_readers as restore
 
 
 def put(path, value):
@@ -322,38 +322,11 @@ class WriterHistoryTests(unittest.TestCase):
         f.input["previous_attempt"] = ref
         return ref
 
-    def test_writer_omission_and_wrong_sha_refuse_before_authorization(self):
-        f = self.fixture
-        del f.input["previous_attempt"]
-        with self.assertRaisesRegex(ValueError, "inputs.keys"):
-            f.write()
-        self.assertFalse((f.custody / "authorization_record.json").exists())
-        prior = self.prior()
-        f.input["previous_attempt"] = dict(prior, sha256="0" * 64)
-        with self.assertRaisesRegex(ValueError, "digest_mismatch"):
-            f.write()
-        self.assertFalse((f.custody / "authorization_record.json").exists())
 
-    def test_null_to_fresh_s1_writer_binds_create_once_history(self):
-        ref = self.prior()
-        self.fixture.write()
-        plan = q.read(self.fixture.output)
-        auth = q.read(Path(plan["pack_night"]["authorization_record"]["path"]))
-        self.assertEqual(auth["previous_attempt"], ref)
-        self.assertEqual(plan["previous_attempt"], ref)
-        self.assertEqual(plan["block_archive_root"], auth["block_archive_root"])
-        self.assertFalse("end_state" in plan)
 
-    def test_admission_abort_to_fresh_s1_writer_spends_no_s2(self):
-        self.prior("RECOVER", admission=True)
-        self.fixture.write()
-        record = q.read(self.fixture.custody / "qualification-plan-record.json")
-        self.assertEqual(record["occurrence"], "s1")
-        self.assertNotIn("end_state", record)
-        self.assertNotIn("s2_authority", record)
 
     def s2(self, *, physics=False):
-        from scripts import write_v5_qualification_plan as writer
+        from tests import qualification_plan_factory as writer
         f = self.fixture
         prior = self.prior("RECOVER", physics=physics)
         f.chain.write_text(f.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=s1", "V5_QUALIFICATION_OCCURRENCE=s2"))
@@ -365,153 +338,11 @@ class WriterHistoryTests(unittest.TestCase):
             "tooling_cause": "named_launch_defect", "r3_cure": cure, "head_coverage": coverage})
         return writer.write_qualification("s2", f.input, f.output)
 
-    def test_tooling_recover_to_s2_writer_and_authenticated_plan_replay(self):
-        self.s2()
-        f = self.fixture
-        plan = night_gate.NightPlan.from_mapping(q.read(f.output))
-        record = q.attempt_record(plan, f.output, "s2", verdict="PASS", cause_codes=[], cause_classes=[])
-        self.assertEqual(q.checked_history(record, plan)["s2_count"], 1)
-        self.assertEqual(q.read(f.custody / "qualification-plan-record.json")["occurrence"], "s2")
 
-    def test_s2_writer_after_physics_recover_refuses(self):
-        with self.assertRaisesRegex(q.HarvestRefusal, "named_tooling_recover"):
-            self.s2(physics=True)
-        self.assertFalse(self.fixture.output.exists())
 
-    def test_second_s2_writer_refuses_before_authorization(self):
-        from scripts import write_v5_qualification_plan as writer
-        f = self.fixture
-        root = Path(f.input["block_archive_root"])
-        first = put(root / "attempts/tooling/harvest.json", attempt("tooling", {"none": True},
-            verdict="RECOVER", cause_codes=["named_launch_defect"], cause_classes=["tooling"]))
-        aborted = AttemptHistoryTests.admission(self, "aborted-s2", first)
-        aborted["occurrence"] = "s2"
-        second = put(root / "attempts/aborted-s2/harvest.json", aborted)
-        prior = put(root / "attempts/fresh-tooling/harvest.json", attempt("fresh-tooling", second,
-            verdict="RECOVER", cause_codes=["named_launch_defect"], cause_classes=["tooling"]))
-        f.input["previous_attempt"] = prior
-        f.input["s2_authority"] = put(f.root / "unused-authority.json", {})
-        f.chain.write_text(f.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=s1", "V5_QUALIFICATION_OCCURRENCE=s2"))
-        f.bind_clock_sizing()
-        with self.assertRaisesRegex(q.HarvestRefusal, "attempt_history_second_s2"):
-            writer.write_qualification("s2", f.input, f.output)
-        self.assertFalse((f.custody / "authorization_record.json").exists())
 
-    def test_s2_runtime_observation_and_control_order_bind_the_written_chain(self):
-        from scripts import run_night as driver, check_v5_arm_abort as checker
-        self.s2()
-        f = self.fixture
-        plan = night_gate.NightPlan.from_mapping(q.read(f.output))
-        self.assertTrue(driver._s1_observation_enabled(plan))
-        boot = "12345678-1234-5678-9234-567812345678"
-        inputs = f.custody / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"
-        for filename in driver.t0_author._CAPTURE_FILES.values():
-            put(inputs / filename, {"boot_session_id": boot, "started_monotonic_ns": 1000})
-        controls = {}
-        for label in ("a1", "a2"):
-            controls[label + "_control"] = put(f.root / (label + "-expired.json"), {
-                "schema_version": checker.CONTROL_SCHEMA, "occurrence": label, "verdict": "PASS",
-                "refusal_reason_code": "readiness_record_expired", "boot_session_id": boot,
-                "checked_monotonic_ns": 999, "absence": {key: True for key in checker.ABSENCE_KEYS}})
-        record = q.read(f.custody / "qualification-plan-record.json")
-        record["prerequisites"].update(controls)
-        with mock.patch.object(readiness, "_current_boot_session_id", return_value=boot):
-            driver._admit_qualification_control_order(plan, record)
-            for occurrence in ("a1", "a2", "s1"):
-                with self.subTest(occurrence=occurrence), self.assertRaisesRegex(night_gate.PackNightRefusal, "occurrence binding"):
-                    driver._admit_qualification_control_order(plan, dict(record, occurrence=occurrence))
-            path = Path(controls["a2_control"]["path"])
-            control = q.read(path)
-            control["checked_monotonic_ns"] = 1000
-            record["prerequisites"]["a2_control"] = put(path, control)
-            with self.assertRaisesRegex(night_gate.PackNightRefusal, "prior expiry"):
-                driver._admit_qualification_control_order(plan, record)
 
-    def test_fresh_attempt_go_uses_frozen_calibration_identity(self):
-        from scripts import run_night as driver
-        from tests.test_run_night import ProbeSource, BOOT_UUID
-        self.s2()
-        f = self.fixture
-        plan = night_gate.NightPlan.from_mapping(q.read(f.output))
-        prepared = driver._prepare_pack_night(plan, f.output, f.output.read_bytes())
-        arm = {"status": "PASS", "arm_disposition": "GO", "receipt_id": "arm-0001",
-               "boot_session_id": BOOT_UUID, "valid_until_monotonic_ns": 10**18,
-               "pack": {"pack_root": str(f.pack), "pack_id": f.pack.name,
-                        "pack_sha256": plan.pack_night["pack_sha256"], "plan_id": "frozen-calibration"},
-               "reviewed_main": {"head_commit": f.head}, "arm_context": f.input["arm_context"]}
-        arm_ref = put(f.custody / "native-arm.json", arm)
-        state = {"path": Path(arm_ref["path"]), "arm": arm, "sha256": arm_ref["sha256"]}
-        refs = {"window_chain": q.reference(f.chain), "window_environment": put(f.root / "window.env", {}),
-                "launch_manifest": put(f.root / "launch-manifest.json", {})}
-        probes = replace(ProbeSource(1001).probes(), checkout_head=lambda: f.head)
-        receipt = night_gate.Receipt(night_gate.SCHEMA, "TRANSACTION_PACK", plan.plan_id, "GO",
-            tuple(night_gate.ConditionRow(f"C{i}", "PASS", None, (),
-                {"boot_session_uuid": BOOT_UUID} if i == 4 else {}) for i in range(1, 6)), None, 1)
-        (f.custody / "night").mkdir(exist_ok=True)
-        # Native plan, authority, chain and context authentication remain real.
-        # ARM/T0 machine replay and launch inventory are explicit fixture seams.
-        with mock.patch.object(readiness, "_pack_record", return_value={"plan_id": "frozen-calibration"}), \
-             mock.patch.object(readiness, "_verify_arm_receipt"), \
-             mock.patch.object(readiness, "_current_boot_session_id", return_value=BOOT_UUID), \
-             mock.patch.object(driver, "_pack_rehearsal_roots"), \
-             mock.patch.object(driver, "_pack_launch_references", return_value=refs), \
-             mock.patch.object(driver, "_pack_evidence", return_value=[]):
-            driver._produce_pack_go(plan, f.output, f.output.read_bytes(), prepared, state, receipt, probes)
-            go_path = f.custody / "night/go_receipt.json"
-            go = q.read(go_path)
-            self.assertEqual(go["plan_id"], plan.plan_id)
-            self.assertEqual(go["authorization"]["attempt_id"], plan.plan_id + "/2")
-            go_path.unlink()
-            (f.custody / "night/go-census.json").unlink()
-            arm["pack"]["plan_id"] = plan.plan_id
-            state["sha256"] = put(state["path"], arm)["sha256"]
-            with self.assertRaisesRegex(night_gate.PackNightRefusal, "arm_receipt.pack.plan_id"):
-                driver._produce_pack_go(plan, f.output, f.output.read_bytes(), prepared, state, receipt, probes)
-            self.assertFalse(go_path.exists())
 
-    def test_s2_assembly_and_desk_consume_authenticated_occurrence(self):
-        from joulewise import process_observer as t0
-        from scripts import produce_t0_rehearsal_bundle as producer, v5_s1_desk_closeout as desk
-        from tests.test_t0_rehearsal import FixtureBuilder
-        f = self.fixture
-        f.input["prerequisites"]["g10_control"] = put(f.root / "positive.json", {"schema_version": t0.POSITIVE_CONTROL_SCHEMA})
-        self.s2()
-        plan = night_gate.NightPlan.from_mapping(q.read(f.output))
-        record_path = f.custody / "qualification-plan-record.json"
-        record = q.read(record_path)
-        native = FixtureBuilder(f.root / "native-go-fixture").build()
-        go = producer.read(native / "night/go_receipt.json")
-        go.update(purpose="G2B_SHAKEDOWN", plan_id=plan.plan_id, plan_sha256=q.sha(f.output),
-                  repo_head=f.head, window_chain_sha256=q.sha(f.chain))
-        go["authorization"].update(purpose="G2B_SHAKEDOWN", claim_eligible=False)
-        put(f.custody / "night/go_receipt.json", go)
-        put(f.custody / "night/observation-origin.json", {
-            "schema_version": "joulewise.t0_rehearsal_observation_origin.v1",
-            "proof_scope": producer.QUALIFICATION_OBSERVED, "boot_session_id": go["boot_session_id"],
-            "plan": q.reference(f.output), "standdown": q.reference(f.confirm),
-            "producer": record["prerequisites"]["observation_producers"]["driver"]})
-        inputs = dict(positive_control=record["prerequisites"]["g10_control"]["path"],
-                      positive_sha256=record["prerequisites"]["g10_control"]["sha256"],
-                      positive_artifacts=[ref["path"] for ref in record["prerequisites"]["g10_artifacts"]])
-        # Stop at the next real admission surface; this isolates the occurrence
-        # adapter without claiming a complete physical G10/STOP lifecycle.
-        with mock.patch.object(q, "g10_sources", side_effect=ValueError("next G10 admission")) as replay:
-            with self.assertRaisesRegex(ValueError, "next G10 admission"):
-                producer.assemble(f.custody, **inputs)
-            self.assertEqual(replay.call_count, 1)
-            put(record_path, dict(record, occurrence="s1"))
-            with self.assertRaisesRegex(ValueError, "occurrence differs"):
-                producer.assemble(f.custody, **inputs)
-            self.assertEqual(replay.call_count, 1)
-        put(record_path, record)
-        put(f.custody / go["pack_id"] / "arm_readiness.receipts" / (go["arm_receipt"]["receipt_id"] + ".json"),
-            {"fixture": "wrong native ARM digest"})
-        with mock.patch.object(q, "load_plan", return_value=plan), mock.patch.dict(desk.os.environ, {}, clear=True):
-            with self.assertRaisesRegex(ValueError, "desk ARM digest mismatch"):
-                desk.closeout(f.output)
-            put(record_path, dict(record, occurrence="s1"))
-            with self.assertRaisesRegex(ValueError, "occurrence binding mismatch"):
-                desk.closeout(f.output)
 
 
 class NullReservationTests(unittest.TestCase):
@@ -535,53 +366,11 @@ class NullReservationTests(unittest.TestCase):
             head_pin_path=pin, require_committed_pin=False, repo_root=self.root))
         self.raw = self.live.read_bytes()
 
-    def test_native_reservation_unit_validates(self):
-        self.assertEqual(restore.validate_tail(b"", self.raw, self.pin, self.row), self.row)
 
-    def test_two_row_tail_and_wrong_seed_or_reservation_refuse(self):
-        with self.assertRaisesRegex(q.HarvestRefusal, "not_one_reservation_unit"):
-            restore.validate_tail(b"", self.raw + self.raw, self.pin, self.row)
-        bad = copy.deepcopy(self.row); bad["session_id"] = "different"
-        with self.assertRaisesRegex(q.HarvestRefusal, "not_attempt_reservation"):
-            restore.validate_tail(b"", self.raw, self.pin, bad)
-        pin = dict(self.pin, sequence=1)
-        with self.assertRaisesRegex(q.HarvestRefusal, "seed_not_pinned"):
-            restore.validate_tail(b"", self.raw, pin, self.row)
 
-    def test_two_open_rows_are_not_the_native_reservation_unit(self):
-        row = ledger.canonical_json_bytes(self.row) + b"\n"
-        with self.assertRaisesRegex(q.HarvestRefusal, "not_attempt_reservation"):
-            restore.validate_tail(b"", row + row, self.pin, self.row)
 
-    def test_native_reservation_has_two_rows_and_replays(self):
-        live = self.root / "ledger.jsonl"; live.write_bytes(b"")
-        pin_path = self.root / "pin.json"; put(pin_path, self.pin)
-        kwargs = dict(self.identity); kwargs["runs_root"] = Path(kwargs["runs_root"])
-        row = ledger.append_bracket_session_receipt(live, **kwargs, slots=self.slots,
-            head_pin_path=pin_path, require_committed_pin=False, repo_root=self.root)
-        raw = live.read_bytes()
-        rows = [readiness.parse_json_bytes(line) for line in raw.splitlines()]
-        self.assertEqual([record["event"] for record in rows], [ledger.APPEND_INTENT_EVENT, ledger.BRACKET_SESSION_OPEN_EVENT])
-        self.assertEqual(restore.validate_tail(b"", raw, self.pin, dict(row)), dict(row))
 
-    def test_null_restore_after_chain_started_refuses_even_for_symlink(self):
-        plan = SimpleNamespace(plan_id="plan", custody_root=str(self.root))
-        harvest = {"schema": q.ATTEMPT_HARVEST_SCHEMA, "verdict": "NULL", "plan_id": "plan", "plan_sha256": "a" * 64}
-        restore.require_null(harvest, plan, "a" * 64)
-        started = self.root / "night/chain.started"
-        started.parent.mkdir()
-        started.write_bytes(b"{}\n")
-        with self.assertRaisesRegex(q.HarvestRefusal, "chain_started"):
-            restore.require_null(harvest, plan, "a" * 64)
-        started.unlink(); started.symlink_to(self.root / "missing")
-        with self.assertRaisesRegex(q.HarvestRefusal, "chain_started"):
-            restore.require_null(harvest, plan, "a" * 64)
 
-    def test_recover_or_wrong_plan_never_qualifies_as_null(self):
-        plan = SimpleNamespace(plan_id="plan", custody_root=str(self.root))
-        harvest = {"schema": q.ATTEMPT_HARVEST_SCHEMA, "verdict": "RECOVER", "plan_id": "plan", "plan_sha256": "a" * 64}
-        with self.assertRaisesRegex(q.HarvestRefusal, "requires_attempt_null"):
-            restore.require_null(harvest, plan, "a" * 64)
 
     def restore_fixture(self):
         from tests.test_v5_qualification_plan import PlanWriterTests
@@ -633,66 +422,8 @@ class NullReservationTests(unittest.TestCase):
                       q.attempt_record(plan, fixture.output, "s1", verdict="NULL", cause_codes=["chain_never_started"], cause_classes=[]))
         return fixture, live, seed, pin, harvest, raw
 
-    def test_native_restore_copies_create_once_leaves_pin_and_replays_record(self):
-        fixture, live, seed, pin, harvest, raw = self.restore_fixture()
-        pin_before = pin.read_bytes()
-        output = fixture.custody / "null-reservation-restore.json"
-        reference = restore.restore(q.reference(fixture.output), harvest, q.reference(seed), output=output)
-        self.assertEqual(live.read_bytes(), b"")
-        self.assertEqual(pin.read_bytes(), pin_before)
-        self.assertEqual((fixture.custody / "null-reservation-ledger.jsonl").read_bytes(), raw)
-        self.assertEqual(restore.verify_restore(reference, harvest, restored_ledger=q.reference(live))["head_pin"], q.reference(pin))
-        live.write_bytes(raw)
-        with self.assertRaisesRegex(q.HarvestRefusal, "custody_exists"):
-            restore.restore(q.reference(fixture.output), harvest, q.reference(seed), output=output)
-        self.assertEqual(live.read_bytes(), raw)
 
-    def test_two_row_restore_preserves_live_ledger_pin_and_absence_of_output(self):
-        fixture, live, seed, pin, harvest, raw = self.restore_fixture()
-        live.write_bytes(raw + raw)
-        pin_before = pin.read_bytes()
-        output = fixture.custody / "null-reservation-restore.json"
-        with self.assertRaisesRegex(q.HarvestRefusal, "not_one_reservation_unit"):
-            restore.restore(q.reference(fixture.output), harvest, q.reference(seed), output=output)
-        self.assertEqual(live.read_bytes(), raw + raw)
-        self.assertEqual(pin.read_bytes(), pin_before)
-        self.assertFalse(output.exists())
-        self.assertFalse((fixture.custody / "null-reservation-ledger.jsonl").exists())
 
-    def test_next_attempt_requires_and_authenticates_restore_without_pooling_ledger_bytes(self):
-        fixture, live, seed, pin, harvest, raw = self.restore_fixture()
-        restored = restore.restore(q.reference(fixture.output), harvest, q.reference(seed),
-                                   output=fixture.custody / "null-reservation-restore.json")
-        old_plan = night_gate.NightPlan.from_mapping(q.read(fixture.output))
-        chain = fixture.root / "fresh-chain.zsh"
-        chain.write_text(f"export CALIBRATION_LEDGER={live}\nexport LEDGER_HEAD_PIN={pin}\nexit 0\n")
-        path = fixture.root / "fresh/night_plan.json"
-        plan = bind_history_fixture(path, SimpleNamespace(plan_id="fresh", custody_root=str(path.parent),
-            chain_path=str(chain), chain_sha256_path=str(fixture.root / "fresh-chain.sha256"),
-            pack_night={"pack_id": fixture.pack.name, "pack_root": str(fixture.pack)}),
-            Path(old_plan.block_archive_root), previous=harvest)
-        with self.assertRaisesRegex(q.HarvestRefusal, "restore_required"):
-            q.verify_attempt_restore(plan, writer=True)
-        value = q.read(path)
-        value["null_reservation_restore"] = restored
-        auth_path = Path(value["pack_night"]["authorization_record"]["path"])
-        auth = q.read(auth_path); auth["null_reservation_restore"] = restored
-        value["pack_night"]["authorization_record"] = put(auth_path, auth)
-        put(path, value)
-        plan = night_gate.NightPlan.from_mapping(value)
-        q.verify_attempt_restore(plan, writer=True)
-        current = q.attempt_record(plan, path, "s1", verdict="NULL", cause_codes=["chain_never_started"], cause_classes=[])
-        self.assertEqual(q.checked_history(current, plan)["harvests"], [harvest])
-        # Later harvesting replays the preserved seed and dropped native unit;
-        # it does not pool the restored attempt ledger with fresh reservation.
-        live.write_bytes(raw)
-        q.verify_attempt_restore(plan)
-        with self.assertRaisesRegex(q.HarvestRefusal, "digest_mismatch"):
-            q.verify_attempt_restore(plan, writer=True)
-        saved = fixture.custody / "null-reservation-ledger.jsonl"
-        saved.write_bytes(saved.read_bytes() + b"{}\n")
-        with self.assertRaisesRegex(q.HarvestRefusal, "digest_mismatch"):
-            q.verify_attempt_restore(plan)
 
 
 if __name__ == "__main__":

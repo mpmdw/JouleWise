@@ -63,7 +63,7 @@ def replay_refusal_error(error):
     return f"{error}; {REPLAY_REFUSAL_REASON}"
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
-                  "joulewise/quiet_predicate_campaign.py", "joulewise/network_time_off.py", "joulewise/night_gate.py",
+                  "joulewise/quiet_predicate_campaign.py", "joulewise/hazards/network_time.py", "joulewise/night_gate.py",
                   # Audit-fix 2 (2026-10-07) moved the agent census's decision
                   # (which pgrep lines are agents) into agent_identity, which
                   # night_gate imports; orchestrator ruling: the manifest covers it.

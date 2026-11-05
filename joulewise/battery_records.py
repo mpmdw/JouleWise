@@ -4,13 +4,13 @@ import os
 import re
 from pathlib import Path
 from joulewise import receipt_readers as readiness
+from joulewise import qualification_readers as _qualification
 
 def sha(path):
     return readiness.sha256_bytes(Path(path).read_bytes())
 
 
-class HarvestRefusal(ValueError):
-    """Only fixed structural codes may cross the public boundary."""
+from joulewise.qualification_readers import HarvestRefusal
 
 
 def identifier(value):
@@ -49,3 +49,32 @@ def persist_battery_observation(directory, name, observation, raw):
             os.fsync(stream.fileno())
     return {"record": reference(record_path.absolute()), "raw": reference(raw_path.absolute())}
 
+
+
+def assemble(plan_id, observations, output, *, lifecycle=None):
+    _qualification.identifier(plan_id)
+    if set(observations) != set(_qualification.BATTERY_BOUNDARY_PHASES):
+        raise _qualification.HarvestRefusal("battery_boundary_census_invalid")
+    # Authenticate before publishing a create-once manifest. Failed physics
+    # readings remain assemblable, so harvest can classify the recorded result.
+    value = {"schema": SCHEMA, "plan_id": plan_id, "observations": observations,
+             "lifecycle": lifecycle}
+    for role, item in observations.items():
+        if set(item) != {"record", "raw"}:
+            raise _qualification.HarvestRefusal("battery_boundary_locator_invalid")
+        record = _qualification.read(_qualification.authenticated_reference(item["record"]))
+        raw = _qualification.authenticated_reference(item["raw"])
+        if (record.get("plan_id") != plan_id or record.get("phase") != _qualification.BATTERY_BOUNDARY_PHASES[role]
+                or record.get("raw_stdout_sha256") != _qualification.sha(raw)):
+            raise _qualification.HarvestRefusal("battery_boundary_digest_or_identity_mismatch")
+    # The same replay as both harvesters, using a temporary in-memory-free
+    # validation file within the caller's output directory.
+    import tempfile
+    output = Path(output).absolute()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="battery-boundaries-", dir=output.parent) as directory:
+        candidate = Path(directory) / "manifest.json"
+        _qualification.write(candidate, value)
+        _qualification.battery_boundaries(candidate, _qualification.sha(candidate), plan_id)
+    _qualification.write(output, value)
+    return _qualification.reference(output)

@@ -299,7 +299,12 @@ class ArmReadinessRegistryTests(unittest.TestCase):
             for relative in overlay:
                 target = frozen_clone / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / relative, target)
+                source = ROOT / relative
+                if source.is_file():
+                    shutil.copy2(source, target)
+                else:
+                    target.write_bytes(subprocess.check_output([
+                        "git", "-C", str(ROOT), "show", "92026c184:" + str(relative)]))
 
             # Freeze-time directories are authenticated, committed pack additions
             # rather than draft-generator outputs.
@@ -428,7 +433,12 @@ class ArmReadinessRegistryTests(unittest.TestCase):
             for relative in overlay:
                 target = clone / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / relative, target)
+                source = ROOT / relative
+                if source.is_file():
+                    shutil.copy2(source, target)
+                else:
+                    target.write_bytes(subprocess.check_output([
+                        "git", "-C", str(ROOT), "show", "92026c184:" + str(relative)]))
             for pack_name in PACKS.values():
                 pack_root = clone / "configs/campaigns" / pack_name
                 for directory in FROZEN_PACK_DIRECTORIES:

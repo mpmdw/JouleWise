@@ -16,8 +16,8 @@ from joulewise import clock_reference
 from joulewise import kernel_clock
 from tests.test_kernel_clock import frequency_probe
 from joulewise.hazards import network_time as network_time_off
-from joulewise import process_observer as rehearsal
-from scripts import rehearse_t0_unattended as cli
+from joulewise import rehearsal_readers as rehearsal
+from scripts import rehearsal_bundle as cli
 
 
 REAL_G5_T0_AUTHENTICATOR = readiness._authenticate_go_t0_evidence
@@ -155,7 +155,7 @@ def fixture_bundle(root):
 
 def install_t0_inventory(fixture):
     """Synthetic probe bytes; the production T0 inventory authenticator stays real."""
-    from joulewise import receipt_formats as author
+    from joulewise import physical_checks as author
     from tests.test_arm_readiness_schemas import sample_evidence
     root = fixture.custody / fixture.pack.name
     if Path(fixture.arm["arm_context"]["custody_root"]) == fixture.custody:
@@ -219,8 +219,22 @@ def fixture_replay(root):
 
 
 def evaluate_fixture(root):
+    """Compose nine reader checks only for these synthetic test assertions.
+
+    This is not the retired ten-gate rehearsal approval or its wire format.
+    """
     with fixture_replay(root):
-        return rehearsal.evaluate_rehearsal(fixture_bundle(root))
+        bundle = fixture_bundle(root)
+        gates = tuple(getattr(rehearsal, f"evaluate_g{index}")(bundle)
+                      for index in range(1, 10))
+    return {
+        "schema_version": "tests.rehearsal_reader_results.v1",
+        "overall_verdict": rehearsal.compose_overall_verdict(gate.status for gate in gates).value,
+        "gate_counts": {status.value: sum(gate.status is status for gate in gates)
+                        for status in rehearsal.GateStatus},
+        "gates": [gate.to_dict() for gate in gates],
+        "load_issues": list(bundle.load_issues),
+    }
 
 
 class FixtureBuilder:
@@ -682,27 +696,6 @@ class FixtureBuilder:
 
 
 class T0RehearsalTests(unittest.TestCase):
-    def test_g10_reads_residual_stamps_from_retained_control_tree(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = FixtureBuilder(Path(temporary)).build()
-            positive = json.loads((root / "records/positive-control.json").read_bytes())
-            support = root / "records/g10-custody/native-control"
-            _write_json(support / "positive-control.json", positive)
-            frequency = frequency_probe()
-            _write_json(support / "before.json", {"realtime_ns": positive["anchor_before_ns"],
-                "monotonic_raw_ns": 0, "kernel_frequency": frequency})
-            _write_json(support / "after.json", {"realtime_ns": positive["anchor_after_ns"] + 1000,
-                "monotonic_raw_ns": 1000, "kernel_frequency": frequency})
-            movement = {"anchor_check_version": kernel_clock.ANCHOR_CHECK_VERSION,
-                "absolute_movement_ns": 5_000_001, "residual_movement_ns": 5_000_001.}
-            _write_json(support / "anchor-movement.json", movement)
-            result = rehearsal.evaluate_g10(fixture_bundle(root))
-            self.assertEqual(result.status, rehearsal.GateStatus.PASS, result.message)
-            movement["residual_movement_ns"] = 0.
-            _write_json(support / "anchor-movement.json", movement)
-            result = rehearsal.evaluate_g10(fixture_bundle(root))
-            self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
-            self.assertIn("residual differs", result.message)
 
     def test_g4_replays_versioned_drift_step_and_slew_from_raw_custody(self):
         from dataclasses import replace
@@ -776,39 +769,9 @@ class T0RehearsalTests(unittest.TestCase):
 
     maxDiff = None
 
-    def _run_rehearsal_arm_liveness_boundary(
-        self, age_ns: int
-    ) -> tuple[str, str | None]:
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = FixtureBuilder(Path(temporary.name)).build()
-        bundle = fixture_bundle(root)
-        _artifact, receipt, fact = rehearsal._clock_receipt(bundle)
-        value = fact["value"]
-        receipt["valid_until_monotonic_ns"] = (
-            value["r1_batch_finished_monotonic_ns"]
-            + 21_600_000_000_000
-            + age_ns
-        )
-        return rehearsal._run_real_arm_boundary(receipt, 4_999_999)
 
-    def test_rehearsal_t0_liveness_bound_refuses_at_610s_plus_1ns(self) -> None:
-        self.assertEqual(
-            self._run_rehearsal_arm_liveness_boundary(610_000_000_001),
-            ("REFUSE", "readiness_clock_preflight_refused"),
-        )
 
-    def test_rehearsal_t0_liveness_bound_passes_at_610s_minus_1ns(self) -> None:
-        self.assertEqual(
-            self._run_rehearsal_arm_liveness_boundary(609_999_999_999),
-            ("PASS", None),
-        )
 
-    def test_rehearsal_t0_liveness_bound_passes_at_exactly_610s(self) -> None:
-        self.assertEqual(
-            self._run_rehearsal_arm_liveness_boundary(610_000_000_000),
-            ("PASS", None),
-        )
 
     def _evaluate(
         self,
@@ -851,12 +814,12 @@ class T0RehearsalTests(unittest.TestCase):
                 self.assertEqual(gate["status"], "PASS", gate)
         return verdict
 
-    def test_current_pack_bundle_composes_all_ten_gates_pass_through_loader(self):
+    def test_stored_bundle_readers_check_g1_through_g9(self):
         _temporary, _root, verdict = self._evaluate()
         self.assertEqual(verdict["overall_verdict"], "PASS", verdict)
-        self.assertEqual(verdict["gate_counts"], {"PASS": 10, "FAIL": 0, "UNRULED": 0})
+        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 0, "UNRULED": 0})
         self.assertEqual([gate["gate_id"] for gate in verdict["gates"]],
-                         [f"G{i}" for i in range(1, 11)])
+                         [f"G{i}" for i in range(1, 10)])
 
     def test_completed_bundle_loads_before_post_night_g7_control(self):
         _temporary, root, _verdict = self._evaluate()
@@ -867,7 +830,7 @@ class T0RehearsalTests(unittest.TestCase):
         _write_json(path, manifest)
         verdict = evaluate_fixture(root)
         self.assertEqual(verdict["load_issues"], [])
-        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 1, "UNRULED": 0})
+        self.assertEqual(verdict["gate_counts"], {"PASS": 8, "FAIL": 1, "UNRULED": 0})
         self.assertEqual(verdict["gates"][6]["message"], "g7_control_pending")
 
     def test_g5_c2_real_t0_file_mutation_omission_and_substitution_fail(self):
@@ -898,7 +861,7 @@ class T0RehearsalTests(unittest.TestCase):
     def test_legacy_bundle_fails_g5_even_with_passing_g7_control(self) -> None:
         _temporary, _root, verdict = self._evaluate(broken_gate="G5")
         self.assertEqual(verdict["overall_verdict"], "FAIL")
-        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 1, "UNRULED": 0})
+        self.assertEqual(verdict["gate_counts"], {"PASS": 8, "FAIL": 1, "UNRULED": 0})
         self.assertEqual(verdict["gates"][6]["status"], "PASS")
 
     def test_g1_wrong_stdin_binding_fails_only_noninteractive_gate(self) -> None:
@@ -1026,49 +989,8 @@ class T0RehearsalTests(unittest.TestCase):
         self.assertEqual([gate["gate_id"] for gate in failures], ["G9"])
         self.assertIn("human intervention occurred", failures[-1]["message"])
 
-    def test_g10_real_author_and_real_arm_paths_observe_both_boundaries(self) -> None:
-        _temporary, _root, verdict = self._evaluate()
-        gate = verdict["gates"][9]
-        self.assertEqual(gate["status"], "PASS")
-        author = next(
-            item["author_boundary_observations"]
-            for item in gate["mechanical_evidence"]
-            if "author_boundary_observations" in item
-        )
-        arm = next(
-            item["arm_boundary_observations"]
-            for item in gate["mechanical_evidence"]
-            if "arm_boundary_observations" in item
-        )
-        self.assertEqual(
-            [(item["delta_ns"], item["status"], item["reason_code"]) for item in author],
-            [
-                (4_999_999, "PASS", None),
-                (5_000_001, "REFUSE", "evidence_author_t0_clock_attestation_underivable"),
-            ],
-        )
-        self.assertEqual(
-            [(item["delta_ns"], item["status"], item["reason_code"]) for item in arm],
-            [
-                (4_999_999, "PASS", None),
-                (5_000_001, "REFUSE", "readiness_clock_preflight_refused"),
-            ],
-        )
 
-    def test_g10_author_and_arm_control_descriptions_each_fail_closed(self) -> None:
-        for case, message in (
-            ("author_broken", "author_cases must contain exactly"),
-            ("arm_broken", "arm_cases must contain exactly"),
-        ):
-            with self.subTest(case=case):
-                self._assert_single_failure("G10", g10_case=case, message=message)
 
-    def test_g10_missing_physical_control_fails_and_names_ed_hands(self) -> None:
-        self._assert_single_failure(
-            "G10",
-            broken_gate="G10",
-            message="outstanding Ed-hands privileged anchor positive-control record is absent",
-        )
 
     def test_verdict_composition_distinguishes_all_status_combinations(self) -> None:
         cases = (
@@ -1090,25 +1012,12 @@ class T0RehearsalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rehearsal.compose_overall_verdict(())
 
-    def test_fixture_cli_reads_bytes_and_exits_success_for_pass(self) -> None:
-        _temporary, root, _verdict = self._evaluate()
-        output = io.BytesIO()
-        with fixture_replay(root):
-            code = cli.main(["--fixture-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
-        parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 0)
-        self.assertEqual(parsed["overall_verdict"], "PASS")
-        self.assertEqual(output.getvalue(), readiness.render_json(parsed))
 
-    def test_real_custody_cli_refuses_unlabelled_fixture_evidence(self) -> None:
+    def test_observed_loader_refuses_unlabelled_fixture_evidence(self) -> None:
         _temporary, root, _verdict = self._evaluate()
-        output = io.BytesIO()
-        with fixture_replay(root):
-            code = cli.main(["--custody-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
-        parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 2)
-        self.assertEqual(parsed["overall_verdict"], "FAIL")
-        self.assertIn("producer provenance", parsed["load_issues"][0])
+        with self.assertRaisesRegex(cli.BundleLoadError, "producer provenance"):
+            cli.load_evidence_bundle(root, home=root.parents[1],
+                                     inventory=fixture_inventory(root), require_observed=True)
 
 
 class PackGoReplayTests(unittest.TestCase):

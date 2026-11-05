@@ -61,6 +61,10 @@ def import_edges(tree, module, package=False):
 
 
 class MainClosureTests(unittest.TestCase):
+    def test_retired_implementation_files_are_absent(self):
+        self.assertEqual([name for name in sorted(RETIRED)
+                          if (ROOT / (name.replace(".", "/") + ".py")).exists()], [])
+
     def test_every_remaining_production_module_excludes_retired_imports(self):
         modules = source_modules()
         failures = []

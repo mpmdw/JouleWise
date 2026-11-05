@@ -215,4 +215,3 @@ def _slug(value: str) -> str:
 
 def _evidence_id(row_id: str) -> str:
     return f"arm-t0-{_slug(row_id)}-v1"
-

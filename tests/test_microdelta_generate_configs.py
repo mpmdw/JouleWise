@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import importlib.util
 import tempfile
@@ -18,7 +19,7 @@ GENERATOR_PATH = (
 SPEC = importlib.util.spec_from_file_location("microdelta_generate_configs", GENERATOR_PATH)
 assert SPEC is not None and SPEC.loader is not None
 GENERATOR = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(GENERATOR)
+exec_archived_generator(SPEC.loader, GENERATOR)
 
 
 def snapshot(root: Path) -> dict[str, bytes]:

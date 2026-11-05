@@ -13,7 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
-from configs.campaigns.d117_contrast_v5 import generate_configs as d117_v5
+from joulewise.stored_generator import historical_reader_imports
+with historical_reader_imports():
+    from configs.campaigns.d117_contrast_v5 import generate_configs as d117_v5
 from joulewise.adapters.mlx_runtime import _encode
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.night_gate import chain_literal

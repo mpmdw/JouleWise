@@ -207,14 +207,14 @@ instance = mac.monitor()
 instance.open_session()
 instance.run(max_seconds=120)
 instance.close_session("done")
-print(json.dumps({"decision": result.decision, "modules": sorted(sys.modules)}))
+print(json.dumps({"decision": result.decision, "reasons": result.reasons, "modules": sorted(sys.modules)}))
 """
         env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         completed = subprocess.run([sys.executable, "-B", "-c", script, str(ROOT)], cwd=str(ROOT),
                                    capture_output=True, text=True, timeout=300, env=env)
         self.assertEqual(completed.returncode, 0, completed.stderr[-3000:])
         report = json.loads(completed.stdout.strip().splitlines()[-1])
-        self.assertEqual(report["decision"], "GO")
+        self.assertEqual(report["decision"], "GO", {key: value for key, value in report.items() if key != "modules"})
         loaded = [name for name in report["modules"] if is_retired(name)
                   or any(name == item or name.startswith(item + ".") for item in FLAG_CODE)]
         self.assertEqual(loaded, [])

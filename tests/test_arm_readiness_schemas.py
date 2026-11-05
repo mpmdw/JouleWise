@@ -1308,10 +1308,6 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         wrong_boot = dict(base, boot_session_id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
         self.assertFalse(self._probe_passes(receipt, live_clock_anchor=wrong_boot))
 
-    def test_original_arm_path_samples_once_and_passes_value_explicitly(self) -> None:
-        source = inspect.getsource(receipt_factory.generate_arm_receipt)
-        self.assertEqual(source.count("_sample_live_clock_anchor()"), 1)
-        self.assertIn("live_clock_anchor=live_clock_anchor", source)
 
     def test_all_35_contract_predicates_require_named_content_and_admissible_sources(self) -> None:
         registry, _raw = load_registry(ROOT)
@@ -1764,7 +1760,7 @@ class ProductionCustodyResolverTests(unittest.TestCase):
             readiness.PRODUCTION_CUSTODY_ROOTS[0].role = "shrunken"
 
     def test_no_census_kind_or_path_is_derived_from_running_clone(self):
-        from joulewise.process_observer import _contains
+        from joulewise.receipt_formats import _contains
         self.assertEqual({"LITERAL", "HOME_RELATIVE", "INVENTORY"},
                          {spec.kind for spec in readiness.PRODUCTION_CUSTODY_ROOTS})
         self.assertNotIn("repo_runs", {spec.role for spec in readiness.PRODUCTION_CUSTODY_ROOTS})

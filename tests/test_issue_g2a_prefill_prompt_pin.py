@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import ast
 import contextlib
@@ -31,7 +32,7 @@ def load_generator():
     spec = importlib.util.spec_from_file_location("d117_v5_issued_pin_test", GENERATOR)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    exec_archived_generator(spec.loader, module)
     return module
 
 

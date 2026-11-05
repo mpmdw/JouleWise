@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import scheduler_factory
 
 import copy
 import hashlib
@@ -12,7 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise import receipt_readers as arm_readiness
-from joulewise import scheduler_gates as gates
+from joulewise import scheduler_receipts as gates
 from tests.git_fixture import init_git_fixture
 
 
@@ -125,11 +126,11 @@ class SchedulerGateReceiptTests(unittest.TestCase):
         }
         pack = {"pack_id": "pack", "pack_sha256": "c" * 64}
         with (
-            mock.patch.object(gates, "_live_boot_session_id", return_value=boot),
+            mock.patch.object(scheduler_factory, "_live_boot_session_id", return_value=boot),
             mock.patch.object(arm_readiness, "reviewed_main", return_value=reviewed),
             mock.patch.object(arm_readiness, "_pack_record", return_value=pack),
         ):
-            return gates.evaluate_scheduler_gates(
+            return scheduler_factory.evaluate_scheduler_gates(
                 pack_root=self.pack_root,
                 campaign_root=self.campaign_root,
                 family_id="family-1",
@@ -227,7 +228,7 @@ class SchedulerGateReceiptTests(unittest.TestCase):
         }
         pack = {"pack_id": "pack", "pack_sha256": "c" * 64}
         with (
-            mock.patch.object(gates, "_live_boot_session_id", return_value=BOOT_A),
+            mock.patch.object(scheduler_factory, "_live_boot_session_id", return_value=BOOT_A),
             mock.patch.object(arm_readiness, "reviewed_main", return_value=reviewed),
             mock.patch.object(arm_readiness, "_pack_record", return_value=pack),
             mock.patch.object(arm_readiness, "_repo_for_pack", return_value=self.root),
@@ -237,7 +238,7 @@ class SchedulerGateReceiptTests(unittest.TestCase):
                 return_value=verified,
             ),
         ):
-            receipt = gates.evaluate_scheduler_gates(
+            receipt = scheduler_factory.evaluate_scheduler_gates(
                 pack_root=self.pack_root,
                 campaign_root=self.campaign_root,
                 family_id="family-1",
@@ -433,7 +434,7 @@ class SchedulerGateReceiptTests(unittest.TestCase):
         for label, (verified, expected_diagnostic) in cases.items():
             with self.subTest(case=label):
                 with (
-                    mock.patch.object(gates, "_live_boot_session_id", return_value=BOOT_A),
+                    mock.patch.object(scheduler_factory, "_live_boot_session_id", return_value=BOOT_A),
                     mock.patch.object(arm_readiness, "reviewed_main", return_value=reviewed),
                     mock.patch.object(arm_readiness, "_pack_record", return_value=pack),
                     mock.patch.object(arm_readiness, "_repo_for_pack", return_value=self.root),
@@ -443,7 +444,7 @@ class SchedulerGateReceiptTests(unittest.TestCase):
                         return_value=verified,
                     ),
                 ):
-                    receipt = gates.evaluate_scheduler_gates(
+                    receipt = scheduler_factory.evaluate_scheduler_gates(
                         pack_root=self.pack_root,
                         campaign_root=self.campaign_root,
                         family_id="family-1",
@@ -567,377 +568,8 @@ class SchedulerGateReceiptTests(unittest.TestCase):
             gates.validate_scheduler_gate_receipt(forged)
 
 
-class ReviewedMainGateTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.repository = Path(self.temporary.name) / "repository"
-        self.repository.mkdir()
-        init_git_fixture(self.repository, "-q")
-        _run("git", "config", "user.email", "scheduler@example.invalid", cwd=self.repository)
-        _run("git", "config", "user.name", "Scheduler Tests", cwd=self.repository)
-        tracked = self.repository / "tracked.txt"
-        tracked.write_text("one\n", encoding="utf-8")
-        _run("git", "add", "tracked.txt", cwd=self.repository)
-        _run("git", "commit", "-q", "-m", "initial", cwd=self.repository)
-        _run("git", "branch", "-M", "main", cwd=self.repository)
-        head = _run("git", "rev-parse", "HEAD", cwd=self.repository)
-        _run("git", "update-ref", "refs/remotes/origin/main", head, cwd=self.repository)
-        self.pack_root = self.repository / "pack"
-        self.pack_root.mkdir()
-        _run("git", "add", "pack", cwd=self.repository)
-        # Git does not track empty directories; reviewed_main only needs the path
-        # to resolve under the repository.
-
-    def test_clean_exact_main_passes(self) -> None:
-        result, reviewed = gates._evaluate_g4(self.pack_root)
-        self.assertIs(reviewed["exact_match"], True)
-        self.assertEqual(result["verdict"], "PASS")
-        self.assertIsNone(result["observations"]["failed_conjunct"])
-
-    def test_untracked_file_refuses_as_dirty(self) -> None:
-        (self.repository / "untracked.txt").write_text("dirty\n", encoding="utf-8")
-        result, _reviewed = gates._evaluate_g4(self.pack_root)
-        self.assertEqual(result["verdict"], "REFUSE")
-        self.assertEqual(result["observations"]["failed_conjunct"], "dirty")
-        self.assertEqual(result["refusals"][0]["code"], "readiness_git_tree_dirty")
-        self.assertEqual(result["refusals"][0]["mirrored_from"], "arm_readiness")
-
-    def test_commit_moves_main_and_exact_match_refuses(self) -> None:
-        (self.repository / "tracked.txt").write_text("two\n", encoding="utf-8")
-        _run("git", "add", "tracked.txt", cwd=self.repository)
-        _run("git", "commit", "-q", "-m", "move main", cwd=self.repository)
-        result, reviewed = gates._evaluate_g4(self.pack_root)
-        self.assertIs(reviewed["exact_match"], False)
-        self.assertEqual(result["verdict"], "REFUSE")
-        self.assertEqual(
-            result["observations"]["failed_conjunct"], "head_ne_origin_main"
-        )
-        self.assertEqual(
-            result["refusals"][0]["code"], "readiness_reviewed_main_mismatch"
-        )
-
-    def test_local_main_moves_away_from_detached_head_and_refuses(self) -> None:
-        head = _run("git", "rev-parse", "HEAD", cwd=self.repository)
-        tree = _run("git", "rev-parse", "HEAD^{tree}", cwd=self.repository)
-        _run("git", "checkout", "-q", "--detach", head, cwd=self.repository)
-        successor = _run(
-            "git",
-            "commit-tree",
-            tree,
-            "-p",
-            head,
-            "-m",
-            "move local main",
-            cwd=self.repository,
-        )
-        _run("git", "update-ref", "refs/heads/main", successor, cwd=self.repository)
-        result, reviewed = gates._evaluate_g4(self.pack_root)
-        self.assertIs(reviewed["exact_match"], False)
-        self.assertEqual(result["verdict"], "REFUSE")
-        self.assertEqual(
-            result["observations"]["failed_conjunct"], "head_ne_local_main"
-        )
-
-    def test_missing_origin_main_refuses_as_unavailable(self) -> None:
-        _run("git", "update-ref", "-d", "refs/remotes/origin/main", cwd=self.repository)
-        result, reviewed = gates._evaluate_g4(self.pack_root)
-        self.assertEqual(reviewed["origin_main_commit"], "unavailable")
-        self.assertEqual(result["verdict"], "REFUSE")
-        self.assertEqual(result["observations"]["failed_conjunct"], "unavailable")
-
-    def test_exact_match_requires_literal_true(self) -> None:
-        reviewed = {
-            "head_commit": "a" * 40,
-            "head_tree_oid": "b" * 40,
-            "local_main_commit": "a" * 40,
-            "origin_main_commit": "a" * 40,
-            "clean": True,
-            "exact_match": 1,
-        }
-        with mock.patch.object(arm_readiness, "reviewed_main", return_value=reviewed):
-            result, _ = gates._evaluate_g4(self.pack_root)
-        self.assertEqual(result["verdict"], "REFUSE")
 
 
-class CampaignBootPinGateTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
-        self.campaign_root = self.root / "campaign"
-        self.campaign_root.mkdir()
-        self.pack_root = self.root / "pack"
-        self.pack_root.mkdir()
-        self.reviewed = {
-            "head_commit": "a" * 40,
-            "head_tree_oid": "b" * 40,
-            "local_main_commit": "a" * 40,
-            "origin_main_commit": "a" * 40,
-            "clean": True,
-            "exact_match": True,
-        }
-
-    def _evaluate(self, *, live: str, receipts: dict[str, str]) -> dict[str, object]:
-        with (
-            mock.patch.object(gates, "_live_boot_session_id", return_value=live),
-            mock.patch.object(arm_readiness, "reviewed_main", return_value=self.reviewed),
-            mock.patch.object(
-                arm_readiness,
-                "_pack_record",
-                return_value={"pack_id": "pack", "pack_sha256": "c" * 64},
-            ),
-        ):
-            return gates.evaluate_scheduler_gates(
-                pack_root=self.pack_root,
-                campaign_root=self.campaign_root,
-                family_id="family-1",
-                window_class="CLAIM",
-                receipt_boot_session_ids=receipts,
-                now_monotonic_ns=456,
-            )
-
-    def test_first_evaluation_create_only_pins_live_boot(self) -> None:
-        receipt = self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        pin_path = self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME
-        pin = json.loads(pin_path.read_text(encoding="utf-8"))
-        self.assertEqual(pin["boot_session_id"], BOOT_A)
-        self.assertEqual(pin["family_id"], "family-1")
-        self.assertEqual(receipt["gates"][0]["gate_id"], "G5")
-        self.assertEqual(receipt["gates"][0]["verdict"], "PASS")
-        sidecar = pin_path.with_name(gates.CAMPAIGN_BOOT_PIN_SIDECAR_NAME)
-        self.assertEqual(
-            sidecar.read_bytes(),
-            arm_readiness.gnu_sidecar(
-                arm_readiness.sha256_bytes(pin_path.read_bytes()), pin_path.name
-            ),
-        )
-
-    def test_reboot_falsifier_refuses_against_authoritative_span_pin(self) -> None:
-        first = self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        second = self._evaluate(live=BOOT_B, receipts={"e2": BOOT_B})
-        self.assertEqual(first["gates"][0]["verdict"], "PASS")
-        g5 = second["gates"][0]
-        self.assertEqual(g5["verdict"], "REFUSE")
-        self.assertEqual(g5["refusals"][0]["code"], "scheduler_boot_pin_mismatch")
-        pin = json.loads(
-            (self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME).read_text(encoding="utf-8")
-        )
-        self.assertEqual(pin["boot_session_id"], BOOT_A)
-
-    def test_live_boot_change_refuses_when_receipt_still_matches_pin(self) -> None:
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        receipt = self._evaluate(live=BOOT_B, receipts={"e2": BOOT_A})
-        g5 = receipt["gates"][0]
-        self.assertEqual(g5["verdict"], "REFUSE")
-        self.assertEqual(g5["observations"]["mismatched_receipts"], [])
-        self.assertEqual(g5["refusals"][0]["code"], "scheduler_boot_pin_mismatch")
-
-    def test_boot_mismatch_marks_monotonic_gates_not_evaluated_but_g4_runs(self) -> None:
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        receipt = self._evaluate(live=BOOT_B, receipts={"e2": BOOT_B})
-        by_id = {gate["gate_id"]: gate for gate in receipt["gates"]}
-        self.assertEqual(by_id["G1"]["verdict"], "NOT_EVALUATED")
-        self.assertEqual(by_id["G2"]["verdict"], "NOT_EVALUATED")
-        self.assertNotEqual(by_id["G1"]["verdict"], "PASS")
-        self.assertNotEqual(by_id["G2"]["verdict"], "PASS")
-        self.assertEqual(by_id["G4"]["verdict"], "PASS")
-        self.assertEqual(by_id["G3"]["verdict"], "NOT_IMPLEMENTED")
-        self.assertEqual(by_id["G6"]["verdict"], "NOT_IMPLEMENTED")
-
-    def test_live_boot_probe_failure_refuses_without_creating_pin(self) -> None:
-        with mock.patch.object(
-            gates,
-            "_live_boot_session_id",
-            side_effect=gates.SchedulerGateError(
-                "scheduler_boot_pin_underivable", "sysctl failed"
-            ),
-        ):
-            result, live = gates._evaluate_g5(
-                campaign_root=self.campaign_root,
-                family_id="family-1",
-                receipt_boot_session_ids={"e1": BOOT_A},
-            )
-        self.assertEqual(live, "unavailable")
-        self.assertEqual(result["refusals"][0]["code"], "scheduler_boot_pin_underivable")
-        self.assertFalse((self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME).exists())
-
-    def test_sequential_second_exclusive_create_refuses_as_conflict(self) -> None:
-        pin_path = self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME
-        gates._create_boot_pin(
-            pin_path, family_id="family-1", boot_session_id=BOOT_A
-        )
-        with self.assertRaisesRegex(gates.SchedulerGateError, "single-writer race") as raised:
-            gates._create_boot_pin(
-                pin_path, family_id="family-1", boot_session_id=BOOT_B
-            )
-        self.assertEqual(raised.exception.code, "scheduler_boot_pin_conflict")
-
-    def test_pin_create_fsyncs_parent_after_primary_and_sidecar(self) -> None:
-        pin_path = self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME
-        with mock.patch.object(
-            gates, "_fsync_directory", wraps=gates._fsync_directory
-        ) as directory_fsync:
-            gates._create_boot_pin(
-                pin_path, family_id="family-1", boot_session_id=BOOT_A
-            )
-        self.assertEqual(
-            directory_fsync.call_args_list,
-            [mock.call(self.campaign_root), mock.call(self.campaign_root)],
-        )
-
-    def test_missing_pin_with_prior_custody_refuses_instead_of_reanchoring(self) -> None:
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        pin_path = self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME
-        pin_path.unlink()
-
-        receipt = self._evaluate(live=BOOT_B, receipts={"e2": BOOT_B})
-        g5 = receipt["gates"][0]
-        self.assertEqual(g5["verdict"], "REFUSE")
-        self.assertEqual(g5["refusals"][0]["code"], "scheduler_boot_pin_underivable")
-        self.assertFalse(pin_path.exists())
-
-    def test_foreign_entries_do_not_brick_first_pin_and_are_recorded(self) -> None:
-        (self.campaign_root / ".DS_Store").write_bytes(b"finder residue")
-        (self.campaign_root / "staged_plan_notes.md").write_text("pre-window staging")
-        (self.campaign_root / "empty_subdir").mkdir()
-
-        receipt = self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        g5 = receipt["gates"][0]
-        self.assertEqual(g5["verdict"], "PASS")
-        self.assertEqual(
-            g5["observations"]["pin_creation_ignored_entries"],
-            [".DS_Store", "empty_subdir", "staged_plan_notes.md"],
-        )
-        self.assertTrue(
-            (self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME).exists()
-        )
-
-    def test_missing_pin_and_sidecar_with_prior_receipt_refuses(self) -> None:
-        first = self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        pin_path = self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME
-        pin_path.unlink()
-        pin_path.with_name(gates.CAMPAIGN_BOOT_PIN_SIDECAR_NAME).unlink()
-        (self.campaign_root
-         / f"{gates.SCHEDULER_GATE_RECEIPT_FILE_PREFIX}-0001.json").write_bytes(
-            gates.render_json(first)
-        )
-
-        receipt = self._evaluate(live=BOOT_B, receipts={"e2": BOOT_B})
-        self.assertEqual(receipt["gates"][0]["verdict"], "REFUSE")
-        self.assertEqual(
-            receipt["gates"][0]["refusals"][0]["code"],
-            "scheduler_boot_pin_underivable",
-        )
-        self.assertIsNone(receipt["campaign_boot_pin_sha256"])
-
-    def test_backdated_hand_planted_pin_without_sidecar_refuses(self) -> None:
-        pin_path = self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME
-        pin_path.write_bytes(
-            gates.render_json(
-                {
-                    "schema_version": gates.CAMPAIGN_BOOT_PIN_SCHEMA,
-                    "family_id": "family-1",
-                    "boot_session_id": BOOT_A,
-                    "created_at_utc": "2023-01-01T00:00:00Z",
-                }
-            )
-        )
-        receipt = self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        self.assertEqual(receipt["gates"][0]["verdict"], "REFUSE")
-        self.assertEqual(
-            receipt["gates"][0]["refusals"][0]["code"],
-            "scheduler_boot_pin_conflict",
-        )
-        self.assertEqual(
-            receipt["campaign_boot_pin_sha256"],
-            arm_readiness.sha256_bytes(pin_path.read_bytes()),
-        )
-
-    def test_backdated_in_place_rewrite_mismatches_sidecar_and_refuses(self) -> None:
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        pin_path = self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME
-        pin = json.loads(pin_path.read_text(encoding="utf-8"))
-        pin["created_at_utc"] = "1999-01-01T00:00:00Z"
-        pin_path.write_bytes(gates.render_json(pin))
-
-        receipt = self._evaluate(live=BOOT_A, receipts={"e2": BOOT_A})
-        self.assertEqual(receipt["gates"][0]["verdict"], "REFUSE")
-        self.assertIn("sidecar mismatch", receipt["gates"][0]["refusals"][0]["detail"])
-        self.assertEqual(
-            receipt["campaign_boot_pin_sha256"],
-            arm_readiness.sha256_bytes(pin_path.read_bytes()),
-        )
-
-    @unittest.skipUnless(sys.platform == "darwin", "kern.bootsessionuuid is Darwin-only")
-    def test_g5_reads_real_kern_bootsessionuuid_without_mock(self) -> None:
-        result, live = gates._evaluate_g5(
-            campaign_root=self.campaign_root,
-            family_id="family-1",
-            receipt_boot_session_ids={"e1": BOOT_A},
-        )
-        if live == "unavailable":
-            self.assertEqual(result["verdict"], "REFUSE")
-            self.assertEqual(
-                result["refusals"][0]["code"], "scheduler_boot_pin_underivable"
-            )
-            self.assertFalse(
-                (self.campaign_root / gates.CAMPAIGN_BOOT_PIN_NAME).exists()
-            )
-        else:
-            self.assertEqual(str(uuid.UUID(live)), live)
-            self.assertIn(result["verdict"], {"PASS", "REFUSE"})
-
-    def test_prior_boot_receipt_refuses_even_when_live_matches_pin(self) -> None:
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        receipt = self._evaluate(
-            live=BOOT_A,
-            receipts={"current": BOOT_A, "prior": BOOT_B},
-        )
-        g5 = receipt["gates"][0]
-        self.assertEqual(g5["verdict"], "REFUSE")
-        self.assertEqual(g5["observations"]["mismatched_receipts"], ["prior"])
-        self.assertEqual(g5["refusals"][0]["code"], "scheduler_boot_pin_mismatch")
-
-    def test_existing_pin_for_different_family_refuses_as_conflict(self) -> None:
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        with mock.patch.object(gates, "_live_boot_session_id", return_value=BOOT_A):
-            result, _ = gates._evaluate_g5(
-                campaign_root=self.campaign_root,
-                family_id="family-2",
-                receipt_boot_session_ids={"e2": BOOT_A},
-            )
-        self.assertEqual(result["refusals"][0]["code"], "scheduler_boot_pin_conflict")
-
-    def test_all_gates_evaluate_after_g5_refusal(self) -> None:
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        with (
-            mock.patch.object(gates, "_live_boot_session_id", return_value=BOOT_B),
-            mock.patch.object(
-                arm_readiness, "reviewed_main", return_value=self.reviewed
-            ) as reviewed_call,
-            mock.patch.object(
-                arm_readiness,
-                "_pack_record",
-                return_value={"pack_id": "pack", "pack_sha256": "c" * 64},
-            ),
-        ):
-            receipt = gates.evaluate_scheduler_gates(
-                pack_root=self.pack_root,
-                campaign_root=self.campaign_root,
-                family_id="family-1",
-                window_class="SHAKEDOWN",
-                receipt_boot_session_ids={"e2": BOOT_B},
-            )
-        reviewed_call.assert_called_once_with(self.pack_root)
-        self.assertEqual(len(receipt["gates"]), 7)
-        self.assertEqual(receipt["verdict"], "NO-GO")
-
-    def test_evaluator_never_writes_the_pack(self) -> None:
-        before = sorted(path.relative_to(self.pack_root) for path in self.pack_root.rglob("*"))
-        self._evaluate(live=BOOT_A, receipts={"e1": BOOT_A})
-        after = sorted(path.relative_to(self.pack_root) for path in self.pack_root.rglob("*"))
-        self.assertEqual(after, before)
 
 
 if __name__ == "__main__":

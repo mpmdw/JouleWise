@@ -225,4 +225,3 @@ def observed_run(args, **kwargs):
         if check and code:
             raise subprocess.CalledProcessError(code, args, output=stdout, stderr=stderr)
         return subprocess.CompletedProcess(args, code, stdout, stderr)
-

@@ -1,6 +1,7 @@
 """Generation and consumer-linkage coverage for the D-117 Qwen3 v5 floors."""
 
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import ast
 import hashlib
@@ -59,7 +60,7 @@ def load_generator(pack_id: str, *, repository: Path = ROOT):
     spec = importlib.util.spec_from_file_location(f"{pack_id}_generator", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    exec_archived_generator(spec.loader, module)
     return module
 
 

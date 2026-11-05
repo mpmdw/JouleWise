@@ -559,3 +559,190 @@ def validate_scheduler_gate_receipt(receipt: object) -> Mapping[str, Any]:
     return value
 
 
+
+from joulewise import receipt_readers as arm_readiness
+
+def _validate_boot_pin(value: object) -> Mapping[str, Any]:
+    pin = _require_exact_keys(value, BOOT_PIN_KEYS, "campaign boot pin")
+    if pin["schema_version"] != CAMPAIGN_BOOT_PIN_SCHEMA:
+        raise SchedulerGateError("scheduler_boot_pin_conflict", "campaign boot pin schema is invalid")
+    _require_nonempty_string(pin["family_id"], "campaign boot pin family_id")
+    _require_nonempty_string(pin["boot_session_id"], "campaign boot pin boot_session_id")
+    _require_nonempty_string(pin["created_at_utc"], "campaign boot pin created_at_utc")
+    return pin
+
+
+def _read_boot_pin(path: Path) -> tuple[Mapping[str, Any], str]:
+    digest: str | None = None
+    try:
+        raw = path.read_bytes()
+        digest = arm_readiness.sha256_bytes(raw)
+        sidecar = path.with_name(CAMPAIGN_BOOT_PIN_SIDECAR_NAME).read_bytes()
+        if sidecar != arm_readiness.gnu_sidecar(digest, path.name):
+            raise SchedulerGateError(
+                "scheduler_boot_pin_conflict",
+                "campaign boot pin SHA-256 sidecar mismatch",
+                pin_sha256=digest,
+            )
+        value = json.loads(raw.decode("utf-8"))
+        return _validate_boot_pin(value), digest
+    except SchedulerGateError as exc:
+        if exc.code == "scheduler_boot_pin_conflict" and exc.pin_sha256 is not None:
+            raise
+        raise SchedulerGateError(
+            "scheduler_boot_pin_conflict", str(exc), pin_sha256=digest
+        ) from exc
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise SchedulerGateError(
+            "scheduler_boot_pin_conflict",
+            f"cannot authenticate existing campaign boot pin: {exc}",
+            pin_sha256=digest,
+        ) from exc
+
+
+def _g7_scheduler_code(check_id: str) -> str:
+    if check_id == "marker_absent":
+        return "scheduler_family_marker_absent"
+    if check_id == "confirmation_missing":
+        return "scheduler_family_confirmation_absent"
+    if check_id.startswith("confirmation_"):
+        return "scheduler_family_confirmation_invalid"
+    if check_id == "head_unpublished":
+        return "scheduler_family_unpublished"
+    if check_id == "family_incoherent":
+        return "scheduler_family_boot_pin_mismatch"
+    return "scheduler_family_marker_invalid"
+
+
+def _evaluate_g7(
+    *,
+    repository: Path,
+    pack_root: Path,
+    campaign_root: Path,
+    family_id: str,
+    marker_path: Path,
+    confirmation_path: Path,
+    expected_confirmation_digest: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    observations: dict[str, Any] = {
+        "phase": "pre-arm",
+        "diagnostic": None,
+        "lifecycle_refusal": None,
+    }
+    try:
+        result = arm_readiness.verify_family_publication_marker(
+            repository,
+            marker_path,
+            phase="pre-arm",
+            confirmation_path=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+            target_pack_root=pack_root,
+        )
+        # The receipt must be able to gate before anything downstream records
+        # it: a candidate-lane receipt is forged-origin/main-conditional and
+        # must never launder into a scheduler PASS.
+        arm_readiness.require_gate_admissible_verification(result)
+        if result["family_id"] != family_id:
+            raise arm_readiness.FamilyPublicationError(
+                "family_incoherent",
+                "published marker family differs from campaign boot-pin family",
+            )
+        verification_root = campaign_root / "family_publication"
+        verification_root.mkdir(parents=True, exist_ok=True)
+        verification_path = verification_root / f"pre-arm-verification-{uuid.uuid4()}.json"
+        verification_raw = render_json(result)
+        arm_readiness._exclusive_write(verification_path, verification_raw)
+        arm_readiness._exclusive_write(
+            verification_path.with_name(f"{verification_path.name}.sha256"),
+            arm_readiness.gnu_sidecar(
+                arm_readiness.sha256_bytes(verification_raw), verification_path.name
+            ),
+        )
+        block = {
+            "family_id": family_id,
+            "marker_path": result["marker"]["path"],
+            "marker_sha256": result["marker"]["sha256"],
+            "confirmation_sha256": result["confirmation"]["sha256"],
+            "verification_receipt": {
+                "path": str(verification_path),
+                "sha256": arm_readiness.sha256_bytes(verification_raw),
+            },
+            "publication_head": result["consulted_git"]["head_commit"],
+            "verdict": "PASS",
+            "refusals": [],
+        }
+        return _gate_result("G7", "PASS", observations=observations), block
+    except arm_readiness.FamilyPublicationError as exc:
+        code = _g7_scheduler_code(exc.check_id)
+        lifecycle = {
+            "role": "FAMILY_PUBLICATION",
+            "code": "readiness_r1_family_publication",
+            "type": "CUSTODY",
+        }
+        observations["diagnostic"] = exc.check_id
+        observations["lifecycle_refusal"] = lifecycle
+        block = {
+            "family_id": family_id,
+            "marker_path": None,
+            "marker_sha256": None,
+            "confirmation_sha256": None,
+            "verification_receipt": {"path": None, "sha256": None},
+            "publication_head": None,
+            "verdict": "REFUSE",
+            "refusals": [lifecycle],
+        }
+        return (
+            _gate_result(
+                "G7",
+                "REFUSE",
+                observations=observations,
+                refusals=[_gate_refusal(code, gate_id="G7", detail=str(exc))],
+            ),
+            block,
+        )
+    except (
+        OSError,
+        arm_readiness.ArmReadinessError,
+        arm_readiness.EvidenceLifecycleError,
+    ) as exc:
+        wrapped = arm_readiness.FamilyPublicationError("registry_mismatch", str(exc))
+        return _evaluate_g7_refusal(family_id, observations, wrapped)
+
+
+def _evaluate_g7_refusal(
+    family_id: str,
+    observations: dict[str, Any],
+    exc: arm_readiness.FamilyPublicationError,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    lifecycle = {
+        "role": "FAMILY_PUBLICATION",
+        "code": "readiness_r1_family_publication",
+        "type": "CUSTODY",
+    }
+    observations["diagnostic"] = exc.check_id
+    observations["lifecycle_refusal"] = lifecycle
+    block = {
+        "family_id": family_id,
+        "marker_path": None,
+        "marker_sha256": None,
+        "confirmation_sha256": None,
+        "verification_receipt": {"path": None, "sha256": None},
+        "publication_head": None,
+        "verdict": "REFUSE",
+        "refusals": [lifecycle],
+    }
+    return (
+        _gate_result(
+            "G7",
+            "REFUSE",
+            observations=observations,
+            refusals=[
+                _gate_refusal(
+                    _g7_scheduler_code(exc.check_id),
+                    gate_id="G7",
+                    detail=str(exc),
+                )
+            ],
+        ),
+        block,
+    )

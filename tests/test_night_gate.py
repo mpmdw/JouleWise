@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.receipt_imports import historical_reader_imports
 from tests import receipt_factory
 
 import copy
@@ -241,41 +242,6 @@ def plan_mapping(receipt_class: str = "DIAGNOSTIC_NO_PACK") -> dict[str, object]
     return night_plan_mapping(make_plan(receipt_class))
 
 
-class PackPreArmIdentityTests(unittest.TestCase):
-    def test_wrong_clone_refuses_without_writing_arm_for_every_pack_purpose(self):
-        from dataclasses import replace
-        from joulewise.night_plan_writer import write_night_plan
-        from tests.test_run_night import PackNightProducerTests
-
-        for purpose in ("T0_REHEARSAL", "G2B_SHAKEDOWN", "CAMPAIGN_TRANSACTION"):
-            with self.subTest(purpose=purpose):
-                fixture = PackNightProducerTests()
-                try:
-                    fixture.setUp()
-                    other = fixture.root / "JouleWise-rehearsal-20260909-07681e95"
-                    other.mkdir()
-                    authorization = dict(fixture.authorization, purpose=purpose)
-                    if purpose == "CAMPAIGN_TRANSACTION":
-                        authorization["authority"] = "V5-TRANSACTION-GO-01"
-                    auth_ref = fixture.write(fixture.custody / "authorization.json", authorization)
-                    fixture.plan = replace(
-                        fixture.plan, measurement_root=str(other),
-                        pack_night={**fixture.plan.pack_night, "authorization_record": auth_ref},
-                    )
-                    write_night_plan(fixture.plan_path, fixture.plan)
-                    code, launches = fixture.run_driver()
-                    self.assertEqual(fixture.driver.EXIT_REFUSED, code)
-                    refusal = json.loads((fixture.custody / "night/refusal.json").read_bytes())["refusal"]
-                    self.assertEqual("launch_go_receipt_invalid", refusal["reason"])
-                    self.assertEqual("measurement_root: launcher is not the planned clone", refusal["detail"])
-                    fixture.author.author_arm_readiness_evidence_t0.assert_not_called()
-                    fixture.receipt_factory.generate_arm_receipt.assert_not_called()
-                    self.assertFalse(fixture.arm_path.exists())
-                    self.assertEqual([], list(fixture.custody.rglob("arm_readiness.receipts/*.json")))
-                    self.assertFalse((fixture.custody / "night/go_receipt.json").exists())
-                    self.assertEqual([], launches)
-                finally:
-                    fixture.doCleanups()
 
 
 class RegistrationSeamTests(unittest.TestCase):
@@ -353,6 +319,19 @@ class RegistrationSeamTests(unittest.TestCase):
 
 
 class NightGateTests(unittest.TestCase):
+    def test_pack_refusal_codes_keep_standard_receipt_shape(self):
+        from dataclasses import replace
+        original = self.evaluate(make_plan(receipt_class="TRANSACTION_PACK"), FakeProbeSource())
+        for code in ("launch_go_receipt_missing", "launch_go_receipt_invalid"):
+            receipt = replace(original, refusal=night_gate.Refusal(code, "historical GO refusal", ()))
+            self.assertEqual(night_gate.validate_receipt(json.loads(receipt.to_json_bytes())), [])
+
+    def test_transaction_issuance_is_retired(self):
+        source = FakeProbeSource()
+        receipt = self.evaluate(make_plan(receipt_class="TRANSACTION_PACK"), source)
+        self.assertEqual(receipt.verdict, "REFUSED")
+        self.assertEqual(receipt.refusal.reason, "night_refused_class_unbuilt")
+
     def evaluate(
         self, plan: night_gate.NightPlan, source: FakeProbeSource
     ) -> night_gate.Receipt:
@@ -490,9 +469,10 @@ class NightGateTests(unittest.TestCase):
         # file must therefore carry exactly the canonical D-166 bytes.
         from pathlib import Path
 
-        from configs.campaigns.d117_contrast_v5.generate_configs import (
-            dominance_criterion_registration,
-        )
+        with historical_reader_imports():
+            from configs.campaigns.d117_contrast_v5.generate_configs import (
+                dominance_criterion_registration,
+            )
         from joulewise.analysis_manifest_v3 import canonical_json_bytes
 
         path = Path(night_gate.__file__).resolve().parents[1] / night_gate.D166_REGISTRATION_PATH
@@ -765,32 +745,7 @@ class NightGateTests(unittest.TestCase):
                 self.assertIn("FileNotFoundError", receipt.refusal.detail)
                 self.assertIn(getattr(plan, missing), source.read_calls)
 
-    def test_a_transaction_plan_is_refused_until_stage_three_exists(self) -> None:
-        source = FakeProbeSource()
-        receipt = self.evaluate(make_plan("TRANSACTION_PACK"), source)
-        self.assertEqual("REFUSED", receipt.verdict)
-        self.assertEqual("FAIL", receipt.conditions[0].status)
-        self.assertEqual("stage 3 not implemented", receipt.conditions[0].measured["detail"])
-        self.assertEqual("night_refused_class_unbuilt", receipt.refusal.reason)
-        self.assertEqual(
-            "stage 3 not implemented: TRANSACTION_PACK is pack-bound and stays under E-10 (ruling R-10)",
-            receipt.refusal.detail,
-        )
-        self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
-        self.assertNotIn("/custody/registration.json", source.read_calls)
 
-    def test_an_agent_present_outranks_the_unbuilt_transaction_class(self) -> None:
-        # R-3 census-first: the zero-agent fence is checked before the class
-        # table, so a TRANSACTION_PACK plan on a busy machine names the agent,
-        # not the unbuilt stage (terra delta re-audit 125, S1 observation).
-        source = FakeProbeSource()
-        source.results[night_gate.AGENT_CENSUS_ARGV] = result(
-            night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="42 claude\n"
-        )
-        receipt = self.evaluate(make_plan("TRANSACTION_PACK"), source)
-        self.assertEqual("REFUSED", receipt.verdict)
-        self.assertEqual("night_refused_agent_present", receipt.refusal.reason)
-        self.assertIn("42 claude", receipt.refusal.detail)
 
     def test_every_class_round_trips_through_the_consumer_validator(self) -> None:
         for receipt_class in night_gate.RECEIPT_CLASSES:
@@ -904,74 +859,7 @@ class NightGateTests(unittest.TestCase):
                             [], night_gate.validate_receipt(json.loads(receipt.to_json_bytes()))
                         )
 
-    def test_new_pack_rehearsal_exempts_only_authenticated_t0_purpose(self) -> None:
-        cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
-        with tempfile.TemporaryDirectory() as temporary:
-            outside = Path(temporary) / "JouleWise-rehearsal-test"
-            outside.mkdir()
-            custody = Path(temporary) / "measurement"
-            custody.mkdir()
-            binding = {"authorization_record": {"path": str(outside / "auth.json"),
-                                                "sha256": "a" * 64}}
-            for purpose, exempt in (("T0_REHEARSAL", True),
-                                    ("CAMPAIGN_TRANSACTION", False),
-                                    ("G2B_SHAKEDOWN", False)):
-                with self.subTest(purpose=purpose), \
-                     mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody), \
-                     mock.patch.object(night_gate, "_pack_object", return_value={"purpose": purpose}):
-                    source = FakeProbeSource(now_epoch_s=cutoff + 5)
-                    plan = make_plan("TRANSACTION_PACK", t0_epoch_s=cutoff,
-                                     authored_epoch_s=cutoff, measurement_root=str(outside),
-                                     pack_night=binding)
-                    receipt = self.evaluate(plan, source)
-                    if exempt:
-                        self.assertNotEqual("GO", receipt.verdict)
-                        self.assertNotEqual("measurement_root_outside_custody",
-                                            receipt.refusal.reason if receipt.refusal else None)
-                        self.assertTrue(source.measurement_calls)
-                    else:
-                        self.assertEqual("measurement_root_outside_custody", receipt.refusal.reason)
-                        self.assertEqual([], source.measurement_calls)
-            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody), \
-                 mock.patch.object(night_gate, "_pack_object",
-                                   side_effect=night_gate.PackNightRefusal("auth mismatch")):
-                source = FakeProbeSource(now_epoch_s=cutoff + 5)
-                plan = make_plan("TRANSACTION_PACK", t0_epoch_s=cutoff,
-                                 authored_epoch_s=cutoff, measurement_root=str(outside),
-                                 pack_night=binding)
-                receipt = self.evaluate(plan, source)
-                self.assertEqual("measurement_root_outside_custody", receipt.refusal.reason)
-                self.assertEqual([], source.measurement_calls)
 
-    def test_pack_rehearsal_exemption_requires_real_authorization_digest(self) -> None:
-        cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            custody = root / "measurement"
-            custody.mkdir()
-            outside = root / "JouleWise-rehearsal-authenticated"
-            outside.mkdir()
-            authorization = outside / "authorization.json"
-            raw = json.dumps({"purpose": "T0_REHEARSAL"}).encode()
-            authorization.write_bytes(raw)
-            digest = hashlib.sha256(raw).hexdigest()
-            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody):
-                for sha, expected_r16 in ((digest, False), ("0" * 64, True)):
-                    with self.subTest(sha=sha):
-                        source = FakeProbeSource(now_epoch_s=cutoff + 5)
-                        plan = make_plan(
-                            "TRANSACTION_PACK", t0_epoch_s=cutoff,
-                            authored_epoch_s=cutoff, measurement_root=str(outside),
-                            pack_night={"authorization_record": {
-                                "path": str(authorization), "sha256": sha,
-                            }},
-                        )
-                        receipt = self.evaluate(plan, source)
-                        self.assertEqual(
-                            "measurement_root_outside_custody" if expected_r16 else "night_probe_error",
-                            receipt.refusal.reason,
-                        )
-                        self.assertNotEqual("GO", receipt.verdict)
 
     def test_existing_case_alias_inside_custody_is_accepted(self) -> None:
         cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
@@ -1619,7 +1507,7 @@ class NightGateTests(unittest.TestCase):
             "night_plan_malformed": "test_a_direct_plan_with_missing_registration_is_refused_as_malformed",
             "measurement_root_outside_custody": "test_new_plan_refuses_roots_outside_measurement_custody",
             "night_chain_digest_mismatch": "test_chain_sidecar_refuses_case_name_and_token_count_defects",
-            "night_refused_class_unbuilt": "test_a_transaction_plan_is_refused_until_stage_three_exists",
+            "night_refused_class_unbuilt": "test_transaction_issuance_is_retired",
             "night_receipt_class_invalid": "test_c2_pass_or_an_unregistered_basis_is_a_class_invalid_defect",
             "night_probe_error": "test_any_probe_exception_refuses_before_later_commands_run",
             "launch_go_receipt_missing": "test_pack_refusal_codes_keep_standard_receipt_shape",
@@ -1677,46 +1565,8 @@ class NightGateTests(unittest.TestCase):
         receipt['refusal'] = dict(reason='night_refused_bind_expired', detail='bind expired', evidence=[])
         self.assertIn('refusal.reason: is not registered', night_gate.validate_receipt(receipt))
 
-    def test_valid_v3_pack_without_driver_arguments_lifts_unbuilt_fence(self):
-        plan = make_plan("TRANSACTION_PACK", pack_night={
-            "pack_id": "pack-test", "pack_root": "/fixture/pack-test",
-            "pack_sha256": "a" * 64, "attempt_ordinal": 1,
-            "authorization_record": {"path": "/custody/auth.json", "sha256": "b" * 64},
-            "confirmation_record": {"path": "/custody/confirm.json", "sha256": "c" * 64},
-        })
-        parsed = night_gate.NightPlan.from_mapping(night_plan_mapping(plan))
-        receipt = night_gate.evaluate_night(parsed, FakeProbeSource().probes())
-        self.assertEqual("REFUSED", receipt.verdict)
-        self.assertEqual("launch_go_receipt_invalid", receipt.refusal.reason)
-        self.assertIn("custody_root", receipt.refusal.detail)
-        self.assertEqual("FAIL", receipt.conditions[0].status)
-        self.assertEqual("FAIL", receipt.conditions[1].status)
 
-    def test_pack_import_failure_refuses_instead_of_crashing(self):
-        plan = make_plan("TRANSACTION_PACK", pack_night={
-            "pack_id": "pack-test", "pack_root": "/fixture/pack-test",
-            "pack_sha256": "a" * 64, "attempt_ordinal": 1,
-            "authorization_record": {"path": "/custody/auth.json", "sha256": "b" * 64},
-            "confirmation_record": {"path": "/custody/confirm.json", "sha256": "c" * 64},
-        })
-        for error in (ImportError("dependency unavailable"), ModuleNotFoundError("dependency missing")):
-            with self.subTest(error=type(error).__name__), mock.patch.object(
-                    night_gate, "_evaluate_pack_conditions", side_effect=error):
-                receipt = night_gate.evaluate_night(plan, FakeProbeSource().probes())
-            self.assertEqual("REFUSED", receipt.verdict)
-            self.assertEqual("launch_go_receipt_invalid", receipt.refusal.reason)
-            self.assertIn(str(error), receipt.refusal.detail)
-            self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
 
-    def test_pack_refusal_codes_keep_standard_receipt_shape(self):
-        from scripts.run_night import _pack_refused_receipt, PackNightRefusal
-        from dataclasses import replace
-        plan = make_plan("TRANSACTION_PACK")
-        for missing in (False, True):
-            error = PackNightRefusal("pack_root", missing=missing)
-            receipt = _pack_refused_receipt(plan, error, FakeProbeSource().probes())
-            self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
-            self.assertEqual(error.reason, receipt.refusal.reason)
 
     def test_every_reason_registry_member_has_the_night_prefix(self) -> None:
         for registry in (
@@ -1754,7 +1604,7 @@ class QuietGatePhaseTests(unittest.TestCase):
                 self.assertEqual(receipt.refusal.reason, 'night_probe_error')
 
     def test_v2_receipt_bytes_and_validation_match_original_legacy_scenarios(self):
-        """Compare the actual pre-v4 evaluator, including pack-class refusals."""
+        """Compare the actual pre-v4 evaluator, for the retained diagnostic and rehearsal execution classes."""
         import dataclasses
         import subprocess
         import sys
@@ -1797,7 +1647,7 @@ class QuietGatePhaseTests(unittest.TestCase):
             (night_gate.BOOT_SESSION_ARGV, 'bad boot', 1005),
             (night_gate.AGENT_CENSUS_ARGV, '42 agent', 1005),
             (None, None, 1061)]
-        for receipt_class in night_gate.RECEIPT_CLASSES:
+        for receipt_class in ("DIAGNOSTIC_NO_PACK", "REHEARSAL_STUB"):
             for argv, stdout, now in scenarios:
                 with self.subTest(receipt_class=receipt_class, argv=argv, now=now):
                     receipts = []

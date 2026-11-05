@@ -1,6 +1,7 @@
 """Production-pack preparation coverage for D-117 CONTRAST v5."""
 
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import copy
 import hashlib
@@ -118,7 +119,7 @@ def load_generator():
     spec = importlib.util.spec_from_file_location("d117_contrast_v5_pack", GENERATOR)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    exec_archived_generator(spec.loader, module)
     return module
 
 

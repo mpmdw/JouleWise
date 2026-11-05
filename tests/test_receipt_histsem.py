@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 from tests import evidence_factory
 
 import copy
@@ -965,7 +966,7 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         if spec is None or spec.loader is None:
             raise AssertionError("cannot load refresh lane")
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        exec_archived_generator(spec.loader, module)
         return module
 
     def test_refresh_lane_interface_is_exact_and_has_no_network_or_git_writes(
@@ -2023,7 +2024,7 @@ def load_v4_builder():
         "build_v4_histsem_pinset", ROOT / "scripts/build_v4_histsem_pinset.py"
     )
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    exec_archived_generator(spec.loader, module)
     return module
 
 

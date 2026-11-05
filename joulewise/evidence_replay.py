@@ -1336,7 +1336,7 @@ def _recorded_generator_check(
     )
     try:
         completed = subprocess.run(
-            command,
+            _stored_generator_check_command(command),
             cwd=context.repository,
             check=False,
             capture_output=True,
@@ -1438,6 +1438,14 @@ _ANCHOR_ARCHIVE_TIMEOUT_SECONDS = 300
 # names are forwarded, and PATH is replaced outright.
 _GENERATOR_ENVIRONMENT_ALLOWLIST = ("HOME", "TMPDIR", "LANG", "LC_ALL")
 _GENERATOR_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+
+
+def _stored_generator_check_command(command):
+    """Adapt execution only; recorded relative argv retains its byte contract."""
+    if "--check" not in command:
+        raise ValueError("stored generator replay requires --check")
+    wrapper = str(Path(__file__).resolve().parents[1] / "scripts/check_stored_generator.py")
+    return [*command[:3], wrapper, *command[3:]]
 
 
 def _generator_command(
@@ -1895,7 +1903,7 @@ def _recorded_projected_pack_authentication(
         )
         try:
             completed = subprocess.run(
-                command,
+                _stored_generator_check_command(command),
                 cwd=anchored,
                 check=False,
                 capture_output=True,

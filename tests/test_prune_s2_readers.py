@@ -45,6 +45,43 @@ class ReaderEquivalenceTests(unittest.TestCase):
                 self.assertEqual(readers.gnu_sidecar(readers.sha256_bytes(old), "receipt.json"),
                                  self.baseline.gnu_sidecar(self.baseline.sha256_bytes(old), "receipt.json"))
 
+    def test_archived_import_binds_only_readers_and_is_removed(self):
+        from joulewise.stored_generator import historical_reader_imports
+        name = "joulewise.arm_readiness"
+        self.assertNotIn(name, sys.modules)
+        with historical_reader_imports():
+            self.assertIs(sys.modules[name], readers)
+            for issuer in ("generate_arm_receipt", "generate_freeze_receipt",
+                           "generate_dry_run_receipt", "_consume_launch_capability"):
+                self.assertFalse(hasattr(sys.modules[name], issuer))
+        self.assertNotIn(name, sys.modules)
+
+    def test_generator_execution_adapter_preserves_recorded_argv(self):
+        from joulewise import evidence_replay
+        command = evidence_replay._generator_command("/synthetic/generate_configs.py")
+        self.assertEqual(command, [sys.executable, "-I", "-B",
+                                   "/synthetic/generate_configs.py", "--check"])
+        adapted = evidence_replay._stored_generator_check_command(command)
+        self.assertEqual(adapted[:3], command[:3])
+        self.assertTrue(adapted[3].endswith("scripts/check_stored_generator.py"))
+        self.assertEqual(adapted[4:], command[3:])
+
+    def test_archived_imports_restore_names_after_parallel_and_nested_loads(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import joulewise
+        from joulewise.stored_generator import historical_reader_imports
+
+        def load(_):
+            with historical_reader_imports():
+                with historical_reader_imports():
+                    from joulewise.arm_readiness import render_json
+                    return render_json({"reader": True})
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(list(pool.map(load, range(8))), [readers.render_json({"reader": True})] * 8)
+        self.assertNotIn("joulewise.arm_readiness", sys.modules)
+        self.assertNotIn("arm_readiness", vars(joulewise))
+
     def test_json_rejection_and_canonical_policy(self):
         for raw in (b'{"x":1,"x":2}', b'{"x":NaN}', b'{"x":1e999}', b'\xff',
                     b'{"x": 1}', b'{"x":1}\n'):

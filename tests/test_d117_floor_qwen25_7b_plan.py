@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import hashlib
 import importlib.util
@@ -56,7 +57,7 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 _PREVIOUS_DONT_WRITE_BYTECODE = sys.dont_write_bytecode
 sys.dont_write_bytecode = True
 try:
-    GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+    exec_archived_generator(GENERATOR_SPEC.loader, GENERATOR_MODULE)
 finally:
     sys.dont_write_bytecode = _PREVIOUS_DONT_WRITE_BYTECODE
 OLD_PACK = REPO_ROOT / "configs/campaigns/qwen25_7b_decode_floor_v1"
@@ -593,7 +594,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         )
         assert spec is not None and spec.loader is not None
         generator_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(generator_module)
+        exec_archived_generator(spec.loader, generator_module)
         successor = generator_module.GenerationIdentity(
             pack_id="d117_floor_qwen25_7b_v2",
             family_suffix="_v2",
