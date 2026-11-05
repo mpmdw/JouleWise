@@ -15,6 +15,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 TOLERANCES = {"fp32": dict(atol=2e-5, rtol=2e-4), "bf16": dict(atol=.004, rtol=.02)}
+# Prospective bounds for deterministic tiny-model logits; not observed results.
+QUANTIZED_TOLERANCES = {
+    "mixed": dict(atol=.04, rtol=.15, rmse=.012),
+    "maxfit": dict(atol=.008, rtol=.03, rmse=.002),
+    "maxfit5": dict(atol=.016, rtol=.06, rmse=.004),
+}
 
 
 def run(command, timeout=60):
@@ -27,7 +33,60 @@ def run(command, timeout=60):
     return result.stdout
 
 
-def mlx_checks(directory, dtype, quantized=False):
+def check_maxfit_storage(model, reference, path, profile):
+    """Check both serialized headers and loaded native weights, exhaustively."""
+    import numpy as np
+    import mlx.core as mx
+    from mlx.utils import tree_flatten
+    from joulewise.align.models.qwen4_exp_tables import MAXFIT_BITS, parameter_shapes
+    from scripts.align_convert_qwen4_exp import tensor_header
+    config = json.loads((path / "config.json").read_text())
+    index = json.loads((path / "model.safetensors.index.json").read_text())["weight_map"]
+    shapes = parameter_shapes(config)
+    params = dict(tree_flatten(model.parameters()))
+    baseline = dict(tree_flatten(reference.parameters()))
+    expected_params, expert_modules = set(), set()
+    for key, shape in shapes.items():
+        if ".ngram_embedding." in key:
+            continue
+        expected_params.add(key)
+        if ".switch_mlp." in key:
+            base = key[:-len("weight")]
+            expected_params.update((base + "scales", base + "biases"))
+            expert_modules.add(key[:-len(".weight")])
+            header, _ = tensor_header(path / index[key])
+            if header[key]["dtype"] != "U32" or header[key]["shape"] != [*shape[:-1], shape[-1] * MAXFIT_BITS[profile] // 32]:
+                raise AssertionError(f"Wrong packed expert storage: {key}")
+            for suffix in ("scales", "biases"):
+                value = params[base + suffix]
+                if value.dtype != mx.bfloat16 or value.shape != (*shape[:-1], shape[-1] // 64):
+                    raise AssertionError(f"Wrong bf16 expert metadata: {base + suffix}")
+            if params[key].dtype != mx.uint32:
+                raise AssertionError(f"Expert weight is not packed: {key}")
+        else:
+            header, _ = tensor_header(path / index[key])
+            if header[key]["dtype"] != "BF16" or params[key].dtype != mx.bfloat16:
+                raise AssertionError(f"Non-expert weight is not native bf16: {key}")
+            np.testing.assert_array_equal(np.array(params[key].view(mx.uint16)),
+                                          np.array(baseline[key].view(mx.uint16)), err_msg=key)
+    if set(params) != expected_params or set(index) != expected_params:
+        raise AssertionError("Maxfit parameter inventory mismatch")
+    records = {k: v for k, v in config["quantization"].items() if k not in ("bits", "group_size", "mode")}
+    expected_quant = dict(bits=MAXFIT_BITS[profile], group_size=64, mode="affine")
+    if records != {k: expected_quant for k in expert_modules}:
+        raise AssertionError("Quantization config must name every expert and no other module")
+    modules = dict(model.named_modules())
+    for name in expert_modules:
+        if modules[name].bits != MAXFIT_BITS[profile] or modules[name].group_size != 64:
+            raise AssertionError(f"Wrong loaded native expert precision: {name}")
+    for descriptor in config["ple_tables"].values():
+        if descriptor["storage"] != "bf16":
+            raise AssertionError("Maxfit PLE disk storage must be bf16")
+        if (path / descriptor["path"]).stat().st_size != descriptor["rows"] * descriptor["dim"] * 2:
+            raise AssertionError("Maxfit PLE disk length mismatch")
+
+
+def mlx_checks(directory, dtype, profile=None):
     import numpy as np
     import mlx.core as mx
     from mlx_lm.utils import load_model
@@ -37,12 +96,13 @@ def mlx_checks(directory, dtype, quantized=False):
     gold = np.load(directory / "gold.npz")
     ids = gold["ids"].astype(np.int32)
     path = directory / "mlx"
+    quantized = profile is not None
     if quantized:
-        path = directory / "mixed"
-        convert(directory / "hf", path, "mixed", 32, "q4")
+        path = directory / profile
+        convert(directory / "hf", path, profile, 64 if profile.startswith("maxfit") else 32)
     model, _ = load_verified_model(path, sha256(path / "manifest.json"))
     model.eval()
-    evidence = dict(dtype=dtype, quantized=quantized, checks=[])
+    evidence = dict(dtype=dtype, quantized=quantized, profile=profile, checks=[])
     tol = TOLERANCES[dtype]
 
     def array(value):
@@ -59,10 +119,14 @@ def mlx_checks(directory, dtype, quantized=False):
     if quantized:
         reference, _ = load_model(directory / "mlx", strict=True)
         baseline = array(reference(inputs))
-        close("mixed_vs_bf16", full, baseline, dict(atol=.04, rtol=.15))
+        bounds = QUANTIZED_TOLERANCES[profile]
+        close(profile + "_vs_bf16", full, baseline, {k: bounds[k] for k in ("atol", "rtol")})
         rmse = float(np.sqrt(np.mean((full - baseline) ** 2)))
-        if rmse > .012:
-            raise AssertionError(f"Quantization RMSE {rmse} > .012")
+        if not np.isfinite(rmse) or rmse > bounds["rmse"]:
+            raise AssertionError(f"Quantization RMSE {rmse} > {bounds['rmse']}")
+        if profile.startswith("maxfit"):
+            check_maxfit_storage(model, reference, path, profile)
+            evidence["checks"].append(dict(name="all_non_experts_bf16_exact_and_experts_packed"))
         # Quantization must leave the indexer present and unquantized.
         indexer = model.layers[1].self_attn.indexer.index_qk_proj
         if hasattr(indexer, "scales"):
@@ -101,7 +165,7 @@ def mlx_checks(directory, dtype, quantized=False):
     # Snapshot/restore all recurrent and PLE state through native disk cache API.
     cache = model.make_cache()
     array(model(inputs[:, :6], cache=cache))
-    snapshot = directory / ("mixed-cache.safetensors" if quantized else "cache.safetensors")
+    snapshot = directory / (profile + "-cache.safetensors" if quantized else "cache.safetensors")
     api.save_prompt_cache(str(snapshot), cache, metadata={"purpose": "synthetic parity"})
     restored = api.load_prompt_cache(str(snapshot))
     suffix = array(model(inputs[:, 6:], cache=cache))
@@ -185,10 +249,18 @@ class TestGoldParity(unittest.TestCase):
         self.require_mlx()
         print(run([self.mlx, "-B", __file__, "--mlx-worker", str(self.root / "bf16"), "bf16", "mixed"]))
 
+    def test_maxfit_quantization(self):
+        self.require_mlx()
+        print(run([self.mlx, "-B", __file__, "--mlx-worker", str(self.root / "bf16"), "bf16", "maxfit"]))
+
+    def test_maxfit5_quantization(self):
+        self.require_mlx()
+        print(run([self.mlx, "-B", __file__, "--mlx-worker", str(self.root / "bf16"), "bf16", "maxfit5"]))
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--mlx-worker":
         sys.path.insert(0, str(ROOT))
-        mlx_checks(sys.argv[2], sys.argv[3], len(sys.argv) > 4)
+        mlx_checks(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     else:
         unittest.main()

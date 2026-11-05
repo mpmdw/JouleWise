@@ -83,3 +83,35 @@ only gathered rows to fp32 for transfer to MLX.
 
 The 102.4 GB release table was not materialized or read here. Bounded behavior
 is demonstrated on synthetic shards; native target-Mac performance remains open.
+
+## Item 4 — native precision and numerical gates
+
+Extended the split-interpreter parity suite with independent maxfit and
+maxfit5 native workers. They convert the deterministic tiny HF bf16 model,
+load through the pinned/verified native loader, and compare full logits to
+the unquantized MLX bf16 baseline. Prospective acceptance bounds:
+
+| Profile | Absolute tolerance | Relative tolerance | Maximum logit RMSE |
+|---|---:|---:|---:|
+| maxfit | .008 | .03 | .002 |
+| maxfit5 | .016 | .06 | .004 |
+
+Each native worker also checks exhaustive serialized/loaded inventories,
+every non-expert's bf16 dtype and bitwise equality to baseline, expert uint32
+packing/shapes, bf16 scales/biases, module bits/group size, expert-only
+quantization records, and bf16 PLE file lengths. Existing cached/chunked,
+causal, padded, snapshot/restore and indexer-retention gates run for both new
+profiles. Missing MLX imports/devices skip explicitly through the existing
+isolated capability probe; numerical failures never skip.
+
+Offline reference interpreter with `JW_QWEN_REF_PYTHON` set to itself and
+`JW_QWEN_MLX_PYTHON=/opt/homebrew/bin/python3.13` (no MLX): `-B -m unittest
+tests.align.test_qwen4_exp_parity`: **2 PASS / 5 SKIP**, 11.703 s. HF reference
+prefill/stepwise max absolute errors: fp32 7.450580596923828e-08; bf16 0.0.
+The five native workers, including both maxfit tests, remain **NOT VALIDATED**.
+No MLX inference/quantization or CPU fallback was attempted in this sandbox.
+
+The lead must rerun `tests.align.test_qwen4_exp_parity` on a Metal-capable
+machine with native mlx 0.31.2 / mlx-lm 0.31.3 and the reference interpreter
+set separately if required. The new bounds have not been calibrated against
+native observations; treat a failing gate as an unresolved finding.
