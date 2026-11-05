@@ -107,7 +107,7 @@ setopt extendedglob
 # Admission guard: argument is the maximum NEXT additional allocation in bytes.
 # Long-running writers also need the continuous floor enforcement above.
 jw_disk_check() {
-  python3.13 -B - "${1:-0}" <<'PY'
+  python3.13 -I -B - "${1:-0}" <<'PY'
 import os, sys
 s = os.statvfs('/System/Volumes/Data')
 free = s.f_bavail * s.f_frsize
@@ -434,100 +434,25 @@ Set its hydration/staging byte ceiling from the recorded archive length
 before calling `jw_disk_check`; do not inherit another root's budget.
 The packaging commands below are for a **new** offload only.
 
-Use the following **new operation-local helper**, saved verbatim as
-`$JW_OP/manifest.py`. It never interprets data. It records regular-file bytes,
-empty directories and symlink targets without following links; rejects special
-files, real restricted directories and duplicate/unsafe archive members.
-Any error is a STOP. Hashes alone do not preserve filesystem-specific metadata:
-before packaging, Ed must establish that resource forks, ACLs, extended
-attributes, sparse layout and hardlink topology are not required for this
-root. Otherwise retain it and use a metadata-preserving archival method with
-an independently verified restore. The pilot tar flags intentionally omit
-AppleDouble/xattrs; do not silently apply them to arbitrary personal files.
+Use the reviewed stdlib program `scripts/align_offload_delete_root.py` for
+opaque-byte inventories and deletion. Copy the reviewed bytes once; preserve
+and check its digest at every resume. This helper refuses dataless files
+before opening them, hardlinks, special files, nested filesystems, unsafe
+members and literal blinded directory names. It does not implement the full
+block-5 restricted path map: only the authorized custody operator may run it
+on roots cleared by that map. Agents never read real blinded manifests.
 
 ```zsh
-cat > "$JW_OP/manifest.py" <<'PY'
-import hashlib, json, os, stat, sys, tarfile
-from pathlib import Path, PurePosixPath
-
-def digest(stream):
-    h = hashlib.sha256()
-    for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
-        h.update(chunk)
-    return h.hexdigest()
-
-def safe(name):
-    p = PurePosixPath(name)
-    if p.is_absolute() or '..' in p.parts or 'restricted' in p.parts:
-        raise ValueError('unsafe or restricted path')
-    return p.as_posix()
-
-def tree(root):
-    root = Path(os.path.abspath(root))
-    safe(str(root).lstrip('/'))
-    if root.is_symlink() or not root.is_dir() or root.resolve() != root:
-        raise ValueError('root must be a real directory, without symlink ancestors')
-    rows = []
-    device = root.stat().st_dev
-    def walk(directory):
-        for p in sorted(directory.iterdir(), key=lambda x: x.name):
-            name = safe(p.relative_to(root).as_posix())
-            s = p.lstat()
-            if s.st_dev != device:
-                raise ValueError('nested filesystem: inventory separately')
-            mode = stat.S_IMODE(s.st_mode)
-            if stat.S_ISLNK(s.st_mode):
-                rows.append([name, 'link', mode, os.readlink(p)])
-            elif stat.S_ISDIR(s.st_mode):
-                rows.append([name, 'dir', mode])
-                walk(p)
-            elif stat.S_ISREG(s.st_mode):
-                with p.open('rb') as f:
-                    sha = digest(f)
-                after = p.lstat()
-                if (s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns) != (
-                    after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
-                    raise ValueError('source changed while hashing')
-                rows.append([name, 'file', mode, s.st_size, sha])
-            else:
-                raise ValueError('special file: retain and resolve')
-    walk(root)
-    return sorted(rows)
-
-def archive():
-    rows, seen = [], set()
-    with tarfile.open(fileobj=sys.stdin.buffer, mode='r|') as tf:
-        for m in tf:
-            name = safe(m.name)
-            if name == '.' and m.isdir():
-                continue
-            if name in seen:
-                raise ValueError('duplicate member')
-            seen.add(name)
-            mode = stat.S_IMODE(m.mode)
-            if m.issym():
-                rows.append([name, 'link', mode, m.linkname])
-            elif m.isdir():
-                rows.append([name, 'dir', mode])
-            elif m.isfile():
-                with tf.extractfile(m) as f:
-                    sha = digest(f)
-                rows.append([name, 'file', mode, m.size, sha])
-            else:
-                raise ValueError('unsupported archive member; retain source')
-    return sorted(rows)
-
-if sys.argv[1] == 'tree':
-    result = tree(sys.argv[2])
-elif sys.argv[1] == 'archive':
-    result = archive()
-else:
-    raise ValueError('tree ROOT or archive < uncompressed.tar')
-json.dump(result, sys.stdout, ensure_ascii=True, separators=(',', ':'))
-sys.stdout.write('\n')
-PY
+cp -p "$JW_CANON/scripts/align_offload_delete_root.py" "$JW_OP/manifest.py"
 shasum -a 256 "$JW_OP/manifest.py" > "$JW_OP/manifest-helper.sha256"
 ```
+
+Hashes do not preserve resource forks, ACLs, xattrs or sparse/hardlink topology.
+Ed must establish those are unnecessary before using the tar flags below;
+otherwise keep the root and obtain a reviewed metadata-preserving method.
+Hardlinks are refused even when two file names hold identical bytes. The
+BYTES helper de-duplicates by inode, so this may make an entire pilot ineligible;
+do not split or silently discard links to get past the guard.
 
 For each reviewed CLOSED leaf, fill variables from its inventory row. No
 source may equal/contain/be contained by a KEEP entry; no ancestor root
@@ -542,19 +467,19 @@ copy of its target (especially HF blobs and `.venv`).
 export JW_SRC JW_ID
 export JW_ITEM="$JW_OP/$JW_ID"
 mkdir "$JW_ITEM"
-python3.13 -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source.json"
+python3.13 -I -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source.json"
 shasum -a 256 "$JW_ITEM/source.json" > "$JW_ITEM/source.sha256"
 printf '%s\n' "$JW_SRC" > "$JW_ITEM/source-path.txt"
 test ! -e "$JW_REMOTE/$JW_ID.tar.zst"
-: "${JW_ARCHIVE_BUDGET_BYTES:?Set archive plus staging upper bound from manifest}"
+export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/manifest.py" budget "$JW_ITEM/source.json")"
 jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
 COPYFILE_DISABLE=1 /usr/bin/tar --no-mac-metadata --no-xattrs -cf - \
   -C "$JW_SRC" . | zstd -T1 -3 -o "$JW_REMOTE/$JW_ID.tar.zst.partial"
 mv "$JW_REMOTE/$JW_ID.tar.zst.partial" "$JW_REMOTE/$JW_ID.tar.zst"
 zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
-  python3.13 -B "$JW_OP/manifest.py" archive > "$JW_ITEM/cloud-local.json"
+  python3.13 -I -B "$JW_OP/manifest.py" archive > "$JW_ITEM/cloud-local.json"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-local.json"
-python3.13 -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source-after.json"
+python3.13 -I -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source-after.json"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/source-after.json"
 shasum -a 256 "$JW_REMOTE/$JW_ID.tar.zst" > "$JW_ITEM/archive.sha256"
 cp -p "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
@@ -603,7 +528,7 @@ jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
 cmp "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
 shasum -a 256 -c "$JW_ITEM/archive.sha256"
 zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
-  python3.13 -B "$JW_OP/manifest.py" archive > "$JW_ITEM/cloud-roundtrip.json"
+  python3.13 -I -B "$JW_OP/manifest.py" archive > "$JW_ITEM/cloud-roundtrip.json"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-roundtrip.json"
 jw_disk_check
 ```
@@ -643,12 +568,12 @@ shasum -a 256 "$JW_SECOND_ARCHIVE"
 # Manually compare with archive.sha256 whose digest was anchored on the MBP.
 shasum -a 256 "$JW_SECOND_HELPER"
 # Compare with manifest-helper.sha256 from the MBP journal too.
-zstd -dc "$JW_SECOND_ARCHIVE" | python3.13 -B "$JW_SECOND_HELPER" archive \
+zstd -dc "$JW_SECOND_ARCHIVE" | python3.13 -I -B "$JW_SECOND_HELPER" archive \
   > "$JW_SECOND_ARCHIVE.members.json"
 cmp "$JW_SECOND_MANIFEST" "$JW_SECOND_ARCHIVE.members.json"
 mkdir -m 700 "$JW_SECOND_RESTORE"
 zstd -dc "$JW_SECOND_ARCHIVE" | /usr/bin/tar -xpf - -C "$JW_SECOND_RESTORE"
-python3.13 -B "$JW_SECOND_HELPER" tree "$JW_SECOND_RESTORE" \
+python3.13 -I -B "$JW_SECOND_HELPER" tree "$JW_SECOND_RESTORE" \
   > "$JW_SECOND_ARCHIVE.restored.json"
 cmp "$JW_SECOND_MANIFEST" "$JW_SECOND_ARCHIVE.restored.json"
 ```
@@ -671,54 +596,46 @@ current launchd pause **immediately before** each deletion. First deletion
 requires Ed's YES against that manifest (standing offload authority in
 `TASK_QUEUE.md:843`); this brief's broad approval does not authenticate bytes.
 
+Before approval, save `$JW_ITEM/retention-review.json` with exactly these
+keys: `source` (exact source path), `manifest_sha256`, `archive_sha256`, and
+`no_retained_ledger_locators: true`. The authorized custody operator supplies
+this structure-only ruling from the locator census; agents do not open the
+ledger. Both `independent-receipt.txt` and `ed-approval.txt` must contain the
+exact source path, source-manifest SHA-256 **and archive SHA-256** for this
+item. An unrelated receipt cannot authorize deletion.
+
 ```zsh
-# Ed only. JW_SRC/JW_ID still name the ONE reviewed CLOSED root from step 6.
-test "$(cat "$JW_ITEM/source-path.txt")" = "$JW_SRC"
-test -s "$JW_ITEM/independent-receipt.txt"
-test -s "$JW_ITEM/ed-approval.txt"
-# Approval files name the source and manifest digest. For replaceable data,
-# independent-receipt.txt contains the pinned restore evidence instead.
-python3.13 -B - <<'PY'
-import os
-from pathlib import Path
-src = Path(os.environ['JW_SRC'])
-op = Path(os.environ['JW_OP'])
-assert src.is_absolute() and src == src.resolve() and not src.is_symlink()
-assert src not in (Path('/'), Path('/Users'), Path('/Users/edr'))
-lines = (op / 'KEEP.txt').read_text().splitlines()
-assert lines and all(x.startswith('/') for x in lines)
-for line in lines:
-    keep = Path(line)
-    assert src != keep and src not in keep.parents and keep not in src.parents, \
-        'KEEP overlap: '+line
-assert op != src and src not in op.parents
-PY
-python3.13 -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/predelete.json"
-cmp "$JW_ITEM/source.json" "$JW_ITEM/predelete.json"
-cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-roundtrip.json"
-# STOP: record Ed's YES, independent receipt and KEEP/dependency review first.
-printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$JW_SRC" \
-  "$(shasum -a 256 "$JW_ITEM/source.json")" 'DELETE_AUTHORIZED; see receipts' \
-  >> "$JW_OP/deletions.tsv"
-/bin/rm -rf -- "$JW_SRC"
-test ! -e "$JW_SRC"
-printf '%s\n' "archive=$JW_REMOTE/$JW_ID.tar.zst" \
-  "manifest=$JW_REMOTE/$JW_ID.manifest.json" \
-  "manifest_sha256=$(shasum -a 256 "$JW_ITEM/source.json")" \
-  "independent_receipt=$JW_ITEM/independent-receipt.txt" \
-  > "$JW_SRC.OFFLOADED.txt"
-printf '%s\t%s\tDELETED\n' "$(date -u +%FT%TZ)" "$JW_SRC" \
-  >> "$JW_OP/deletions.tsv"
-/bin/df -k /System/Volumes/Data >> "$JW_OP/df-after-each.txt"
+# Ed only; a single fail-closed program owns every check and the deletion.
+shasum -a 256 -c "$JW_OP/manifest-helper.sha256"
+python3.13 -I -B "$JW_OP/manifest.py" delete \
+  --item "$JW_ITEM" --keep "$JW_OP/KEEP.txt" --remote "$JW_REMOTE" \
+  --journal "$JW_OP/deletions.tsv"
 jw_disk_check
 ```
 
-The independent receipt must actually be saved at the pointer's stated path;
-for replaceable data write its reviewed pinned-revision/restore evidence there
-instead. Keep local pointers, manifests and receipts. Back up the journal and
-verify its own cloud and independent copies. The source manifest remains
-immutable after authorization. A failed/partial deletion is logged as such and
-resolved against that manifest; never declare completion because `rm` started.
+The program reads `source-path.txt`; shell `JW_SRC` cannot redirect it. It
+requires all mandatory KEEP entries to exist and compares device/inode identity
+of the source and KEEP entries through their ancestors (including APFS case
+aliases). Symlink ancestors, `..`, noncanonical spelling and whitespace refuse.
+The only source classes are exact `pilot-v*-*` children of
+`/Users/edr/night-align` or exact paths in the lead-reviewed
+`$JW_OP/approved-models.txt`; KEEP still overrides that list. Pilot 9's
+`pilot-v8-*` and every capture-bearing tree refuse. Model deletion under
+`jw_models` or the shared HF cache is therefore unavailable in this pause.
+
+All source/cloud/round-trip digests, both bound receipts, retention review,
+file flags and ACLs must pass; `fileproviderctl evaluate` must freshly report
+`isUploaded=1` for both cloud objects immediately before deletion. Any
+preflight failure exits nonzero with **no deletion** and a
+`REFUSED_NO_DELETE` TSV row. The program checks writable directories and
+pre-stages the pointer before calling `shutil.rmtree`, then publishes
+`$JW_SRC.OFFLOADED.json` and `DELETE_AUTHORIZED`/`DELETED` TSV rows. A later
+OS/I/O failure can still cause partial removal: `FAILED_PARTIAL` is recorded,
+and the `.pending` pointer retains recovery coordinates. STOP and resolve
+against the original manifest; never report it as completed. This is not a
+filesystem transaction and requires the proved no-writer pause throughout.
+Keep local pointers, immutable manifests and receipts, and verify cloud plus
+independent copies of the operation journal.
 
 Explicitly evict only the verified uploaded tar after independent verification
 to reclaim its local staging bytes; do not delete the cloud object:
