@@ -137,7 +137,8 @@ class ThermalSession:
     time advances. status_reader returns observed os_level / pm_state, plus
     their optional source stamps; it may be bound by an ALIGN launch adapter.
     With no callback a bundle-local outputs/align_thermal_status.json supplies
-    {os_level, pm_state, monotonic_ns}. No path in the episode spec is followed.
+    {os_level, pm_state, pm_observed_ns, monotonic_ns}.
+    No path in the episode spec is followed.
     """
     def __init__(self, policy, clock, context=None, *, reader=None, status_reader=None):
         self.policy = validate_policy(policy)
@@ -221,7 +222,10 @@ class ThermalSession:
                           'source_member': member, 'span_ns': [now - 60 * NS, now]}
 
     def wait(self, kind, *, turn=0, token_count=None, deadman=None, defer_resume=False):
-        """G0 proceeds on timeout; callers stop on any G1/H non-release."""
+        """G0 proceeds on timeout; unobserved gates wait then proceed with X4.
+
+        G1/H stop only on an actual timeout or the member deadman.
+        """
         if kind not in ('G0', 'G1', 'H'):
             raise ValueError('unknown thermal gate')
         entry = self.clock.stamp()
@@ -251,21 +255,28 @@ class ThermalSession:
                     if len(good_slots) < .90 * expected:
                         unobserved = True
                     slope = slow_slope(rows, now, slow)
-                    if latest is not None and latest['monotonic_ns'] != last_ns:
-                        continuous = last_ns is None or 0 < latest['monotonic_ns'] - last_ns <= 2 * NS
-                        last_ns = latest['monotonic_ns']
+                    # Consume every queued observation in order. Checking only
+                    # the last row can hide an intervening out-of-band sample.
+                    new_rows = (rows[-1:] if last_ns is None else
+                                [r for r in rows if r['monotonic_ns'] > last_ns])
+                    for sample in new_rows:
+                        continuous = last_ns is None or 0 < sample['monotonic_ns'] - last_ns <= 2 * NS
+                        last_ns = sample['monotonic_ns']
                         good = (not unobserved and continuous and 0 <= now - last_ns <= 2 * NS
-                                and all(temperature.valid_value(k, latest['sensors'].get(k)) for k in (fast, slow))
-                                and latest['sensors'][fast] <= reference['fast_c'] + self.policy['delta_fast_c']
-                                and latest['sensors'][slow] <= reference['slow_c'] + self.policy['delta_slow_c'])
+                                and all(temperature.valid_value(k, sample['sensors'].get(k)) for k in (fast, slow))
+                                and sample['sensors'][fast] <= reference['fast_c'] + self.policy['delta_fast_c']
+                                and sample['sensors'][slow] <= reference['slow_c'] + self.policy['delta_slow_c'])
                         if kind == 'G0':
-                            status = latest['status']
-                            good = (good and slope is not None and abs(slope) <= .2
-                                    and status.get('os_level') == 0 and status.get('pm_state') == 'Nominal')
+                            status = sample['status']
+                            pm_ns = status.get('pm_observed_ns')
+                            sample_slope = slow_slope(rows, last_ns, slow)
+                            good = (good and sample_slope is not None and abs(sample_slope) <= .2
+                                    and status.get('os_level') == 0 and status.get('pm_state') == 'Nominal'
+                                    and type(pm_ns) is int and 0 <= now - pm_ns <= 2 * NS)
                         consecutive = consecutive + 1 if good else 0
-                        if consecutive >= required:
-                            release, reason = latest, 'released'
-                            break
+                    if new_rows and consecutive >= required:
+                        release, reason = new_rows[-1], 'released'
+                        break
                     if deadman is not None and deadman.expired():
                         reason = 'deadman'
                         break
@@ -305,7 +316,7 @@ class ThermalSession:
                'exit_sample_ns': values['monotonic_ns'] if values else None,
                'outcome': 'unobserved' if unobserved and reason != 'deadman' else reason}
         self.intervals.append(row)
-        if not (kind == 'H' and reason == 'released' and defer_resume):
+        if not (kind == 'H' and defer_resume and (reason == 'released' or (unobserved and reason != 'deadman'))):
             self.persist_interval(row)
         phase = 'align_thermal_hold' if kind == 'H' else 'align_thermal_gate'
         self.events.extend([RuntimeEvent(entry.epoch_s, 'phase_start', phase, kind, row),

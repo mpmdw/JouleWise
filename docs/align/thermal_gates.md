@@ -55,7 +55,7 @@ It binds this runtime to the actual telemetry adapter regardless of resolution
 order. `PowermetricsStatus` reads complete frames incrementally from that
 adapter's current capture and reads the existing OS notify bus. It launches
 no sampler or subprocess. A launcher can instead inject a status callback,
-or atomically publish `{os_level, pm_state, monotonic_ns}` to the bundle-local
+or atomically publish `{os_level, pm_state, pm_observed_ns, monotonic_ns}` to the bundle-local
 `outputs/align_thermal_status.json` (read only while at most 2 seconds old).
 No path stored in an episode spec is followed. The ordinary v3 runner does
 not select this registry: kit v4 must wire it explicitly.
@@ -71,7 +71,9 @@ errors, observed OS/PM state, and gate events. The existing window monitor's
 - G0 is after neutral warmup and before the episode stamp. Ten consecutive
   samples must satisfy both one-sided upper temperature bands, slow-sensor
   OLS slope over the preceding 60 seconds within ±0.2 °C/min, OS level 0 and
-  the last PM state Nominal. Its cap is 600 seconds; timeout flags and proceeds.
+  the last PM state Nominal with its own observation stamp at most 2 seconds
+  old. A cached Nominal from a stopped PM sampler cannot release G0.
+  Its cap is 600 seconds; timeout flags and proceeds.
 - G1 precedes chat on every admitted turn after turn 0. Five consecutive
   samples must satisfy bands referenced to that episode's G0 release values.
   The reference never changes after a turn. Cap is the configured R1 value,
@@ -81,12 +83,18 @@ errors, observed OS/PM state, and gate events. The existing window monitor's
   entry, suspended native generator arrays (including nested lookahead) are
   evaluated and the native generation stream explicitly synchronized. A native
   generator whose stream cannot be identified refuses the hold path. This drain is still owned model
-  work. The hold uses G1's fixed reference and cap. Failure stops decoding
-  and prevents tool execution from an incomplete completion.
+  work. The hold uses G1's fixed reference and cap. Timeout or deadman expiry
+  stops decoding and prevents tool execution from an incomplete completion.
 - More than 10% failed/missing sensor slots in the 60-second evaluation
   window latches a timed wait and `thermal.state_unobserved`: 300 seconds
-  for G0, or G_turn for G1/H. G0 proceeds; G1/H stop. No guessed sensor
+  for G0, or G_turn for G1/H. All proceed after this wait with X4; an actual
+  timeout or deadman still stops G1/H. No guessed sensor
   value or nominal status substitutes for an absent observation.
+
+Every queued sample is checked toward the consecutive-sample rule. A G1/H
+timeout stops model/tool work, but the retained partial transcript is scored
+for capability (X2: kept for capability). Its incomplete/excluded labels stay.
+Deadman (X7) trajectories retain their previous incomplete, unscored handling.
 
 The whole-turn token admission budget is unchanged; cooling consumes no
 decode tokens and never shortens an admitted turn's cap. Thermal members

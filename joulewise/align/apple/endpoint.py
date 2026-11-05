@@ -226,7 +226,7 @@ class _StreamObservation:
                             self.deadman_expired = True
                             break
                         hold = thermal.wait('H', turn=turn_index, token_count=count, deadman=deadman, defer_resume=True)
-                        if hold['outcome'] != 'released':
+                        if hold['outcome'] not in ('released', 'unobserved'):
                             self.thermal_aborted = True
                             self.deadman_expired = hold['outcome'] == 'deadman'
                             break

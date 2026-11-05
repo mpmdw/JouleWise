@@ -422,7 +422,7 @@ class EpisodeRuntimeAdapter:
                     event_start = len(endpoint.events)
                     if index >= 1 and self.thermal is not None and spec.thermal['per_turn']:
                         gate = self.thermal.wait('G1', turn=index, deadman=deadman)
-                        if gate['outcome'] != 'released':
+                        if gate['outcome'] not in ('released', 'unobserved'):
                             break
                     result = endpoint.chat(
                         transcript, tools=tools, max_tokens=spec.max_tokens,
@@ -538,8 +538,8 @@ class EpisodeRuntimeAdapter:
         side_success = None
         incomplete = any(f.startswith(('episode.deadman:', 'thermal.gate_timeout:', 'thermal.hold_timeout:')) for f in flags)
         if self.thermal is not None:
-            incomplete |= any(r['kind'] != 'G0' and r['outcome'] != 'released' for r in self.thermal.intervals)
-        if task is not None and not incomplete:
+            incomplete |= any(r['kind'] != 'G0' and r['outcome'] in ('timeout', 'deadman') for r in self.thermal.intervals)
+        if task is not None and not any(f.startswith('episode.deadman:') for f in flags):
             try:
                 main_score = task.score_main(transcript)
                 if main_score is not None and (

@@ -55,7 +55,7 @@ def session(*, values=None, config=None):
     clock = FakeClock()
     transport = Transport(clock, values)
     obj = ThermalSession(config or policy(), clock, reader=smc.Reader(transport),
-                         status_reader=lambda: {'os_level': 0, 'pm_state': 'Nominal'})
+                         status_reader=lambda: {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': round(obj.clock.now()*NS)})
     obj.start()
     for _ in range(60):
         clock.sleep(1)
@@ -64,6 +64,35 @@ def session(*, values=None, config=None):
 
 
 class GateTests(unittest.TestCase):
+    def test_batched_samples_cannot_skip_an_out_of_band_read(self):
+        obj, clock = session()
+        obj.wait('G0')
+        sleep = clock.sleep
+        calls = 0
+        def advance(seconds):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                sleep(seconds/2)
+                obj.reader._transport.values = lambda t: (60, 60)
+                obj.sample()
+                sleep(seconds/2)
+            else:
+                sleep(seconds)
+            obj.reader._transport.values = lambda t: (40, 40)
+            obj.sample()
+        clock.sleep = advance
+        obj.thread = object()  # advance() supplies asynchronous batches.
+        gate = obj.wait('G1', turn=1)
+        self.assertEqual(gate['outcome'], 'released')
+        self.assertEqual(gate['duration_s'], 5)
+
+    def test_g0_rejects_a_dead_pm_samplers_stale_nominal_state(self):
+        obj, clock = session()
+        obj.status_reader = lambda: {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': 0}
+        obj.sample()
+        self.assertEqual(obj.wait('G0')['outcome'], 'timeout')
+
     def test_fixed_rate_sampling_with_parse_cost_and_phase_jitter(self):
         p = policy()
         del p['window_reference']
@@ -74,7 +103,7 @@ class GateTests(unittest.TestCase):
         reader = SimpleNamespace(read=read, close=lambda: None)
         def status():
             clock.sleep(.11)  # PM parsing must not lengthen the SMC bracket.
-            return {'os_level': 0, 'pm_state': 'Nominal'}
+            return {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': round(clock.now()*NS)}
         obj = ThermalSession(p, clock, reader=reader, status_reader=status)
         obj.start()
         class Stop:
@@ -180,6 +209,22 @@ class GateTests(unittest.TestCase):
 
 
 class HoldTests(unittest.TestCase):
+    def test_unobserved_hold_is_a_timed_wait_then_decode_continues(self):
+        obj, clock = session(config=policy(heavy=True))
+        obj.wait('G0')
+        obj.reader._transport.values = lambda t: (None, 40)
+        # Dropout covers enough of the evaluation window to latch X4.
+        for _ in range(7):
+            clock.sleep(1)
+            obj.sample()
+        observation = _StreamObservation(SimpleNamespace(stream_generate=lambda: self.stream(300, clock)),
+                                         max_tokens=300, thermal=obj)
+        with patch('joulewise.align.apple.thermal.drain_decode', lambda stream: None):
+            self.assertEqual(len(list(observation.stream_generate())), 300)
+        self.assertFalse(observation.thermal_aborted)
+        self.assertIn('thermal.state_unobserved', obj.flags)
+        self.assertEqual(obj.intervals[-1]['outcome'], 'unobserved')
+
     def stream(self, n, clock):
         for i in range(n):
             clock.sleep(.001)
@@ -319,7 +364,7 @@ class HoldTests(unittest.TestCase):
 
 
 class WorkloadTests(unittest.TestCase):
-    def run_episode(self, *, fail_g1=False, g0_hot=False, long_episode=False, deadman_s=1000):
+    def run_episode(self, *, fail_g1=False, g0_hot=False, long_episode=False, deadman_s=1000, dropout=False):
         class SamplingClock(FakeClock):
             observer = None
             def sleep(self, seconds):
@@ -358,6 +403,8 @@ class WorkloadTests(unittest.TestCase):
                 clock.sleep(500)
             if fail_g1:
                 holders[0].reader._transport.values = lambda t: (60, 60)
+            if dropout:
+                holders[0].reader._transport.values = lambda t: (None, 40)
             holders[0].sample()
             return result
         adapter.runtime.run_workload = runtime_run
@@ -377,7 +424,14 @@ class WorkloadTests(unittest.TestCase):
         self.assertEqual(len(ep.turns), 1)
         self.assertIn('thermal.gate_timeout:1', ep.flags)
         self.assertEqual(result.metadata['align_episode']['stop_condition'], 'thermal.incomplete')
-        self.assertIsNone(ep.main_task_score)
+        self.assertIsNotNone(ep.main_task_score)
+
+    def test_unobserved_g1_keeps_capability_trajectory(self):
+        ep, result = self.run_episode(dropout=True)
+        self.assertGreater(len(ep.turns), 1)
+        self.assertIn('thermal.state_unobserved', ep.flags)
+        self.assertNotEqual(result.metadata['align_episode']['stop_condition'], 'thermal.incomplete')
+        self.assertIsNotNone(ep.main_task_score)
 
     def test_g0_timeout_proceeds_with_calibration_exclusion(self):
         ep, _ = self.run_episode(g0_hot=True)
@@ -479,7 +533,7 @@ class NativeIntegrationTests(unittest.TestCase):
         original_init, original_start = ThermalSession.__init__, ThermalSession.start
         def init(obj, p, c, context=None, **kwargs):
             original_init(obj, p, c, context, reader=smc.Reader(Transport(c)),
-                          status_reader=lambda: {'os_level': 0, 'pm_state': 'Nominal'})
+                          status_reader=lambda: {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': round(c.now()*NS)})
         def start(obj):
             # Seed the real prepare-to-warmup history on a fake clock only.
             # The readiness projector can construct another adapter; it does
@@ -538,7 +592,7 @@ class NativeIntegrationTests(unittest.TestCase):
             self.assertEqual([t.decode_tokens for t in ep.turns], [180, 256])
             self.assertEqual(ep.turns[-1].tool_calls, ())
             self.assertIn('thermal.hold_timeout:1', ep.flags)
-            self.assertIsNone(ep.main_task_score)
+            self.assertIsNotNone(ep.main_task_score)
             self.assertTrue(ep.hardware['token_budget']['incomplete'])
             self.assertEqual(ep.hardware['token_budget']['decode_tokens_used'], 436)
 
