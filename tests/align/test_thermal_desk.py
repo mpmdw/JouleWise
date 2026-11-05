@@ -34,6 +34,27 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def test_tolerated_thermal_exclusion_does_not_fail_included_turns_or_release_range(self):
+        valid = [member(str(i)) for i in range(3)]
+        for flag in ('thermal.os_level_nonzero', 'thermal.start_gate_timeout',
+                     'thermal.powermetrics_non_nominal'):
+            bad = member('excluded', slow=44.)
+            bad['flags'] = [flag]
+            if flag == 'thermal.os_level_nonzero':
+                bad['turn_observation'][0]['os_nominal'] = False
+                bad['registered_os_nonzero'] = True
+            elif flag == 'thermal.powermetrics_non_nominal':
+                bad['turn_observation'][0]['pm_nominal'] = False
+            else:
+                bad['intervals'] = [{'kind': 'G0', 'outcome': 'timeout'}]
+            with self.subTest(flag=flag):
+                result = desk.acceptance(valid + [bad])
+                self.assertEqual(result['U1']['thermal_excluded_members'], 1)
+                self.assertEqual(result['U1']['status'], 'pass')
+                self.assertEqual(result['U2']['status'], 'pass')
+                self.assertEqual(result['U2']['g0_slow_range_c'], 0)
+                self.assertEqual(desk.acceptance(valid + [bad, deepcopy(bad)])['U1']['status'], 'fail')
+
     def test_student_t90_critical_values_are_not_normal_intervals(self):
         for df, expected in ((1, 6.3137515148), (2, 2.9199855804), (4, 2.1318467863), (30, 1.6972608866)):
             self.assertAlmostEqual(desk.t90(df), expected, places=8)
@@ -58,8 +79,6 @@ class DeskTests(unittest.TestCase):
         self.assertEqual([result[k]['status'] for k in ('U1', 'U2', 'U3')], ['pass']*3)
         cases = [('coverage', [{'sample_fraction': .989, 'gaps_ns': []}]),
                  ('coverage', [{'sample_fraction': .99, 'gaps_ns': [[0, 2*NS+1]]}]),
-                 ('turn_observation', [{'os_nominal': False, 'pm_nominal': True, 'pm_max_gap_s': 0}]),
-                 ('turn_observation', [{'os_nominal': True, 'pm_nominal': False, 'pm_max_gap_s': 0}]),
                  ('turn_observation', [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': 1.001}])]
         for key, value in cases:
             changed = deepcopy(m)

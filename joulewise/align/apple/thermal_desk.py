@@ -426,21 +426,32 @@ def monitoring_stability(benign, *, mean_turn_j, mean_30b_turn_j, mean_episode_j
             'corr_residual_clock': _correlation([sum(r['residual_j']) for r in benign], [r.get('mean_clock_mhz') for r in benign])}
 
 
+def thermal_exclusions(member):
+    """X1–X4 only: value checks omit these; U1(b/d) still count them."""
+    reasons = [f for f in member.get('flags', ()) if f.startswith((
+        'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal',
+        'thermal.start_gate_timeout', 'thermal.gate_timeout:',
+        'thermal.hold_timeout:', 'thermal.state_unobserved'))]
+    if member.get('registered_os_nonzero') or any(t.get('os_nominal') is False for t in member.get('turn_observation', ())):
+        reasons.append('thermal.os_level_nonzero')
+    if any(t.get('pm_nominal') is False for t in member.get('turn_observation', ())):
+        reasons.append('thermal.powermetrics_non_nominal')
+    return sorted(set(reasons))
+
+
 def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
-    """One model/window; X4 omitted from value checks but counted for U1(b)."""
+    """One model/window; only included members supply U1(a)/U2 values."""
     model_ids = {r.get('model') for r in members if r.get('gated')}
     if len(model_ids) > 1:
         raise ValueError('acceptance is per model per window')
     gated = [r for r in members if r.get('gated')]
     observed = [r for r in gated if 'thermal.state_unobserved' not in r.get('flags', [])]
-    excluded = sum(any(f.startswith(('thermal.os_level_nonzero', 'thermal.start_gate_timeout',
-                                    'thermal.gate_timeout:', 'thermal.hold_timeout:', 'thermal.state_unobserved'))
-                       for f in r.get('flags', [])) or r.get('registered_os_nonzero', False)
-                   or any(t.get('pm_nominal') is False for t in r.get('turn_observation', [])) for r in gated)
-    turns = [t for r in observed for t in r['turn_observation']]
+    included = [r for r in gated if not thermal_exclusions(r)]
+    excluded = len(gated) - len(included)
+    turns = [t for r in included for t in r['turn_observation']]
     checks = []
     checks.append('pass' if excluded <= 1 else 'fail')
-    checks.append('pass' if observed and all(r.get('registered_os_observed') is True for r in observed) else 'inconclusive')
+    checks.append('pass' if included and all(r.get('registered_os_observed') is True for r in included) else 'inconclusive')
     checks.extend('inconclusive' if t[k] is None else 'pass' if t[k] else 'fail'
                   for t in turns for k in ('os_nominal', 'pm_nominal'))
     checks.extend('pass' if c['sample_fraction'] is not None and c['sample_fraction'] >= .99
@@ -456,9 +467,9 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
     checks.append('pass' if admissions and timeouts/admissions <= .02 else 'fail' if admissions else 'inconclusive')
     if not turns or not observed:
         checks.append('inconclusive')
-    slow = [r['g0_slow_c'] for r in observed if r.get('g0_slow_c') is not None]
+    slow = [r['g0_slow_c'] for r in included if r.get('g0_slow_c') is not None]
     range_c = max(slow)-min(slow) if slow else None
-    release_checks = [v['journal_verified'] for r in observed for v in r['releases']]
+    release_checks = [v['journal_verified'] for r in included for v in r['releases']]
     u2 = combine(['pass' if range_c is not None and range_c <= 3 else 'fail' if range_c is not None else 'inconclusive',
                   'pass' if release_checks and all(release_checks) else 'fail' if release_checks else 'inconclusive'])
     pair_results = [identical_pair(a, b) for a, b in pairs

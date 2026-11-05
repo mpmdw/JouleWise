@@ -118,10 +118,12 @@ window's journal must not exclude every member in that window.
 
 - U1: nominal OS/PM observations, X1–X4 member count, ≥99% successful slots,
   no SMC gap over 2 seconds, PM gaps through episode and G0, and exact timeout
-  counts/rates against turn admissions. X4 is counted in U1(b) but omitted
-  from value checks, reconciling the explicit X1–X4 count with X4's U-check
-  exclusion. The lead should retain that interpretation in protocol v4.
-- U2: ≤3 °C G0 slow-sensor range and journal-verified fixed-reference releases.
+  counts/rates against turn admissions. U1(a) uses only members with no X1–X4
+  exclusion. Excluded members still count once in U1(b), and timeouts still
+  count in U1(d); X4 is omitted from coverage/value checks. Protocol v4 must
+  state this included-member convention explicitly before registration.
+- U2: ≤3 °C G0 slow-sensor range and journal-verified fixed-reference releases,
+  using only members with no X1–X4 exclusion. A G0 timeout is not a release.
 - U3: every supplied identical-work pair, exact prompt/output IDs, energy bar
   `3*max(2.97, .0011*mean_pair_energy)` and ≤0.5% difference in active-weighted
   decode clock. Per-turn differences are diagnostic. Missing IDs are
