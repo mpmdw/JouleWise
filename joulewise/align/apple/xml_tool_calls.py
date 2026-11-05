@@ -204,7 +204,9 @@ def parse_xml_calls(
             expect("</tool_call>")
             if not _accepts(arguments, schema, schema):
                 raise ValueError("invalid_or_missing_parameters")
-            arguments_json = json.dumps(arguments, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            # Keep emitted parameter order: the template iterates the mapping.
+            # Sorting here would rewrite otherwise canonical cached call text.
+            arguments_json = json.dumps(arguments, separators=(",", ":"), allow_nan=False)
             emitted = visible[start:cursor]
             call_id = hashlib.sha256(f"{len(calls)}\0{emitted}".encode("utf-8")).hexdigest()
             calls.append(ToolCallRequest(call_id, name, arguments_json))
