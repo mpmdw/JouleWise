@@ -12,6 +12,26 @@ from scripts.align_cache_checkpoint_native import payload_projection, tiny_confi
 
 
 class CheckpointProbeTests(unittest.TestCase):
+    def test_optional_source_test_import_does_not_stat_external_home(self):
+        source = '''
+from pathlib import Path
+from unittest.mock import patch
+root = Path.cwd()
+original = Path.is_dir
+def guarded(path):
+    if str(path).startswith('/Users/edr/') and not path.is_relative_to(root):
+        raise AssertionError('external home stat: ' + str(path))
+    return original(path)
+with patch.object(Path, 'is_dir', guarded):
+    import tests.align.test_pilot4
+'''
+        root = Path(__file__).resolve().parents[2]
+        env = dict(os.environ, PYTHONPATH=str(root), PYTHONDONTWRITEBYTECODE='1')
+        env.pop('JW_ALIGN_REAL_SHADE_TEST', None)
+        result = subprocess.run([sys.executable, '-B', '-c', source], cwd=root,
+                                env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_real_configs_select_the_tested_native_families(self):
         root = Path(__file__).with_name('fixtures')
         for family, fixture, expected_text_type in (
