@@ -196,6 +196,7 @@ class MlxEndpoint:
         enable_thinking: bool | None = None,
         prompt_cache: str | None = None,
         sampler: Mapping[str, Any] | None = None,
+        hybrid_checkpoint_limit: int | None = 0,
     ) -> None:
         self.runtime = runtime
         self.config = config
@@ -209,6 +210,9 @@ class MlxEndpoint:
             raise ValueError("unknown prompt cache policy")
         self.cache_policy = prompt_cache or "full_prompt_each_turn"
         self._episode_cache = None
+        from joulewise.align.apple.prompt_cache import hybrid_checkpoint_policy
+        self._checkpoint_policy = hybrid_checkpoint_policy(
+            getattr(runtime, "_model_config", None), hybrid_checkpoint_limit)
         self.events: list[Any] = []
         self.turn_provenance: list[Mapping[str, Any]] = []
         self.flags: list[str] = []
@@ -237,7 +241,7 @@ class MlxEndpoint:
         }, sort_keys=True)
         self._prepare_flags = tuple(self.flags)
 
-    def _render_prompt(self, messages, tools):
+    def _render_prompt(self, messages, tools, *, add_generation_prompt=True):
         return self.runtime._tokenizer.apply_chat_template(
             [{"role": m.role, "content": m.content,
               **({"name": m.name} if m.name else {}),
@@ -245,7 +249,7 @@ class MlxEndpoint:
               **({"tool_calls": [{"id": c.call_id, "type": "function", "function": {
                   "name": c.name, "arguments": c.arguments_json}} for c in getattr(m, "tool_calls", ())]}
                  if getattr(m, "tool_calls", ()) else {})} for m in _coalesce_assistant_calls(messages)],
-            tools=list(tools) or None, tokenize=False, add_generation_prompt=True,
+            tools=list(tools) or None, tokenize=False, add_generation_prompt=add_generation_prompt,
             **({"enable_thinking": self.enable_thinking} if self.enable_thinking is not None else {}),
         )
 
@@ -371,8 +375,23 @@ class MlxEndpoint:
                 def reconcile_prompt(ids):
                     from joulewise.align.apple.prompt_cache import EpisodePromptCache
                     if self._episode_cache is None:
-                        self._episode_cache = EpisodePromptCache(self.runtime._model)
+                        self._episode_cache = EpisodePromptCache(
+                            self.runtime._model,
+                            checkpoint_limit=self._checkpoint_policy['limit'] if self._checkpoint_policy else 0)
                     delta, observed = self._episode_cache.prepare(ids)
+                    if self._episode_cache.hybrid and self._checkpoint_policy:
+                        # Snapshot before the assistant generation preamble,
+                        # whose think markers can disappear on the next render.
+                        closed = self._render_prompt(messages, tools, add_generation_prompt=False)
+                        observed["cache_checkpoint_boundary_tokens"] = self._episode_cache.plan_checkpoint(
+                            ids, _encode(tokenizer, closed, add_special_tokens=False))
+                        from joulewise.align.apple.prompt_cache import checkpoint_size_from_config
+                        model_config = getattr(self.runtime, "_model_config", None)
+                        if model_config:
+                            try:
+                                observed["cache_checkpoint_config_size"] = checkpoint_size_from_config(model_config)
+                            except (KeyError, TypeError, ValueError):
+                                observed["cache_checkpoint_config_size_unavailable"] = True
                     cache_metadata.update(observed)
                     cache_setup_metadata.update({k: v for k, v in observed.items() if k != "fed_delta_ids"})
                     stream_options["prompt_cache"] = self._episode_cache.cache
@@ -400,7 +419,8 @@ class MlxEndpoint:
                         prepare_prompt=prepare_prompt,
                         **({"sampler_policy": dict(self.sampler), "per_turn_seed": turn_seed(seed, turn_index)} if self.sampler is not None else {}),
                         **({"stream_options": stream_options, "cache_accounting": True,
-                            "setup_metadata": cache_setup_metadata, "reconcile_prompt": reconcile_prompt}
+                            "setup_metadata": cache_setup_metadata, "reconcile_prompt": reconcile_prompt,
+                            "prefill_prompt": lambda delta: self._episode_cache.prefill_checkpoint(delta, cache_metadata)}
                            if self.cache_policy == "episode_prefix" else {}),
                     )
                 finally:

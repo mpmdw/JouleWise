@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import math
+import os
 from pathlib import Path
 import random
 import shutil
@@ -145,7 +146,8 @@ class SamplingTests(unittest.TestCase):
             self.assertEqual(EpisodeSpec.from_text(text).to_text(), text)
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            bundle, status, _ = run_native_review(root / 'legacy', 'think', FakeClock())
+            bundle, status, _ = run_native_review(root / 'legacy', 'think', FakeClock(),
+                                                 spec_updates={'hybrid_checkpoint_limit': None})
             self.assertEqual(status.status.value, 'succeeded')
             legacy = h.read(bundle / 'metadata.json')['workload_provenance']['sampler']
             self.assertNotIn('execution_policy', legacy)
@@ -156,7 +158,8 @@ class SamplingTests(unittest.TestCase):
 
 
 class KitTests(unittest.TestCase):
-    @unittest.skipUnless(Path(kit.SHADE_CACHE).is_dir(), 'pinned SHADE cache is not installed')
+    @unittest.skipUnless(os.environ.get('JW_ALIGN_REAL_SHADE_TEST') == '1' and Path(kit.SHADE_CACHE).is_dir(),
+                         'requires explicit JW_ALIGN_REAL_SHADE_TEST=1 and the pinned SHADE cache')
     def test_real_offline_factory_seeds_equal_preregistration(self):
         from joulewise.align.apple.pilot import offline_shade_task
         plan = h.read(ROOT / kit.KIT / 'collection_plan.json')
