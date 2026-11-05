@@ -376,7 +376,6 @@ def _sentinel_equivalence(windows, reference_j):
             'mean_fraction': mean, 'ci90_fraction': ci, 'df': len(means)-1, 'window_means': means}
 
 
-
 def _combined_u4(value):
     if not value or not all(isinstance(value.get(k), dict) and value[k].get('status') in
                             ('pass', 'fail', 'inconclusive') for k in ('anchors', 'sentinels')):

@@ -135,7 +135,8 @@ class ThermalSession:
 
     SystemClock uses a 1 Hz thread. Fake clocks explicitly call sample() as
     time advances. status_reader returns observed os_level / pm_state, plus
-    their optional source stamps; it may be bound by an ALIGN launch adapter.
+    their source stamps (PM observation time is required at G0); it may be
+    bound by an ALIGN launch adapter.
     With no callback a bundle-local outputs/align_thermal_status.json supplies
     {os_level, pm_state, pm_observed_ns, monotonic_ns}.
     No path in the episode spec is followed.

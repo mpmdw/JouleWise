@@ -86,4 +86,3 @@ class Reader(smc.Reader):
                                 "data_size": size, "initial_value": value})
         return {"keys": sorted(sensors, key=lambda item: item["key"]),
                 "errors": errors, "complete": complete}
-

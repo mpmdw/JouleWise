@@ -43,7 +43,8 @@ chunk size. Heavy cells require G1 and holds. Light cells can independently
 switch G1 for the deciding experiment; G0 is always on for a thermal cell.
 
 The first sidecar member omits `window_reference`. At warmup entry it captures
-medians from 60 successful one-second slots immediately preceding warmup.
+medians over the true 60-second window immediately preceding warmup,
+requiring at least 54 successful one-second slots (90%).
 Kit v4 must persist that reference and source span in window custody and carry
 it unchanged to subsequent members. Each member has a fresh process; this
 module does not discover or mutate shared window custody. Omitting the
@@ -148,7 +149,8 @@ window's journal must not exclude every member in that window.
 - U3: every supplied identical-work pair, exact prompt/output IDs, energy bar
   `3*max(2.97, .0011*mean_pair_energy)` and ≤0.5% difference in active-weighted
   decode clock. Per-turn differences are diagnostic. Missing IDs are
-  inconclusive; observed divergence is X5.
+  inconclusive; observed divergence is X5 (`excluded`), retained in the
+  pair table but omitted from U3. With no eligible pairs, U3 is inconclusive.
 - U4: unweighted window means, W−1 df, point bar ±0.25%, 90% interval within
   ±0.5%, **and** the four-anchor, K≥3 balanced crossed-anchor moment
   estimator: `sigma_w²=max(0,(MS_window-MS_interaction)/4)` with the 6 J bar.
@@ -178,7 +180,11 @@ per template/arm. It fits all eight energies to template + arm S + actual
 start hours, reports δ and its 90% Student t interval with **4 df**, and applies
 the exact 10 J confirmation / 6 J rejection rule. Missing runs or identity
 are inconclusive. It prints same-arm U3 pairs and available per-turn energy,
-clock and temperature arm differences. Heavy cells always retain G1/H.
+clock and temperature arm differences. Missing/ambiguous clock mappings,
+missing clock uncertainty, uncovered duty support, or nonfinite energy
+half-widths make the energy evidence ineligible for the contrast and U3.
+Unavailable half-widths are exported as null with a reason flag.
+Heavy cells always retain G1/H.
 
 The additive `scripts/align_v4_thermal_desk.py` reads an explicit bundle manifest
 and writes a new directory containing `PILOT.json` and `THERMAL.md`. It does
