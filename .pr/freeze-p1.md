@@ -76,31 +76,29 @@ block-6/BYTES addenda are outside this brief.
 
 ## Verification
 
-The requested pytest command could not start: neither installed Python 3.14 nor
-3.13 has pytest. No install or network was attempted. Serial, targeted stdlib
-unittest is the documented fallback; the report lists exact commands/results.
-Broad `RealTreeTests` and a whole-tree digest census are excluded because their
-traversal can read evidence forbidden by the user's blinding rules. Local checks
-are supplementary and do not fill gate-ledger row 2.
+Serial Python 3.13 unittest only; no pytest, network or full suite this round.
+The final results, exact commands, two blinding-related test_repin exclusions,
+old-digest audit and remaining gates are in
+`docs/run_reports/2026-11-05-freeze-by-commit-p1.md`.
+A whole-tree digest census is excluded because it indexes measurement data.
+The allowed source/config/Markdown old-digest search covers pins beyond the
+census's Kind-P set. No real-data equivalence or hardware validation is claimed.
 
-Local evidence (full commands and tails in the report):
+## Fix round 1
 
-| Evidence | Result |
-| --- | --- |
-| Git identity/tampering/descendant/custody tests | 10 passed |
-| Registered-tree freeze/worktree independence tests | 4 passed |
-| Digest census/content-location tests | 23 passed |
-| Synthetic repin and historical-era checks (six classes) | 44 passed |
-| Registry migration | 335 locations / 77 holders; all targets, counts and literal values preserved |
-| Syntax, generated-state drift and diff whitespace | Passed |
-| Fixture census | Unavailable: ps denied (exit 2); no clean-census claim |
+| Finding | Commit | Disposition |
+| --- | --- | --- |
+| B1 | `1da9e978d` | Retire the stale main-byte test pin under F1, rebind clamp test, audit all old digests. |
+| H1 | `ef2ff5a78` | Strict F3; remove runtime ledger/authority override; refuse forged local r3 registration. |
+| M1 | `f604e1655` | Require r2 for post-release paper/fill; TODO A346 block/role selection; honor origin/main keyword and rename test. |
+| M2 | `8a0357e8c` | Independently pin three commit/tag/tree triples to RUN_STATE item 146. |
+| L1 | `6ef50adc4` | Warn on absent content pointers and print registry-refresh remedy. |
+| L2 | `25aa848d2` | Check collection imports at b5/collection too. |
+| L3 | `2dd765162` | Close AttributeError at the identity boundary. |
+| L4 | Pending report-refresh commit | Correct branch, commits, actual changed files and verification claims. |
+| L5 | `36337b39b` | Clear stray exported registration in frozen-tree test setup. |
 
-81 targeted tests passed using stdlib unittest. About 167 seconds of test time
-including the earlier targeted reruns; serial execution throughout. This does not replace
-the unrun whole-suite, final-head CI, independent review, cold pass or reproduction
-gates. No measurement inputs or restricted paths were opened.
-
-## Original implementation plan (moved from PLAN.md)
+## Original implementation plan (historical; strict F3 supersedes its descendant route)
 
 # A346 FREEZE-BY-COMMIT-01 — Phase 1
 
@@ -118,12 +116,12 @@ Authority: docs/process/freeze_by_commit.md F1–F4/F7, RUN_STATE items
    explicitly stage the missing dependency; do not issue scientific acceptance.
 4. Retire line-number test pins without weakening remaining non-test pins.
 5. Cite rebinds for every changed frozen file; run only inspected synthetic,
-   targeted pytest files, serially, with no network or real-data access.
+   targeted unittest modules, serially, with no network or real-data access.
 6. Update the kernel/generated views and dated report; move this plan into
    .pr/freeze-p1.md, with a truthful gate ledger and all unrun release gates.
 
 Safety: never access restricted directories or paths outside this clone under
 /Users/edr; never invoke run_b5_analysis.py or a real-data reader. No full suite.
 
-Workspace blocker: requested branch creation failed because .git is read-only
-under the session policy. No branch or commit success is claimed.
+The historical implementation-session Git limitation was resolved before fix
+round 1. This branch is checked out and all finding fixes are local commits.

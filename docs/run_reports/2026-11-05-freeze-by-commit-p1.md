@@ -1,137 +1,139 @@
-# A346 FREEZE-BY-COMMIT-01 — Phase-1 preparation, 2026-11-05
+# A346 / PR #649 — Phase 1, fix round 1 (2026-11-05)
 
-Status: APPLIED_UNVERIFIED / LOCAL_ONLY. Requested branch and commits could
-not be created because the session policy makes `.git` read-only. No push,
-network operation, release, merge, pipeline invocation or data access.
-Base: `92026c1849c0f053e56bdac6110c079211db2c31` (detached HEAD).
-Requested branch: `lane/2026-11-05-freeze-by-commit-p1`.
+Status: local fixes prepared on `lane/2026-11-05-freeze-by-commit-p1`.
+Implementation commit: `2e0528ad8`; implementation base:
+`92026c1849c0f053e56bdac6110c079211db2c31`. The branch was already checked out
+at intake. Git metadata is writable and the finding fixes are committed.
+No push, network, full suite, analysis pipeline or real-measurement read was
+performed. This replaces the earlier report's obsolete read-only-Git claim.
 
-## Intake and authority
+## Intake and scope
 
-Read AGENTS.md, CLAUDE.md, Mission M0, the generated restart region (no active
-stop card), current status/workspace notes, the A346 queue/kernel row and
-Do-Not-Do-Yet list. Read the F1–F7 rollout, TRIM_REPORT, RUN_STATE 145–146,
-D-138 and its implementation notes, and the D-188–D-190 release/rebind context.
-The user's brief authorizes preparation before release; landing remains after
-release. No Phase-2 pruning is performed.
+Read the stop card (NONE), current status/workspace and queue, Mission M0,
+AGENT_PLAN, orchestration, F1–F7, the rebind record, RUN_STATE 145–146/165,
+and D-188–D-190. The user explicitly selects this bounded [AGENT] repair over
+ordinary queue work and authorizes local commits. The existing untracked
+`.pr/freeze-p1.md` was the requested PR-body draft; it is now updated/tracked.
+No new branch was needed. No delegation, peer consult or external integration
+was used. No advisor-visible scientific state changed.
 
-## Changes
+The prior implementation changed Git identity and pin-location machinery,
+not estimator/result arithmetic. Phase 1 still lands only after block-5
+release. F4 remains an unissued stub pending the combined D-138/A178/L9-ENV-2
+acceptance reissue. Phase 2 and mirror removal remain outside this repair.
 
-- New `joulewise/freeze_by_commit.py` and
-  `configs/analysis/b5/freeze_commits.json`: annotated tag objects, peeled
-  commit IDs and trees; batch Git-blob hashing; exact r2 or completely ruled
-  descendant identity. Side-branch commits are included. A clean ruled
-  checkout can load its ledger from a separately pinned later registration
-  commit, avoiding a self-reference in its own tree. Missing history,
-  malformed rulings and moved/lightweight tags fail closed. No remote query
-  is needed.
-- `tests/b5_analysis/test_frozen_files.py`: full sealed inventory at collection,
-  each historical harvest pin at its own commit, and sealed documents at the
-  original analysis and r2 trees. A regression forbids source worktree reads.
-- `joulewise/identity_pins.py`, `joulewise/paper_custody.py`: custody requests
-  registered analysis identity through the mint's existing clean-tree gate.
-  No estimator or result arithmetic changes. The old keyword is an F2 alias.
-- `scripts/digest_pin_census.py`, `scripts/repin.py`,
-  `configs/pins/registry.json`: 335 Python test locations in 77 holders become
-  content locations, preserving target methods, all counts and all families.
-  Migrated from existing registry plus explicit test-source blobs; **did not
-  run the whole-tree census**, which can read evidence forbidden by the brief.
-- `tests/test_freeze_by_commit.py`, `tests/test_digest_pin_census.py`,
-  `tests/test_repin.py`: constructed-Git and line-motion regressions.
-  `tests/b5_analysis/joined_s10.py`: fixture annotated tag/registration feeds
-  the real predicate. No joined driver or pipeline ran in this session.
-- `docs/process/freeze_p1_rebind.md`: authority, exact per-file release/new
-  digests, calibration stub and remaining gates. Kernel/generated queue and
-  restart views carry partial preparation status. PLAN.md content moves into
-  `.pr/freeze-p1.md`; PLAN.md is removed at handoff.
+## Finding dispositions and commits
 
-## Calibration: explicitly incomplete
+| Finding | Commit | Result |
+| --- | --- | --- |
+| B1 | `1da9e978d` | Retired the worktree-byte pin/test on test_frozen_files.py under F1; added the clamp module to the rebind table. Final old-digest audit described below. |
+| H1 | `ef2ff5a78` | Strict F3: exact registered analysis HEAD only; removed runtime descendant ledger and environment authority override; forge attempts refuse. |
+| M1 | `f604e1655` | Documented r2-only paper/fill operation for all current families; TODO A346 for block/role selection; origin/main parameter honors its name; misleading custody test renamed. |
+| M2 | `8a0357e8c` | Independent full literal commit/tag/tree pins cross-check RUN_STATE item 146 and all three existing annotated tags. |
+| L1 | `6ef50adc4` | Warn when a content pointer is absent; family rewrite prints the registry-refresh command; regression covers it. |
+| L2 | `25aa848d2` | Collection import check reads b5/collection as well as active analysis. |
+| L3 | `2dd765162` | AttributeError becomes a closed identity-anchor refusal, with regression. |
+| L5 | `36337b39b` | FrozenFilesTests clears/restores the exported registration variable in setUp. |
+| L4 | This report's refresh commit; exact ID in .pr/freeze-p1.md | Replaced obsolete branch/commit/pytest claims; reconciled actual files and gates. |
 
-A178 remains staged in the kernel and the reducer's endpoint comparisons are
-unchanged. The combined D-138/A178/L9-ENV-2 reissue was not found in the
-inspected repository authorities. F4 has null acceptance and an explicit
-`STUB_REISSUE_REQUIRED` status; its callable always refuses. No production
-consumer is switched to the stub, and no issued acceptance, estimator byte,
-scientific threshold or staleness predicate is changed. The combined refuter,
-reissue and commit-scoped loader/trigger wiring belong to the owning D-138
-transaction. No scientific acceptance is inferred from historical hashes.
+H1 chooses the review's simpler alternative: F3 already requires a new
+`b5/analysis-r<k>` tag for a ruled fix. A local ruling document, descendant
+ledger, new local tag or arbitrary authority commit cannot grant admission.
+Runtime rulings therefore cannot bypass decision-log resolution: that route
+is gone. A successor must cite the owner's decision in docs/decision_log.md,
+record old/new trees and receive a reviewed registration. The checkout's
+registration is the sole metadata source, checked independently in M2.
 
-## Verification ledger
+M2 provenance limitation: item 146 originally printed only abbreviated
+collection identity; item 165 named abbreviated r2; the original-analysis
+annotated tag message printed its full commit/tree. Full tag-object literals
+were not all present in those records. This fix adds a clearly labeled
+clerical full-ID expansion to ruled item 146, derived from the already-existing
+local annotated objects, and pins all nine values independently in the test.
+It does not claim that table predated this fix or issue a new science ruling.
 
-- `git switch -c lane/2026-11-05-freeze-by-commit-p1`: FAILED, cannot create
-  `.git/refs/heads/lane/...` under read-only Git metadata. No branch or commit.
-- Git `for-each-ref`, `rev-parse`, `cat-file`: observed annotated tags locally.
-  Collection: `c27485347c9629b857df81665b5b1b8d10dcd36a`, tree
-  `30dc0681fbea919338f639075389bde0161f7c21`.
-  Original analysis: `2fdc0929d5c214505617145893df2e71ab8a83b5`, tree
-  `ea994f30a109123cffe19e1b064e1593928f16b3`.
-  Release r2: `929fc65c9ce3ff82f0311d28acf76a682edd466f`, tree
-  `9e89d7ff48999416467129c03ea171fc3a1f3f83`.
-- Final before/after digest check for all nine existing source/test/registry
-  files in the rebind table: PASS against r2 Git blobs and current files.
-- AST parsing of the ten changed/new Python files: PASS.
-- PLAN.md-to-PR transfer check: PASS; PLAN.md is removed and its original
-  contents are preserved in `.pr/freeze-p1.md`.
-- Registry structural migration check: PASS; target array and summary exactly
-  equal to base; zero Python-test `#L` pointers remain. No measurement files
-  opened to perform this migration.
-- `git diff --check`: PASS at implementation review.
-- Additional restrictive `sandbox-exec -f .../blind.sb python3 -m pytest
-  tests/test_freeze_by_commit.py -q -x`: NOT STARTED; macOS returned
-  `sandbox_apply: Operation not permitted`. No weaker sandbox flags were used.
-- `python3 -m pytest tests/test_freeze_by_commit.py -q -x`: NOT STARTED;
-  default Python 3.14 has no pytest. Python 3.13 also has no pytest. No install
-  or network attempted. A question about runner preference received no reply;
-  the same authorized targeted scope was checked serially with stdlib unittest.
-  This is a runner substitution, not evidence that the requested pytest ran.
-- Serial stdlib fallback (no workers; common environment:
-  `HOME=/private/tmp/jwsol/freeze-p1/tmp/home`, `GIT_CONFIG_GLOBAL=/dev/null`,
-  `GIT_CONFIG_NOSYSTEM=1`, `PYTHONDONTWRITEBYTECODE=1`,
-  `JW_B5_SYNTHETIC_ONLY=1`):
+## Post-release operation (M1)
 
-  ```text
-  python3 -m unittest tests.test_freeze_by_commit -q -f
-  Ran 10 tests in 4.659s — OK (final rerun; prior 8/9-test runs also passed)
+After landing, **paper and fill runs must run from a clean b5/analysis-r2
+checkout**, including build_results_fill_input.py, issue_reported_energy.py,
+produce_b5_disclosures.py, compare_b5_recompute.py and open_paper_input.
+Main and unregistered descendant checkouts refuse analysis_descendant_unruled
+for every currently supported custody family. A later correction needs the
+strict-F3 successor procedure above. An exported
+JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT now refuses and must be unset.
 
-  python3 -m unittest tests.b5_analysis.test_frozen_files -q -f
-  Ran 4 tests in 2.266s — OK (final rerun; initial run also passed)
+TODO A346: select registration by block or supply role before enabling other
+blocks at this seam. The relevant role contracts are not mapped yet; inventing
+a mapping in a small review repair would be unsound. require_origin_main=True
+now independently requires a positive containment result. Paper custody uses
+require_registered_analysis=True instead, retaining the clean-tree gate.
 
-  python3 -m unittest tests.test_digest_pin_census -q -f
-  Ran 23 tests in 106.082s — OK
+## Files touched in this fix round
 
-  python3 -m unittest tests.test_repin.RegistryCheckTests tests.test_repin.CommandFamilyTests tests.test_repin.EraRecordTests tests.test_repin.Block5EraRecordTests tests.test_repin.SealedInventoryEraRecordTests tests.test_repin.SealPinsEraRecordTests -q -f
-  Ran 44 tests in 31.155s — OK
-  ```
+- Production/tooling: joulewise/freeze_by_commit.py, identity_pins.py,
+  paper_custody.py; configs/analysis/b5/freeze_commits.json; scripts/repin.py.
+- Tests: tests/test_whole_window_inverted_corner_clamp.py,
+  test_freeze_by_commit.py, test_paper_custody.py, test_repin.py;
+  tests/b5_analysis/test_frozen_files.py.
+- Records: .pr/freeze-p1.md, docs/process/freeze_p1_rebind.md, this report,
+  RUN_STATE.md, TASK_QUEUE.md and docs/process/state_kernel.json.
 
-  81 tests in the final targeted set passed. Including the earlier 8/9-test
-  and freeze-test runs, runner-reported test time totals about 167 seconds;
-  only one test process
-  ran at a time. `RealTreeTests` in test_repin.py was deliberately excluded:
-  it invokes broader evidence/registry/generator checks outside this lane.
-  The joined pipeline harness was syntax-checked but not executed.
-- `python3 scripts/gen_state.py --check`: PASS after generation.
-- All 335 migrated literal values are still present in their current Python
-  holder sources: PASS. All target IDs/families/multiplicities are preserved.
-- `python3 scripts/fixture_orphan_census.py --fail-on-orphans`: exit 2,
-  `PermissionError: [Errno 1] Operation not permitted: 'ps'`. Observation is
-  unavailable; no clean fixture census is claimed. No processes were signalled.
-- Full suite: NOT RUN, explicitly prohibited by the user while the seven-worker
-  analysis runs. Independent review, cold pass, CI, locked-environment tag
-  reproduction and real-data equivalence: NOT RUN in this offline blind lane.
+The kernel's A346 status is now partial; its note records the fix and open
+gates. TASK_QUEUE generated rows were regenerated from it; RUN_STATE adds a
+hand-authored handoff and item-146 full-ID table. This is actual fix-round
+bookkeeping, not a claim that the original implementation commit changed the
+kernel or queue. PROJECT_STATUS is unchanged because scientific/advisor-visible
+state did not change.
 
-## Findings, uncertainty and next action
+## Verification
 
-No claim of merge readiness: targeted checks passed, but branch creation,
-commits, independent review and CI remain open. The reissue's absence is
-based on the kernel, authority records and reducer source, not off-repo lane inspection. Existing tag availability and
-identity are verified; reproducibility of its scientific outputs is not.
-No delegation or model consult was used (offline; final authority retained).
-The static checks caught no number-bearing defect; they establish syntax and
-migration shape only. No mechanism is proposed for deletion on this one-run
-sample.
+All tests use Python 3.13 stdlib unittest, one process/module at a time, with
+`TMPDIR=$TMPDIR` (the existing /private/tmp/jwsol/freeze-p1-fix1/tmp).
+No pytest, package installation or full-suite command was attempted this round.
+Final serial checks are recorded here; no unrun gate is marked green.
 
-Next: provide a session with writable Git metadata; create the requested branch
-at the recorded base; run the focused pytest files in a pytest-equipped offline
-environment (serial, under the user's blinding rules), review, and commit the
-prepared diff. Keep A346 partial and the F4 dependency open. Land Phase 1 only
-after the release and the owning lead's remaining gates; Phase 2 stays closed.
+| Command (common prefix TMPDIR=$TMPDIR) | Result |
+| --- | --- |
+| python3.13 -B -m unittest tests.test_whole_window_inverted_corner_clamp -q | 33 tests, OK, 117.734 s; final rerun pending |
+| python3.13 -B -m unittest tests.test_freeze_by_commit -q | 14 tests, OK, 9.279 s |
+| JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT=ffffffffffffffffffffffffffffffffffffffff python3.13 -B -m unittest tests.b5_analysis.test_frozen_files -q | 4 tests, OK, 4.599 s |
+| python3.13 -B -m unittest tests.test_paper_custody -q | 33 tests, OK, 69.165 s; 147 owner-source, 5 grant-policy and 4 refusal-AST mutations killed |
+| python3.13 -B -m unittest tests.test_digest_pin_census -q | Final serial run in progress |
+| python3.13 -B /private/tmp/run-freeze-p1-repin.py | Pending; module loader excludes two unsafe real-tree tests |
+| python3.13 -B scripts/gen_state.py --check | PASS |
+| git diff --check | PASS before record refresh; final check pending |
+
+Additional pre-final freeze tests passed (12 tests, 4.873 s). Runner times,
+not wall-clock estimates, are used for the total. The final ledger update will
+record total test time, syntax and the last whitespace check.
+
+Safety exclusions from test_repin: the real registry freshness test hashes
+archived measurement outputs (including analysis/rpt001-v1 and paper/trace
+results). The real generator-family test can resolve off-clone /Users/edr
+paths and consume issued selection evidence. Both are excluded before their
+bodies run. Remaining synthetic tests and safe real-tree CLI/workflow checks
+run. This is an explicit verification limitation, not a full-module pass.
+No whole-tree digest census was run: it indexes measurement artifacts.
+
+## Old-digest audit (B1)
+
+Final audit update pending. Preliminary search covers every old file digest
+for paths changed by the PR, from the pre-PR base, r2 and initial implementation
+commit (not just Kind-P census targets). It searches tracked regular source,
+Markdown and config JSON files, including PR/record content. It excludes
+measurement artifacts, restricted directories and symlinks. The final report
+will record all matches and their dispositions. No claim is made about
+unopened measurement/restricted content.
+
+## Remaining gates and next action
+
+Local targeted results do not establish real-data equivalence, reproducibility,
+release, final-head CI, independent delta review or the cold admission pass.
+The previous executing review found the issues addressed here; its final delta
+review remains the owning lead's next step. The full suite remains prohibited
+in this session. No quiet-machine or hardware gate was attempted.
+
+Next: complete the final local verification ledger and commit map, then hand
+these local commits to the PR #649 lead for delta review. Keep A346 partial,
+F4 and block/role selection open. Land only after block-5 release and the
+remaining owning-lead gates. Do not push from this offline lane.
