@@ -319,7 +319,11 @@ _POWER_TRACE_INTERVAL_COLUMNS = (
 )
 
 
-from joulewise.strict_io import sha256_file
+
+from joulewise.strict_io import (
+    json_pretty_ascii as _json_bytes,
+    sha256_file,
+)
 
 class PrivacyAuditError(RuntimeError):
     """Raised when a private bundle contains an unreviewed publication surface."""
@@ -952,10 +956,6 @@ def _transform_events(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         transformed["metadata"] = _redacted_subtree("events.metadata")
         result.append(transformed)
     return result
-
-
-def _json_bytes(value: Any) -> bytes:
-    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
 def _jsonl_bytes(records: list[dict[str, Any]]) -> bytes:

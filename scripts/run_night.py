@@ -46,7 +46,11 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # Eager imports cover every formerly lazy run/dead-man/rehearse dependency,
 # so importing this driver during preflight catches failures before installation.
-from joulewise.strict_io import sha256_path_bytes as _sha256_path
+
+from joulewise.strict_io import (
+    json_pretty_ascii as _json_bytes,
+    sha256_path_bytes as _sha256_path,
+)
 
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
@@ -200,10 +204,6 @@ def _sidecar_digest(sidecar_text: str, chain_basename: str) -> str | None:
     if len(tokens) == 2 and tokens[1] != chain_basename:
         return None
     return tokens[0]
-
-
-def _json_bytes(value: Mapping[str, Any]) -> bytes:
-    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
 def _write_all(descriptor: int, payload: bytes) -> None:

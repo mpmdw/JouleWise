@@ -51,3 +51,7 @@ def json_ascii_bytes_strict(value: Any) -> bytes:
 
 def json_ascii_text(value: Any) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=True, separators=(',', ':'))
+
+
+def json_pretty_ascii(value: Any) -> bytes:
+    return (json.dumps(value, sort_keys=True, ensure_ascii=True, allow_nan=True, indent=2) + "\n") .encode("utf-8")

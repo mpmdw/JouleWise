@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from joulewise.strict_io import json_pretty_ascii as render_json
+
 from joulewise import arm_readiness
 from joulewise.arm_readiness import _fsync_directory
 
@@ -198,12 +200,6 @@ class SchedulerGateError(ValueError):
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
-
-def render_json(value: Mapping[str, Any]) -> bytes:
-    """Return canonical human-readable receipt bytes."""
-
-    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
 def _require_exact_keys(value: object, keys: frozenset[str], where: str) -> Mapping[str, Any]:
