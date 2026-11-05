@@ -914,6 +914,10 @@ def make_layer_caches(args: TextModelArgs, left_padding: Optional[Sequence[int]]
     return caches
 
 
+def _batch(arrays) -> Optional[int]:
+    return next((int(a.shape[0]) for a in arrays if a is not None), None)
+
+
 def snapshot_cache(cache: List[Any]) -> List[Any]:
     """Zero-copy checkpoint of a hybrid cache. Arrays are values (slots are
     rebound, never mutated) and KV/indexer buffers below the current offset
@@ -921,25 +925,46 @@ def snapshot_cache(cache: List[Any]) -> List[Any]:
     snap = []
     for c in cache:
         if isinstance(c, Qwen4ExpQSACache):
-            snap.append(("qsa", c.offset))
+            snap.append(("qsa", c.offset, c.padding, _batch([c.keys])))
         elif isinstance(c, Qwen4ExpLinearCache):
-            snap.append(("linear", list(c.cache), c.offset, c.padding))
+            snap.append(("linear", list(c.cache), c.offset, c.padding, _batch(c.cache)))
         else:
             raise TypeError(f"unsupported cache type {type(c).__name__}")
     return snap
 
 
 def restore_cache(cache: List[Any], snap: List[Any]) -> None:
-    """Restore ``snapshot_cache`` output (QSA caches are trimmed back)."""
+    """Restore ``snapshot_cache`` output (QSA caches are trimmed back).
+
+    Every entry is checked before any cache is touched (validation round 1),
+    so a refused restore leaves the caller's cache exactly as it was."""
+    if len(cache) != len(snap):
+        raise ValueError("snapshot and cache have different layer counts")
+    if len({entry[1] if entry[0] == "qsa" else entry[2] for entry in snap}) > 1:
+        raise ValueError("snapshot offsets disagree")
     for c, entry in zip(cache, snap):
         if entry[0] == "qsa":
-            if c.offset < entry[1]:
+            if not isinstance(c, Qwen4ExpQSACache):
+                raise ValueError("snapshot layer kinds do not match the cache")
+            _, offset, padding, batch = entry
+            if c.offset < offset:
                 raise ValueError("cannot restore a QSA cache forward in time")
+            now = _batch([c.keys])
+        else:
+            if not isinstance(c, Qwen4ExpLinearCache):
+                raise ValueError("snapshot layer kinds do not match the cache")
+            _, _, _, padding, batch = entry
+            now = _batch(c.cache)
+        if c.padding != padding:
+            raise ValueError("snapshot was taken on a batch with different left padding")
+        if batch is not None and now is not None and batch != now:
+            raise ValueError("snapshot was taken on a different batch size")
+    for c, entry in zip(cache, snap):
+        if entry[0] == "qsa":
             c.trim(c.offset - entry[1])
         else:
-            _, slots, offset, _padding = entry
-            c.cache = list(slots)
-            c.offset = offset  # left_padding derives from padding - offset
+            c.cache = list(entry[1])
+            c.offset = entry[2]  # left_padding derives from padding - offset
 
 
 # --------------------------------------------------------------------------

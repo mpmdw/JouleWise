@@ -1464,6 +1464,34 @@ class ValidationRound1Test(unittest.TestCase):
             with self.assertRaises(ValueError):
                 conv._check_unchanged(changed, stamps)
 
+    # ------------------------------------------- systems LOW (cache API)
+    def test_r1_refused_restore_leaves_the_cache_untouched(self):
+        """restore_cache used to overwrite the linear caches in layer order and
+        only then meet a QSA entry from the future, leaving a half-restored
+        hybrid cache. Every entry is now checked first."""
+        import numpy as np
+        fx = self.fx
+        model = fx.model("fp32")
+        ids = fx.seqs["seq_a"]
+        later = model.make_cache()
+        run(model, [ids[:42 if len(ids) >= 42 else len(ids)]], later)
+        late = model.snapshot_cache(later)
+        fresh = model.make_cache()
+        run(model, [ids[:20]], fresh)
+        want = run(model, [ids[20:23]], fresh)
+        cache = model.make_cache()
+        run(model, [ids[:20]], cache)
+        padded = model.make_cache(left_padding=[0, PAD_B])
+        run(model, [ids[:PAD_B + 4], [EOS] * PAD_B + ids[:4]], padded)
+        for label, snap in (("future", late), ("other padding", model.snapshot_cache(padded)),
+                            ("layer count", late[:-1])):
+            with self.subTest(case=label):
+                with self.assertRaises(ValueError):
+                    model.restore_cache(cache, snap)
+                self.assertEqual([c.offset for c in cache], [20] * N_LAYERS)
+        got = run(model, [ids[20:23]], cache)
+        self.assertEqual(float(np.abs(got - want).max()), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
