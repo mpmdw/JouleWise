@@ -51,3 +51,15 @@ benign executable paths containing harvest/tar directory tokens, and the exact
 ps field request. Interpreted scripts whose comm is only Python require the
 external no-writer/launcher gates too; comm is not an argv script census.
 `python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS, 48 tests.
+
+N6: replaced working-tree reads with six independently reviewed Git-ref roles:
+main, BYTES c58282f87, B6 dda456f98, ALIGN v4, amendment 1 and v4 R0 config.
+All identity pins/rosters plus explicit B6 §1.4, kit and plan/config blobs use
+git show at resolved full commits. Receipts carry role/ref/commit/path/digest,
+source paths and conservative model aliases. Real model paths stay inert.
+Synthetic disjoint orphan histories prove no merged checkout is required;
+working-copy poison/symlinks have no effect, Git symlinks and missing inputs
+refuse. `python3.13 -B -m unittest tests.test_align_offload_model_keep`: PASS,
+4 tests. Cached council 219fb1515 lacks amendment 1; kit 8d1ab6e2c has only
+v0–v3; R0 49e78e178 still names Next-80B. Asked for locally available reviewed
+v4/amendment SHAs; no source revision, candidate list or plan value fabricated.

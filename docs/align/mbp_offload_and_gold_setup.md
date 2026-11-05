@@ -255,8 +255,8 @@ step 3; it is a storage prerequisite, not permission to begin downloads.
 
 ## 3. Mechanical model KEEP census and pre-offload R0 inventories
 
-Use the integrated Mac records/kit checkout containing the BYTES, B6, ALIGN
-and R0 code. Before **any offload or archive**, prepare the reviewed R0 config
+Use one repository object store containing each reviewed ref; no merged
+checkout is required. The model census reads only `git show <full-sha>:<path>`. Before **any offload or archive**, prepare the reviewed R0 config
 from PR #661's `docs/align/r0_desk.example.json`. Keep `disk_path` on the
 **measurement internal volume**; the example's `/Volumes/ALIGN_MODELS` is not
 appropriate for the measurement disk gate. Set all custody parents. Set
@@ -267,11 +267,18 @@ Pilot 9's source is retained even though R0's schema calls its copy an offload.
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_R0_CODE:?Set reviewed integrated R0 checkout}"
-: "${JW_R0_CONFIG:?Set reviewed config JSON INSIDE that checkout}"
+: "${JW_R0_CONFIG:?Set reviewed operational config JSON}"
+: "${JW_ALIGN_V4_REF:?Set reviewed full ALIGN v4 kit SHA}"
+: "${JW_AMENDMENT_REF:?Set reviewed full amendment-1 SHA}"
+: "${JW_R0_V4_REF:?Set reviewed full v4 R0 SHA}"
+: "${JW_R0_CONFIG_BLOB:?Set repository-relative v4 R0 config blob path}"
 : "${JW_P8_SOURCE:?Set exact pilot-8 root from handoff}"
 export JW_R0_CODE JW_R0_CONFIG JW_P8_SOURCE
 python3.13 -I -B "$JW_CANON/scripts/align_offload_model_keep.py" \
-  --repo "$JW_R0_CODE" --r0-config "$JW_R0_CONFIG" \
+  --repo "$JW_CANON" --main-ref origin/main \
+  --bytes-ref c58282f87 --b6-ref dda456f98 \
+  --align-ref "$JW_ALIGN_V4_REF" --amendment-ref "$JW_AMENDMENT_REF" \
+  --r0-ref "$JW_R0_V4_REF" --r0-config "$JW_R0_CONFIG_BLOB" \
   --output "$JW_OP/model-keep-provenance.json" > "$JW_OP/model-KEEP.txt"
 cat "$JW_OP/model-KEEP.txt"
 # --inventory only, not the R0 measurement/selection run. Run before any offload.
@@ -283,26 +290,29 @@ cat "$JW_OP/model-KEEP.txt"
 jw_disk_check
 ```
 
-The tracked helper reads repository text only and prints model paths without
-following them: every config JSON (a superset of **every**
-`configs/campaigns/*/registration/identity_pins.json` `model_source`), every
-tracked roster file and the exact R0 config. It extracts model sources and
-artifact roots/blob paths, and records input SHA-256s. This older authoring
-checkout lacks integrated rosters; its census must refuse, not print a
-plausible incomplete list. Ed compares every BYTES ten-model + 27B extension,
-B6 §1.4 and ALIGN kit roster entry against the printed census, including any
-prose-only roster not represented by config sources. Unresolved IDs/paths are
-KEEP and STOP; do not infer a filesystem path from a model's display name.
-Store R0 config/source variables in a new mode-600 `$JW_OP/r0-env.zsh` with
-quoted `export` lines; later R0 scripts source it. No env overwrite on resume.
+The helper resolves every role to a full commit SHA before listing inputs.
+It reads every registration identity pin and roster across **main**, **BYTES
+c58282f87**, **B6 dda456f98** (including its §1.4 roster), the **ALIGN v4 kit**,
+**amendment 1** and the **v4 R0 config** from Git blobs. Every receipt records
+role, ref, commit, path and content SHA-256, model sources/blob paths and model
+identity aliases. No filesystem model path is followed. Symlink blobs, blinded
+input components, missing roles/files and stale kits refuse; no ad-hoc merged
+checkout is needed. Compare the operational R0 config to that pinned config;
+changing sources requires a new reviewed config commit and census.
 
-The printed census must include the NEG-8 Qwen2.5-1.5B-Instruct-4bit,
-Qwen3-1.7B-4bit, Qwen3-8B-4bit, all BYTES roster models, Qwen3.8-27B-8bit,
-all Qwen3-30B-A3B-4bit anchors and Qwen3-Next-80B-A3B-Thinking-4bit (R0 N).
-Keep every pinned revision and its **blob bytes**, not just HF snapshot links.
-For HF KEEP baselines use the kit's `model_artifact_inventory` or hash each
-referenced blob with its resolved-path binding. A snapshot symlink manifest
-alone does not authenticate weights; no shared HF cache cleanup here.
+Amendment 1 must retain Qwen3.8-27B, the Qwen3-30B anchors and the
+Qwen2.5-1.5B NEG-8 reference. All sources in older registration pins and BYTES/B6
+rosters remain KEEP too, even if dropped from the next ALIGN window. A dropped
+model is not automatically unreferenced. Prose-only identities enter the census
+as aliases without inventing local paths. UNKNOWN is KEEP and STOP. Keep every
+pinned revision and its blob bytes, not merely HF snapshot links. Save reviewed
+refs/config variables in a new mode-600 `$JW_OP/r0-env.zsh` with quoted exports.
+No env overwrite on resume.
+
+This offline clone currently lacks the amendment-1 blob and v4 kit/config;
+its stale refs must **refuse**. Obtain the reviewed objects through the lead's
+normal integration process before an operator runs the census; no network or
+live model census was performed while writing this fix.
 
 Structure-only candidate metadata comes from the authorized custody operator,
 using the full restricted path map. No recursive `du -I restricted` is an
