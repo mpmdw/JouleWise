@@ -26,3 +26,25 @@ an array fails with `[metal::load_device] No Metal device available`, including
 after `mx.set_default_device(mx.cpu)`. The sandbox offers no approval route;
 no bypass attempted. Torch 2.15.0 / transformers 5.22.1 import successfully.
 Do not deploy this model until the gold tests pass on a device-capable Mac.
+
+## Stage 2
+
+Added read-only mmap PLE storage (bf16/fp32, row-affine q4/q8), deduplicated
+row gathering and gathered-row-only dequantization. Production-sized PLE
+construction without an offload descriptor fails before allocating an
+embedding. Disk tables stay outside `parameters()` and the MLX resident set.
+
+`venv-ref/bin/python -B -m unittest tests.align.test_qwen4_exp_tables`:
+3 tests PASS (0.178 s). Covers encoding/gathering, byte accounting, invalid
+indices/file lengths, EOS segmentation and chunked hashing.
+
+`venv-ref/bin/python -B scripts/align_benchmark_qwen4_ple.py --mib 128
+--tokens 128`: PASS (1.44 s), synthetic warm file only. For a 134,217,728-byte
+bf16 table: mmap peak RSS 38,617,088 → 70,270,976 bytes; eager worker
+36,028,416 → 307,101,696 bytes (includes mapped pages AND eager copy).
+Mmap median/p95 44.646/55.342 us per 16-row token; logical bytes/token 8,192;
+unique 16-KiB page spans 29,327,360 bytes over 128 requests. Eager median
+7.334 us. These are CPU warm-cache synthetic timings, not model tok/s, cold
+disk bandwidth, GPU resident memory or whole-machine page-cache residency.
+An initial `/bin/ps` RSS probe was sandbox-denied; replaced it with standard
+`getrusage` high-water RSS. No permission bypass. `git diff --check` passed.

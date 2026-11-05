@@ -423,7 +423,19 @@ class NGramEmbedding(nn.Module):
         super().__init__()
         self._args, self._index = a, ple_index
         self._layout = tables.ngram_layout(vars(a), ple_index)
-        self.ngram_embedding = nn.Embedding(self._layout["rows"], self._layout["dim"])
+        descriptor = a.ple_tables.get(str(a.ple_layer_ids[ple_index]))
+        self._table = None
+        if descriptor:
+            descriptor = dict(descriptor)
+            descriptor["path"] = Path(__file__).parent / descriptor["path"]
+            self._table = tables.MMapTable(**descriptor)
+            if self._table.rows != self._layout["rows"] or self._table.dim != self._layout["dim"]:
+                raise ValueError("Offloaded PLE layout disagrees with configuration")
+        else:
+            # Tiny/reference-only route. Production conversion always offloads.
+            if self._layout["rows"] * self._layout["dim"] > 16_000_000:
+                raise ValueError("Large PLE table requires an on-disk descriptor; refusing GPU allocation")
+            self.ngram_embedding = nn.Embedding(self._layout["rows"], self._layout["dim"])
 
     def __call__(self, ids, cache):
         a = self._args
@@ -434,6 +446,8 @@ class NGramEmbedding(nn.Module):
         indices = tables.ngram_ids(host_ids, previous, vars(a), self._index)
         if cache is not None:
             cache[3] = mx.array(np.concatenate([previous, host_ids], axis=1)[:, -(a.ngram_size - 1):].astype(np.int32))
+        if self._table is not None:
+            return mx.array(self._table.lookup(indices)).reshape(*ids.shape, -1)
         return self.ngram_embedding(mx.array(indices.astype(np.int32))).reshape(*ids.shape, -1)
 
 
@@ -451,7 +465,7 @@ class PLE(nn.Module):
 
     def __call__(self, x, ids, mask, cache):
         a = self._args
-        emb = self.ple_embedding(ids, cache)
+        emb = self.ple_embedding(ids, cache).astype(x.dtype)
         shape = (*ids.shape, a.hc_count, a.hidden_size)
         key = self.norm_key(self.key_proj(emb)).reshape(shape)
         query = self.norm_query(x).reshape(shape)
