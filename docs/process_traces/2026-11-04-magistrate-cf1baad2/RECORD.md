@@ -51,3 +51,7 @@
 
 ## Pilot-8 kit build
 - Lane `lane/2026-11-04-align-pilot8-benign` (worktree `jw-wt/align-pilot8`) from `50bf73f78`. Build seat Sol 6.1 high (local `codex-run-v3`), brief `~/night-archive/seats-cf1baad2/pilot8/BUILD-BRIEF.md`; WRITE_SCOPE the kit script, `tests/align/test_pilot4.py`, `tests/test_align_pilot_session.py`, `configs/campaigns/align_pilot_v3/**`, its report. Required: anchors byte-identical to pilot 7; independent seed recomputation; desk end to end on 28 production-shaped synthetic bundles for this roster.
+- Build seat relaunched 17:41 (first launch rc 64: `codex-run-v3` requires a literal `WRITE_SCOPE:` line in the prompt; brief fixed).
+
+## Desk calibration script (Codex Cloud, during pilot 8)
+- Sol 6.1 high, Codex Cloud thread `01a1a95e-ed2c-7171-8c2a-ee940fbda038` (model read back gpt-6.1-sol), brief `~/night-archive/seats-cf1baad2/desk-cal/BRIEF.md`, branch `lane/2026-11-04-align-desk-calibration` from `cda28a5ef`. New `scripts/align_pilot_calibration.py` and its test only; imports the frozen alternative unchanged. Per-session fits; pooled split rank ceil(0.95(m+1)) over held-out benign seeds; sabotage against the pooled threshold; GPU-clock correlation printed only. Re-attach: `node ~/.local/bin/codex-cloud-run.mjs --attach 01a1a95e-ed2c-7171-8c2a-ee940fbda038 --out ~/night-archive/seats-cf1baad2/desk-cal/cloud`. Needs one non-Sol executing review and a frozen commit before pilot 8's desk.
