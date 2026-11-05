@@ -1,0 +1,1076 @@
+{
+  "baseline_head": "92026c1849c0f053e56bdac6110c079211db2c31",
+  "tracked_files": 13009,
+  "tracked_bytes": 375553491,
+  "physical_code_lines": 725536,
+  "source_suffixes": [
+    ".css",
+    ".js",
+    ".mjs",
+    ".py",
+    ".sh",
+    ".ts",
+    ".tsx",
+    ".zsh"
+  ],
+  "by_top": {
+    ".agents": {
+      "files": 1,
+      "bytes": 2503,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    ".claude": {
+      "files": 3,
+      "bytes": 12612,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    ".codex-report": {
+      "files": 58,
+      "bytes": 728362,
+      "code_lines": 1053,
+      "source_files_counted": 18
+    },
+    ".codex": {
+      "files": 1,
+      "bytes": 300,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    ".github": {
+      "files": 4,
+      "bytes": 33538,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    "(root)": {
+      "files": 17,
+      "bytes": 2572719,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    "analysis": {
+      "files": 18,
+      "bytes": 43619,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    "configs": {
+      "files": 2511,
+      "bytes": 21171760,
+      "code_lines": 42223,
+      "source_files_counted": 23
+    },
+    "docs": {
+      "files": 8984,
+      "bytes": 257804661,
+      "code_lines": 404,
+      "source_files_counted": 3
+    },
+    "env": {
+      "files": 4,
+      "bytes": 8233,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    "figures": {
+      "files": 2,
+      "bytes": 7721,
+      "code_lines": 0,
+      "source_files_counted": 0
+    },
+    "joulewise": {
+      "files": 172,
+      "bytes": 8348650,
+      "code_lines": 191580,
+      "source_files_counted": 172
+    },
+    "scripts": {
+      "files": 175,
+      "bytes": 5079429,
+      "code_lines": 106409,
+      "source_files_counted": 153
+    },
+    "site_capsule": {
+      "files": 10,
+      "bytes": 63781,
+      "code_lines": 664,
+      "source_files_counted": 2
+    },
+    "tests": {
+      "files": 1047,
+      "bytes": 79558290,
+      "code_lines": 380826,
+      "source_files_counted": 540
+    },
+    "tools": {
+      "files": 2,
+      "bytes": 117313,
+      "code_lines": 2377,
+      "source_files_counted": 2
+    }
+  },
+  "largest_30": [
+    {
+      "path": "docs/process_traces/2026-10-27-l9-restart/b5-transfer/quiet-kit.manifest.json",
+      "bytes": 6877177,
+      "oid": "92fa8bb31431f09f9a641c79461a0de210b4edec"
+    },
+    {
+      "path": "docs/process_traces/2026-10-27-l9-restart/b5-transfer/v5-b5-beta-a6-20261011T2011Z-harvest.manifest.json",
+      "bytes": 6764424,
+      "oid": "3e3929d380ac0cb276723d47b59ea1d4452e31cc"
+    },
+    {
+      "path": "docs/process_traces/2026-10-27-l9-restart/b5-transfer/v5-b5-alpha-a1-20261009T2312Z-harvest.manifest.json",
+      "bytes": 6616293,
+      "oid": "23bcd478663450196840e868cb0ac43ccd262cc1"
+    },
+    {
+      "path": "docs/process_traces/2026-10-27-l9-restart/b5-transfer/v5-b5-gamma-a1-20261012T0420Z-harvest.manifest.json",
+      "bytes": 6562636,
+      "oid": "62de2da0710189f9071884643782f405027d5e2d"
+    },
+    {
+      "path": "tests/fixtures/d117_v2_production/strict_seed_bundle/raw/powermetrics.plist",
+      "bytes": 5783144,
+      "oid": "5f3c3a293d7804aa2eb83d6cd380081d7631d664"
+    },
+    {
+      "path": "docs/process_traces/2026-08-07-plan-factory/DRAFT-QUANT_GATES.md",
+      "bytes": 4541882,
+      "oid": "d074d86f5827a892aa2fce12af5df9d31423f2ee"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-meta-sweeps/CONSISTENCY-SWEEP.md",
+      "bytes": 4056663,
+      "oid": "2b7b2c3f665fd413a99233db69f3ef46d61997e6"
+    },
+    {
+      "path": "docs/process_traces/2026-08-07-plan-factory/DRAFT-REASONCODE.md",
+      "bytes": 3855071,
+      "oid": "c5e6ec3ff5ba743203c09cf93120c389c0406677"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-d117-u-units/U2-DESIGN-BRIEF.md",
+      "bytes": 3570676,
+      "oid": "f88c39c343ace09df9b7a94b84bfa1109534c082"
+    },
+    {
+      "path": "docs/process_traces/rev6-windows/d079-epoch-25g83-r6-20261001T2252Z/harvest.json",
+      "bytes": 3505018,
+      "oid": "20051a1e0133d45625d017ceb3186d2265363d17"
+    },
+    {
+      "path": "docs/process_traces/rev6-windows/d079-epoch-25g83-r6-20261001T0617Z/harvest.json",
+      "bytes": 3483534,
+      "oid": "f8e4da8c563f397ab2c68610147e34ad87e8415f"
+    },
+    {
+      "path": "docs/process_traces/2026-08-07-plan-factory/DRAFT-NEVERZERO.md",
+      "bytes": 3416475,
+      "oid": "8766922ee15d18a9db4855f4f605464cf69d6d6d"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-meta-sweeps/PAPER-FORMAT.md",
+      "bytes": 3274971,
+      "oid": "6eabf57218edb4544bbd0e9b585ca6764915b681"
+    },
+    {
+      "path": "docs/process_traces/2026-09-18-activation-d8ca3a36/21-arm-evidence-n1-20260919/step0-output.txt",
+      "bytes": 3145847,
+      "oid": "840e3234a0c83cadac32eee9686c58f632ca6d17"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-meta-sweeps/DOCS-VS-PRACTICE.md",
+      "bytes": 3034557,
+      "oid": "ca4fb9446972286b1ffb95f1a5434a8ef242b1aa"
+    },
+    {
+      "path": "configs/pins/registry.json",
+      "bytes": 2924593,
+      "oid": "fd27cd9882bd9b1ac64c50fe2e553288c24055d9"
+    },
+    {
+      "path": "tests/fixtures/d117_v2_production/strict_seed_bundle/raw/powermetrics_idle_post.plist",
+      "bytes": 2776887,
+      "oid": "a3f7f15409aac46fbb3c54564cb1be4607a3be45"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-d117-u-units/U3-DELTA-VERDICT.md",
+      "bytes": 2775309,
+      "oid": "4c3413636c45cde296939b41ec2b0a4dffea9bcd"
+    },
+    {
+      "path": "docs/paper/round7/prefill-resolvability-projection.json",
+      "bytes": 2414334,
+      "oid": "bb26602c6f3c1cb6b0c9f00fe1e37f5ec2a0f242"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-night-hardening/AUDIT-MINT.md",
+      "bytes": 2366103,
+      "oid": "e0efc112e34f2d3d2496e1a7fc0513df3d160245"
+    },
+    {
+      "path": "tests/fixtures/d117_v2_production/strict_seed_bundle/raw/powermetrics_idle.plist",
+      "bytes": 2313257,
+      "oid": "b51a243ef59e871928d4e53dca9cbdbcd5729943"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-d117-u-units/U1-RECOVERY-FINALHEAD.md",
+      "bytes": 2297704,
+      "oid": "c46a329986e7481cee39e6ebaa997273b7afd34d"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-d117-u-units/U1-AUDIT-EXEC.md",
+      "bytes": 2290619,
+      "oid": "657c034732ddf7422a472e0a2d67f17d95abedb0"
+    },
+    {
+      "path": "docs/legacy/process_traces/2026-08-07-night-hardening/AUDIT-LEDGER.md",
+      "bytes": 2237180,
+      "oid": "4ef9697de13238e47cce3734ae5a812391f32871"
+    },
+    {
+      "path": "tests/fixtures/controller_g2b/block3-pre/raw/powermetrics.plist.gz",
+      "bytes": 2213205,
+      "oid": "4b023b57810116b02717f4f7fb3af9efb10322d0"
+    },
+    {
+      "path": "docs/process_traces/2026-10-03-design-block3/windows/d117-g2a-prefill-probe-20261004T1305Z/SHA256SUMS",
+      "bytes": 2138714,
+      "oid": "d9fe718f9ebdc25c2df038d12b083e37e465a6cf"
+    },
+    {
+      "path": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md",
+      "bytes": 2114877,
+      "oid": "2dc2415476f46650fbd1236321885ed75292bc55"
+    },
+    {
+      "path": "docs/process_traces/2026-10-02-design-block2/windows/d117-g2a-prefill-probe-20261003T1748Z/SHA256SUMS",
+      "bytes": 2094883,
+      "oid": "214a6bd4d8c5548cc849e0d3d092068805d309cc"
+    },
+    {
+      "path": "docs/process_traces/2026-10-03-design-block3/windows/d117-g2a-prefill-probe-20261004T0526Z/SHA256SUMS",
+      "bytes": 2054886,
+      "oid": "4cf7e8ff2a061ff5637e2173a43c85b405373df5"
+    },
+    {
+      "path": "docs/process_traces/2026-10-02-design-block2/windows/d117-g2a-prefill-probe-20261003T0820Z/SHA256SUMS",
+      "bytes": 2049761,
+      "oid": "d3692d8ea50a0b844c041d4f69cf40b2559989dd"
+    }
+  ],
+  "groups": {
+    "stage1": {
+      "files": 5,
+      "bytes": 91728,
+      "code_lines": 2534,
+      "paths": [
+        "scripts/axi_sb_static_batch_spike.py",
+        "scripts/axi_sc_spec_decode_spike.py",
+        "scripts/codex_usage_probe.py",
+        "scripts/gen_affine_smoke.py",
+        "scripts/measure_claude_cold_start.sh"
+      ]
+    },
+    "arm_code_envelope": {
+      "files": 28,
+      "bytes": 1498844,
+      "code_lines": 33256,
+      "paths": [
+        "joulewise/arm_readiness.py",
+        "joulewise/arm_readiness_evidence.py",
+        "joulewise/arm_readiness_evidence_t0.py",
+        "joulewise/arm_retry.py",
+        "joulewise/dwell.py",
+        "joulewise/network_time_off.py",
+        "joulewise/night_gate.py",
+        "joulewise/scheduler_gates.py",
+        "joulewise/t0_rehearsal.py",
+        "joulewise/v5_qualification.py",
+        "scripts/assemble_v5_battery_boundaries.py",
+        "scripts/author_arm_evidence_t0.py",
+        "scripts/author_arm_readiness_evidence.py",
+        "scripts/capture_t0_step.py",
+        "scripts/check_v5_arm_abort.py",
+        "scripts/ed_session/build_rehearsal_env.sh",
+        "scripts/ed_session/capture_t0_anchor_positive_control.py",
+        "scripts/ed_session/rail-probe.sh",
+        "scripts/ed_session/sampler-checklist.sh",
+        "scripts/generate_arm_readiness.py",
+        "scripts/harvest_v5_g2b_window.py",
+        "scripts/harvest_v5_qualification.py",
+        "scripts/launch_window.py",
+        "scripts/produce_t0_rehearsal_bundle.py",
+        "scripts/rehearse_t0_unattended.py",
+        "scripts/restore_v5_null_reservation.py",
+        "scripts/v5_s1_desk_closeout.py",
+        "scripts/write_v5_qualification_plan.py"
+      ]
+    },
+    "arm_test_reference_envelope": {
+      "files": 130,
+      "bytes": 7462771,
+      "code_lines": 151201,
+      "paths": [
+        "tests/b5_analysis/step4_reasons/make_table.py",
+        "tests/b5_analysis/test_launch_lineage.py",
+        "tests/b5_analysis/test_small_fixes.py",
+        "tests/flags/test_flags_collect.py",
+        "tests/flags/test_flags_core.py",
+        "tests/flags/test_flags_import_graph.py",
+        "tests/hazards/test_arm.py",
+        "tests/hazards/test_arm_dwell_clean_run.py",
+        "tests/hazards/test_arm_identity.py",
+        "tests/hazards/test_clock.py",
+        "tests/hazards/test_contention.py",
+        "tests/hazards/test_import_graph.py",
+        "tests/hazards/test_refusal_allowlist.py",
+        "tests/night_gate_fixtures/bind_supervision.py",
+        "tests/test_acc_25g83_rev6.py",
+        "tests/test_agent_census_concurrency.py",
+        "tests/test_agent_identity.py",
+        "tests/test_analysis_inputs.py",
+        "tests/test_analysis_integration.py",
+        "tests/test_arm_census.py",
+        "tests/test_arm_readiness.py",
+        "tests/test_arm_readiness_batch.py",
+        "tests/test_arm_readiness_dry_run.py",
+        "tests/test_arm_readiness_evidence.py",
+        "tests/test_arm_readiness_evidence_author.py",
+        "tests/test_arm_readiness_evidence_packauth.py",
+        "tests/test_arm_readiness_evidence_t0.py",
+        "tests/test_arm_readiness_integration.py",
+        "tests/test_arm_readiness_lifecycle.py",
+        "tests/test_arm_readiness_pack_digest.py",
+        "tests/test_arm_readiness_registry.py",
+        "tests/test_arm_readiness_schemas.py",
+        "tests/test_arm_retry.py",
+        "tests/test_authentication_io.py",
+        "tests/test_b5_chain.py",
+        "tests/test_b5_chain_prune2.py",
+        "tests/test_b5_driver.py",
+        "tests/test_b5_driver_lineage_real.py",
+        "tests/test_b5_driver_p2.py",
+        "tests/test_b5_driver_p3.py",
+        "tests/test_b5_plan.py",
+        "tests/test_battery_float.py",
+        "tests/test_battery_float_consumers.py",
+        "tests/test_battery_float_sweep.py",
+        "tests/test_bench_replay_entrypoint.py",
+        "tests/test_capture_pipeline_era.py",
+        "tests/test_capture_t0_anchor_positive_control.py",
+        "tests/test_capture_t0_anchor_positive_control_g10.py",
+        "tests/test_capture_t0_step.py",
+        "tests/test_cli_run.py",
+        "tests/test_clock_reference.py",
+        "tests/test_controller.py",
+        "tests/test_controller_g2b_attachment.py",
+        "tests/test_controller_hazard_flags.py",
+        "tests/test_controller_retry_backoff.py",
+        "tests/test_d117_contrast_v5_pack.py",
+        "tests/test_d117_decode_contrast_plan.py",
+        "tests/test_d117_floor_qwen25_1p5b_plan.py",
+        "tests/test_d117_floor_qwen25_7b_plan.py",
+        "tests/test_d117_floor_qwen3_v5_generate.py",
+        "tests/test_d117_v3_family.py",
+        "tests/test_detection_floor.py",
+        "tests/test_digest_pin_census.py",
+        "tests/test_evidence_night.py",
+        "tests/test_family_marker.py",
+        "tests/test_floor_extraction.py",
+        "tests/test_g10_clock_step_control.py",
+        "tests/test_gate_prune_integration.py",
+        "tests/test_gen_derivation_night.py",
+        "tests/test_gen_evidence_night.py",
+        "tests/test_gen_g2a_window.py",
+        "tests/test_gen_state.py",
+        "tests/test_harvest_g2a_window.py",
+        "tests/test_harvest_v5_g2b_window.py",
+        "tests/test_harvest_v5_qualification.py",
+        "tests/test_harvest_window.py",
+        "tests/test_hazard_neg8_mint_verdicts.py",
+        "tests/test_hazard_whole_window_verdict.py",
+        "tests/test_identity_pins.py",
+        "tests/test_install_night_agent.py",
+        "tests/test_issue_calibration_acceptance_generation.py",
+        "tests/test_launch_window.py",
+        "tests/test_launch_window_realization_recheck.py",
+        "tests/test_launcher_argv_regression.py",
+        "tests/test_magistrate_watchdog.py",
+        "tests/test_magistrate_watchdog_cli.py",
+        "tests/test_mint_analysis_admission.py",
+        "tests/test_network_time_off.py",
+        "tests/test_night_agent_install.py",
+        "tests/test_night_gate.py",
+        "tests/test_night_kinds.py",
+        "tests/test_night_plan_writer.py",
+        "tests/test_prewindow_check.py",
+        "tests/test_quiet_admission.py",
+        "tests/test_quiet_predicate_campaign.py",
+        "tests/test_reauthor_clean.py",
+        "tests/test_receipt_histsem.py",
+        "tests/test_rehearse_t0_unattended.py",
+        "tests/test_run_campaign.py",
+        "tests/test_run_campaign_p2_rc.py",
+        "tests/test_run_night.py",
+        "tests/test_run_night_probe_worker_cadence.py",
+        "tests/test_s0_line_audit_guard.py",
+        "tests/test_sample_quiet_predicate_evidence.py",
+        "tests/test_scheduler_gates.py",
+        "tests/test_single_count_discipline_matrix.py",
+        "tests/test_t0_anchor_positive_control.py",
+        "tests/test_t0_rehearsal.py",
+        "tests/test_v5_arm_abort.py",
+        "tests/test_v5_block4_clock.py",
+        "tests/test_v5_block4_composed.py",
+        "tests/test_v5_block4_replay.py",
+        "tests/test_v5_block4_x1.py",
+        "tests/test_v5_block4_x10.py",
+        "tests/test_v5_block4_x12a.py",
+        "tests/test_v5_block4_x12b.py",
+        "tests/test_v5_block4_x16.py",
+        "tests/test_v5_block4_x2.py",
+        "tests/test_v5_block4_x4.py",
+        "tests/test_v5_block4_x6.py",
+        "tests/test_v5_block4_x7.py",
+        "tests/test_v5_block4_x9.py",
+        "tests/test_v5_pack_regen.py",
+        "tests/test_v5_pack_rehearsal.py",
+        "tests/test_v5_qualification_plan.py",
+        "tests/test_v5_s1_desk_closeout.py",
+        "tests/test_v5_s1_qualification.py",
+        "tests/test_whole_window.py",
+        "tests/test_window_env_allowlist.py",
+        "tests/test_window_lineage.py"
+      ]
+    },
+    "remote_code_envelope": {
+      "files": 5,
+      "bytes": 169958,
+      "code_lines": 4570,
+      "paths": [
+        "joulewise/adapters/node_client.py",
+        "joulewise/adapters/node_worker.py",
+        "joulewise/adapters/nvidia_smi.py",
+        "joulewise/adapters/ssh_transport.py",
+        "joulewise/adapters/vllm_runtime.py"
+      ]
+    },
+    "remote_test_reference_envelope": {
+      "files": 12,
+      "bytes": 326224,
+      "code_lines": 7609,
+      "paths": [
+        "tests/test_2k_amplification.py",
+        "tests/test_arm_census.py",
+        "tests/test_audit_cli_examples.py",
+        "tests/test_fixture_orphan_census.py",
+        "tests/test_mock_adapters.py",
+        "tests/test_node_client.py",
+        "tests/test_node_worker.py",
+        "tests/test_node_worker_subprocess.py",
+        "tests/test_nvidia_node_integration.py",
+        "tests/test_nvidia_smi.py",
+        "tests/test_ssh_transport.py",
+        "tests/test_vllm_runtime.py"
+      ]
+    },
+    "frozen_version_envelope": {
+      "files": 7,
+      "bytes": 1093710,
+      "code_lines": 27125,
+      "paths": [
+        "joulewise/analysis_manifest.py",
+        "joulewise/analysis_manifest_v2.py",
+        "joulewise/analysis_manifest_v3.py",
+        "joulewise/reduce.py",
+        "joulewise/whole_window.py",
+        "scripts/mint_floor_artifact.py",
+        "scripts/mint_floor_artifact_generalized.py"
+      ]
+    },
+    "site_snapshot": {
+      "files": 39,
+      "bytes": 1566398,
+      "code_lines": 55,
+      "paths": [
+        "docs/site/DRIFT.md",
+        "docs/site/adapter_contracts.html",
+        "docs/site/advisor_brief.html",
+        "docs/site/agent_plan.html",
+        "docs/site/build_manifest.json",
+        "docs/site/claims_ladder.html",
+        "docs/site/council_log.html",
+        "docs/site/decision_log.html",
+        "docs/site/decision_log_archive_1.html",
+        "docs/site/decision_log_archive_2.html",
+        "docs/site/decision_log_archive_3.html",
+        "docs/site/decision_log_archive_4.html",
+        "docs/site/decision_log_archive_5.html",
+        "docs/site/fonts/Fraunces-600.woff2",
+        "docs/site/fonts/Fraunces-900.woff2",
+        "docs/site/fonts/IBMPlexMono-400.woff2",
+        "docs/site/fonts/IBMPlexMono-500.woff2",
+        "docs/site/fonts/IBMPlexSans-400.woff2",
+        "docs/site/fonts/IBMPlexSans-600.woff2",
+        "docs/site/fonts/fonts.css",
+        "docs/site/index.html",
+        "docs/site/latest_run_report.html",
+        "docs/site/library.html",
+        "docs/site/measurement_methodology.html",
+        "docs/site/milestones.html",
+        "docs/site/orchestration.html",
+        "docs/site/process.html",
+        "docs/site/project_status.html",
+        "docs/site/project_status_full.html",
+        "docs/site/readme.html",
+        "docs/site/record.html",
+        "docs/site/research.html",
+        "docs/site/results.html",
+        "docs/site/risk_register.html",
+        "docs/site/roadmap.html",
+        "docs/site/run_state.html",
+        "docs/site/status.html",
+        "docs/site/style.css",
+        "docs/site/task_queue.html"
+      ]
+    },
+    "legacy_records": {
+      "files": 311,
+      "bytes": 83144895,
+      "code_lines": 0
+    },
+    "process_records": {
+      "files": 8100,
+      "bytes": 157013233,
+      "code_lines": 0
+    },
+    "codex_reports": {
+      "files": 58,
+      "bytes": 728362,
+      "code_lines": 1053
+    },
+    "bridge_logs": {
+      "files": 0,
+      "bytes": 0,
+      "code_lines": 0
+    }
+  },
+  "stage1_refs": {
+    "scripts/axi_sb_static_batch_spike.py": {
+      "importers": [],
+      "source_referrers": [],
+      "release_reachable": false,
+      "later_reachable": false
+    },
+    "scripts/axi_sc_spec_decode_spike.py": {
+      "importers": [],
+      "source_referrers": [],
+      "release_reachable": false,
+      "later_reachable": false
+    },
+    "scripts/codex_usage_probe.py": {
+      "importers": [],
+      "source_referrers": [],
+      "release_reachable": false,
+      "later_reachable": false
+    },
+    "scripts/measure_claude_cold_start.sh": {
+      "importers": [],
+      "source_referrers": [],
+      "release_reachable": null,
+      "later_reachable": null
+    },
+    "scripts/gen_affine_smoke.py": {
+      "importers": [],
+      "source_referrers": [],
+      "release_reachable": false,
+      "later_reachable": false
+    }
+  },
+  "release_static_closure": [
+    "joulewise/__init__.py",
+    "joulewise/adapters/__init__.py",
+    "joulewise/adapters/local_transport.py",
+    "joulewise/adapters/mlx_runtime.py",
+    "joulewise/adapters/mock_runtime.py",
+    "joulewise/adapters/mock_spec_runtime.py",
+    "joulewise/adapters/mock_telemetry.py",
+    "joulewise/adapters/node_client.py",
+    "joulewise/adapters/nvidia_smi.py",
+    "joulewise/adapters/powermetrics.py",
+    "joulewise/adapters/ssh_transport.py",
+    "joulewise/adapters/suite_control.py",
+    "joulewise/adapters/vllm_runtime.py",
+    "joulewise/agent_identity.py",
+    "joulewise/aggregate.py",
+    "joulewise/analysis_engine/__init__.py",
+    "joulewise/analysis_engine/artifact.py",
+    "joulewise/analysis_engine/claim_side_bound.py",
+    "joulewise/analysis_engine/claims.py",
+    "joulewise/analysis_engine/distributions.py",
+    "joulewise/analysis_engine/estimators.py",
+    "joulewise/analysis_engine/inputs.py",
+    "joulewise/analysis_engine/multiplicity.py",
+    "joulewise/analysis_engine/ratio.py",
+    "joulewise/analysis_engine/registry.py",
+    "joulewise/analysis_engine/sensitivity.py",
+    "joulewise/analysis_manifest.py",
+    "joulewise/analysis_manifest_v3.py",
+    "joulewise/analysis_member_pool.py",
+    "joulewise/analysis_run_cache.py",
+    "joulewise/analysis_verified_store.py",
+    "joulewise/arm_readiness.py",
+    "joulewise/arm_readiness_evidence.py",
+    "joulewise/arm_readiness_evidence_t0.py",
+    "joulewise/arm_retry.py",
+    "joulewise/authentication_io.py",
+    "joulewise/axi_decode_config.py",
+    "joulewise/b5/__init__.py",
+    "joulewise/b5/chain.py",
+    "joulewise/b5/driver.py",
+    "joulewise/b5/harvest.py",
+    "joulewise/b5/plan.py",
+    "joulewise/b5/reference_spares.py",
+    "joulewise/b5_analysis/__init__.py",
+    "joulewise/b5_analysis/archive.py",
+    "joulewise/b5_analysis/bracket.py",
+    "joulewise/b5_analysis/context.py",
+    "joulewise/b5_analysis/deadline_observer.py",
+    "joulewise/b5_analysis/disclosures.py",
+    "joulewise/b5_analysis/dry_run.py",
+    "joulewise/b5_analysis/kept_units.py",
+    "joulewise/b5_analysis/parallel.py",
+    "joulewise/b5_analysis/phase_timing.py",
+    "joulewise/b5_analysis/sensitivity.py",
+    "joulewise/b5_analysis/sources_replay.py",
+    "joulewise/b5_analysis/steps.py",
+    "joulewise/b5_analysis/windows.py",
+    "joulewise/battery_float.py",
+    "joulewise/bundle.py",
+    "joulewise/bundle_read.py",
+    "joulewise/calibration_bracketing.py",
+    "joulewise/calibration_custody_worker.py",
+    "joulewise/calibration_dispositions.py",
+    "joulewise/calibration_epoch_continuation.py",
+    "joulewise/calibration_exits.py",
+    "joulewise/calibration_ledger.py",
+    "joulewise/campaign_provenance.py",
+    "joulewise/cli.py",
+    "joulewise/clock.py",
+    "joulewise/clock_reference.py",
+    "joulewise/controller.py",
+    "joulewise/cooldown.py",
+    "joulewise/cooldown_anchor.py",
+    "joulewise/corecaptured_loop.py",
+    "joulewise/detection_floor.py",
+    "joulewise/detection_floor_registry.py",
+    "joulewise/determinism_gate.py",
+    "joulewise/doctor.py",
+    "joulewise/dominance_closeout.py",
+    "joulewise/dwell.py",
+    "joulewise/envelope_gate.py",
+    "joulewise/environment.py",
+    "joulewise/environment_admission.py",
+    "joulewise/external/__init__.py",
+    "joulewise/external/km003c_parse.py",
+    "joulewise/external/km003c_usb.py",
+    "joulewise/flags/__init__.py",
+    "joulewise/flags/catalog.py",
+    "joulewise/flags/collect.py",
+    "joulewise/flags/core.py",
+    "joulewise/flags/exclusions.py",
+    "joulewise/flags/schema.py",
+    "joulewise/flags/sink.py",
+    "joulewise/floor_extraction.py",
+    "joulewise/floor_mint_estimator.py",
+    "joulewise/hazards/__init__.py",
+    "joulewise/hazards/arm.py",
+    "joulewise/hazards/base.py",
+    "joulewise/hazards/battery.py",
+    "joulewise/hazards/clock.py",
+    "joulewise/hazards/contention.py",
+    "joulewise/hazards/disk.py",
+    "joulewise/hazards/instrument.py",
+    "joulewise/hazards/monitor.py",
+    "joulewise/hazards/smc.py",
+    "joulewise/hazards/thermal.py",
+    "joulewise/identity_pins.py",
+    "joulewise/idle_admission.py",
+    "joulewise/idle_dependence.py",
+    "joulewise/interfaces.py",
+    "joulewise/kernel_clock.py",
+    "joulewise/kv_size.py",
+    "joulewise/measurement_liveness.py",
+    "joulewise/model_panel.py",
+    "joulewise/neg8_survivors.py",
+    "joulewise/network_time_off.py",
+    "joulewise/night_agent_install.py",
+    "joulewise/night_gate.py",
+    "joulewise/night_kinds.py",
+    "joulewise/night_plan_writer.py",
+    "joulewise/output_identity.py",
+    "joulewise/paper_custody.py",
+    "joulewise/paper_rendering.py",
+    "joulewise/paper_reported_energy.py",
+    "joulewise/paper_reported_energy_issuer.py",
+    "joulewise/powermetrics_fiducial.py",
+    "joulewise/prewindow.py",
+    "joulewise/provenance.py",
+    "joulewise/publication_privacy.py",
+    "joulewise/quiet_admission.py",
+    "joulewise/quiet_predicate_campaign.py",
+    "joulewise/receipt_oracle.py",
+    "joulewise/reduce.py",
+    "joulewise/report.py",
+    "joulewise/results_fill_adapter.py",
+    "joulewise/salvage_dangler.py",
+    "joulewise/sampler_teardown.py",
+    "joulewise/scheduler_gates.py",
+    "joulewise/schemas.py",
+    "joulewise/suite.py",
+    "joulewise/t0_rehearsal.py",
+    "joulewise/uncertainty_evidence.py",
+    "joulewise/v5_qualification.py",
+    "joulewise/validation.py",
+    "joulewise/whole_window.py",
+    "joulewise/window_lineage.py",
+    "joulewise/zero_capture_facts.py",
+    "scripts/advance_b5_ledger_pin.py",
+    "scripts/author_arm_evidence_t0.py",
+    "scripts/author_arm_readiness_evidence.py",
+    "scripts/b5_window_calibration_verdict.py",
+    "scripts/build_bracket_binding.py",
+    "scripts/build_d165_dominance_closeout.py",
+    "scripts/build_family_marker.py",
+    "scripts/build_results_fill_input.py",
+    "scripts/build_v4_histsem_pinset.py",
+    "scripts/calibration_cadence_report.py",
+    "scripts/calibration_ledger_bootstrap.py",
+    "scripts/cap_replay_harness.py",
+    "scripts/capture_t0_step.py",
+    "scripts/check_b5_chain.py",
+    "scripts/check_v5_arm_abort.py",
+    "scripts/check_window_provenance.py",
+    "scripts/collect_clock_reference.py",
+    "scripts/collect_window_flags.py",
+    "scripts/compare_b5_recompute.py",
+    "scripts/ed_session/capture_t0_anchor_positive_control.py",
+    "scripts/emit_floor_mint_pinset.py",
+    "scripts/extract_detection_floors.py",
+    "scripts/finalize_analysis_manifest.py",
+    "scripts/fixture_orphan_census.py",
+    "scripts/g10_clock_step_control.py",
+    "scripts/gen_derivation_night.py",
+    "scripts/gen_evidence_night.py",
+    "scripts/gen_g2_phase_d.py",
+    "scripts/generate_arm_readiness.py",
+    "scripts/generate_g2a_probe_inputs.py",
+    "scripts/generate_matrix.py",
+    "scripts/harvest_b5_window.py",
+    "scripts/harvest_g2a_window.py",
+    "scripts/harvest_v5_g2b_window.py",
+    "scripts/harvest_v5_qualification.py",
+    "scripts/harvest_window.py",
+    "scripts/hazard_monitor.py",
+    "scripts/independent_recompute_b5.py",
+    "scripts/issue_calibration_acceptance_generation.py",
+    "scripts/issue_reported_energy.py",
+    "scripts/km003c_monitor.py",
+    "scripts/launch_window.py",
+    "scripts/magistrate_watchdog.py",
+    "scripts/mint_floor_artifact.py",
+    "scripts/mint_floor_artifact_generalized.py",
+    "scripts/produce_b5_disclosures.py",
+    "scripts/produce_t0_rehearsal_bundle.py",
+    "scripts/project_identity_pins.py",
+    "scripts/recover_calibration_ledger.py",
+    "scripts/refresh_receipt_histsem_pinset.py",
+    "scripts/rehearse_b5_real.py",
+    "scripts/rehearse_t0_unattended.py",
+    "scripts/replay_powermetrics_frames.py",
+    "scripts/reserve_calibration_window_bracket.py",
+    "scripts/restore_v5_null_reservation.py",
+    "scripts/run_b5_analysis.py",
+    "scripts/run_campaign.py",
+    "scripts/run_d165_closeout_from_custody.py",
+    "scripts/run_night.py",
+    "scripts/sample_quiet_predicate_evidence.py",
+    "scripts/select_g2a_prefill_length.py",
+    "scripts/summarize_g2a_prefill_probe.py",
+    "scripts/v5_s1_desk_closeout.py",
+    "scripts/validate_powermetrics_fiducial.py",
+    "scripts/verify_family_marker.py",
+    "scripts/verify_receipt_histsem.py",
+    "scripts/write_v5_qualification_plan.py",
+    "tests/b5_analysis/__init__.py",
+    "tests/b5_analysis/fixtures.py",
+    "tests/b5_analysis/fixtures_s1.py",
+    "tests/b5_analysis/fixtures_s10.py",
+    "tests/b5_analysis/fixtures_s2.py",
+    "tests/b5_analysis/fixtures_s3.py",
+    "tests/b5_analysis/fixtures_s3b.py",
+    "tests/b5_analysis/fixtures_s5.py",
+    "tests/b5_analysis/fixtures_s8.py",
+    "tests/b5_analysis/joined_s10.py",
+    "tests/b5_analysis/support_s10/__init__.py",
+    "tests/b5_analysis/support_s10/calibration.py",
+    "tests/b5_analysis/support_s10/journals.py",
+    "tests/b5_analysis/support_s10/member.py",
+    "tests/b5_analysis/test_dry_run.py",
+    "tests/b5_analysis/test_fill_adapter.py",
+    "tests/b5_analysis/test_floor_kept_units.py",
+    "tests/b5_analysis/test_mint_kept_units.py",
+    "tests/b5_analysis/test_reported_cell.py",
+    "tests/b5_analysis/test_sensitivity_guard.py",
+    "tests/battery_float_corpus.py",
+    "tests/battery_float_fixture.py",
+    "tests/calibration_exits_fixtures/custody_hang.py",
+    "tests/git_fixture.py",
+    "tests/night_gate_fixtures/bind_supervision.py",
+    "tests/owned_process_runner.py",
+    "tests/process_reaper.py",
+    "tests/receipt_corpus.py",
+    "tests/receipt_provenance_analyzer.py",
+    "tests/test_analysis_finalizer.py",
+    "tests/test_analysis_integration.py",
+    "tests/test_analysis_manifest_v3.py",
+    "tests/test_arm_readiness.py",
+    "tests/test_arm_readiness_dry_run.py",
+    "tests/test_arm_readiness_evidence.py",
+    "tests/test_arm_readiness_evidence_author.py",
+    "tests/test_arm_readiness_evidence_t0.py",
+    "tests/test_arm_readiness_integration.py",
+    "tests/test_arm_readiness_lifecycle.py",
+    "tests/test_arm_readiness_schemas.py",
+    "tests/test_axi_analysis_manifest.py",
+    "tests/test_calibration_bracketing.py",
+    "tests/test_calibration_exits.py",
+    "tests/test_calibration_ledger.py",
+    "tests/test_calibration_ledger_custody.py",
+    "tests/test_calibration_live_three_window.py",
+    "tests/test_controller.py",
+    "tests/test_d117_contrast_v5_pack.py",
+    "tests/test_detection_floor.py",
+    "tests/test_emit_floor_mint_pinset.py",
+    "tests/test_family_marker.py",
+    "tests/test_floor_extraction.py",
+    "tests/test_gen_evidence_night.py",
+    "tests/test_harvest_b5_sources.py",
+    "tests/test_harvest_b5_trigger_scope.py",
+    "tests/test_harvest_b5_window.py",
+    "tests/test_identity_pins.py",
+    "tests/test_kernel_clock.py",
+    "tests/test_mint_floor_artifact.py",
+    "tests/test_mint_floor_artifact_generalized.py",
+    "tests/test_neg8_survivors.py",
+    "tests/test_night_gate.py",
+    "tests/test_p2038_production_path.py",
+    "tests/test_paper_custody.py",
+    "tests/test_paper_reported_energy.py",
+    "tests/test_powermetrics.py",
+    "tests/test_quiet_admission.py",
+    "tests/test_r4_acceptance_oracle.py",
+    "tests/test_receipt_histsem.py",
+    "tests/test_reduce.py",
+    "tests/test_run_campaign.py",
+    "tests/test_run_night.py",
+    "tests/test_run_night_probe_cadence.py",
+    "tests/test_whole_window.py",
+    "tests/test_whole_window_selection.py",
+    "tests/verify_w1w2_disposition_sources.py"
+  ],
+  "block6_bytes_align_static_closure": [
+    "joulewise/__init__.py",
+    "joulewise/axi_decode_config.py",
+    "joulewise/idle_admission.py",
+    "joulewise/load_transition_alignment.py",
+    "joulewise/schemas.py",
+    "joulewise/validation.py"
+  ],
+  "source_files": 913,
+  "parsed_python_files": 845,
+  "method": {
+    "scope": "Tracked index entries, excluding every restricted path component; stat sizes only for records/data. Source bytes only for LOC and AST analysis.",
+    "loc": "Physical newline counts in .py/.js/.mjs/.ts/.tsx/.sh/.zsh/.css; excludes docs/process_traces, docs/legacy, docs/paper, tests/fixtures, analysis. Zero means no eligible source counted, not an empty directory.",
+    "graph": "AST import/import-from (relative imports resolved, package initializers included), exact module strings and scripts/*.py literals. Function-local imports included conservatively. Not a tagged-tree or dynamic import proof.",
+    "release_roots": "Every current joulewise/b5 and joulewise/b5_analysis module; scripts/run_b5_analysis.py, independent_recompute_b5.py and compare_b5_recompute.py. Parsed only, never executed.",
+    "later_roots": "Current non-test Python paths containing block6, block_6, /b6/, bytes or align; not an exhaustive owning-lane inventory.",
+    "git": "Only the initial Git queries used normal storage; subsequent calls set GIT_OBJECT_DIRECTORY to a local-only temporary store and empty GIT_ALTERNATE_OBJECT_DIRECTORIES. Historical objects unavailable in this mode."
+  },
+  "stage1_files": [
+    {
+      "path": "scripts/axi_sb_static_batch_spike.py",
+      "bytes": 34869,
+      "lines": 974,
+      "sha256": "9acfed91c87b060bf08c1a36a1b7823e8fac15f315af9451cff6310397602043",
+      "matches_sealed_inventory": true
+    },
+    {
+      "path": "scripts/axi_sc_spec_decode_spike.py",
+      "bytes": 51910,
+      "lines": 1418,
+      "sha256": "14f1dc592ad5341e002c26e9d221d7124d6a3f5201a74f6a551016c7fd41c50a",
+      "matches_sealed_inventory": true
+    },
+    {
+      "path": "scripts/codex_usage_probe.py",
+      "bytes": 2274,
+      "lines": 54,
+      "sha256": "ee4fcb7270ca790cc00dec795114a2f92fc02ce529e042978521be374f4da115",
+      "matches_sealed_inventory": true
+    },
+    {
+      "path": "scripts/gen_affine_smoke.py",
+      "bytes": 1540,
+      "lines": 56,
+      "sha256": "7ce91bd3423558acb4ffdaaec4b1490938522a9b32a3c47185f452c595fb22eb",
+      "matches_sealed_inventory": true
+    },
+    {
+      "path": "scripts/measure_claude_cold_start.sh",
+      "bytes": 1135,
+      "lines": 32,
+      "sha256": "105ecad207f53fe202d418c80eaee1d44d7def5c45dda9a840a28a46fd78382e",
+      "matches_sealed_inventory": true
+    }
+  ],
+  "mirror_functions": [
+    {
+      "name": "_clamped_corner_composed_anchor_shift_envelope",
+      "lines": 143,
+      "bytes": 5680
+    },
+    {
+      "name": "_group_envelope_contributions",
+      "lines": 80,
+      "bytes": 3166
+    },
+    {
+      "name": "_restamp_clamped_gate",
+      "lines": 28,
+      "bytes": 1171
+    },
+    {
+      "name": "_clamp_inverted_operative_envelopes",
+      "lines": 162,
+      "bytes": 6792
+    },
+    {
+      "name": "_rederive_operative_summary",
+      "lines": 25,
+      "bytes": 1037
+    }
+  ],
+  "census_files": [
+    {
+      "path": "tests/test_single_count_discipline_census.py",
+      "bytes": 96633,
+      "lines": 1226
+    },
+    {
+      "path": "tests/test_single_count_discipline_matrix.py",
+      "bytes": 36908,
+      "lines": 580
+    },
+    {
+      "path": "tests/test_docs_freshness.py",
+      "bytes": 54605,
+      "lines": 1270
+    },
+    {
+      "path": "scripts/repin.py",
+      "bytes": 20081,
+      "lines": 442
+    },
+    {
+      "path": "scripts/gen_state.py",
+      "bytes": 34964,
+      "lines": 855
+    },
+    {
+      "path": "tests/test_gen_state.py",
+      "bytes": 106699,
+      "lines": 1810
+    },
+    {
+      "path": "tests/test_b5_seal_landing.py",
+      "bytes": 13060,
+      "lines": 252
+    },
+    {
+      "path": "tests/test_reason_code_partition.py",
+      "bytes": 8159,
+      "lines": 222
+    },
+    {
+      "path": "tests/flags/test_flags_import_graph.py",
+      "bytes": 4428,
+      "lines": 92
+    },
+    {
+      "path": "tests/hazards/test_import_graph.py",
+      "bytes": 10380,
+      "lines": 227
+    },
+    {
+      "path": "scripts/verify_receipt_histsem.py",
+      "bytes": 2475,
+      "lines": 77
+    }
+  ],
+  "remote_dedicated_tests": [
+    {
+      "path": "tests/test_2k_amplification.py",
+      "bytes": 25718,
+      "lines": 645
+    },
+    {
+      "path": "tests/test_node_client.py",
+      "bytes": 46081,
+      "lines": 1131
+    },
+    {
+      "path": "tests/test_node_worker.py",
+      "bytes": 69472,
+      "lines": 1570
+    },
+    {
+      "path": "tests/test_node_worker_subprocess.py",
+      "bytes": 17298,
+      "lines": 456
+    },
+    {
+      "path": "tests/test_nvidia_node_integration.py",
+      "bytes": 34327,
+      "lines": 832
+    },
+    {
+      "path": "tests/test_nvidia_smi.py",
+      "bytes": 17105,
+      "lines": 455
+    },
+    {
+      "path": "tests/test_ssh_transport.py",
+      "bytes": 6282,
+      "lines": 159
+    },
+    {
+      "path": "tests/test_vllm_runtime.py",
+      "bytes": 16444,
+      "lines": 421
+    }
+  ],
+  "verification": {
+    "state_generator_before": "python3 -I -B scripts/gen_state.py --check: exit 0",
+    "focused_unittest_before": "python3 -m unittest tests.test_gen_state -q: 44 tests, 3.575s, OK",
+    "pytest": "python3 -m pytest tests/test_gen_state.py -q -x: exit 1, pytest not installed; no install/network attempted",
+    "package_smoke": "171/171 non-CLI package modules imported with source-only read, boundary, process and network guards; joulewise.__main__ compiled only",
+    "smoke_setup": "python3 -I -S -B; sys.path explicitly adds this checkout; tempfile.tempdir preselected; system ctypes loads allowed; all measurement/data opens denied",
+    "os_sandbox": "Nested sandbox-exec unavailable: sandbox_apply: Operation not permitted; Python audit hooks plus guarded stat/lstat/access/readlink used for import smoke instead; this is not an OS security proof."
+  }
+}
