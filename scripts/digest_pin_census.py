@@ -15,7 +15,8 @@ Lane L7 (Ed's point c, 2026-10-05). Hard-coded digests are of two kinds:
   time instead of written down.
 
 The census finds every 64-hex literal, records where it sits (a JSON pointer
-for JSON files, ``#L<line>`` otherwise), resolves it against the tree, sorts it
+for JSON files, ``#sha256/<digest>`` for Python tests, ``#L<line>``
+for historical non-test documents), resolves it against the tree, sorts it
 into a family, and writes ``configs/pins/registry.json``. A literal is
 resolved against, in order:
 
@@ -551,7 +552,11 @@ def literals_in(path: str, raw: bytes) -> list[Literal]:
             # Era tables can put claims from different commits on one line.
             # Preserve each literal's identity even when a digest is repeated.
             suffix = f":{ordinal}" if path in ERA_RECORDS and len(matches) > 1 else sub_pointer
-            found.append(Literal(path, f"#L{number}{suffix}", match.group(0), number, context))
+            # F7 rebind: docs/process/freeze_p1_rebind.md. The digest is the
+            # identity; moving a test or adding comments never relocates it.
+            pointer = (f"#sha256/{match.group(0)}" if path.startswith("tests/") and path.endswith(".py")
+                       else f"#L{number}{suffix}")
+            found.append(Literal(path, pointer, match.group(0), number, context))
     return found
 
 

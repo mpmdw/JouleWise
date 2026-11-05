@@ -60,9 +60,8 @@ ORIGIN_MAIN_SHA256 = {
         "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
     ),
 }
-FROZEN_FILES_TEST_SHA256 = (
-    "523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d"
-)
+# The former test_frozen_files.py worktree-byte pin is retired under F1.
+# Registered tag/tree checks own that freeze: docs/process/freeze_p1_rebind.md.
 PREFILL = "/phase_energy_j/prefill"
 UNRECORDED = "anchor_energy_envelope_unrecorded"
 EXCEEDS = "anchor_energy_envelope_exceeds_quarter_metric"
@@ -1230,11 +1229,6 @@ class FreezeProofTests(unittest.TestCase):
         acceptance = json.loads(Path(DEFAULT_ACCEPTANCE_BOUND_PATH).read_bytes())
         self.assertEqual(acceptance["prospective_rederivation"]["estimator_code_sha256"],
                          _current_estimator_code_sha256())
-
-    def test_frozen_files_test_is_unchanged(self) -> None:
-        self.assertEqual(
-            hashlib.sha256((ROOT / "tests/b5_analysis/test_frozen_files.py").read_bytes()).hexdigest(),
-            FROZEN_FILES_TEST_SHA256)
 
     def test_reduce_is_not_patched_at_runtime(self) -> None:
         for name in ("_corner_composed_anchor_shift_envelope", "_anchor_shift_envelope",

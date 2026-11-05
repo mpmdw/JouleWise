@@ -572,7 +572,7 @@ class PaperCustodyApiTests(unittest.TestCase):
         source = inspect.getsource(custody._open_paper_input_impl)
         self.assertNotIn('row["sha256"] != _sha256(raw)', source)
 
-    def test_anchor_refuses_head_not_contained_in_origin_main(self) -> None:
+    def test_anchor_refuses_unregistered_analysis_head(self) -> None:
         mint_module = identity_pins._load_mint_module()
         with mock.patch.object(
             mint_module,
@@ -580,7 +580,7 @@ class PaperCustodyApiTests(unittest.TestCase):
             return_value=("a" * 40, False),
         ):
             with self.assertRaises(IdentityPinProjectionError) as raised:
-                identity_pins._mint_git_anchor(require_origin_main=True)
+                identity_pins._mint_git_anchor(require_registered_analysis=True)
         self.assertEqual(
             raised.exception.reason_code,
             "readiness_identity_artifact_unreadable",

@@ -239,6 +239,10 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
             warnings.append(f"pinning file {path} is gone; refresh with python scripts/repin.py --write registry")
             continue
         for pointer, family, target_index in entry["rows"]:
+            if (pointer.startswith("#sha256/")
+                    and pointer.removeprefix("#sha256/") not in (files.text(path) or "")):
+                warnings.append(f"{path} {pointer}: content pointer is absent; refresh with "
+                                "python scripts/repin.py --write registry")
             if family not in census.FAMILIES:
                 warnings.append(f"{path} {pointer}: unknown family {family}")
                 continue
@@ -292,6 +296,11 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
 def _literal_at(files: _Files, row: StaleRow) -> str | None:
     """The single 64-hex literal a stale row holds now, or None if ambiguous."""
 
+    if row.pointer.startswith("#sha256/"):
+        # F7 rebind: docs/process/freeze_p1_rebind.md. Retain the old literal
+        # for an explicit family rewrite, independently of its source line.
+        value = row.pointer.removeprefix("#sha256/")
+        return value if census.HEX64.fullmatch(value) and value in (files.text(row.path) or "") else None
     if row.pointer.startswith("#L"):
         match = re.match(r"#L([0-9]+)", row.pointer)
         lines = (files.text(row.path) or "").splitlines()
@@ -355,6 +364,7 @@ def write_registry_family(family: str, root: Path = REPO_ROOT) -> int:
         (root / path).write_text(text, encoding="utf-8")
     if edits:
         print("These pins protect a number: commit them with the review the target change needs.")
+        print("Refresh content pointers with python scripts/repin.py --write registry after review.")
     return 1 if refused else 0
 
 

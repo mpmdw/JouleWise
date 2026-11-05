@@ -1,0 +1,32 @@
+{
+  "schema": "joulewise.block_freeze.v1",
+  "authority": "docs/process/freeze_by_commit.md",
+  "active_analysis": "b5/analysis-r2",
+  "tags": {
+    "b5/collection": {
+      "tag_object": "dbf91f4ba108017c8973b0f0ad8c6819b4300422",
+      "commit": "c27485347c9629b857df81665b5b1b8d10dcd36a",
+      "tree": "30dc0681fbea919338f639075389bde0161f7c21"
+    },
+    "b5/analysis": {
+      "tag_object": "8b8aa535898142470426050e8b4b2ef64e593e3a",
+      "commit": "2fdc0929d5c214505617145893df2e71ab8a83b5",
+      "tree": "ea994f30a109123cffe19e1b064e1593928f16b3"
+    },
+    "b5/analysis-r2": {
+      "tag_object": "bdaf0c03e74b6fc824e16f607122c0738dab0eb7",
+      "commit": "929fc65c9ce3ff82f0311d28acf76a682edd466f",
+      "tree": "9e89d7ff48999416467129c03ea171fc3a1f3f83"
+    }
+  },
+  "calibration_scope": {
+    "status": "STUB_REISSUE_REQUIRED",
+    "acceptance": null,
+    "dependencies": [
+      "D-138 acceptance reissue",
+      "A178 GATE-R2-COVERAGE-ULP-01",
+      "L9-ENV-2 e1b3a0510"
+    ],
+    "authority": "RUN_STATE.md item 145"
+  }
+}
