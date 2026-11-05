@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / ".engine" / "hf-flashnext" / "config.json"
+CONFIG = ROOT / "tests" / "fixtures" / "align_flashnext_config.json"  # = .engine/hf-flashnext/config.json
 
 
 def _text_config(**over):

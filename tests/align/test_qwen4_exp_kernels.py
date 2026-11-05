@@ -19,7 +19,8 @@ HAVE_MLX = (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-REAL_CONFIG = ROOT / ".engine" / "hf-flashnext" / "config.json"
+# Byte-identical copy of the official config (.engine/ is not tracked).
+REAL_CONFIG = ROOT / "tests" / "fixtures" / "align_flashnext_config.json"
 
 if HAVE_MLX:
     import mlx.core as mx
@@ -315,6 +316,82 @@ class QSATests(unittest.TestCase):
         full = K.qsa_sparse_decode_attention(qq, kk, vv, None, scale=Dh**-0.5, kv_len=T)
         ref_full = mx.fast.scaled_dot_product_attention(qq, kk[:, :, :T], vv[:, :, :T], scale=Dh**-0.5)
         self.assertLess(_maxabs(full, ref_full), 1e-6)
+
+    def _sparse_case(self, cfg, B, T, L, seed, dtype):
+        qk, qw, kw = _qsa_inputs(cfg, B, T, seed=seed)
+        q, raw = K.qsa_split_qk(qk, qw, cfg)
+        nb = T // cfg.compress_ratio
+        bk = K.qsa_block_keys(raw[:, : nb * cfg.compress_ratio], kw, cfg)
+        off = T - L
+        pos = mx.arange(off, T, dtype=mx.int32)
+        scores = K.qsa_scores(q[:, off:], bk)
+        return q[:, off:], bk, off, pos, scores
+
+    def test_token_indices_select_the_mask_set(self):
+        cfg = _tiny_qsa()
+        _, _, _, pos, scores = self._sparse_case(cfg, 2, 57, 30, 80, mx.float32)
+        idx = K.qsa_select_token_indices(scores, pos, cfg)
+        mask = K.qsa_token_mask(K.qsa_select_blocks(scores, pos, cfg), pos, 57, cfg)
+        from_idx = (mx.arange(57)[None, None, None, :] == idx[..., None]).any(axis=-2)[:, None]
+        self.assertTrue(mx.array_equal(from_idx, mask).item())
+        self.assertEqual(idx.shape[-1], cfg.budget + cfg.compress_ratio - 1)
+
+    def test_sparse_attention_kernel_matches_masked_sdpa(self):
+        cfg = _tiny_qsa()
+        T, L, Tcap = 61, 23, 80
+        _, _, _, pos, scores = self._sparse_case(cfg, 2, T, L, 81, mx.float32)
+        idx = K.qsa_select_token_indices(scores, pos, cfg)
+        mask = (mx.arange(T)[None, None, None, :] == idx[..., None]).any(axis=-2)[:, None]
+        mx.random.seed(82)
+        for dtype, tol in ((mx.float32, 2e-5), (mx.bfloat16, 2e-2)):
+            for Hq, Hkv, D in ((6, 2, 64), (24, 2, 256)):
+                with self.subTest(dtype=dtype, Hq=Hq, D=D):
+                    q = mx.random.normal((2, Hq, L, D)).astype(dtype)
+                    kbuf = mx.random.normal((2, Hkv, Tcap, D)).astype(dtype)
+                    vbuf = mx.random.normal((2, Hkv, Tcap, D)).astype(dtype)
+                    out = K.qsa_sparse_attention(q, kbuf, vbuf, idx, D**-0.5)
+                    ref = mx.fast.scaled_dot_product_attention(
+                        q.astype(mx.float32), kbuf[:, :, :T].astype(mx.float32), vbuf[:, :, :T].astype(mx.float32),
+                        scale=D**-0.5, mask=mask,
+                    )
+                    self.assertEqual(out.dtype, dtype)
+                    self.assertLess(_maxabs(out, ref), tol)
+
+    def test_prefill_attention_paths_agree(self):
+        cfg = _tiny_qsa()
+        T, L = 64, 20
+        qi, bk, off, pos, _ = self._sparse_case(cfg, 1, T, L, 83, mx.float32)
+        mx.random.seed(84)
+        Hq, Hkv, D = 6, 2, 64
+        q = mx.random.normal((1, Hq, L, D))
+        kbuf = mx.random.normal((1, Hkv, T + 7, D))
+        vbuf = mx.random.normal((1, Hkv, T + 7, D))
+        sparse = K.qsa_prefill_attention(q, kbuf, vbuf, T, qi, bk, off, cfg, D**-0.5, sparse_min_kv=0)
+        dense = K.qsa_prefill_attention(q, kbuf, vbuf, T, qi, bk, off, cfg, D**-0.5, sparse_min_kv=10**9)
+        self.assertLess(_maxabs(sparse, dense), 2e-5)
+        # Dense regime: plain causal attention, bottom-right aligned.
+        Td = cfg.dense_limit
+        qd, bkd, offd, _, _ = self._sparse_case(cfg, 1, Td, 7, 85, mx.float32)
+        qq = mx.random.normal((1, Hq, 7, D))
+        out = K.qsa_prefill_attention(qq, kbuf, vbuf, Td, qd, bkd, offd, cfg, D**-0.5)
+        causal = mx.arange(Td)[None, :] <= mx.arange(Td - 7, Td)[:, None]
+        ref = mx.fast.scaled_dot_product_attention(qq, kbuf[:, :, :Td], vbuf[:, :, :Td], scale=D**-0.5, mask=causal)
+        self.assertLess(_maxabs(out, ref), 2e-5)
+
+    def test_decode_attention_paths_agree(self):
+        cfg = _tiny_qsa()
+        T = 58
+        qk, qw, kw = _qsa_inputs(cfg, 1, T, seed=86)
+        q, raw = K.qsa_split_qk(qk, qw, cfg)
+        bk = K.QSAIndexerCache(cfg).update(raw, kw)
+        mx.random.seed(87)
+        Hq, Hkv, D = 6, 2, 64
+        qq = mx.random.normal((1, Hq, 1, D))
+        kbuf = mx.random.normal((1, Hkv, T + 5, D))
+        vbuf = mx.random.normal((1, Hkv, T + 5, D))
+        a = K.qsa_decode_attention(qq, kbuf, vbuf, T, q[:, -1:], bk, cfg, D**-0.5, sparse_min_kv=0)
+        b = K.qsa_decode_attention(qq, kbuf, vbuf, T, q[:, -1:], bk, cfg, D**-0.5, sparse_min_kv=10**9)
+        self.assertLess(_maxabs(a, b), 2e-6)
 
     def test_query_chunked_sdpa(self):
         mx.random.seed(60)

@@ -33,7 +33,8 @@ import mlx.nn as nn
 from joulewise.align.models import qwen4_exp_kernels as K
 
 ROOT = Path(__file__).resolve().parents[3]
-CONFIG = ROOT / ".engine" / "hf-flashnext" / "config.json"
+# Byte-identical copy of .engine/hf-flashnext/config.json (.engine/ is untracked).
+CONFIG = ROOT / "tests" / "fixtures" / "align_flashnext_config.json"
 
 BF16 = mx.bfloat16
 
@@ -77,6 +78,16 @@ def free():
 # --------------------------------------------------------------------------
 
 
+def rand_bf16(shape, scale: float, rows: int = 4096) -> mx.array:
+    """Random bf16 in row blocks: MLX's random ops peak at about 3x the
+    output size, which is 3.8 GB for a bf16 lm_head."""
+    out = mx.zeros(shape, dtype=BF16)
+    for i in range(0, shape[0], rows):
+        out[i : i + rows] = (mx.random.normal((min(rows, shape[0] - i), *shape[1:])) * scale).astype(BF16)
+        mx.eval(out)
+    return out
+
+
 def rand_packed(shape) -> mx.array:
     """Random packed quantized words (uint32), without a bf16 intermediate."""
     return mx.random.randint(0, 2**31 - 1, shape, dtype=mx.int32).view(mx.uint32)
@@ -89,7 +100,7 @@ class Lin:
         scale = scale if scale is not None else in_dim**-0.5
         self.bits = bits
         if bits is None:
-            self.w = (mx.random.normal((out_dim, in_dim)) * scale).astype(BF16)
+            self.w = rand_bf16((out_dim, in_dim), scale)
         else:
             # Random packed weights directly: avoids a transient bf16 copy.
             self.w = rand_packed((out_dim, in_dim * bits // 32))
@@ -180,6 +191,8 @@ class QSALayer:
         self.k_norm = mx.ones((self.Dh,), dtype=BF16)
         self.scale = self.Dh**-0.5
         self.eps = cfg["rms_norm_eps"]
+        self.sparse_min_kv = K.QSA_SPARSE_PREFILL_MIN_KV
+        self.sparse_decode_min_kv = K.QSA_SPARSE_DECODE_MIN_KV
 
     @property
     def weight_bytes(self) -> int:
@@ -217,11 +230,13 @@ class QSALayer:
         k = K.qsa_rope(k, self.qcfg, off)
         keys, values = kv.update_and_fetch(k, v.transpose(0, 2, 1, 3))
         if L == 1:
-            idx = K.qsa_decode_token_indices(iq, bk, off, self.qcfg)
-            o = K.qsa_sparse_decode_attention(q, keys, values, idx, self.scale)
+            o = K.qsa_decode_attention(
+                q, kv.keys, kv.values, kv.offset, iq, bk, self.qcfg, self.scale, self.sparse_decode_min_kv
+            )
         else:
-            mask = K.qsa_prefill_mask(iq, bk, off, self.qcfg)
-            o = K.sdpa_query_chunked(q, keys, values, self.scale, "causal" if mask is None else mask)
+            o = K.qsa_prefill_attention(
+                q, kv.keys, kv.values, kv.offset, iq, bk, off, self.qcfg, self.scale, self.sparse_min_kv
+            )
         o = o.transpose(0, 2, 1, 3).reshape(B, L, -1) * mx.sigmoid(gate.reshape(B, L, -1))
         return self.o_proj(o)
 
@@ -492,6 +507,36 @@ def bench_qsa(cfg, args) -> List[dict]:
             print(out[-1], flush=True)
         del keys, vals
         free()
+    # Prefill attention for a 512-query chunk ending at T: dense SDPA under the
+    # selection mask (query-chunked) vs the block-sparse Metal kernel.
+    for T in [c for c in args.contexts if c > qc.dense_limit]:
+        L = 512
+        keys = mx.random.normal((1, Hkv, T, Dh)).astype(BF16)
+        vals = mx.random.normal((1, Hkv, T, Dh)).astype(BF16)
+        q = mx.random.normal((1, Hq, L, Dh)).astype(BF16)
+        iq = mx.random.normal((1, L, H, D)).astype(BF16)
+        bk = mx.random.normal((1, T // 4, D)).astype(BF16)
+        mx.eval(keys, vals, q, iq, bk)
+        off = T - L
+        pos = mx.arange(off, T, dtype=mx.int32)
+        scores = K.qsa_scores(iq, bk)
+        idx = K.qsa_select_token_indices(scores, pos, qc)
+        mask = K.qsa_token_mask(K.qsa_select_blocks(scores, pos, qc), pos, T, qc)
+        mx.eval(scores, idx, mask)
+        variants = (
+            ("select_indices", lambda: K.qsa_select_token_indices(K.qsa_scores(iq, bk), pos, qc)),
+            ("select_mask", lambda: K.qsa_token_mask(K.qsa_select_blocks(K.qsa_scores(iq, bk), pos, qc), pos, T, qc)),
+            ("attn_dense_masked", lambda: K.sdpa_query_chunked(q, keys, vals, Dh**-0.5, mask)),
+            ("attn_sparse_kernel", lambda: K.qsa_sparse_attention(q, keys, vals, idx, Dh**-0.5)),
+        )
+        for name, f in variants:
+            if name == "attn_dense_masked" and T > args.max_dense_prefill_ctx:
+                continue
+            st = timeit(f, max(3, args.iters // 2))
+            out.append({"suite": "qsa_prefill_attn", "variant": name, "T": T, "L": L, **st})
+            print(out[-1], flush=True)
+        del keys, vals, mask
+        free()
     # Whole layer, decode and one 512-token prefill chunk at context T.
     for bits in args.other_bits:
         layer = QSALayer(cfg, bits)
@@ -612,6 +657,87 @@ def bench_misc(cfg, args) -> List[dict]:
     return out
 
 
+def bench_calib(cfg, args) -> List[dict]:
+    """Machine calibration for the M4 -> M3 Max extrapolation: GEMM and qmm
+    TFLOPS, streaming bandwidth, per-dispatch overhead, the effect of
+    mx.compile on a GDN decode layer, and MoE prefill per-token cost vs chunk."""
+    out = []
+    a = rand_bf16((4096, 4096), 1.0)
+    b = rand_bf16((4096, 4096), 1.0)
+    st = timeit(lambda: a @ b, args.iters)
+    out.append({"suite": "calib", "what": "bf16_gemm_4096_TFLOPS", "value": 2 * 4096**3 / st["median_ms"] / 1e9,
+                "best": 2 * 4096**3 / st["p10_ms"] / 1e9})
+    x = rand_bf16((2048, 4096), 1.0)
+    for bits in (3, 4, 8):
+        w = Lin(4096, 4096, bits)
+        st = timeit(lambda: w(x), args.iters)
+        out.append({"suite": "calib", "what": f"qmm_{bits}bit_M2048_TFLOPS", "value": 2 * 2048 * 4096**2 / st["median_ms"] / 1e9,
+                    "best": 2 * 2048 * 4096**2 / st["p10_ms"] / 1e9})
+    big = mx.random.uniform(shape=(64 * 2**20,))
+    mx.eval(big)
+    st = timeit(lambda: big * 1.0001, args.iters)
+    out.append({"suite": "calib", "what": "stream_rw_GBps", "value": 2 * big.nbytes / st["median_ms"] / 1e6,
+                "best": 2 * big.nbytes / st["p10_ms"] / 1e6})
+    w8 = Lin(16384, 4096, 8)
+    x1 = rand_bf16((1, 4096), 1.0)
+
+    def qmv_chain():
+        y = x1
+        for _ in range(8):
+            y = w8(y)[:, :4096]
+        return y
+
+    st = timeit(qmv_chain, args.iters)
+    out.append({"suite": "calib", "what": "qmv_8bit_weight_stream_GBps", "value": 8 * w8.nbytes / st["median_ms"] / 1e6,
+                "best": 8 * w8.nbytes / st["p10_ms"] / 1e6})
+    v = mx.ones((2560,), dtype=BF16)
+    mx.eval(v)
+
+    def chain(n):
+        y = v
+        for _ in range(n):
+            y = y * 1.0001  # one dispatch per op
+        return y
+
+    t1, t2 = timeit(lambda: chain(100), args.iters), timeit(lambda: chain(1100), args.iters)
+    out.append({"suite": "calib", "what": "dispatch_us_per_op", "value": (t2["median_ms"] - t1["median_ms"]) / 1000 * 1e3,
+                "best": (t2["p10_ms"] - t1["p10_ms"]) / 1000 * 1e3})
+    del a, b, x, big, w8
+    free()
+    # mx.compile on a GDN decode layer (fixed shapes), 36 chained reps.
+    g = GDNLayer(cfg, 8)
+    xin = _x(1)
+    cs0 = mx.zeros((1, 3, g.conv_dim), dtype=BF16)
+    s0 = mx.zeros((1, g.Hv, g.Dv, g.Dk), dtype=mx.float32)
+    mx.eval(xin, cs0, s0)
+    step = lambda x, cs, s: g(x, cs, s)  # noqa: E731
+    cstep = mx.compile(step)
+    for name, f in (("eager", step), ("compiled", cstep)):
+        def run(f=f):
+            y, cs, s = xin, cs0, s0
+            for _ in range(36):
+                y, cs, s = f(y, cs, s)
+            return y, s
+        st = per_rep(timeit(run, args.iters), 36)
+        out.append({"suite": "calib", "what": f"gdn_decode_layer_{name}_ms", "value": st["median_ms"], "best": st["p10_ms"]})
+    del g
+    free()
+    # MoE prefill: per-token cost against chunk length.
+    blk = MoEBlock(cfg, 3, 3, "fused_folded")
+    for T in args.moe_chunks:
+        xs = _x(T)
+        mx.eval(xs)
+        st = timeit(lambda: blk(xs), max(3, args.iters // 2), warmup=1)
+        out.append({"suite": "calib", "what": f"moe_prefill_us_per_token_T{T}", "value": 1e3 * st["median_ms"] / T,
+                    "best": 1e3 * st["p10_ms"] / T})
+        free()
+    del blk
+    free()
+    for r in out:
+        print(r, flush=True)
+    return out
+
+
 class DepthModel:
     """All 48 layers in the real pattern, 12 x (3 GDN + 1 QSA), each with
     2 hyper-connections and the MoE. One weight set per layer type is shared
@@ -631,6 +757,9 @@ class DepthModel:
         self.hc_attn = GatedResidual(cfg, other_bits)
         self.hc_mlp = GatedResidual(cfg, other_bits)
         self.moe = MoEBlock(cfg, expert_bits[0], expert_bits[1], "fused_folded")
+        # Prefill evaluates per layer, which bounds transient memory on the 24 GB
+        # laptop; decode evaluates once per token, as generation does.
+        self.eval_each_layer = False
         self.reset(0)
 
     def reset(self, context: int):
@@ -665,6 +794,8 @@ class DepthModel:
             else:
                 h4 = self.hc_attn(h4, lambda m, c=self.qsa_cache[i]: self.qsa(m, c))
             h4 = self.hc_mlp(h4, self.moe)
+            if self.eval_each_layer:
+                mx.eval(h4)
         return h4
 
 
@@ -696,6 +827,7 @@ def bench_model(cfg, args) -> List[dict]:
         for chunk in args.prefill_chunks:
             h = (mx.random.normal((1, chunk, H4)) * 0.5).astype(BF16)
             mx.eval(h)
+            model.eval_each_layer = True
             ts = []
             for i in range(max(2, args.iters // 2) + 1):
                 model.reset(0)
@@ -704,6 +836,7 @@ def bench_model(cfg, args) -> List[dict]:
                 mx.eval(y)
                 if i >= 1:
                     ts.append(time.perf_counter() - t0)
+            model.eval_each_layer = False
             med = statistics.median(ts)
             out.append({
                 "suite": "model_prefill", "other_bits": bits, "expert_bits": args.expert_bits[0],
@@ -726,7 +859,9 @@ def bench_model(cfg, args) -> List[dict]:
     return out
 
 
-SUITES = {"gdn": bench_gdn, "qsa": bench_qsa, "moe": bench_moe, "misc": bench_misc, "model": bench_model}
+SUITES = {
+    "calib": bench_calib, "gdn": bench_gdn, "qsa": bench_qsa, "moe": bench_moe, "misc": bench_misc, "model": bench_model,
+}
 
 
 def main(argv=None) -> int:
@@ -735,14 +870,18 @@ def main(argv=None) -> int:
     ap.add_argument("--json", type=Path)
     ap.add_argument("--iters", type=int, default=7)
     ap.add_argument("--mem-gb", type=float, default=2.5)
-    ap.add_argument("--contexts", type=int, nargs="*", default=[2048, 8192, 32768, 40960])
-    ap.add_argument("--max-prefill-ctx", type=int, default=16384)
+    ap.add_argument("--contexts", type=int, nargs="*", default=[2048, 4096, 8192, 16384, 32768, 40960])
+    ap.add_argument("--max-prefill-ctx", type=int, default=40960)
+    ap.add_argument("--max-dense-prefill-ctx", type=int, default=16384,
+                    help="largest context for the dense-masked prefill attention microbenchmark (memory)")
     ap.add_argument("--other-bits", type=lambda s: None if s == "bf16" else int(s), nargs="*", default=[8])
     ap.add_argument("--expert-bits", type=lambda s: tuple(int(x) for x in s.split("/")), nargs="*",
                     default=[(3, 3), (4, 4), (3, 4)])
     ap.add_argument("--moe-variants", nargs="*", default=["split3", "fused", "fused_folded"])
-    ap.add_argument("--model-contexts", type=int, nargs="*", default=[1024, 8192])
-    ap.add_argument("--prefill-chunks", type=int, nargs="*", default=[512, 2048])
+    ap.add_argument("--model-contexts", type=int, nargs="*", default=[1024, 8192, 16384])
+    ap.add_argument("--moe-chunks", type=int, nargs="*", default=[64, 256, 512, 1024, 2048])
+    ap.add_argument("--prefill-chunks", type=int, nargs="*", default=[512],
+                    help="2048 peaked near 4 GB on the 24 GB M4 (perf.md); use it on the Mac")
     args = ap.parse_args(argv)
     mx.set_memory_limit(int(args.mem_gb * 2**30))
     mx.set_cache_limit(256 * 2**20)

@@ -17,7 +17,8 @@ Sections
      The kernel is reused unchanged. The call site changes: the l2norm eps,
      fp32 gate math, and the state layout.
   2. QSA indexer: block keys, scores, top-k block selection, the token mask,
-     an incremental per-layer cache, and sparse decode attention.
+     an incremental per-layer cache, sparse decode attention (gather + SDPA),
+     and a new block-sparse prefill attention Metal kernel.
   3. MoE: an fp32 router and a SwitchGLU with fused gate_up via ``gather_qmm``.
      Optionally the shared expert is folded in as expert ``E``.
   4. References: literal transcriptions of the transformers math.
@@ -453,8 +454,9 @@ def sdpa_query_chunked(
 
     With head_dim 256, MLX 0.31.2 has no fused prefill kernel and materializes
     [B, Hq, L, T] scores (perf.md). Splitting the rows bounds that
-    transient; FLOPs are unchanged. ``mask`` may be None, "causal" (only for
-    L == T), or an array broadcastable to [B, 1, L, T].
+    transient; FLOPs are unchanged. ``mask`` may be None, "causal" (the
+    queries are the last L of the T keys), or an array broadcastable to
+    [B, 1, L, T].
     """
     B, Hq, L, D = queries.shape
     T = keys.shape[-2]
@@ -476,6 +478,234 @@ def sdpa_query_chunked(
             )
         )
     return mx.concatenate(outs, axis=2)
+
+
+def qsa_select_token_indices(
+    scores: mx.array, q_positions: mx.array, cfg: QSAConfig
+) -> mx.array:
+    """Top-K block selection as per-query token lists [B, L, K*r + r - 1] int32.
+
+    Lists hold the tokens of the selected blocks, then the tail r*nvis..p.
+    Unused slots are -1. This is the input of ``qsa_sparse_attention``, and it
+    selects the same set as ``qsa_select_blocks`` + ``qsa_token_mask`` (same
+    argpartition on the same scores) without a [L, T] mask.
+    """
+    B, L, n = scores.shape
+    r, K = cfg.compress_ratio, cfg.block_topk
+    pos = q_positions.astype(mx.int32)
+    nvis = (pos + 1) // r
+    valid = mx.broadcast_to((mx.arange(n, dtype=mx.int32)[None, :] < nvis[:, None])[None], (B, L, n))
+    if n <= K:
+        blk = mx.broadcast_to(mx.arange(n, dtype=mx.int32), (B, L, n))
+        keep = valid
+    else:
+        masked = mx.where(valid, scores, -mx.inf)
+        blk = mx.argpartition(-masked, kth=K - 1, axis=-1)[..., :K].astype(mx.int32)
+        keep = mx.take_along_axis(valid, blk, axis=-1)
+    tok = blk[..., None] * r + mx.arange(r, dtype=mx.int32)
+    tok = mx.where(keep[..., None], tok, -1).reshape(B, L, -1)
+    tail = r * nvis[:, None] + mx.arange(r - 1, dtype=mx.int32)[None, :]
+    tail = mx.where(tail <= pos[:, None], tail, -1)
+    return mx.concatenate([tok, mx.broadcast_to(tail[None], (B, L, r - 1))], axis=-1)
+
+
+# Block-sparse QSA attention (new Metal kernel). One threadgroup per (query l,
+# kv head g, batch b). Its NSG simdgroups each own HPS of the Hq/Hkv query
+# heads that share kv head g, so the K/V rows of one selected token are reused
+# from L1 by every head. Scores are lane-per-token: lane j computes q_h . k_t for
+# token t = idx[j0 + j], with q in threadgroup memory, so there is no per-token
+# simd_sum. Then an online softmax per 32-token tile (simd_max / simd_sum), and
+# P.V lane-per-dims (E = D/32 dims per lane, p broadcast by simd_shuffle).
+# Cost is O(L * S * D), independent of the context length T; dense-masked
+# SDPA is O(L * T * D). Measured crossover on the M4 is about 6K tokens
+# (perf.md). Unused idx slots are -1. Every row has at least one valid token
+# (the tail always holds token p).
+_QSA_SPARSE_ATTN_SRC = """
+    constexpr int E = D / 32;
+    const uint lane = thread_index_in_simdgroup;
+    const uint sg = simdgroup_index_in_threadgroup;
+    const uint l = thread_position_in_grid.y / Hkv;
+    const uint g = thread_position_in_grid.y % Hkv;
+    const uint b = thread_position_in_grid.z;
+    const uint h0 = g * (Hq / Hkv) + sg * HPS;
+    threadgroup float4 q_sh[NSG][HPS][D / 4];
+    for (int h = 0; h < HPS; h++) {
+      const device InT* qp = q + (((size_t)(b * Hq + h0 + h) * L + l) * D);
+      for (int d4 = lane; d4 < D / 4; d4 += 32) {
+        q_sh[sg][h][d4] = float4(static_cast<float>(qp[4 * d4]), static_cast<float>(qp[4 * d4 + 1]),
+                                 static_cast<float>(qp[4 * d4 + 2]), static_cast<float>(qp[4 * d4 + 3])) * scale;
+      }
+    }
+    simdgroup_barrier(mem_flags::mem_threadgroup);
+    const device int* ip = idx + ((size_t)(b * L + l) * S);
+    const device InT* kb = k + ((size_t)(b * Hkv + g) * Tcap) * D;
+    const device InT* vb = v + ((size_t)(b * Hkv + g) * Tcap) * D + lane * E;
+    float m[HPS], lsum[HPS], o[HPS][E];
+    for (int h = 0; h < HPS; h++) {
+      m[h] = -INFINITY;
+      lsum[h] = 0.0f;
+      for (int i = 0; i < E; i++) o[h][i] = 0.0f;
+    }
+    for (int j0 = 0; j0 < S; j0 += 32) {
+      int t = (j0 + (int)lane < S) ? ip[j0 + lane] : -1;
+      if (!simd_any(t >= 0)) continue;
+      float s[HPS];
+      for (int h = 0; h < HPS; h++) s[h] = 0.0f;
+      if (t >= 0) {
+        const device InT* kp = kb + (size_t)t * D;
+        for (int d4 = 0; d4 < D / 4; d4++) {
+          float4 kk = float4(static_cast<float>(kp[4 * d4]), static_cast<float>(kp[4 * d4 + 1]),
+                             static_cast<float>(kp[4 * d4 + 2]), static_cast<float>(kp[4 * d4 + 3]));
+          for (int h = 0; h < HPS; h++) s[h] += dot(q_sh[sg][h][d4], kk);
+        }
+      } else {
+        for (int h = 0; h < HPS; h++) s[h] = -INFINITY;
+      }
+      float p[HPS];
+      for (int h = 0; h < HPS; h++) {
+        float mn = max(m[h], simd_max(s[h]));
+        float f = metal::exp(m[h] - mn);
+        p[h] = metal::exp(s[h] - mn);
+        lsum[h] = lsum[h] * f + simd_sum(p[h]);
+        for (int i = 0; i < E; i++) o[h][i] *= f;
+        m[h] = mn;
+      }
+      for (int jj = 0; jj < 32; jj++) {
+        int tj = simd_shuffle(t, (ushort)jj);
+        if (tj < 0) continue;
+        const device InT* vp = vb + (size_t)tj * D;
+        float vv[E];
+        for (int i = 0; i < E; i++) vv[i] = static_cast<float>(vp[i]);
+        for (int h = 0; h < HPS; h++) {
+          float pj = simd_shuffle(p[h], (ushort)jj);
+          for (int i = 0; i < E; i++) o[h][i] += pj * vv[i];
+        }
+      }
+    }
+    for (int h = 0; h < HPS; h++) {
+      device InT* op = out + (((size_t)(b * Hq + h0 + h) * L + l) * D) + lane * E;
+      float inv = 1.0f / lsum[h];
+      for (int i = 0; i < E; i++) op[i] = static_cast<InT>(o[h][i] * inv);
+    }
+"""
+
+_qsa_sparse_attn_kernel = None
+
+
+def qsa_sparse_attention(
+    queries: mx.array,
+    keys: mx.array,
+    values: mx.array,
+    token_idx: mx.array,
+    scale: float,
+    heads_per_simdgroup: Optional[int] = None,
+) -> mx.array:
+    """Attention of each query over its own selected tokens (Metal kernel).
+
+    queries [B, Hq, L, D]; keys/values [B, Hkv, Tcap, D], which may be a
+    whole preallocated cache buffer: only indexed rows are read, and a
+    contiguous buffer avoids the copy ``metal_kernel`` makes of a strided
+    slice. token_idx [B, L, S] int32, -1 = unused. Returns [B, Hq, L, D] in
+    ``queries.dtype``; softmax and accumulation are fp32.
+    """
+    global _qsa_sparse_attn_kernel
+    if _qsa_sparse_attn_kernel is None:
+        _qsa_sparse_attn_kernel = mx.fast.metal_kernel(
+            name="qwen4_exp_qsa_sparse_attention",
+            input_names=["q", "k", "v", "idx", "scale", "L", "S", "Tcap"],
+            output_names=["out"],
+            source=_QSA_SPARSE_ATTN_SRC,
+        )
+    B, Hq, L, D = queries.shape
+    Hkv, Tcap = keys.shape[1], keys.shape[2]
+    group = Hq // Hkv
+    if D % 32 or Hq % Hkv or (Hq // Hkv) * D > 8192:
+        raise ValueError(f"unsupported shapes D={D}, Hq={Hq}, Hkv={Hkv}")
+    hps = heads_per_simdgroup or next(h for h in (4, 3, 2, 1) if group % h == 0)
+    nsg = group // hps
+    if keys.dtype != queries.dtype or values.dtype != queries.dtype:
+        keys, values = keys.astype(queries.dtype), values.astype(queries.dtype)
+    return _qsa_sparse_attn_kernel(
+        inputs=[queries, keys, values, token_idx.astype(mx.int32), float(scale), L, token_idx.shape[-1], Tcap],
+        template=[("InT", queries.dtype), ("D", D), ("Hq", Hq), ("Hkv", Hkv), ("HPS", hps), ("NSG", nsg)],
+        grid=(32 * nsg, L * Hkv, B),
+        threadgroup=(32 * nsg, 1, 1),
+        output_shapes=[queries.shape],
+        output_dtypes=[queries.dtype],
+    )[0]
+
+
+# Below this kv length dense-masked SDPA beats the sparse kernel for a prefill
+# chunk (M4 measurement, perf.md). Re-measure on the target machine.
+QSA_SPARSE_PREFILL_MIN_KV = 6144
+
+
+def qsa_prefill_attention(
+    queries: mx.array,
+    keys: mx.array,
+    values: mx.array,
+    kv_len: int,
+    index_q: mx.array,
+    block_keys: mx.array,
+    offset: int,
+    cfg: QSAConfig,
+    scale: float,
+    sparse_min_kv: int = QSA_SPARSE_PREFILL_MIN_KV,
+) -> mx.array:
+    """QSA attention for a prefill chunk of L queries at positions offset.. .
+
+    keys/values may be whole cache buffers; kv[:kv_len] is valid and
+    kv_len == offset + L. The path depends on the regime: dense causal while
+    every query sees <= K blocks; dense SDPA under the selection mask below
+    ``sparse_min_kv``; the sparse kernel above it. All three compute the same
+    function.
+    """
+    L = queries.shape[2]
+    if kv_len != offset + L:
+        raise ValueError("kv_len must equal offset + L")
+    if kv_len <= cfg.dense_limit:
+        return sdpa_query_chunked(queries, keys[..., :kv_len, :], values[..., :kv_len, :], scale, "causal")
+    pos = mx.arange(offset, kv_len, dtype=mx.int32)
+    scores = qsa_scores(index_q, block_keys)
+    if kv_len < sparse_min_kv:
+        mask = qsa_token_mask(qsa_select_blocks(scores, pos, cfg), pos, kv_len, cfg)
+        return sdpa_query_chunked(queries, keys[..., :kv_len, :], values[..., :kv_len, :], scale, mask)
+    idx = qsa_select_token_indices(scores, pos, cfg)
+    return qsa_sparse_attention(queries, keys, values, idx, scale)
+
+
+# Decode: below this kv length, dense SDPA under the [1, T] selection mask
+# beats gathering the selected rows (M4 measurement, perf.md). On the higher
+# bandwidth M3 Max the crossover is expected to move up. Re-measure there.
+QSA_SPARSE_DECODE_MIN_KV = 8192
+
+
+def qsa_decode_attention(
+    queries: mx.array,
+    keys: mx.array,
+    values: mx.array,
+    kv_len: int,
+    index_q: mx.array,
+    block_keys: mx.array,
+    cfg: QSAConfig,
+    scale: float,
+    sparse_min_kv: int = QSA_SPARSE_DECODE_MIN_KV,
+) -> mx.array:
+    """QSA attention for one decode query at position kv_len - 1.
+
+    Takes the dense causal path while kv_len <= dense_limit (all selected), a
+    dense SDPA under the selection mask below ``sparse_min_kv``, and the gather
+    of the selected rows above it. All three compute the same function.
+    """
+    p = kv_len - 1
+    k, v = keys[..., :kv_len, :], values[..., :kv_len, :]
+    if kv_len <= cfg.dense_limit:
+        return mx.fast.scaled_dot_product_attention(queries, k, v, scale=scale)
+    if kv_len < sparse_min_kv:
+        mask = qsa_prefill_mask(index_q, block_keys, p, cfg)
+        return mx.fast.scaled_dot_product_attention(queries, k, v, scale=scale, mask=mask)
+    idx = qsa_decode_token_indices(index_q, block_keys, p, cfg)
+    return qsa_sparse_decode_attention(queries, keys, values, idx, scale)
 
 
 class QSAIndexerCache:
