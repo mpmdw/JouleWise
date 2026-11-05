@@ -47,7 +47,9 @@ sys.path.insert(0, str(REPO_ROOT))
 # Eager imports cover every formerly lazy run/dead-man/rehearse dependency,
 # so importing this driver during preflight catches failures before installation.
 
+
 from joulewise.strict_io import (
+    fsync_directory as _fsync_path,
     json_pretty_ascii as _json_bytes,
     sha256_path_bytes as _sha256_path,
 )
@@ -226,14 +228,6 @@ def _write_bytes_exclusive(path: Path, payload: bytes) -> None:
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
     _write_bytes_exclusive(path, _json_bytes(value))
-
-
-def _fsync_path(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 def _append_log(custody_root: Path, message: str) -> None:

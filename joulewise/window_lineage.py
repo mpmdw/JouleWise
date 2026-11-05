@@ -189,7 +189,9 @@ _SHA256_HEX = frozenset("0123456789abcdef")
 
 
 
+
 from joulewise.strict_io import (
+    fsync_directory as _fsync_directory,
     json_pretty_utf8_strict as render_json,
     sha256_raw as sha256_bytes,
     unique_json_pairs as _no_duplicate_pairs,
@@ -850,14 +852,6 @@ def _read_descriptor(descriptor: int) -> bytes:
             break
         chunks.append(chunk)
     return b"".join(chunks)
-
-
-def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 def committed_pack_sha256(pack_root: Path | str) -> str:

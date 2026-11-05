@@ -48,7 +48,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from joulewise.strict_io import sha256_raw as _sha256
+
+from joulewise.strict_io import (
+    fsync_directory as _fsync_directory,
+    sha256_raw as _sha256,
+)
 
 from joulewise import night_gate
 from joulewise.b5 import chain as b5_chain
@@ -474,14 +478,6 @@ def _create_once(path: Path, raw: bytes, mode: int = 0o600) -> dict[str, str]:
         stream.flush()
         os.fsync(stream.fileno())
     return {"path": str(path), "sha256": _sha256(raw)}
-
-
-def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 def window_env_bytes(values: Mapping[str, str]) -> bytes:

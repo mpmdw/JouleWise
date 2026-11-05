@@ -149,3 +149,11 @@ def relative_inside(root: Path, value: Any, label: str, require: Callable[[Any, 
     require(isinstance(value, str) and value and not PurePosixPath(value).is_absolute()
             and ".." not in PurePosixPath(value).parts, f"{label} must be a relative path without '..'")
     return root / value
+
+
+def fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
