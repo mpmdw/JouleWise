@@ -26,6 +26,8 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Callable, Literal
 
+from joulewise.strict_io import is_lower_sha256 as _sha256_text
+
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
     read_authentication_input,
@@ -2458,14 +2460,6 @@ def canonical_sha256(value: Any) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
-
-
-def _sha256_text(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
 
 
 def _finite_number(value: Any, *, positive: bool = False) -> float | None:

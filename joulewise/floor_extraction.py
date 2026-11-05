@@ -44,6 +44,8 @@ from typing import Any, Callable, Literal, Mapping, Sequence, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from joulewise.b5_analysis.kept_units import KeptUnits
+from joulewise.strict_io import is_lower_sha256 as _is_sha256
+
 from joulewise.window_lineage import LOCATOR_BASENAME
 
 # A strict validator returns the list of D-030 strict-validation problems for a
@@ -876,14 +878,6 @@ def _exact_mapping_keys(
     for key in sorted(missing):
         errors.append(f"{where}: missing key {key!r}")
     return not unknown and not missing
-
-
-def _is_sha256(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
 
 
 def _validate_condition_family_definition(

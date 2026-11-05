@@ -75,3 +75,7 @@ def json_utf8_bytes(value: Any) -> bytes:
 
 def json_utf8_bytes_strict(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(',', ':')) .encode("utf-8")
+
+
+def is_lower_sha256(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)

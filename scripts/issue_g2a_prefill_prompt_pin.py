@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from configs.campaigns.d117_contrast_v5 import generate_configs as d117_v5
-from joulewise.strict_io import sha256_raw as _sha256
+
+from joulewise.strict_io import (
+    is_lower_sha256 as _is_sha256,
+    sha256_raw as _sha256,
+)
 
 from joulewise.adapters.mlx_runtime import _encode
 from joulewise.provenance import prompt_token_ids_sha256
@@ -103,14 +107,6 @@ def _load_json(path: Path, *, label: str) -> tuple[Any, bytes]:
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise PromptPinError(f"{label}_invalid_json:{path}:{exc}") from exc
     return value, raw
-
-
-def _is_sha256(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
 
 
 def _require_exact_keys(value: Any, keys: set[str], *, label: str) -> dict[str, Any]:

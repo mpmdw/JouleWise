@@ -65,7 +65,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from joulewise.strict_io import sha256_file as _sha256_file
+
+from joulewise.strict_io import (
+    is_lower_sha256 as _is_sha256_hex,
+    sha256_file as _sha256_file,
+)
 
 from joulewise.flags.schema import (
     FlagSchemaError,
@@ -931,11 +935,6 @@ def recorded_download_revisions(source: str | None) -> list[str]:
 
 
 IDENTITY_PINS_SCHEMA = "joulewise.b5_identity_pins.v1"
-
-
-def _is_sha256_hex(value: Any) -> bool:
-    return (isinstance(value, str) and len(value) == 64
-            and all(character in "0123456789abcdef" for character in value))
 
 
 def read_identity_pins(path: str | Path | None) -> dict[str, Any]:

@@ -40,6 +40,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from joulewise.strict_io import is_lower_sha256 as _lowercase_sha256
+
 from joulewise.authentication_io import (
     open_authentication_input,
     read_authentication_input,
@@ -904,14 +906,6 @@ class BundleReader:
 
 def _positive_nonbool_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
-
-
-def _lowercase_sha256(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
 
 
 def _phase_prompt_counts(
