@@ -293,8 +293,10 @@ class CacheTests(unittest.TestCase):
         sampled = replace(spec, temperature=.6, sampler=policy)
         self.assertNotEqual(identity(spec), identity(sampled))
         self.assertNotEqual(identity(spec), identity(replace(spec,max_episode_seconds=120)))
-        self.assertNotEqual(identity(spec), identity(replace(spec,max_episode_decode_tokens=8192)))
-        self.assertNotEqual(identity(spec), identity(replace(spec,deadman_s=1086)))
+        budgeted = replace(spec, max_episode_decode_tokens=8192, deadman_s=1086)
+        self.assertNotEqual(identity(spec), identity(budgeted))
+        self.assertNotEqual(identity(budgeted), identity(replace(budgeted, max_episode_decode_tokens=9216)))
+        self.assertNotEqual(identity(budgeted), identity(replace(budgeted, deadman_s=1087)))
         self.assertEqual(identity(spec), identity(replace(spec,sampler=None,max_episode_seconds=None)))
         with self.assertRaisesRegex(ValueError, 'prompt_cache'):
             EpisodeSpec.from_text(replace(spec, prompt_cache='wrong').to_text())

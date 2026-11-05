@@ -123,13 +123,17 @@ class EpisodeSpec:
             raise ValueError("max_episode_decode_tokens must be a positive integer within the context cap (at most 40960)")
         if spec.deadman_s is not None and (
             type(spec.deadman_s) not in (float, int)
-            or not math.isfinite(spec.deadman_s) or spec.deadman_s <= 0
+            or not math.isfinite(spec.deadman_s) or not 0 < spec.deadman_s < 1800 / 1.13544
         ):
-            raise ValueError("deadman_s must be finite and positive")
+            # Council V2's member law, ignoring even the intercept. R1 must
+            # select the tighter (1750 - I_m) / 1.13544 deadline for each model.
+            raise ValueError("deadman_s must be finite, positive and below 1800 / 1.13544")
         if spec.max_episode_seconds is not None and (
             spec.max_episode_decode_tokens is not None or spec.deadman_s is not None
         ):
             raise ValueError("token admission/deadman cannot be combined with max_episode_seconds")
+        if (spec.max_episode_decode_tokens is None) != (spec.deadman_s is None):
+            raise ValueError("max_episode_decode_tokens and deadman_s must be set together")
         return spec
 
 

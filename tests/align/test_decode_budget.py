@@ -72,6 +72,21 @@ def read(path):
 
 
 class SpecTests(unittest.TestCase):
+    def test_controls_are_paired_and_deadman_precedes_the_member_kill(self):
+        spec = episode_spec(hidden=False)
+        for update in ({'max_episode_decode_tokens': 8192}, {'deadman_s': 1086}):
+            with self.subTest(update=update), self.assertRaisesRegex(ValueError, 'together'):
+                EpisodeSpec.from_text(replace(spec, **update).to_text())
+        # Council member law, with zero intercept: even this most permissive
+        # bound must fire strictly before the 1800 s outer kill.
+        ceiling = 1800 / 1.13544
+        for seconds in (ceiling, ceiling + .01, 5000):
+            with self.subTest(seconds=seconds), self.assertRaisesRegex(ValueError, 'below'):
+                EpisodeSpec.from_text(replace(spec, max_episode_decode_tokens=8192, deadman_s=seconds).to_text())
+        paired = replace(spec, max_episode_decode_tokens=8192, deadman_s=ceiling - .000001)
+        self.assertEqual(EpisodeSpec.from_text(paired.to_text()), paired)
+        self.assertEqual(EpisodeSpec.from_text(spec.to_text()), spec)
+
     def test_new_config_fields_round_trip_and_distinguish_counterbalanced_cells(self):
         base = replace(episode_spec(hidden=False), max_episode_decode_tokens=8192, deadman_s=1086)
         self.assertEqual(EpisodeSpec.from_text(base.to_text()), base)
