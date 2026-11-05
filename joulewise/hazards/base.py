@@ -55,7 +55,9 @@ C_LOCALE_ENV = {"LC_ALL": "C"}
 
 
 
+
 from joulewise.strict_io import (
+    fsync_directory_best_effort_directory as fsync_directory,
     json_ascii_bytes_strict as canonical_json,
     sha256_data as sha256_hex,
 )
@@ -206,19 +208,6 @@ def write_create_once(path: Path, data: bytes) -> None:
     finally:
         os.close(descriptor)
     fsync_directory(path.parent)
-
-
-def fsync_directory(directory: Path) -> None:
-    try:
-        descriptor = os.open(directory, os.O_RDONLY)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        pass
-    finally:
-        os.close(descriptor)
 
 
 # --------------------------------------------------------------------------
