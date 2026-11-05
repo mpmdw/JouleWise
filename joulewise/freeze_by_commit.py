@@ -16,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRATION = "configs/analysis/b5/freeze_commits.json"
 REGISTRATION_COMMIT_ENV = "JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT"
 _SHA1 = re.compile(r"[0-9a-f]{40}")
-_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 class FreezeIdentityError(ValueError):
@@ -70,20 +69,19 @@ def blob_digests(repository: Path, commit: str, paths) -> dict[str, str]:
 
 
 def load_registration(repository: Path = ROOT) -> dict:
-    """Load local metadata, or an explicitly pinned later registration commit.
+    """Read the checkout's reviewed registration (F3; freeze_p1_rebind.md).
 
-    A commit cannot contain its own ID/tree in a ledger. A ruled block
-    checkout therefore names the reviewed *later* registration commit in
-    JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT. Read that exact Git blob; never
-    infer authority from the current tip of a branch or from remote state.
+    Runtime authority overrides and descendant ledgers are retired. A ruled
+    fix requires a new registered analysis-r<k> tag, through ordinary review.
     """
     try:
-        authority = os.environ.get(REGISTRATION_COMMIT_ENV)
-        raw = (blob(repository, authority, REGISTRATION) if authority is not None
-               else (repository / REGISTRATION).read_bytes())
+        if REGISTRATION_COMMIT_ENV in os.environ:
+            raise FreezeIdentityError("freeze_registration_override_removed")
+        raw = (repository / REGISTRATION).read_bytes()
         value = json.loads(raw)
         if (value["schema"] != "joulewise.block_freeze.v1"
-                or value["active_analysis"] not in value["tags"]):
+                or value["active_analysis"] not in value["tags"]
+                or value.get("ruled_descendants")):
             raise ValueError()
         return value
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -105,32 +103,17 @@ def verify_tag(repository: Path, tag: str, record: dict) -> str:
 
 
 def require_analysis_head(repository: Path, head: str, *, registration: dict | None = None) -> None:
-    """F2: exact release commit, or a descendant with every new commit ruled.
+    """F2/F3: require the exact registered analysis tag's peeled commit.
 
-    The caller owns the clean-checkout gate. No remote or branch-containment
-    predicate is used. Merged side branches are included in the ruling census.
+    The caller owns the clean-checkout gate. Descendants (including merges)
+    require a new reviewed registration and analysis-r<k> tag before use.
     """
     head = _commit(head)
     value = load_registration(repository) if registration is None else registration
     tag = value["active_analysis"]
     base = verify_tag(repository, tag, value["tags"][tag])
-    if head == base:
-        return
-    _git(repository, "merge-base", "--is-ancestor", base, head)
-    new_commits = _git(repository, "rev-list", f"{base}..{head}").decode().splitlines()
-    ruled = value["ruled_descendants"]
-    for commit in new_commits:
-        record = ruled.get(commit)
-        if not isinstance(record, dict):
-            raise FreezeIdentityError("analysis_descendant_unruled")
-        tree = _git(repository, "rev-parse", commit + "^{tree}").decode().strip()
-        ruling = record.get("ruling", "")
-        digest = record.get("ruling_sha256", "")
-        if (tree != _commit(record.get("tree"))
-                or not isinstance(ruling, str) or not ruling.startswith("docs/")
-                or not isinstance(digest, str) or _SHA256.fullmatch(digest) is None
-                or hashlib.sha256(blob(repository, commit, ruling)).hexdigest() != digest):
-            raise FreezeIdentityError("analysis_descendant_ruling_invalid")
+    if head != base:
+        raise FreezeIdentityError("analysis_descendant_unruled")
 
 
 def require_commit_scoped_calibration() -> None:

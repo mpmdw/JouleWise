@@ -17,6 +17,10 @@ from tests.git_fixture import init_git_fixture
 
 class CommitFreezeTests(unittest.TestCase):
     def setUp(self):
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(f.REGISTRATION_COMMIT_ENV, None)
         self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.repo = Path(self.temporary.name)
@@ -89,9 +93,10 @@ class CommitFreezeTests(unittest.TestCase):
                 with self.assertRaises(f.FreezeIdentityError):
                     f.verify_tag(self.repo, "b5/analysis-r2", record)
 
-    def test_ruled_descendant_and_every_intermediate_commit(self):
+    def test_descendant_ledger_cannot_authorize_even_the_first_fix(self):
         first = self.ruled_child()
-        self.require(first)
+        with self.assertRaisesRegex(f.FreezeIdentityError, "analysis_descendant_unruled"):
+            self.require(first)
         self.write("estimator.py", "unruled intermediate\n")
         middle = self.commit("unruled")
         last = self.ruled_child("last\n")
@@ -99,18 +104,48 @@ class CommitFreezeTests(unittest.TestCase):
             self.require(last)
         self.assertNotIn(middle, self.registration["ruled_descendants"])
 
-    def test_ruled_checkout_uses_a_separately_committed_registration(self):
+    def test_environment_registration_cannot_authorize_a_descendant(self):
+        self.write(f.REGISTRATION, json.dumps(self.registration))
+        self.commit("checkout registration")
         child = self.ruled_child()
         self.write(f.REGISTRATION, json.dumps(self.registration))
         authority = self.commit("register the already-reviewed block correction")
         self.git("checkout", "--detach", child)
-        self.assertFalse((self.repo / f.REGISTRATION).exists())
+        self.assertTrue((self.repo / f.REGISTRATION).exists())
         with mock.patch.dict(os.environ, {f.REGISTRATION_COMMIT_ENV: authority}):
-            f.require_analysis_head(self.repo, child)
+            with self.assertRaises(f.FreezeIdentityError):
+                f.require_analysis_head(self.repo, child)
         for invalid in ("main", "../outside", "f" * 40):
             with mock.patch.dict(os.environ, {f.REGISTRATION_COMMIT_ENV: invalid}):
                 with self.assertRaises(f.FreezeIdentityError):
                     f.require_analysis_head(self.repo, child)
+
+    def test_forged_tag_and_registration_cannot_replace_checkout_authority(self):
+        self.write(f.REGISTRATION, json.dumps(self.registration))
+        self.commit("checkout registration")
+        child = self.ruled_child()
+        self.git("tag", "-a", "b5/analysis-r3", "-m", "unreviewed fix")
+        forged = json.loads(json.dumps(self.registration))
+        forged["active_analysis"] = "b5/analysis-r3"
+        forged["tags"]["b5/analysis-r3"] = {
+            "tag_object": self.git("rev-parse", "refs/tags/b5/analysis-r3"),
+            "commit": child, "tree": self.git("rev-parse", child + "^{tree}"),
+        }
+        self.write(f.REGISTRATION, json.dumps(forged))
+        authority = self.commit("forged registration authority")
+        self.git("checkout", "--detach", child)
+        with mock.patch.dict(os.environ, {f.REGISTRATION_COMMIT_ENV: authority}):
+            with self.assertRaises(f.FreezeIdentityError):
+                f.require_analysis_head(self.repo, child)
+        # Neither a local tag nor a docs blob called a ruling grants authority.
+        with self.assertRaisesRegex(f.FreezeIdentityError, "analysis_descendant_unruled"):
+            f.require_analysis_head(self.repo, child)
+
+    def test_nonempty_legacy_ledger_in_checkout_refuses(self):
+        self.ruled_child()
+        self.write(f.REGISTRATION, json.dumps(self.registration))
+        with self.assertRaisesRegex(f.FreezeIdentityError, "freeze_registration_invalid"):
+            f.load_registration(self.repo)
 
     def test_unrelated_history_and_missing_objects_refuse(self):
         self.git("checkout", "--orphan", "unrelated")

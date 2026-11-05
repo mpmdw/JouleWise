@@ -20,20 +20,21 @@ The release executes its existing tag tree; these changes affect subsequent
 main development. A same-commit tag replacement, lightweight tag, wrong tree,
 unavailable object or unruled descendant refuses.
 
-F2 enumerates every commit in `registered_analysis..HEAD`, including merged
-side history. Every commit needs its tree plus a `docs/` ruling blob and
-SHA-256 in `ruled_descendants`. That ledger is empty: this work does not
-self-authorize its own branch as block-5 analysis code. Since a commit cannot
-contain its own ID or tree hash, a ruled descendant's clean checkout uses
-`JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT=<full reviewed registration commit>`.
-That later commit contains the ledger; the loader reads its exact Git blob
-without checking out a new tree. Record this authority commit in the block's
-invocation record. Branch names, filesystem overrides and missing commits
-refuse. Without the explicit pin, the current checkout's registration is used.
-The legacy
-`require_origin_main` keyword is retained as a spelling of the new gate.
-The mint's existing clean-tree check remains; its upstream-containment field
-is still audit evidence, never admission authority.
+H1 (PR #649 fix round 1) chooses strict F3: only HEAD equal to the
+checkout's registered analysis tag is admitted. An untagged descendant,
+including one with a local ruling blob, refuses. A ruled scientific fix must
+cite the owner's decision in `docs/decision_log.md`, record old/new trees,
+and receive a new reviewed `b5/analysis-r<k>` tag and registration before use.
+There is no runtime descendant-ruling authority: `ruled_descendants` is
+removed and nonempty legacy ledgers refuse. Thus a runtime ruling cannot
+name an unresolved decision or manufacture authority from its own blob.
+
+`JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT` is retired and explicitly refuses
+when exported. A local annotated r3 tag plus any arbitrary registration
+commit cannot replace `tags` or `active_analysis` in the checkout. This is
+simpler than adding a second registration-tag trust chain, and follows F3's
+existing re-tag/review procedure. Regression tests replay both forgery paths.
+The mint's clean-tree check remains.
 
 ## Rebind scope
 
