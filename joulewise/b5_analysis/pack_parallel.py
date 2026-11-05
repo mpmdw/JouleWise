@@ -96,7 +96,7 @@ def run_pack(task):
         delta = members.export_new(caches, task.vdl, before)
     records = () if session is None else tuple(
         (r.normalized_path, r.sha256, r.grammar, r.read_count) for r in session.records.values())
-    return members.MemberOutcome(ok, value, records, firings, physics, vdl_new=delta, cost=cost)
+    return members.MemberOutcome(ok, value, records, firings, _snapshot(physics), vdl_new=delta, cost=cost)
 
 
 def pack_map(function, calls):
@@ -113,20 +113,35 @@ def pack_map(function, calls):
     if context and context.get('entries') is None:
         context = members.vdl_context(caches, caches.vdl.export_entries())
     shares = member_worker_shares(caches.workers, len(calls))
-    tasks = [PackTask(reference, dumps(call), share, active_v2_authentication_session() is not None,
+    try:
+        payloads = [dumps(call) for call in calls]
+    except Exception:
+        # An opaque caller-owned callback or runtime object keeps the original
+        # serial path, like member_map's failed-transport recomputation.
+        return None
+    tasks = [PackTask(reference, payload, share, active_v2_authentication_session() is not None,
                       _snapshot(caches.physics_store or {}), context, phase_timing.enabled())
-             for call, share in zip(calls, shares)]
-    with ProcessPoolExecutor(max_workers=min(caches.workers, len(tasks)),
-                             mp_context=multiprocessing.get_context('spawn')) as pool:
+             for payload, share in zip(payloads, shares)]
+    pool = ProcessPoolExecutor(max_workers=min(caches.workers, len(tasks)),
+                               mp_context=multiprocessing.get_context('spawn'))
+    outcomes, broken = [], False
+    try:
         futures = [pool.submit(run_pack, task) for task in tasks]
-        outcomes = []
         for future in futures:
             try:
                 outcome = future.result()
             except Exception:
+                broken = True
                 outcome = members.MemberOutcome(False, None, (), 0, {})
-            members.merge_side_channel(caches, outcome.vdl_new)
             outcomes.append(outcome)
+    except BaseException:
+        pool.shutdown(wait=True, cancel_futures=True)
+        raise
+    pool.shutdown(wait=True, cancel_futures=broken)
+    # Every task has finished before publication/side-channel handling can
+    # raise, so staging cleanup cannot race an unconsumed writer.
+    for outcome in outcomes:
+        members.merge_side_channel(caches, outcome.vdl_new)
     return outcomes
 
 

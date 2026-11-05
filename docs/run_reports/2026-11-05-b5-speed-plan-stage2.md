@@ -53,6 +53,53 @@ round-trip test (ordinary S0 has no source replay; recovered S0 is not hazard
 admitted); the test now transports a genuinely issued roster and preserves the
 real replay refusal. No production admission check was bypassed to make it pass.
 
+## Step 10
+
+Each pack computes its issuer and independent custody opener in a private
+directory containing copies of the prior authenticated outputs. Receipt,
+inventory and role-census paths retain the same relative names. The driver
+re-authenticates public commitments, then publishes/registers alpha followed by
+beta and adopts their original log counters. Unconsumed staging is removed;
+a computation that escapes recomputes through the original serial call.
+The benchmark applies the existing `JoinedHarness` synthetic Git observations
+inside spawned openers as well as the parent; production receives no Git seam.
+
+The initial fresh-pool candidate matched every digest but regressed from
+131.653 to 256.824 s (including 16.630 s of benchmark-only input retention).
+A cold restart, which lacks the original prefix's warm member workers, measured
+433.000 to 205.929 s and also matched. That difference exposed an important
+timing confound: a serialized store snapshot does not preserve a warm process
+pool. Neither observation establishes a production gain. An experiment borrowing
+the warm member pool was **deferred**: its full-prefix serial baseline admitted
+alpha, then refused beta's custody replay (`paper_custody_validator_refused`),
+with the same issued beta projection digest. The cause is not established. No
+timing or equivalence claim is made for that failed experiment, and its runtime
+changes are absent from the final implementation. Keep the bounded fresh pack
+pool and the existing memo-shipment rules. No memo key, validator or parser
+policy changes. Retention is now opt-in (`--retain-prefix`).
+
+The successful cold-restart pair matched all **442 registered files, 14 step
+records and all archive censuses**, including projections, basis, registered
+inputs, receipts, inventories and role censuses. The
+[step-10 ledger](2026-11-05-b5-speed-plan-stage2-10.json) preserves every output
+hash and matching commitments. Both real spawned issuer/opener results were
+`ok`, with member shares 1/2 at a configured budget of 3. This is a 52.4% cold
+restart reduction, **not evidence of a warm pipeline speedup**; the initial warm
+prefix observation regressed even after allowing for retention overhead.
+
+`python3.13 -B -m unittest tests.b5_analysis.test_reported_parallel` passed
+3 tests in 49.755 s: simultaneous issuer/opener failures preserve the first
+pack, every staged/published byte and log counter matches serial, an escaped
+staging computation reruns serially, and the opener refuses changed report
+bytes. An initial test-fixture collision (identical addressed basis/receipt
+payloads) was corrected with distinct synthetic documents, without changing
+the production collision guard.
+
+The shared transport/refusal module was rerun after staging cleanup and opaque
+argument fallback changes: `python3.13 -B -m unittest
+tests.b5_analysis.test_pack_parallel` passed 6 tests in 236.609 s under the
+concurrent machine load.
+
 ## Handoff and limits
 
 Coordination files are intentionally untouched under the user's explicit fence.
