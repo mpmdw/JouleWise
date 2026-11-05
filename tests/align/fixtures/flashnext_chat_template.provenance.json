@@ -1,0 +1,8 @@
+{
+  "model": "Qwen3.8-Flash-Next",
+  "local_source": ".hf-qwen38/flashnext_chat_template.jinja",
+  "revision": null,
+  "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+  "pinned_revision_template_verified": false,
+  "note": "Supplied offline in the task clone. No repository URL or resolved revision was supplied; this checks the supplied template only."
+}

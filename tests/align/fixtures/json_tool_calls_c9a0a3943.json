@@ -1,0 +1,223 @@
+{
+  "base_commit": "c9a0a39437614176bf4e14ff1565a6e4537328fb",
+  "cases": [
+    {
+      "label": "plain",
+      "text": "Finished. café & tea",
+      "kwargs": {},
+      "expected": [
+        "Finished. café & tea",
+        "",
+        [],
+        []
+      ]
+    },
+    {
+      "label": "qwen_json",
+      "text": "<think>plan</think>\n<tool_call>{\"name\":\"lookup\",\"arguments\":{\"z\":2,\"a\":\"é\"}}</tool_call>",
+      "kwargs": {
+        "reasoning_tokens": 2
+      },
+      "expected": [
+        "\n<tool_call>{\"name\":\"lookup\",\"arguments\":{\"z\":2,\"a\":\"é\"}}</tool_call>",
+        "plan",
+        [
+          {
+            "call_id": "a22c61be6f7914c692ce2d7daa3d1dd3c42dab17a7fb4f1968512bffda3f46e3",
+            "name": "lookup",
+            "arguments_json": "{\"a\":\"\\u00e9\",\"z\":2}"
+          }
+        ],
+        []
+      ]
+    },
+    {
+      "label": "multiple",
+      "text": "<tool_call>{\"name\": \"a\", \"arguments\": {\"x\": true}}</tool_call><tool_call>{\"name\": \"b\", \"arguments\": \"{ \\\"raw\\\": 1 }\"}</tool_call>",
+      "kwargs": {},
+      "expected": [
+        "<tool_call>{\"name\": \"a\", \"arguments\": {\"x\": true}}</tool_call><tool_call>{\"name\": \"b\", \"arguments\": \"{ \\\"raw\\\": 1 }\"}</tool_call>",
+        "",
+        [
+          {
+            "call_id": "69e70a4bbff1b8c308c74680cd619fadebe7319793139239b96c80deae6e5f37",
+            "name": "a",
+            "arguments_json": "{\"x\":true}"
+          },
+          {
+            "call_id": "9dff8b42ef14dce46509cbbaabc55f0a31a9a8453eca581ac9302b69489f7c44",
+            "name": "b",
+            "arguments_json": "{ \"raw\": 1 }"
+          }
+        ],
+        []
+      ]
+    },
+    {
+      "label": "arguments_string",
+      "text": "<tool_call>{\"name\": \"a\", \"arguments\": \"{  \\\"x\\\": 1}\"}</tool_call>",
+      "kwargs": {},
+      "expected": [
+        "<tool_call>{\"name\": \"a\", \"arguments\": \"{  \\\"x\\\": 1}\"}</tool_call>",
+        "",
+        [
+          {
+            "call_id": "2110a7ac6d875af680ae5f1da9a57ecbeff737d4fb0e74039356d7cf13c1fc47",
+            "name": "a",
+            "arguments_json": "{  \"x\": 1}"
+          }
+        ],
+        []
+      ]
+    },
+    {
+      "label": "parameters",
+      "text": "{\"name\":\"lookup\",\"parameters\":{\"step\":1}}",
+      "kwargs": {},
+      "expected": [
+        "{\"name\":\"lookup\",\"parameters\":{\"step\":1}}",
+        "",
+        [
+          {
+            "call_id": "6dca66265006720ad3e4a33870638b4fe8393d0775701f150249b2d5dc5f11a2",
+            "name": "lookup",
+            "arguments_json": "{\"step\":1}"
+          }
+        ],
+        []
+      ]
+    },
+    {
+      "label": "llama",
+      "text": "<|python_tag|>{\"name\":\"a\",\"parameters\":{}}<|eom_id|>",
+      "kwargs": {},
+      "expected": [
+        "<|python_tag|>{\"name\":\"a\",\"parameters\":{}}<|eom_id|>",
+        "",
+        [
+          {
+            "call_id": "c757a30b5feb527f383073b862d3209a52b661b3454df26874672be0a996e0d8",
+            "name": "a",
+            "arguments_json": "{}"
+          }
+        ],
+        []
+      ]
+    },
+    {
+      "label": "broken",
+      "text": "<tool_call>{broken}</tool_call>",
+      "kwargs": {},
+      "expected": [
+        "<tool_call>{broken}</tool_call>",
+        "",
+        [],
+        [
+          "malformed_tool_call:JSONDecodeError"
+        ]
+      ]
+    },
+    {
+      "label": "unclosed",
+      "text": "<tool_call>{\"name\":\"a\",\"arguments\":{}",
+      "kwargs": {},
+      "expected": [
+        "<tool_call>{\"name\":\"a\",\"arguments\":{}",
+        "",
+        [],
+        [
+          "malformed_tool_call:unclosed_or_unmatched_envelope"
+        ]
+      ]
+    },
+    {
+      "label": "unsupported",
+      "text": "<function=a>{\"x\":1}</function>",
+      "kwargs": {},
+      "expected": [
+        "<function=a>{\"x\":1}</function>",
+        "",
+        [],
+        [
+          "unsupported_tool_call_format"
+        ]
+      ]
+    },
+    {
+      "label": "prefilled",
+      "text": "hidden</think>\n<tool_call>{\"name\":\"a\",\"arguments\":{}}</tool_call>",
+      "kwargs": {},
+      "expected": [
+        "\n<tool_call>{\"name\":\"a\",\"arguments\":{}}</tool_call>",
+        "hidden",
+        [
+          {
+            "call_id": "2262ace67a50dfc6535558b082ec28098cad882a9621b20000b99c88fab7679b",
+            "name": "a",
+            "arguments_json": "{}"
+          }
+        ],
+        [
+          "reasoning_open_tag_prefilled_or_missing",
+          "reasoning_token_count_unavailable"
+        ]
+      ]
+    },
+    {
+      "label": "open_reasoning",
+      "text": "<think>hidden <tool_call>{\"name\":\"a\"}</tool_call>",
+      "kwargs": {},
+      "expected": [
+        "",
+        "hidden <tool_call>{\"name\":\"a\"}</tool_call>",
+        [],
+        [
+          "unclosed_reasoning_span",
+          "reasoning_token_count_unavailable"
+        ]
+      ]
+    },
+    {
+      "label": "reasoning_open",
+      "text": "hidden</think>done",
+      "kwargs": {
+        "reasoning_open": true
+      },
+      "expected": [
+        "done",
+        "hidden",
+        [],
+        [
+          "reasoning_open_tag_prefilled_or_missing",
+          "reasoning_token_count_unavailable"
+        ]
+      ]
+    },
+    {
+      "label": "missing_name",
+      "text": "<tool_call>{\"arguments\":{}}</tool_call>",
+      "kwargs": {},
+      "expected": [
+        "<tool_call>{\"arguments\":{}}</tool_call>",
+        "",
+        [],
+        [
+          "malformed_tool_call:KeyError"
+        ]
+      ]
+    },
+    {
+      "label": "truncated_json",
+      "text": "{\"name\":\"a\",\"arguments\":",
+      "kwargs": {},
+      "expected": [
+        "{\"name\":\"a\",\"arguments\":",
+        "",
+        [],
+        [
+          "malformed_tool_call:invalid_or_truncated_json"
+        ]
+      ]
+    }
+  ]
+}
