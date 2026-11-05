@@ -1,0 +1,14 @@
+{
+  "schema": "joulewise.align.r0.config.v1",
+  "models": {
+    "N": {"source": "/Volumes/ALIGN_MODELS/Qwen3-Next-80B-A3B-Thinking-4bit"},
+    "D": {"source": "/Volumes/ALIGN_MODELS/Qwen3.8-27B-8bit"}
+  },
+  "shade_cache": "/Volumes/ALIGN_INPUTS/shade",
+  "disk_path": "/Volumes/ALIGN_MODELS",
+  "custody_parents": ["/Volumes/ALIGN_CUSTODY"],
+  "offloads": [
+    {"label": "pilot8", "inventory": "/Volumes/ALIGN_INPUTS/pilot8-source-inventory.json", "destination": "/Volumes/ALIGN_OFFLOAD/pilot8"},
+    {"label": "pilot9", "inventory": "/Volumes/ALIGN_INPUTS/pilot9-source-inventory.json", "destination": "/Volumes/ALIGN_OFFLOAD/pilot9"}
+  ]
+}
