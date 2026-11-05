@@ -2,13 +2,14 @@
 import ast
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import unittest
 from unittest import mock
 
 from joulewise.freeze_by_commit import (
-    ROOT, blob, blob_digests, load_registration, verify_tag,
+    ROOT, REGISTRATION_COMMIT_ENV, blob, blob_digests, load_registration, verify_tag,
 )
 
 SEALED_DIR = "configs/campaigns/v5_claim_25g83/"
@@ -59,6 +60,12 @@ def analysis_blob(path):
 
 
 class FrozenFilesTests(unittest.TestCase):
+    def setUp(self):
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(REGISTRATION_COMMIT_ENV, None)
+
     def test_frozen_files(self):
         self.assertEqual(frozen_mismatches(), [])
 
