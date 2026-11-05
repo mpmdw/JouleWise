@@ -239,6 +239,10 @@ def registry_stale(root: Path = REPO_ROOT, registry: dict | None = None) -> tupl
             warnings.append(f"pinning file {path} is gone; refresh with python scripts/repin.py --write registry")
             continue
         for pointer, family, target_index in entry["rows"]:
+            if (pointer.startswith("#sha256/")
+                    and pointer.removeprefix("#sha256/") not in (files.text(path) or "")):
+                warnings.append(f"{path} {pointer}: content pointer is absent; refresh with "
+                                "python scripts/repin.py --write registry")
             if family not in census.FAMILIES:
                 warnings.append(f"{path} {pointer}: unknown family {family}")
                 continue
@@ -360,6 +364,7 @@ def write_registry_family(family: str, root: Path = REPO_ROOT) -> int:
         (root / path).write_text(text, encoding="utf-8")
     if edits:
         print("These pins protect a number: commit them with the review the target change needs.")
+        print("Refresh content pointers with python scripts/repin.py --write registry after review.")
     return 1 if refused else 0
 
 

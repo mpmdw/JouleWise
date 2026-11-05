@@ -145,6 +145,19 @@ class RegistryCheckTests(unittest.TestCase):
             self.assertEqual(repin.write("pinned_config_copy", root=tree.root), 0)
         self.assertEqual(tree.check()[0], 0)
 
+    def test_rewrite_warns_when_registry_content_pointer_is_no_longer_present(self) -> None:
+        tree = self.tree()
+        tree.edit("configs/campaigns/packx/plan_tree.json", '"members"', '"note": "reviewed", "members"')
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(repin.write("pinned_config_copy", root=tree.root), 0)
+        self.assertIn("Refresh content pointers", out.getvalue())
+        stale, warnings = repin.registry_stale(tree.root)
+        self.assertEqual(stale, [])
+        self.assertIn("tests/test_example.py #sha256/" + tree.digests["plan"] +
+                      ": content pointer is absent; refresh with python scripts/repin.py --write registry",
+                      warnings)
+
     def test_busywork_edits_need_no_repin(self) -> None:
         tree = self.tree()
         # An unpinned validator, a synthetic literal's neighbour, a line shift.
