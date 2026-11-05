@@ -34,9 +34,10 @@ RoPE for text because all three position rows are equal).
 """
 
 import fcntl
-import json
 import math
+import mmap
 import os
+import resource
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -303,8 +304,36 @@ class NgramHashSpec:
         valid = (pos_in_seg >= shift) & (src[None, :] >= 0)
         return np.where(valid, shifted, self.eos)
 
+    def _ngram_ids_one(self, row: Sequence[int]) -> List[int]:
+        """Pure-int fast path for one new token (decode); identical results.
+
+        ``row`` = the last ``context_len + 1`` history tokens. Shift ``s`` of
+        the new token is ``row[-1-s]`` unless an EOS occurs in
+        ``row[-1-s:-1]`` (the reference ``_shift_right_ignore_eos``).
+        """
+        eos = self.eos
+        n = len(row)
+        shifted = [row[-1]]
+        blocked = False
+        for s in range(1, self.ngram_size):
+            src = n - 1 - s
+            blocked = blocked or src < 0 or row[src] == eos
+            shifted.append(eos if blocked else row[src])
+        mult, sizes, offs = self.multipliers, self.head_vocab_sizes, self.head_offsets
+        out = []
+        mixed = shifted[0] * mult[0]
+        for order in range(2, self.ngram_size + 1):
+            mixed ^= shifted[order - 1] * mult[order - 1]
+            lo = (order - 2) * self.heads_per_ngram
+            for h in range(lo, lo + self.heads_per_ngram):
+                out.append(mixed % sizes[h] + offs[h])
+        return out
+
     def ngram_ids(self, history: np.ndarray, n_new: int) -> np.ndarray:
         """``history``: (B, context_len + n_new) int64 -> (B, n_new, heads)."""
+        if n_new == 1 and history.shape[1] == self.context_len + 1:
+            rows = [self._ngram_ids_one([int(v) for v in r]) for r in history]
+            return np.asarray(rows, dtype=np.int64)[:, None, :]
         h = history.astype(np.int64, copy=False)
         shifted = [self._shift_right_ignore_eos(h, s) for s in range(self.ngram_size)]
         blocks = []
@@ -423,8 +452,10 @@ class NgramTable:
     Either way only the looked-up rows are dequantized, on the host.
     """
 
+    PREFETCH_MAX_ROWS = 4096
+
     def __init__(self, path: os.PathLike, rows: int, dim: int, fmt: str,
-                 group_size: int = 32, io: str = "mmap"):
+                 group_size: int = 32, io: str = "mmap", prefetch: bool = True):
         self.path = Path(path)
         self.rows, self.dim, self.fmt, self.group_size = int(rows), int(dim), fmt, int(group_size)
         self.layout = ngram_record_layout(fmt, self.dim, self.group_size)
@@ -434,6 +465,7 @@ class NgramTable:
         if actual != expected:
             raise ValueError(f"{self.path}: size {actual} != rows*record_bytes {expected}")
         self.io = io
+        self.prefetch = prefetch
         self._mm = None
         self._fd = None
         if io == "mmap":
@@ -450,6 +482,9 @@ class NgramTable:
         self.lookups = 0
         self.unique_rows = 0
         self.seconds = 0.0
+        # Major page faults observed during gathers (mmap mode): a nonzero
+        # count means rows were paged in from disk inside the gather.
+        self.major_faults = 0
 
     def close(self):
         if self._fd is not None:
@@ -457,8 +492,23 @@ class NgramTable:
             self._fd = None
         self._mm = None
 
+    def _prefetch(self, ids: np.ndarray) -> None:
+        """MADV_WILLNEED each row's pages so cold rows page in concurrently
+        instead of as serial faults inside the gather."""
+        raw = getattr(self._mm, "_mmap", None)
+        if raw is None or not hasattr(raw, "madvise"):
+            return
+        rb, page = self.record_bytes, mmap.PAGESIZE
+        offset = getattr(self._mm, "offset", 0)
+        for row in ids.tolist():
+            start = offset + row * rb
+            first = (start // page) * page
+            raw.madvise(mmap.MADV_WILLNEED, first, start + rb - first)
+
     def _read_rows(self, ids: np.ndarray) -> np.ndarray:
         if self._mm is not None:
+            if self.prefetch and ids.size <= self.PREFETCH_MAX_ROWS:
+                self._prefetch(ids)
             return np.asarray(self._mm[ids])
         rb = self.record_bytes
         out = np.empty((ids.shape[0], rb), dtype=np.uint8)
@@ -472,14 +522,19 @@ class NgramTable:
     def gather(self, ids: np.ndarray) -> np.ndarray:
         """``ids`` (...) int64 -> float32 rows (..., dim); dedupes repeated ids."""
         t0 = time.perf_counter()
+        faults0 = resource.getrusage(resource.RUSAGE_SELF).ru_majflt
         flat = ids.reshape(-1).astype(np.int64, copy=False)
         if flat.size and (flat.min() < 0 or flat.max() >= self.rows):
             raise IndexError("n-gram id out of table range")
-        uniq, inverse = np.unique(flat, return_inverse=True)
+        if flat.size <= 64:                       # decode: dedupe not worth it
+            uniq, inverse = flat, None
+        else:
+            uniq, inverse = np.unique(flat, return_inverse=True)
         rows = decode_ngram_rows(self._read_rows(uniq), self.fmt, self.dim, self.group_size)
-        out = rows[inverse].reshape(*ids.shape, self.dim)
+        out = (rows if inverse is None else rows[inverse]).reshape(*ids.shape, self.dim)
         self.lookups += int(flat.size)
         self.unique_rows += int(uniq.size)
+        self.major_faults += resource.getrusage(resource.RUSAGE_SELF).ru_majflt - faults0
         self.seconds += time.perf_counter() - t0
         return out
 
