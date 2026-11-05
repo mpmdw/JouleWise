@@ -230,6 +230,13 @@ class EpisodeRuntimeAdapter:
                 "accounting_version": "represented_ids_v1",
                 "repetition": "observe_only",
             }
+            from joulewise.align.apple.prompt_cache import hybrid_checkpoint_policy
+            checkpoint = hybrid_checkpoint_policy(getattr(self.runtime, "_model_config", None))
+            if checkpoint is not None:
+                metadata["sampler"]["execution_policy"].update(
+                    fallback="checkpoint_then_whole_cache_rebuild_on_untrimmable_rewrite",
+                    checkpoint=checkpoint,
+                )
         if spec.sampler is not None or spec.max_episode_seconds is not None:
             from joulewise.align.apple.sampling import SEED_LAW, TURN_SEED_LAW, SEED_BITS, seed_inputs
             policy = metadata["sampler"].setdefault("execution_policy", {})
