@@ -1444,7 +1444,15 @@ class QSAAttention(nn.Module):
         out = self._core(q, keys, values, cache, sel)
         out = out.transpose(0, 2, 1, 3).reshape(B, S, -1)
         out = out * sigmoid_once(gate)
-        return self.o_proj(out)
+        out = self.o_proj(out)
+        # The indexer's cache writes (raw keys, completed block keys) feed the
+        # output only once a query drops blocks; in the dense regime (fewer
+        # than budget + ratio tokens) and between block completions nothing
+        # reads them. mlx-lm evaluates only the logits per decode step, so
+        # without this tie the writes pile up as one unevaluated graph that runs
+        # in a burst at the first sparse token, or never (mlx-lm #1662 class;
+        # validation round 1, systems HIGH).
+        return mx.depends(out, [a for a in (cache.raw_keys, cache.block_keys) if a is not None])
 
     def _core(self, q, keys, values, cache, sel):
         p = QSAAttention.paths

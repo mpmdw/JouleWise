@@ -546,10 +546,33 @@ class Fixture:
         self.conv_dir = self.ref_dir / ("conv-" + code)
         self.conv_dir.mkdir(exist_ok=True)
         self.reference = Reference(self.ref_dir)
-        self.ref, self.meta = self.reference.compute()
-        self.seqs = self.meta["seqs"]
+        self._ref = self._meta = None
+        self.seqs = sequences()
         self._models = {}
         self.results = {}
+
+    def _reference(self):
+        # Lazy: tests that need only a converted model never start torch's
+        # reference stage (minutes on a CPU shared with the analysis job).
+        if self._ref is None:
+            self._ref, self._meta = self.reference.compute()
+            if self._meta["seqs"] != self.seqs:
+                raise RuntimeError("cached reference was built from different token sequences")
+        return self._ref, self._meta
+
+    @property
+    def ref(self):
+        return self._reference()[0]
+
+    @property
+    def meta(self):
+        return self._reference()[1]
+
+    def text_config(self, profile="fp32", **changes):
+        """The converted artifact's text_config with ``changes`` applied (for
+        ``model(profile, text_config=...)`` overrides)."""
+        cfg = json.loads((self.converted(profile) / "config.json").read_text())["text_config"]
+        return dict(cfg, **changes)
 
     def converter(self):
         spec = importlib.util.spec_from_file_location("qwen4_exp_converter", CONVERTER_FILE)
@@ -563,6 +586,7 @@ class Fixture:
             if out.exists():
                 import shutil
                 shutil.rmtree(out)
+            self.reference.build_checkpoint()
             self.converter().convert(self.reference.ckpt, out, profile=profile)
         return out
 
@@ -570,7 +594,7 @@ class Fixture:
         """Load through mlx-lm's ``model_file`` hook after verifying the sha256
         manifest; no bytecode is written into the model directory (it would
         break the manifest's file inventory)."""
-        key = (profile, tuple(sorted(overrides.items())))
+        key = (profile, json.dumps(overrides, sort_keys=True))
         if key not in self._models:
             from mlx_lm.utils import load_model
             path = self.converted(profile)
@@ -1209,6 +1233,75 @@ class CanonicalParityTest(unittest.TestCase):
             want = np.concatenate([np.array(p.view(mx.uint16)) for p in pieces]).tobytes()
             got = (out / f"ngram-L{layer:03d}.bf16.bin").read_bytes()
             self.assertEqual(got, want)
+
+
+# ===========================================================================
+# Validation round 1 regressions (docs/align/qwen4_exp_port/canonical.md)
+# ===========================================================================
+
+
+def graph_nodes(*arrays):
+    """Unevaluated graph nodes behind ``arrays`` (0 once they are evaluated)."""
+    import tempfile
+    import mlx.core as mx
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "g.dot"
+        mx.export_to_dot(str(f), *arrays)
+        return sum(1 for line in f.read_text().splitlines() if "->" not in line and "[" in line)
+
+
+def cache_bytes(cache):
+    return sum(c.nbytes for c in cache)
+
+
+def decode_trace(model, cache, rows, steps, checkpoints, probe):
+    """Decode ``steps`` tokens per row evaluating only the logits (mlx-lm's
+    generate_step contract); at each checkpoint record active memory, the
+    caches' own bytes and ``probe(cache)``."""
+    import gc
+    import mlx.core as mx
+    trace = []
+    for i in range(1, steps + 1):
+        out = model(mx.array([[5 + (i + r) % 200] for r in range(rows)]), cache=cache)
+        mx.eval(out)
+        del out
+        if i in checkpoints:
+            gc.collect()
+            trace.append(dict(step=i, active=mx.get_active_memory(), cache=cache_bytes(cache), **probe(cache)))
+    return trace
+
+
+@unittest.skipIf(SKIP, SKIP)
+class ValidationRound1Test(unittest.TestCase):
+    """One regression per validation-round-1 finding that has a code fix."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.fx = fixture()
+
+    # ------------------------------------------------- systems HIGH (indexer)
+    def test_r1_dense_regime_indexer_writes_run_with_their_token(self):
+        """While every QSA block is selected (fewer than budget + ratio tokens)
+        the indexer's raw-key and block-key writes reach no output. Evaluating
+        only the logits each step (as mlx-lm's generate_step does) must still
+        run them with their own token: no deferred graph, no residual memory
+        growth beyond the caches' own buffers."""
+        import mlx.core as mx
+        fx = self.fx
+        model = fx.model("bf16", text_config=fx.text_config("bf16", indexer_budget=1024))
+        qsa = lambda c: [c[i] for i in QSA_LAYERS]
+        cache = model.make_cache()
+        run(model, [fx.seqs["seq_a"][:12]], cache)
+        mx.eval([c.state for c in cache])
+        probe = lambda c: dict(nodes=max(graph_nodes(*[a for a in (q.raw_keys, q.block_keys) if a is not None])
+                                         for q in qsa(c)))
+        trace = decode_trace(model, cache, 1, 400, (100, 200, 400), probe)
+        self.assertTrue(all(q.offset == 412 for q in qsa(cache)))
+        self.assertLess(412, 1024 + RATIO, "the run must stay in the dense regime")
+        growth = (trace[-1]["active"] - trace[0]["active"]) - (trace[-1]["cache"] - trace[0]["cache"])
+        fx.record("r1_dense_indexer", dict(trace=trace, residual_growth_bytes=growth))
+        self.assertEqual([t["nodes"] for t in trace], [0, 0, 0], trace)
+        self.assertLessEqual(growth, 16 * 1024, trace)
 
 
 if __name__ == "__main__":
