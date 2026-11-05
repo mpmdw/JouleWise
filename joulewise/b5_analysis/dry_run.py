@@ -717,8 +717,7 @@ class RunState:
             self.flags.extend(f['code'] for f in flags)
             # Capture the archive-owned input census, including all bytes the
             # child programs will reopen through their own authenticated handles.
-            for name in archive.source_names():
-                archive.source_bytes('sources/'+name)
+            archive.census_sources(archive.source_names())
             for name in archive.record['outputs']:
                 archive.output_bytes(name)
             for name in ('withheld/member-assessments.json','withheld/neg8-rescreen-bracket.json','withheld/bracket-evaluation.json'):
@@ -785,8 +784,16 @@ class RunState:
         return 0
 
     def prepare_brackets(self, argv):
-        from .bracket import evaluate_window_bracket, block_b_max_for_archives, b_sens
-        self.brackets={p:evaluate_window_bracket(a,repo_root=self.repo_root) for p,a in self.archives.items()}
+        from .bracket import block_b_max_for_archives, b_sens
+        from .pack_parallel import bracket_pack, consume, merge_census, pack_map
+        items = list(self.archives.items())
+        outcomes = pack_map(bracket_pack, [((a, self.repo_root), {}) for _, a in items])
+        brackets = {}
+        for (pack, archive), outcome in zip(items, outcomes or [None] * len(items)):
+            bracket, census = consume(outcome, lambda: bracket_pack(archive, self.repo_root))
+            merge_census(archive, census)
+            brackets[pack] = replace(bracket, window=archive.window)
+        self.brackets = brackets
         self.b_max=block_b_max_for_archives(list(self.archives.values()))
         self.contexts=primary_contexts(self.archives,self.kept,self.brackets,self.rows,synthetic=self.pack_table is not None)
         for pack,bracket in self.brackets.items():
@@ -1601,21 +1608,28 @@ def _reported_open(s,pack):
     return 0
 
 
-def step_10(s,r):
+def _reported_one(s,r,pack):
     from scripts.issue_reported_energy import main
+    output=s.path('outputs/projection-'+pack+'.json')
+    result,outputs,code,exit_status=s.invoke(r,main,['--window-index',s.index_path,'--pack',pack,'--output',output],
+        step='10',window=pack,outputs=[('projection_'+pack,output)])
+    if exit_status==0:
+        step4=next((record for record in s.step_records if record.step=='4' and record.window==pack),None)
+        require_step10_admission(step4,s.read('projection_'+pack),s.read('extraction_'+pack))
+        before=set(s.outputs)
+        result=r.run(s.guarded(lambda argv:_reported_open(s,pack)),[],step='10',window=pack)
+        exit_status=result.exit_status;code=result.token() if exit_status else None
+        outputs.extend(s.outputs[k] for k in s.outputs if k not in before)
+    return s.record('10',window=pack,exit_status=exit_status,code=code,outputs=outputs)
+
+
+def step_10(s,r):
+    if _parallel(s,r,2):
+        from .reported_parallel import step_10_parallel
+        return step_10_parallel(s,r)
     records=[]
     for pack in ('alpha','beta'):
-        output=s.path('outputs/projection-'+pack+'.json')
-        result,outputs,code,exit_status=s.invoke(r,main,['--window-index',s.index_path,'--pack',pack,'--output',output],
-            step='10',window=pack,outputs=[('projection_'+pack,output)])
-        if exit_status==0:
-            step4=next((record for record in s.step_records if record.step=='4' and record.window==pack),None)
-            require_step10_admission(step4,s.read('projection_'+pack),s.read('extraction_'+pack))
-            before=set(s.outputs)
-            result=r.run(s.guarded(lambda argv:_reported_open(s,pack)),[],step='10',window=pack)
-            exit_status=result.exit_status;code=result.token() if exit_status else None
-            outputs.extend(s.outputs[k] for k in s.outputs if k not in before)
-        records.append(s.record('10',window=pack,exit_status=exit_status,code=code,outputs=outputs))
+        records.append(_reported_one(s,r,pack))
         if records[-1].status!='ok':break
     return records
 
