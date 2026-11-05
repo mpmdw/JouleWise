@@ -54,8 +54,14 @@ the SMC lane when ready. Do not run these commands from an agent session.
 
    Every check can run separately with the same command plus, for example,
    `--checks template --models D`. Available checks: `host,disk,smc,load,template,generated,ladder,long-decode,memory`.
-   A subset does not complete R0. The per-check timeout is 7,200 s; a timeout
-   fails that check. Census failure refuses the run; there is no force option.
+   A subset does not complete R0. The timeout is 7,200 s per long-decode
+   **attempt**, ladder **episode**, generated **turn**, or other check. D's
+   38,912-token decode at 10 tok/s takes about 3,891 s per attempt; two attempts
+   get separate deadlines. A slow D host can use `--timeout 14400`. Native
+   calls can delay signal delivery. A timeout fails the current check while
+   retaining completed attempts/rungs/turns and sampled in-flight evidence.
+   JSON/Markdown are saved at each progress boundary, including memory samples.
+   Census failure refuses the run; there is no force option.
    If testing High Power, switch it manually and repeat `--checks host` into
    a new output directory; R1 owns the adoption decision.
 

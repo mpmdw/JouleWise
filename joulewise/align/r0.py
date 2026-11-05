@@ -93,10 +93,11 @@ class EchoTask:
         return '{"value":"desk-check","ok":true}'
 
 
-def load_coherence(backend):
+def load_coherence(backend, *, progress=lambda data: None):
     backend.new_session(None)
     short = backend.chat([ChatMessage("user", SHORT_PROMPT)], [], 4096, 93)
     short_row = turn_row(backend, short, 4096)
+    progress({"short": short_row})
     task = backend.task(PAIRS[0], 91)
     messages = [ChatMessage("system", task.system_prompt("benign")), ChatMessage("user", task.user_prompt())]
     # Freeze the first 2049 rendered SHADE IDs; 2048 teacher-forced targets.
@@ -104,6 +105,7 @@ def load_coherence(backend):
     if len(ids) != 2049:
         raise ValueError("pinned SHADE prompt is shorter than 2049 tokens")
     nll = backend.nll(ids)
+    progress({"nll_nats_per_token": nll if math.isfinite(nll) else None, "nll_prompt_ids": ids})
     backend.new_session(None)
     echo_messages = [ChatMessage("user", ECHO_PROMPT)]
     first = backend.chat(echo_messages, ECHO_TOOLS, 4096, 94)
@@ -145,22 +147,25 @@ def template_rewrites(backend, *, transitions=12):
             "note": "B7 uses generated transitions below; these synthetic counts cannot waive it."}
 
 
-def generated_rewrites(backend, *, transitions=12):
+def generated_rewrites(backend, *, transitions=12, progress=lambda data: None, run_unit=lambda fn: fn()):
     backend.new_session(None)
     messages = [ChatMessage("user", ECHO_PROMPT)]
     rows, turns = [], []
+    progress({"transitions": rows, "turns": turns})
     for index in range(transitions):
         if len(backend.render(messages, ECHO_TOOLS)) + 4096 > 40960:
             break
-        result = backend.chat(messages, ECHO_TOOLS, 4096, 95)
+        result = run_unit(lambda: backend.chat(messages, ECHO_TOOLS, 4096, 95))
         row = turn_row(backend, result, 4096)
         turns.append(row)
+        progress({"turns": turns})
         replies = append_result(backend, messages, result, EchoTask(), strict=True)
         if not replies:
             break
         following = backend.render(messages, ECHO_TOOLS)
         rows.append({"turn": index, "closed_reasoning": row["closed_reasoning"],
                      **rewrite(row["prompt_token_ids"], row["output_token_ids"], following)})
+        progress({"transitions": rows})
     return {"status": "pass" if len(rows) >= transitions else "inconclusive",
             "evidence": "real_generated_turns", "transitions": rows, "turns": turns}
 
@@ -177,11 +182,13 @@ def checkpoint_verdict(tag, evidence):
             "eligible_transitions": len(rows), "rewind_fraction": fraction}
 
 
-def screen_episode(backend, tag, pair, seed_index, cap, *, max_turns=6, budget=16384):
+def screen_episode(backend, tag, pair, seed_index, cap, *, max_turns=6, budget=16384, progress=lambda data: None):
     seed = episode_seed(PINS[tag]["tag"], "thinking_on", "shade/" + pair, seed_index)
     task = backend.task(pair, seed_index)
     messages = [ChatMessage("system", task.system_prompt("benign")), ChatMessage("user", task.user_prompt())]
     rows, used = [], 0
+    progress({"pair": pair, "seed_index": seed_index, "seed": seed, "turns": rows,
+              "decode_tokens": 0, "decode_budget": budget})
     for index in range(max_turns):
         if used + cap > budget:
             break
@@ -193,29 +200,41 @@ def screen_episode(backend, tag, pair, seed_index, cap, *, max_turns=6, budget=1
         used += row["tokens"]
         row["tool_outputs"] = append_result(backend, messages, result, task)
         rows.append({"turn": index, **row})
+        progress({"turns": rows, "decode_tokens": used})
         if not result.tool_calls:
             break
     return {"pair": pair, "seed_index": seed_index, "seed": seed, "turns": rows,
             "decode_tokens": used, "decode_budget": budget}
 
 
-def ladder(backend, tag):
+def ladder(backend, tag, *, progress=lambda data: None, run_unit=lambda fn: fn()):
     rungs = []
+    progress({"rungs": rungs, "selected": None})
     choices = (("xhigh", None, 4096), ("medium", "medium", 4096), ("low", "low", 4096)) if tag == "D" else (
         ("4096", None, 4096), ("8192", None, 8192))
     for label, effort, cap in choices:
         episodes = []
+        rung = {"rung": label, "template_kwargs": {} if effort is None else {"reasoning_effort": effort},
+                "cap": cap, "episodes": episodes, "status": "running"}
+        rungs.append(rung)
+        progress({"rungs": rungs})
         for pair, seed in zip(PAIRS, (91, 92)):
             backend.new_session(effort)  # xhigh deliberately passes no kwarg
-            episodes.append(screen_episode(backend, tag, pair, seed, cap))
+            episode = {"pair": pair, "turns": [], "status": "running"}
+            episodes.append(episode)
+            def episode_progress(data):
+                episode.update(data)
+                progress({"rungs": rungs})
+            episode.update(run_unit(lambda: screen_episode(backend, tag, pair, seed, cap, progress=episode_progress)))
+            episode["status"] = "complete"
+            progress({"rungs": rungs})
         turns = [turn for episode in episodes for turn in episode["turns"]]
         bad = [t for t in turns if t["hit_cap"] and (tag == "N" or not t["closed_reasoning"])]
         fraction = len(bad) / len(turns) if turns else 1.0
         median = statistics.median(t["reasoning_tokens"] for t in turns) if turns else None
         ok = bool(turns) and fraction <= 0.20 and (tag == "N" or median <= 2048)
-        rungs.append({"rung": label, "template_kwargs": {} if effort is None else {"reasoning_effort": effort},
-                      "cap": cap, "episodes": episodes, "bad_cap_fraction": fraction,
-                      "median_reasoning_tokens": median, "status": "pass" if ok else "fail"})
+        rung.update(bad_cap_fraction=fraction, median_reasoning_tokens=median, status="pass" if ok else "fail")
+        progress({"rungs": rungs})
         if ok:
             return {"status": "pass", "selected": label, "rungs": rungs}
     return {"status": "fail", "selected": None, "rungs": rungs,
@@ -270,11 +289,23 @@ def long_decode_verdict(result):
             "growth_limit_bytes_per_10k": 2_000_000_000}
 
 
-def long_decode(backend):
-    first = long_decode_verdict(backend.long_decode(eval_metadata=False))
-    attempts = [first]
-    if first["status"] != "pass":
-        attempts.append(long_decode_verdict(backend.long_decode(eval_metadata=True)))
+def long_decode(backend, *, progress=lambda data: None, run_unit=lambda fn: fn()):
+    attempts = []
+    for evaluate in (False, True):
+        attempt = {"status": "running", "eval_metadata": evaluate, "positions": 0, "memory_samples": []}
+        attempts.append(attempt)
+        def probe_progress(data):
+            attempt.update(data)
+            progress({"attempts": attempts, "metadata_eval_required": False})
+        backend.probe_progress = probe_progress
+        probe_progress({})
+        try:
+            attempt.update(long_decode_verdict(run_unit(lambda: backend.long_decode(eval_metadata=evaluate))))
+            probe_progress({})
+        finally:
+            backend.probe_progress = lambda data: None
+        if attempt["status"] == "pass":
+            break
     evaluated = attempts[-1].get("metadata_arrays_evaluated", 0) > 0
     status = attempts[-1]["status"]
     if len(attempts) > 1 and status == "pass" and not evaluated:
@@ -315,13 +346,13 @@ def markdown(report):
             lines.extend(["| Rung | Pair | Turn | Tokens | Reasoning tokens | Seconds |", "|---|---|---|---|---|---|"])
             for rung in row["rungs"]:
                 for ep in rung["episodes"]:
-                    lines.extend(f"| {rung['rung']} | {ep['pair']} | {t['turn']} | {t['tokens']} | {t['reasoning_tokens']} | {t['seconds']:.3f} |"
+                    lines.extend(f"| {rung['rung']} | {ep['pair']} | {t.get('turn')} | {t.get('tokens')} | {t.get('reasoning_tokens')} | {t.get('seconds', 0):.3f} |"
                                  for t in ep["turns"])
             lines.append(f"Selected: {row['selected']}. See JSON for rung bars and raw ID evidence.")
         elif row["check"] == "long-decode" and "attempts" in row:
             lines.extend(["| Metadata evaluation | Positions | Trend bytes/10k | KV bytes/10k | Status | Errors |",
                           "|---|---|---|---|---|---|"])
-            lines.extend(f"| {a.get('metadata_evaluation')} | {a['positions']} | {a['trend_bytes_per_10k']} | {a['kv_bytes_per_10k']} | {a['status']} | {a.get('errors', [])} |"
+            lines.extend(f"| {a.get('metadata_evaluation')} | {a['positions']} | {a.get('trend_bytes_per_10k')} | {a.get('kv_bytes_per_10k')} | {a['status']} | {a.get('errors', [])} |"
                          for a in row["attempts"])
             lines.append(f"Metadata evaluation required: {row['metadata_eval_required']}. See JSON for all memory samples.")
         elif row["check"] == "disk" and "models" in row:

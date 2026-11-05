@@ -184,6 +184,9 @@ class MlxBackend:
                 mx.synchronize()
                 samples.append({"position": prompt_size + count, "active_bytes": mx.get_active_memory(),
                                 "kv_cache_bytes": kv_bytes()})
+                getattr(self, "probe_progress", lambda data: None)({
+                    "positions": prompt_size + count, "memory_samples": samples,
+                    "metadata_arrays_evaluated": metadata_arrays_evaluated})
         self.native.observe = observe
         started = time.monotonic()
         record = None

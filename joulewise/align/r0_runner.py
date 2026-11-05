@@ -93,22 +93,42 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
-    def receipt(name, model, fn):
+    def receipt(name, model, fn, *, incremental=False):
         guard.check(force=True)
         started = time.monotonic()
-        try:
+        row = {"check": name, **({"model": model} if model else {}), "status": "running"}
+        report["checks"].append(row)
+        def progress(data):
+            row.update(data)
+            report["census"] = guard.receipts
+            save_report(output, report)
+        def run_unit(fn):
+            guard.check(force=True)
             with deadline(per_check_timeout):
-                result = fn()
+                return fn()
+        progress({})
+        try:
+            result = fn(progress, run_unit) if incremental else run_unit(fn)
+            row.update(result)
             guard.check(force=True)
         except Refused:
             raise
         except (Exception, DeadlineExpired) as exc:
-            result = {"status": "fail", "error": f"{type(exc).__name__}: {exc}"}
-        report["checks"].append({"check": name, **({"model": model} if model else {}),
-                                 **result, "check_seconds": time.monotonic() - started})
+            def interrupt(value):
+                if isinstance(value, dict):
+                    if value.get("status") == "running":
+                        value["status"] = "interrupted"
+                    for child in value.values():
+                        interrupt(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        interrupt(child)
+            interrupt(row)
+            row.update(status="fail", error=f"{type(exc).__name__}: {exc}")
+        row["check_seconds"] = time.monotonic() - started
         report["census"] = guard.receipts
         save_report(output, report)
-        return result
+        return row
     try:
         # This guard precedes host probes, file inventories, optional SMC and
         # lazy imports. No model can be opened after a refused initial census.
@@ -145,7 +165,13 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                              "long-decode": lambda: r0.long_decode(backend),
                              "memory": lambda: r0.memory_peak(backend, tag)}
                 for name in wanted:
-                    result = receipt(name, tag, functions[name])
+                    composites = {
+                        "load": lambda p, u: u(lambda: r0.load_coherence(backend, progress=p)),
+                        "generated": lambda p, u: r0.generated_rewrites(backend, progress=p, run_unit=u),
+                        "ladder": lambda p, u: r0.ladder(backend, tag, progress=p, run_unit=u),
+                        "long-decode": lambda p, u: r0.long_decode(backend, progress=p, run_unit=u),
+                    }
+                    result = receipt(name, tag, composites.get(name, functions[name]), incremental=name in composites)
                     if name == "generated" and "transitions" in result:
                         receipt("checkpoint", tag, lambda: r0.checkpoint_verdict(tag, result))
                 if tag == "D" and any(c in checks for c in ("load", "generated", "ladder")):
@@ -175,7 +201,8 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard):
     parser.add_argument("--output", type=Path, required=True, help="new exclusive record directory")
     parser.add_argument("--checks", default=",".join(CHECKS), help="comma-separated: " + ",".join(CHECKS))
     parser.add_argument("--models", default="N,D")
-    parser.add_argument("--timeout", type=int, default=7200, help="wall timeout per check, seconds")
+    parser.add_argument("--timeout", type=int, default=7200,
+                        help="seconds per check, or per decode attempt / ladder episode / generated turn")
     parser.add_argument("--inventory", type=Path, help="hash this root only, before offload; output is a new JSON file")
     args = parser.parse_args(argv)
     checks, models = args.checks.split(","), args.models.split(",")

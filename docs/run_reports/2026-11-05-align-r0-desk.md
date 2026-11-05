@@ -171,3 +171,11 @@ observed failing before its fix; final commit mapping and checks follow below.
   unsupported-format flags still fail. Ladder rows retain tool outputs/errors.
   Reasoning-quote/capped-tail and tool-error evidence regressions fail before
   and pass after.
+
+- G4 / MEDIUM shared deadline and lost partial results: each decode attempt,
+  ladder episode and generated turn gets its own timeout. Check rows are added
+  before work; attempts, rungs, episodes, turns, transitions and native memory
+  samples are saved incrementally. Exceptions update the existing row and mark
+  in-flight work interrupted. Three regressions failed before and pass after,
+  including reading the partial receipt from disk inside a timed-out retry.
+  Runbook gives D's token/time calculation and a 14,400 s slow-host override.
