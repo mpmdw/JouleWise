@@ -22,7 +22,7 @@ class CommitFreezeTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         os.environ.pop(f.REGISTRATION_COMMIT_ENV, None)
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=str(Path("/tmp").resolve()))
         self.addCleanup(self.temporary.cleanup)
         self.repo = Path(self.temporary.name)
         init_git_fixture(self.repo, "-q")
