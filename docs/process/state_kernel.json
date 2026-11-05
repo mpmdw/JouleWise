@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Synthetic speed-plan evidence and remaining post-release gates",
-    "path": "docs/run_reports/2026-11-05-b5-speed-plan.md"
+    "label": "Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review",
+    "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -844,56 +844,6 @@
       "priority": "p2_next_slice",
       "rank": 14,
       "status": "queued",
-      "stop_card": null
-    },
-    "B5-SPEED-PLAN-01": {
-      "acceptance": {
-        "evidence": [
-          "Synthetic before/after output and census digests match exactly",
-          "Targeted unittest checks pass",
-          "Post-release full-pipeline blinded comparator and timing establish the runtime target"
-        ],
-        "pointer": {
-          "label": "Post-release block-5 speed plan",
-          "path": "docs/process/b5_speed_plan.md"
-        },
-        "summary": "Measured complete runtime below two hours with exact result/decision equivalence; seven- and ten-worker schedules and load/memory limits documented."
-      },
-      "authority": {
-        "label": "Synthetic speed-plan evidence and remaining post-release gates",
-        "path": "docs/run_reports/2026-11-05-b5-speed-plan.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "event",
-          "required": "The frozen block-5 release at 929fc65c9 has completed before runtime changes are promoted.",
-          "scope": "live_promotion",
-          "state": "pending",
-          "strength": "hard",
-          "target": "b5-analysis-r2-release-complete"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Synthetic speed-plan evidence and remaining post-release gates",
-            "path": "docs/run_reports/2026-11-05-b5-speed-plan.md"
-          },
-          "rule": "Synthetic fixtures only in this blinded clone; no real measurement reads, restricted directory, full suite, network, push or release-tag change."
-        }
-      ],
-      "flags": [
-        "lead_only"
-      ],
-      "goal": "Reduce the complete r2 analysis below two hours after release; preserve every result and decision, including refusal identity and position.",
-      "id": "B5-SPEED-PLAN-01",
-      "lane": "agent",
-      "priority": "p3_tooling",
-      "rank": 347,
-      "status": "partial",
-      "status_note": "2026-11-05: step-by-step plan and synthetic profiles recorded; ordered bulk source census implemented on lane/2026-11-05-b5-speed-plan. Whole-pipeline runtime and blinded equivalence remain unverified; no merge, release-path change or real-data run authorized here.",
       "stop_card": null
     },
     "BATTERY-FLOAT-GATE-01": {
@@ -11499,5 +11449,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-11-05"
+  "updated": "2026-09-25"
 }

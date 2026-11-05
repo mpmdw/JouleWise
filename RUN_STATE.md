@@ -1,18 +1,5 @@
 # JouleWise Run State
 
-## 2026-11-05 — isolated post-release block-5 speed-plan lane
-
-`lane/2026-11-05-b5-speed-plan` starts at `origin/main` `92026c184`.
-The [speed plan](docs/process/b5_speed_plan.md) budgets 114 minutes at seven
-workers and 98.5 at ten, conditional on future parallel work; neither complete
-runtime is verified. One runtime change uses the existing ordered bulk source
-census in step 0. Synthetic output/record digests match; a prefix-indexing
-experiment showed no reliable wall gain and is retained only in the benchmark.
-No real data, restricted directory, full suite, network or release run was used.
-`b5/analysis-r2^{}` remains `929fc65c9`; no push or promotion is authorized.
-Evidence and next exact step: [run report](docs/run_reports/2026-11-05-b5-speed-plan.md).
-The kernel records `B5-SPEED-PLAN-01` as partial, with promotion gated on release.
-
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;
@@ -7325,7 +7312,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-05). Latest report: [Synthetic speed-plan evidence and remaining post-release gates](docs/run_reports/2026-11-05-b5-speed-plan.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
 
 ### [ED-EXTERNAL]
 
