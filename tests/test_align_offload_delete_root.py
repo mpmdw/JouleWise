@@ -26,7 +26,7 @@ class DeleteRootTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.align = self.root / 'night-align'
         self.align.mkdir()
-        self.src = self.align / 'pilot-v7-test'
+        self.src = self.root / 'archived-unused-model'
         self.src.mkdir()
         (self.src / 'bytes').write_bytes(b'opaque synthetic bytes')
         (self.src / 'empty').mkdir()
@@ -41,6 +41,7 @@ class DeleteRootTests(unittest.TestCase):
         self.keep = self.op / 'KEEP.txt'
         self.keep.write_text(str(self.keep_root) + '\n')
         self.journal = self.op / 'deletions.tsv'
+        (self.op / 'approved-models.txt').write_text(str(self.src) + '\n')
         self.archive = self.remote / 'p8.tar.zst'
         self.archive.write_bytes(b'synthetic archive')
         self.addCleanup(mock.patch.stopall)
@@ -120,7 +121,7 @@ class DeleteRootTests(unittest.TestCase):
             self.assertTrue(g.overlaps(self.src, alias))
 
     def test_keep_equal_ancestor_and_descendant_refuse(self):
-        for entry in (self.src, self.align, self.src / 'bytes'):
+        for entry in (self.src, self.src.parent, self.src / 'bytes'):
             with self.subTest(entry=entry):
                 self.keep.write_text(str(self.keep_root) + '\n' + str(entry) + '\n')
                 self.refused('KEEP inode overlap')
@@ -150,7 +151,14 @@ class DeleteRootTests(unittest.TestCase):
         self.src = self.align / 'pilot-v8-20261105T102850Z'
         self.src.mkdir()
         self.prepare()
-        self.refused('pilot 9 retained')
+        self.refused('pilot roots retained')
+
+    def test_every_pilot_root_is_retained_until_release(self):
+        for version in (0, 7, 8):
+            self.src = self.align / ('pilot-v' + str(version) + '-test')
+            self.src.mkdir()
+            self.prepare()
+            self.refused('pilot roots retained')
 
     def test_control_overlap_refuses(self):
         with mock.patch.object(g, 'overlaps', return_value=True):

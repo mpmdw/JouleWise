@@ -63,3 +63,22 @@ refuse. `python3.13 -B -m unittest tests.test_align_offload_model_keep`: PASS,
 4 tests. Cached council 219fb1515 lacks amendment 1; kit 8d1ab6e2c has only
 v0–v3; R0 49e78e178 still names Next-80B. Asked for locally available reviewed
 v4/amendment SHAs; no source revision, candidate list or plan value fabricated.
+
+N5a: added delete_root --model-class public-weights. Exact per-item Ed approval
+binds path, every-file blob manifest, repo id/full revision, replayable six-ref
+census and file-to-HF mapping. It skips only the containing mandatory model
+root's overlap; every other KEEP overlap and common deletion guard remains.
+Cloud-copy proof is replaced by public reproducibility proof: unauthenticated
+operator-time HEAD of the exact API revision and every mapped file. No call
+was made here. Independent review, retention, ACLs/flags, pause/census/floor,
+source recheck, validated journal, pointer and partial-failure behavior remain.
+All pilot roots now refuse pending block-5 release, including pilot 8. Test
+fixtures for archived-class success now use an explicitly approved non-pilot
+source. New tests cover exact approval, reference aliases/paths, missing census,
+root/other KEEP protections, blob-only files, source mutation, HF failures and
+HEAD URL/method/no-auth. Deletion reports regular bytes and measured available
+space delta separately. Actual source deletions/freed bytes here: NONE / 0.
+
+`python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS, 49 tests.
+`python3.13 -B -m unittest tests.test_align_offload_public_weights`: PASS, 12 tests.
+These are synthetic tests, not HF availability or model eligibility validation.

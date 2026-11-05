@@ -1483,3 +1483,70 @@ peak working bytes and lowest free bytes, conversion/end-to-end outcomes, unused
 model revision inventory, and pilot-9 harvest/pause/restoration status.
 Report UNKNOWN, BLOCKED and PROVISIONAL explicitly. **No offload or hardware
 validation occurred merely because this runbook was written.**
+
+## Public weights deletion receipt contract (round-2 ruling N5a)
+
+This is the only class currently eligible to reclaim internal source space:
+**PUBLIC MODEL WEIGHTS NOT IN ANY PLAN**, under `jw_models` or the HF hub.
+No cloud copy is required for this class. It does not grant an approval list.
+Pilot roots and capture-bearing trees remain until after block-5 release.
+
+For each exact proposed model directory, Ed and an independent reviewer must
+first review the complete step-3 census from all six refs. Every registration
+identity pin, BYTES roster, B6 §1.4 roster, ALIGN v4 kit, amendment-1 plan and
+v4 R0 config participates. Path containment or a model identity alias in any
+of them is KEEP. Dropping Next-80B or Qwen3.5-122B from ALIGN alone is insufficient:
+BYTES/B6 or historical pins may still reference them. Never infer eligibility
+from the expected candidate names. No real candidate was inspected here.
+
+Use a new item directory outside the source. Save `source-path.txt` as one
+canonical absolute line, `source.json` from the reviewed `tree` helper,
+`source.sha256` as its exact checksum receipt, and `source-after.json` with
+identical bytes. All model files must be regular, nlink-1 **blob bytes**, never
+snapshot symlinks, and every file must appear in the SHA-256 inventory. No
+shared HF cache cleanup is authorized. Save the complete step-3 result as
+`model-census.json`; it is replayed from its full Git SHAs before deletion.
+
+`public-weights.json` has exactly these fields: `source` (the exact approved
+path), `repo_id` (the exact public HF org/repo), `revision` (40 lowercase hex
+characters), `manifest_sha256`, `census_sha256`, and `files` (an exhaustive
+mapping from each local manifest file path to its HF repo filename at that
+revision). This mapping covers blob-cache names too; no symlinks are followed.
+The independent review receipt `independent-receipt.txt` must bind the exact
+source, both digests, repo id and revision. `retention-review.json` must equal:
+
+```json
+{"source":"<exact source>","manifest_sha256":"<source.json digest>","model_class":"public-weights","no_retained_ledger_locators":true,"no_measurement_data":true}
+```
+
+Ed approves the **specific list**, not a wildcard, cache root or model family.
+For each item save `ed-approval.json` as `{"approver":"Ed","approved":[CLAIM]}`,
+where CLAIM is the complete exact `public-weights.json` object. Any changed
+path, manifest, repo, revision, census or file mapping requires a new approval.
+These local receipts record Ed's review; creating JSON is not approval itself.
+
+At deletion time the guard makes an unauthenticated **HEAD** request to the
+HF API `/api/models/ORG/REPO/revision/FULL_SHA` and HEAD-checks every mapped
+file at `/ORG/REPO/resolve/FULL_SHA/FILENAME`. Private/gated, missing, failed
+or ambiguous responses refuse. No network was used to author or test this
+procedure; HF API behavior remains an operator-time gate. This class relaxes
+only mandatory model-root containment for this exact approved descendant.
+It never relaxes the root itself, another KEEP entry, path/inode checks,
+retention, pause/census, 30 GB floor, manifests, permissions/flags/ACLs,
+source recheck, exclusive pointer publication or the validated journal.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_PUBLIC_ITEM:?Set reviewed exact item directory with Ed approval}"
+python3.13 -I -B "$JW_CANON/scripts/align_offload_delete_root.py" delete \
+  --model-class public-weights --item "$JW_PUBLIC_ITEM" \
+  --keep "$JW_OP/KEEP.txt" --journal "$JW_OP/deletions.tsv" \
+  > "$JW_PUBLIC_ITEM/freed-bytes.json"
+```
+
+The success JSON reports `source_regular_bytes` and the observed filesystem
+`available_bytes_delta`. APFS sharing/snapshots and concurrent allocations can
+make them differ; report both and budget only measured available space.
+The `.OFFLOADED.json` pointer records `model_class=public-weights`, exact HF
+identity, manifest/census digests, HEAD receipt and regular-file bytes; it does
+not claim a cloud archive exists. **Freed in this authoring session: 0 bytes.**

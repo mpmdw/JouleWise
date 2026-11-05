@@ -13,12 +13,15 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import runpy
 import shutil
 import stat
 import subprocess
 import sys
 import tarfile
 import unicodedata
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 MANDATORY_KEEP = tuple(Path(p) for p in (
     '/Users/edr/code/JouleWise', '/Users/edr/night-custody',
@@ -28,6 +31,7 @@ MANDATORY_KEEP = tuple(Path(p) for p in (
     '/Users/edr/Library/LaunchAgents',
 ))
 ALIGN_ROOT = Path('/Users/edr/night-align')
+MODEL_ROOTS = (Path('/Users/edr/jw_models'), Path('/Users/edr/.cache/huggingface/hub'))
 STOP_PATH = Path('/Users/edr/night-custody/magistrate/STOP')
 DATALESS = 0x40000000
 LOCK_FLAGS = (0x2 | 0x4 | 0x20000 | 0x40000 |  # uchg/uappnd/schg/sappnd
@@ -89,7 +93,7 @@ def overlaps(src, keep):
             identity(keep) in {identity(p) for p in (src, *src.parents)})
 
 
-def check_keep(src, keep_file, mandatory=None):
+def check_keep(src, keep_file, mandatory=None, public_path=None):
     mandatory = MANDATORY_KEEP if mandatory is None else mandatory
     lines = keep_file.read_text().splitlines()
     require(bool(lines) and len(lines) == len(set(lines)), 'empty/duplicate KEEP')
@@ -97,6 +101,9 @@ def check_keep(src, keep_file, mandatory=None):
     # Every mandatory spelling must be present, and must exist on this host.
     require(all(str(p) in lines for p in mandatory), 'missing mandatory KEEP')
     for keep in keeps:
+        if (public_path == src and keep in mandatory and keep in MODEL_ROOTS and
+                src != keep and keep in src.parents):
+            continue  # only this approved model's mandatory-root containment
         require(not overlaps(src, keep), 'KEEP inode overlap')
 
 
@@ -265,17 +272,109 @@ def audit(fd, journal, src, state, manifest_sha='', archive_sha=''):
     os.fsync(fd)
 
 
-def delete_root(item, keep, remote, journal):
+
+def replay_census(census):
+    helper = runpy.run_path(str(Path(__file__).with_name('align_offload_model_keep.py')))
+    require(census.get('schema') == 'joulewise.offload.model-census.v2', 'model census schema')
+    refs = census['reviewed_refs']
+    require(set(refs) == set(helper['ROLES']) and all(
+        re.fullmatch('[0-9a-f]{40}', value) for value in refs.values()), 'model census full ref pins')
+    repo = Path(__file__).resolve().parents[1]
+    require(refs['bytes'] == helper['commit'](repo, 'c58282f87') and
+            refs['b6'] == helper['commit'](repo, 'dda456f98'), 'model census lane pins')
+    actual = helper['derive'](repo, refs, census['r0_config'])
+    def normalized(value):
+        value = json.loads(json.dumps(value))
+        for row in value['inputs']:
+            row.pop('ref', None)  # full commit SHA remains authoritative
+        return value
+    require(normalized(actual) == normalized(census), 'model census replay mismatch')
+
+
+def unreferenced(src, repo_id, census):
+    # Text only. Never stat paths extracted from registration/plan blobs.
+    for text in census['paths']:
+        p = PurePosixPath(text)
+        candidate = PurePosixPath(str(src))
+        require(not (p == candidate or p in candidate.parents or candidate in p.parents),
+                'model referenced by census path')
+    def alias(value):
+        return value.casefold().replace('_', '-').replace('.', '-')
+    candidates = {alias(src.name), alias(repo_id.split('/')[1])}
+    for name in census['model_ids']:
+        pin = alias(name)
+        require(not any(c == pin or c.startswith(pin + '-') or pin.startswith(c + '-')
+                        for c in candidates), 'model referenced by census identity')
+
+
+def public_evidence(item, src, manifest_sha):
+    require(any(root in src.parents for root in MODEL_ROOTS) and src not in MODEL_ROOTS,
+            'public weights must be a strict model-root descendant')
+    claim = json.loads((item / 'public-weights.json').read_text())
+    require(set(claim) == {'source', 'repo_id', 'revision', 'manifest_sha256', 'census_sha256', 'files'},
+            'public weights claim fields')
+    require(claim['source'] == str(src) and claim['manifest_sha256'] == manifest_sha,
+            'public weights exact source/manifest mismatch')
+    require(isinstance(claim['repo_id'], str) and re.fullmatch(
+        r'[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*', claim['repo_id']) and
+        re.fullmatch(r'[0-9a-f]{40}', claim['revision']), 'exact HF repo/revision required')
+    require(sha_file(item / 'model-census.json') == claim['census_sha256'], 'model census digest')
+    census = json.loads((item / 'model-census.json').read_text())
+    replay_census(census)
+    unreferenced(src, claim['repo_id'], census)
+    approval = json.loads((item / 'ed-approval.json').read_text())
+    require(approval == {'approver': 'Ed', 'approved': [claim]},
+            'Ed specific public-model list approval missing/mismatched')
+    receipt = (item / 'independent-receipt.txt').read_text()
+    require(all(value in receipt for value in (str(src), manifest_sha, claim['repo_id'],
+                                               claim['revision'], claim['census_sha256'])),
+            'independent public-model receipt not bound')
+    retention = json.loads((item / 'retention-review.json').read_text())
+    require(retention == dict(source=str(src), manifest_sha256=manifest_sha,
+                             model_class='public-weights', no_retained_ledger_locators=True,
+                             no_measurement_data=True), 'public-model retention review')
+    return claim
+
+
+def check_hf_downloadable(claim, rows):
+    files = {r[0] for r in rows if r[1] == 'file'}
+    require(isinstance(claim['files'], dict) and set(claim['files']) == files and
+            len(set(claim['files'].values())) == len(files), 'HF file/blob mapping incomplete')
+    require(files and not any(r[1] == 'link' for r in rows), 'public model must contain blobs, not symlinks')
+    base = 'https://huggingface.co/'
+    repo, rev = claim['repo_id'], claim['revision']
+    urls = [base + 'api/models/' + quote(repo, safe='/') + '/revision/' + rev]
+    for remote in claim['files'].values():
+        require(isinstance(remote, str) and safe_name(remote) == remote and remote != '.',
+                'unsafe HF filename')
+        urls.append(base + quote(repo, safe='/') + '/resolve/' + rev + '/' + quote(remote, safe='/'))
+    # Operator-time network only, without credentials; gated/private/missing
+    # revisions or any unavailable file fail. Never called by offline authoring.
+    for url in urls:
+        with urlopen(Request(url, method='HEAD'), timeout=15) as response:
+            require(response.status == 200, 'public HF revision/file unavailable')
+    return dict(checked_utc=datetime.now(timezone.utc).isoformat(), method='HEAD',
+                revision_url=urls[0], files_checked=len(files))
+
+
+def delete_root(item, keep, remote, journal, model_class='archived'):
     """Production policy constants cannot be overridden through CLI or env."""
     src = 'UNRESOLVED'
     started = False
     # Outside the audit-on-refusal block: invalid journals must receive no write.
     journal_fd = open_journal(journal, item)
     try:
-        item, keep, remote = (exact_path(str(p)) for p in (item, keep, remote))
-        for name in ('source-path.txt', 'source.json', 'source.sha256', 'archive.sha256',
+        require(model_class in ('archived', 'public-weights'), 'unknown model class')
+        public = model_class == 'public-weights'
+        item, keep = (exact_path(str(p)) for p in (item, keep))
+        if not public:
+            remote = exact_path(str(remote))
+        names = (('source-path.txt', 'source.json', 'source.sha256', 'source-after.json',
+                  'independent-receipt.txt', 'retention-review.json', 'public-weights.json',
+                  'model-census.json', 'ed-approval.json') if public else ('source-path.txt', 'source.json', 'source.sha256', 'archive.sha256',
                      'source-after.json', 'cloud-local.json', 'cloud-roundtrip.json',
-                     'independent-receipt.txt', 'ed-approval.txt', 'retention-review.json'):
+                     'independent-receipt.txt', 'ed-approval.txt', 'retention-review.json'))
+        for name in names:
             control = exact_path(str(item / name))
             require(control.is_file() and not getattr(control.stat(), 'st_flags', 0) & DATALESS,
                     'control receipt missing or dataless')
@@ -283,39 +382,49 @@ def delete_root(item, keep, remote, journal):
         require(raw.endswith('\n') and raw.count('\n') == 1, 'source-path format')
         src = exact_path(raw[:-1])
         require(src.is_dir(), 'source not directory')
-        require(not overlaps(src, item) and not overlaps(src, remote) and
+        require(not overlaps(src, item) and (public or not overlaps(src, remote)) and
                 not overlaps(src, journal.parent), 'control/source overlap')
-        check_keep(src, keep)
-        approved = item.parent / 'approved-models.txt'
-        model_dirs = approved.read_text().splitlines() if approved.exists() else []
-        for line in model_dirs:
-            exact_path(line)
-        pilot = src.parent == ALIGN_ROOT and re.fullmatch(r'pilot-v[0-9]+-[A-Za-z0-9_-]+', src.name)
-        require(pilot or str(src) in model_dirs, 'source outside allowed roots')
-        require(not (src.parent == ALIGN_ROOT and src.name.startswith('pilot-v8-')),
-                'pilot 9 retained until release')
-        pointer = src.with_name(src.name + '.OFFLOADED.json')
-        require(not os.path.lexists(pointer), 'pointer already exists')
         source = item / 'source.json'
         manifest_sha = checksum_receipt(item / 'source.sha256', source)
-        archive_path = remote / (item.name + '.tar.zst')
-        cloud_manifest = remote / (item.name + '.manifest.json')
-        archive_sha = checksum_receipt(item / 'archive.sha256', archive_path)
-        require(sha_file(cloud_manifest) == manifest_sha, 'cloud manifest mismatch')
-        for name in ('cloud-local.json', 'source-after.json', 'cloud-roundtrip.json'):
-            require(sha_file(item / name) == manifest_sha, 'verification manifest mismatch')
-        for name in ('independent-receipt.txt', 'ed-approval.txt'):
-            receipt = (item / name).read_text()
-            require(str(src) in receipt and manifest_sha in receipt and archive_sha in receipt,
-                    'receipt not bound to this source/manifest/archive')
-        retention = json.loads((item / 'retention-review.json').read_text())
-        require(retention == dict(source=str(src), manifest_sha256=manifest_sha,
-                                 archive_sha256=archive_sha, no_retained_ledger_locators=True),
-                'retention review absent or mismatched')
+        pointer = src.with_name(src.name + '.OFFLOADED.json')
+        require(not os.path.lexists(pointer), 'pointer already exists')
+        archive_sha = ''
+        if public:
+            claim = public_evidence(item, src, manifest_sha)
+            check_keep(src, keep, public_path=src)
+            require(sha_file(item / 'source-after.json') == manifest_sha, 'verification manifest mismatch')
+        else:
+            check_keep(src, keep)
+            approved = item.parent / 'approved-models.txt'
+            model_dirs = approved.read_text().splitlines() if approved.exists() else []
+            for line in model_dirs:
+                exact_path(line)
+            pilot = src.parent == ALIGN_ROOT and re.fullmatch(r'pilot-v[0-9]+-[A-Za-z0-9_-]+', src.name)
+            require(not pilot, 'pilot roots retained until block-5 release')
+            require(pilot or str(src) in model_dirs, 'source outside allowed roots')
+            archive_path = remote / (item.name + '.tar.zst')
+            cloud_manifest = remote / (item.name + '.manifest.json')
+            archive_sha = checksum_receipt(item / 'archive.sha256', archive_path)
+            require(sha_file(cloud_manifest) == manifest_sha, 'cloud manifest mismatch')
+            for name in ('cloud-local.json', 'source-after.json', 'cloud-roundtrip.json'):
+                require(sha_file(item / name) == manifest_sha, 'verification manifest mismatch')
+            for name in ('independent-receipt.txt', 'ed-approval.txt'):
+                receipt = (item / name).read_text()
+                require(str(src) in receipt and manifest_sha in receipt and archive_sha in receipt,
+                        'receipt not bound to this source/manifest/archive')
+            retention = json.loads((item / 'retention-review.json').read_text())
+            require(retention == dict(source=str(src), manifest_sha256=manifest_sha,
+                                     archive_sha256=archive_sha, no_retained_ledger_locators=True),
+                    'retention review absent or mismatched')
         rows = tree(src)
         require(encoded(rows) == source.read_bytes(), 'predelete source mismatch')
         require(not any('instrument_validation' in PurePosixPath(r[0]).parts for r in rows),
                 'capture retention: keep root and request ruling')
+        if public:
+            require(not any(r[1] == 'link' for r in rows), 'public model requires blobs, not symlinks')
+            require(not any({'runs', 'runs-parent', 'measurement', 'captures'} &
+                            set(PurePosixPath(r[0]).parts) for r in rows),
+                    'capture-bearing tree is not public model weights')
         for p in (src.parent, item, journal.parent, src, *(src / r[0] for r in rows)):
             # ls -d and lstat check links themselves, never their targets.
             check_acl_flags(p)
@@ -325,14 +434,23 @@ def delete_root(item, keep, remote, journal):
         check_pause_and_disk(item.parent)
         before_identity = identity(src)
         # No operator gap after these fresh upload checks. Ambiguous/failed tool refuses.
-        check_uploaded(archive_path)
-        check_uploaded(cloud_manifest)
-        check_keep(src, keep)
+        if public:
+            require(public_evidence(item, src, manifest_sha) == claim, 'public-model evidence changed')
+            head_receipt = check_hf_downloadable(claim, rows)
+            check_keep(src, keep, public_path=src)
+            payload = dict(model_class=model_class, **claim, hf_head=head_receipt)
+        else:
+            check_uploaded(archive_path)
+            check_uploaded(cloud_manifest)
+            check_keep(src, keep)
+            payload = dict(source=str(src), archive=str(archive_path), manifest=str(cloud_manifest),
+                           manifest_sha256=manifest_sha, archive_sha256=archive_sha,
+                           independent_receipt=str(item / 'independent-receipt.txt'))
         require(identity(src) == before_identity and encoded(tree(src)) == source.read_bytes(),
                 'source changed before delete')
-        payload = dict(source=str(src), archive=str(archive_path), manifest=str(cloud_manifest),
-                       manifest_sha256=manifest_sha, archive_sha256=archive_sha,
-                       independent_receipt=str(item / 'independent-receipt.txt'))
+        regular_bytes = sum(r[3] for r in rows if r[1] == 'file')
+        payload['source_regular_bytes'] = regular_bytes
+        free_before = shutil.disk_usage(src.parent).free
         # Probe pointer publication before irreversible work, without replacing any file.
         staged = pointer.with_name(pointer.name + '.pending')
         with staged.open('x', encoding='utf-8') as f:
@@ -347,6 +465,8 @@ def delete_root(item, keep, remote, journal):
         os.link(staged, pointer)  # exclusive publication; never clobber a pointer
         staged.unlink()
         audit(journal_fd, journal, src, 'DELETED', manifest_sha, archive_sha)
+        return dict(source=str(src), model_class=model_class, source_regular_bytes=regular_bytes,
+                    available_bytes_delta=shutil.disk_usage(src.parent).free - free_before)
     except Exception:
         try:
             audit(journal_fd, journal, src, 'FAILED_PARTIAL' if started else 'REFUSED_NO_DELETE')
@@ -366,8 +486,10 @@ def main():
     for name in ('tree', 'budget'):
         sub.add_parser(name).add_argument('path', type=Path)
     d = sub.add_parser('delete')
-    for name in ('item', 'keep', 'remote', 'journal'):
+    for name in ('item', 'keep', 'journal'):
         d.add_argument('--' + name, required=True, type=Path)
+    d.add_argument('--remote', type=Path, help='required for archived class')
+    d.add_argument('--model-class', choices=('archived', 'public-weights'), default='archived')
     args = p.parse_args()
     if args.command == 'delete':
         require(sys.platform == 'darwin', 'deletion requires macOS file flags/ACL tools')
@@ -376,7 +498,9 @@ def main():
         require(not lock_path.is_symlink(), 'delete lock symlink')
         with lock_path.open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            delete_root(args.item, args.keep, args.remote, args.journal)
+            require(args.model_class == 'public-weights' or args.remote is not None, '--remote required')
+            result = delete_root(args.item, args.keep, args.remote, args.journal, args.model_class)
+            print(json.dumps(result, sort_keys=True))
     elif args.command == 'census':
         busy = process_census()
         require(not busy, 'writer/agent census busy; PIDs=' + ','.join(busy))
