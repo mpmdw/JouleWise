@@ -9,6 +9,8 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import json_ascii_text as canonical_json
+
 from joulewise.benchmark_import import (
     EMPTY_THINK_PREFIX, PINNED_QWEN3_TOKENIZER_ID,
     REVIEWED_QWEN3_CHAT_TEMPLATE_SHA256, REVIEWED_QWEN3_TOKENIZER_JSON_SHA256,
@@ -38,10 +40,6 @@ DIFFICULTY_QUARANTINE = "PENDING D-166 addendum/AP-5M: MATH author-assigned leve
 CONTAMINATION_NOTE = "PENDING AP-5M: MATH (2021) and PRM800K (2023) predate Qwen3 and are widely redistributed; pre-training contamination is UNMITIGABLE; accuracy is a property of this pinned subject-balanced rational-answer subset, never a capability claim"
 CORRECTNESS_QUARANTINE = "quarantined annotation (C-004); malformed counts as incorrect (D-047.6); capped counts as truncated-incorrect (integration synthesis M2; AP-5M PENDING); no capability claim"
 ELIGIBILITY_NOTE = "Rational-only reference subset: 2 duplicate rows, 954 non-rational references, and 5 ambiguous plain-comma references excluded; retained by level: 381/437, 733/894, 924/1130, 967/1214, 1035/1324."
-
-
-def canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def canonical_json_sha256(value: Any) -> str:

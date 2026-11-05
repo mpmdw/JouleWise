@@ -17,6 +17,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
+from joulewise.strict_io import json_ascii_text as _canonical_json
+
 from joulewise.gensuite import tokenizer_id_for
 from joulewise.model_panel import load_model_panel
 from joulewise.suite import (
@@ -156,10 +158,6 @@ class AuthenticatedGSM8KRecords(Sequence[Mapping[str, Any]]):
 
 def _refuse(reason: str, detail: str) -> None:
     raise ValueError(f"{reason}: {detail}")
-
-
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _canonical_json_sha256(value: Any) -> str:

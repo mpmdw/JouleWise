@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise.strict_io import json_ascii_text as canonical_output
+
 from joulewise.quiet_guard import (  # noqa: E402
     GuardEngine,
     GuardError,
@@ -28,10 +30,6 @@ EXIT_OK = 0
 EXIT_REFUSED = 2
 EXIT_ERROR = 3
 TEST_SANDBOX_PREFIX = TEST_STATE_ROOT_PREFIX
-
-
-def canonical_output(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def privileged_command(arguments: Sequence[str]) -> tuple[str, ...]:
