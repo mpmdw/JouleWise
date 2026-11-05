@@ -338,8 +338,13 @@ class EpisodeRuntimeAdapter:
             raise AdapterFailure(
                 FailureReason.RUNTIME_UNAVAILABLE, "align_episode was not prepared"
             )
+        # Reserve no additional G0 allowance: cooling and the episode share
+        # the R1-derived slack below the runner's member cap. Never reset that
+        # deadline after a 600 s timeout or a 300 s unobserved wait.
+        gate_deadman = (EpisodeDeadman(self.clock, self.clock.stamp(), self.spec.deadman_s)
+                        if self.thermal is not None and self.spec.deadman_s is not None else None)
         if self.thermal is not None:
-            self.thermal.wait('G0')
+            self.thermal.wait('G0', deadman=gate_deadman)
         start = self.clock.stamp()
         episode_id = context.run_id if context is not None else config.run_id or "align_episode"
         domain = f"joulewise.monotonic:{episode_id}"
@@ -348,7 +353,7 @@ class EpisodeRuntimeAdapter:
         events: list[RuntimeEvent] = []
         flags = list(self.flags)
         spec = self.spec
-        deadman = EpisodeDeadman(self.clock, start, spec.deadman_s) if spec.deadman_s is not None else None
+        deadman = gate_deadman or (EpisodeDeadman(self.clock, start, spec.deadman_s) if spec.deadman_s is not None else None)
         endpoint = MlxEndpoint(
             self.runtime, config, self.clock, episode_domain=domain,
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
@@ -586,6 +591,9 @@ class EpisodeRuntimeAdapter:
         reason = next((f for f in reversed(flags) if f.startswith(stop + ":")), stop)
         token_details = budget_record(spec, turns, reason, incomplete=incomplete,
                                       effective_context_cap=self.prepared.get("max_context_tokens"))
+        if gate_deadman is not None:
+            token_details['token_budget'].update(deadline_ns=gate_deadman.deadline_ns,
+                                                deadline_origin='G0_entry', planned_g0_allowance_s=0)
         episode = Episode(
             episode_id=episode_id,
             task_pair=task.task_pair if task is not None else "unavailable",

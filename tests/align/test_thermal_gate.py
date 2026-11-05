@@ -302,7 +302,7 @@ class HoldTests(unittest.TestCase):
 
 
 class WorkloadTests(unittest.TestCase):
-    def run_episode(self, *, fail_g1=False, g0_hot=False):
+    def run_episode(self, *, fail_g1=False, g0_hot=False, long_episode=False, deadman_s=1000):
         class SamplingClock(FakeClock):
             observer = None
             def sleep(self, seconds):
@@ -327,7 +327,7 @@ class WorkloadTests(unittest.TestCase):
                 obj.reader._transport.values = lambda t: (60, 60)
             return obj
         spec = replace(episode_spec(hidden=False), thermal=policy(), warmup_condition='benign',
-                       max_episode_decode_tokens=4096, deadman_s=1000)
+                       max_episode_decode_tokens=4096, deadman_s=deadman_s)
         config = replace(base_config(), workload_profile=replace(base_config().workload_profile,
                          name='align_episode', prompt_text=spec.to_text()))
         adapter = EpisodeRuntimeAdapter(MockRuntimeAdapter(clock), clock, thermal_factory=factory)
@@ -337,12 +337,20 @@ class WorkloadTests(unittest.TestCase):
         orig = adapter.runtime.run_workload
         def runtime_run(*args, **kwargs):
             result = orig(*args, **kwargs)
+            if long_episode:
+                clock.sleep(500)
             if fail_g1:
                 holders[0].reader._transport.values = lambda t: (60, 60)
             holders[0].sample()
             return result
         adapter.runtime.run_workload = runtime_run
-        result = adapter.run_workload(config)
+        from joulewise.interfaces import AdapterFailure
+        try:
+            result = adapter.run_workload(config)
+        except AdapterFailure:
+            if not long_episode:
+                raise
+            result = adapter._failed_episode_result
         ep = from_json(Episode, result.output_artifacts['align_episode.json'])
         adapter.cleanup(config)
         return ep, result
@@ -359,6 +367,18 @@ class WorkloadTests(unittest.TestCase):
         self.assertGreater(len(ep.turns), 0)
         self.assertIn('thermal.start_gate_timeout', ep.flags)
         self.assertLessEqual(ep.hardware['thermal']['intervals'][0]['end_ns'], ep.start_ns)
+
+    def test_g0_timeout_consumes_deadman_slack_before_long_episode(self):
+        ep, result = self.run_episode(g0_hot=True, long_episode=True, deadman_s=1086)
+        g0 = ep.hardware['thermal']['intervals'][0]
+        self.assertEqual(g0['duration_s'], 600)
+        self.assertIn('thermal.start_gate_timeout', ep.flags)
+        self.assertIn('episode.deadman:0', ep.flags)
+        # A fake blocking call can overshoot at its return boundary; it must
+        # not receive another full 1086 seconds after spending 600 in G0.
+        self.assertEqual(len(ep.turns), 1)
+        self.assertLess((ep.end_ns-g0['start_ns'])/NS, 1200)
+        self.assertEqual(result.metadata['align_episode']['stop_condition'], 'episode.deadman')
 
 
 class StatusWiringTests(unittest.TestCase):

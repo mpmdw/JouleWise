@@ -84,9 +84,13 @@ errors, observed OS/PM state, and gate events. The existing window monitor's
   value or nominal status substitutes for an absent observation.
 
 The whole-turn token admission budget is unchanged; cooling consumes no
-decode tokens and never shortens an admitted turn's cap. The deadman remains
-**episode wall time**, as explicitly required in §2.2. G0 precedes that
-clock. G1/H consume it. No model-call timer survives into a hold; its own
+decode tokens and never shortens an admitted turn's cap. Thermal members
+anchor the R1-derived wall-time slack at **G0 entry**, with zero additional
+planned G0 allowance. The deadline is the earlier of episode-start + T_dead
+and G0-entry + T_dead; G0, G1 and H all consume it. This conservative bound
+prevents a 600-second G0 timeout from adding another full episode budget
+outside the member cap. Nonthermal members retain the episode-start clock.
+The thermal budget record prints the deadline and origin. No model-call timer survives into a hold; its own
 wall-deadline guard bounds the wait and records the exact partial interval
 as `deadman`, rather than a thermal timeout. Expiry is an intentional X7,
 not a reason to extend the deadline beyond the runner's member cap.
