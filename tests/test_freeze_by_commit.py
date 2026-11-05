@@ -227,6 +227,18 @@ class CommitFreezeTests(unittest.TestCase):
                 pins._mint_git_anchor(require_registered_analysis=True)
             self.assertEqual(raised.exception.reason_code, "readiness_identity_environment_dirty")
 
+    def test_malformed_registration_attribute_is_a_closed_anchor_refusal(self):
+        from joulewise import identity_pins as pins
+        class MintError(ValueError):
+            pass
+        module = SimpleNamespace(REPO_ROOT=self.repo, MintError=MintError,
+                                 _actual_v2_git_state=lambda: (self.base, None))
+        with mock.patch.object(pins, "_load_mint_module", return_value=module), \
+             mock.patch.object(f, "require_analysis_head", side_effect=AttributeError("malformed registration")):
+            with self.assertRaises(pins.IdentityPinProjectionError) as raised:
+                pins._mint_git_anchor(require_registered_analysis=True)
+        self.assertEqual(raised.exception.reason_code, "readiness_identity_artifact_unreadable")
+
 
 class RegistrationAuthorityTests(unittest.TestCase):
     def test_b5_registration_matches_item_146_and_independent_literal_pins(self):

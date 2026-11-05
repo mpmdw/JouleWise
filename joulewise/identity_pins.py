@@ -870,7 +870,7 @@ def _mint_git_anchor(*, require_origin_main: bool = False,
         from joulewise.freeze_by_commit import FreezeIdentityError, require_analysis_head
         try:
             require_analysis_head(repository, head)
-        except (FreezeIdentityError, KeyError, TypeError, ValueError) as exc:
+        except (AttributeError, FreezeIdentityError, KeyError, TypeError, ValueError) as exc:
             raise IdentityPinProjectionError(
                 "readiness_identity_artifact_unreadable",
                 "HEAD must equal the registered analysis commit (F3)",
