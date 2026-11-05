@@ -1,0 +1,588 @@
+{
+  "comparator_checkout_commit": "ef8d2c20dd28698dfd4e80245b42597e77842915",
+  "comparators": {
+    "current": {
+      "absent_sources": [],
+      "argv": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/scripts/compare_b5_recompute.py",
+        "--l9-custody",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/synthetic-custody",
+        "--recompute",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/recompute.json",
+        "--window-index",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/index.json",
+        "--restricted-out",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/comparison-initial.json"
+      ],
+      "bars_sha256": "2f65bba22c0afd23a637cabb5079e1c5dc6a367d53d956f77c20ead416813892",
+      "compared_leaf_paths": 328,
+      "comparisons": 2514,
+      "counts": {
+        "b_op_s": {
+          "fail": 0,
+          "pass": 14
+        },
+        "battery_term": {
+          "fail": 0,
+          "pass": 0
+        },
+        "contrast_j": {
+          "fail": 0,
+          "pass": 122
+        },
+        "contrast_p": {
+          "fail": 0,
+          "pass": 44
+        },
+        "count": {
+          "fail": 0,
+          "pass": 133
+        },
+        "descriptive_ratio": {
+          "fail": 0,
+          "pass": 6
+        },
+        "dominance_branch": {
+          "fail": 0,
+          "pass": 2
+        },
+        "dominance_ratio": {
+          "fail": 0,
+          "pass": 12
+        },
+        "exclusions_rederivation": {
+          "fail": 0,
+          "pass": 3
+        },
+        "floor_gate_j": {
+          "fail": 0,
+          "pass": 70
+        },
+        "floor_j": {
+          "fail": 0,
+          "pass": 149
+        },
+        "holm_order": {
+          "fail": 0,
+          "pass": 1
+        },
+        "kept_units": {
+          "fail": 0,
+          "pass": 26
+        },
+        "machine_j": {
+          "fail": 0,
+          "pass": 0
+        },
+        "meter_j": {
+          "fail": 0,
+          "pass": 0
+        },
+        "meter_w": {
+          "fail": 0,
+          "pass": 0
+        },
+        "outcome_word": {
+          "fail": 0,
+          "pass": 188
+        },
+        "p42_status": {
+          "fail": 0,
+          "pass": 6
+        },
+        "per_token_j": {
+          "fail": 0,
+          "pass": 10
+        },
+        "reported_cell_j": {
+          "fail": 0,
+          "pass": 144
+        },
+        "rho": {
+          "fail": 0,
+          "pass": 0
+        },
+        "routing_id": {
+          "fail": 0,
+          "pass": 798
+        },
+        "run_phase_energy_j": {
+          "fail": 0,
+          "pass": 786
+        },
+        "window_edge_s": {
+          "fail": 0,
+          "pass": 0
+        }
+      },
+      "disagreements": 0,
+      "exit": 0,
+      "leaf_paths": 1384,
+      "nonfinite": 0,
+      "output_sha256": "b59abbf6e9a53be49759f031f162fbfa3ce35cf1287785bc3946a7d2293baa30",
+      "refused": null,
+      "script_sha256": "28d504c2ab6a67090e3cd1a1b4d11d4e4002e03d99c94196298215d311ce6207",
+      "uncovered_leaf_paths": 1056,
+      "uncovered_numeric_paths": 340,
+      "unmapped_leaf_paths": 0
+    },
+    "rc-cmp-1-coded": {
+      "absent_sources": [],
+      "argv": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/compare_b5_recompute_RC_CMP_1.py",
+        "--l9-custody",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/synthetic-custody",
+        "--recompute",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/recompute.json",
+        "--bars",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/tests/independent_recompute/bar_sets/recompute_coded_7e322b76.json",
+        "--restricted-out",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/rc-cmp-1-coded.json"
+      ],
+      "bars_sha256": "8946f4525928e3c6a40033c5ec1ef1ad47807bc25fd0efef31ad2c660f5becc6",
+      "compared_leaf_paths": 217,
+      "comparisons": 1454,
+      "counts": {
+        "b_op_s": {
+          "fail": 0,
+          "pass": 8
+        },
+        "contrast_j": {
+          "fail": 0,
+          "pass": 118
+        },
+        "contrast_p": {
+          "fail": 0,
+          "pass": 44
+        },
+        "count": {
+          "fail": 0,
+          "pass": 112
+        },
+        "descriptive_ratio": {
+          "fail": 0,
+          "pass": 6
+        },
+        "dominance_branch": {
+          "fail": 0,
+          "pass": 1
+        },
+        "dominance_ratio": {
+          "fail": 0,
+          "pass": 12
+        },
+        "exclusions_rederivation": {
+          "fail": 0,
+          "pass": 3
+        },
+        "floor_gate_j": {
+          "fail": 0,
+          "pass": 28
+        },
+        "floor_j": {
+          "fail": 0,
+          "pass": 141
+        },
+        "holm_order": {
+          "fail": 0,
+          "pass": 1
+        },
+        "kept_units": {
+          "fail": 0,
+          "pass": 6
+        },
+        "outcome_word": {
+          "fail": 0,
+          "pass": 50
+        },
+        "p42_status": {
+          "fail": 0,
+          "pass": 8
+        },
+        "per_token_j": {
+          "fail": 0,
+          "pass": 10
+        },
+        "reported_cell_j": {
+          "fail": 0,
+          "pass": 120
+        },
+        "run_phase_energy_j": {
+          "fail": 0,
+          "pass": 786
+        }
+      },
+      "disagreements": 0,
+      "exit": 0,
+      "leaf_paths": 841,
+      "nonfinite": 0,
+      "output_sha256": "db3adae30a1b0ac9e918089cca260c92e924517f144ba96bd37c894150c48b5d",
+      "refused": null,
+      "script_sha256": "263b74fa345a92563526fe55deb8f8b047195499000fb72981ebbc53e7ac4495",
+      "uncovered_leaf_paths": 624,
+      "uncovered_numeric_paths": 0,
+      "unmapped_leaf_paths": 0
+    },
+    "rc-cmp-1-s13": {
+      "absent_sources": [],
+      "argv": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/compare_b5_recompute_RC_CMP_1.py",
+        "--l9-custody",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/synthetic-custody",
+        "--recompute",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/recompute.json",
+        "--bars",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/tests/independent_recompute/bar_sets/s13_block6.json",
+        "--restricted-out",
+        "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/rc-cmp-1-s13.json"
+      ],
+      "bars_sha256": "7adeaeb5e1f2981632aa8cb724c59fb83ec13302dc5b07420f051bb2ae1cf298",
+      "compared_leaf_paths": 217,
+      "comparisons": 1454,
+      "counts": {
+        "b_op_s": {
+          "fail": 0,
+          "pass": 8
+        },
+        "contrast_j": {
+          "fail": 0,
+          "pass": 118
+        },
+        "contrast_p": {
+          "fail": 0,
+          "pass": 44
+        },
+        "count": {
+          "fail": 0,
+          "pass": 112
+        },
+        "descriptive_ratio": {
+          "fail": 0,
+          "pass": 6
+        },
+        "dominance_branch": {
+          "fail": 0,
+          "pass": 1
+        },
+        "dominance_ratio": {
+          "fail": 0,
+          "pass": 12
+        },
+        "exclusions_rederivation": {
+          "fail": 0,
+          "pass": 3
+        },
+        "floor_gate_j": {
+          "fail": 0,
+          "pass": 28
+        },
+        "floor_j": {
+          "fail": 0,
+          "pass": 141
+        },
+        "holm_order": {
+          "fail": 0,
+          "pass": 1
+        },
+        "kept_units": {
+          "fail": 0,
+          "pass": 6
+        },
+        "outcome_word": {
+          "fail": 0,
+          "pass": 50
+        },
+        "p42_status": {
+          "fail": 0,
+          "pass": 8
+        },
+        "per_token_j": {
+          "fail": 0,
+          "pass": 10
+        },
+        "reported_cell_j": {
+          "fail": 0,
+          "pass": 120
+        },
+        "run_phase_energy_j": {
+          "fail": 0,
+          "pass": 786
+        }
+      },
+      "disagreements": 0,
+      "exit": 0,
+      "leaf_paths": 841,
+      "nonfinite": 0,
+      "output_sha256": "354a0fbe8ecceff0a7b3194fc7060f1a78c0a2174f9ae72be0c98d470722a159",
+      "refused": null,
+      "script_sha256": "263b74fa345a92563526fe55deb8f8b047195499000fb72981ebbc53e7ac4495",
+      "uncovered_leaf_paths": 624,
+      "uncovered_numeric_paths": 0,
+      "unmapped_leaf_paths": 0
+    }
+  },
+  "data_class": "SYNTHETIC_ONLY",
+  "driver": {
+    "completed_without_tooling_refusal": true,
+    "custody": "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/synthetic-custody",
+    "driver_rc": 0,
+    "driver_wall_s": 2446.88,
+    "index": "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/index.json",
+    "mode": "blind-dry-run",
+    "r2_commit": "929fc65c9ce3ff82f0311d28acf76a682edd466f",
+    "record_analysis_commit": "c98628b20ed0ac84ce2924ab135f96dbf2dae6a1",
+    "record_sha256": "34ec2896354148e129254f9a3796879134a306f9c6a3c8709aaf399fdd7a788f",
+    "steps": [
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "0",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "1",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "2",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "3",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "3b",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "4",
+        "window": "alpha"
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "4",
+        "window": "beta"
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "5",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "8",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "6",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "9",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "9b",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "10",
+        "window": "alpha"
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "10",
+        "window": "beta"
+      },
+      {
+        "flags": [
+          "results_rendering_not_run_no_block5_template"
+        ],
+        "status": "ok",
+        "step": "11",
+        "window": null
+      }
+    ],
+    "window_index_sha256": "1cf2a4e2b0da39bf888843faa47dca3e9a70a33cfe4e043a5735c53ded940aa5"
+  },
+  "fixtures": {
+    "alpha": {
+      "archive_sha256": "caee0f24d38e0a21945acf8333d1806d1c41954330dacc2b8e6a493f6714f003",
+      "members": 125
+    },
+    "beta": {
+      "archive_sha256": "b4a3a497a9e497b52c61cc1cab119b9bcc71f9c545515e8776be3506742be9ba",
+      "members": 125
+    },
+    "gamma": {
+      "archive_sha256": "1cdfbbd6678ca4340784d10685997f4121935883956852c86a138566f47c5e44",
+      "members": 107
+    }
+  },
+  "interrupted_shadow_attempt": {
+    "completed_without_tooling_refusal": false,
+    "custody": "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/tmp/synthetic-custody",
+    "driver_rc": 2,
+    "driver_wall_s": 1598.95,
+    "index": "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/tmp/index.json",
+    "r2_commit": "929fc65c9ce3ff82f0311d28acf76a682edd466f",
+    "record_sha256": "eef0aec005e5b3a9afc6577b3982155c559f0fc000ca94a0937a7ca8c4471f85",
+    "steps": [
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "0",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "1",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "2",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "3",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "3b",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "4",
+        "window": "alpha"
+      },
+      {
+        "flags": [],
+        "status": "ok",
+        "step": "4",
+        "window": "beta"
+      },
+      {
+        "flags": [],
+        "status": "unclassified_refusal",
+        "step": "5",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "not_run",
+        "step": "8",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "not_run",
+        "step": "6",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "not_run",
+        "step": "9",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "not_run",
+        "step": "9b",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "not_run",
+        "step": "10",
+        "window": null
+      },
+      {
+        "flags": [],
+        "status": "not_run",
+        "step": "11",
+        "window": null
+      }
+    ]
+  },
+  "legacy_comparator_commit": "234fbb12708c6b318173d7227319aaaa377d1b76",
+  "recompute": {
+    "argv": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/scripts/independent_recompute_b5.py",
+      "--member-detail",
+      "--out",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/recompute.json",
+      "--alpha",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/alpha/archive",
+      "--claim-runs-alpha",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/alpha/custody/runs_claim",
+      "--bound-runs-alpha",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/alpha/custody/runs_bound",
+      "--beta",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/beta/archive",
+      "--claim-runs-beta",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/beta/custody/runs_claim",
+      "--bound-runs-beta",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/beta/custody/runs_bound",
+      "--gamma",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/gamma/archive",
+      "--claim-runs-gamma",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/gamma/custody/runs_claim",
+      "--bound-runs-gamma",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-release-ready/.scratch-b5-release-readiness/r2/.scratch-s10f/tmp/readiness-on/fixtures/gamma/custody/runs_bound"
+    ],
+    "exit": 0,
+    "flags_by_code": {
+      "archive_file_missing": 19,
+      "member_pre_bound_missing": 3,
+      "meter_absent": 3,
+      "trace_plist_missing": 3
+    },
+    "interpreter": {
+      "implementation": "CPython",
+      "version": "3.13.18"
+    },
+    "script_sha256": "ecb12b639e344d0ed28a07e502b90d5149fbc98d2d65653dbcd44bc132667a7f",
+    "sha256": "59fc3f29975cc9a5c9377bd56ccae3c34d662b9a10acb84c201e5b24cccaeb9b"
+  }
+}
