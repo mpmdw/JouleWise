@@ -23,13 +23,16 @@ DEFAULT_PROMPTS = [
 ]
 
 
-def worker_env():
+def worker_env(hf_home=None):
     env = dict(os.environ)
+    hf_home = Path(hf_home) if hf_home else REPO / ".cache/qwen4-gold-hf"
     for key in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS", "MLX_NUM_THREADS"):
         env[key] = "2"
     env.update(PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1", HF_HUB_OFFLINE="1",
                TRANSFORMERS_OFFLINE="1", HF_DATASETS_OFFLINE="1", TOKENIZERS_PARALLELISM="false",
-               HF_HOME=str(REPO / ".cache/qwen4-gold-hf"))
+               HF_HOME=str(hf_home), HF_HUB_CACHE=str(hf_home / "hub"),
+               HF_XET_CACHE=str(hf_home / "xet"), HF_HUB_DISABLE_XET="1",
+               HF_XET_CHUNK_CACHE_SIZE_BYTES="0", HF_XET_SHARD_CACHE_SIZE_LIMIT="0")
     env["PYTHONPATH"] = str(REPO)
     return env
 
@@ -38,7 +41,7 @@ def runtime_identity(python):
     # Metadata/source hashes without importing either numerical framework.
     code = """import hashlib, importlib.metadata as m, json, sys
 versions = {}
-for name in ['transformers', 'torch', 'mlx', 'numpy', 'safetensors']:
+for name in ['transformers', 'torch', 'mlx', 'mlx-lm', 'numpy', 'safetensors']:
     try: versions[name] = m.version(name)
     except m.PackageNotFoundError: pass
 if 'transformers' in versions:
@@ -67,7 +70,7 @@ def execute(python, request, directory, max_gb, timeout):
     with (directory / "worker.log").open("w") as log:
         process = subprocess.Popen([python, "-B", "-m", "joulewise.align.qwen4_gold.worker",
                                     str(directory / "request.json"), str(directory)],
-                                   cwd=REPO, env=worker_env(), stdout=log, stderr=log)
+                                   cwd=REPO, env=worker_env(request.get("hf_home")), stdout=log, stderr=log)
         try:
             while process.poll() is None:
                 if can_inspect_rss:
@@ -283,6 +286,7 @@ class Harness:
                        "shard_guards": self.identity.get("stamps"),
                        "config_digest": digest(self.checkpoint.config),
                        "weight_map_digest": digest(self.checkpoint.weight_map)}
+            request.update(getattr(self.args, "worker_extra", {}))
             print(f"Reference {unit}/{case}", flush=True)
             reference = execute(self.args.ref_python, request, directory / "reference", self.args.max_gb, self.args.timeout)
             report = {"schema": SCHEMA, "fingerprint": fp, "unit": unit, "case": case,

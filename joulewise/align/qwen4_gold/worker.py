@@ -45,9 +45,22 @@ def main():
         from .reference import make_tiny
         write_json(out / "result.json", make_tiny(request["checkpoint"]))
         return
-    checkpoint = IndexedCheckpoint(request["checkpoint"], request.get("shard_guards"))
+    if request.get("sparse_store"):
+        from .stream_ple import SparseCheckpoint
+        checkpoint = SparseCheckpoint(request["checkpoint"], request.get("shard_guards"),
+                                      request["sparse_store"], request["sparse_digest"])
+    else:
+        checkpoint = IndexedCheckpoint(request["checkpoint"], request.get("shard_guards"))
     if request.get("config_digest") != digest(checkpoint.config) or request.get("weight_map_digest") != digest(checkpoint.weight_map):
         raise ValueError("checkpoint config/index changed after fingerprinting")
+    if request["backend"] == "ple_plan":
+        from .stream_ple import official_plan
+        write_json(out / "result.json", official_plan(request, checkpoint))
+        return
+    if request["backend"] == "convert_unit":
+        from .stream_convert import write_unit
+        write_json(out / "result.json", write_unit(request, checkpoint))
+        return
     if request["backend"] == "reference":
         from .reference import run_reference
         traces, metadata = run_reference(request, checkpoint)

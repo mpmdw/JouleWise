@@ -292,3 +292,177 @@ for exact commands, hashes, counts, peak memory and limitations. Neither indepen
 checked; local executions used the explicit stub. The sandbox cannot initialize
 MLX's Metal device, even when requesting the CPU device. Consequently local
 Torch execution and harness self-tests must not be presented as MLX parity.
+
+## Streaming laptop run plan (2026-11-05)
+
+`scripts/run_qwen4_gold_stream.py` stages weights from **Qwen/Qwen3.8-Flash-Next**,
+revision `de4b8e4d43b917e7706784d8bb445c9af86a3540`. This is a separate online
+coordinator; the existing parity workers remain offline and serial. All Hub
+storage, including partial downloads, is under `--work/staging`; Xet is
+disabled. Before a shard is used, its complete bytes must match the pinned
+revision's HF LFS SHA256 and size from `get_paths_info`. Config/index bytes are
+checked against their Git blob identities. No tokenizer is downloaded.
+
+### Disk constraint and the shared-shard ruling
+
+The default `--shared-shards retain` follows the requested whole-shard policy:
+keep a shared original until its last unit. **This policy cannot fit the stated
+laptop disk budget.** The index places embeddings with layer 9, layer 1 with
+layer 10, layer 2 with layer 19, layer 3 with layer 29, layer 4 with layer 39,
+and layer 5 with layer 47. Official meta-model shapes plus the supplied index
+prove a **24.110 GiB lower bound at layer 8**, before headers, MTP bytes, traces,
+or the 25 GiB reserve. `retain` therefore refuses the default 12 GiB staging
+plan before downloading weight shards. Raising the cap alone does not create
+the missing free space.
+
+The explicit alternative `--shared-shards restage` authenticates a full source
+shard, copies only the current unit's tensor bytes into a local safetensors
+view, records the source hash, selected names and derived file hash, and deletes
+the original. Later users download the shared original again. No floating
+conversion occurs in this view. This alternative is implemented and tested on
+tiny checkpoints, but **the lead must approve this exception to whole-shard
+retention before selecting it for the laptop run**. It is never selected
+silently. Source, budgets, policy, adapter/dependencies, runtimes and prompts
+are frozen in the invocation fingerprint; use a fresh work directory to change
+them.
+
+### Native commands
+
+Run these outside the no-network implementation sandbox. First extract the
+already available canonical source without merging its branch:
+
+```bash
+GOLD_CANONICAL=/private/tmp/jw-gold-canonical-65763077
+mkdir -p "$GOLD_CANONICAL"
+git show 65763077aec03235d149517f6c97a7cda987a74c:joulewise/align/models/qwen4_exp.py > "$GOLD_CANONICAL/qwen4_exp.py"
+git show 65763077aec03235d149517f6c97a7cda987a74c:scripts/align_convert_qwen4_exp.py > "$GOLD_CANONICAL/canonical_converter.py"
+
+JW_GOLD_CANONICAL_MODULE="$GOLD_CANONICAL/qwen4_exp.py" \
+JW_GOLD_CANONICAL_CONVERTER="$GOLD_CANONICAL/canonical_converter.py" \
+PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 \
+/private/tmp/jwsol/venv-both/bin/python -B -m unittest tests.test_qwen4_gold_stream
+```
+
+The combined native venv must contain Transformers 5.22.1, Torch, NumPy,
+safetensors, MLX 0.31.2 and mlx-lm 0.31.3. The last two are the canonical
+converter's pins. Native tests cover the MLX sparse gather and canonical
+6-bit/group-64 quantization, bf16 passthrough, and per-tensor conversion resume.
+They skip when MLX or the explicit canonical paths are unavailable.
+
+Supply the lead's **gold/v1 canonical adapter**, not `qwen4_exp.py` itself:
+the canonical model file does not declare `run_gold`. Hash all separately
+imported adapter sources with additional `--adapter-dependency` flags.
+After the shared-shard ruling, the laptop command is:
+
+```bash
+GOLD_ADAPTER=/absolute/local/path/to/canonical_gold_adapter.py
+GOLD_WORK="$PWD/runs/qwen4-gold-stream-20261105"
+
+env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE \
+/private/tmp/jwsol/venv-ref/bin/python -B scripts/run_qwen4_gold_stream.py \
+  --work "$GOLD_WORK" \
+  --ref-python /private/tmp/jwsol/venv-ref/bin/python \
+  --mlx-python /private/tmp/jwsol/venv-mlx/bin/python \
+  --mlx-module "$GOLD_ADAPTER" \
+  --adapter-dependency "$GOLD_CANONICAL/qwen4_exp.py" \
+  --shared-shards restage --min-free-gb 25 --max-staging-gb 12 \
+  --max-gb 12 --timeout 3600 --resume
+```
+
+Add `--plan-only` to that same command first to save exact pinned file sizes and
+download estimates without downloading weight shards. Remove only `--plan-only`
+to start; repeat the actual command unchanged after sleep or interruption.
+The built-in two token prompts are fixed lengths 9 and 8, including token zero.
+An explicit `--prompts-json` may replace them before starting a fresh run.
+
+### Downloads, disk peak, and timing
+
+With original retention, all 131 source shards are touched: approximately
+**360 GB** downloaded, even though 333 vision tensors and 31 MTP tensors are
+excluded from computation. Their bytes share shards with text weights, so
+skipping these tensors does not avoid their physical download. `restage`
+repeats shared downloads and the two hash-buffer shards: plan approximately
+**460 GB**, with the authoritative byte count in
+`manifest.json -> storage.restage_download_bytes` after the metadata preflight.
+The offline shape projection is a lower bound, not authenticated file metadata.
+
+For the short built-in prompts, budget roughly **9 GiB staging plus 3 GiB
+retained traces/inputs/reports**; these are planning estimates, not observed
+real-weight peaks. Both downloads and byte-subset writes enforce the 12 GiB
+staging cap and the 25 GiB free-space reserve using current disk usage. Partial
+downloads count toward staging. Reference/MLX workers remain within the existing
+12 GiB aggregate sampled memory guard. Longer prompts increase trace/logit
+storage substantially; the staging cap does not cap retained evidence.
+
+Do not quote an unmeasured per-unit time. Measure embeddings, layer 0, QSA
+layer 3, and the PLE extraction phase on the laptop. Sum each case's
+`reference.elapsed_seconds` and `mlx.elapsed_seconds` in the unit JSON; default
+decoder units have eight cases (two prompts × two dtypes × real/random).
+Add source bytes / measured download throughput, complete-shard SHA256 time,
+and local subset-copy time. Extrapolate separately by actual config layer type;
+include the approximately 104 GB PLE-shard download phase once, plus shared
+re-downloads from the plan. Suspend/sleep and network retry time are additional.
+
+### Durable chain, sparse PLE, and PASS
+
+Every real input is the predecessor's official reference `output.npy`, for
+each prompt and dtype independently. That flattened `[B,S,C*H]` array includes
+all residual streams. The reference's existing persisted traces and case input
+snapshots are reused; `manifest.json` records the chain paths, completed-unit
+result paths/hashes and artifact hashes. A completed unit, a completed case
+inside an interrupted unit, and committed PLE rows survive restart. Resume
+rehashes reused evidence and refuses changed invocation inputs. Cache/KV decode
+state is absent because this is a cache-free prefill test.
+
+The PLE planning worker constructs the official 5.22.1 NGramEmbedding on meta,
+loads its three checkpoint I64 buffers, and calls its unchanged hashing
+`forward` on the fixed prompts. Only the final embedding gather is replaced
+with an index recorder. Each table partition contributes exact raw bf16 row
+bytes to `.npy` files, with tensor name, row ids, source LFS hash and row-file
+hash. Both backends receive the same sparse checkpoint shim. The reference
+still computes its own ids; the adapter must independently compute its ids.
+Any unrecorded lookup raises. This is equivalent to the full table for these
+fixed prompts because prefill lookup indices depend on tokens, EOS/context and
+the checkpoint hash buffers, not hidden states; all other table rows are unused.
+The unittest independently compares sparse and full official tiny-table
+forwards, including EOS, duplicates, partition boundaries and both dtypes.
+
+GOAL item 5 can be recorded PASS only after the real, pinned source run has
+`summary.json` status `PASS`, all 51 units (embed, 0–47, final, head) complete,
+and `coverage.full_48_layer_gold == true`, using a real MLX adapter. Every
+required intermediate trace must satisfy the unchanged harness tolerances;
+router expert sets, PLE ids and QSA masks must agree exactly. No missing cases,
+stub, sparse miss, hash failure or memory failure may be waived. Retain the
+shared-shard ruling with the result. Short prompts do not establish real QSA
+budget truncation, decode/cache parity, full-model quality, or GOAL item 11's
+separate full-checkpoint-resident Mac validation. **No real MLX PASS is claimed
+by this implementation run.**
+
+### Optional conversion output
+
+Choose conversion at the initial invocation by appending:
+
+```bash
+  --convert-out /absolute/lead/chosen/Dropbox-or-external-volume/qwen4-maxfit \
+  --canonical-converter "$GOLD_CANONICAL/canonical_converter.py" \
+  --canonical-module "$GOLD_CANONICAL/qwen4_exp.py"
+```
+
+Each unit is exported only after its parity passes. The worker uses the
+canonical mapping, shape/chunk/writer helpers and `quantization_for` policy:
+6-bit group-64 routed experts and bf16 other floating weights. Hash buffers
+remain exact integers in unit metadata. Each unit has a SHA256 manifest and
+resumable per-tensor progress. PLE conversion re-downloads its source shards and
+copies the **entire** bf16 table into canonical row-record order after parity;
+its committed spans survive interruption. This adds roughly 104 GB of source
+downloads in restaging mode. It never exports the sparse parity rows as a full
+table.
+
+These outputs are unit fragments (`complete_model: false`), requiring assembly
+and canonical full-model validation before loading as one model. Full maxfit
+output needs roughly 210 GB, including the approximately 102 GB PLE table.
+A Dropbox directory on the same nearly full SSD does not provide that capacity
+automatically. Use sufficient local/external capacity; guards stop otherwise.
+There is no cloud upload, eviction, or Dropbox API integration. Output files
+must remain readable for resume integrity checks.
