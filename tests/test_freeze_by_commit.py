@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -242,8 +243,8 @@ class CommitFreezeTests(unittest.TestCase):
 
 class RegistrationAuthorityTests(unittest.TestCase):
     def test_b5_registration_matches_item_146_and_independent_literal_pins(self):
-        # M2: clerical full-ID expansion of the ruled RUN_STATE 146 record;
-        # docs/process/freeze_p1_rebind.md explains the abbreviated predecessors.
+        # Independent second copy: do not derive these triples from the file
+        # under test or add authority literals to coordination files in this PR.
         expected = {
             "b5/collection": {
                 "tag_object": "dbf91f4ba108017c8973b0f0ad8c6819b4300422",
@@ -264,12 +265,33 @@ class RegistrationAuthorityTests(unittest.TestCase):
         registration = json.loads((f.ROOT / f.REGISTRATION).read_bytes())
         self.assertEqual(registration["active_analysis"], "b5/analysis-r2")
         self.assertEqual(registration["tags"], expected)
-        record = (f.ROOT / "RUN_STATE.md").read_text().split(
+        upstream_state = subprocess.check_output(
+            ["git", "-C", str(f.ROOT), "show", "origin/main:RUN_STATE.md"],
+            text=True,
+        )
+        record = upstream_state.split(
             '146. **Ed adopted', 1)[1].split('147. **', 1)[0]
+        collection_object = re.search(r"tag object is `([0-9a-f]+)`", record)[1]
+        collection_commit = re.search(r"peels to `([0-9a-f]+)`", record)[1]
+        analysis_r2_commit = re.search(
+            r"`b5/analysis-r2` → `([0-9a-f]+)`", upstream_state,
+        )[1]
+        self.assertEqual(collection_object, "dbf91f4ba")
+        self.assertEqual(collection_commit, "c27485347")
+        self.assertEqual(analysis_r2_commit, "929fc65c9")
+        self.assertTrue(expected["b5/collection"]["tag_object"].startswith(collection_object))
+        self.assertTrue(expected["b5/collection"]["commit"].startswith(collection_commit))
+        self.assertTrue(expected["b5/analysis-r2"]["commit"].startswith(analysis_r2_commit))
+        analysis_message = subprocess.check_output(
+            ["git", "-C", str(f.ROOT), "cat-file", "tag", "b5/analysis"], text=True,
+        ).partition("\n\n")[2]
+        analysis_commit, analysis_tree = re.search(
+            r"commit ([0-9a-f]+), tree ([0-9a-f]+)", analysis_message,
+        ).groups()
+        self.assertTrue(expected["b5/analysis"]["commit"].startswith(analysis_commit))
+        self.assertTrue(expected["b5/analysis"]["tree"].startswith(analysis_tree))
         for tag, fields in expected.items():
             with self.subTest(tag=tag):
-                row = "| " + " | ".join(f"`{item}`" for item in (tag, *fields.values())) + " |"
-                self.assertIn(row, record)
                 self.assertEqual(f.verify_tag(f.ROOT, tag, fields), fields["commit"])
 
 

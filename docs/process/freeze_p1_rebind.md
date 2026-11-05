@@ -51,13 +51,13 @@ name by requiring positive containment; it is independent of the registered
 analysis gate, which paper custody requests instead (F2).
 
 M2: the registration is independently pinned by full literal triples in
-`RegistrationAuthorityTests`, cross-checked against the clerical identity
-table in RUN_STATE item 146 and against all three annotated Git objects.
-The prior record printed only abbreviated collection and r2 identities;
-the original-analysis tag's existing message names its full commit/tree.
-Full tag-object literals were not previously present in the cited ruled
-records, so item 146 now records their explicit expansion. These reviewed
-local objects are the source; this is not a new scientific release ruling.
+`RegistrationAuthorityTests`, cross-checked by prefix against pre-existing
+Git-object records: origin/main's RUN_STATE item 146 (collection object
+`dbf91f4ba`, commit `c27485347`), its r2 tag entry (`929fc65c9`), and the
+original-analysis annotated tag message (commit/tree). The test reads
+RUN_STATE with `git show origin/main:RUN_STATE.md`, never from the worktree,
+and verifies all three annotated tag objects against its independent full
+triples. No coordination-file table supplies authority for this PR.
 
 ## Rebind scope
 
