@@ -174,6 +174,11 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
                          'temperature_crosscheck': crosscheck})
     attributed = attribute_episode(episode, source=source, channel=channel)
     owned = sum(s.energy.joules for s in attributed.segments if s.turn is not None)
+    owned_half = sum(s.energy.half_width_j for s in attributed.segments if s.turn is not None)
+    gross_half = attributed.total.half_width_j
+    energy_flags = list(attributed.flags)
+    if not all(math.isfinite(v) for v in (owned_half, gross_half)):
+        energy_flags.append('energy.nonfinite_half_width')
     clocks, turn_observation = [], []
     all_clock_weights = []
     for turn in episode.turns:
@@ -239,6 +244,8 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
             'turn_admissions': len(episode.turns) + sum(r['kind'] == 'G1' and r['outcome'] != 'released' for r in intervals),
             'intervals': intervals, 'releases': releases, 'g0_slow_c': g0['release']['slow_c'] if g0 else None,
             'tokens': exact_tokens, 'decode_clocks_mhz': clocks, 'turn_owned_j': owned,
+            'turn_owned_half_width_j': owned_half if math.isfinite(owned_half) else None,
+            'gross_episode_half_width_j': gross_half if math.isfinite(gross_half) else None,
             'per_turn': per_turn,
             'decode_clock_mhz': (sum(w*c for w, c in all_clock_weights)/sum(w for w, _ in all_clock_weights)
                                  if sum(w for w, _ in all_clock_weights) else None),
@@ -250,11 +257,24 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
                                        'meter_end_ns': r['end_ns']-offset if offset is not None else None,
                                        'mapping_uncertainty_ns': mappings[0].uncertainty_ns if len(mappings) == 1 else 0 if offset == 0 else None}
                                     for r in intervals],
-            'energy_flags': list(attributed.flags)}
+            'energy_flags': energy_flags}
+
+
+def energy_exclusions(member):
+    reasons = [f for f in member.get('energy_flags', ()) if f.startswith((
+        'trace.missing', 'trace.ambiguous', 'clock.', 'clock_anchor_unresolved',
+        'duty.uncovered', 'energy.'))]
+    for key in ('turn_owned_half_width_j', 'gross_episode_half_width_j'):
+        value = member.get(key)
+        if type(value) not in (int, float) or not math.isfinite(value):
+            reasons.append('energy.uncertainty_unavailable')
+    if type(member.get('turn_owned_j')) not in (int, float) or not math.isfinite(member['turn_owned_j']):
+        reasons.append('energy.value_unavailable')
+    return sorted(set(reasons))
 
 
 def identical_pair(a, b):
-    if any(any(f.startswith(('trace.missing', 'trace.ambiguous', 'clock_anchor_unresolved')) for f in r.get('energy_flags', ())) for r in (a, b)):
+    if any(energy_exclusions(r) for r in (a, b)):
         return {'status': 'inconclusive', 'reason': 'energy evidence unavailable'}
     if a.get('tokens') is None or b.get('tokens') is None:
         return {'status': 'inconclusive', 'token_identical': None, 'reason': 'token identity unavailable'}
@@ -510,8 +530,7 @@ def calibration_exclusions(member):
         reasons.append('thermal.powermetrics_non_nominal')
     if any(f.startswith(('endpoint_error:', 'episode_error:')) for f in member.get('flags', ())):
         reasons.append('member.runtime_failure')
-    reasons.extend(f for f in member.get('energy_flags', ()) if f.startswith((
-        'trace.missing', 'trace.ambiguous', 'clock_anchor_unresolved')))
+    reasons.extend(energy_exclusions(member))
     return sorted(set(reasons))
 
 

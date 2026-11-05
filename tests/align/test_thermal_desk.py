@@ -2,6 +2,7 @@
 from copy import deepcopy
 from dataclasses import replace
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,7 +20,8 @@ def member(name='one', energy=1000, slow=40.):
             'turn_observation': [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': 0}],
             'pm_period_s': .1, 'turn_admissions': 1, 'intervals': [],
             'releases': [{'journal_verified': True}], 'g0_slow_c': slow,
-            'tokens': [[1, 2, 3]], 'turn_owned_j': energy, 'decode_clocks_mhz': [1000.], 'decode_clock_mhz': 1000.}
+            'tokens': [[1, 2, 3]], 'turn_owned_j': energy, 'turn_owned_half_width_j': 1.,
+            'gross_episode_half_width_j': 1., 'decode_clocks_mhz': [1000.], 'decode_clock_mhz': 1000.}
 
 
 def contrast(effect=12, noise=0):
@@ -34,6 +36,38 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def test_energy_quality_refuses_unmapped_uncovered_and_unbounded_evidence(self):
+        for flag in ('clock.mapping_missing', 'clock.uncertainty_missing', 'clock.mapping_ambiguous',
+                     'clock.episode_domain_mismatch', 'duty.uncovered'):
+            runs = contrast()
+            runs[0]['energy_flags'] = [flag]
+            with self.subTest(flag=flag):
+                self.assertEqual(desk.deciding_experiment(runs)['verdict'], 'INCONCLUSIVE')
+                self.assertEqual(desk.identical_pair(runs[0], runs[0])['status'], 'inconclusive')
+        for width in (None, math.inf, math.nan):
+            runs = contrast()
+            runs[0]['turn_owned_half_width_j'] = width
+            with self.subTest(width=width):
+                self.assertEqual(desk.deciding_experiment(runs)['verdict'], 'INCONCLUSIVE')
+                self.assertEqual(desk.identical_pair(runs[0], runs[0])['status'], 'inconclusive')
+
+    def test_missing_clock_mapping_and_nonfinite_uncertainty_are_derived(self):
+        ep = episode(turns=(turn(),))
+        # Exercise attribution's defensive missing-mapping path. Normal
+        # Episode construction already refuses this malformed legacy object.
+        object.__setattr__(ep, 'clock_mappings', ())
+        record = desk.member_record(ep, [], os_readings=[], pm_samples=[], pm_period_s=1,
+                                   source='mock', channel='package')
+        self.assertIn('clock.mapping_missing', record['energy_flags'])
+        self.assertEqual(desk.identical_pair(record, record)['status'], 'inconclusive')
+        object.__setattr__(ep, 'power_traces', ())
+        record = desk.member_record(ep, [], os_readings=[], pm_samples=[], pm_period_s=1,
+                                   source='mock', channel='package')
+        self.assertIsNone(record['turn_owned_half_width_j'])
+        self.assertIsNone(record['gross_episode_half_width_j'])
+        self.assertEqual(desk.identical_pair(record, record)['status'], 'inconclusive')
+        json.dumps(record, allow_nan=False)
+
     def test_external_journal_phase_cannot_replace_gate_decision_evidence(self):
         from tests.align.test_thermal_gate import NativeIntegrationTests
         helper = NativeIntegrationTests('test_real_workload_endpoint_budget_and_held_stream_keep_exact_tokens')
