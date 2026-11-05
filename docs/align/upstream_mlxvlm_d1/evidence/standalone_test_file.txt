@@ -1,0 +1,7 @@
+# standalone kit file tests/test_qwen4_exp_ragged_qsa.py
+## base
+E           Max absolute difference among violations: 0.13312922
+E           Max absolute difference among violations: 0.13312916
+2 failed in 14.22s
+## fix
+2 passed in 10.88s

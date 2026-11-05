@@ -1,0 +1,8 @@
+# repro_minimal.py on mlx-vlm main 5cdc659b (PYTHONPATH=/private/tmp/jwd1kit/base)
+max |logit(batch) - logit(single request)|   ragged row 0 (pad 0)   ragged row 1 (pad 3)   equal-length control
+decode, batch-invariant path (default)         8.7e-02                1.0e-01                1.9e-07
+  then a 3-token verify                        9.5e-02                1.5e-01                2.1e-07
+decode, attention-module path                  8.7e-02                1.0e-01                2.4e-07
+  then a 3-token verify                        9.5e-02                1.5e-01                2.9e-07
+FAIL: the ragged batch differs from single requests
+exit status: 1

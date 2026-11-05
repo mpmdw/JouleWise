@@ -1,0 +1,111 @@
+diff --git a/mlx_vlm/models/qwen4_exp/language.py b/mlx_vlm/models/qwen4_exp/language.py
+index 9a9bee24..2f6bc280 100644
+--- a/mlx_vlm/models/qwen4_exp/language.py
++++ b/mlx_vlm/models/qwen4_exp/language.py
+@@ -1109,21 +1109,14 @@ class Qwen4ExpAttention(Qwen3_5Attention):
+         standard_causal_mask = mask is None or (
+             isinstance(mask, str) and mask == "causal"
+         )
+-        if isinstance(mask, str) and not standard_causal_mask:
+-            # Qwen3.5 owns specialized string modes such as
+-            # ``left_padded_decode``. The indexer state is already updated;
+-            # delegate only the Q/K/V attention path to the parent.
+-            return super().__call__(
+-                x,
+-                mask=mask,
+-                cache=cache,
+-                position_ids=position_ids,
+-                position_embeddings=position_embeddings,
+-            )
++        # The parent's ``left_padded_decode`` path is dense and ignores masks.
++        # build_mask() already offsets each row's blocks by its left padding
++        # and hides the pad columns, so it is the whole mask for that step.
++        left_padded_decode = isinstance(mask, str) and mask == "left_padded_decode"
+         sparse_candidate = selection.zero_padding and standard_causal_mask
+         qsa_mask = None if sparse_candidate else self.indexer.build_mask(selection)
+         if qsa_mask is not None:
+-            if standard_causal_mask:
++            if standard_causal_mask or left_padded_decode:
+                 mask = qsa_mask
+             elif isinstance(mask, mx.array):
+                 if mask.dtype == mx.bool_:
+@@ -1868,9 +1861,9 @@ class Qwen4ExpBatchInvariantForward(Qwen3_5BatchInvariantForward):
+                 axis=1,
+             )
+         projected = self._linear(attention.indexer.index_qk_proj, hidden_states)
+-        if hidden_states.shape[1] > 2 or (
+-            isinstance(mask, str) and mask == "left_padded_decode"
+-        ):
++        # Batches with any left padding skip this branch: _attention() would
++        # send them to the dense ragged helper, which ignores the QSA mask.
++        if hidden_states.shape[1] > 2 and standard_causal:
+             qsa_mask = attention.indexer.from_projected(projected, cache, position_ids)
+             if qsa_mask is not None:
+                 if mask is None or (isinstance(mask, str) and mask == "causal"):
+@@ -1916,7 +1909,9 @@ class Qwen4ExpBatchInvariantForward(Qwen3_5BatchInvariantForward):
+         sparse_candidate = standard_causal
+         qsa_mask = None if sparse_candidate else attention.indexer.build_mask(selection)
+         if qsa_mask is not None:
+-            if standard_causal:
++            if standard_causal or (
++                isinstance(mask, str) and mask == "left_padded_decode"
++            ):
+                 mask = qsa_mask
+             elif isinstance(mask, mx.array):
+                 if mask.dtype == mx.bool_:
+diff --git a/mlx_vlm/tests/test_cache.py b/mlx_vlm/tests/test_cache.py
+index f2872509..0e05ed60 100644
+--- a/mlx_vlm/tests/test_cache.py
++++ b/mlx_vlm/tests/test_cache.py
+@@ -1805,6 +1805,51 @@ def test_qwen3_5_single_row_decode_retains_batch_cache(dtype, prefix_length):
+                     ).item()
+ 
+ 
++@parametrize("decode_path", ["batch_invariant", "attention"])
++def test_qwen4_exp_ragged_batch_matches_single_requests(decode_path):
++    from mlx_vlm.models import qwen4_exp
++
++    fields = model_case("qwen4_exp")["config"]["text_config"]
++    # With one indexer head, relu leaves exact-zero score ties, which a padded
++    # row may break differently. Sixteen heads keep the selection unique.
++    fields["indexer_n_heads"] = 16
++    mx.random.seed(17)
++    lm = qwen4_exp.LanguageModel(build_config(qwen4_exp, fields, "TextConfig"))
++    lm.eval()
++    if decode_path == "attention":
++        # Decode takes this path when lm_head is quantized in a format the
++        # batch-invariant forward does not support.
++        lm._supports_batch_invariant_decode = lambda: False
++
++    # Rows of 14 and 11 tokens, so left padding [0, 3]. QSA keeps 2 blocks of
++    # 4 tokens, so both rows decode with sparse attention from the first step.
++    prompts = [list(range(1, 15)), list(range(20, 31))]
++    indexer = lm.model.layers[lm.model.fa_idx].self_attn.indexer
++    assert (len(prompts[1]) + 1) // indexer.compress_ratio > indexer.block_topk
++
++    def run(rows, cache):
++        width = max(map(len, rows))
++        ids = [[0] * (width - len(r)) + r for r in rows]
++        positions = [[0] * (width - len(r)) + list(range(len(r))) for r in rows]
++        lm(mx.array(ids), cache=cache, position_ids=mx.array(positions))
++        logits = []
++        for step in range(3):
++            tokens = mx.full((len(rows), 1), 40 + step)
++            positions = mx.array([[len(r) + step] for r in rows])
++            logits.append(lm(tokens, cache=cache, position_ids=positions).logits)
++        # A 3-token block through the speculative (MTP) verifier.
++        block = mx.array([[43, 44, 45]] * len(rows))
++        logits.append(lm.speculative_verify_logits(block, cache, lambda x: x)[3])
++        return mx.concatenate(logits, axis=1)
++
++    actual = run(prompts, _make_cache(lm, [0, 3]))
++    for row, prompt in enumerate(prompts):
++        expected = run([prompt], lm.make_cache())
++        np.testing.assert_allclose(
++            np.array(actual[row : row + 1]), np.array(expected), atol=1e-5, rtol=1e-5
++        )
++
++
+ def test_hashes_and_dependencies():
+     tokens = tuple(range(16))
+     hash_tokens = P._hash_tokens

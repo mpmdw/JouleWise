@@ -1,0 +1,8 @@
+# repro_minimal.py on 5cdc659b + fix.diff (PYTHONPATH=/private/tmp/jwmlxvlm-main)
+max |logit(batch) - logit(single request)|   ragged row 0 (pad 0)   ragged row 1 (pad 3)   equal-length control
+decode, batch-invariant path (default)         1.9e-07                2.1e-07                1.9e-07
+  then a 3-token verify                        2.1e-07                1.5e-07                2.1e-07
+decode, attention-module path                  2.4e-07                2.4e-07                2.4e-07
+  then a 3-token verify                        2.9e-07                2.7e-07                2.9e-07
+PASS
+exit status: 0

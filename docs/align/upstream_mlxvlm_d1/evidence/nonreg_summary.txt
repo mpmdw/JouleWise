@@ -1,0 +1,59 @@
+# nonreg.py (models in eval mode): 40 logit arrays [rows, prefill-last + 3 decode + verify, vocab], before (5cdc659b) vs after (+fix.diff)
+float32_invariant_v2_single_A            bitwise identical
+float32_invariant_v2_single_B            bitwise identical
+float32_invariant_v2_equal_AA2           bitwise identical
+float32_invariant_v2_ragged_short        bitwise identical
+float32_invariant_v2_ragged_long         CHANGED  max|after-before| = 1.02e-01
+float32_invariant_v3_single_A            bitwise identical
+float32_invariant_v3_single_B            bitwise identical
+float32_invariant_v3_equal_AA2           bitwise identical
+float32_invariant_v3_ragged_short        bitwise identical
+float32_invariant_v3_ragged_long         CHANGED  max|after-before| = 1.47e-01
+float32_module_v2_single_A               bitwise identical
+float32_module_v2_single_B               bitwise identical
+float32_module_v2_equal_AA2              bitwise identical
+float32_module_v2_ragged_short           bitwise identical
+float32_module_v2_ragged_long            CHANGED  max|after-before| = 1.02e-01
+float32_module_v3_single_A               bitwise identical
+float32_module_v3_single_B               bitwise identical
+float32_module_v3_equal_AA2              bitwise identical
+float32_module_v3_ragged_short           bitwise identical
+float32_module_v3_ragged_long            CHANGED  max|after-before| = 1.47e-01
+bfloat16_invariant_v2_single_A           bitwise identical
+bfloat16_invariant_v2_single_B           bitwise identical
+bfloat16_invariant_v2_equal_AA2          bitwise identical
+bfloat16_invariant_v2_ragged_short       bitwise identical
+bfloat16_invariant_v2_ragged_long        CHANGED  max|after-before| = 9.91e-02
+bfloat16_invariant_v3_single_A           bitwise identical
+bfloat16_invariant_v3_single_B           bitwise identical
+bfloat16_invariant_v3_equal_AA2          bitwise identical
+bfloat16_invariant_v3_ragged_short       bitwise identical
+bfloat16_invariant_v3_ragged_long        CHANGED  max|after-before| = 1.46e-01
+bfloat16_module_v2_single_A              bitwise identical
+bfloat16_module_v2_single_B              bitwise identical
+bfloat16_module_v2_equal_AA2             bitwise identical
+bfloat16_module_v2_ragged_short          bitwise identical
+bfloat16_module_v2_ragged_long           CHANGED  max|after-before| = 9.91e-02
+bfloat16_module_v3_single_A              bitwise identical
+bfloat16_module_v3_single_B              bitwise identical
+bfloat16_module_v3_equal_AA2             bitwise identical
+bfloat16_module_v3_ragged_short          bitwise identical
+bfloat16_module_v3_ragged_long           CHANGED  max|after-before| = 1.46e-01
+
+# ragged_long vs single requests (decode + verify positions)
+float32_invariant_v2   before row0 8.7e-02  row1 1.0e-01  argmax agree True
+float32_invariant_v2   after  row0 2.1e-07  row1 2.1e-07  argmax agree True
+float32_invariant_v3   before row0 9.5e-02  row1 1.5e-01  argmax agree False
+float32_invariant_v3   after  row0 2.1e-07  row1 2.1e-07  argmax agree True
+float32_module_v2      before row0 8.7e-02  row1 1.0e-01  argmax agree True
+float32_module_v2      after  row0 2.9e-07  row1 2.7e-07  argmax agree True
+float32_module_v3      before row0 9.5e-02  row1 1.5e-01  argmax agree False
+float32_module_v3      after  row0 2.9e-07  row1 2.7e-07  argmax agree True
+bfloat16_invariant_v2  before row0 9.9e-02  row1 5.8e-02  argmax agree False
+bfloat16_invariant_v2  after  row0 7.6e-02  row1 3.9e-03  argmax agree False
+bfloat16_invariant_v3  before row0 9.9e-02  row1 1.5e-01  argmax agree False
+bfloat16_invariant_v3  after  row0 7.6e-02  row1 3.9e-03  argmax agree False
+bfloat16_module_v2     before row0 9.9e-02  row1 5.8e-02  argmax agree False
+bfloat16_module_v2     after  row0 7.6e-02  row1 3.9e-03  argmax agree False
+bfloat16_module_v3     before row0 9.9e-02  row1 1.5e-01  argmax agree False
+bfloat16_module_v3     after  row0 7.6e-02  row1 3.9e-03  argmax agree False
