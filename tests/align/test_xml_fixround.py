@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
-from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion
+from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion, reasoning_tokens_from_ids
 from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES
 from joulewise.align.interfaces import ChatMessage
 from joulewise.align.endpoints import _coalesce_assistant_calls
@@ -45,6 +45,23 @@ def endpoint(family="qwen3_8", text="", finish_reason="length", **kwargs):
 
 
 class XmlFixRoundTests(unittest.TestCase):
+    def test_xml_hidden_id_count_ignores_literal_think_tags_in_call_arguments(self):
+        wire = xml("<parameter=text>literal <think>quoted</parameter>")
+        ep = endpoint(text="plan\n</think>\n\n" + wire, finish_reason="stop")
+        result = ep.chat([ChatMessage("user", "x")], tools=TOOLS,
+                         max_tokens=1024, temperature=0, seed=None)
+        self.assertEqual(result.reasoning_text, "plan\n")
+        self.assertEqual(result.reasoning_tokens, len("plan\n"))
+        self.assertEqual(len(result.tool_calls), 1)
+        # Closing tags in a literal parameter must not imply a prefilled opener.
+        wire = xml("<parameter=text>literal </think> then <think></parameter>")
+        self.assertEqual(reasoning_tokens_from_ids(ByteTokenizer(), list(wire.encode()),
+                                                 stop_at_tool_call=True), 0)
+        thought = "draft " + xml() + "\n"
+        emitted = "<think>" + thought + "</think>" + wire
+        self.assertEqual(reasoning_tokens_from_ids(ByteTokenizer(), list(emitted.encode()),
+                                                 stop_at_tool_call=True), len(thought))
+
     def test_xml_history_reasoning_survives_monitor_and_call_coalescing(self):
         ep = endpoint(text="private plan</think>" + xml(), finish_reason="stop")
         result = ep.chat([ChatMessage("user", "x")], tools=TOOLS,

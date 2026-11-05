@@ -24,7 +24,8 @@ from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
 
-def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False, split_at=None):
+def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False, split_at=None,
+                              stop_at_tool_call=False):
     """Count reasoning content in the emitted IDs; delimiters/EOS are not content.
 
     Only the fixed delimiters are encoded to locate their ID sequences. The
@@ -33,6 +34,7 @@ def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False, sp
     from joulewise.adapters.mlx_runtime import _encode
     opening = _encode(tokenizer, "<think>", add_special_tokens=False)
     closing = _encode(tokenizer, "</think>", add_special_tokens=False)
+    tool_call = _encode(tokenizer, "<tool_call>", add_special_tokens=False) if stop_at_tool_call else ()
     ids = list(output_ids)
     eos = getattr(tokenizer, "eos_token_ids", None)
     if eos is None:
@@ -44,10 +46,14 @@ def reasoning_tokens_from_ids(tokenizer, output_ids, *, reasoning_open=False, sp
         return next((i for i in range(len(ids)) if ids[i:i+len(sequence)] == list(sequence)), len(ids)) if sequence else len(ids)
     # Some templates prefill the opening tag; a leading close in the emitted
     # IDs is also exact evidence that the initial content was reasoning.
-    active = reasoning_open or first(closing) < first(opening)
+    active = reasoning_open or first(closing) < min(first(opening), first(tool_call))
     count, index = 0, 0
     cached_count = 0
     while index < len(ids):
+        if not active and tool_call and ids[index:index + len(tool_call)] == list(tool_call):
+            # The XML grammar makes the remaining turn literal call syntax,
+            # including any reasoning delimiters within parameter strings.
+            break
         if opening and ids[index:index + len(opening)] == list(opening):
             active = True
             index += len(opening)
@@ -547,8 +553,11 @@ class MlxEndpoint:
                 }
                 provenance.update(cache_metadata)
                 reasoning_tokens = reasoning_tokens_from_ids(
-                    tokenizer, record.output_token_ids, reasoning_open=reasoning_open_from_template)
-                provenance["reasoning_token_accounting"] = "output_ids_between_think_delimiters_excluding_trailing_eos"
+                    tokenizer, record.output_token_ids, reasoning_open=reasoning_open_from_template,
+                    stop_at_tool_call=xml_family)
+                provenance["reasoning_token_accounting"] = (
+                    "output_ids_between_think_delimiters_before_visible_xml_call_excluding_trailing_eos"
+                    if xml_family else "output_ids_between_think_delimiters_excluding_trailing_eos")
             else:
                 raise ValueError("align_episode supports only mock and mlx backends")
             for event in new_events:
