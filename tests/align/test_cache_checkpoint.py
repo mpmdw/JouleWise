@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+from contextlib import contextmanager
 import json
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -89,8 +90,13 @@ class HybridModel:
 
 def fake_core():
     mlx = ModuleType('mlx')
-    mlx.core = SimpleNamespace(array=lambda value: value, eval=lambda *values: None)
-    return {'mlx': mlx, 'mlx.core': mlx.core}
+    @contextmanager
+    def context(*args):
+        yield
+    mlx.core = SimpleNamespace(array=lambda value: value, eval=lambda *values: None,
+                               clear_cache=lambda: None, stream=context)
+    return {'mlx': mlx, 'mlx.core': mlx.core,
+            'mlx_lm.generate': SimpleNamespace(wired_limit=context, generation_stream=object())}
 
 
 def hybrid_endpoint(model_config, limit=0):
@@ -184,6 +190,45 @@ class CheckpointTests(unittest.TestCase):
                 self.assertEqual(endpoint._episode_cache.checkpoint_limit, expected)
                 self.assertEqual(len(endpoint._episode_cache.checkpoints), int(bool(expected)))
                 self.assertEqual(fed, [[90]] if expected else [[1, 2, 3, 90]])
+
+    def test_manual_prefill_matches_native_context_chunks_and_allocator_cleanup(self):
+        active = set()
+        calls = []
+        stream = object()
+
+        @contextmanager
+        def context(name, value):
+            self.assertEqual(value, [stream] if name == 'wired' else stream)
+            active.add(name)
+            try:
+                yield
+            finally:
+                active.remove(name)
+
+        model = self.model
+        def forward(inputs, *, cache):
+            self.assertEqual(active, {'wired', 'stream'})
+            calls.append(('forward', len(inputs[0])))
+            return model(inputs, cache=cache)
+
+        def clear_cache():
+            self.assertEqual(active, {'wired', 'stream'})
+            calls.append(('clear', None))
+
+        self.cache.model = forward
+        core = fake_core()
+        core['mlx.core'].stream = lambda value: context('stream', value)
+        core['mlx.core'].clear_cache = clear_cache
+        core['mlx_lm.generate'] = SimpleNamespace(
+            wired_limit=lambda model, streams: context('wired', streams), generation_stream=stream)
+        prefix = [1] * (2048 + 73)
+        delta, metadata = self.cache.prepare(prefix + [90], stable_prefix_ids=prefix)
+        with patch.dict('sys.modules', core):
+            tail = self.cache.prefill_checkpoint(delta, metadata)
+        self.assertEqual(tail, [90])
+        self.assertEqual(calls, [('forward', 2048), ('clear', None), ('forward', 73), ('clear', None)])
+        self.assertEqual(active, set())
+        self.assertEqual(hybrid_checkpoint_policy({'model_type': 'qwen3_next'}, 2)['prefill_step_size'], 2048)
 
     def test_newest_compatible_checkpoint_and_branch_invalidation(self):
         self.turn([1, 2, 3, 90], 3)

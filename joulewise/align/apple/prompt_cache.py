@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 CHECKPOINT_POLICY = "hybrid_boundary_v1"
 DEFAULT_CHECKPOINT_LIMIT = 0
+PREFILL_STEP_SIZE = 2048  # mlx-lm 0.31.3 generate_step (non-speculative)
 
 
 def hybrid_checkpoint_policy(config, checkpoint_limit=DEFAULT_CHECKPOINT_LIMIT):
@@ -25,7 +26,7 @@ def hybrid_checkpoint_policy(config, checkpoint_limit=DEFAULT_CHECKPOINT_LIMIT):
     cfg = (config or {}).get("text_config", config or {})
     if cfg.get("model_type") in {"qwen3_next", "qwen3_5_text", "qwen3_5", "qwen3_5_moe", "qwen3_5_moe_text"}:
         return {"policy": CHECKPOINT_POLICY, "limit": checkpoint_limit,
-                "boundary": "closed_history_token_prefix", "prefill_step_size": 512}
+                "boundary": "closed_history_token_prefix", "prefill_step_size": PREFILL_STEP_SIZE}
     return None
 
 
@@ -156,7 +157,7 @@ class EpisodePromptCache:
         self.represented_ids = self.represented_ids[:checkpoint.length]
         self.verify_length(checkpoint.length)
 
-    def prefill_checkpoint(self, delta, metadata, *, step_size=512):
+    def prefill_checkpoint(self, delta, metadata, *, step_size=PREFILL_STEP_SIZE):
         """Called inside the measured prefill phase, before native generation.
 
         Stop exactly at the closed-history boundary; leave at least one token
@@ -165,15 +166,22 @@ class EpisodePromptCache:
         if self._checkpoint_length is None:
             return delta
         import mlx.core as mx
+        from mlx_lm.generate import generation_stream, wired_limit
+        if type(step_size) is not int or step_size <= 0:
+            raise ValueError("checkpoint prefill step_size must be a positive integer")
         count = self._checkpoint_length - len(self.represented_ids)
         if not 0 <= count < len(delta):
             raise ValueError("cache_checkpoint_boundary_invalid")
-        for start in range(0, count, step_size):
-            chunk = delta[start:min(start + step_size, count)]
-            self.model(mx.array([chunk]), cache=self.cache)
-            mx.eval(*list(_arrays([c.state for c in self.cache])))
-            self.represented_ids.extend(chunk)
-        self._snapshot()
+        # Match native stream_generate/generate_step residency, stream and
+        # allocator behavior for all manually consumed prompt chunks.
+        with wired_limit(self.model, [generation_stream]), mx.stream(generation_stream):
+            for start in range(0, count, step_size):
+                chunk = delta[start:min(start + step_size, count)]
+                self.model(mx.array([chunk]), cache=self.cache)
+                mx.eval(*list(_arrays([c.state for c in self.cache])))
+                self.represented_ids.extend(chunk)
+                mx.clear_cache()
+            self._snapshot()
         metadata.update(cache_checkpoint_count=len(self.checkpoints),
                         cache_checkpoint_boundary_tokens=self._checkpoint_length,
                         cache_checkpoint_bytes=self.checkpoints[-1].state_bytes + 8 * len(self.offsets()),

@@ -17,14 +17,14 @@ import sys
 import time
 
 from joulewise.align.apple.prompt_cache import (
-    EpisodePromptCache, _arrays, checkpoint_size_from_config,
+    EpisodePromptCache, PREFILL_STEP_SIZE, _arrays, checkpoint_size_from_config,
 )
 
 
 PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 FAMILIES = ("qwen3_next", "qwen3_5")
 REWRITES = (143, 257, 560)
-STEP = 512
+STEP = PREFILL_STEP_SIZE
 MIB = 1024 ** 2
 CONFIG_FIXTURES = {"qwen3_next": "qwen3_next_config.json", "qwen3_5": "qwen38_config.json"}
 
@@ -166,7 +166,7 @@ class NativeProbe:
         """Three consecutive turns discard exactly the pilot's three trim sizes.
 
         Fresh references re-prefill EVERY token using the same prefix/suffix
-        schedule. At boundary=512 this is also the usual full 512-token prefill.
+        schedule. At boundary=2048 this is also the native full-chunk prefill.
         An additional one-call prefill is diagnostic: its different GEMM shapes
         may differ even when every kernel is individually deterministic.
         """

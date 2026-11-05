@@ -18,10 +18,14 @@ token LCP. Templates that rewrite earlier history can use an older checkpoint;
 if none survives, the existing whole-cache rebuild applies. A tokenizer that
 does not support a closed-history render needs native integration work.
 
-Prefill to that boundary in chunks of at most 512 tokens, then checkpoint before
+Prefill to that boundary in chunks of at most 2048 tokens (the pinned native
+non-speculative step size), then checkpoint before
 feeding the remaining suffix to `stream_generate`. Both this prefill and the
 snapshot run inside the existing measured prefill phase. Restores run in
-`generation_setup`. No extra sampler draws occur. Full prompt and fed-token
+`generation_setup`. Manual prefill and snapshot execute under mlx-lm's
+`wired_limit(model, [generation_stream])` and `mx.stream(generation_stream)`;
+each evaluated chunk calls `mx.clear_cache()`, matching native prefill.
+No extra sampler draws occur. Full prompt and fed-token
 counts continue to include the manually prefetched prefix. A checkpoint is
 never taken after generation in the hope of rewinding recurrent state later.
 

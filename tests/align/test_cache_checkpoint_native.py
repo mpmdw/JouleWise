@@ -9,9 +9,12 @@ at setup: a skipped or blocked run is never numerical exactness evidence.
 from __future__ import annotations
 
 import importlib.util
+from contextlib import contextmanager
 import unittest
+from unittest.mock import patch
 
 from scripts.align_cache_checkpoint_native import NativeProbe, STEP
+from joulewise.align.apple.prompt_cache import EpisodePromptCache
 
 
 AVAILABLE = all(importlib.util.find_spec(name) is not None for name in ('mlx', 'mlx_lm'))
@@ -45,6 +48,43 @@ class NativeCheckpointTests(unittest.TestCase):
 
     def test_qwen3_5_bfloat16(self):
         self.run_family('qwen3_5', 'bfloat16')
+
+    def test_manual_prefill_native_stream_wiring_and_chunks(self):
+        import importlib
+        generate = importlib.import_module('mlx_lm.generate')
+        mx = self.probe.mx
+        model, _ = self.probe.model('qwen3_5', 'bfloat16')
+        cache = EpisodePromptCache(model, checkpoint_limit=2)
+        delta, metadata = cache.prepare([1] * (STEP + 73) + [31], stable_prefix_ids=[1] * (STEP + 73))
+        active = []
+        chunks = []
+        native_wired = generate.wired_limit
+        native_call = type(model).__call__
+
+        @contextmanager
+        def wired(observed_model, streams):
+            self.assertIs(observed_model, model)
+            self.assertEqual(streams, [generate.generation_stream])
+            with native_wired(observed_model, streams):
+                active.append(True)
+                try:
+                    yield
+                finally:
+                    active.pop()
+
+        def forward(observed_model, inputs, **kwargs):
+            self.assertTrue(active)
+            self.assertEqual(mx.default_stream(mx.default_device()), generate.generation_stream)
+            chunks.append(inputs.shape[1])
+            return native_call(observed_model, inputs, **kwargs)
+
+        with patch.object(generate, 'wired_limit', wired), \
+             patch.object(type(model), '__call__', forward), \
+             patch.object(mx, 'clear_cache', wraps=mx.clear_cache) as clear:
+            self.assertEqual(cache.prefill_checkpoint(delta, metadata), [31])
+            self.assertEqual(clear.call_count, 2)
+        self.assertEqual(chunks, [2048, 73])
+        cache.verify_length(STEP + 73)
 
 
 if __name__ == '__main__':
