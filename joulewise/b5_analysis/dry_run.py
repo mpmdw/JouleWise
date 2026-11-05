@@ -717,8 +717,7 @@ class RunState:
             self.flags.extend(f['code'] for f in flags)
             # Capture the archive-owned input census, including all bytes the
             # child programs will reopen through their own authenticated handles.
-            for name in archive.source_names():
-                archive.source_bytes('sources/'+name)
+            archive.census_sources(archive.source_names())
             for name in archive.record['outputs']:
                 archive.output_bytes(name)
             for name in ('withheld/member-assessments.json','withheld/neg8-rescreen-bracket.json','withheld/bracket-evaluation.json'):
