@@ -589,16 +589,9 @@ class MlxEndpoint:
         )
         flags.extend(parse_flags)
         if cut and "unclosed_reasoning_span" in parse_flags:
-            prefix, _, tail = text.rpartition("<think>")
-            # Parse tools only in the visible prefix; an unfinished thought
-            # may itself contain tool-like text that must remain hidden.
-            # Closed spans earlier in the same turn stay reasoning too.
-            visible, prior, calls, prefix_flags = parse_completion(
-                prefix, reasoning_tokens=reasoning_tokens,
-                model_family=self.config.model.family, tools=tools,
-            )
-            reasoning = "\n".join(part for part in (prior, tail) if part)
-            flags.extend(prefix_flags)
+            # The first parse already hides the entire unfinished span using
+            # the template's opener. Reparsing at a quoted/nested <think>
+            # would expose the draft before it and could execute a draft call.
             flags.append("reasoning_censored_at_token_limit")
         calls = tuple(replace(call, call_id=f"{turn_index}-{call.call_id}") for call in calls)
         self.flags.extend(flags)
