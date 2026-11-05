@@ -846,6 +846,34 @@
       "status": "queued",
       "stop_card": null
     },
+    "B5-POSTRELEASE-FIXES-01": {
+      "acceptance": {
+        "evidence": [
+          "POSTRELEASE_PLAN.md and .pr/post-release-fixes.md enumerate a through g and all unresolved rulings."
+        ],
+        "pointer": {
+          "label": "Post-release preparation acceptance",
+          "path": "POSTRELEASE_PLAN.md"
+        },
+        "summary": "One local commit per item, targeted synthetic tests, plan and PR draft; release and any scientific rulings still gate integration."
+      },
+      "authority": {
+        "label": "Explicit user-directed preparation on 2026-11-05; retrospective deferred items",
+        "path": "POSTRELEASE_PLAN.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Prepare the seven block-5 post-release items in POSTRELEASE_PLAN.md on an isolated branch; keep scientific ambiguities as NEEDS-LEAD and the D-178 successor as NEEDS-ED.",
+      "id": "B5-POSTRELEASE-FIXES-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 347,
+      "status": "active",
+      "status_note": "Preparation selected by explicit user direction, overriding lane rank. No network, measurement inputs, restricted paths or full-suite run; at most two test workers. Do not merge before the block-5 release.",
+      "stop_card": null
+    },
     "BATTERY-FLOAT-GATE-01": {
       "acceptance": {
         "evidence": [
