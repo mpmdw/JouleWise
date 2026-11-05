@@ -146,19 +146,21 @@ def _accepts(value: Any, schema: Mapping[str, Any], root: Mapping[str, Any], dep
 def _decode(raw, schema, root):
     # The template emits exactly one LF on either side, not arbitrary trim().
     raw = raw.removeprefix("\n").removesuffix("\n")
-    candidates = [raw]
     try:
         decoded = _json_value(raw)
     except ValueError:
         pass
     else:
-        # A decoded string was actually emitted literally with its quote marks.
-        if not isinstance(decoded, str):
-            candidates.append(decoded)
-    matches = [value for value in candidates if _accepts(value, schema, root)]
-    if len(matches) != 1:
-        raise ValueError("ambiguous_or_invalid_parameter_type")
-    return matches[0]
+        # JSON wins for Any and mixed string/non-string unions when that
+        # value satisfies the schema (notably Optional[str]'s bare null).
+        # A declared string still retains literal quotes from the wire.
+        untyped = not any(key in schema for key in
+                          ("type", "$ref", "anyOf", "oneOf", "allOf", "enum", "const"))
+        if (untyped or not isinstance(decoded, str)) and _accepts(decoded, schema, root):
+            return decoded
+    if _accepts(raw, schema, root):
+        return raw
+    raise ValueError("ambiguous_or_invalid_parameter_type")
 
 
 def parse_xml_calls(

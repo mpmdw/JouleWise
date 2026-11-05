@@ -240,8 +240,29 @@ class XmlToolCallTests(unittest.TestCase):
             self.assertEqual(json.loads(result[2][0].arguments_json), {"x": json.loads(value)})
         tools[0]["function"]["parameters"]["properties"]["x"] = {"type": ["string", "null"]}
         result = parse_completion(xml("<parameter=x>null</parameter>", "choose"), model_family="qwen3_8", tools=tools)
-        self.assertEqual(result[2], ())  # null vs the literal string 'null' is undecidable.
-        self.assertIn("ambiguous_or_invalid_parameter_type", result[3][0])
+        self.assertEqual(result[3], ())
+        self.assertEqual(json.loads(result[2][0].arguments_json), {"x": None})
+
+    def test_any_and_string_unions_prefer_valid_json_values(self):
+        for schema, raw, expected in (
+            ({}, "5", 5), ({}, "[1, 2]", [1, 2]), ({}, '"hello"', "hello"),
+            ({"title": "Any value"}, "true", True),
+            ({"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+             '["a@x.com"]', ["a@x.com"]),
+            ({"anyOf": [{"type": "string"}, {"type": "integer"}]}, "42", 42),
+            ({"anyOf": [{"type": "string"}, {"type": "null"}]}, "null", None),
+            ({"anyOf": [{"type": "string"}, {"type": "null"}]}, "somewhere", "somewhere"),
+            ({"type": "string"}, "null", "null"),
+            ({"type": "string"}, '"hello"', '"hello"'),
+        ):
+            with self.subTest(schema=schema, raw=raw):
+                tools = [{"function": {"name": "choose", "parameters": {
+                    "type": "object", "properties": {"x": schema}, "required": ["x"],
+                }}}]
+                result = parse_completion(xml(f"<parameter=x>\n{raw}\n</parameter>", "choose"),
+                                          model_family="qwen3_8", tools=tools)
+                self.assertEqual(result[3], ())
+                self.assertEqual(json.loads(result[2][0].arguments_json), {"x": expected})
 
     def test_config_selection_never_uses_model_name_or_output_sniffing(self):
         wire = xml()
