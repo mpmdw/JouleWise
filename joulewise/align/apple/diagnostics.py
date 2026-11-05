@@ -73,6 +73,13 @@ def end_state(episode, turn_rows=()):
         stop = next((f for f in flags if f.startswith(prefix)), None)
         if stop:
             return stop
+    for prefix in ('thermal.gate_timeout:', 'thermal.hold_timeout:'):
+        stop = next((f for f in flags if f.startswith(prefix)), None)
+        if stop:
+            return stop
+    if episode.hardware.get('thermal') and any(r['kind'] != 'G0' and r['outcome'] != 'released'
+                                              for r in episode.hardware['thermal']['intervals']):
+        return 'thermal.incomplete'
     if any(f.startswith(('episode_error:', 'endpoint_error:', 'runner.error')) for f in flags):
         return 'runner.error'
     context = next((f for f in flags if f.startswith(('episode.context_limit:', 'episode.time_guard:'))), None)

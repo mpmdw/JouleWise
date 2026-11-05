@@ -34,6 +34,7 @@ def _counterbalanced(specs: Sequence[EpisodeSpec]) -> tuple[tuple[EpisodeSpec, .
             **({"max_episode_seconds": spec.max_episode_seconds} if spec.max_episode_seconds is not None else {}),
             **{key: getattr(spec, key) for key in ("max_episode_decode_tokens", "deadman_s")
                if getattr(spec, key) is not None},
+            **{key: getattr(spec, key) for key in ('thermal', 'warmup_condition') if getattr(spec, key) is not None},
         }, sort_keys=True)
         cell = cells.setdefault(key, {"benign": deque(), "sabotage": deque()})
         cell[spec.condition].append(spec)

@@ -62,11 +62,13 @@ class EpisodeSpec:
     max_episode_seconds: float | None = None
     max_episode_decode_tokens: int | None = None
     deadman_s: float | None = None
+    thermal: Mapping[str, Any] | None = None
+    warmup_condition: Condition | None = None
 
     def to_text(self) -> str:
         value = asdict(self)
         for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds",
-                    "max_episode_decode_tokens", "deadman_s"):
+                    "max_episode_decode_tokens", "deadman_s", "thermal", "warmup_condition"):
             if value[key] is None:
                 del value[key]
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -130,13 +132,20 @@ class EpisodeSpec:
             spec.max_episode_decode_tokens is not None or spec.deadman_s is not None
         ):
             raise ValueError("token admission/deadman cannot be combined with max_episode_seconds")
+        if spec.warmup_condition not in (None, 'benign'):
+            raise ValueError('neutral warmup_condition must be benign')
+        if spec.thermal is not None:
+            from joulewise.align.apple.thermal import validate_policy
+            validate_policy(spec.thermal)
+            if spec.warmup_condition != 'benign' or spec.max_episode_seconds is not None:
+                raise ValueError('thermal cells require neutral warmup and no legacy wall guard')
         return spec
 
 
 class EpisodeRuntimeAdapter:
     """RuntimeAdapter wrapping the registry-selected MLX or mock implementation."""
 
-    def __init__(self, runtime: Any, clock: Clock) -> None:
+    def __init__(self, runtime: Any, clock: Clock, *, thermal_factory=None) -> None:
         self.name = runtime.name if runtime is not None else WORKLOAD_KIND
         self.runtime = runtime
         self.clock = clock
@@ -146,6 +155,9 @@ class EpisodeRuntimeAdapter:
         self.prepared: dict[str, Any] = {}
         self._runtime_ready = False
         self._failed_episode_result: RuntimeResult | None = None
+        self.thermal = None
+        self.thermal_factory = thermal_factory
+        self.thermal_status_reader = None
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None,
@@ -176,6 +188,13 @@ class EpisodeRuntimeAdapter:
             self.task.reset(self.spec.seed)
             self.task.system_prompt(self.spec.condition)
             self.task.user_prompt()
+            if self.spec.thermal is not None:
+                from joulewise.align.apple.thermal import ThermalSession
+                factory = self.thermal_factory or ThermalSession
+                self.thermal = factory(self.spec.thermal, self.clock, context,
+                                       **({'status_reader': self.thermal_status_reader}
+                                          if self.thermal_status_reader is not None else {}))
+                self.thermal.start()
         except Exception as exc:
             self.flags.append(f"task_unavailable:{type(exc).__name__}:{exc}")
             return AdapterResult(
@@ -271,6 +290,9 @@ class EpisodeRuntimeAdapter:
         for key in ("max_episode_decode_tokens", "deadman_s"):
             if getattr(spec, key) is not None:
                 metadata["sampler"].setdefault("execution_policy", {})[key] = getattr(spec, key)
+        for key in ('thermal', 'warmup_condition'):
+            if getattr(spec, key) is not None:
+                metadata['sampler'].setdefault('execution_policy', {})[key] = getattr(spec, key)
         if spec.max_episode_decode_tokens is not None or spec.deadman_s is not None:
             metadata["sampler"]["execution_policy"]["effective_context_cap"] = self.prepared.get(
                 "max_context_tokens", min(40960, spec.max_context_tokens or 40960))
@@ -294,10 +316,12 @@ class EpisodeRuntimeAdapter:
         try:
             warm_config = config
             if self.task is not None and self.spec is not None:
+                if self.thermal is not None:
+                    self.thermal.capture_reference(context.run_id if context is not None else config.run_id or 'align_episode')
                 self.task.reset(self.spec.seed)
                 warm_config = replace(config, workload_profile=replace(
                     config.workload_profile,
-                    prompt_text=self.task.system_prompt(self.spec.condition) + "\n" + self.task.user_prompt(),
+                    prompt_text=self.task.system_prompt(self.spec.warmup_condition or self.spec.condition) + "\n" + self.task.user_prompt(),
                 ))
             result = self.runtime.warmup(warm_config, context)
             if not result.ok:
@@ -314,6 +338,8 @@ class EpisodeRuntimeAdapter:
             raise AdapterFailure(
                 FailureReason.RUNTIME_UNAVAILABLE, "align_episode was not prepared"
             )
+        if self.thermal is not None:
+            self.thermal.wait('G0')
         start = self.clock.stamp()
         episode_id = context.run_id if context is not None else config.run_id or "align_episode"
         domain = f"joulewise.monotonic:{episode_id}"
@@ -328,6 +354,7 @@ class EpisodeRuntimeAdapter:
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
             enable_thinking=spec.enable_thinking, prompt_cache=spec.prompt_cache,
             sampler=spec.sampler,
+            **({'thermal': self.thermal} if self.thermal is not None else {}),
             **({"deadman": deadman, "enforce_turn_cap": True}
                if deadman is not None or spec.max_episode_decode_tokens is not None else {}),
         )
@@ -388,6 +415,10 @@ class EpisodeRuntimeAdapter:
                                     ))
                             break
                     event_start = len(endpoint.events)
+                    if index >= 1 and self.thermal is not None and spec.thermal['per_turn']:
+                        gate = self.thermal.wait('G1', turn=index, deadman=deadman)
+                        if gate['outcome'] != 'released':
+                            break
                     result = endpoint.chat(
                         transcript, tools=tools, max_tokens=spec.max_tokens,
                         temperature=spec.temperature, seed=measured_seed,
@@ -401,7 +432,10 @@ class EpisodeRuntimeAdapter:
                     ))
                     calls: list[ToolCall] = []
                     observed_calls = []
-                    for call_index, call in enumerate(result.tool_calls):
+                    thermal_abort = self.thermal is not None and any(
+                        r['kind'] == 'H' and r['turn'] == index and r['outcome'] != 'released'
+                        for r in self.thermal.intervals)
+                    for call_index, call in enumerate(() if thermal_abort else result.tool_calls):
                         if deadman is not None and deadman.expired():
                             flags.append(f"episode.deadman:{index}")
                             break
@@ -462,6 +496,8 @@ class EpisodeRuntimeAdapter:
                         first_token_ns=result.first_token_ns,
                         tool_calls=tuple(calls),
                     ))
+                    if thermal_abort:
+                        break
                     if deadman is not None and deadman.expired():
                         flags.append(f"episode.deadman:{index}")
                     if f"episode.deadman:{index}" in flags or f"episode.deadman:{index}" in endpoint.flags:
@@ -480,6 +516,10 @@ class EpisodeRuntimeAdapter:
             except Exception as exc:
                 flags.append(f"episode_error:{type(exc).__name__}:{exc}")
         flags.extend(endpoint.flags)
+        if self.thermal is not None:
+            flags.extend(self.thermal.flags)
+            events.extend(self.thermal.events)
+            events.sort(key=lambda event: event.timestamp_s)
         if not model_returned_tokens and not any(f.startswith(("episode.context_limit:", "episode.time_guard:",
                                                                "episode.decode_budget:", "episode.deadman:")) for f in flags):
             # UNKNOWN_ERROR maps to failed; RUNTIME_UNAVAILABLE maps to unsupported
@@ -491,7 +531,9 @@ class EpisodeRuntimeAdapter:
         end = self.clock.stamp()
         main_score = None
         side_success = None
-        incomplete = any(f.startswith("episode.deadman:") for f in flags)
+        incomplete = any(f.startswith(('episode.deadman:', 'thermal.gate_timeout:', 'thermal.hold_timeout:')) for f in flags)
+        if self.thermal is not None:
+            incomplete |= any(r['kind'] != 'G0' and r['outcome'] != 'released' for r in self.thermal.intervals)
         if task is not None and not incomplete:
             try:
                 main_score = task.score_main(transcript)
@@ -539,6 +581,8 @@ class EpisodeRuntimeAdapter:
         for prefix in ("episode.decode_budget:", "episode.deadman:"):
             if any(flag.startswith(prefix) for flag in flags):
                 stop = prefix[:-1]
+        if self.thermal is not None and incomplete and stop != 'episode.deadman':
+            stop = 'thermal.incomplete'
         reason = next((f for f in reversed(flags) if f.startswith(stop + ":")), stop)
         token_details = budget_record(spec, turns, reason, incomplete=incomplete,
                                       effective_context_cap=self.prepared.get("max_context_tokens"))
@@ -564,6 +608,7 @@ class EpisodeRuntimeAdapter:
                 "context_limits": {k: self.prepared.get(k) for k in ("max_position_embeddings", "max_context_tokens")},
                 "task_diagnostics": diagnostics,
                 **token_details,
+                **({'thermal': self.thermal.record()} if self.thermal is not None else {}),
             },
             flags=tuple(dict.fromkeys(flags)),
         )
@@ -662,6 +707,8 @@ class EpisodeRuntimeAdapter:
     def cleanup(
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> AdapterResult:
+        if self.thermal is not None:
+            self.thermal.close()
         if self.runtime is None:
             return AdapterResult(ok=True)
         result = self.runtime.cleanup(config, context)

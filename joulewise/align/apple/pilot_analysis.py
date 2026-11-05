@@ -175,6 +175,8 @@ def episode_ineligibility_reasons(member):
     other = [c for c in member.get('exclusion_codes', []) if c != 'thermal.os_level_nonzero']
     s = member['summary']
     other.extend(f for f in s.get('flags', ()) if f.startswith('episode.deadman:'))
+    other.extend(f for f in s.get('flags', ()) if f.startswith(('thermal.start_gate_timeout',
+        'thermal.gate_timeout:', 'thermal.hold_timeout:', 'thermal.state_unobserved')))
     thermal = s.get('os_thermal', {}).get('os_level_nonzero_in_episode')
     if thermal is None:
         other.append('no_valid_os_reading_inside_or_bracketing_episode')
