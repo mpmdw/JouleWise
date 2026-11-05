@@ -580,30 +580,35 @@ class Fixture:
         spec.loader.exec_module(conv)
         return conv
 
-    def converted(self, profile):
-        out = self.conv_dir / profile
-        if not (out / "manifest.json").exists():
+    def converted(self, profile, **options):
+        """Convert once; the manifest's sha256 is recorded next to the artifact
+        at conversion time and is the pin every later load must present."""
+        name = profile + "".join(f"-{k}{v}" for k, v in sorted(options.items()))
+        out, pin = self.conv_dir / name, self.conv_dir / f"{name}.manifest.sha256"
+        if not (out / "manifest.json").exists() or not pin.exists():
             if out.exists():
                 import shutil
                 shutil.rmtree(out)
             self.reference.build_checkpoint()
-            self.converter().convert(self.reference.ckpt, out, profile=profile)
+            self.converter().convert(self.reference.ckpt, out, profile=profile, **options)
+            pin.write_text(_sha(out / "manifest.json") + "\n")
         return out
 
-    def model(self, profile, **overrides):
-        """Load through mlx-lm's ``model_file`` hook after verifying the sha256
-        manifest; no bytecode is written into the model directory (it would
-        break the manifest's file inventory)."""
-        key = (profile, json.dumps(overrides, sort_keys=True))
+    def manifest_pin(self, profile, **options):
+        name = profile + "".join(f"-{k}{v}" for k, v in sorted(options.items()))
+        self.converted(profile, **options)
+        return (self.conv_dir / f"{name}.manifest.sha256").read_text().strip()
+
+    def model(self, profile, convert_options=None, **overrides):
+        """Load through ``load_verified_model`` (both pins: the manifest sha256
+        recorded at conversion, the converter's module pin) and mlx-lm's
+        ``model_file`` hook; ``overrides`` are mlx-lm ``model_config`` keys."""
+        options = convert_options or {}
+        key = (profile, json.dumps(options, sort_keys=True), json.dumps(overrides, sort_keys=True))
         if key not in self._models:
-            from mlx_lm.utils import load_model
-            path = self.converted(profile)
-            self.converter().verify_manifest(path)
-            previous, sys.dont_write_bytecode = sys.dont_write_bytecode, True
-            try:
-                model, _ = load_model(path, model_config=overrides or None)
-            finally:
-                sys.dont_write_bytecode = previous
+            path = self.converted(profile, **options)
+            model, _ = self.converter().load_verified_model(path, self.manifest_pin(profile, **options),
+                                                            model_config=overrides or None)
             model.eval()
             self._models[key] = model
         return self._models[key]
@@ -1337,6 +1342,58 @@ class ValidationRound1Test(unittest.TestCase):
         self.assertLessEqual(growth, 32 * 1024, trace)
         # The derived value is the protocol's: pad tokens still ahead.
         self.assertEqual(np.array(linear[1].left_padding).tolist(), [0 - linear[1].offset, PAD_B - linear[1].offset])
+
+    # ------------------------------------ systems MEDIUM (verified loading)
+    def test_r1_load_verified_model_requires_both_pins(self):
+        """A missing manifest pin fails closed, and the manifest's module sha256
+        must equal its own qwen4_exp.py entry and the converter's module pin:
+        a module edited and re-signed (manifest recomputed, even re-pinned)
+        is refused before any of its code runs."""
+        import shutil
+        import tempfile
+        fx = self.fx
+        conv = fx.converter()
+        self.assertEqual(getattr(conv, "MODULE_SHA256", None), _sha(MODULE_FILE),
+                         "rebind MODULE_SHA256 in scripts/align_convert_qwen4_exp.py")
+        src, pin = fx.converted("bf16"), fx.manifest_pin("bf16")
+        marker = "JW_R1_TAMPERED_MODULE_RAN"
+
+        def resign(d, **fields):
+            man = json.loads((d / "manifest.json").read_text())
+            man["files"] = {k: _sha(d / k) for k in man["files"]}
+            man["module_sha256"] = man["files"]["qwen4_exp.py"]
+            man.update(fields)
+            (d / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
+            return _sha(d / "manifest.json")
+
+        with tempfile.TemporaryDirectory(dir=fx.ref_dir) as tmp:
+            evil = Path(tmp) / "evil"
+            shutil.copytree(src, evil)
+            mod = evil / "qwen4_exp.py"
+            mod.write_text(mod.read_text() + f"\nimport os\nos.environ['{marker}'] = '1'\n")
+            evil_pin = resign(evil)
+            os.environ.pop(marker, None)
+            for label, manifest_pin in (("no pin", None), ("empty pin", ""), ("re-pinned", evil_pin)):
+                with self.subTest(case=label):
+                    try:
+                        conv.load_verified_model(evil, manifest_pin)
+                        loaded = True
+                    except ValueError:
+                        loaded = False
+                    self.assertFalse(loaded, "a tampered module was loaded")
+                    self.assertNotIn(marker, os.environ, "tampered module code ran")
+                    os.environ.pop(marker, None)
+            # A module_sha256 field that disagrees with the file entry.
+            liar = Path(tmp) / "liar"
+            shutil.copytree(src, liar)
+            liar_pin = resign(liar, module_sha256="0" * 64)
+            with self.assertRaises(ValueError):
+                conv.load_verified_model(liar, liar_pin)
+            # No module pin at all.
+            with self.assertRaises((ValueError, TypeError)):
+                conv.load_verified_model(src, pin, expected_module_sha256=None)
+        model, _ = conv.load_verified_model(src, pin)
+        self.assertEqual(type(model).__name__, "Model")
 
 
 if __name__ == "__main__":

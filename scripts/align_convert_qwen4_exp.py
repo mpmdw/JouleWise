@@ -42,6 +42,10 @@ REPO = Path(__file__).resolve().parents[1]
 MODULE_FILE = REPO / "joulewise" / "align" / "models" / "qwen4_exp.py"
 FORMAT = "joulewise-qwen4-exp-canonical-v1"
 PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
+# sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
+# default. Rebind it with every module change (the canonical test checks it
+# against the file; canonical.md records it under "Pin").
+MODULE_SHA256 = "2543584c70fc6ddedb9182717820c090824492c340d20407a2807cb37d6ce2f0"
 EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
 DTYPES = {"BF16": "<u2", "F32": "<f4", "F16": "<f2", "I64": "<i8"}
@@ -263,20 +267,42 @@ def verify_manifest(directory, expected_manifest_sha256=None):
     return manifest
 
 
-def load_verified_model(directory, expected_manifest_sha256, lazy=False):
-    """Verify the externally pinned manifest before executing its Python."""
+def _is_sha256(value):
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def load_verified_model(directory, expected_manifest_sha256, lazy=False, *, expected_module_sha256=MODULE_SHA256,
+                        model_config=None):
+    """Verify the externally pinned manifest before executing its Python.
+
+    Both pins are required and fail closed: ``expected_manifest_sha256`` (the
+    sha256 of the artifact's ``manifest.json``, recorded when it was
+    converted) and ``expected_module_sha256`` (default: the canonical
+    module this converter pins, ``MODULE_SHA256``). The manifest's
+    ``module_sha256`` must equal its own ``qwen4_exp.py`` entry and the pin."""
+    if not _is_sha256(expected_manifest_sha256):
+        raise ValueError("load_verified_model requires the artifact's pinned manifest sha256 (64 lowercase hex)")
+    if not _is_sha256(expected_module_sha256):
+        raise ValueError("load_verified_model requires a pinned qwen4_exp.py sha256 (64 lowercase hex)")
     manifest = verify_manifest(directory, expected_manifest_sha256)
+    module_entry = manifest["files"].get("qwen4_exp.py")
+    if module_entry is None or manifest.get("module_sha256") != module_entry:
+        raise ValueError("manifest module_sha256 disagrees with its qwen4_exp.py entry")
+    if module_entry != expected_module_sha256:
+        raise ValueError(f"artifact module {module_entry[:12]} is not the pinned module {expected_module_sha256[:12]}")
     import importlib.metadata
     for package, version in PINS.items():
         if importlib.metadata.version(package) != version:
             raise ValueError(f"pinned stack mismatch: {package}")
     if manifest["format"] != FORMAT:
         raise ValueError("unsupported artifact format")
+    if json.loads((Path(directory) / "config.json").read_text()).get("model_file") != "qwen4_exp.py":
+        raise ValueError("artifact config.json must load qwen4_exp.py")
     previous = sys.dont_write_bytecode
     sys.dont_write_bytecode = True
     try:
         from mlx_lm.utils import load_model
-        return load_model(Path(directory), lazy=lazy, strict=True)
+        return load_model(Path(directory), lazy=lazy, strict=True, model_config=model_config)
     finally:
         sys.dont_write_bytecode = previous
 
