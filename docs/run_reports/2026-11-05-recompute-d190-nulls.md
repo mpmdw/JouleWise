@@ -2,7 +2,7 @@
 
 Branch: `lane/2026-11-05-recompute-d190-nulls`, from local `origin/main`
 `92026c1849c0f053e56bdac6110c079211db2c31`. Local only; no push.
-**Implementation prepared; full S10 verification remains blocked below.**
+**Continuation: item 1 verified; item 2 implementation and rerun follow.**
 
 ## Authority and intake
 
@@ -100,7 +100,7 @@ the existing test source is unchanged and passes. The new interval-coverage
 probe initially omitted unrelated copied block lists; it now isolates the
 three leaves under test and their routing rows. Final checks above pass.
 
-## Synthetic null probes and limits
+## Initial a43d84b27 probes and limits (historical)
 
 The in-memory n=1 estimator probe records **8 null agreements**; a refused
 floor probe records **7 null agreements**. These are separate assertions over
@@ -117,7 +117,7 @@ release will now achieve end-to-end recompute agreement. A representation
 change for these placeholders is a separate follow-up, not silently included
 in null equality. No study outcome or actual release readiness is inferred.
 
-## NEEDS_RULING — full S10 directory exception
+## Initial NEEDS_RULING — resolved by the continuation brief
 
 Question: may the full S10 run access only its own freshly generated
 synthetic `restricted/` directories inside this clone? The standing user rule
@@ -150,3 +150,63 @@ then record fresh exits and totals here before claiming full acceptance.
 Commit identity is reported by this lane's `git log` and the task reply.
 The next exact step is the user's directory ruling, followed by that synthetic
 acceptance sequence if allowed. All other work is ready for lead review.
+
+## Continuation item 1 — full S10 baseline
+
+The lead ruled blind on 2026-11-05 that fresh synthetic `restricted/`
+directories under TMPDIR or this clone are allowed. This resolves the
+directory early-return above. Real study custody remains prohibited. The
+second supplied ruling selects the n<2 representation follow-up; it is
+implemented and reported separately below. No coordination task was
+registered and no lead-owned state file was edited. Mission M0 and targeted
+D-190 / plan / registration authority were re-read; no active stop card.
+The existing named lane was clean at `a43d84b27`. No agents were delegated.
+
+Ran the full S10 restore → r2 real driver → unchanged `a43d84b27` recompute
+→ unchanged comparator. Every final driver row is `ok`, through step 11;
+`completed_without_tooling_refusal=true`. Driver, recompute and comparator
+exits are **0 / 0 / 0**. The no-template renderer flag remains expected.
+
+| Case | Comparisons | Numeric agreements | Categorical agreements | agree_null | Disagreements | Uncovered | Unmapped |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Fresh baseline | 2,514 | 1,490 | 1,024 | 0 | 0 | 1,056 | 0 |
+
+Null agreements by reason: **{}**. Coverage has 1,384 normalized paths,
+328 compared, 340 named numeric/null exemption paths (a subset of the
+1,056 uncovered paths), 0 unbound, 0 nonfinite and no absent sources. This
+reproduces the readiness lane's **2,514 comparisons / 0 disagreements**;
+its counts are not substituted for this fresh evidence. The ordinary S10
+fixture does not exercise an n<2 estimator. Its lack of null agreements
+is not evidence for or against that branch. Full-size meter streams remain
+unexercised.
+
+Exact invocation, from `.scratch-d190/r2`:
+
+```sh
+TMPDIR="$PWD/.scratch-s10f/tmp/baseline" JW_B5_SYNTHETIC_ONLY=1 JW_B5_S10_REAL_PROGRAMS=1 JW_B5_S10_CHAIN_CACHE="$PWD/.scratch-s10f/tmp/baseline/fixtures" JOULEWISE_B5_VDL=on python3.13 -B ../../docs/process_traces/2026-11-05-recompute-d190-nulls/synthetic_run.py
+```
+
+The saved runner is byte-identical to the readiness lane's runner. The
+existing joined harness supplies only its documented synthetic Git seams;
+no arithmetic or program callable is replaced. One driver worker. Actual
+executing r2 source is `929fc65c9ce3ff82f0311d28acf76a682edd466f`;
+the record's Git anchor belongs to the synthetic harness, as before.
+All restored inputs and new custody are inside the clone-local scratch
+TMPDIR and are retained. The r2 tracked tree is unchanged. Local Git
+exclude `/.scratch-s10f/` keeps that worktree's generated storage ignored.
+
+Driver/setup/restore wall time: **2551.72 s**; this is synthetic acceptance
+execution, separate from the bounded unittest budget, with no hardware
+performance claim. The [baseline summary](../process_traces/2026-11-05-recompute-d190-nulls/baseline-summary.json)
+records exact command vectors, exits, source/bar/artifact hashes, step
+statuses and counts. Recompute flags are the existing intentional fixture
+features: 19 archive-file-missing, 3 trace-plist-missing, 3 missing pre-bound
+and 3 absent-meter flags. Comparator structure flags are empty.
+
+Targeted baseline check: `JW_B5_SYNTHETIC_ONLY=1 python3.13 -B -m unittest
+tests.independent_recompute.test_d190_nulls` — **14 tests, OK, 0.053 s**.
+An initial runner setup used the wrong working directory and its launch
+failed before fixture restore; the task-created misplaced files were
+removed and the corrected invocation above supplied all evidence.
+No network, real data, production pipeline, quiet-machine measurement,
+full suite, push or merge was used.
