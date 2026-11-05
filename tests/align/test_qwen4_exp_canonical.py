@@ -1653,6 +1653,59 @@ class ValidationRound1Test(unittest.TestCase):
         ids = [fx.seqs["seq_a"]]
         self.assertEqual(float(np.abs(run(lazy, ids) - run(sharded, ids)).max()), 0.0)
 
+    def test_r1_manifest_hashing_is_parallel_chunked_and_uncached(self):
+        """Every verified load re-hashed the artifact on one thread (~108 GB
+        of weights plus the single 102 GB n-gram file, ~136 s at 1.54 GB/s),
+        through the page cache. Files and chunks of large files now hash on a
+        thread pool with F_NOCACHE; files up to the chunk size keep their
+        plain sha256, so the module and manifest pins are unchanged."""
+        import fcntl
+        import hashlib
+        import shutil
+        import tempfile
+        import threading
+        from unittest import mock
+        fx = self.fx
+        conv = fx.converter()
+        rng = __import__("numpy").random.default_rng(3)
+        with tempfile.TemporaryDirectory(dir=fx.ref_dir) as tmp:
+            tmp = Path(tmp)
+            a, b, big = tmp / "a.bin", tmp / "b.bin", tmp / "big.bin"
+            for f, n in ((a, 1000), (b, 4096), (big, 8192)):
+                f.write_bytes(rng.bytes(n))
+            got = conv.hash_files([a, b, big], chunk_bytes=4096)
+            raw = big.read_bytes()
+            self.assertEqual(got[a], hashlib.sha256(a.read_bytes()).hexdigest())
+            self.assertEqual(got[b], hashlib.sha256(b.read_bytes()).hexdigest())
+            self.assertEqual(got[big], hashlib.sha256(hashlib.sha256(raw[:4096]).digest()
+                                                      + hashlib.sha256(raw[4096:]).digest()).hexdigest())
+            # Two files, and two chunks of one file, must be hashed concurrently.
+            original = conv._range_digest
+            for label, paths in (("files", [a, b]), ("chunks", [big])):
+                barrier = threading.Barrier(2, timeout=30)
+
+                def gated(*args, _orig=original, _barrier=barrier):
+                    _barrier.wait()
+                    return _orig(*args)
+
+                with self.subTest(parallel=label), mock.patch.object(conv, "_range_digest", gated):
+                    conv.hash_files(paths, chunk_bytes=4096, workers=4)
+            with mock.patch.object(fcntl, "fcntl", wraps=fcntl.fcntl) as spy:
+                conv.hash_files([a, big], chunk_bytes=4096)
+            nocache = [c for c in spy.call_args_list if c.args[1:] == (48, 1)]
+            self.assertEqual(len(nocache), 3, spy.call_args_list)
+            # The artifact records the scheme; a pre-round-1 manifest (no
+            # "digest" entry: plain sha256 everywhere) still verifies.
+            src = fx.converted("bf16")
+            manifest = conv.verify_manifest(src, fx.manifest_pin("bf16"))
+            self.assertEqual(manifest["digest"]["chunk_bytes"], conv.HASH_CHUNK_BYTES)
+            old = tmp / "old"
+            shutil.copytree(src, old)
+            man = json.loads((old / "manifest.json").read_text())
+            del man["digest"]
+            (old / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
+            conv.verify_manifest(old, _sha(old / "manifest.json"))
+
 
 if __name__ == "__main__":
     unittest.main()

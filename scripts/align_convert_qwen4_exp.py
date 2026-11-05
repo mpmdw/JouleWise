@@ -29,6 +29,7 @@ Generation`` serialization, or an fp32 one) into the format loaded by
   module's own (one source of truth), so this script imports mlx.
 """
 import argparse
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -39,11 +40,12 @@ import shutil
 import stat
 import struct
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 MODULE_FILE = REPO / "joulewise" / "align" / "models" / "qwen4_exp.py"
-FORMAT = "joulewise-qwen4-exp-canonical-v1"
+FORMAT = "joulewise-qwen4-exp-canonical-v2"
 PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 # sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
 # default. Rebind it with every module change (the canonical test checks it
@@ -61,12 +63,65 @@ def load_rules(module_file=MODULE_FILE):
     return rules
 
 
-def sha256(path):
-    h = hashlib.sha256()
-    with Path(path).open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+# Manifest digests (validation round 1: one thread re-hashed ~210 GB per
+# verified load, ~136 s, pulling the 102 GB n-gram table through the page cache
+# right before a 108 GB weight load). Files and fixed-size chunks of large files
+# are hashed on a thread pool (hashlib releases the GIL), reading with
+# F_NOCACHE. A file of at most HASH_CHUNK_BYTES gets its plain sha256; a larger
+# one the sha256 of its consecutive chunk digests concatenated, so one huge
+# file still hashes in parallel. The manifest records the scheme.
+HASH_CHUNK_BYTES = 256 * 2 ** 20
+HASH_WORKERS = max(1, min(8, os.cpu_count() or 1))
+_F_NOCACHE = getattr(fcntl, "F_NOCACHE", 48 if sys.platform == "darwin" else None)
+_READ_BYTES = 8 * 2 ** 20
+_PLAIN = 1 << 62  # chunk size of pre-round-1 manifests: plain sha256 for every file
+
+
+def _range_digest(path, start, length, nofollow=False):
+    """Raw sha256 of ``length`` bytes at ``start``, bypassing the file cache."""
+    fd = os.open(path, os.O_RDONLY | (getattr(os, "O_NOFOLLOW", 0) if nofollow else 0))
+    try:
+        if _F_NOCACHE is not None:
+            try:
+                fcntl.fcntl(fd, _F_NOCACHE, 1)
+            except OSError:
+                pass
+        h, pos, end = hashlib.sha256(), start, start + length
+        while pos < end:
+            block = os.pread(fd, min(_READ_BYTES, end - pos), pos)
+            if not block:
+                raise ValueError(f"file shrank while hashing: {path}")
+            h.update(block)
+            pos += len(block)
+        return h.digest()
+    finally:
+        os.close(fd)
+
+
+def hash_files(paths, chunk_bytes=HASH_CHUNK_BYTES, workers=HASH_WORKERS, nofollow=False):
+    """Manifest digests (hex) of ``paths``: {Path: digest}. ``nofollow``
+    refuses symlinks (artifact payloads); conversion inputs may be links
+    into a hub cache."""
+    paths = [Path(p) for p in paths]
+    sizes = {p: os.stat(p, follow_symlinks=not nofollow).st_size for p in paths}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        jobs = {p: [pool.submit(_range_digest, p, start, min(chunk_bytes, sizes[p] - start), nofollow)
+                    for start in range(0, max(sizes[p], 1), chunk_bytes)] for p in paths}
+        out = {}
+        for p in paths:
+            digests = [job.result() for job in jobs[p]]
+            out[p] = digests[0].hex() if sizes[p] <= chunk_bytes else hashlib.sha256(b"".join(digests)).hexdigest()
+    return out
+
+
+def sha256(path, chunk_bytes=HASH_CHUNK_BYTES):
+    """Manifest digest of one file (its plain sha256 up to ``chunk_bytes``)."""
+    return hash_files([path], chunk_bytes)[Path(path)]
+
+
+def digest_scheme(chunk_bytes=HASH_CHUNK_BYTES):
+    return dict(algorithm="sha256", chunk_bytes=chunk_bytes,
+                large_files="sha256 of the concatenated sha256 digests of consecutive chunk_bytes ranges")
 
 
 def tensor_header(path):
@@ -285,7 +340,7 @@ def _stamp(st):
     return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
 
 
-def _verify(directory, expected_manifest_sha256=None):
+def _verify(directory, expected_manifest_sha256=None, known_digests=None):
     """Verification core: (manifest, verified bytes of manifest/config/module,
     file stamps). Every payload entry must be a regular file inside the
     directory (no symlinks); the small files are read once and the bytes
@@ -316,19 +371,23 @@ def _verify(directory, expected_manifest_sha256=None):
             raise ValueError(f"unexpected entry in artifact: {entry.name}")
     if files != set(manifest["files"]) | {"manifest.json"}:
         raise ValueError("manifest file inventory mismatch")
+    chunk = int(manifest.get("digest", {}).get("chunk_bytes", _PLAIN))
     stamps, blobs = {"manifest.json": _stamp(_lstat_regular(directory / "manifest.json"))}, {"manifest.json": raw}
     for name in _READ_ONCE[1:]:
         if name in manifest["files"]:
             st = _lstat_regular(directory / name)
             blobs[name] = (directory / name).read_bytes()
-            if hashlib.sha256(blobs[name]).hexdigest() != manifest["files"][name]:
+            if len(blobs[name]) > chunk or hashlib.sha256(blobs[name]).hexdigest() != manifest["files"][name]:
                 raise ValueError(f"manifest sha256 mismatch: {name}")
             stamps[name] = _stamp(st)
-    for name, expected in manifest["files"].items():
-        if name in blobs:
-            continue
+    rest = [name for name in manifest["files"] if name not in blobs]
+    for name in rest:
         stamps[name] = _stamp(_lstat_regular(directory / name))
-        if sha256(directory / name) != expected:
+    todo = [name for name in rest if name not in (known_digests or {})]
+    digests = {p.name: d for p, d in hash_files([directory / n for n in todo], chunk, nofollow=True).items()}
+    digests.update({n: known_digests[n] for n in rest if n not in digests})
+    for name in rest:
+        if digests[name] != manifest["files"][name]:
             raise ValueError(f"manifest sha256 mismatch: {name}")
     manifest["ignored_bytecode"] = sorted(ignored)
     return manifest, blobs, stamps
@@ -527,14 +586,17 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
                  "chat_template.jinja", "vocab.json", "merges.txt"):
         if (checkpoint / name).is_file():
             shutil.copyfile(checkpoint / name, output / name)
+    inputs = hash_files([checkpoint / "config.json", *input_files])
+    outputs = hash_files([p for p in sorted(output.iterdir()) if p.is_file()], nofollow=True)
     manifest = dict(format=FORMAT, pins=PINS, profile=profile, group_size=group_size, ngram_storage=ple_storage,
-                    ngram_tables=ngram_manifest, module_sha256=sha256(module_file),
+                    ngram_tables=ngram_manifest, module_sha256=outputs[output / "qwen4_exp.py"],
                     norm_representation="raw HF zero-centered; runtime 1 + w",
-                    omitted_keys=omitted, quantized=sorted(quant_cfg),
-                    inputs={p.name: sha256(p) for p in [checkpoint / "config.json", *input_files]},
-                    files={p.name: sha256(p) for p in sorted(output.iterdir()) if p.is_file()})
+                    omitted_keys=omitted, quantized=sorted(quant_cfg), digest=digest_scheme(),
+                    inputs={p.name: d for p, d in inputs.items()},
+                    files={p.name: d for p, d in outputs.items()})
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    verify_manifest(output)
+    # Structure check of what was just written; its bytes were hashed above.
+    _verify(output, known_digests=manifest["files"])
     return manifest
 
 
