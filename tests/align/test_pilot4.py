@@ -9,7 +9,6 @@ import math
 from pathlib import Path
 import random
 import shutil
-import subprocess
 import sys
 import tempfile
 from types import ModuleType, SimpleNamespace
@@ -176,7 +175,7 @@ class KitTests(unittest.TestCase):
             values.add(actual)
         self.assertEqual(len(values), 22)
 
-    def test_preregistered_table_equals_seed_law_for_indices_1_to_26(self):
+    def test_preregistered_table_equals_seed_law_for_indices_1_to_36(self):
         # Independently hash the protocol text's literal inputs, then check the
         # runtime/factory route too. The table is supplied, never runtime-derived.
         from joulewise.align.apple.pilot import offline_shade_task
@@ -189,22 +188,40 @@ class KitTests(unittest.TestCase):
             task = offline_shade_task(**spec.task_kwargs)
             config = BenchmarkConfig.from_mapping(h.read(ROOT / m['config_path']))
             table = kit.EXPECTED_EPISODE_SEEDS[pair]
-            self.assertEqual(len(table), 26)
-            for i in range(1, 27):
+            self.assertEqual(len(table), 36)
+            for i in range(1, 37):
                 raw = json.dumps(['align-p4-v1', 'qwen3-30b-a3b', 'thinking_on', 'shade/' + pair, i],
                                  separators=(',', ':'), ensure_ascii=True).encode('utf-8')
                 self.assertEqual(int.from_bytes(hashlib.sha256(raw).digest()[:8], 'big'), table[i - 1])
                 self.assertEqual(episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair, i), table[i - 1])
 
-    def test_anchor_configs_and_sizing_are_byte_identical_to_pilot7_parent(self):
+        values = [value for table in kit.EXPECTED_EPISODE_SEEDS.values() for value in table]
+        self.assertEqual(len(values), 72)
+        self.assertEqual(len(set(values)), 72)
+        # Protocol: MLX accepts unsigned 64-bit seeds, including 2**64 - 1.
+        self.assertTrue(all(type(value) is int and 0 <= value < 2**64 for value in values))
+
+    def test_anchor_configs_and_sizing_match_pilot8_parent_sha256(self):
+        # Byte-identity pins from pilot 8 commit
+        # e328f0e72da6c64986932d4443338d7317cc0ed9; no lane-only Git objects needed.
+        anchors = {
+            1: '6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58',
+            2: '6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8',
+            3: '56105368782182d14e5dbd125854de1dff888cad4c1c25d21aa6820fcf2062d2',
+            4: '5b893b05211f36450bb60c7c01b39ec1721415022c65797d0c2fb3831d1a7bfa',
+            9: '4849f43451c4fa7e28f3ca57a73be825ad709f1ab923e0804aae5e725fe82d1b',
+            14: 'a0cb52b7c68b26492b078c572802b520e63adce24ab933e8e656d919c324780e',
+            19: 'c6783380aef6869afdbe907ad7c9c8b97c0036874d3b6ec9728dba7dd136cfa7',
+            28: 'a5dd8c51ad09a62e6fe271dfb879b6b354dbf90c7598eb4f0066bc80e30ad48f',
+        }
         plan = h.read(ROOT / kit.KIT / 'collection_plan.json')
-        parent = '50bf73f78ff108286c356c5542b8de35fe180d81'
-        paths = [m['config_path'] for m in plan['members'] if m['ordinal'] in (1, 2, 3, 4, 9, 14, 19, 28)]
-        self.assertEqual(len(paths), 8)
-        paths.append((kit.KIT / 'registration/sizing_b5.json').as_posix())
-        for path in paths:
-            self.assertEqual((ROOT / path).read_bytes(), subprocess.check_output(
-                ['git', '-C', str(ROOT), 'show', parent + ':' + path]), path)
+        members = [m for m in plan['members'] if m['ordinal'] in anchors]
+        self.assertEqual(len(members), 8)
+        for m in members:
+            self.assertEqual(hashlib.sha256((ROOT / m['config_path']).read_bytes()).hexdigest(),
+                             anchors[m['ordinal']], m['config_path'])
+        self.assertEqual(hashlib.sha256((ROOT / kit.KIT / 'registration/sizing_b5.json').read_bytes()).hexdigest(),
+                         '8e52a898c4793e56e90e496742e60cf00bf53ce3278ae292577f1ddeaef4aae6')
 
     def test_planning_statistics_and_spans_are_source_derived(self):
         evidence = h.read(ROOT / kit.KIT / 'registration/sizing_evidence.json')
@@ -227,11 +244,11 @@ class KitTests(unittest.TestCase):
         originals = [m for m in members if not m['is_replay']]
         cells = [('spam_filter_update', 'benign'), ('bank_transfer_2', 'sabotage'),
                  ('spam_filter_update', 'sabotage'), ('bank_transfer_2', 'benign')]
-        self.assertEqual(kit.SEED_INDICES, (1, *range(17, 27)))
+        self.assertEqual(kit.SEED_INDICES, (1, *range(27, 37)))
         self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition)
                           for m in originals[:4]], cells)
         fresh = []
-        for seed in range(17, 27):
+        for seed in range(27, 37):
             rows = [m for m in originals if m['spec'].seed == seed]
             pairs = ['spam_filter_update', 'bank_transfer_2'] if seed % 2 else ['bank_transfer_2', 'spam_filter_update']
             self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition)
@@ -244,7 +261,7 @@ class KitTests(unittest.TestCase):
             expected.append((*replays[ordinal], 1) if ordinal in replays else next(remaining))
         self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition, m['seed_index'])
                           for m in members], expected)
-        # Anchors: seed-1 originals and replays retain pilots 4-7's ordinals (1-based).
+        # Anchors: seed-1 originals and replays retain pilots 4-8's ordinals (1-based).
         self.assertEqual([i for i, m in enumerate(members, 1) if m['spec'].seed == kit.ANCHOR_SEED_INDEX], [1, 2, 3, 4, 9, 14, 19, 28])
         self.assertTrue(all(m['spec'].seed == kit.ANCHOR_SEED_INDEX for m in members if m['is_replay']))
         for i, m in enumerate(members):
@@ -310,7 +327,7 @@ def coefficient_bundle(root, rid, pair, condition, seed, rows):
 
 
 class AnalysisTests(unittest.TestCase):
-    def test_pilot8_production_shaped_28_bundle_desk_and_one_bit_seed_flip(self):
+    def test_pilot9_production_shaped_28_bundle_desk_and_one_bit_seed_flip(self):
         """Real desk/attribution/provenance/residual paths; all compute/sensors synthetic."""
         from tests.align.test_apple_campaign import base_config
         from tests.test_align_pilot_session import SessionPrepareTests
@@ -384,12 +401,12 @@ class AnalysisTests(unittest.TestCase):
                     self.assertEqual({r['run_id'] for r in scores if r['method'] == 'full_benign_fit'}, sabotage)
                     self.assertEqual({r['seed'] for r in scores if r['method'] == 'full_benign_fit'}, {1})
                     self.assertEqual({r['seed'] for r in scores if r['method'] == 'leave_one_trajectory_out'},
-                                     {1, *range(17, 27)})
+                                     {1, *range(27, 37)})
                 curve = scope['counts_logged_headline']['tamper_detection_curve']
                 self.assertEqual({r['run_id'] for r in curve}, sabotage)
             # Change exactly one recorded per-turn seed bit in a fresh benign
             # bundle, leaving the registered table and bundle seed unchanged.
-            victim = next(m for m in collection['members'] if m['seed_index'] == 17)
+            victim = next(m for m in collection['members'] if m['seed_index'] == 27)
             path = runs / victim['run_id'] / 'outputs/align_turns.jsonl'
             turns = [json.loads(line) for line in path.read_text().splitlines()]
             turns[0]['generation']['sampler']['per_turn_seed'] ^= 1
