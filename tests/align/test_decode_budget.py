@@ -326,7 +326,13 @@ class AnchorRegressionTests(unittest.TestCase):
             self.assertIsNone(spec.deadman_s)
 
     def test_120_second_guard_checks_only_at_turn_boundaries(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory() as parent:
+            # Exercise macOS-style aliased temp paths on every platform.
+            real_root = Path(parent)/'canonical'
+            real_root.mkdir()
+            alias = Path(parent)/'alias'
+            alias.symlink_to(real_root, target_is_directory=True)
+            d = str(alias)
             clock = ScaledClock(20)
             with scale_work(clock):
                 bundle, status, _ = run_native_review(Path(d), 'think', clock,
@@ -358,7 +364,7 @@ class AnchorRegressionTests(unittest.TestCase):
             payloads['policy'] = json.dumps({k: provenance[k] for k in
                 ('sampler', 'output_policy', 'episode_outcome')}, sort_keys=True)
             for name, text in payloads.items():
-                normalized = text.replace(d, '<synthetic-root>')
+                normalized = text.replace(str(Path(d).resolve()), '<synthetic-root>').replace(d, '<synthetic-root>')
                 self.assertEqual(hashlib.sha256(normalized.encode()).hexdigest(), expected[name], name)
 
 
