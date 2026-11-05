@@ -86,7 +86,7 @@ def check_maxfit_storage(model, reference, path, profile):
             raise AssertionError("Maxfit PLE disk length mismatch")
 
 
-def mlx_checks(directory, dtype, profile=None):
+def mlx_checks(directory, dtype, profile=None, replay_reference=None):
     import numpy as np
     import mlx.core as mx
     from mlx_lm.utils import load_model
@@ -104,6 +104,27 @@ def mlx_checks(directory, dtype, profile=None):
     model.eval()
     evidence = dict(dtype=dtype, quantized=quantized, profile=profile, checks=[])
     tol = TOLERANCES[dtype]
+
+    if replay_reference:
+        # The synthetic fixture has zero indexer projections and nonzero
+        # attention K/V. Export the port's actual ordered selection, then
+        # monkeypatch the official topk indices in its separate interpreter.
+        indexer = model.layers[1].self_attn.indexer
+        length, ratio = ids.shape[1], model.args.indexer_compress_ratio
+        selected, keep = indexer(mx.zeros((1, length, model.args.hidden_size)),
+                                 mx.arange(length)[None], mx.ones((1, length), dtype=mx.bool_), None)
+        mx.eval(selected, keep)
+        selected, keep = np.array(selected), np.array(keep)
+        orders = [(selected[0, i, :model.args.indexer_budget:ratio][
+            keep[0, i, :model.args.indexer_budget:ratio]] // ratio).tolist() for i in range(length)]
+        order_file = directory / "mlx-qsa-order.json"
+        order_file.write_text(json.dumps(orders))
+        evidence["reference_replay"] = json.loads(run([
+            replay_reference, "-B", str(ROOT / "tests/align/qwen4_exp_reference.py"),
+            str(directory), "--replay-qsa-order", str(order_file)]))
+        if evidence["reference_replay"]["alternative_ties_max_abs"] <= 1e-6:
+            raise AssertionError("Tie fixture did not distinguish arbitrary and forced block selection")
+        gold = np.load(directory / "forced-gold.npz")
 
     def array(value):
         mx.eval(value)
@@ -144,7 +165,10 @@ def mlx_checks(directory, dtype, profile=None):
     cache, chunks = model.make_cache(), []
     for i in range(0, ids.shape[1], 3):
         chunks.append(array(model(inputs[:, i:i + 3], cache=cache)))
-    close("chunked_prefill", np.concatenate(chunks, axis=1), full)
+    chunked = np.concatenate(chunks, axis=1)
+    close("chunked_prefill", chunked, full)
+    if replay_reference:
+        close("hf_forced_chunked", chunked, gold["chunked"])
     if api.can_trim_prompt_cache(cache):
         raise AssertionError("Hybrid recurrent cache must not advertise trimming")
     # Causality with sparse selection active and nonempty query-local tails.
@@ -215,6 +239,8 @@ class TestGoldParity(unittest.TestCase):
             stdout = run([cls.ref, "-B", str(ROOT / "tests/align/qwen4_exp_reference.py"),
                           str(cls.root / dtype), "--dtype", dtype])
             print(stdout.strip())
+        print(run([cls.ref, "-B", str(ROOT / "tests/align/qwen4_exp_reference.py"),
+                   str(cls.root / "fp32-ties"), "--force-qsa-ties"]).strip())
         # Probe in an isolated process: an unavailable device can raise again
         # at interpreter shutdown. It must not hide numerical test failures.
         probe = subprocess.run([cls.mlx, "-B", "-c", "import mlx.core as mx; mx.eval(mx.array([0])); print('MLX_OK')"],
@@ -245,6 +271,10 @@ class TestGoldParity(unittest.TestCase):
         self.require_mlx()
         print(run([self.mlx, "-B", __file__, "--mlx-worker", str(self.root / "bf16"), "bf16"]))
 
+    def test_gold_fp32_forced_qsa_ties(self):
+        self.require_mlx()
+        print(run([self.mlx, "-B", __file__, "--mlx-ties-worker", str(self.root / "fp32-ties"), self.ref]))
+
     def test_mixed_quantization(self):
         self.require_mlx()
         print(run([self.mlx, "-B", __file__, "--mlx-worker", str(self.root / "bf16"), "bf16", "mixed"]))
@@ -262,5 +292,8 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--mlx-worker":
         sys.path.insert(0, str(ROOT))
         mlx_checks(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--mlx-ties-worker":
+        sys.path.insert(0, str(ROOT))
+        mlx_checks(sys.argv[2], "fp32", replay_reference=sys.argv[3])
     else:
         unittest.main()

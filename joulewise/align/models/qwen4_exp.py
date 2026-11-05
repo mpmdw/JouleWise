@@ -298,6 +298,33 @@ class GatedDeltaNet(nn.Module):
         return self.out_proj(out.reshape(b, s, -1))
 
 
+def qsa_topk(scores, k):
+    """Exact QSA order: score descending, then original block index ascending.
+
+    MLX's argsort is stable. Partitioning alone is unordered, including at
+    exact zero ties from ReLU. Retain its O(N) selection when the cut is
+    unique, sorting only K selected entries; a straddling tie in any row
+    requires an O(N log N) stable sort of the batch. The exact tie check
+    synchronizes one boolean to the host. No epsilon perturbs score ranks.
+    """
+    if not 0 < k <= scores.shape[-1]:
+        raise ValueError("QSA k must be within the block count")
+    if k == scores.shape[-1]:
+        return mx.argsort(-scores, axis=-1)
+    top = mx.argpartition(-scores, k - 1, axis=-1)[..., :k]
+    cut = mx.take_along_axis(scores, top, axis=-1).min(axis=-1, keepdims=True)
+    # More than K entries >= the selected minimum means an exact tie crosses
+    # the cut. This also handles masked -inf entries without subtraction.
+    crosses = (scores >= cut).sum(axis=-1) > k
+    if mx.any(crosses).item():
+        return mx.argsort(-scores, axis=-1)[..., :k]
+    # Establish ascending block order before the stable score sort, since
+    # argpartition's order is unspecified even when its selected set is unique.
+    top = mx.sort(top, axis=-1)
+    order = mx.argsort(-mx.take_along_axis(scores, top, axis=-1), axis=-1)
+    return mx.take_along_axis(top, order, axis=-1)
+
+
 class QSAIndexer(nn.Module):
     # Peer cross-check: PR1788 qwen4_exp.py:252-344. Official lines 716-750
     # define blocks over each query's visible list and append its own tail.
@@ -336,7 +363,7 @@ class QSAIndexer(nn.Module):
         visible = mx.arange(blocks)[None, None] < complete[..., None]
         scores = mx.where(visible, scores, -mx.inf)
         topk = min(a.indexer_budget // r, blocks)
-        top = mx.argpartition(-scores, topk - 1, axis=-1)[..., :topk]
+        top = qsa_topk(scores, topk)
         picked = mx.take_along_axis(visible, top, axis=-1)
         tok = left[:, None, None, None] + top[..., None] * r + mx.arange(r)[None, None, None]
         good = mx.broadcast_to(picked[..., None], tok.shape)

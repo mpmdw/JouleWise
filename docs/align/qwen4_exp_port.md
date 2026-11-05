@@ -155,6 +155,24 @@ community module was imported, executed or copied wholesale.
 
 ## Deliberate differences and limits
 
+- **Deterministic QSA ties.** Complete blocks are selected and emitted by
+  `(score descending, block index ascending)` in prefill, chunked prefill and
+  stepwise decode. Block indices are relative to each row's first real token;
+  causal visibility and the query-local incomplete tail are unchanged. Exact
+  zero ties are common because each head contributes `relu(q·k)`; no epsilon
+  is added to scores. The official Torch topk leaves ties unspecified, so
+  different tied subsets can legitimately produce different attention output.
+  `qsa_topk` uses argpartition and an exact cutoff-count check. If no tie
+  straddles the cut, it sorts only the K selected blocks (index first, then a
+  stable score sort). If any row straddles, it stably sorts all N blocks.
+  Selection cost is O(N + K log K) normally, O(N log N) on the tied fallback,
+  plus one host synchronization for the tie check. Early queries' masked
+  `-inf` ties can also trigger the fallback in a prefill batch. This costs
+  more than the previous unordered argpartition; native latency is unmeasured.
+  The forced-ties gold variant exports actual MLX block orders and replays
+  them by patching both Torch topk APIs **only inside QSA**. It compares all
+  three modes and checks that an alternative admissible zero-tie subset
+  changes logits. This isolates agreement modulo ties without changing MoE.
 - **Text only.** Official `Qwen4ExpForCausalLM` lines 1568-1664 uses no MTP
   module. Ordinary next-token logits therefore need neither the speculative
   MTP head nor the vision tower. Their checkpoint keys are explicitly logged
@@ -299,7 +317,7 @@ cold real-model latency and SSD traffic remain unmeasured.
    /private/tmp/jwsol/venv-ref/bin/python -B -m unittest tests.align.test_qwen4_exp_parity
    ```
 
-   Required result: all seven tests pass, **zero skips**, with worker error
+   Required result: all eight tests pass, **zero skips**, with worker error
    logs retained. The environment-specific paths are examples from this
    session; use existing appropriate venvs on the target, without modifying
    the protected venvs. A fresh reviewer must audit implementation and tests
