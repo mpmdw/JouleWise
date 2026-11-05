@@ -263,7 +263,7 @@ class CacheTests(unittest.TestCase):
     def test_spec_legacy_bytes_and_governed_policy_digest(self):
         spec = episode_spec(hidden=False)
         legacy = asdict(spec)
-        for key in ('prompt_cache', 'enable_thinking', 'max_context_tokens', 'sampler', 'max_episode_seconds'):
+        for key in ('prompt_cache', 'enable_thinking', 'max_context_tokens', 'sampler', 'max_episode_seconds', 'thermal'):
             if legacy[key] is None:
                 del legacy[key]
         self.assertEqual(spec.to_text(), json.dumps(legacy, sort_keys=True, separators=(',', ':'), allow_nan=False))
