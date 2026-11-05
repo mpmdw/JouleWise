@@ -58,15 +58,15 @@ class KitTests(unittest.TestCase):
         self.assertEqual(len(chain.stage_plan(tree)),len(tree['stage_graph']))
         collection=json.loads(files[kit.KIT/'collection_plan.json'])
         self.assertEqual(collection['seeds_per_cell'], {'benign': 11, 'sabotage': 1})
-        self.assertEqual(collection['seed_indices'], [1, *range(27, 37)])
-        self.assertEqual(collection['cross_session_anchor_of'][-1], 'align-pilot-20261105T015948125148Z')
+        self.assertEqual(collection['seed_indices'], [1, *range(37, 47)])
+        self.assertEqual(collection['cross_session_anchor_of'][-1], 'align-pilot-20261105T102850144782Z')
         members=collection['members']
         self.assertEqual(len(members),28)
         self.assertEqual([m['block'] for m in members], ['A'] * 28)
         originals = [m for m in members if not m['is_replay']]
         self.assertEqual(len(originals),24)
         self.assertEqual(len([m for m in originals if m['seed_index'] == 1]), 4)
-        for seed in range(27, 37):
+        for seed in range(37, 47):
             fresh = [m for m in originals if m['seed_index'] == seed]
             self.assertEqual(len(fresh), 2)
             self.assertEqual({m['condition'] for m in fresh}, {'benign'})

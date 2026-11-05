@@ -175,7 +175,7 @@ class KitTests(unittest.TestCase):
             values.add(actual)
         self.assertEqual(len(values), 22)
 
-    def test_preregistered_table_equals_seed_law_for_indices_1_to_36(self):
+    def test_preregistered_table_equals_seed_law_for_indices_1_to_46(self):
         # Independently hash the protocol text's literal inputs, then check the
         # runtime/factory route too. The table is supplied, never runtime-derived.
         from joulewise.align.apple.pilot import offline_shade_task
@@ -188,22 +188,22 @@ class KitTests(unittest.TestCase):
             task = offline_shade_task(**spec.task_kwargs)
             config = BenchmarkConfig.from_mapping(h.read(ROOT / m['config_path']))
             table = kit.EXPECTED_EPISODE_SEEDS[pair]
-            self.assertEqual(len(table), 36)
-            for i in range(1, 37):
+            self.assertEqual(len(table), 46)
+            for i in range(1, 47):
                 raw = json.dumps(['align-p4-v1', 'qwen3-30b-a3b', 'thinking_on', 'shade/' + pair, i],
                                  separators=(',', ':'), ensure_ascii=True).encode('utf-8')
                 self.assertEqual(int.from_bytes(hashlib.sha256(raw).digest()[:8], 'big'), table[i - 1])
                 self.assertEqual(episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair, i), table[i - 1])
 
         values = [value for table in kit.EXPECTED_EPISODE_SEEDS.values() for value in table]
-        self.assertEqual(len(values), 72)
-        self.assertEqual(len(set(values)), 72)
+        self.assertEqual(len(values), 92)
+        self.assertEqual(len(set(values)), 92)
         # Protocol: MLX accepts unsigned 64-bit seeds, including 2**64 - 1.
         self.assertTrue(all(type(value) is int and 0 <= value < 2**64 for value in values))
 
-    def test_anchor_configs_and_sizing_match_pilot8_parent_sha256(self):
-        # Byte-identity pins from pilot 8 commit
-        # e328f0e72da6c64986932d4443338d7317cc0ed9; no lane-only Git objects needed.
+    def test_anchor_configs_and_sizing_match_pilot9_base_sha256(self):
+        # Byte-identity pins from pilot 9 plus ledger-pin base commit
+        # 4b77e09c6e8286816ef7dacf6d2449ef906ac394; no lane-only Git objects needed.
         anchors = {
             1: '6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58',
             2: '6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8',
@@ -244,11 +244,11 @@ class KitTests(unittest.TestCase):
         originals = [m for m in members if not m['is_replay']]
         cells = [('spam_filter_update', 'benign'), ('bank_transfer_2', 'sabotage'),
                  ('spam_filter_update', 'sabotage'), ('bank_transfer_2', 'benign')]
-        self.assertEqual(kit.SEED_INDICES, (1, *range(27, 37)))
+        self.assertEqual(kit.SEED_INDICES, (1, *range(37, 47)))
         self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition)
                           for m in originals[:4]], cells)
         fresh = []
-        for seed in range(27, 37):
+        for seed in range(37, 47):
             rows = [m for m in originals if m['spec'].seed == seed]
             pairs = ['spam_filter_update', 'bank_transfer_2'] if seed % 2 else ['bank_transfer_2', 'spam_filter_update']
             self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition)
@@ -261,7 +261,7 @@ class KitTests(unittest.TestCase):
             expected.append((*replays[ordinal], 1) if ordinal in replays else next(remaining))
         self.assertEqual([(m['spec'].task_kwargs['task_pair'], m['spec'].condition, m['seed_index'])
                           for m in members], expected)
-        # Anchors: seed-1 originals and replays retain pilots 4-8's ordinals (1-based).
+        # Anchors: seed-1 originals and replays retain pilots 4-9's ordinals (1-based).
         self.assertEqual([i for i, m in enumerate(members, 1) if m['spec'].seed == kit.ANCHOR_SEED_INDEX], [1, 2, 3, 4, 9, 14, 19, 28])
         self.assertTrue(all(m['spec'].seed == kit.ANCHOR_SEED_INDEX for m in members if m['is_replay']))
         for i, m in enumerate(members):
@@ -327,7 +327,7 @@ def coefficient_bundle(root, rid, pair, condition, seed, rows):
 
 
 class AnalysisTests(unittest.TestCase):
-    def test_pilot9_production_shaped_28_bundle_desk_and_one_bit_seed_flip(self):
+    def test_pilot10_production_shaped_28_bundle_desk_and_one_bit_seed_flip(self):
         """Real desk/attribution/provenance/residual paths; all compute/sensors synthetic."""
         from tests.align.test_apple_campaign import base_config
         from tests.test_align_pilot_session import SessionPrepareTests
@@ -401,12 +401,12 @@ class AnalysisTests(unittest.TestCase):
                     self.assertEqual({r['run_id'] for r in scores if r['method'] == 'full_benign_fit'}, sabotage)
                     self.assertEqual({r['seed'] for r in scores if r['method'] == 'full_benign_fit'}, {1})
                     self.assertEqual({r['seed'] for r in scores if r['method'] == 'leave_one_trajectory_out'},
-                                     {1, *range(27, 37)})
+                                     {1, *range(37, 47)})
                 curve = scope['counts_logged_headline']['tamper_detection_curve']
                 self.assertEqual({r['run_id'] for r in curve}, sabotage)
             # Change exactly one recorded per-turn seed bit in a fresh benign
             # bundle, leaving the registered table and bundle seed unchanged.
-            victim = next(m for m in collection['members'] if m['seed_index'] == 27)
+            victim = next(m for m in collection['members'] if m['seed_index'] == 37)
             path = runs / victim['run_id'] / 'outputs/align_turns.jsonl'
             turns = [json.loads(line) for line in path.read_text().splitlines()]
             turns[0]['generation']['sampler']['per_turn_seed'] ^= 1
