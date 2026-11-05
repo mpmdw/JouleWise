@@ -46,6 +46,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # Eager imports cover every formerly lazy run/dead-man/rehearse dependency,
 # so importing this driver during preflight catches failures before installation.
+from joulewise.strict_io import sha256_path_bytes as _sha256_path
+
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_off
@@ -182,10 +184,6 @@ def _build_code_map(codes: set[str] | frozenset[str]) -> dict[str, str]:
 
 
 _CODES = _build_code_map({code for code in NIGHT_GATE_REASON_CODES | NIGHT_DRIVER_REASON_CODES if code.startswith("night_")})
-
-
-def _sha256_path(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 _SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}")

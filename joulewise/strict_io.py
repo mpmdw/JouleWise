@@ -39,3 +39,7 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256_path_bytes(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()

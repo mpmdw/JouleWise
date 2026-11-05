@@ -52,6 +52,8 @@ from typing import Any, Callable, Mapping
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.strict_io import sha256_path_bytes as sha256_path
+
 from joulewise.calibration_exits import RefusalCode, emit_calibration_refusal  # noqa: E402
 from joulewise.calibration_epoch_continuation import acceptance_judged_epochs  # noqa: E402
 from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
@@ -803,10 +805,6 @@ def _write_text_artifact(path: Path, payload: str, stage: WriterStage) -> None:
         handle.write(raw[split:])
         handle.flush()
         os.fsync(handle.fileno())
-
-
-def sha256_path(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _derive_active_capture_clock_evidence(*, stamps, records):

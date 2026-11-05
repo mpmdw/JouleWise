@@ -24,6 +24,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.strict_io import sha256_path_bytes as _sha256
+
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.phase_share import (
     Interval,
@@ -43,10 +45,6 @@ BOX_BASIS = "stored_current_wire_phase_envelope_lower_upper_j"
 
 class PhaseShareAnalysisRefused(RuntimeError):
     """The bundle does not carry the evidence required by this diagnostic."""
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _phase_envelope(summary: dict[str, Any], phase: str) -> dict[str, Any]:
