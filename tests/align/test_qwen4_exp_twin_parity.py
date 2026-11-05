@@ -617,6 +617,70 @@ def stage_mlx(work: Path):
 
 
 # ===========================================================================
+# Review regressions (2026-11-05 review of the port). Each probe reproduces a
+# confirmed finding against the pinned reference, so reintroducing the bug
+# fails here. Stages ``ref_regress`` (venv-ref) and ``mlx_regress``
+# (venv-mlx); artifacts live under ``<work>/regress``.
+# ===========================================================================
+
+# Config validation: (TINY_TEXT_CONFIG overrides). The reference rejects every
+# case except "valid"; the port must agree case by case.
+REG_VALIDATION = {
+    "valid": {},
+    "experts_per_tok_0": {"num_experts_per_tok": 0},
+    "experts_per_tok_gt_experts": {"num_experts_per_tok": 9},
+    "experts_0": {"num_experts": 0},
+    "moe_intermediate_0": {"moe_intermediate_size": 0},
+    "shared_intermediate_0": {"shared_expert_intermediate_size": 0},
+    "indexer_budget_0": {"indexer_budget": 0},
+    "indexer_heads_0": {"indexer_n_heads": 0},
+}
+
+
+def _ref_validation():
+    from transformers.models.qwen4_exp.configuration_qwen4_exp import Qwen4ExpTextConfig
+    out = {}
+    for name, over in REG_VALIDATION.items():
+        try:
+            Qwen4ExpTextConfig(**dict(TINY_TEXT_CONFIG, **over))
+            out[name] = None
+        except Exception as exc:  # noqa: BLE001 -- recorded, compared case by case
+            out[name] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+def stage_ref_regress(work: Path):
+    import torch
+
+    torch.set_num_threads(2)
+    reg = work / "regress"
+    reg.mkdir(parents=True, exist_ok=True)
+    meta = {"validation": _ref_validation()}
+    meta["peak_rss_bytes"] = _peak_rss()
+    (reg / "ref_meta.json").write_text(json.dumps(meta, indent=2))
+
+
+def _mlx_validation(tw):
+    out = {}
+    for name, over in REG_VALIDATION.items():
+        try:
+            tw.TextModelArgs.from_dict(dict(TINY_TEXT_CONFIG, **over))
+            out[name] = None
+        except ValueError as exc:
+            out[name] = str(exc)
+    return out
+
+
+def stage_mlx_regress(work: Path):
+    from joulewise.align.models import qwen4_exp_twin as tw
+
+    reg = work / "regress"
+    res = {"validation": _mlx_validation(tw)}
+    res["peak_rss_bytes"] = _peak_rss()
+    (reg / "mlx_results.json").write_text(json.dumps(res, indent=2))
+
+
+# ===========================================================================
 # Driver (system python, stdlib only)
 # ===========================================================================
 
@@ -636,6 +700,7 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
         cls.work = Path(tempfile.mkdtemp(prefix="qwen4_exp_twin_", dir=str(TMP_ROOT)))
         me = str(Path(__file__).resolve())
         _run(VENV_REF, me, "ref", str(cls.work))
+        _run(VENV_REF, me, "ref_regress", str(cls.work))
         ckpt = cls.work / "hf_ckpt"
         cls.manifests = {
             "fp32": _convert(ckpt, cls.work / "mlx_fp32", "--dtype", "float32", "--no-quantize",
@@ -679,11 +744,14 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
         for name, extra in attribution.items():
             _convert(ckpt, cls.work / name, "--dtype", "bfloat16", "--group-size", "32", *extra)
         _run(VENV_MLX, me, "mlx", str(cls.work))
+        _run(VENV_MLX, me, "mlx_regress", str(cls.work))
         cls.ref_meta = json.loads((cls.work / "ref_meta.json").read_text())
         cls.res = json.loads((cls.work / "mlx_results.json").read_text())
+        cls.reg_ref = json.loads((cls.work / "regress" / "ref_meta.json").read_text())
+        cls.reg = json.loads((cls.work / "regress" / "mlx_results.json").read_text())
         summary = {"work": str(cls.work), "ref_meta": {k: v for k, v in cls.ref_meta.items()
                                                        if not k.startswith(("seq", "ext", "trim"))},
-                   "results": cls.res}
+                   "results": cls.res, "regressions": cls.reg}
         (cls.work / "summary.json").write_text(json.dumps(summary, indent=2))
         print(f"\n[qwen4_exp_twin parity] summary: {cls.work / 'summary.json'}", file=sys.stderr)
 
@@ -829,10 +897,25 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
     def test_stage_memory_under_budget(self):
         self.assertLess(self.ref_meta["peak_rss_bytes"], RSS_LIMIT_BYTES)
         self.assertLess(self.res["mlx_peak_rss_bytes"], RSS_LIMIT_BYTES)
+        self.assertLess(self.reg_ref["peak_rss_bytes"], RSS_LIMIT_BYTES)
+        self.assertLess(self.reg["peak_rss_bytes"], RSS_LIMIT_BYTES)
 
+    # --- review regressions -------------------------------------------------------
+    def test_regress_config_validation_matches_reference(self):
+        ref, got = self.reg_ref["validation"], self.reg["validation"]
+        self.assertIsNone(ref["valid"])
+        for name in REG_VALIDATION:
+            with self.subTest(case=name):
+                if name != "valid":
+                    self.assertIsNotNone(ref[name], "reference accepted a case it should reject")
+                self.assertEqual(got[name] is None, ref[name] is None, (got[name], ref[name]))
+
+
+STAGES = {"ref": stage_ref, "mlx": stage_mlx,
+          "ref_regress": stage_ref_regress, "mlx_regress": stage_mlx_regress}
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] in ("ref", "mlx"):
-        {"ref": stage_ref, "mlx": stage_mlx}[sys.argv[1]](Path(sys.argv[2]))
+    if len(sys.argv) == 3 and sys.argv[1] in STAGES:
+        STAGES[sys.argv[1]](Path(sys.argv[2]))
     else:
         unittest.main()

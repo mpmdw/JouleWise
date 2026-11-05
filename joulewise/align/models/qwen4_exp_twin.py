@@ -158,6 +158,13 @@ class TextModelArgs(BaseModelArgs):
             raise ValueError("this port implements hidden_act == 'silu' only")
         if self.hc_count <= 1:
             raise ValueError("qwen4_exp requires hc_count > 1")
+        if self.num_experts <= 0:
+            raise ValueError(f"num_experts must be > 0, got {self.num_experts}")
+        if not 0 < self.num_experts_per_tok <= self.num_experts:
+            raise ValueError("num_experts_per_tok must be in [1, num_experts], got "
+                             f"{self.num_experts_per_tok} and {self.num_experts}")
+        if self.moe_intermediate_size <= 0 or self.shared_expert_intermediate_size <= 0:
+            raise ValueError("moe_intermediate_size and shared_expert_intermediate_size must be > 0")
         qsa = (
             self.indexer_n_heads,
             self.indexer_kv_heads,
@@ -167,6 +174,8 @@ class TextModelArgs(BaseModelArgs):
         )
         if any(v is None for v in qsa):
             raise ValueError("QSA indexer config is required (the reference always builds it)")
+        if any(v <= 0 for v in qsa):
+            raise ValueError(f"QSA indexer config values must be positive: {qsa}")
         if self.indexer_kv_heads != 1:
             raise ValueError("qwen4_exp QSA requires indexer_kv_heads == 1")
         if self.indexer_budget % self.indexer_compress_ratio:
