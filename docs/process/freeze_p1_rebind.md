@@ -73,6 +73,15 @@ New modules, tests and registration metadata have no predecessor to rebind.
 | `tests/test_digest_pin_census.py` | `5c83e04bc139f0b0d9b854e5d33394f98a95c0fb3557554be490d4ff8f9972ab` | `bdf8e98a552fda692c558e6d558060320c256df1629d7b83e3c4455681e7e0a4` |
 | `tests/test_repin.py` | `b15f3fb7498b00b4f880fe1b081a93ecd4db1ebaf9fa6c83830c4ac5ef75f3ad` | `7373df8cd28e63258fc36aae3135e53c91f2235d43f3916429346f4caf6a93ca` |
 
+| `tests/test_whole_window_inverted_corner_clamp.py` | `ab154bb78045669bce32b55177bb2101aa602ffc19a613650db069565ba25dfa` | `e648a0b1b7df84de10b494c895580c17f39b0a38440e974dd73952cd8596c9b0` |
+
+B1 (PR #649 fix round 1): retire the test module's worktree-byte pin on
+`tests/b5_analysis/test_frozen_files.py`. F1's registered Git trees preserve
+the original freeze independently of this test's evolving implementation.
+The estimator-byte and live-acceptance checks in the clamp module remain.
+The final fix-round report records the tree-wide old-digest audit, including
+historical occurrences outside the Kind-P census.
+
 ## Calibration dependency: deliberately unissued
 
 A178 is still `STAGED, not landed` in the kernel. `_anchor_coverage_ok` still
