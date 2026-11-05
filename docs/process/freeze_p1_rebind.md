@@ -28,6 +28,12 @@ local registration commits cannot supply authority. A missing origin/main
 ref refuses with `freeze_registration_origin_main_missing`; a missing or
 invalid registration also refuses, without a worktree fallback.
 
+Accepted residual (fix-round-3 lead ruling): a local operator can redirect
+`refs/remotes/origin/main` with `git update-ref refs/remotes/origin/main` and
+thereby replace its registration authority. This has the same local-ref
+trust level as the former origin/main containment gate; it is not a claim
+of remote authentication.
+
 The PR #649 fix-round-3 lead ruling requires HEAD to equal the peeled commit
 of the registration's **active_analysis**
 `b5/analysis` or `b5/analysis-r<k>` annotated tag, with its tag-object ID
@@ -114,7 +120,7 @@ New modules, tests and registration metadata have no predecessor to rebind.
 
 | Path | SHA-256 at analysis-r2 | SHA-256 after Phase 1 |
 | --- | --- | --- |
-| `configs/pins/registry.json` | `2482eee5eb846d597cf9d1e69893b41c2851bb8cb6acc4234345f79510eb190c` | `bfc1cef5724d1ec87e7816b48df83480ab52a5ecf33daa76021cdbdb1a5dd92c` |
+| `configs/pins/registry.json` | `2482eee5eb846d597cf9d1e69893b41c2851bb8cb6acc4234345f79510eb190c` | `bf7c400310f8c8ed4167fbbaa1f12b23487ddd81aad222d0b42635b105bd7e61` |
 | `joulewise/identity_pins.py` | `a102a7712559d62294db46836da9f900ee5281701ae366bf08c69287cc99e109` | `ad67633fbef04122ed3af9c034c6f8688015add31c89f300f1e3b38c61cba8fe` |
 | `joulewise/paper_custody.py` | `f2d3273e71b30f7a55e8eafcf4ebf7eb0afce64946ae9c7cbc224e8748ea2966` | `067dcc7029c6452e053a7a2cc56e7db7ed1c05baa1bc33bb8381314f18a72a40` |
 | `scripts/digest_pin_census.py` | `59be516f789a994d82d47a8ca3a79b45307265e43384b1f4ec3c55b089a604e0` | `4edac808870cc09ef798c02e749ee58efb7b3d9a4bfe7caca6a0c998e1d44c36` |
@@ -169,10 +175,14 @@ intake across 995 explicitly listed code/prose/metadata files, including
 `configs/pins/registry.json`. The narrower scope excludes measurement artifacts
 and records its limits; it supersedes the prior broad-audit claim.
 
-Of 13 matching lines, 11 are this historical rebind table and one is collection
-seal provenance. **X3 remains open:** the retired test digest still has a
-registry content pointer, which L1 warns is absent. It produces an extra warning
-and breaks the real-tree repin test even though `source_digest` is not admission
-authority. The run report records the blocking conflict between required broad
-regeneration/full repin verification and the standing prohibition on measurement
-reads. This is not classified as a resolved harmless occurrence.
+Of the audit snapshot's 13 matching lines, 11 were this historical rebind table,
+one was collection seal provenance, and one was the stale registry pointer.
+**X3 is resolved:** the lead ruled that the census hashes tracked files only,
+with no restricted paths, and authorized regeneration. `bae8c9ec6` removed the
+retired test's stale registry pointer. It also caught up three unchecked rows
+of pre-existing drift: two `issued_config` rows in
+`configs/analysis/b5/equivalence_open_indices.json` and one `synthetic_literal`
+row in `tests/b5_analysis/fixtures/equivalence/s10_remint.py`. Numeric target
+indices were renumbered; normalized rows show no other semantic drift. The
+old-digest audit remains the historical pre-regeneration snapshot. The run
+report records the fresh full-module repin verification.
