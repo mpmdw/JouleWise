@@ -148,19 +148,24 @@ def target_shape(key, entries):
     return tuple(shape)
 
 
-def tensor_chunks(key, entries, max_bytes=32 * 1024 * 1024):
+def tensor_chunks(key, entries, max_bytes=32 * 1024 * 1024, preserve_bf16=False):
+    """Map one input shard at a time; copy bounded slices before unmapping."""
     import numpy as np
     for _, path, original, shape, half in entries:
-        rows = max(1, max_bytes // (math.prod(shape[1:]) * 4))
         source, dtype = tensor_array(path, original)
         try:
+            raw_bf16 = preserve_bf16 and dtype == "BF16"
+            rows = max(1, max_bytes // (math.prod(shape[1:]) * (2 if raw_bf16 else 4)))
             for start in range(0, shape[0], rows):
                 sl = [slice(None)] * len(shape)
                 sl[0] = slice(start, min(start + rows, shape[0]))
                 if isinstance(half, int):
                     sl[-2] = slice(half * (shape[-2] // 2), (half + 1) * (shape[-2] // 2))
                 raw = source[tuple(sl)]
-                value = (raw.astype(np.uint32) << 16).view(np.float32) if dtype == "BF16" else raw.astype(np.float32)
+                if raw_bf16:
+                    value = np.array(raw, copy=True)
+                else:
+                    value = (raw.astype(np.uint32) << 16).view(np.float32) if dtype == "BF16" else raw.astype(np.float32)
                 if half == "expert":
                     value = value[None]
                 if key.endswith("conv1d.weight"):
@@ -168,6 +173,36 @@ def tensor_chunks(key, entries, max_bytes=32 * 1024 * 1024):
                 yield np.ascontiguousarray(value)
         finally:
             source._mmap.close()
+
+
+def write_ple_table(output, key, entries, shape, storage, max_bytes=32 * 1024 * 1024):
+    """Append numeric input shards into one row-major mmap file, never concatenate.
+
+    BF16 sources pass through as uint16 payloads without fp32 expansion or
+    re-rounding. The manifest records each source shard's output row/byte span.
+    """
+    import numpy as np
+    layer = int(key.split("layers.")[1].split(".")[0]) + 1
+    name = f"ple-{layer}.{storage}.bin"
+    descriptor = dict(path=name, rows=shape[0], dim=shape[1], storage=storage, group_size=shape[1])
+    row_bytes = rules.row_dtype(shape[1], storage).itemsize
+    shards, row = [], 0
+    with (Path(output) / name).open("xb") as f:
+        for entry in entries:
+            start = f.tell()
+            for chunk in tensor_chunks(key, [entry], max_bytes, preserve_bf16=storage == "bf16"):
+                encoded = chunk if storage == "bf16" and chunk.dtype == np.dtype("<u2") else rules.encode_rows(chunk, storage)
+                f.write(encoded.tobytes())
+            rows = entry[3][0]
+            if f.tell() - start != rows * row_bytes:
+                raise ValueError(f"Incomplete PLE shard: {entry[2]}")
+            shards.append(dict(input_file=entry[1].name, tensor=entry[2],
+                               row_start=row, row_stop=row + rows, byte_start=start, byte_stop=f.tell()))
+            row += rows
+        if row != shape[0] or f.tell() != shape[0] * row_bytes:
+            raise ValueError(f"Incomplete PLE table: {key}")
+        metadata = dict(**descriptor, size_bytes=f.tell(), source_shards=shards)
+    return descriptor, metadata
 
 
 def verify_manifest(directory, expected_manifest_sha256=None):
@@ -243,18 +278,15 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage=None
         import mlx.core as mx
         mx.eval(mx.array([0]))  # fail before creating output on unavailable device
     output.mkdir(parents=True)
-    descriptors, weight_map, quantization = {}, {}, dict(group_size=group_size, bits=4, mode="affine")
+    descriptors, ple_manifest, weight_map = {}, {}, {}
+    quantization = dict(group_size=group_size, bits=4, mode="affine")
     dtype_name = "F32" if profile == "fp32" else "BF16"
     for ordinal, (key, entries) in enumerate(sorted(inventory.items())):
         shape, quant = expected[key], quantizers[key]
         if ".ngram_embedding." in key:
             layer = int(key.split("layers.")[1].split(".")[0]) + 1
-            name = f"ple-{layer}.{ple_storage}.bin"
-            descriptor = dict(path=name, rows=shape[0], dim=shape[1], storage=ple_storage, group_size=shape[1])
-            with (output / name).open("xb") as f:
-                for chunk in tensor_chunks(key, entries):
-                    f.write(rules.encode_rows(chunk, ple_storage).tobytes())
-            descriptors[str(layer)] = descriptor
+            descriptors[str(layer)], ple_manifest[str(layer)] = write_ple_table(
+                output, key, entries, shape, ple_storage)
             continue
         name = f"model-{ordinal:05d}.safetensors"
         tensors = {key: (shape, dtype_name)}
@@ -265,7 +297,7 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage=None
                        base + "biases": ((*shape[:-1], shape[-1] // group_size), "BF16")}
             quantization[key[:-len(".weight")]] = quant
         writer = TensorFile(output / name, tensors)
-        for chunk in tensor_chunks(key, entries):
+        for chunk in tensor_chunks(key, entries, preserve_bf16=not quant and dtype_name == "BF16"):
             if quant:
                 arr = mx.array(chunk).astype(mx.bfloat16)
                 packed, scales, biases = mx.quantize(arr, **quant)
@@ -274,7 +306,9 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage=None
                 writer.write(base + "scales", np.array(scales.view(mx.uint16)).astype("<u2").tobytes())
                 writer.write(base + "biases", np.array(biases.view(mx.uint16)).astype("<u2").tobytes())
             else:
-                writer.write(key, rules.encode_rows(chunk, "fp32" if profile == "fp32" else "bf16").tobytes())
+                encoded = chunk if chunk.dtype == np.dtype("<u2") else rules.encode_rows(
+                    chunk, "fp32" if profile == "fp32" else "bf16")
+                writer.write(key, encoded.tobytes())
         writer.close()
         for tensor in tensors:
             weight_map[tensor] = name
@@ -293,7 +327,8 @@ def convert(checkpoint, output, profile="mixed", group_size=64, ple_storage=None
         if (checkpoint / name).is_file():
             shutil.copyfile(checkpoint / name, output / name)
     manifest = dict(format="joulewise-qwen4-exp-v1", pins=dict(mlx="0.31.2", mlx_lm="0.31.3"),
-                    profile=profile, ple_storage=ple_storage, norm_representation="raw HF zero-centered; runtime 1 + w",
+                    profile=profile, ple_storage=ple_storage, ple_tables=ple_manifest,
+                    norm_representation="raw HF zero-centered; runtime 1 + w",
                     omitted_keys=omitted, qsa_indexer="retained unquantized; strict shape inventory checked",
                     inputs={p.name: sha256(p) for p in [checkpoint / "config.json", *input_files]},
                     files={p.name: sha256(p) for p in sorted(output.iterdir()) if p.is_file()})

@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.models.qwen4_exp_tables import parameter_shapes, ple_storage_for, quantization_for
 from tests.align.qwen4_exp_reference import tiny_config_dict
@@ -46,6 +47,38 @@ class TestPolicy(unittest.TestCase):
         self.assertEqual(quantization_for(key, shapes[key], "mixed", 32)["bits"], 8)
 
 
+@unittest.skipUnless(importlib.util.find_spec("numpy"), "optional numpy required")
+class TestPLEStreaming(unittest.TestCase):
+    def test_bf16_shards_stream_exact_bits_with_manifest_spans(self):
+        import numpy as np
+        from scripts.align_convert_qwen4_exp import TensorFile, sources, tensor_chunks, write_ple_table
+        key = "model.layers.0.ple.ngram_embedding.weight"
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            # Include signed zero, infinities and NaN payloads: no fp32 roundtrip.
+            bits = np.array([0, 0x8000, 0x3f80, 0xbf80, 0x7f80, 0xff80, 0x7fc1, 0x7fff], dtype="<u2")
+            for ordinal, rows in ((2, 4), (0, 3), (1, 2)):
+                name = key.replace(".weight", f".shard_{ordinal}.weight")
+                writer = TensorFile(root / f"input-{2 - ordinal}.safetensors", {name: ((rows, 8), "BF16")})
+                writer.write(name, np.tile(bits, (rows, 1)).tobytes())
+                writer.close()
+            entries = sources(root)[0][key]
+            # Tiny cap forces multiple chunks within each source shard.
+            chunks = list(tensor_chunks(key, entries, max_bytes=32, preserve_bf16=True))
+            self.assertGreater(len(chunks), len(entries))
+            self.assertTrue(all(x.nbytes <= 32 and x.dtype == np.dtype("<u2") for x in chunks))
+            with patch("numpy.concatenate", side_effect=AssertionError("whole-table concatenation")), patch(
+                    "joulewise.align.models.qwen4_exp_tables.encode_rows",
+                    side_effect=AssertionError("BF16 payload must pass through")):
+                descriptor, manifest = write_ple_table(root, key, entries, (9, 8), "bf16", max_bytes=32)
+            self.assertEqual((root / descriptor["path"]).read_bytes(), np.tile(bits, (9, 1)).tobytes())
+            self.assertEqual(manifest["size_bytes"], 9 * 8 * 2)
+            spans = manifest["source_shards"]
+            self.assertEqual([(s["row_start"], s["row_stop"]) for s in spans], [(0, 3), (3, 5), (5, 9)])
+            self.assertEqual([(s["byte_start"], s["byte_stop"]) for s in spans], [(0, 48), (48, 80), (80, 144)])
+            self.assertEqual([s["tensor"] for s in spans], [e[2] for e in entries])
+
+
 @unittest.skipUnless(all(importlib.util.find_spec(x) for x in ("torch", "transformers", "safetensors")),
                      "optional torch/transformers/safetensors required")
 class TestConversion(unittest.TestCase):
@@ -75,7 +108,16 @@ class TestConversion(unittest.TestCase):
             output = root / "mlx"
             manifest = convert(source, output, "bf16", 32, "bf16")
             self.assertEqual(len(manifest["omitted_keys"]), 2)
+            ple = manifest["ple_tables"]["1"]
+            self.assertEqual(ple["storage"], "bf16")
+            self.assertEqual(len(ple["source_shards"]), 4)
+            self.assertEqual(ple["size_bytes"], ple["rows"] * ple["dim"] * 2)
+            self.assertIn(ple["path"], manifest["files"])
             index = json.loads((output / "model.safetensors.index.json").read_text())["weight_map"]
+            # Every retained weight, including norms and non-weight leaves, is BF16.
+            for name, shard in index.items():
+                with safe_open(output / shard, framework="pt") as f:
+                    self.assertEqual(f.get_tensor(name).dtype, torch.bfloat16, name)
             key = "model.layers.1.self_attn.indexer.index_qk_proj.weight"
             with safe_open(output / index[key], framework="pt") as f:
                 self.assertEqual(f.get_tensor(key).dtype, torch.bfloat16)

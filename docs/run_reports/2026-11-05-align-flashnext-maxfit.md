@@ -55,3 +55,31 @@ These are accounting estimates, not native measurements or admission results.
 Validation: `python3.13 -B -m unittest tests.align.test_qwen4_exp_memory`:
 **3 PASS**, 0.039 s, including exact expert and non-expert byte counts,
 bf16 PLE, hardware-limit boundaries, negative headroom and JSON serialization.
+
+## Item 3 — bounded bf16 PLE streaming
+
+The converter maps one numeric input shard at a time and copies bounded row
+slices into the output mmap file. BF16 source payloads pass through unchanged
+as uint16 bits, avoiding fp32 expansion and re-rounding (also for retained
+model weights). Non-bf16 sources are still rounded into bf16 by bounded slices.
+One flat row-major file per PLE layer preserves the existing mmap reader;
+the completion manifest now includes each table's descriptor, total bytes,
+and every input shard's output row and byte span. Input/output hashes remain
+in the same manifest, written only after successful conversion.
+
+Synthetic validation forces 32-byte chunks across shuffled, separate input
+shard files, checks numeric order, exact bits including signed zero/infinities/
+NaN payloads, and refuses both concatenation and encoding on the bf16 copy
+path. Full tiny bf16 conversion checks every retained tensor's dtype and
+manifest coverage. The mmap test independently supplies raw bf16 payloads and
+checks exact fp32 bit expansion, deduplicated gather bytes, no affine metadata,
+and a copied result. BF16 lookup does **no affine dequantization**; it expands
+only gathered rows to fp32 for transfer to MLX.
+
+- Offline reference Python `-B -m unittest tests.align.test_qwen4_exp_conversion`:
+  **6 PASS**, 13.334 s.
+- Reference Python `-B -m unittest tests.align.test_qwen4_exp_tables`:
+  **4 PASS**, 0.185 s.
+
+The 102.4 GB release table was not materialized or read here. Bounded behavior
+is demonstrated on synthetic shards; native target-Mac performance remains open.
