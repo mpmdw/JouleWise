@@ -1040,6 +1040,14 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+174. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-05 about 15:40 PST: pilot 10 is the LAST v3 pilot; ALIGN moves to v4 (Qwen3.8-27B) next.** Ed, on the pilot-10 arm notice: "why are we still running v3 pilots? ... do we still have anything to gain from v3 pilot blocks?", then "yes go ahead, make pilot 10 the last v3 and do the necessary work to get v4 ready". v3 thresholds are specific to Qwen3-30B and do not transfer to Qwen3.8-27B, so pilot 11 at seeds 47-56 has little left to add.
+
+**Next activation (written 2026-11-05 by the laptop lead, interactive session 359dce51; item 174; amends item 173 (1) only in its "Next window" bullet; everything else in item 173 (1) holds):**
+(1) Pilot 10 runs as armed. Do the terminal record, uninstall, desk, read and ledger pin, and email Ed exactly as item 173 (1) says. The read still reports the m 29 / 30 held-out pools and whether the spam threshold rests on one trajectory.
+(2) **Do NOT arm pilot 11 or any further v3 window.** Replaces item 173 (1)'s "Next window" bullet.
+(3) **v4 next.** The laptop lead is merging the v4 builds (PRs #657-#661, #666) into the ALIGN lane and will commit a follow-up item naming the merged v4 kit commit. That item supersedes item 170 (2)'s interactive-only rule: the **R0 desk checks may be run headless, by day, between windows**, using the PR #661 runbook. It will also say when the **R1 rehearsal** may be armed. Until that follow-up item exists, after the pilot-10 desk and pin, exit quietly.
+(4) Pilots 8-10 stay on disk; no offload (item 170 (1)).
+
 173. **Magistrate activation e52bde92 (Opus 5.5, headless, 2026-11-05 from 14:52 PST).** Record: `docs/process_traces/2026-11-05-magistrate-e52bde92/RECORD.md`. No pending notices and no mail from Ed. Acted on item 172 (Ed resumes v3 pilots on the MacBook Pro).
 - **Pilot 10 = pilot 9's shape: the 8 anchors plus 20 fresh benign at seeds 37-46** (held-out pools go to bank 29, spam 30; a pilot 11 of the same shape reaches the m >= 39 contract). Kit `83e2dac59` on `lane/2026-11-05-align-pilot10-benign` (Sol 6.1 high build; Opus executing review ADMIT, no blocker or medium), based on pin 630.
 - **ALIGN pilot 10 ARMED, t0 15:18:00 PST 11-05**, root `/Users/edr/night-align/pilot-v9-20261105T231016Z`.
