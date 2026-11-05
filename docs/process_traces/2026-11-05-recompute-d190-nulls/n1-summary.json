@@ -1,0 +1,16 @@
+{
+  "agree_null": {
+    "by_reason": {
+      "not_estimable:insufficient_complete_blocks": 26
+    },
+    "total": 26
+  },
+  "case": "n1_registered_estimator_fields",
+  "comparisons": 26,
+  "disagreements": 0,
+  "numeric_agreements": 0,
+  "scope": "26 estimator fields only; no full-window routing or step-11 coverage assessment",
+  "synthetic_only": true,
+  "uncovered": null,
+  "unmapped": null
+}

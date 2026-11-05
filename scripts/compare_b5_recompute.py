@@ -2361,7 +2361,12 @@ def compare_contrasts(c, custody, ours):
         c.word("outcome_word", f"{cid}/holm_reject", multiplicity.get("rejected"), mine.get("holm_reject"),
                named(tests, "reject"), lambda t: t["reject"])
         c.numeric("count", f"{cid}/n", est.get("n"), mine.get("n"))
-        c.numeric("count", f"{cid}/df", est.get("df"), mine["n"] - 1 if finite(mine.get("n")) else None)
+        # D-190: the registered n<2 estimator has no degrees of freedom.
+        # Read the explicit recompute null; a numeric placeholder still disagrees.
+        own_df = (mine.get("df") if finite(mine.get("n")) and mine["n"] < 2
+                  else mine["n"] - 1 if finite(mine.get("n")) else None)
+        c.nullable_numeric("count", f"{cid}/df", est.get("df"), own_df,
+                           null_reasons=reasons if "df" in mine else (None, None))
         c.exact("kept_units", f"{cid}/kept_quads", kept_blocks(get(row, "bundle_blocks", "blocks", default=None)),
                 sorted(mine["kept_quads"]) if mine.get("kept_quads") else None)
         evaluation = row.get("claim_evaluation") or {}

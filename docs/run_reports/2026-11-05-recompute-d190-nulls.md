@@ -2,7 +2,7 @@
 
 Branch: `lane/2026-11-05-recompute-d190-nulls`, from local `origin/main`
 `92026c1849c0f053e56bdac6110c079211db2c31`. Local only; no push.
-**Continuation: item 1 verified; item 2 implementation and rerun follow.**
+**Both continuation items complete: fresh full S10 before/after passes; n<2 null fix and synthetic probes pass.**
 
 ## Authority and intake
 
@@ -210,3 +210,156 @@ failed before fixture restore; the task-created misplaced files were
 removed and the corrected invocation above supplied all evidence.
 No network, real data, production pipeline, quiet-machine measurement,
 full suite, push or merge was used.
+
+## Continuation item 2 — registered n<2 recompute nulls
+
+The supplied second blind lead ruling resolves the former numeric D/p
+placeholder boundary: when the registered estimator does not exist,
+recompute emits its registered not-estimable null, never a number.
+
+- `scripts/independent_recompute_b5.py`: n=0/1 has null D, raw p, adjusted p
+  and df; null estimator/interval values carry the independently established
+  `insufficient_complete_blocks` reason. Deterministic terms are empty.
+  Primary, timing-bound sensitivity, scaled allowance and LOO partner tests
+  preserve nulls. Holm retains the frozen m=2 denominator and never rejects
+  a null test. Numeric pairs retain the same arithmetic.
+- `scripts/compare_b5_recompute.py`: the n<2 df comparison reads the emitted
+  null instead of fabricating n−1. Missing df and numeric df still disagree;
+  all registered reason checks and rule (3) remain. No bar was changed.
+- `tests/independent_recompute/test_d190_nulls.py`: n=0/1 raw/finalized rows,
+  full synthetic recompute CLI across all three bound variants, real engine
+  n=1 null-shape parity, frozen-m Holm, partner n=0/1, explicit df presence,
+  and injected numeric placeholders. The native contrast-field test now
+  has 13 null agreements instead of the former 8.
+- `tests/independent_recompute/test_examples.py`: its old Holm missing-test
+  expectation was p=1; updated to null under the supplied ruling.
+- Ruling draft, this report and value-free trace metadata document both
+  items. No registered engine or sealed configuration was edited.
+
+The saved [n=1 probe](../process_traces/2026-11-05-recompute-d190-nulls/null_probe.py)
+runs the real independent CLI entrypoint on fresh synthetic ALPHA/BETA (n=5) and GAMMA
+(n=1) archives, then compares 13 estimator fields for each of the two
+contrasts to the real engine's synthetic n=1 output. Result: **26 comparisons,
+0 numeric agreements, 26 agree_null, 0 disagreements**; the complete reason
+count is **not_estimable:insufficient_complete_blocks = 26**.
+[Probe metadata](../process_traces/2026-11-05-recompute-d190-nulls/n1-summary.json).
+This is explicitly a field probe: uncovered/unmapped are **not assessed**,
+not zero. It is not a full-window routing/coverage certification. The valid
+full S10 chain requires at least five kept units (analysis plan §2.2), so
+its ordinary issued-output fixture and this n<2 probe are reported separately.
+
+### Final focused verification
+
+Modules ran one at a time with this command prefix:
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$PWD/.scratch-d190/tests-tmp" python3.13 -B -m unittest <module>
+```
+
+| Module | Tests | Final result |
+|---|---:|---|
+| `tests.independent_recompute.test_d190_nulls` | 20 | OK |
+| `tests.independent_recompute.test_examples` | 30 | OK |
+| `tests.independent_recompute.test_comparator` | 28 | OK |
+| `tests.independent_recompute.test_rc_cmp11` | 13 | OK |
+| `tests.independent_recompute.test_hygiene` | 6 | OK |
+| `tests.independent_recompute.test_input_gate` | 45 | OK |
+| `tests.independent_recompute.test_archives` | 14 | OK |
+| `tests.b5_analysis.test_step11_null_outcomes` | 9 | OK |
+
+**165 tests in the eight final passing runs**, 111.090 s wall time. The
+initial worked-example run failed its outdated p=1 expectation; only that
+expectation was corrected before its successful rerun. Exact vectors,
+individual times and the failed attempt are retained in
+[tests-summary.json](../process_traces/2026-11-05-recompute-d190-nulls/tests-summary.json).
+Before installing the patch, three scratch previews loaded the pending
+sources into the existing test modules with `exec(compile(source,
+module.__file__, 'exec'), module.__dict__)`, then used unittest's module
+loader: 18/19/19 tests, all OK, 1.216/1.984/3.195 s. Those are development
+checks, not the full S10 acceptance result. Including the earlier baseline
+module and failed attempt, targeted test time remains far below 20 minutes.
+Python 3.11 was not run.
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$PWD/.scratch-d190/tests-tmp" python3.13 -B docs/process_traces/2026-11-05-recompute-d190-nulls/null_probe.py docs/process_traces/2026-11-05-recompute-d190-nulls/n1-summary.json
+python3.13 -B -m compileall -q -x '(^|/)restricted(/|$)' joulewise tests scripts/compare_b5_recompute.py scripts/independent_recompute_b5.py docs/process_traces/2026-11-05-recompute-d190-nulls
+git diff --check
+```
+
+All exit 0. The full suite was not run, per the standing load/blinding
+instruction. The full S10 driver runs are separate synthetic acceptance
+executions and their wall times are recorded separately.
+
+### Patched full S10 rerun
+
+**PASS.** A second full restore → r2 real driver → patched recompute →
+patched comparator completed in fresh
+`.scratch-d190/r2/.scratch-s10f/tmp/patched/`. Every final driver step is
+`ok`, through 11; `completed_without_tooling_refusal=true`. The expected
+no-template renderer flag is unchanged. All three exits are **0 / 0 / 0**.
+Recompute `comparison_stopped=false`; comparator structure flags are empty.
+
+| Case | Comparisons | Numeric agreements | Categorical agreements | agree_null | Disagreements | Uncovered | Unmapped |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Fresh baseline, item 1 | 2,514 | 1,490 | 1,024 | 0 | 0 | 1,056 | 0 |
+| Patched full S10, item 2 | 2,514 | 1,490 | 1,024 | 0 | 0 | 1,056 | 0 |
+
+Null agreements by reason for **each full S10 run: {}**. The n=1 probe's
+separate count is **26**, all `not_estimable:insufficient_complete_blocks`;
+its uncovered/unmapped totals are not assessed. No probe count is added
+to either full S10 run. Both full runs match the readiness lane's 2,514
+comparisons / 0 disagreements.
+
+Both full runs have 1,384 normalized paths, 328 compared, 1,056 uncovered
+(including 340 named numeric/null exemption paths), 0 unmapped, 0 unbound,
+0 nonfinite and no absent sources. The entire coverage summary, every
+comparison-family count and the coded bar digest match the fresh baseline.
+The same intentional recompute fixture flags remain (19/3/3/3 as above).
+No numerical comparison bar or D-190 engine behavior was changed.
+
+Exact patched invocation from `.scratch-d190/r2`:
+
+```sh
+TMPDIR="$PWD/.scratch-s10f/tmp/patched" JW_B5_SYNTHETIC_ONLY=1 JW_B5_S10_REAL_PROGRAMS=1 JW_B5_S10_CHAIN_CACHE="$PWD/.scratch-s10f/tmp/patched/fixtures" JOULEWISE_B5_VDL=on python3.13 -B ../../docs/process_traces/2026-11-05-recompute-d190-nulls/synthetic_run.py
+```
+
+One driver worker. Actual r2 source remains
+`929fc65c9ce3ff82f0311d28acf76a682edd466f`; its tracked tree is unchanged.
+Driver/setup/restore wall time is **9670.73 s**. This is not a hardware
+performance comparison, and no cause is assigned to the longer runtime.
+Only this task's session was polled; the existing analysis job was not
+signalled or inspected. An optional process lookup was unavailable
+(`pgrep`: sysmon service not found); no permission override was attempted.
+The first metadata-summary attempt preceded the comparator file and failed
+with FileNotFoundError; rerunning it after the runner's terminal exit 0
+succeeded. No acceptance artifact was overwritten by that failed read.
+
+[Patched metadata](../process_traces/2026-11-05-recompute-d190-nulls/patched-summary.json)
+records exact child command vectors, source/bar/artifact hashes, driver
+statuses and totals. The summarizer verified the recompute output's source
+hash against the actual executing script. Both synthetic fixture caches,
+custody roots and comparison outputs remain in ignored scratch.
+
+### Final handoff and limits
+
+Changed code: the independent recompute and comparator's df binding.
+Changed tests: `test_d190_nulls.py` and the one superseded expectation in
+`test_examples.py`. Documentation: ruling draft, this report, and the trace
+runner/summarizer, n=1 probe and value-free verification summaries.
+
+No RUN_STATE, TASK_QUEUE, state kernel, test_gen_state, registered engine,
+sealed configuration or advisor-visible status file was changed. No full
+suite, production pipeline, quiet-machine measurement, real data access,
+network, push or merge was used. Final diff and protected-path checks pass.
+
+Item 1 is local commit **427f0c1d7**. Item 2 is the subsequent local commit
+`Emit registered n<2 nulls in independent recompute`; its hash is supplied
+by the final Git log/task reply (avoiding a self-referential report commit).
+No implementation question remains. Limits: Python 3.11 was not run; the
+full S10 fixture has no meter stream or n<2 estimator; the n=1 probe proves
+estimator-field equality, not full-window routing/coverage certification.
+These are synthetic results, not study release or hardware validation.
+
+Next exact step: the lead reviews the two continuation commits and the
+updated ruling draft. Decision-log adoption, any real release, and its
+live evidence/pin gates remain lead-owned.

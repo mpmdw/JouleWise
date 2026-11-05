@@ -1,6 +1,6 @@
 """Blind lead ruling, 2026-11-05: registered nulls have their own agreement status.
 
-All inputs are in-memory synthetic shapes. No custody or measurement path is opened.
+Inputs are synthetic shapes or fresh temporary synthetic archives. No study data is opened.
 """
 import copy
 import contextlib
@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from .support import recompute
+from .support import recompute, full_pack, run_cli
 from .test_comparator import cmp, verdict_row, recompute_output, DECODE, PREFILL
 
 
@@ -141,21 +141,33 @@ class ContrastNullTests(unittest.TestCase):
         del cells["Qwen3-8B-4bit/decode"]["null_reason"]
         self.assertNotIn("null_reason", recompute.contrast_floor(cells, "decode"))
 
-    def test_native_n1_estimator_nulls_agree_and_numeric_placeholders_disagree(self):
+    def test_native_n1_estimator_nulls_agree_and_numeric_placeholders_still_disagree(self):
         row, mine = self.verdicts["contrasts"][0], self.ours["contrasts"][DECODE]
-        row["estimator"].update(n=1, estimate=None, s_d=None, SE_total=None, t_critical_95=None,
+        row["estimator"].update(n=1, df=None, estimate=None, s_d=None, SE_total=None, t_critical_95=None,
                                 metrology_aware_CI95=None)
         row["deterministic_bounds"].update(total=None, terms=[], decision_interval=None)
         row["claim_evaluation"].update(outcome="not_estimable", reason_codes=["insufficient_complete_blocks"])
-        mine.update(recompute.contrast_stats([1.0], 2.75), outcome="not_estimable", loo=[])
+        row["multiplicity"].update(raw_p=None, adjusted_p=None, rejected=False)
+        mine.update(recompute.finish_contrast(recompute.contrast_stats([1.0], 2.75), .68, 103.5))
         c, rows = self.compare()
         for key in ("dbar_j", "s_d_j", "se_j", "t_critical", "metrology_interval_j/lower",
-                    "metrology_interval_j/upper", "decision_interval_j/lower", "decision_interval_j/upper"):
+                    "metrology_interval_j/upper", "decision_interval_j/lower", "decision_interval_j/upper", "D_j", "D_terms_j", "raw_p",
+                    "adjusted_p", "df"):
             self.assertEqual(rows[f"{DECODE}/{key}"]["status"],
                              "agree_null:not_estimable:insufficient_complete_blocks")
-        # The ruling never launders the independent program's existing numeric D into a null.
-        self.assertEqual(rows[f"{DECODE}/D_j"]["verdict"], "DISAGREE")
-        self.assertEqual(c.null_counts()["total"], 8)
+        self.assertEqual(c.null_counts()["total"], 13)
+        # Ruling (3) remains strict for every former placeholder.
+        for field, key in (("D_j", "D_j"), ("p", "raw_p"), ("holm_p", "adjusted_p"), ("df", "df")):
+            original = mine[field]
+            mine[field] = 0.0
+            _, changed = self.compare()
+            self.assertEqual(changed[f"{DECODE}/{key}"]["verdict"], "DISAGREE")
+            mine[field] = original
+        del mine["df"]
+        missing, changed = self.compare()
+        self.assertEqual(changed[f"{DECODE}/df"]["verdict"], "DISAGREE")
+        json.dumps(missing.rows, allow_nan=False)
+        mine["df"] = None
         files = {"outputs/" + "0" * 64 + "-results-fill-input.json": {
             "gamma": {"contrasts": [{"contrast_id": DECODE, "estimate": None, "interval": None,
                                       "decision_interval": None}]}},
@@ -222,6 +234,97 @@ class ContrastNullTests(unittest.TestCase):
         _, rows = self.compare()
         for key in keys:
             self.assertEqual(rows[f"{DECODE}/{key}"]["verdict"], "DISAGREE")
+
+
+class NotEstimableRecomputeTests(unittest.TestCase):
+    reason = {"outcome": "not_estimable", "codes": ["insufficient_complete_blocks"]}
+
+    def assert_no_estimator(self, row):
+        self.assertEqual(row["null_reason"], self.reason)
+        for key in ("dbar_j", "s_d_j", "se_j", "t_star", "t_stat", "df", "D_j", "p"):
+            self.assertIsNone(row[key], key)
+        for key in ("metrology_interval_j", "decision_interval_j"):
+            self.assertEqual(row[key], [None, None])
+        json.dumps(row, allow_nan=False)
+
+    def test_n0_n1_never_emit_a_numeric_estimator_placeholder(self):
+        for values in ([], [3.0]):
+            for D in (0.0, 2.75, None):
+                with self.subTest(n=len(values), D=D):
+                    raw = recompute.contrast_stats(values, D)
+                    self.assert_no_estimator(raw)
+                    for minimum in (2, 5):
+                        for missing in (False, True):
+                            row = recompute.finish_contrast(raw, .01, 1.2, minimum=minimum, missing=missing)
+                            self.assert_no_estimator(row)
+                            self.assertIsNone(row["holm_p"])
+                            self.assertIs(row["holm_reject"], False)
+                            self.assertEqual(row["outcome"], "not_estimable")
+                            self.assertEqual(row["floor_gate_j"], 1.2)
+
+    def test_holm_keeps_null_tests_and_frozen_two_hypothesis_denominator(self):
+        self.assertEqual(recompute.holm([None, None]), [None, None])
+        self.assertEqual(recompute.holm([None, .01]), [None, .02])
+        self.assertEqual(recompute.holm([.01, None]), [.02, None])
+        self.assertEqual(recompute.holm([.01, .03]), [.02, .03])
+        self.assertEqual(recompute.holm([.03, .01]), [.03, .02])
+
+    def test_leave_one_out_partner_keeps_its_n0_n1_test_null(self):
+        full = recompute.contrast_stats([3.0, 3.2, 2.8], .15)
+        partner = recompute.contrast_stats([1.0], .15)
+        ids = ["synthetic-b01", "synthetic-b02", "synthetic-b03"]
+        for missing in (False, True):
+            row = recompute.finish_contrast(full, None, 1.2, ids=ids,
+                partner=(partner, ["peer-b01"], [[.1, 0.0, .05]], missing))
+            self.assertEqual([value["partner_n"] for value in row["loo"]], [0, 1, 1])
+            self.assertEqual([value["partner_p"] for value in row["loo"]], [None] * 3)
+
+    def test_n1_matches_the_real_registered_engine_nulls(self):
+        from tests.b5_analysis.test_step11_null_outcomes import NotEstimable
+        release = NotEstimable().primary["contrasts"]
+        self.assertEqual(len(release), 2)
+        own = recompute.finish_contrast(recompute.contrast_stats([3.0], 2.75), None, 1.2)
+        c = cmp.Comparison(cmp.load_bars(cmp.DEFAULT_BARS))
+        for row in release:
+            left = cmp.estimator_null_reason(row)
+            right = cmp.estimator_null_reason(own, independent=True)
+            self.assertEqual(left, "not_estimable:insufficient_complete_blocks")
+            for key, source, family in (("D_j", row["deterministic_bounds"]["total"], "contrast_j"),
+                                        ("p", row["multiplicity"]["raw_p"], "contrast_p"),
+                                        ("holm_p", row["multiplicity"]["adjusted_p"], "contrast_p"),
+                                        ("df", row["estimator"]["df"], "count")):
+                result = c.numeric(family, row["contrast_id"] + "/" + key, source, own[key],
+                                   null_reasons=(left, right))
+                self.assertEqual(result["status"], "agree_null:" + left)
+        self.assertEqual(c.null_counts(), {"total": 8, "by_reason": {
+            "not_estimable:insufficient_complete_blocks": 8}})
+
+    def test_n2_keeps_its_numeric_estimator_and_has_no_null_reason(self):
+        row = recompute.contrast_stats([1.0, 3.0], 2.75)
+        self.assertEqual(row["df"], 1)
+        self.assertEqual(row["D_j"], 2.75)
+        self.assertIsInstance(row["p"], float)
+        self.assertNotIn("null_reason", row)
+
+    def test_full_synthetic_recompute_cli_preserves_n0_n1_in_all_bound_variants(self):
+        for n in (0, 1):
+            with self.subTest(n=n), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                archives = {pack: full_pack(root, pack, n=n if pack == "GAMMA" else 5)
+                            for pack in ("ALPHA", "BETA", "GAMMA")}
+                rc, output, _ = run_cli(archives, root / "recompute.json")
+                self.assertEqual(rc, 0)
+                variants = [output["contrasts"], output["disclosures"]["sensitivity_bound"]["contrasts"],
+                            output["disclosures"]["scaled_allowance"]["contrasts"]]
+                for contrasts in variants:
+                    self.assertEqual(len(contrasts), 2)
+                    for row in contrasts.values():
+                        self.assertEqual(row["n"], n)
+                        self.assert_no_estimator(row)
+                        self.assertIsNone(row["holm_p"])
+                        self.assertIs(row["holm_reject"], False)
+                        self.assertEqual(row["D_terms_j"], [])
+                self.assertNotIn("nonfinite_value", {flag["code"] for flag in output["flags"]})
 
 
 if __name__ == "__main__":
