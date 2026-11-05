@@ -54,6 +54,12 @@ class NativeCheckpointTests(unittest.TestCase):
         generate = importlib.import_module('mlx_lm.generate')
         mx = self.probe.mx
         model, _ = self.probe.model('qwen3_5', 'bfloat16')
+        # generation_stream is a ThreadLocalStream; inside mx.stream() the
+        # default stream resolves to this thread's concrete Stream, which never
+        # compares equal to the ThreadLocalStream object itself.
+        with mx.stream(generate.generation_stream):
+            native_stream = mx.default_stream(mx.default_device())
+        self.assertNotEqual(native_stream, mx.default_stream(mx.default_device()))
         cache = EpisodePromptCache(model, checkpoint_limit=2)
         delta, metadata = cache.prepare([1] * (STEP + 73) + [31], stable_prefix_ids=[1] * (STEP + 73))
         active = []
@@ -74,7 +80,7 @@ class NativeCheckpointTests(unittest.TestCase):
 
         def forward(observed_model, inputs, **kwargs):
             self.assertTrue(active)
-            self.assertEqual(mx.default_stream(mx.default_device()), generate.generation_stream)
+            self.assertEqual(mx.default_stream(mx.default_device()), native_stream)
             chunks.append(inputs.shape[1])
             return native_call(observed_model, inputs, **kwargs)
 
