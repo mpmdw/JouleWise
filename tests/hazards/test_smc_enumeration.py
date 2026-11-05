@@ -83,9 +83,15 @@ class EnumerationTests(unittest.TestCase):
 
 
 class QuietTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
     def inputs(self):
         return {"agent_probe": lambda: (ProbeResult(("fake",), 1, "", "", 0), None),
                 "measurement_probe": lambda: Census(),
+                "custody_parents": [Path(self.tmp.name)],
+                "contention_probe": lambda: {"clean": True, "error": None},
                 "process_probe": lambda: SimpleNamespace(returncode=0, stderr="", stdout="1 /sbin/launchd\n")}
 
     def test_clean_fake_census_passes(self):
@@ -164,6 +170,8 @@ class CaptureTests(unittest.TestCase):
             raw = (output / "r0.json").read_bytes()
             report = json.loads(raw)
             self.assertEqual(report["hardware"]["hw.model"], "FAKE")
+            self.assertEqual(report["hardware_after"]["hw.model"], "FAKE")
+            self.assertGreater(len(report["quiet_observations"]), 2)
             self.assertIn(hashlib.sha256(raw).hexdigest(), (output / "summary.md").read_text())
             self.assertEqual(report["coverage"]["all_keys"]["sample_fraction"], 1)
             readings = [json.loads(line) for line in (output / "samples.jsonl").read_text().splitlines()]

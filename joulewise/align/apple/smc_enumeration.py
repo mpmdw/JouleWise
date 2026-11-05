@@ -6,6 +6,7 @@ worker, never by the journal, enumeration, ranking, or tests.
 from __future__ import annotations
 
 import math
+import json
 import os
 import statistics
 import subprocess
@@ -31,14 +32,52 @@ class NotQuiet(RuntimeError):
     pass
 
 
-def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=None) -> dict[str, Any]:
+class CpuQuietProbe:
+    """Reuse per-process and host-tick accounting outside this process tree.
+
+    First admission measures one second; subsequent calls reuse the previous
+    snapshot, so periodic supervision does not insert a one-second stall.
+    The own tree includes the controlled GPU worker, but no unrelated jobs.
+    """
+    def __init__(self, *, ctx=None, snapshot=None):
+        from joulewise.hazards import contention
+        self.ctx = ctx if ctx is not None else Context()
+        self.snapshot = snapshot or (lambda: contention.take_snapshot(self.ctx))
+        self.previous = None
+        self.previous_over = None
+        self.root_identities = {}
+
+    def __call__(self):
+        from joulewise.hazards import contention
+        if self.previous is None:
+            self.previous = self.snapshot()
+        remaining = 1 - (self.ctx.clocks.monotonic_ns()-self.previous.finished.monotonic_ns)/1e9
+        if remaining > 0:
+            self.ctx.clocks.sleep(remaining)
+        current = self.snapshot()
+        limit = contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"]
+        contention.pin_roots(self.previous, [os.getpid()], self.root_identities)
+        contention.pin_roots(current, [os.getpid()], self.root_identities)
+        result = contention.interval(self.previous, current, tree_roots=[os.getpid()],
+                                     include_kernel_task=True, limit=limit, aggregate_limit=limit,
+                                     previous_over=self.previous_over, root_identities=self.root_identities)
+        self.previous = current
+        self.previous_over = contention.over_limit(result)
+        return {**result, "cpu_limit_s_per_s": limit, "aggregate_cpu_limit_s_per_s": limit}
+
+
+_cpu_quiet = None
+
+
+def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=None,
+                  contention_probe=None, custody_parents=None) -> dict[str, Any]:
     """Reuse the acquisition-owner and agent-identity censuses, fail closed.
 
     The additional process snapshot catches direct collectors and unregistered
     chains that the custody census explicitly cannot cover. This is snapshot
     admission plus periodic supervision, not an atomic measurement lease.
     """
-    from joulewise.measurement_liveness import census
+    from joulewise.measurement_liveness import census, custody_parent, ADDITIONAL_PARENTS_ENV
     from joulewise.night_gate import ProbeResult, agent_census
 
     def probe(argv):
@@ -50,7 +89,14 @@ def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=Non
             SimpleNamespace(run=probe, monotonic_ns=time.monotonic_ns), own_tree_root=os.getpid()))
         if refusal is not None:
             raise NotQuiet(f"agent census refused: {refusal.detail}")
-        owners = (measurement_probe or census)()
+        if custody_parents is None:
+            extra = json.loads(os.environ.get(ADDITIONAL_PARENTS_ENV, "[]"))
+            if not isinstance(extra, list) or any(not isinstance(p, str) or not p for p in extra):
+                raise NotQuiet("additional custody parents must be a JSON array of paths")
+            custody_parents = [custody_parent(), *(Path(p).expanduser() for p in extra)]
+        if not custody_parents or any(not Path(p).is_dir() for p in custody_parents):
+            raise NotQuiet("custody parent missing or not a directory")
+        owners = measurement_probe() if measurement_probe else census(parents=custody_parents)
         if not owners.clear:
             raise NotQuiet("measurement census refused: " + "; ".join(owners.refusals))
         processes = (process_probe or (lambda: subprocess.run(
@@ -68,7 +114,16 @@ def require_quiet(*, agent_probe=None, measurement_probe=None, process_probe=Non
                 continue
             if any(Path(token).name in blocked for token in parts[1:]):
                 raise NotQuiet("measurement process active: " + line.strip())
+        global _cpu_quiet
+        if contention_probe is None:
+            if _cpu_quiet is None:
+                _cpu_quiet = CpuQuietProbe()
+            contention_probe = _cpu_quiet
+        cpu = contention_probe()
+        if cpu.get("error") or cpu.get("clean") is not True:
+            raise NotQuiet("outside-tree CPU contention or unmeasured host CPU: " + str(cpu))
         return {"agent_exit_code": observed.exit_code, "measurement_warnings": owners.warnings,
+                "contention": cpu, "custody_parents": [str(p) for p in custody_parents],
                 "checked_monotonic_ns": time.monotonic_ns()}
     except NotQuiet:
         raise
@@ -84,6 +139,12 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
         raise ValueError("capture durations must be positive integer seconds")
     if gpu_step and load_factory is None:
         raise ValueError("GPU step requires a load factory")
+    observations = []
+    probe_quiet = quiet_check
+    def quiet_check():
+        result = probe_quiet()
+        observations.append({"stamp": ctx.stamp().to_json(), "evidence": result})
+        return result
     quiet_check()  # before any SMC access
     inventory = reader.enumerate_sensors()
     if not inventory["complete"] or not inventory["keys"]:
@@ -141,6 +202,7 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
         if load is not None:
             load.stop()
     return {"inventory": inventory, "samples": samples, "phases": phase_records,
+            "quiet_observations": observations,
             "started": start.to_json(), "finished": ctx.stamp().to_json()}
 
 

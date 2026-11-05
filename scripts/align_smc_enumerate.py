@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import platform
+import re
 import signal
 import subprocess
 import sys
@@ -46,12 +47,43 @@ def markdown(report, digest):
     return "\n".join(lines) + "\n"
 
 
-def host_metadata():
+def host_metadata(*, probe=None, thermal_reader_factory=None):
+    from joulewise.hazards.thermal import NotifyReader
+    if probe is None:
+        probe = lambda argv: subprocess.run(argv, capture_output=True, text=True, timeout=5, check=False)
+    def record(argv):
+        try:
+            value = probe(argv)
+            return {"argv": list(argv), "returncode": value.returncode,
+                    "stdout": value.stdout, "stderr": value.stderr, "error": None}
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return {"argv": list(argv), "returncode": None, "stdout": "", "stderr": "",
+                    "error": f"{type(exc).__name__}: {exc}"}
     result = {"platform": platform.platform(), "machine": platform.machine()}
     for field in ("hw.model", "hw.memsize"):
-        probe = subprocess.run(["/usr/sbin/sysctl", "-n", field], capture_output=True,
-                               text=True, timeout=5, check=False)
-        result[field] = probe.stdout.strip() if probe.returncode == 0 else None
+        value = record(["/usr/sbin/sysctl", "-n", field])
+        result[field] = value["stdout"].strip() if value["returncode"] == 0 else None
+    for name, suffix in (("pmset_g", []), ("pmset_custom", ["custom"]), ("pmset_batt", ["batt"])):
+        result[name] = record(["/usr/bin/pmset", "-g", *suffix])
+    batt = result["pmset_batt"]
+    result["ac_power"] = ("AC Power" in batt["stdout"] if batt["returncode"] == 0
+                          and "Power'" in batt["stdout"] else None)
+    result["power_mode"] = {key: None for key in ("lowpowermode", "highpowermode", "powermode")}
+    # -g is the active profile; -g custom retains all profiles as raw evidence.
+    for key, value in re.findall(r"^\s*(lowpowermode|highpowermode|powermode)\s+(\d+)\s*$",
+                                 result["pmset_g"]["stdout"], re.MULTILINE):
+        result["power_mode"][key] = int(value)
+    reader = None
+    try:
+        reader = (thermal_reader_factory or NotifyReader)()
+        result["os_thermal_level"] = reader.read()
+        result["os_thermal_error"] = None
+    except Exception as exc:
+        result["os_thermal_level"] = None
+        result["os_thermal_error"] = f"{type(exc).__name__}: {exc}"
+    finally:
+        if reader is not None:
+            reader.close()
     return result
 
 
@@ -77,6 +109,7 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
         admission = quiet_check()  # before directory creation, metadata or backend construction
         args.output.mkdir(parents=True, exist_ok=False)
         journal = Journal(args.output / "samples.jsonl", fsync_interval_s=5)
+        hardware = metadata()  # baseline state before SMC enumeration or load
         reader = reader_factory()
         capture = r0.collect(reader, seconds=args.seconds, idle_s=args.idle_seconds,
                              load_s=args.load_seconds, recovery_s=args.recovery_seconds,
@@ -85,7 +118,8 @@ def main(argv=None, *, reader_factory=smc.Reader, quiet_check=r0.require_quiet,
         selected = [s["key"] for s in capture["inventory"]["keys"]]
         report = {"schema": "joulewise.align_smc_r0.v1", "status": "PROVISIONAL",
                   "thermometry_bar": "PENDING_R1_CLASSIFICATION",
-                  "hardware": metadata(), "admission": admission, "gpu_step": args.gpu_step,
+                  "hardware": hardware, "hardware_after": metadata(),
+                  "admission": admission, "gpu_step": args.gpu_step,
                   "gpu_load": {"backend": "mlx", "shape": [2048, 2048], "dtype": "float32"}
                               if args.gpu_step else None,
                   **{k: v for k, v in capture.items() if k != "samples"},
