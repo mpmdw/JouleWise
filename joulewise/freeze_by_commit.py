@@ -14,6 +14,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRATION = "configs/analysis/b5/freeze_commits.json"
+REGISTRATION_REF = "refs/remotes/origin/main"
 REGISTRATION_COMMIT_ENV = "JOULEWISE_B5_FREEZE_REGISTRATION_COMMIT"
 _SHA1 = re.compile(r"[0-9a-f]{40}")
 
@@ -69,17 +70,25 @@ def blob_digests(repository: Path, commit: str, paths) -> dict[str, str]:
 
 
 def load_registration(repository: Path = ROOT) -> dict:
-    """Read the checkout's reviewed registration (F3; freeze_p1_rebind.md).
+    """Read only origin/main's reviewed Git blob (F3; freeze_p1_rebind.md).
 
     Runtime authority overrides and descendant ledgers are retired. A ruled
     fix requires a new registered analysis-r<k> tag, through ordinary review.
     """
+    if REGISTRATION_COMMIT_ENV in os.environ:
+        raise FreezeIdentityError("freeze_registration_override_removed")
     try:
-        if REGISTRATION_COMMIT_ENV in os.environ:
-            raise FreezeIdentityError("freeze_registration_override_removed")
-        raw = (repository / REGISTRATION).read_bytes()
+        main = _git(repository, "rev-parse", "--verify",
+                    REGISTRATION_REF + "^{commit}").decode().strip()
+    except FreezeIdentityError as exc:
+        raise FreezeIdentityError("freeze_registration_origin_main_missing") from exc
+    try:
+        raw = blob(repository, main, REGISTRATION)
         value = json.loads(raw)
-        if (value["schema"] != "joulewise.block_freeze.v1"
+        if (not isinstance(value, dict)
+                or value["schema"] != "joulewise.block_freeze.v1"
+                or not isinstance(value["tags"], dict)
+                or not isinstance(value["active_analysis"], str)
                 or value["active_analysis"] not in value["tags"]
                 or value.get("ruled_descendants")):
             raise ValueError()
@@ -102,18 +111,20 @@ def verify_tag(repository: Path, tag: str, record: dict) -> str:
     return commit
 
 
-def require_analysis_head(repository: Path, head: str, *, registration: dict | None = None) -> None:
-    """F2/F3: require the exact registered analysis tag's peeled commit.
+def require_analysis_head(repository: Path, head: str) -> None:
+    """F2/F3: require an analysis tag registered in origin/main.
 
     The caller owns the clean-checkout gate. Descendants (including merges)
     require a new reviewed registration and analysis-r<k> tag before use.
     """
     head = _commit(head)
-    value = load_registration(repository) if registration is None else registration
-    tag = value["active_analysis"]
-    base = verify_tag(repository, tag, value["tags"][tag])
-    if head != base:
-        raise FreezeIdentityError("analysis_descendant_unruled")
+    value = load_registration(repository)
+    for tag, record in value["tags"].items():
+        if (re.fullmatch(r"b5/analysis(?:-r[0-9]+)?", tag)
+                and isinstance(record, dict) and record.get("commit") == head):
+            verify_tag(repository, tag, record)
+            return
+    raise FreezeIdentityError("analysis_descendant_unruled")
 
 
 def require_commit_scoped_calibration() -> None:

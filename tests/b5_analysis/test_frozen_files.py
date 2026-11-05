@@ -5,20 +5,33 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import unittest
 from unittest import mock
 
 from joulewise.freeze_by_commit import (
-    ROOT, REGISTRATION_COMMIT_ENV, blob, blob_digests, load_registration, verify_tag,
+    ROOT, REGISTRATION, REGISTRATION_COMMIT_ENV, blob, blob_digests, verify_tag,
 )
 
 SEALED_DIR = "configs/campaigns/v5_claim_25g83/"
 SEAL = "docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md"
 
 
+def proposed_registration(root=ROOT):
+    """Test this PR's committed metadata before it merges to origin/main.
+
+    Runtime admission uses load_registration's origin/main authority instead;
+    these F1 tests only check the proposed historical tree records.
+    """
+    head = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True,
+    ).strip()
+    return json.loads(blob(root, head, REGISTRATION))
+
+
 def frozen_mismatches(root=ROOT):
     """F1: verify registered Git trees; current main may evolve independently."""
-    registration = load_registration(root)
+    registration = proposed_registration(root)
     commits = {tag: verify_tag(root, tag, record)
                for tag, record in registration["tags"].items()}
     analysis = commits[registration["active_analysis"]]
@@ -51,12 +64,12 @@ def frozen_mismatches(root=ROOT):
 
 
 def registered_blob(tag, path):
-    value = load_registration()
+    value = proposed_registration()
     return blob(ROOT, verify_tag(ROOT, tag, value["tags"][tag]), path)
 
 
 def analysis_blob(path):
-    return registered_blob(load_registration()["active_analysis"], path)
+    return registered_blob(proposed_registration()["active_analysis"], path)
 
 
 class FrozenFilesTests(unittest.TestCase):
@@ -70,11 +83,7 @@ class FrozenFilesTests(unittest.TestCase):
         self.assertEqual(frozen_mismatches(), [])
 
     def test_freeze_does_not_open_worktree_source_bytes(self):
-        read_bytes = Path.read_bytes
-        def registered_metadata_only(path):
-            self.assertEqual(path, ROOT / "configs/analysis/b5/freeze_commits.json")
-            return read_bytes(path)
-        with mock.patch.object(Path, "read_bytes", registered_metadata_only):
+        with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("worktree read")):
             self.assertEqual(frozen_mismatches(), [])
 
     def test_seal_pins_match_every_printed_value(self):
@@ -102,7 +111,7 @@ class FrozenFilesTests(unittest.TestCase):
         self.assertEqual(value["schema"], "joulewise.b5_seal_pins.v1")
 
     def test_collection_does_not_import_analysis(self):
-        for tag in ("b5/collection", load_registration()["active_analysis"]):
+        for tag in ("b5/collection", proposed_registration()["active_analysis"]):
             for name in ("scripts/run_campaign.py", "joulewise/b5/harvest.py"):
                 with self.subTest(tag=tag, path=name):
                     tree = ast.parse(registered_blob(tag, name))

@@ -32,9 +32,10 @@ class CommitFreezeTests(unittest.TestCase):
         self.registration = {
             "schema": "joulewise.block_freeze.v1",
             "active_analysis": "b5/analysis-r2",
-            "tags": {"b5/analysis-r2": self.tag_record()},
-            "ruled_descendants": {},
+            "tags": {"b5/analysis-r2": self.tag_record("b5/analysis-r2")},
         }
+        self.publish_registration(self.registration)
+        self.git("checkout", "--detach", self.base)
 
     def git(self, *args):
         return subprocess.check_output(
@@ -52,37 +53,59 @@ class CommitFreezeTests(unittest.TestCase):
         self.git("commit", "-qm", message)
         return self.git("rev-parse", "HEAD")
 
-    def tag_record(self):
-        return {"tag_object": self.git("rev-parse", "refs/tags/b5/analysis-r2"),
-                "commit": self.base, "tree": self.git("rev-parse", self.base + "^{tree}")}
+    def tag_record(self, tag):
+        commit = self.git("rev-parse", tag + "^{commit}")
+        return {"tag_object": self.git("rev-parse", "refs/tags/" + tag),
+                "commit": commit, "tree": self.git("rev-parse", commit + "^{tree}")}
+
+    def publish_registration(self, registration):
+        """Model a reviewed merge; the registration commit follows its tag."""
+        self.write(f.REGISTRATION, json.dumps(registration))
+        main = self.commit("reviewed registration on main")
+        self.git("update-ref", f.REGISTRATION_REF, main)
+        return main
 
     def require(self, head):
-        return f.require_analysis_head(self.repo, head, registration=self.registration)
+        return f.require_analysis_head(self.repo, head)
 
-    def ruled_child(self, text="VALUE = 2\n"):
-        self.write("estimator.py", text)
-        self.write("docs/ruling.md", "Fixture owner permits this exact change.\n")
-        head = self.commit("ruled block correction")
-        self.registration["ruled_descendants"][head] = {
-            "tree": self.git("rev-parse", head + "^{tree}"), "ruling": "docs/ruling.md",
-            "ruling_sha256": hashlib.sha256((self.repo / "docs/ruling.md").read_bytes()).hexdigest(),
-        }
-        return head
+    def successor(self):
+        self.write("estimator.py", "VALUE = 2\n")
+        child = self.commit("candidate block correction")
+        self.git("tag", "-a", "b5/analysis-r3", "-m", "candidate fix")
+        registration = json.loads(json.dumps(self.registration))
+        registration["active_analysis"] = "b5/analysis-r3"
+        registration["tags"]["b5/analysis-r3"] = self.tag_record("b5/analysis-r3")
+        return child, registration
 
-    def test_release_does_not_need_origin_main(self):
-        self.assertEqual(self.git("remote"), "")
-        self.require(self.base)
+    def test_release_uses_origin_main_blob_without_worktree_registration(self):
+        self.assertFalse((self.repo / f.REGISTRATION).exists())
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.base)
+        with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("worktree read")):
+            self.assertEqual(f.load_registration(self.repo), self.registration)
+            self.require(self.base)
         self.write("estimator.py", "later main bytes\n")
         self.assertEqual(f.blob(self.repo, self.base, "estimator.py"), b"VALUE = 1\n")
         self.assertEqual(f.blob_digests(self.repo, self.base, ["estimator.py"]),
                          {"estimator.py": hashlib.sha256(b"VALUE = 1\n").hexdigest()})
+
+    def test_missing_origin_main_has_specific_refusal(self):
+        self.git("update-ref", "-d", f.REGISTRATION_REF)
+        self.write(f.REGISTRATION, json.dumps(self.registration))
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^freeze_registration_origin_main_missing$"):
+            self.require(self.base)
+
+    def test_missing_origin_main_registration_does_not_fall_back_to_worktree(self):
+        self.git("update-ref", f.REGISTRATION_REF, self.base)
+        self.write(f.REGISTRATION, json.dumps(self.registration))
+        with self.assertRaises(f.FreezeIdentityError):
+            self.require(self.base)
 
     def test_lightweight_moved_or_wrong_tree_tag_refuses(self):
         for defect in ("lightweight", "moved", "tree", "object"):
             with self.subTest(defect=defect):
                 self.git("tag", "-d", "b5/analysis-r2")
                 self.git("tag", "-a", "b5/analysis-r2", self.base, "-m", "release")
-                record = self.tag_record()
+                record = self.tag_record("b5/analysis-r2")
                 if defect == "lightweight":
                     self.git("tag", "-f", "b5/analysis-r2", self.base)
                 elif defect == "moved":
@@ -91,99 +114,94 @@ class CommitFreezeTests(unittest.TestCase):
                     self.git("tag", "-fa", "b5/analysis-r2", child, "-m", defect)
                 else:
                     record["tree" if defect == "tree" else "tag_object"] = "0" * 40
-                with self.assertRaises(f.FreezeIdentityError):
-                    f.verify_tag(self.repo, "b5/analysis-r2", record)
+                registration = {**self.registration, "tags": {"b5/analysis-r2": record}}
+                self.publish_registration(registration)
+                self.git("checkout", "--detach", self.base)
+                with self.assertRaisesRegex(f.FreezeIdentityError, "freeze_tag_identity_mismatch"):
+                    self.require(self.base)
 
-    def test_descendant_ledger_cannot_authorize_even_the_first_fix(self):
-        first = self.ruled_child()
-        with self.assertRaisesRegex(f.FreezeIdentityError, "analysis_descendant_unruled"):
-            self.require(first)
-        self.write("estimator.py", "unruled intermediate\n")
-        middle = self.commit("unruled")
-        last = self.ruled_child("last\n")
-        with self.assertRaisesRegex(f.FreezeIdentityError, "analysis_descendant_unruled"):
-            self.require(last)
-        self.assertNotIn(middle, self.registration["ruled_descendants"])
-
-    def test_environment_registration_cannot_authorize_a_descendant(self):
-        self.write(f.REGISTRATION, json.dumps(self.registration))
-        self.commit("checkout registration")
-        child = self.ruled_child()
-        self.write(f.REGISTRATION, json.dumps(self.registration))
-        authority = self.commit("register the already-reviewed block correction")
+    def test_legacy_descendant_ledger_on_origin_main_refuses(self):
+        child, _ = self.successor()
+        registration = {**self.registration, "ruled_descendants": {child: {"ruling": "docs/ruling.md"}}}
+        self.publish_registration(registration)
         self.git("checkout", "--detach", child)
-        self.assertTrue((self.repo / f.REGISTRATION).exists())
-        with mock.patch.dict(os.environ, {f.REGISTRATION_COMMIT_ENV: authority}):
-            with self.assertRaises(f.FreezeIdentityError):
-                f.require_analysis_head(self.repo, child)
-        for invalid in ("main", "../outside", "f" * 40):
-            with mock.patch.dict(os.environ, {f.REGISTRATION_COMMIT_ENV: invalid}):
-                with self.assertRaises(f.FreezeIdentityError):
-                    f.require_analysis_head(self.repo, child)
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^freeze_registration_invalid$"):
+            self.require(child)
 
-    def test_forged_tag_and_registration_cannot_replace_checkout_authority(self):
-        self.write(f.REGISTRATION, json.dumps(self.registration))
-        self.commit("checkout registration")
-        child = self.ruled_child()
-        self.git("tag", "-a", "b5/analysis-r3", "-m", "unreviewed fix")
-        forged = json.loads(json.dumps(self.registration))
-        forged["active_analysis"] = "b5/analysis-r3"
-        forged["tags"]["b5/analysis-r3"] = {
-            "tag_object": self.git("rev-parse", "refs/tags/b5/analysis-r3"),
-            "commit": child, "tree": self.git("rev-parse", child + "^{tree}"),
-        }
-        self.write(f.REGISTRATION, json.dumps(forged))
-        authority = self.commit("forged registration authority")
+    def test_environment_override_has_distinct_refusal_even_for_registered_head(self):
+        for invalid in (self.base, "main", "../outside", "f" * 40, ""):
+            with self.subTest(value=invalid), \
+                 mock.patch.dict(os.environ, {f.REGISTRATION_COMMIT_ENV: invalid}):
+                with self.assertRaisesRegex(f.FreezeIdentityError, "^freeze_registration_override_removed$"):
+                    self.require(self.base)
+
+    def test_unreviewed_local_tag_and_registration_commit_refuse(self):
+        child, registration = self.successor()
+        self.write(f.REGISTRATION, json.dumps(registration))
+        self.commit("unreviewed local registration")
         self.git("checkout", "--detach", child)
-        with mock.patch.dict(os.environ, {f.REGISTRATION_COMMIT_ENV: authority}):
-            with self.assertRaises(f.FreezeIdentityError):
-                f.require_analysis_head(self.repo, child)
-        # Neither a local tag nor a docs blob called a ruling grants authority.
-        with self.assertRaisesRegex(f.FreezeIdentityError, "analysis_descendant_unruled"):
-            f.require_analysis_head(self.repo, child)
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^analysis_descendant_unruled$"):
+            self.require(child)
 
-    def test_nonempty_legacy_ledger_in_checkout_refuses(self):
-        self.ruled_child()
+    def test_ignored_worktree_registration_cannot_authorize_successor(self):
+        child, registration = self.successor()
+        self.write(".git/info/exclude", f.REGISTRATION + "\n")
+        self.write(f.REGISTRATION, json.dumps(registration))
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertEqual(f.load_registration(self.repo), self.registration)
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^analysis_descendant_unruled$"):
+            self.require(child)
+
+    def test_assume_unchanged_registration_cannot_authorize_successor(self):
         self.write(f.REGISTRATION, json.dumps(self.registration))
-        with self.assertRaisesRegex(f.FreezeIdentityError, "freeze_registration_invalid"):
-            f.load_registration(self.repo)
+        self.commit("track local registration")
+        child, registration = self.successor()
+        self.git("update-index", "--assume-unchanged", f.REGISTRATION)
+        self.write(f.REGISTRATION, json.dumps(registration))
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertEqual(f.load_registration(self.repo), self.registration)
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^analysis_descendant_unruled$"):
+            self.require(child)
 
-    def test_unrelated_history_and_missing_objects_refuse(self):
+    def test_successor_passes_after_registration_merges_to_origin_main(self):
+        child, registration = self.successor()
+        main = self.publish_registration(registration)
+        self.assertNotEqual(main, child)
+        self.git("checkout", "--detach", child)
+        self.assertEqual(self.git("rev-parse", "HEAD"), child)
+        self.assertFalse((self.repo / f.REGISTRATION).exists())
+        self.require(child)
+        # An earlier analysis tag remains listed and reproducible as well.
+        self.git("checkout", "--detach", self.base)
+        self.require(self.base)
+
+    def test_collection_tag_cannot_authorize_analysis_head(self):
+        child, _ = self.successor()
+        self.git("tag", "-a", "b5/collection", "-m", "collection only")
+        registration = json.loads(json.dumps(self.registration))
+        registration["tags"]["b5/collection"] = self.tag_record("b5/collection")
+        self.publish_registration(registration)
+        self.git("checkout", "--detach", child)
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^analysis_descendant_unruled$"):
+            self.require(child)
+
+    def test_unrelated_history_refuses(self):
         self.git("checkout", "--orphan", "unrelated")
         self.write("estimator.py", "different history\n")
         head = self.commit("not a descendant")
-        for commit in (head, "f" * 40):
-            with self.assertRaises(f.FreezeIdentityError):
-                self.require(commit)
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^analysis_descendant_unruled$"):
+            self.require(head)
 
-    def test_ruling_and_tree_must_authenticate_at_the_ruled_commit(self):
-        head = self.ruled_child()
-        record = self.registration["ruled_descendants"][head]
-        for key, bad in (("tree", "0" * 40), ("ruling_sha256", "0" * 64),
-                         ("ruling", "docs/missing.md"), ("ruling", "../outside"),
-                         ("ruling", None), ("ruling_sha256", None)):
-            with self.subTest(key=key, bad=bad):
-                old = record[key]
-                record[key] = bad
-                with self.assertRaises(f.FreezeIdentityError):
-                    self.require(head)
-                record[key] = old
-
-    def test_merged_side_commit_also_needs_a_ruling(self):
+    def test_merged_side_commit_cannot_authorize_analysis(self):
         self.git("checkout", "-b", "side")
         self.write("side.py", "unruled side branch\n")
-        side = self.commit("side")
+        self.commit("side")
         self.git("checkout", "-b", "block", self.base)
-        self.ruled_child()
+        self.write("estimator.py", "candidate fix\n")
+        self.commit("candidate")
         self.git("merge", "--no-ff", "side", "-m", "merge")
-        head = self.git("rev-parse", "HEAD")
-        self.registration["ruled_descendants"][head] = {
-            "tree": self.git("rev-parse", head + "^{tree}"), "ruling": "docs/ruling.md",
-            "ruling_sha256": hashlib.sha256((self.repo / "docs/ruling.md").read_bytes()).hexdigest(),
-        }
-        with self.assertRaisesRegex(f.FreezeIdentityError, "analysis_descendant_unruled"):
-            self.require(head)
-        self.assertNotIn(side, self.registration["ruled_descendants"])
+        with self.assertRaisesRegex(f.FreezeIdentityError, "^analysis_descendant_unruled$"):
+            self.require(self.git("rev-parse", "HEAD"))
 
     def test_git_path_scope_and_calibration_stub_fail_closed(self):
         for path in ("/Users/edr/outside", "restricted/data", "docs/restricted/data", "../data"):
