@@ -1608,10 +1608,14 @@ class SparseMoeBlock(nn.Module):
 
     Router: fp32 softmax, top-k of the fp32 probabilities (mlx-vlm audit P1),
     renormalised in fp32, cast to the logit dtype. Exact fp32 ties at the cut
-    are broken by ``argpartition`` (``torch.topk`` order is unspecified too);
-    the parity tests log their rate. Combine: the k weighted rows summed in
-    fp32 and rounded once, as the reference's default ``grouped_mm`` experts
-    path (transformers moe.py; T:1195, D6)."""
+    are broken by ``argpartition`` (``torch.topk``'s CPU order is unspecified
+    and not reproducible either). With bf16 logits such ties are common at
+    the released scale (512 experts, top-10): a real-weight bf16 prefill
+    ties on 8 of 54 router rows at layer 2 (official model; 7 in this port)
+    and 5 of 54 at layer 3, 0 in fp32; a tied swap selects a different expert
+    of equal weight, so parity checks must be tie-aware. Combine: the k
+    weighted rows summed in fp32 and rounded once, as the reference's default
+    ``grouped_mm`` experts path (transformers moe.py; T:1195, D6)."""
 
     def __init__(self, args: TextModelArgs):
         super().__init__()
