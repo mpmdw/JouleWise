@@ -64,6 +64,45 @@ def session(*, values=None, config=None):
 
 
 class GateTests(unittest.TestCase):
+    def test_fixed_rate_sampling_with_parse_cost_and_phase_jitter(self):
+        p = policy()
+        del p['window_reference']
+        clock = FakeClock()
+        def read(keys):
+            clock.sleep(.0002)
+            return {'values': {k: 40. for k in keys}}
+        reader = SimpleNamespace(read=read, close=lambda: None)
+        def status():
+            clock.sleep(.11)  # PM parsing must not lengthen the SMC bracket.
+            return {'os_level': 0, 'pm_state': 'Nominal'}
+        obj = ThermalSession(p, clock, reader=reader, status_reader=status)
+        obj.start()
+        class Stop:
+            calls = 0
+            def wait(self, delay):
+                self.calls += 1
+                if self.calls > 120:
+                    return True
+                clock.sleep(delay + (.003 if self.calls % 2 else .001))
+                return False
+        obj.stop_event = Stop()
+        obj._loop()
+        self.assertLess(clock.now(), 121)
+        self.assertTrue(all(r['finished']['monotonic_after_ns'] - r['monotonic_ns'] == 200_000 for r in obj.rows))
+        from joulewise.align.apple.thermal_desk import _coverage
+        self.assertGreaterEqual(_coverage(obj.rows, 0, 120*NS, ('Tfak', 'Tslw'))['sample_fraction'], .99)
+        obj.capture_reference('first')
+        self.assertEqual(obj.reference['slow_c'], 40.)
+        self.assertEqual(obj.wait('G0')['outcome'], 'released')
+
+    def test_reference_accepts_ninety_percent_complete_slots(self):
+        p = policy()
+        del p['window_reference']
+        obj, _ = session(config=p)
+        obj.rows = obj.rows[6:]
+        obj.capture_reference('first')
+        self.assertIsNotNone(obj.reference)
+
     def test_g0_requires_ten_samples_slope_and_nominal_status(self):
         obj, clock = session()
         gate = obj.wait('G0')
@@ -323,6 +362,22 @@ class WorkloadTests(unittest.TestCase):
 
 
 class StatusWiringTests(unittest.TestCase):
+    def test_pm_tap_parses_only_latest_complete_frame(self):
+        import plistlib
+        from joulewise.align.apple.thermal import PowermetricsStatus
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d)/'fake.plist'
+            frame = plistlib.dumps({'thermal_pressure': 'Nominal'})
+            latest = plistlib.dumps({'thermal_pressure': 'Serious'})
+            path.write_bytes((frame+b'\0')*9 + latest + b'\0' + frame[:40])
+            feed = PowermetricsStatus(SimpleNamespace(_capture_path=path), FakeClock(),
+                                      notify_reader=SimpleNamespace(read=lambda: 0))
+            with patch('plistlib.loads', wraps=plistlib.loads) as parse:
+                self.assertEqual(feed()['pm_state'], 'Serious')
+                self.assertEqual(parse.call_count, 1)
+                feed()
+                self.assertEqual(parse.call_count, 1)
+
     def test_pm_tap_reads_only_complete_frames_and_observes_new_capture(self):
         import plistlib
         from joulewise.align.apple.thermal import PowermetricsStatus

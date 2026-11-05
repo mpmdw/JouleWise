@@ -55,12 +55,18 @@ def validate_policy(value):
     return policy
 
 
+def _good_window_rows(rows, end_ns, keys):
+    start = end_ns - 60 * NS
+    return [r for r in rows if start <= r['monotonic_ns'] < end_ns
+            and (r['finished']['monotonic_after_ns'] - start) // NS == (r['monotonic_ns'] - start) // NS
+            and all(k not in r.get('errors', {}) and temperature.valid_value(k, r['sensors'].get(k)) for k in keys)]
+
+
 def slow_slope(rows, end_ns, key):
     """OLS °C/min on actual times in the preceding 60 seconds; no interpolation."""
-    selected = [r for r in rows if end_ns - 60 * NS <= r['monotonic_ns'] <= end_ns]
-    good = [(r['monotonic_ns'], r['sensors'].get(key)) for r in selected
-            if temperature.valid_value(key, r['sensors'].get(key))]
-    if len(good) < 2 or good[-1][0] - good[0][0] < 59 * NS:
+    selected = _good_window_rows(rows, end_ns, (key,))
+    good = [(r['monotonic_ns'], r['sensors'][key]) for r in selected]
+    if len({(t - end_ns + 60*NS) // NS for t, _ in good}) < 54:
         return None
     x = [(t - end_ns) / NS for t, _ in good]
     y = [v for _, v in good]
@@ -148,14 +154,20 @@ class ThermalSession:
     def start(self):
         if self.context is not None:
             self.handle = (self.context.outputs_dir / 'align_thermal.jsonl').open('x', encoding='utf-8')
+        self.next_due_ns = monotonic_ns(self.clock.stamp()) + NS
         self.sample()
         if isinstance(self.clock, SystemClock):
             self.thread = threading.Thread(target=self._loop, name='align-thermal', daemon=True)
             self.thread.start()
 
     def _loop(self):
-        while not self.stop_event.wait(1):
+        while not self.stop_event.wait(max(0, (self.next_due_ns - monotonic_ns(self.clock.stamp())) / NS)):
             self.sample()
+            self.next_due_ns += NS
+            # Resume from now after a stall; never fabricate catch-up samples.
+            now = monotonic_ns(self.clock.stamp())
+            if self.next_due_ns <= now:
+                self.next_due_ns = now + NS
 
     def _status(self):
         if self.status_reader is not None:
@@ -173,11 +185,11 @@ class ThermalSession:
         with self.lock:
             started = self.clock.stamp()
             values = temperature.sample(self.reader, temperature.keys(self.policy['sensors']))
+            finished = self.clock.stamp()
             try:
                 status = self._status()
             except Exception as exc:
                 status = {'error': f'{type(exc).__name__}:{exc}'}
-            finished = self.clock.stamp()
             row = {'kind': 'sample', 'monotonic_ns': monotonic_ns(started),
                    'epoch_ns': _stamp_record(started)['epoch_ns'],
                    'started': _stamp_record(started), 'finished': _stamp_record(finished),
@@ -199,13 +211,12 @@ class ThermalSession:
             rows = [r for r in self.rows if now - 60 * NS <= r['monotonic_ns'] < now]
         sensors = self.policy['sensors']
         # Missing baseline never becomes a guessed release reference.
-        if len({(r['monotonic_ns'] - now + 60 * NS) // NS for r in rows
-                if all(temperature.valid_value(sensors[k], r['sensors'].get(sensors[k]))
-                       for k in ('s_fast', 's_slow'))}) < 60:
+        good = _good_window_rows(rows, now, (sensors['s_fast'], sensors['s_slow']))
+        if len({(r['monotonic_ns'] - now + 60 * NS) // NS for r in good}) < 54:
             self.flags.append('thermal.state_unobserved')
             return
-        self.reference = {'fast_c': median(r['sensors'][sensors['s_fast']] for r in rows),
-                          'slow_c': median(r['sensors'][sensors['s_slow']] for r in rows),
+        self.reference = {'fast_c': median(r['sensors'][sensors['s_fast']] for r in good),
+                          'slow_c': median(r['sensors'][sensors['s_slow']] for r in good),
                           'source_member': member, 'span_ns': [now - 60 * NS, now]}
 
     def wait(self, kind, *, turn=0, token_count=None, deadman=None, defer_resume=False):
@@ -232,14 +243,11 @@ class ThermalSession:
                     latest = rows[-1] if rows else None
                     window = [r for r in rows if now - 60 * NS <= r['monotonic_ns'] <= now]
                     # Missing slots, late reads and missing keys all count as failed reads.
-                    span_start = now - 59 * NS
+                    span_start = now - 60 * NS
                     expected = 60
-                    good_slots = {(r['monotonic_ns'] - span_start) // NS for r in window
-                                  if span_start <= r['monotonic_ns'] <= now
-                                  and (r['finished']['monotonic_after_ns'] - span_start) // NS
-                                      == (r['monotonic_ns'] - span_start) // NS
-                                  and all(temperature.valid_value(k, r['sensors'].get(k)) for k in (fast, slow))}
-                    if 1 - len(good_slots) / expected > .10:
+                    good_slots = {(r['monotonic_ns'] - span_start) // NS
+                                  for r in _good_window_rows(window, now, (fast, slow))}
+                    if len(good_slots) < .90 * expected:
                         unobserved = True
                     slope = slow_slope(rows, now, slow)
                     if latest is not None and latest['monotonic_ns'] != last_ns:
@@ -377,9 +385,11 @@ class PowermetricsStatus:
             if len(self.pending) > 8*1024*1024:
                 raise ValueError('powermetrics status tap incomplete frame exceeds bound')
             # A complete XML document may precede its NUL separator.
-            while b'</plist>' in self.pending:
-                end = self.pending.index(b'</plist>') + len(b'</plist>')
-                raw, self.pending = self.pending[:end].strip(b'\0\n\r '), self.pending[end:].lstrip(b'\0\n\r ')
+            if b'</plist>' in self.pending:
+                end = self.pending.rindex(b'</plist>') + len(b'</plist>')
+                complete, self.pending = self.pending[:end], self.pending[end:].lstrip(b'\0\n\r ')
+                previous = complete.rfind(b'</plist>', 0, end-len(b'</plist>'))
+                raw = complete[previous+len(b'</plist>') if previous >= 0 else 0:].strip(b'\0\n\r ')
                 document = plistlib.loads(raw)
                 self.pm_state = document.get('thermal_pressure')
                 self.pm_observed_ns = monotonic_ns(self.clock.stamp())
