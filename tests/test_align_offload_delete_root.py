@@ -238,6 +238,17 @@ class DeleteRootTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'ACL'):
                 module.check_acl_flags(self.src)
 
+    def test_all_protected_flags_refuse_before_acl_command(self):
+        module = importlib.util.module_from_spec(SPEC)
+        SPEC.loader.exec_module(module)
+        for flag in (0x2, 0x4, 0x20000, 0x40000, 0x100000, 0x80000, 0x80):
+            with self.subTest(flag=hex(flag)), \
+                 mock.patch.object(Path, 'lstat', return_value=types.SimpleNamespace(st_flags=flag)), \
+                 mock.patch.object(module.subprocess, 'run') as command:
+                with self.assertRaisesRegex(g.Refusal if module is g else module.Refusal, 'flag'):
+                    module.check_acl_flags(self.src)
+                command.assert_not_called()
+
     @unittest.skipUnless(hasattr(os, 'chflags'), 'native BSD uchg unavailable')
     def test_native_uchg_refusal_on_synthetic_file(self):
         p = self.src / 'bytes'

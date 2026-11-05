@@ -36,3 +36,9 @@ conflicts, unknown keys/format, duplicate keys and misleading uploaded values.
 `python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS,
 46 tests. Operational cloud deletion remains BLOCKED until the lead records
 and pins the real sample; no synthetic fixture is represented as live output.
+
+N4: LOCK_FLAGS additionally rejects SF_NOUNLINK (0x100000), SF_RESTRICTED
+(0x80000), UF_DATAVAULT (0x80). Synthetic stat tests exercise every protected
+bit independently and assert refusal before ACL execution.
+`python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS, 47 tests.
+Native privileged flags are not set by these tests.

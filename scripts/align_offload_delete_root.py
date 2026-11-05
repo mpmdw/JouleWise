@@ -30,7 +30,8 @@ MANDATORY_KEEP = tuple(Path(p) for p in (
 ALIGN_ROOT = Path('/Users/edr/night-align')
 STOP_PATH = Path('/Users/edr/night-custody/magistrate/STOP')
 DATALESS = 0x40000000
-LOCK_FLAGS = 0x2 | 0x4 | 0x20000 | 0x40000  # uchg/uappnd/schg/sappnd
+LOCK_FLAGS = (0x2 | 0x4 | 0x20000 | 0x40000 |  # uchg/uappnd/schg/sappnd
+              0x100000 | 0x80000 | 0x80)  # SF_NOUNLINK/SF_RESTRICTED/UF_DATAVAULT
 # Deliberately unpinned. Step 5 must capture real macOS evaluate output; a
 # reviewed code change must install its exact safe grammar/sample and digest.
 # Synthetic tests do not supply operational upload authority.
@@ -168,7 +169,7 @@ def sha_file(p):
 
 
 def check_acl_flags(p):
-    require(not getattr(p.lstat(), 'st_flags', 0) & LOCK_FLAGS, 'immutable/append flag')
+    require(not getattr(p.lstat(), 'st_flags', 0) & LOCK_FLAGS, 'immutable/append/protected flag')
     result = subprocess.run(['/bin/ls', '-lde', str(p)], check=True,
                             text=True, capture_output=True)
     require(not re.search(r'^\s*\d+:', result.stdout, re.M), 'ACL present')
