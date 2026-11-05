@@ -22,7 +22,9 @@ from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
 
+
 from joulewise.strict_io import (
+    collect_exact_keys as _exact_keys,
     json_pretty_insertion_utf8_strict as render_manifest,
     json_utf8_bytes_strict as canonical_json_bytes,
 )
@@ -401,19 +403,6 @@ def calculate_manifest_id(value: Mapping[str, Any]) -> str:
     body = dict(value)
     body.pop("manifest_id", None)
     return "am-" + hashlib.sha256(canonical_json_bytes(body)).hexdigest()
-
-
-def _exact_keys(value: Any, expected: set[str], where: str, errors: list[str]) -> bool:
-    if not isinstance(value, Mapping):
-        errors.append(f"{where}: must be an object")
-        return False
-    missing = sorted(expected - set(value))
-    extra = sorted(set(value) - expected)
-    if missing:
-        errors.append(f"{where}: missing key(s): {', '.join(missing)}")
-    if extra:
-        errors.append(f"{where}: unrecognized key(s): {', '.join(extra)}")
-    return not missing and not extra
 
 
 def _read_object(path: Path) -> tuple[Mapping[str, Any], bytes]:

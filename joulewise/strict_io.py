@@ -103,3 +103,16 @@ def require_finite(value: object, *, name: str) -> float:
     if not math.isfinite(converted):
         raise ValueError(f"{name} must be a finite number")
     return converted
+
+
+def collect_exact_keys(value: Any, expected: set[str], where: str, errors: list[str]) -> bool:
+    if not isinstance(value, Mapping):
+        errors.append(f"{where}: must be an object")
+        return False
+    missing = sorted(expected - set(value))
+    extra = sorted(set(value) - expected)
+    if missing:
+        errors.append(f"{where}: missing key(s): {', '.join(missing)}")
+    if extra:
+        errors.append(f"{where}: unrecognized key(s): {', '.join(extra)}")
+    return not missing and not extra
