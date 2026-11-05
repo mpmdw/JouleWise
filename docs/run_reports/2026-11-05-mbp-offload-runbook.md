@@ -1,5 +1,7 @@
 # 2026-11-05 — Measurement MBP offload and streaming gold runbook
 
+> Historical pre-review report. Superseded by the [safety fix round](2026-11-05-mbp-offload-fix-round.md), including the external-SSD plan, pilot-9 retention and corrected PR #664/#667 references. The executable runbook is the current authority for this procedure.
+
 Revised `docs/align/mbp_offload_and_gold_setup.md` on the requested existing
 branch `lane/2026-11-05-mbp-offload-runbook`, starting at `57b318fc7` (the
 original runbook commit). This documentation-only revision implements the

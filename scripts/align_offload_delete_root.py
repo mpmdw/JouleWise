@@ -28,6 +28,7 @@ MANDATORY_KEEP = tuple(Path(p) for p in (
     '/Users/edr/Library/LaunchAgents',
 ))
 ALIGN_ROOT = Path('/Users/edr/night-align')
+STOP_PATH = Path('/Users/edr/night-custody/magistrate/STOP')
 DATALESS = 0x40000000
 LOCK_FLAGS = 0x2 | 0x4 | 0x20000 | 0x40000  # uchg/uappnd/schg/sappnd
 
@@ -176,6 +177,19 @@ def check_uploaded(p):
             'cloud upload unconfirmed')
 
 
+def check_pause_and_disk(op):
+    stop = exact_path(str(STOP_PATH))
+    ours = exact_path(str(op / 'our-STOP.txt'))
+    expected = ('ALIGN paused for MBP offload and gold validation; ' + str(op) + '\n').encode()
+    require(stop.read_bytes() == ours.read_bytes() == expected, 'pause STOP mismatch')
+    s = os.statvfs(op)
+    require(s.f_bavail * s.f_frsize >= 30_000_000_000, 'disk floor')
+    table = subprocess.run(['/bin/ps', '-axo', 'pid=,comm=,args='],
+                           check=True, text=True, capture_output=True).stdout
+    pattern = re.compile(r'(?i)(?:^|[/\s])(?:claude(?:/versions/[\d.]+)?|codex|offload\.py|align_pilot_session(?:\.py)?|harvest[\w.-]*|zstd|tar)(?:\s|$)')
+    require(not any(pattern.search(row) for row in table.splitlines()), 'writer/agent census busy')
+
+
 def checksum_receipt(receipt, target):
     # One exact sha256sum/shasum line; never run shell text from the receipt.
     match = re.fullmatch(r'([0-9a-f]{64}) [ *](.+)\n?', receipt.read_text())
@@ -200,6 +214,12 @@ def delete_root(item, keep, remote, journal):
         item, keep, remote = (exact_path(str(p)) for p in (item, keep, remote))
         exact_path(str(journal.parent))
         require(not journal.is_symlink(), 'journal symlink')
+        for name in ('source-path.txt', 'source.json', 'source.sha256', 'archive.sha256',
+                     'source-after.json', 'cloud-local.json', 'cloud-roundtrip.json',
+                     'independent-receipt.txt', 'ed-approval.txt', 'retention-review.json'):
+            control = exact_path(str(item / name))
+            require(control.is_file() and not getattr(control.stat(), 'st_flags', 0) & DATALESS,
+                    'control receipt missing or dataless')
         raw = (item / 'source-path.txt').read_text()
         require(raw.endswith('\n') and raw.count('\n') == 1, 'source-path format')
         src = exact_path(raw[:-1])
@@ -238,12 +258,12 @@ def delete_root(item, keep, remote, journal):
         require(not any('instrument_validation' in PurePosixPath(r[0]).parts for r in rows),
                 'capture retention: keep root and request ruling')
         for p in (src.parent, item, journal.parent, src, *(src / r[0] for r in rows)):
-            # Symlinks inside an archived tree are removed as links, not followed.
-            if not p.is_symlink():
-                check_acl_flags(p)
+            # ls -d and lstat check links themselves, never their targets.
+            check_acl_flags(p)
         require(os.access(src.parent, os.W_OK | os.X_OK), 'source parent not writable')
         for p in (src, *(src / r[0] for r in rows if r[1] == 'dir')):
             require(os.access(p, os.W_OK | os.X_OK), 'source directory not writable')
+        check_pause_and_disk(item.parent)
         before_identity = identity(src)
         # No operator gap after these fresh upload checks. Ambiguous/failed tool refuses.
         check_uploaded(archive_path)
@@ -286,7 +306,9 @@ def main():
     if args.command == 'delete':
         require(sys.platform == 'darwin', 'deletion requires macOS file flags/ACL tools')
         # Serialize this operation. Process quiescence is also mandatory externally.
-        with (args.item.parent / '.delete.lock').open('a') as lock:
+        lock_path = exact_path(str(args.item.parent)) / '.delete.lock'
+        require(not lock_path.is_symlink(), 'delete lock symlink')
+        with lock_path.open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             delete_root(args.item, args.keep, args.remote, args.journal)
     elif args.command == 'budget':

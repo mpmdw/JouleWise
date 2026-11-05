@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import types
@@ -46,6 +47,7 @@ class DeleteRootTests(unittest.TestCase):
         mock.patch.object(g, 'ALIGN_ROOT', self.align).start()
         self.acl = mock.patch.object(g, 'check_acl_flags').start()
         self.upload = mock.patch.object(g, 'check_uploaded').start()
+        self.pause = mock.patch.object(g, 'check_pause_and_disk').start()
         self.prepare()
 
     def prepare(self):
@@ -90,7 +92,8 @@ class DeleteRootTests(unittest.TestCase):
 
     def test_raw_path_variants_refuse(self):
         for raw in (str(self.src) + '/..', str(self.src) + '/', str(self.src) + ' ',
-                    str(self.src) + '/.', 'relative', str(self.src) + '\nother'):
+                    str(self.src) + '/.', 'relative', str(self.src) + '\nother',
+                    str(self.src.parent / 'pilot-v7-e\u0301')):
             with self.subTest(raw=raw):
                 (self.item / 'source-path.txt').write_text(raw + '\n')
                 self.refused()
@@ -202,7 +205,7 @@ class DeleteRootTests(unittest.TestCase):
         self.refused('capture retention')
 
     def test_acl_flags_upload_or_permissions_failure_refuses(self):
-        for check in (self.acl, self.upload):
+        for check in (self.acl, self.upload, self.pause):
             check.side_effect = g.Refusal('preflight refused')
             self.refused('preflight refused')
             check.side_effect = None
@@ -241,8 +244,8 @@ class DeleteRootTests(unittest.TestCase):
         try:
             module = importlib.util.module_from_spec(SPEC)
             SPEC.loader.exec_module(module)
-            with self.assertRaisesRegex(ValueError, 'immutable'):
-                module.check_acl_flags(p)
+            self.acl.side_effect = module.check_acl_flags
+            self.refused('immutable')
         finally:
             os.chflags(p, 0)
 
@@ -255,6 +258,105 @@ class DeleteRootTests(unittest.TestCase):
             return s
         with mock.patch.object(Path, 'lstat', flagged):
             self.refused('dataless')
+
+    def test_receipt_symlink_refuses_without_following(self):
+        receipt = self.item / 'source-path.txt'
+        receipt.unlink()
+        receipt.symlink_to('/must-not-follow')
+        self.refused('symlink')
+
+    def test_pending_pointer_refuses_before_delete(self):
+        self.src.with_name(self.src.name + '.OFFLOADED.json.pending').write_text('old')
+        self.refused()
+
+    def test_nested_filesystem_refuses(self):
+        original = Path.lstat
+        def other_device(p, *a, **kw):
+            st = original(p, *a, **kw)
+            if p == self.src / 'bytes':
+                return types.SimpleNamespace(st_mode=st.st_mode, st_dev=st.st_dev + 1)
+            return st
+        with mock.patch.object(Path, 'lstat', other_device):
+            self.refused('nested filesystem')
+
+    def test_missing_source_or_non_directory_refuses(self):
+        for p in (self.src / 'missing', self.src / 'bytes'):
+            (self.item / 'source-path.txt').write_text(str(p) + '\n')
+            self.refused()
+
+    def test_source_path_requires_exact_single_newline(self):
+        (self.item / 'source-path.txt').write_text(str(self.src))
+        self.refused('source-path format')
+
+    def test_control_dataless_refuses(self):
+        original = Path.stat
+        def flagged(p, *a, **kw):
+            st = original(p, *a, **kw)
+            if p == self.item / 'retention-review.json':
+                return types.SimpleNamespace(st_mode=st.st_mode, st_flags=g.DATALESS)
+            return st
+        with mock.patch.object(Path, 'stat', flagged):
+            self.refused('control receipt')
+
+    def test_missing_archive_or_cloud_manifest_refuses(self):
+        for p in (self.archive, self.remote / 'p8.manifest.json'):
+            old = p.read_bytes()
+            p.unlink()
+            self.refused()
+            p.write_bytes(old)
+
+    def test_source_directory_not_writable_refuses(self):
+        with mock.patch.object(g.os, 'access', side_effect=[True, False]):
+            self.refused('source directory not writable')
+
+    def test_archive_dataless_refuses_before_hash(self):
+        original = Path.stat
+        def flagged(p, *a, **kw):
+            st = original(p, *a, **kw)
+            if p == self.archive:
+                return types.SimpleNamespace(st_mode=st.st_mode, st_flags=g.DATALESS)
+            return st
+        with mock.patch.object(Path, 'stat', flagged):
+            self.refused('dataless')
+
+    def test_invalid_approved_model_entry_refuses(self):
+        (self.op / 'approved-models.txt').write_text(str(self.keep_root) + '/..\n')
+        self.refused('non-canonical')
+
+    def test_exact_approved_model_path_still_obeys_keep(self):
+        (self.op / 'approved-models.txt').write_text(str(self.src) + '\n')
+        self.keep.write_text(str(self.keep_root) + '\n' + str(self.src) + '\n')
+        self.refused('KEEP inode overlap')
+
+    def test_audit_write_failure_never_starts_deletion(self):
+        self.journal.mkdir()
+        self.refused_audit_failure()
+
+    def refused_audit_failure(self):
+        with mock.patch.object(g.shutil, 'rmtree') as deletion:
+            with self.assertRaises(OSError):
+                self.run_delete()
+            deletion.assert_not_called()
+        self.assertTrue(self.src.exists())
+
+    def test_tree_root_dataless_and_file_changes_during_hash_refuse(self):
+        original = Path.stat
+        def root_flag(p, *a, **kw):
+            st = original(p, *a, **kw)
+            if p == self.src:
+                return types.SimpleNamespace(st_mode=st.st_mode, st_dev=st.st_dev, st_flags=g.DATALESS)
+            return st
+        with mock.patch.object(Path, 'stat', root_flag):
+            with self.assertRaisesRegex(g.Refusal, 'dataless root'):
+                g.tree(self.src)
+        original_digest = g.digest
+        def mutate(stream):
+            result = original_digest(stream)
+            (self.src / 'bytes').write_bytes(b'changed during inventory')
+            return result
+        with mock.patch.object(g, 'digest', side_effect=mutate):
+            with self.assertRaisesRegex(g.Refusal, 'source changed'):
+                g.tree(self.src)
 
     def test_hardlink_and_special_file_refuse(self):
         os.link(self.src / 'bytes', self.src / 'hardlink')
@@ -275,6 +377,62 @@ class HelperTests(unittest.TestCase):
                 else:
                     with self.assertRaises(g.Refusal):
                         g.check_uploaded(Path('/synthetic'))
+
+    def test_tree_archive_roundtrip_preserves_modes_links_and_empty_dirs(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            (root / 'empty').mkdir(mode=0o750)
+            (root / 'bytes').write_bytes(b'opaque synthetic bytes')
+            (root / 'bytes').chmod(0o640)
+            (root / 'link').symlink_to('/synthetic-target-never-read')
+            expected = g.tree(root)
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode='w') as tf:
+                tf.add(root, arcname='.')
+            stream.seek(0)
+            self.assertEqual(g.archive(stream), expected)
+
+    def test_manifest_budget_covers_uncompressed_tar_with_long_names(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            source = root / 'source'
+            source.mkdir()
+            (source / ('x' * 200)).write_bytes(os.urandom(4097))
+            (source / 'empty').mkdir()
+            (source / 'link').symlink_to('x' * 200)
+            manifest = root / 'source.json'
+            manifest.write_bytes(g.encoded(g.tree(source)))
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode='w') as tf:
+                tf.add(source, arcname='.')
+            result = subprocess.run([sys.executable, '-I', '-B', str(Path(g.__file__)),
+                                     'budget', str(manifest)], text=True, capture_output=True, check=True)
+            self.assertGreater(int(result.stdout), len(stream.getvalue()) + 4 * manifest.stat().st_size)
+
+    def test_pause_disk_and_writer_census_refusals(self):
+        with tempfile.TemporaryDirectory() as d:
+            op = Path(d).resolve()
+            stop = op / 'STOP'
+            ours = op / 'our-STOP.txt'
+            expected = 'ALIGN paused for MBP offload and gold validation; ' + str(op) + '\n'
+            stop.write_text(expected)
+            ours.write_text(expected)
+            space = types.SimpleNamespace(f_bavail=40_000_000_000, f_frsize=1)
+            with mock.patch.object(g, 'STOP_PATH', stop), mock.patch.object(g.os, 'statvfs', return_value=space), mock.patch.object(g.subprocess, 'run', return_value=types.SimpleNamespace(stdout='1 /sbin/launchd')) as ps:
+                g.check_pause_and_disk(op)
+                for command in ('claude -p hi', 'codex', 'offload.py', 'align_pilot_session.py',
+                                'harvest.py', 'zstd', '/usr/bin/tar -cf archive'):
+                    ps.return_value.stdout = '123 ' + command
+                    with self.assertRaisesRegex(g.Refusal, 'census busy'):
+                        g.check_pause_and_disk(op)
+                ps.return_value.stdout = ''
+                space.f_bavail = 29_999_999_999
+                with self.assertRaisesRegex(g.Refusal, 'disk floor'):
+                    g.check_pause_and_disk(op)
+                space.f_bavail = 40_000_000_000
+                stop.write_text('someone else')
+                with self.assertRaisesRegex(g.Refusal, 'STOP mismatch'):
+                    g.check_pause_and_disk(op)
 
     def test_archive_unsafe_duplicate_and_hardlink(self):
         for name, kind, repeat in (('../bad', tarfile.REGTYPE, False),

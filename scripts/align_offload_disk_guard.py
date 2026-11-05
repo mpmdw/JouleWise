@@ -20,8 +20,14 @@ def free_bytes(path):
     return s.f_bavail * s.f_frsize
 
 
-def check(paths):
+def device_id(path):
+    return os.stat(path).st_dev
+
+
+def check(paths, devices):
     for p in paths:
+        if device_id(p) != devices[p]:
+            raise RuntimeError('volume identity changed')
         if free_bytes(p) < FLOOR:
             raise RuntimeError('disk floor')
 
@@ -35,12 +41,13 @@ def stop_group(child):
 
 
 def run(paths, argv):
-    check(paths)  # no writer if admission already fails
+    devices = {p: device_id(p) for p in paths}
+    check(paths, devices)  # no writer if admission already fails
     child = subprocess.Popen(argv, start_new_session=True)
     print('GUARDED_WRITER_PGID=' + str(child.pid), flush=True)
     try:
         while True:
-            check(paths)
+            check(paths, devices)
             try:
                 return child.wait(timeout=INTERVAL)
             except subprocess.TimeoutExpired:

@@ -127,7 +127,7 @@ if lock.exists():
 # Raw argv may contain credentials: inspect only in memory, never journal it.
 ps = subprocess.run(['/bin/ps', '-axo', 'pid=,comm=,args='], check=True,
                     text=True, capture_output=True).stdout
-pattern = re.compile(r'(?i)(?:^|[/\s])(?:codex|offload\.py|align_pilot_session(?:\.py)?|harvest(?:[\w.-]*)?|zstd|tar)(?:\s|$)|(?:^|[/\s])claude(?:\s|$).*?(?:\s)-(?:p|[^\s]*p)(?:\s|$)')
+pattern = re.compile(r'(?i)(?:^|[/\s])(?:claude(?:/versions/[\d.]+)?|codex|offload\.py|align_pilot_session(?:\.py)?|harvest[\w.-]*|zstd|tar)(?:\s|$)')
 for row in ps.splitlines():
     pid, command = row.strip().split(None, 1)
     if pattern.search(command):
@@ -255,6 +255,9 @@ no active writer and reviewed disable-state receipts. Optional remote
 lock owner gone, no named agent/writer, no collection/armed t0, launchers
 absent/disabled, external schedulers accounted for. This check precedes all
 STOP/bootout actions; repeat on resume. Agents must exit before measurements.
+
+After STOP 2, perform the Ed-only purchase/attach subsection **9a** before
+step 3; it is a storage prerequisite, not permission to begin downloads.
 
 ## 3. Mechanical model KEEP census and pre-offload R0 inventories
 
@@ -505,8 +508,11 @@ on roots cleared by that map. Agents never read real blinded manifests.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-cp -p "$JW_CANON/scripts/align_offload_delete_root.py" "$JW_OP/manifest.py"
-shasum -a 256 "$JW_OP/manifest.py" > "$JW_OP/manifest-helper.sha256"
+: "${JW_OFFLOAD_CODE_COMMIT:?Set reviewed full runbook/tooling commit}"
+git -C "$JW_CANON" cat-file -e "$JW_OFFLOAD_CODE_COMMIT^{commit}"
+git -C "$JW_CANON" show "${JW_OFFLOAD_CODE_COMMIT}:scripts/align_offload_delete_root.py" \
+  > "$JW_OP/align_offload_delete_root.py"
+shasum -a 256 "$JW_OP/align_offload_delete_root.py" > "$JW_OP/manifest-helper.sha256"
 ```
 
 Hashes do not preserve resource forks, ACLs, xattrs or sparse/hardlink topology.
@@ -535,19 +541,31 @@ mkdir "$JW_ITEM"
     printf 'export %s=%q\n' "$name" "${(P)name}"
   done
 } > "$JW_ITEM/item-env.zsh"
-python3.13 -I -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source.json"
+python3.13 -I -B "$JW_OP/align_offload_delete_root.py" tree "$JW_SRC" > "$JW_ITEM/source.json"
 shasum -a 256 "$JW_ITEM/source.json" > "$JW_ITEM/source.sha256"
 printf '%s\n' "$JW_SRC" > "$JW_ITEM/source-path.txt"
+```
+
+The first file only inventories/hashes and writes control receipts; admit its
+bounded manifest/journal allocation. Once source.json exists, compute the
+archive budget from it, then run the packaging file below through the guard.
+Do not type an archive size by hand. Resume uses this same item-env and checks
+the existing source.sha256; do not recreate/overwrite the source inventory.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+source "${JW_ITEM:?Set exact item}/item-env.zsh"
+shasum -a 256 -c "$JW_OP/manifest-helper.sha256" "$JW_ITEM/source.sha256"
 test ! -e "$JW_REMOTE/$JW_ID.tar.zst"
-export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/manifest.py" budget "$JW_ITEM/source.json")"
+export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/align_offload_delete_root.py" budget "$JW_ITEM/source.json")"
 jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
 COPYFILE_DISABLE=1 /usr/bin/tar --no-mac-metadata --no-xattrs -cf - \
   -C "$JW_SRC" . | zstd -T1 -3 -o "$JW_REMOTE/$JW_ID.tar.zst.partial"
 mv "$JW_REMOTE/$JW_ID.tar.zst.partial" "$JW_REMOTE/$JW_ID.tar.zst"
 zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
-  python3.13 -I -B "$JW_OP/manifest.py" archive > "$JW_ITEM/cloud-local.json"
+  python3.13 -I -B "$JW_OP/align_offload_delete_root.py" archive > "$JW_ITEM/cloud-local.json"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-local.json"
-python3.13 -I -B "$JW_OP/manifest.py" tree "$JW_SRC" > "$JW_ITEM/source-after.json"
+python3.13 -I -B "$JW_OP/align_offload_delete_root.py" tree "$JW_SRC" > "$JW_ITEM/source-after.json"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/source-after.json"
 shasum -a 256 "$JW_REMOTE/$JW_ID.tar.zst" > "$JW_ITEM/archive.sha256"
 cp -p "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
@@ -593,8 +611,9 @@ Without these baselines, the restoration checks in step 13 remain blocked.
 including name set, empty directories, links, file lengths and SHA-256s. Both
 pre/post source manifests match. No source writers remain. Save full manifest
 digest, total regular bytes, archive bytes and dependency review in the ledger.
-For B5 and calibration, match against existing committed transfer manifests
-as well; a new manifest alone cannot authenticate a pre-existing omission.
+For any eligible evidence root, authenticate coverage against its existing
+custody records as well; a new manifest cannot prove a pre-existing omission.
+B5 originals and calibration capture roots are ineligible in this pause.
 
 Wait for **both archive and manifest** to report uploaded; save per-file state
 and aggregate queue state (the transfer precedent is
@@ -612,7 +631,7 @@ jw_uploaded "$JW_REMOTE/$JW_ID.manifest.json"
 jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" yes
 jw_wait_dataless "$JW_REMOTE/$JW_ID.manifest.json" yes
 # Budget the bytes still to hydrate; wait for eviction before admission.
-export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/manifest.py" budget "$JW_ITEM/source.json")"
+export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/align_offload_delete_root.py" budget "$JW_ITEM/source.json")"
 jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
 /usr/bin/brctl download "$JW_REMOTE/$JW_ID.tar.zst"
 /usr/bin/brctl download "$JW_REMOTE/$JW_ID.manifest.json"
@@ -622,7 +641,7 @@ shasum -a 256 -c "$JW_ITEM/cloud-manifest.sha256"
 cmp "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
 shasum -a 256 -c "$JW_ITEM/archive.sha256"
 zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
-  python3.13 -I -B "$JW_OP/manifest.py" archive > "$JW_ITEM/cloud-roundtrip.json"
+  python3.13 -I -B "$JW_OP/align_offload_delete_root.py" archive > "$JW_ITEM/cloud-roundtrip.json"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-roundtrip.json"
 jw_disk_check
 ```
@@ -783,7 +802,7 @@ source "${JW_OP:?Set existing operation}/env.zsh"
 source "${JW_ITEM:?Set exact item}/item-env.zsh"
 # Ed only; a single fail-closed program owns every check and the deletion.
 shasum -a 256 -c "$JW_OP/manifest-helper.sha256"
-python3.13 -I -B "$JW_OP/manifest.py" delete \
+python3.13 -I -B "$JW_OP/align_offload_delete_root.py" delete \
   --item "$JW_ITEM" --keep "$JW_OP/KEEP.txt" --remote "$JW_REMOTE" \
   --journal "$JW_OP/deletions.tsv"
 jw_disk_check
@@ -800,7 +819,8 @@ The only source classes are exact `pilot-v*-*` children of
 `jw_models` or the shared HF cache is therefore unavailable in this pause.
 
 All source/cloud/round-trip digests, both bound receipts, retention review,
-file flags and ACLs must pass; `fileproviderctl evaluate` must freshly report
+file flags and ACLs must pass. The program also checks this operation's exact
+STOP, current writer/agent census and 30 GB journal-filesystem floor; `fileproviderctl evaluate` must freshly report
 `isUploaded=1` for both cloud objects immediately before deletion. Any
 preflight failure exits nonzero with **no deletion** and a
 `REFUSED_NO_DELETE` TSV row. The program checks writable directories and
@@ -825,97 +845,191 @@ jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" yes
 /bin/df -k /System/Volumes/Data > "$JW_OP/df-current.txt"
 ```
 
-**STOP 8:** record both `available_after * 1024` and the actual reclaimed
-`(available_after - available_before) * 1024` bytes from `df -k`. The target is
-about **150,000,000,000 available bytes**, not a prescribed deletion volume.
-When it and step 9 pass, stop deleting. APFS clone sharing meant pilot offload
-reclaimed much less than summed root sizes (`7e06863b/RECORD.md:17`). Do not
-remove snapshots or KEEP roots to force admission. Check the 30 GB floor after
-each upload, hydration, deletion and eviction; unresolved capacity goes to Ed.
+**STOP 8:** record actual available bytes and `(available_after -
+available_before) * 1024` from `df -k`. Delete only the already-approved,
+eligible leaf. Stop once the combined step-9 budget is met; **150 GB internal
+is not reachable from the present eligible set**. Never remove snapshots,
+retained pilot 9 or KEEP to force a disk gate. If pilot 8 is ineligible or
+clones reclaim less than estimated, keep it and report the shortfall.
 
-## 9. Admit the disk budget before downloading
+## 9. Combined internal/external budget and primary external-SSD plan
 
-Use measured available bytes in execution order. About 150 GB free is
-139.7 GiB; it is an admission target on the confirmed 1 TB SSD. Nominal peak
-**additional allocation** is about 120 GB, leaving 30 GB available. It comprises
-up to 95 GB converted output + about 15 GB maximum working unit + about 10 GB
-for new environments, metadata, activation/cache checkpoints, journals and
-temporary writes. These are planning estimates, not measured guarantees.
+### 9a. Ed-only purchase/attach gate (after STOP 2, before step 3 copies)
 
-| Step / allocation order | Accounting and STOP check |
-|---|---|
-| 1–4: identify, pause, inventory | Record initial available bytes `F0`; only small control/manifest writes. Below 30 GB: STOP. Mark KEEP before selecting a source. |
-| 5: quota/probe | Budget two local 256 MiB probe copies plus receipts. New cloud archives consume local SSD until uploaded and explicitly evicted. |
-| 6–8: one root at a time | Before packaging/hydration, require available bytes ≥ 30 GB + maximum added archive/staging bytes. Verify cloud and independent restore, authorize/delete one local root, evict verified cloud staging, then measure the actual `df` gain. Stop offloading at about 150 GB available once the remaining budget fits. |
-| 9–10: setup | Freeze the byte budget, then measure new venv/package/metadata/log allocation. Include pip/HF cache and temporary space in the overhead ceiling; reuse one location on resume. Existing measurement environments and both anchor models stay in place. |
-| 11: metadata only | Fetch pinned config/tokenizer/index and LFS metadata; derive exact layer-group shard unions from `weight_map`. No bf16 bulk download. Replace the estimated largest working unit with its true maximum, including incomplete downloads and temporary output overlap. |
-| 12: each streaming unit | From current free bytes `F`, admit only if `F ≥ 30 GB + next unit's maximum incremental allocation`. Download/verify → gold parity with real carried activations → convert/commit output and journal → delete that verified bf16 working unit → measure space. Converted shards accumulate toward 90–95 GB; bf16 working units do not accumulate. |
-| 12: final peak | Current available bytes must cover **remaining converted output + largest additional simultaneous working/temp unit + remaining overhead + 30 GB**. Do not double-count setup/output already reflected in current `df`. Recompute before every unit and after a retry; reject a projected overrun before starting it. |
-| 13: future ALIGN | Re-admit the next kit's full footprint and the 30 GB floor before re-arm. Historical pilot floor 41.2 GB is context (`7e06863b/RECORD.md:17`), not a second concurrent pilot during gold work. |
+Ed purchases or attaches a **1–2 TB external NVMe SSD**, Thunderbolt/USB4,
+APFS. Ed alone chooses/formats a device in Disk Utility after verifying its
+identity and preserving existing contents. No formatting command is supplied.
+Exclude the volume in **Spotlight Privacy** and Time Machine; verify exclusions
+before writing. Prefer another device for independent durable custody backups,
+so a failed gold scratch drive does not take the backup with it. A copy on the
+same external device as another copy is not a second independent backup.
+A verified external copy is independent of the Mac's internal SSD and iCloud.
+Budget all uses if a single external device supplies that independent copy.
 
-The group plan must bound **simultaneous** disk use. Layers 2–47 are expected
-to touch about 3 shards / 7 GB each. Layer 0 touches about 24 shards, so it
-needs bounded shard/tensor subunits rather than staging that whole union.
-Layer 1's n-gram table spans about 35 shards / 100 GB bf16, processed one shard
-at a time (step 12). A 15 GB working allowance is valid only after the harness
-accounts for these large unions, shared shards, partial files, output temp
-files and activation checkpoints. No second full HF snapshot/cache is allowed.
-
-**STOP 9:** measured free space and the preliminary budget must admit the
-bounded setup and metadata work of steps 10–11. Final admission for weights
-waits for the exact step-11 group schedule and step-12 harness review; repeat
-this gate then. If measured output, working unit or overhead exceeds the
-120 GB estimate, re-admit the actual total plus the 30 GB floor. Stop for a
-revised plan if minimal eligible offload cannot fund it; retain all KEEP data.
-No full 360 GB checkpoint is required on disk. Never delete custody to pay for
-an unbounded layer-0 or n-gram working set.
-
-## 10. Create isolated storage and venvs; exclude indexing and backups
-
-New proposed locations under the established non-iCloud model/code roots:
+Save this as an Ed-reviewed writer file, run via step 5's guard with both
+internal and external volumes (at this point only small control writes).
+Choose one fixed mount and operation location, not a new date on resume.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-export JW_GOLD=/Users/edr/jw_models/flashnext-gold-20261105.noindex
+: "${JW_EXTERNAL:?Set actual attached APFS mount under /Volumes}"
+: "${JW_EXTERNAL_UUID:?Set verified Volume UUID from diskutil info}"
+export JW_EXTERNAL JW_EXTERNAL_UUID
+jw_external_check() {
+  python3.13 -I -B - <<'PY'
+import os, plistlib, subprocess
+from pathlib import Path
+p = Path(os.environ['JW_EXTERNAL'])
+assert p.parent == Path('/Volumes') and not p.is_symlink()
+s = subprocess.run(['/usr/sbin/diskutil', 'info', '-plist', str(p)],
+                   check=True, capture_output=True).stdout
+d = plistlib.loads(s)
+assert d['VolumeUUID'] == os.environ['JW_EXTERNAL_UUID']
+assert d['FilesystemType'].casefold() == 'apfs' and d['MountPoint'] == str(p)
+assert os.stat(p).st_dev != os.stat('/System/Volumes/Data').st_dev
+print('external volume identity PASS')
+PY
+}
+jw_external_check
+sudo /usr/bin/tmutil addexclusion -p "$JW_EXTERNAL"
+/usr/bin/tmutil isexcluded "$JW_EXTERNAL"
+# Ed verifies this exact volume in Spotlight Privacy; no fake measurement proof.
+export JW_GOLD="$JW_EXTERNAL/flashnext-gold-20261105.noindex"
 export JW_GOLD_CODE=/Users/edr/code/JouleWise-flashnext-gold-20261105
-: "${JW_SETUP_BUDGET_BYTES:?Set approved new setup and temporary allocation ceiling}"
-jw_disk_check "$JW_SETUP_BUDGET_BYTES"
+{
+  for name in JW_EXTERNAL JW_EXTERNAL_UUID JW_GOLD JW_GOLD_CODE; do
+    printf 'export %s=%q\n' "$name" "${(P)name}"
+  done
+  functions jw_external_check
+} > "$JW_OP/external-env.zsh"
+shasum -a 256 "$JW_OP/external-env.zsh" > "$JW_OP/external-env.sha256"
+jw_disk_check 0 "$JW_EXTERNAL"
+```
+
+On resume source the existing external-env file, check its digest and call
+`jw_external_check`; never rewrite it because a mount path changed. Call it
+before **every** external writer. The guard monitors both filesystems; a
+missing volume/changed device is STOP, not permission to write into an empty
+mountpoint on the internal SSD.
+
+External paging changes throughput, latency, USB/Thunderbolt traffic and power.
+Measure sequential read/write and real page-fault behavior on **synthetic or
+model bytes**, outside a measurement window; record link, enclosure, firmware,
+filesystem, thermal throttling, throughput and n-gram paging policy. The n-gram
+table is paged from this external SSD; do not silently copy it internally.
+A bus-powered enclosure contributes to the laptop/wall boundary differently
+from a separately powered enclosure; the measurement lead must freeze and
+document that boundary and the attached hardware for future energy comparisons.
+Gold parity/setup performance is not energy evidence. Revalidate no-swap memory,
+quiet-state and the measurement boundary before ALIGN; no measurement with
+backup, indexing, downloads or agents active. If an external-paging protocol
+change needs a ruling, keep the pause and ask the lead.
+
+### 9b. Honest reachable space and one combined admission
+
+The planning estimate after pilot 9 is **about 66 GB internal available**, plus
+**about 26 GB for pilot 8 only if eligible**, or **about 92 GB**. This is not a
+promise: pilot 9 is retained, clone sharing reduces reclamation, and pilot 8
+may also stay. Record actual `df` before/after each allowed deletion. Pilots
+0–7 reclaim zero deleted-source bytes and tier 3 is empty. No extra 26 GB is
+credited for pilot 9. Without a measured 80 GB internal free, R0's disk gate
+still fails even when models are external; retain sources and STOP for the
+lead's storage/r0 ruling. External space cannot be substituted for that gate.
+
+Internal SSD alone **CANNOT** fund the roughly **120 GB streaming peak + 30 GB
+floor = 150 GB**, or keep the **95 GB converted model + 41.2 GB next ALIGN
+window + 30 GB floor = 166.2 GB**. The older 150 GB offload target is unreachable
+from this eligible set. Conversion on the internal SSD is not admitted.
+`JW_GOLD` and converted weights remain external after gold; no later internal
+copy is implied by reaching a checkpoint.
+
+Use this single budget before packaging, hydration, copying, setup and every
+gold unit. Fill **all** remaining allocations, and repeat after metadata pins,
+retries and materialized R0 copies. Count allocations already reflected in
+current `df` once, not again as future bytes. Use maximum **simultaneous** use.
+
+| Filesystem / stage | Remaining new bytes to fund, in addition to current resident bytes |
+|---|---|
+| Internal, per offload | One archive upper bound from `source.json`, cloud hydration, probe copies and small journal/control writes. Keep source resident until step 8 passes. Retained pilot 9 and all KEEP weights remain. |
+| Internal, future selection/measurement | After present weights/copies: R0 needs **≥80 GB free** on its configured measurement `disk_path`. Next ALIGN requires the actual next kit footprint (historical 41.2 GB) plus **30 GB**, or any larger reviewed window budget. Use `max(80 GB, next_window + 30 GB, pending internal write + 30 GB)` for the relevant next stages. |
+| External, R0 | Both uncompressed pilot 8/9 materialized copies, matching the pre-offload inventories; complete non-symlink N/D model mirrors if not already present (**44.86 GB N**, about **28 GB D** are estimates). Do not count a compressed tar or HF symlinks as a mirror. Keep inventories/config/results outside sources. |
+| External, durable custody | Existing ALIGN 0–7, H/H2, R7 archive/manifest copies, newly eligible archives, plus **largest complete restore workspace**. If this is gold's device, all copies compete in the same budget and remain resident. Otherwise budget/check the backup device separately. |
+| External, streaming gold | Remaining converted output up to **95 GB**, maximum simultaneous bounded bf16/download/temp unit initially **15 GB**, and remaining env/cache/metadata/activation/journal overhead initially **10 GB**, plus **30 GB floor**. Replace estimates with the actual frozen schedule; incomplete downloads, output temp/atomic overlap, caches and re-downloads count. |
+| Whole operation | Every filesystem passes its own current-free ≥ remaining simultaneous allocations + required floor; the internal R0 ≥80 GB gate and future ALIGN gate also pass before those stages. Do not add free bytes across disks to satisfy any single-filesystem constraint. |
+
+Layer 0's roughly 24-shard union and layer 1's roughly 35-shard/100 GB bf16
+n-gram table need bounded subunits, not entire unions staged simultaneously.
+Layers 2–47 are expected at about 3 shards/7 GB each. A 15 GB unit allowance
+is valid only after review includes source shard verification, conversion temp
+files, partials, shared-shard consumers and activation checkpoints. The exact
+step-11 `weight_map` schedule controls final weight admission. No full 360 GB
+snapshot or duplicate shared HF cache is admitted on either SSD.
+
+**STOP 9:** Ed records volume identities, available bytes and every remaining
+allocation in one budget receipt. External capacity/throughput/exclusions and
+internal future-window budget must pass. Retention overrides capacity; if no
+plan can pass R0/ALIGN internal headroom, STOP for the lead. Do not bypass R0,
+quiet-machine or model/energy review by relabeling the external disk.
+
+## 10. Isolated external storage, caches and venvs
+
+Run new initialization only once; on resume verify existing environment locks,
+wheel hashes and the saved env file rather than rerunning package resolution.
+`mkdir`/noclobber refusals are deliberate. Use a new reviewed attempt filename
+for each additional receipt. No writes, `delete-cache` or cleanup under
+`~/.cache/huggingface/hub`, which holds anchor bytes. `HF_HOME`, `HF_HUB_CACHE`
+and `HF_XET_CACHE` all live in `JW_GOLD`. Disable xet transport/chunk cache;
+cap any other cache in the per-unit byte budget. The harness must refuse a
+cache path outside these pinned locations.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
+shasum -a 256 -c "$JW_OP/external-env.sha256"
+jw_external_check
+: "${JW_SETUP_BUDGET_BYTES:?Set reviewed new setup/cache/temp byte ceiling}"
+jw_disk_check "$JW_SETUP_BUDGET_BYTES" "$JW_EXTERNAL"
 mkdir -m 700 "$JW_GOLD"
 touch "$JW_GOLD/.metadata_never_index"
-sudo /usr/bin/tmutil addexclusion -p "$JW_GOLD"
-/usr/bin/tmutil isexcluded "$JW_GOLD"
-# Ed also adds this exact folder in Spotlight Privacy and confirms exclusion.
-# .noindex plus .metadata_never_index are defense in depth, not a UI check.
 mkdir "$JW_GOLD/envs" "$JW_GOLD/results" "$JW_GOLD/converted" \
-  "$JW_GOLD/metadata" "$JW_GOLD/working" "$JW_GOLD/activations"
+  "$JW_GOLD/metadata" "$JW_GOLD/working" "$JW_GOLD/activations" \
+  "$JW_GOLD/hf" "$JW_GOLD/pip-cache" "$JW_GOLD/tmp"
+{
+  cat <<'CACHE'
+export HF_HOME="$JW_GOLD/hf"
+export HF_HUB_CACHE="$JW_GOLD/hf/hub"
+export HF_XET_CACHE="$JW_GOLD/hf/xet"
+export HF_HUB_DISABLE_XET=1
+export HF_XET_CHUNK_CACHE_SIZE_BYTES=0
+export PIP_CACHE_DIR="$JW_GOLD/pip-cache"
+export TMPDIR="$JW_GOLD/tmp"
 export JW_METADATA="$JW_GOLD/metadata"
-export JW_CHECKPOINT="$JW_GOLD/working"  # Rolling verified bf16 unit only.
-python3.13 -m venv "$JW_GOLD/envs/mlx"
-python3.13 -m venv "$JW_GOLD/envs/reference"
-"$JW_GOLD/envs/mlx/bin/python" -m pip install 'mlx==0.31.2' 'mlx-lm==0.31.3'
-: "${JW_TORCH_VERSION:?Set harness-approved exact torch version}"
-"$JW_GOLD/envs/reference/bin/python" -m pip install \
+export JW_CHECKPOINT="$JW_GOLD/working"
+CACHE
+} > "$JW_OP/gold-env.zsh"
+source "$JW_OP/gold-env.zsh"
+shasum -a 256 "$JW_OP/gold-env.zsh" > "$JW_OP/gold-env.sha256"
+python3.13 -I -m venv "$JW_GOLD/envs/mlx"
+python3.13 -I -m venv "$JW_GOLD/envs/reference"
+"$JW_GOLD/envs/mlx/bin/python" -I -m pip install 'mlx==0.31.2' 'mlx-lm==0.31.3'
+: "${JW_TORCH_VERSION:?Set harness-reviewed exact torch version}"
+"$JW_GOLD/envs/reference/bin/python" -I -m pip install \
   "torch==$JW_TORCH_VERSION" 'transformers==5.22.1' safetensors huggingface_hub
-"$JW_GOLD/envs/mlx/bin/python" -m pip freeze --all > "$JW_OP/mlx.freeze.txt"
-"$JW_GOLD/envs/reference/bin/python" -m pip freeze --all > "$JW_OP/reference.freeze.txt"
-"$JW_GOLD/envs/mlx/bin/python" -m pip check
-"$JW_GOLD/envs/reference/bin/python" -m pip check
-"$JW_GOLD/envs/mlx/bin/python" -c \
-  'from importlib.metadata import version; print(version("mlx"), version("mlx-lm"))'
-"$JW_GOLD/envs/reference/bin/python" -c \
-  'from importlib.metadata import version; print(version("torch"), version("transformers"))'
+"$JW_GOLD/envs/mlx/bin/python" -I -m pip freeze --all > "$JW_OP/mlx.freeze.txt"
+"$JW_GOLD/envs/reference/bin/python" -I -m pip freeze --all > "$JW_OP/reference.freeze.txt"
+"$JW_GOLD/envs/mlx/bin/python" -I -m pip check
+"$JW_GOLD/envs/reference/bin/python" -I -m pip check
+jw_disk_check 0 "$JW_EXTERNAL"
 jw_disk_check
 ```
 
-**STOP 10:** mlx 0.31.2 / mlx-lm 0.31.3 match, transformers 5.22.1 matches,
-torch is the harness-reviewed pin, dependency checks pass, Spotlight Privacy
-and Time Machine exclusion confirmed. Archive freeze files and wheel hashes
-for reproducibility; rebuild from them rather than re-resolving later. Heavy
-dependencies are isolated: main's `pyproject.toml:17` currently constrains
-`transformers<5.13`; **do not install `[mac]` into the reference venv or upgrade
-the measurement venv**. The required MLX pins are corroborated in
-`8d1ab6e2c:docs/align/pilot_protocol_v3.md:65–67`; reference version authority
-is `1643e9aac4:docs/align/qwen4_exp_port/GOAL.md:13`.
+**STOP 10:** mlx 0.31.2 / mlx-lm 0.31.3, transformers 5.22.1 and the
+harness-approved torch pin verified from version locks; preserve wheel digests.
+Do not install `[mac]` into the reference venv or upgrade the measurement venv
+(main's transformers constraint differs). Confirm external Spotlight/Time
+Machine exclusions. On every step-11/12 restart source env, external-env and
+gold-env, check their hashes and volume identity, compare the frozen pins,
+then resume only from a fully authenticated durable checkpoint.
 
 ## 11. Pin the official revision and metadata; plan layer-group streaming
 
@@ -929,8 +1043,14 @@ First resolve metadata without downloading weights:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
+source "$JW_OP/gold-env.zsh"
+shasum -a 256 -c "$JW_OP/external-env.sha256" "$JW_OP/gold-env.sha256"
+jw_external_check
+test ! -e "$JW_OP/hf-pinned.json"
+test ! -e "$JW_OP/hf-proposed.json"
 export JW_HF_REPO=Qwen/Qwen3.8-Flash-Next
-"$JW_GOLD/envs/reference/bin/python" -B - <<'PY'
+"$JW_GOLD/envs/reference/bin/python" -I -B - <<'PY'
 import json, os
 from pathlib import Path
 from huggingface_hub import HfApi
@@ -941,7 +1061,8 @@ for f in info.siblings:
     rows.append(dict(path=f.rfilename, size=f.size,
                      sha256=lfs.sha256 if lfs else None))
 out = dict(repo=info.id, revision=info.sha, files=rows)
-Path(os.environ['JW_OP'], 'hf-proposed.json').write_text(json.dumps(out, indent=2)+'\n')
+with Path(os.environ['JW_OP'], 'hf-proposed.json').open('x') as f:
+    f.write(json.dumps(out, indent=2)+'\n')
 print('revision', info.sha)
 print('total_bytes', sum(r['size'] for r in rows))
 print('largest_file', max(r['size'] for r in rows))
@@ -958,10 +1079,22 @@ LFS oid at that revision, not a hash computed from a downloaded corrupt file.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
+source "$JW_OP/gold-env.zsh"
+shasum -a 256 -c "$JW_OP/external-env.sha256" "$JW_OP/gold-env.sha256"
+jw_external_check
+test ! -e "$JW_OP/hf-pinned.json"
 cp -p "$JW_OP/hf-proposed.json" "$JW_OP/hf-pinned.json"
-export JW_HF_REV="$("$JW_GOLD/envs/reference/bin/python" -c \
+test ! -e "$JW_OP/hf-metadata-verified.json"
+test ! -e "$JW_OP/hf-receipts.sha256"
+export JW_HF_REPO=Qwen/Qwen3.8-Flash-Next
+export JW_HF_REV="$("$JW_GOLD/envs/reference/bin/python" -I -c \
   'import json,os; print(json.load(open(os.environ["JW_OP"]+"/hf-pinned.json"))["revision"])')"
-"$JW_GOLD/envs/reference/bin/python" -B - <<'PY'
+{
+  printf 'export JW_HF_REPO=%q\n' "$JW_HF_REPO"
+  printf 'export JW_HF_REV=%q\n' "$JW_HF_REV"
+} > "$JW_OP/hf-env.zsh"
+"$JW_GOLD/envs/reference/bin/python" -I -B - <<'PY'
 import hashlib, json, os, re
 from pathlib import Path, PurePosixPath
 from huggingface_hub import hf_hub_download
@@ -983,7 +1116,7 @@ selected = [r for r in p['files'] if r['path'] in names]
 assert {'model.safetensors.index.json', 'config.json'} <= {r['path'] for r in selected}
 checks = []
 for r in selected:
-    s = os.statvfs('/System/Volumes/Data')
+    s = os.statvfs(os.environ['JW_GOLD'])
     if s.f_bavail * s.f_frsize < 30_000_000_000 + r['size']:
         raise SystemExit('STOP: metadata download would violate disk floor')
     hf_hub_download(repo_id=p['repo'], revision=p['revision'], filename=r['path'],
@@ -1001,14 +1134,26 @@ for r in selected:
                        lfs_oid_sha256=r['sha256']))
 index = json.loads((target / 'model.safetensors.index.json').read_text())
 assert set(index['weight_map'].values()) == {r['path'] for r in shards}
-Path(os.environ['JW_OP'], 'hf-metadata-verified.json').write_text(json.dumps(
-    dict(repo=p['repo'], revision=p['revision'], files=checks,
-         expected_shards=shards), indent=2)+'\n')
+with Path(os.environ['JW_OP'], 'hf-metadata-verified.json').open('x') as f:
+    f.write(json.dumps(dict(repo=p['repo'], revision=p['revision'], files=checks,
+                           expected_shards=shards), indent=2)+'\n')
 print('VERIFIED metadata; expected weight shards', len(shards), '; weights not downloaded')
 PY
-shasum -a 256 "$JW_OP/hf-pinned.json" "$JW_OP/hf-metadata-verified.json" \
-  > "$JW_OP/hf-receipts.sha256"
+"$JW_GOLD/envs/reference/bin/python" -I -B - <<'PYHF'
+import hashlib, json, os
+from pathlib import Path
+op = Path(os.environ['JW_OP'])
+verified = json.loads((op / 'hf-metadata-verified.json').read_text())
+with (op / 'hf-receipts.sha256').open('x') as f:
+    for name in ('hf-pinned.json', 'hf-metadata-verified.json', 'hf-env.zsh'):
+        p = op / name
+        f.write(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + str(p) + '\n')
+    for row in verified['files']:
+        f.write(row['sha256'] + '  ' + str(Path(os.environ['JW_METADATA']) / row['path']) + '\n')
+PYHF
+shasum -a 256 -c "$JW_OP/hf-receipts.sha256"
 /bin/df -k /System/Volumes/Data
+jw_disk_check 0 "$JW_EXTERNAL"
 jw_disk_check
 ```
 
@@ -1037,19 +1182,51 @@ until all immediate consumers finish or re-download/re-verify it later.
 Preserve partials and error receipts on failure; retry only after checking
 space/network. A partial or hash mismatch never enters parity or conversion.
 
-## 12. Reviewed gold-parity harness: stream, compare, convert, journal, prune
-
-Harness authority: **`lane/2026-11-05-align-flashnext-gold-parity`**. That ref,
-its entrypoint, CLI, tolerances, torch pin and conversion command remain
-**unavailable in this clone's local refs**; the branch may not have been pushed
-yet. No network fetch was authorized in the authoring session. **STOP 12a:
-obtain the lane's reviewed commit and README/`--help`, and lead review of its
-streaming parity/conversion, disk-floor and resume behavior before downloading
-weights or running the loop.** The following checkout commands become usable
-only once the lead supplies the lane object to the MBP:
+On resume **skip both initialization blocks above**, including the mutable
+`main` metadata query. First verify the existing bound receipts; never create
+a new pin to make resume pass:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
+source "$JW_OP/gold-env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" "$JW_OP/gold-env.sha256"
+jw_external_check
+test -s "$JW_OP/hf-pinned.json"
+test -s "$JW_OP/hf-receipts.sha256"
+shasum -a 256 -c "$JW_OP/hf-receipts.sha256"
+source "$JW_OP/hf-env.zsh"
+# Then re-hash every recovered shard/output/activation against its frozen receipt.
+```
+
+Record metadata-file checksums at their actual paths in hf-receipts.sha256 as
+well as the pin/verification JSON checksums. Missing/corrupt receipts or an
+incomplete initialization are STOP for a reviewed recovery; never rerun the
+`main` query or overwrite hf-pinned.json. Package setup, metadata/weight fetch
+and all conversion commands run through step 5's process-group guard, watching
+both internal storage and the external volume. Pin/cache variables are part
+of the harness resume identity and may not point at the shared home cache.
+
+## 12. Reviewed gold-parity harness: stream, compare, convert, journal, prune
+
+Harness authority: **PR #667,
+`lane/2026-11-05-align-flashnext-gold-parity` (pushed per the lead)**.
+The port is **PR #664, `lane/2026-11-05-align-flashnext-port`**, based on
+`origin/port/qwen4-exp-mlx`. Record the actual reviewed full SHAs from the
+Mac's available objects; no stale cached SHA or moving base is authority.
+**STOP 12a:** review the harness README/`--help`, actual streaming/conversion
+CLI, tolerances, torch pin, disk-floor and interrupted-unit resume behavior
+before downloading weights. This offline authoring session did not fetch or
+execute that lane. Do not infer correctness merely from a pushed branch.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
+source "$JW_OP/gold-env.zsh"
+shasum -a 256 -c "$JW_OP/external-env.sha256" "$JW_OP/gold-env.sha256"
+jw_external_check
+shasum -a 256 -c "$JW_OP/hf-receipts.sha256"
+source "$JW_OP/hf-env.zsh"
 : "${JW_HARNESS_COMMIT:?Set reviewed full gold-parity lane commit}"
 git -C "$JW_CANON" cat-file -e "$JW_HARNESS_COMMIT^{commit}"
 git -C "$JW_CANON" worktree add --detach "$JW_GOLD_CODE" "$JW_HARNESS_COMMIT"
@@ -1150,9 +1327,16 @@ Before/after each unit, also record memory and disk state:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
+source "$JW_OP/gold-env.zsh"
+shasum -a 256 -c "$JW_OP/external-env.sha256" "$JW_OP/gold-env.sha256"
+jw_external_check
+shasum -a 256 -c "$JW_OP/hf-receipts.sha256"
+source "$JW_OP/hf-env.zsh"
 /usr/bin/vm_stat > "$JW_OP/vm-before-phase.txt"
 /usr/sbin/sysctl vm.swapusage > "$JW_OP/swap-before-phase.txt"
 /bin/df -k /System/Volumes/Data > "$JW_OP/df-before-phase.txt"
+/bin/df -k "$JW_EXTERNAL" > "$JW_OP/external-df-before-phase.txt"
 ```
 
 Use unique unit/phase filenames instead of overwriting earlier receipts. This is
@@ -1187,7 +1371,8 @@ the SSD.
 
 ## 13. Restore ALIGN through the magistrate, with a fresh plan
 
-1. Finish uploads; require no pending/error iCloud objects, downloads,
+1. Source/check the saved env, external-env and gold-env files, verify
+   external volume identity, then finish uploads; require no pending/error iCloud objects, downloads,
    compression, hashing, conversion, package installs or backup work. Verify
    KEEP paths and pinned model files against their pre-offload manifests.
    The Qwen3-30B anchors and Qwen3.8-27B have stayed on-device. If a previously
@@ -1200,7 +1385,11 @@ the SSD.
    swap/memory pressure and allow the machine to return to its baseline;
    no energy claims attach to the setup window. Restore only the reviewed
    Spotlight/other service state recorded at pause. Keep the new large model
-   directory excluded from indexing and Time Machine.
+   external volume excluded from indexing and Time Machine. Keep the converted
+   model and paged n-gram table external; recheck volume identity and the agreed
+   power boundary. R0 still needs at least 80 GB internal free after present
+   weights; independently admit the next kit's exact measurement-volume budget
+   plus the 30 GB floor. Use the larger bound for the next stage.
 3. Restore any temporarily unloaded non-measurement infrastructure from the
    saved exact plists and restore original disabled states. Do not resume a
    DONE BYTES/B6 loop. With Ed's go, remove **only this operation's** STOP
@@ -1209,8 +1398,7 @@ the SSD.
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
 # Ed only, after steps 1–2 and confirmation the STOP was created by step 2.
-test "$(cat /Users/edr/night-custody/magistrate/STOP)" = \
-  'ALIGN paused for MBP offload and gold validation'
+cmp "$JW_OP/our-STOP.txt" /Users/edr/night-custody/magistrate/STOP
 rm /Users/edr/night-custody/magistrate/STOP
 /bin/launchctl enable "gui/$(id -u)/com.joulewise.magistrate"
 /bin/launchctl bootstrap "gui/$(id -u)" \
@@ -1248,7 +1436,8 @@ the exact failed gate; do not shorten or bypass admission.
 ## 14. Ed-only actions and handoff checklist
 
 Ed owns: physical machine confirmation and measured SSD capacity; iCloud quota,
-account and any storage purchase; confirmation ALIGN is paused; control of
+account and any storage purchase, including the external NVMe attachment/format;
+confirmation ALIGN is paused; control of
 personal apps/system launchers and system privileges; independent-copy device
 and receipt; exact-manifest deletion approval and every irreversible removal;
 any requested change to sealed retention (not granted here); approval of
@@ -1259,8 +1448,9 @@ The operation handoff records machine/SSD, before/after `df`, bytes actually
 freed, per-root KEEP/offloaded/deleted status, exact cloud/second-copy locations
 and manifest hashes, every deletion receipt, pending uploads/errors, pinned
 checkpoint and all 131 shard results, venv locks, harness CLI/commit and
-coverage, streaming journal/resume state and activation hashes, actual peak
-working bytes and lowest free bytes, conversion/end-to-end outcomes, unused
+coverage, streaming journal/resume state and activation hashes, external
+volume/link/paging/power-boundary identity, combined R0/ALIGN disk budget, actual
+peak working bytes and lowest free bytes, conversion/end-to-end outcomes, unused
 model revision inventory, and pilot-9 harvest/pause/restoration status.
 Report UNKNOWN, BLOCKED and PROVISIONAL explicitly. **No offload or hardware
 validation occurred merely because this runbook was written.**

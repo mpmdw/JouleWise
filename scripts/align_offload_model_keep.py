@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
 
@@ -61,7 +62,9 @@ def derive(repo, r0_config):
             # Do not invent a local directory from a prose model name. The
             # roster must supply machine-readable sources in configs; operator
             # compares prose roster IDs against this printed source census.
-            found = set()
+            found = set(re.findall(
+                r'/Users/edr/(?:jw_models|\.cache/huggingface)/[^\s`|<>"\)]+',
+                data.decode('utf-8')))
         paths |= found
         receipts.append(dict(input=name, sha256=hashlib.sha256(data).hexdigest(),
                              sources=sorted(found)))
