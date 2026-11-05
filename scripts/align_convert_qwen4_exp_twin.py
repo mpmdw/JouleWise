@@ -168,9 +168,13 @@ class Converter:
                                 shape=(spec.padded_vocab_size, lay["record_bytes"]))
             parts = self.args.split_ngram_parts
             part_rows = -(-spec.padded_vocab_size // parts)  # torch.chunk sizing
+            # torch.chunk returns FEWER than `parts` pieces when
+            # ceil(rows / parts) * (parts - 1) >= rows; the reference saves
+            # and reloads whatever pieces it got (Chunk / Concatenate).
+            n_chunks = -(-spec.padded_vocab_size // part_rows)
             self.ngram[layer] = {"spec": spec, "layout": lay, "file": fname, "path": path,
                                  "mm": mm, "parts": parts, "part_rows": part_rows,
-                                 "written": set(), "whole": False}
+                                 "n_chunks": n_chunks, "written": set(), "whole": False}
 
     # ---------------- emit -----------------
     def _emit(self, key: str, value):
@@ -310,6 +314,10 @@ class Converter:
             st["whole"] = True
         else:
             k = int(part)
+            if not 0 <= k < st["n_chunks"]:
+                raise ValueError(f"n-gram part {k} out of range: torch.chunk of "
+                                 f"{spec.padded_vocab_size} rows into {st['parts']} parts "
+                                 f"gives {st['n_chunks']} pieces")
             start = k * st["part_rows"]
             expect = max(0, min(st["part_rows"], spec.padded_vocab_size - start))
             if value.shape[0] != expect:
@@ -391,8 +399,9 @@ class Converter:
             raise ValueError(f"incomplete expert sets: {missing}")
         ngram_meta = {}
         for layer, st in self.ngram.items():
-            if not st["whole"] and len(st["written"]) != st["parts"]:
-                raise ValueError(f"layer {layer}: n-gram parts {len(st['written'])}/{st['parts']}")
+            if not st["whole"] and st["written"] != set(range(st["n_chunks"])):
+                raise ValueError(f"layer {layer}: n-gram parts {len(st['written'])}/{st['n_chunks']} "
+                                 f"(torch.chunk pieces of split_ngram_parts={st['parts']})")
             st["mm"].flush()
             del st["mm"]
             ngram_meta[str(layer)] = {

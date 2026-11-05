@@ -136,8 +136,11 @@ context, whatever the prefill step.
   `gate_up_proj` [E, 2I, H] (as in the released shards) is split. Both give
   bitwise-identical output (tested).
 - N-gram `shard_K` parts are written at numeric offsets into the store. The
-  checkpoint's I64 hash buffers are checked against the port's recomputation,
-  then dropped.
+  converter expects exactly the pieces `torch.chunk` produced on save, which
+  can be fewer than `split_ngram_parts` (ceil sizing: 424 rows into 28 parts
+  gives 27); the release (multiple-of-128 rows, 128 parts) has equal pieces.
+  The checkpoint's I64 hash buffers are checked against the port's
+  recomputation, then dropped.
 - `--pins` refuses any shard whose sha256 does not match.
 - Completeness gate: every port parameter must be present with the right
   shape, and every attention layer must have its indexer, or the run fails.

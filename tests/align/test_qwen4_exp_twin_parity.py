@@ -740,10 +740,11 @@ def _qsa_cfg(over):
 # Tiny full model at the edges of the config space, converted like the main
 # checkpoint. Reference logits are an UNCACHED prefill: with
 # ple_conv_kernel_size 1 the reference's own cached PLE path raises.
+# split_ngram_parts 28 over 424 padded rows: torch.chunk saves 27 pieces.
 REG_EDGE_TEXT = dict(
     TINY_TEXT_CONFIG, num_hidden_layers=4, ple_layer_ids=[2],
     layer_types=["linear_attention"] * 3 + ["full_attention"],
-    linear_conv_kernel_dim=1, ple_conv_kernel_size=1)
+    linear_conv_kernel_dim=1, ple_conv_kernel_size=1, split_ngram_parts=28)
 REG_EDGE_CUTS = [0, 2, 3, 4, 9, 10, 11, 12, 18, 19, 20, 35, 36, 37, 38, 39, 40, 41]
 
 
@@ -951,8 +952,17 @@ def _ref_edge(engine, reg: Path):
     ids = _tokens(3, REG_EDGE_CUTS[-1], eos_at=(4, 17))
     with torch.no_grad():
         logits = ref(input_ids=torch.tensor([ids]), use_cache=False).logits[0].float().numpy()
+        # The checkpoint as saved is valid for the reference itself.
+        installed = full(input_ids=torch.tensor([ids]), use_cache=False).logits[0].float().numpy()
+        reloaded = Qwen4ExpForConditionalGeneration.from_pretrained(
+            reg / "edge_ckpt", attn_implementation="sdpa").eval()
+        again = reloaded(input_ids=torch.tensor([ids]), use_cache=False).logits[0].float().numpy()
     np.savez(reg / "edge_ref.npz", logits=logits, ids=np.array(ids))
-    return {}
+    weight_map = json.loads((reg / "edge_ckpt" / "model.safetensors.index.json").read_text())["weight_map"]
+    return {"ngram_shards_saved": sum(".ngram_embedding.shard_" in k for k in weight_map),
+            "split_ngram_parts": REG_EDGE_TEXT["split_ngram_parts"],
+            "reference_reload_max_abs": float(np.abs(again - installed).max()),
+            "engine_vs_installed_max_abs": float(np.abs(logits - installed).max())}
 
 
 def stage_ref_regress(work: Path):
@@ -1636,6 +1646,17 @@ class Qwen4ExpTwinParityTest(unittest.TestCase):
         self.assertFalse(r["default"]["retained"])
         self.assertTrue(r["recorded"]["retained"])
         self.assertEqual(r["recorded"]["blocks_shape"], [1, 1024, 256])
+
+    def test_regress_uneven_ngram_chunks_convert(self):
+        # torch.chunk saved fewer pieces than split_ngram_parts; the reference
+        # reloads them, so the converter must accept them too.
+        e = self.reg_ref["edge"]
+        self.assertEqual(e["ngram_shards_saved"], 27)
+        self.assertLess(e["ngram_shards_saved"], e["split_ngram_parts"])
+        self.assertEqual(e["reference_reload_max_abs"], 0.0)
+        self.assertEqual(e["engine_vs_installed_max_abs"], 0.0)
+        self.assertEqual(len(self.manifests["edge"]["ngram_buffer_checks"]), 3)
+        self.assertLessEqual(self.reg["edge"]["prefill_vs_ref_uncached"]["max_abs"], TOL["fp32_vs_ref"])
 
     def test_regress_kernel1_convs_cached_decode(self):
         # DeltaNet and PLE short convs with kernel 1, cached decode in uneven
