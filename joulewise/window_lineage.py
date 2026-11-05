@@ -188,9 +188,11 @@ _SHA256_HEX = frozenset("0123456789abcdef")
 
 
 
+
 from joulewise.strict_io import (
     json_pretty_utf8_strict as render_json,
     sha256_raw as sha256_bytes,
+    unique_json_pairs as _no_duplicate_pairs,
 )
 
 class HazardLineageError(ValueError):
@@ -221,15 +223,6 @@ class PackInventoryUnusableError(LineagePublicationError):
 
 def gnu_sidecar(digest: str, filename: str) -> bytes:
     return f"{digest}  {filename}\n".encode("ascii")
-
-
-def _no_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key {key!r}")
-        result[key] = value
-    return result
 
 
 def _reject_constant(name: str) -> Any:

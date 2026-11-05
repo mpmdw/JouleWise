@@ -19,12 +19,14 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 
+
 from joulewise.strict_io import (
     json_pretty_utf8 as normalized_json_bytes,
     json_utf8_bytes as canonical_json_bytes,
     parse_finite_float as _strict_parse_finite_float,
     parse_finite_int as _strict_parse_finite_int,
     sha256_value as sha256_bytes,
+    unique_json_pairs as _reject_duplicate_admission_keys,
 )
 
 from joulewise.authentication_io import read_authentication_input
@@ -167,17 +169,6 @@ class AnalysisManifestError(ValueError):
         self.code = code
         self.detail = detail
         super().__init__(f"{code}: {detail}")
-
-
-def _reject_duplicate_admission_keys(
-    pairs: list[tuple[str, Any]],
-) -> dict[str, Any]:
-    value: dict[str, Any] = {}
-    for key, child in pairs:
-        if key in value:
-            raise ValueError(f"duplicate JSON key {key!r}")
-        value[key] = child
-    return value
 
 
 def _reject_nonfinite_admission_number(value: str) -> None:

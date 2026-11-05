@@ -134,3 +134,12 @@ def parse_finite_int(value: str, reject: Callable[[str], None]) -> int:
     if not finite_projection:
         reject(value)
     return parsed
+
+
+def unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        result[key] = value
+    return result
