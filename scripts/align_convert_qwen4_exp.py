@@ -8,8 +8,9 @@ Generation`` serialization, or an fp32 one) into the format loaded by
 (lane/2026-11-05-align-flashnext-port, scripts/align_convert_qwen4_exp.py):
 
 * Streaming. Shard headers are inventoried first; every tensor is then read
-  as bounded row slices of a read-only memmap and written to its own output
-  file. Nothing materialises the checkpoint or builds a second model copy.
+  as bounded row slices of a read-only memmap and written into output shards
+  of at most ``--shard-gb`` (4 GiB). Nothing materialises the checkpoint or
+  builds a second model copy.
 * Raw bf16 passthrough. bf16 sources are copied as their uint16 bit patterns
   (no fp32 expansion, no re-rounding). The reader parses safetensors headers
   itself; it never uses ``safetensors.safe_open(framework="mlx")``, which goes
@@ -88,13 +89,21 @@ def tensor_array(path, key):
     return np.memmap(path, mode="r", offset=offset + start, dtype=dtype, shape=tuple(info["shape"])), info["dtype"]
 
 
+SHARD_BYTES = 4 * 2 ** 30
+_TENSOR_ITEMSIZE = dict(F32=4, BF16=2, U32=4)
+
+
+def tensor_bytes(shape, dtype):
+    return math.prod(shape) * _TENSOR_ITEMSIZE[dtype]
+
+
 class TensorFile:
     """Small safetensors writer accepting sequential slices of large tensors (S)."""
 
     def __init__(self, path, tensors):
         offset, header, self.offsets = 0, {"__metadata__": {"format": "mlx"}}, {}
         for key, (shape, dtype) in tensors.items():
-            length = math.prod(shape) * dict(F32=4, BF16=2, U32=4)[dtype]
+            length = tensor_bytes(shape, dtype)
             header[key] = dict(dtype=dtype, shape=list(shape), data_offsets=[offset, offset + length])
             self.offsets[key] = (offset, offset + length)
             offset += length
@@ -414,7 +423,7 @@ def expected_parameters(rules, text_config):
 
 
 def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=None, ngram_group_size=32,
-            module_file=MODULE_FILE):
+            module_file=MODULE_FILE, shard_bytes=SHARD_BYTES):
     import numpy as np
     rules = load_rules(module_file)
     ple_storage = rules.ple_storage_for(profile, ple_storage, group_size)
@@ -455,36 +464,51 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
     dtype_name = "F32" if profile == "fp32" else "BF16"
     out_np = np.dtype("<f4") if profile == "fp32" else np.dtype("<u2")
     weight_map, quant_cfg, ngram_layers, ngram_manifest = {}, {}, {}, {}
-    for ordinal, (key, entries) in enumerate(sorted(inventory.items())):
+    # Tensors packed into shards of at most shard_bytes (one file per tensor
+    # meant 1163 files for the released structure, all held open by mlx-lm's
+    # load_model until the first eval; validation round 1).
+    plan = []
+    for key, entries in sorted(inventory.items()):
         shape, quant = expected[key], quantizers.get(key)
-        name = f"model-{ordinal:05d}.safetensors"
         tensors = {key: (shape, dtype_name)}
-        base = key[:-len("weight")]
         if quant:
-            bits = quant["bits"]
-            tensors = {key: ((*shape[:-1], shape[-1] * bits // 32), "U32"),
+            base = key[:-len("weight")]
+            tensors = {key: ((*shape[:-1], shape[-1] * quant["bits"] // 32), "U32"),
                        base + "scales": ((*shape[:-1], shape[-1] // group_size), "BF16"),
                        base + "biases": ((*shape[:-1], shape[-1] // group_size), "BF16")}
             quant_cfg[key[:-len(".weight")]] = quant
-        writer = TensorFile(output / name, tensors)
-        for chunk in tensor_chunks(entries, raw_bf16=not quant and dtype_name == "BF16"):
-            if quant:
-                arr = mx.array(chunk).astype(mx.bfloat16)
-                arr = arr.reshape(-1, arr.shape[-1])
-                packed, scales, biases = mx.quantize(arr, group_size=group_size, bits=quant["bits"])
-                mx.eval(packed, scales, biases)
-                writer.write(key, np.array(packed).astype("<u4").tobytes())
-                writer.write(base + "scales", np.array(scales.view(mx.uint16)).astype("<u2").tobytes())
-                writer.write(base + "biases", np.array(biases.view(mx.uint16)).astype("<u2").tobytes())
-            elif chunk.dtype == out_np:
-                writer.write(key, chunk.tobytes())
-            elif out_np == np.dtype("<u2"):
-                writer.write(key, rules._f32_to_bf16_bits(chunk).tobytes())
-            else:
-                writer.write(key, chunk.astype("<f4").tobytes())
+        plan.append((key, entries, quant, tensors, sum(tensor_bytes(*t) for t in tensors.values())))
+    shards, current, size = [], [], 0
+    for item in plan:
+        if current and size + item[4] > shard_bytes:
+            shards.append(current)
+            current, size = [], 0
+        current.append(item)
+        size += item[4]
+    shards += [current] if current else []
+    for number, shard in enumerate(shards, 1):
+        name = f"model-{number:05d}-of-{len(shards):05d}.safetensors"
+        writer = TensorFile(output / name, {t: spec for item in shard for t, spec in item[3].items()})
+        for key, entries, quant, tensors, _ in shard:
+            base = key[:-len("weight")]
+            for chunk in tensor_chunks(entries, raw_bf16=not quant and dtype_name == "BF16"):
+                if quant:
+                    arr = mx.array(chunk).astype(mx.bfloat16)
+                    arr = arr.reshape(-1, arr.shape[-1])
+                    packed, scales, biases = mx.quantize(arr, group_size=group_size, bits=quant["bits"])
+                    mx.eval(packed, scales, biases)
+                    writer.write(key, np.array(packed).astype("<u4").tobytes())
+                    writer.write(base + "scales", np.array(scales.view(mx.uint16)).astype("<u2").tobytes())
+                    writer.write(base + "biases", np.array(biases.view(mx.uint16)).astype("<u2").tobytes())
+                elif chunk.dtype == out_np:
+                    writer.write(key, chunk.tobytes())
+                elif out_np == np.dtype("<u2"):
+                    writer.write(key, rules._f32_to_bf16_bits(chunk).tobytes())
+                else:
+                    writer.write(key, chunk.astype("<f4").tobytes())
+            for tensor in tensors:
+                weight_map[tensor] = name
         writer.close()
-        for tensor in tensors:
-            weight_map[tensor] = name
     for layer, entries in sorted(tables.items()):
         ngram_layers[str(layer)], ngram_manifest[str(layer)] = write_ngram_table(
             rules, output, layer, entries, specs[layer], ple_storage, ngram_group_size)
@@ -522,8 +546,11 @@ def main():
     p.add_argument("--group-size", type=int, choices=(32, 64, 128), default=64)
     p.add_argument("--ple-storage", choices=("f32", "bf16", "q8", "q4"),
                    help="n-gram table format (default: bf16 for maxfit*/bf16, f32 for fp32, q4 for mixed)")
+    p.add_argument("--shard-gb", type=float, default=SHARD_BYTES / 2 ** 30,
+                   help="maximum weight shard size in GiB (a larger single tensor gets its own shard)")
     a = p.parse_args()
-    manifest = convert(a.checkpoint, a.output, a.profile, a.group_size, a.ple_storage)
+    manifest = convert(a.checkpoint, a.output, a.profile, a.group_size, a.ple_storage,
+                       shard_bytes=int(a.shard_gb * 2 ** 30))
     print(json.dumps(dict(output=str(a.output), payload_files=len(manifest["files"]),
                           manifest_sha256=sha256(a.output / "manifest.json"))))
 

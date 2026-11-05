@@ -1619,6 +1619,40 @@ class ValidationRound1Test(unittest.TestCase):
                 self.assertEqual(raw[pos:pos + t.record_bytes], bits[row].tobytes())
             t.close()
 
+    # -------------------------------------------- systems LOW (converter)
+    def test_r1_converter_packs_shards_and_bounds_open_files(self):
+        """One safetensors file per tensor meant 1163 files for the released
+        structure, every one held open by mlx-lm's load_model until the first
+        eval (headroom only because importing mlx_lm raises RLIMIT_NOFILE).
+        Tensors are now packed into shards of at most shard_bytes."""
+        import mlx.core as mx
+        import numpy as np
+        fx = self.fx
+        conv = fx.converter()
+        default, pin = fx.converted("bf16"), fx.manifest_pin("bf16")
+        self.assertEqual(len(sorted(default.glob("model-*.safetensors"))), 1)
+        limit = 256 * 1024
+        small = fx.converted("bf16", shard_bytes=limit)
+        shards = sorted(small.glob("model-*.safetensors"))
+        self.assertGreater(len(shards), 4)
+        for f in shards:
+            header, _ = conv.tensor_header(f)
+            n = len([k for k in header if k != "__metadata__"])
+            with self.subTest(shard=f.name):
+                self.assertTrue(f.stat().st_size <= limit + 64 * 1024 or n <= 3, (f.name, f.stat().st_size, n))
+        a = {k: v for f in sorted(default.glob("model-*.safetensors")) for k, v in mx.load(str(f)).items()}
+        b = {k: v for f in shards for k, v in mx.load(str(f)).items()}
+        self.assertEqual(set(a), set(b))
+        self.assertTrue(all(bool(mx.array_equal(a[k], b[k]).item()) for k in a))
+        base = len(os.listdir("/dev/fd"))
+        lazy, _ = conv.load_verified_model(default, pin, lazy=True)
+        held = len(os.listdir("/dev/fd")) - base
+        fx.record("r1_shards", dict(default_files=1, small_shards=len(shards), fds_held_by_lazy_load=held))
+        self.assertLessEqual(held, 8)
+        sharded, _ = conv.load_verified_model(small, fx.manifest_pin("bf16", shard_bytes=limit))
+        ids = [fx.seqs["seq_a"]]
+        self.assertEqual(float(np.abs(run(lazy, ids) - run(sharded, ids)).max()), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
