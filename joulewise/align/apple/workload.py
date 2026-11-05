@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from joulewise.align.apple.endpoint import MlxEndpoint
+from joulewise.align.apple.xml_tool_calls import validate_model_family
 from joulewise.align.apple.sampler import (
     NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping, _stamp_record, _restore_stamp,
 )
@@ -180,6 +181,9 @@ class EpisodeRuntimeAdapter:
             result = self.runtime.prepare(config, context)
             self._runtime_ready = result.ok
             self.prepared = dict(result.metadata)
+            if result.ok:
+                validate_model_family(config.model.family, self.prepared,
+                                      getattr(self.runtime, "_model_config", None))
             self.prepared["max_position_embeddings"] = native_limit
             self.prepared["max_context_tokens"] = min(
                 x for x in (native_limit, self.spec.max_context_tokens) if x is not None

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
-from joulewise.align.apple.endpoint import MlxEndpoint
+from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion
 from joulewise.align.interfaces import ChatMessage
 from joulewise.clock import FakeClock
 from joulewise.schemas import RuntimeBackend
@@ -42,6 +42,24 @@ def endpoint(family="qwen3_8", text="", finish_reason="length", **kwargs):
 
 
 class XmlFixRoundTests(unittest.TestCase):
+    def test_dotted_families_select_xml_and_split_history(self):
+        for family in ("qwen3.5", "qwen3.8"):
+            with self.subTest(family=family):
+                ep = endpoint(family, "plan</think>" + xml(), "stop",
+                              prepare_metadata={"model_config_name": "qwen3_5"})
+                result = ep.chat([ChatMessage("user", "x")], tools=TOOLS,
+                                 max_tokens=1024, temperature=0, seed=None)
+                self.assertEqual(len(result.tool_calls), 1)
+                self.assertEqual(ep.assistant_history_message(result).content, "")
+                self.assertEqual(len(parse_completion(xml(), model_family=family, tools=TOOLS)[2]), 1)
+
+    def test_artifact_family_mismatch_is_refused_before_generation(self):
+        for family, artifact in (("qwen3_next", "qwen3_5"), (None, "qwen3_5"),
+                                 ("qwen3.8", "qwen3_next"), ("qwen3_5", "qwen3_moe")):
+            with self.subTest(family=family, artifact=artifact):
+                with self.assertRaisesRegex(ValueError, "model_family_artifact_mismatch"):
+                    endpoint(family, prepare_metadata={"model_config_name": artifact})
+
     def test_length_cut_keeps_prefilled_thought_private_and_never_executes_draft(self):
         for family, call in (("qwen3_8", xml()), ("qwen3_next", '<tool_call>{"name":"update","arguments":{"text":"hello"}}</tool_call>')):
             for tail in ("", "<think>\nStill deciding"):

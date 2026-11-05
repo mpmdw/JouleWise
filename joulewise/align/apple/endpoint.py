@@ -17,7 +17,9 @@ from joulewise.align.endpoints import _coalesce_assistant_calls
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mapping
 from joulewise.align.apple.sampling import turn_seed
-from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES, parse_xml_calls
+from joulewise.align.apple.xml_tool_calls import (
+    XML_MODEL_FAMILIES, normalize_model_family, parse_xml_calls, validate_model_family,
+)
 from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, RuntimeBackend
 
@@ -137,7 +139,7 @@ def parse_completion(
     Unknown tool-like syntax remains text with a flag. Retokenization is an
     estimate of hidden generation, never a server-provided ground-truth count.
     """
-    if model_family in XML_MODEL_FAMILIES:
+    if normalize_model_family(model_family) in XML_MODEL_FAMILIES:
         visible, reasoning, reasoning_flags = _split_reasoning(
             "<think>" + text if reasoning_open else text, stop_at_tool_call=True)
         calls, xml_flags = parse_xml_calls(visible, tools)
@@ -267,6 +269,8 @@ class MlxEndpoint:
         }
         self._turn = 0
         prepared = dict(prepare_metadata or {})
+        self.model_family = validate_model_family(
+            config.model.family, prepared, getattr(runtime, "_model_config", None))
         if config.model.revision is None:
             self.flags.append("model_revision_unpinned")
         if config.hardware_target.runtime_backend == RuntimeBackend.MLX:
@@ -290,7 +294,7 @@ class MlxEndpoint:
 
         JSON families keep their original raw-completion history byte for byte.
         """
-        if self.config.model.family in XML_MODEL_FAMILIES:
+        if self.model_family in XML_MODEL_FAMILIES:
             content = result.content
             if result.tool_calls and "<tool_call>" in content:
                 content = content[:content.index("<tool_call>")].rstrip()
@@ -305,7 +309,7 @@ class MlxEndpoint:
         ], sort_keys=True)
 
     def _render_prompt(self, messages, tools):
-        if self.config.model.family in XML_MODEL_FAMILIES:
+        if self.model_family in XML_MODEL_FAMILIES:
             return self._render_xml_prompt(messages, tools)
         return self.runtime._tokenizer.apply_chat_template(
             [{"role": m.role, "content": m.content,
@@ -385,7 +389,7 @@ class MlxEndpoint:
         provenance: dict[str, Any] = {}
         finish_reason: str | None = None
         reasoning_open_from_template = False
-        xml_family = self.config.model.family in XML_MODEL_FAMILIES
+        xml_family = self.model_family in XML_MODEL_FAMILIES
 
         def history_reasoning(message):
             return (_xml_history_reasoning(message, tools) if xml_family

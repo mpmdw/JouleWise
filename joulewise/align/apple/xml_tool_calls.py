@@ -20,6 +20,32 @@ XML_MODEL_FAMILIES = frozenset({
     "qwen3_5", "qwen3_5_moe", "qwen3_5_text", "qwen3_5_moe_text",
     "qwen3_8", "qwen3_8_moe", "qwen3_8_text", "qwen3_8_moe_text",
 })
+
+
+def normalize_model_family(family):
+    """Accept the repository's dotted labels as explicit HF-family aliases."""
+    if isinstance(family, str):
+        for dotted, canonical in (("qwen3.5", "qwen3_5"), ("qwen3.8", "qwen3_8")):
+            if family == dotted or family.startswith(dotted + "_"):
+                return canonical + family[len(dotted):]
+    return family
+
+
+def validate_model_family(family, prepared, model_config=None):
+    """Refuse contradictory configured and loaded wire protocols before a turn."""
+    family = normalize_model_family(family)
+    artifact_types = [prepared.get("model_config_name")]
+    if isinstance(model_config, Mapping):
+        artifact_types.append(model_config.get("model_type"))
+        text_config = model_config.get("text_config", {})
+        if isinstance(text_config, Mapping):
+            artifact_types.append(text_config.get("model_type"))
+    for artifact in filter(None, artifact_types):
+        if (normalize_model_family(artifact) in XML_MODEL_FAMILIES) != (family in XML_MODEL_FAMILIES):
+            raise ValueError(f"model_family_artifact_mismatch:{family}:{artifact}")
+    return family
+
+
 _FUNCTION = re.compile(r"<function=([^<>\s=]+)>")
 _PARAMETER = re.compile(r"<parameter=([^<>\s=]+)>")
 _CONTROL = re.compile(r"</?(?:tool_call|function|parameter)\b")
