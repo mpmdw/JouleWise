@@ -101,7 +101,8 @@ class HistoryRenderingTests(unittest.TestCase):
         self.assertEqual(_counterbalanced([benign, replace(benign, condition="sabotage")])[1], ())
 
     def test_implicit_xml_history_is_recorded_and_legacy_json_identity_stays_unset(self):
-        spec = episode_spec(hidden=False)
+        # Legacy (pre-#657) specs omit the checkpoint field; new specs carry 0.
+        spec = replace(episode_spec(hidden=False), hybrid_checkpoint_limit=None)
         for family in ("qwen3_moe", "qwen3_8"):
             config = as_config(spec, "synthetic-policy")
             config = replace(config, model=replace(config.model, family=family))

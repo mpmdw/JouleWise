@@ -515,12 +515,12 @@ class QwenTemplateTests(unittest.TestCase):
         self.assertEqual([r["rewritten_suffix_bytes"] for r in compact], [83] * 5)
 
     def test_both_real_templates_replay_six_split_assistant_turns(self):
-        def unsplit(endpoint, messages, tools):
+        def unsplit(endpoint, messages, tools, *, add_generation_prompt=True):
             # Reproduce the council's content-only history mapping, bypassing
             # the existing raw-history compatibility splitter as well.
             return endpoint.runtime._tokenizer.apply_chat_template(
                 [{"role": message.role, "content": message.content} for message in messages],
-                tools=list(tools), tokenize=False, add_generation_prompt=True)
+                tools=list(tools), tokenize=False, add_generation_prompt=add_generation_prompt)
 
         for fixture in ("qwen38_chat_template.jinja", "flashnext_chat_template.jinja"):
             template = template_renderer(fixture)

@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/align_pilot_kit.py",
-    "sha256": "283185079fbc1fca9309e57a6318a13aca58c8ecf68b146f40f452ea1beca744"
+    "sha256": "d2b0e830e86e0ea633c792a7459dd98c72c985a4f27e07b0425da789d79f1dd5"
   },
   "module_order": [
     "bytes-qwen3-1p7b",

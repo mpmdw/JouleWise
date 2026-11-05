@@ -187,6 +187,14 @@ class CheckpointTests(unittest.TestCase):
         for config, limit, expected in ((cfg, 2, 2), (cfg, 0, 0), (cfg, None, 0),
                                         ({'model_type': 'lfm2'}, 2, 0), (None, 2, 0)):
             with self.subTest(config=config and config.get('model_type'), limit=limit):
+                if config is cfg:
+                    # #659 M1: reserve F's XML template is unverified, so the
+                    # endpoint refuses it before any cache work; identity
+                    # still projects the shared checkpoint policy.
+                    with self.assertRaisesRegex(ValueError, 'unverified_xml_template:qwen3_5_moe'):
+                        hybrid_endpoint(config, limit)
+                    self.assertEqual((hybrid_checkpoint_policy(cfg, limit) or {}).get('limit', 0), expected)
+                    continue
                 endpoint, fed = hybrid_endpoint(config, limit)
                 spec = replace(episode_spec(hidden=False), prompt_cache='episode_prefix', hybrid_checkpoint_limit=limit)
                 adapter = EpisodeRuntimeAdapter(endpoint.runtime, endpoint.clock)

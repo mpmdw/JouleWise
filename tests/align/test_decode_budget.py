@@ -453,7 +453,7 @@ class AnchorRegressionTests(unittest.TestCase):
             clock = ScaledClock(20)
             with scale_work(clock):
                 bundle, status, _ = run_native_review(Path(d), 'think', clock,
-                    spec_updates={'max_episode_seconds': 120})
+                    spec_updates={'max_episode_seconds': 120, 'hybrid_checkpoint_limit': None})
             self.assertEqual(status.status.value, 'succeeded', status)
             ep = read_episode_bundle(bundle)
             self.assertEqual([t.decode_tokens for t in ep.turns], [180, 260])

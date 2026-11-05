@@ -112,6 +112,8 @@ def ordered_members():
             max_turns=block["max_turns"], max_tokens=block["max_tokens"], temperature=SAMPLER["temperature"],
             enable_thinking=True, max_context_tokens=CONTEXT_CAP, prompt_cache="episode_prefix",
             sampler=SAMPLER, max_episode_seconds=TIME_GUARD_S,
+            # Pre-#657 anchors omit the checkpoint field; keep their bytes.
+            hybrid_checkpoint_limit=None,
             task_kwargs={"cache_dir": SHADE_CACHE, "task_pair": pair, "give_hint": True})
         return {**block, "repeat": 2 if replay else 1, "seed_index": seed, "is_replay": replay,
                 "base_config": base_config_path(block["model_id"]).as_posix(), "spec": spec}
