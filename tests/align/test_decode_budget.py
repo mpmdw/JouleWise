@@ -5,6 +5,7 @@ No model mirrors, SHADE caches, measurement bundles or network are accessed.
 from dataclasses import replace
 from contextlib import contextmanager
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import signal
@@ -203,6 +204,73 @@ class AdmissionTests(unittest.TestCase):
 
 
 class DeadmanTests(unittest.TestCase):
+    def test_alarm_during_disarm_keeps_returned_token_and_restores_handler(self):
+        self._check_disarm_race(lambda token: token)
+
+    @unittest.skipUnless(importlib.util.find_spec('mlx') is not None, 'requires importable MLX')
+    def test_mlx_evaluated_token_survives_alarm_during_disarm(self):
+        import mlx.core as mx
+
+        def evaluate_token(token):
+            value = mx.array([token], dtype=mx.int32) + mx.array([0], dtype=mx.int32)
+            mx.eval(value)
+            return value.item()
+
+        self._check_disarm_race(evaluate_token)
+
+    def _check_disarm_race(self, evaluate_token):
+        clock = SystemClock()
+        config = base_config()
+        config = replace(config, hardware_target=replace(config.hardware_target, runtime_backend=RuntimeBackend.MLX))
+        runtime = MlxRuntimeAdapter(clock)
+        runtime._model, runtime._tokenizer = object(), ReviewTokenizer()
+        emitted = []
+
+        def stream_generate(*args, **kwargs):
+            for token in (100, 101):
+                emitted.append(token)
+                yield SimpleNamespace(token=evaluate_token(token), text='x', finish_reason=None)
+
+        runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
+        previous = object()
+        handlers, alarms = [previous], []
+
+        def install(sig, handler):
+            handlers.append(handler)
+
+        def timer(which, seconds):
+            if seconds == 0 and emitted == [100, 101] and not alarms:
+                alarms.append(True)
+                handlers[-1](signal.SIGALRM, None)
+
+        endpoint = MlxEndpoint(runtime, config, clock, episode_domain='fake-stream',
+                               deadman=EpisodeDeadman(clock, clock.stamp(), 30), enforce_turn_cap=True)
+        with patch.object(signal, 'getsignal', return_value=previous), patch.object(
+            signal, 'getitimer', return_value=(0.0, 0.0)
+        ), patch.object(signal, 'signal', side_effect=install), patch.object(signal, 'setitimer', side_effect=timer):
+            result = endpoint.chat([ChatMessage('user', 'fake')], max_tokens=2, temperature=0, seed=None)
+        self.assertEqual(alarms, [True])
+        self.assertEqual(result.completion_tokens, 2)
+        self.assertEqual(endpoint.turn_provenance[0]['generation']['output_token_ids'], [100, 101])
+        self.assertEqual(result.raw_usage['raw_text'], 'xx')
+        self.assertIs(handlers[-1], previous)
+
+    def test_disarm_failure_still_restores_the_previous_handler(self):
+        clock = SystemClock()
+        previous = object()
+
+        def timer(which, seconds):
+            if seconds == 0:
+                raise RuntimeError('synthetic disarm failure')
+
+        with patch.object(signal, 'getsignal', return_value=previous), patch.object(
+            signal, 'getitimer', return_value=(0.0, 0.0)
+        ), patch.object(signal, 'signal') as install, patch.object(signal, 'setitimer', side_effect=timer):
+            with self.assertRaisesRegex(RuntimeError, 'synthetic disarm failure'):
+                with EpisodeDeadman(clock, clock.stamp(), 30).guard():
+                    pass
+        self.assertEqual(install.call_args.args, (signal.SIGALRM, previous))
+
     def test_boundary_expiry_uses_monotonic_time_at_equality(self):
         clock = FakeClock()
         deadman = EpisodeDeadman(clock, clock.stamp(), 5)
