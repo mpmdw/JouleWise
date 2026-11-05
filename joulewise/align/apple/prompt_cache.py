@@ -164,6 +164,9 @@ class EpisodePromptCache:
         for generate_step. No sampler calls or generated-text retokenization.
         """
         if self._checkpoint_length is None:
+            if "cache_checkpoint_count" in metadata:
+                metadata.update({key + "_after_prefill": metadata[key] for key in (
+                    "cache_checkpoint_count", "cache_checkpoint_bytes", "cache_checkpoint_retained_bytes")})
             return delta
         import mlx.core as mx
         from mlx_lm.generate import generation_stream, wired_limit
@@ -182,10 +185,10 @@ class EpisodePromptCache:
                 self.represented_ids.extend(chunk)
                 mx.clear_cache()
             self._snapshot()
-        metadata.update(cache_checkpoint_count=len(self.checkpoints),
+        metadata.update(cache_checkpoint_count_after_prefill=len(self.checkpoints),
                         cache_checkpoint_boundary_tokens=self._checkpoint_length,
-                        cache_checkpoint_bytes=self.checkpoints[-1].state_bytes + 8 * len(self.offsets()),
-                        cache_checkpoint_retained_bytes=sum(c.state_bytes + 8 * len(self.offsets()) for c in self.checkpoints))
+                        cache_checkpoint_bytes_after_prefill=self.checkpoints[-1].state_bytes + 8 * len(self.offsets()),
+                        cache_checkpoint_retained_bytes_after_prefill=sum(c.state_bytes + 8 * len(self.offsets()) for c in self.checkpoints))
         self._checkpoint_length = None
         return delta[count:]
 

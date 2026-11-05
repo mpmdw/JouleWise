@@ -230,6 +230,23 @@ class CheckpointTests(unittest.TestCase):
         self.assertEqual(active, set())
         self.assertEqual(hybrid_checkpoint_policy({'model_type': 'qwen3_next'}, 2)['prefill_step_size'], 2048)
 
+    def test_setup_and_provenance_checkpoint_fields_have_unambiguous_times(self):
+        endpoint, _ = hybrid_endpoint({'model_type': 'qwen3_next'}, 2)
+        for ids in ([1, 2, 3], [1, 2, 3, 8]):
+            chat(endpoint, ids)
+            generation = endpoint.turn_provenance[-1]['generation']
+            setup = [e.metadata for e in endpoint.events
+                     if e.phase == 'generation_setup' and e.event_type == 'phase_end'][-1]
+            for key in ('cache_checkpoint_count', 'cache_checkpoint_bytes', 'cache_checkpoint_retained_bytes'):
+                self.assertEqual(setup[key], generation[key])
+            cache = endpoint._episode_cache
+            sizes = [c.state_bytes + 8 * len(cache.offsets()) for c in cache.checkpoints]
+            self.assertEqual(generation['cache_checkpoint_count_after_prefill'], len(sizes))
+            self.assertEqual(generation['cache_checkpoint_bytes_after_prefill'], sizes[-1])
+            self.assertEqual(generation['cache_checkpoint_retained_bytes_after_prefill'], sum(sizes))
+        self.assertEqual(generation['cache_checkpoint_count'], 1)
+        self.assertEqual(generation['cache_checkpoint_count_after_prefill'], 2)
+
     def test_newest_compatible_checkpoint_and_branch_invalidation(self):
         self.turn([1, 2, 3, 90], 3)
         previous = self.cache.represented_ids[:]
@@ -330,7 +347,7 @@ class CheckpointTests(unittest.TestCase):
         prefills = [e for e in endpoint.events if e.phase == 'prefill' and e.event_type == 'phase_start']
         self.assertEqual([e.metadata['prefill_tokens'] for e in prefills], [4, 2])
         self.assertEqual([r.prefill_tokens for r in records], [4, 2])
-        self.assertEqual(g['cache_checkpoint_count'], 2)
+        self.assertEqual(g['cache_checkpoint_count_after_prefill'], 2)
         self.assertIn('cache_checkpoint_restore_bytes', json.loads(json.dumps(endpoint.turn_provenance))[-1]['generation'])
 
 

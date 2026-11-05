@@ -75,6 +75,10 @@ Hybrid turns add these observations to the existing `generation` member record:
   `cache_checkpoint_restore_bytes` (zero on a miss).
 - Boundary/restored offsets, retained checkpoint count, latest checkpoint
   payload bytes, total retained payload bytes, limit and policy version.
+- `cache_checkpoint_count`, `cache_checkpoint_bytes` and
+  `cache_checkpoint_retained_bytes` retain their setup-time values in both the
+  event and generation record. Separate `*_after_prefill` fields report the
+  post-snapshot values, including when prefill does not create a snapshot.
 - A config-derived payload estimate when the prepared model config has the
   required shape fields. Missing shapes are explicitly marked unavailable.
 
