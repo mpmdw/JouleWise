@@ -56,7 +56,7 @@ REPO = Path(__file__).resolve().parents[2]
 MODULE_FILE = REPO / "joulewise" / "align" / "models" / "qwen4_exp.py"
 CONVERTER_FILE = REPO / "scripts" / "align_convert_qwen4_exp.py"
 WORK_ROOT = Path(os.environ.get("JW_CANON_WORK", Path(os.environ.get("TMPDIR", "/tmp")) / "qwen4exp_canonical"))
-REF_VERSION = "canonical-ref-v5"
+REF_VERSION = "canonical-ref-v6"
 
 EOS = 1
 TEXT = {
@@ -90,7 +90,10 @@ QSA_LAYERS = [i for i, t in enumerate(TEXT["layer_types"]) if t == "full_attenti
 PLE_LAYERS = [i - 1 for i in TEXT["ple_layer_ids"]]
 RATIO = TEXT["indexer_compress_ratio"]
 TOPK = TEXT["indexer_budget"] // RATIO
-LEN_A, LEN_B, PAD_B, N_EXT, CHUNK = 40, 32, 8, 4, 7
+# PAD_B is not a multiple of RATIO, so the padded row's QSA blocks complete on
+# different steps from row 0's (the per-row branch of _update_blocks).
+LEN_A, PAD_B, N_EXT, CHUNK = 40, 5, 4, 7
+LEN_B = LEN_A - PAD_B
 LONG_LEN, LONG_PREFIX, LONG_CHUNK = 320, 304, 64
 LONGK_LEN, LONGK_CHUNK = 4101, 1024
 N_GREEDY = 32
@@ -727,12 +730,18 @@ def port_scenarios(model, seqs, long_chunk=LONG_CHUNK):
             rows.append(run(model, [ids[s:s + n]], cache)[0])
         return np.concatenate(rows)
 
+    def padded(chunk=None):
+        cache, batch = model.make_cache(left_padding=[0, PAD_B]), [sa, [EOS] * PAD_B + sb]
+        if chunk is None:
+            rows = [run(model, batch, cache)]
+        else:  # chunks shorter than the padding: the per-row block phase
+            rows = [run(model, [r[s:s + chunk] for r in batch], cache) for s in range(0, LEN_A, chunk)]
+        for i in range(N_EXT):
+            rows.append(run(model, [[seqs["ext_a"][i]], [seqs["ext_b"][i]]], cache))
+        return np.concatenate(rows, axis=1)
+
     res = {"prefill": run(model, [sa])[0], "stepwise": chunked(sa, 1), "chunked": chunked(sa, CHUNK)}
-    cache = model.make_cache(left_padding=[0, PAD_B])
-    rows = [run(model, [sa, [EOS] * PAD_B + sb], cache)]
-    for i in range(N_EXT):
-        rows.append(run(model, [[seqs["ext_a"][i]], [seqs["ext_b"][i]]], cache))
-    res["padded"] = np.concatenate(rows, axis=1)
+    res["padded"], res["padded_chunked"] = padded(), padded(CHUNK)
     res["single_a"] = chunked(sa + seqs["ext_a"], 1, prefix=LEN_A)
     res["single_b"] = chunked(sb + seqs["ext_b"], 1, prefix=LEN_B)
     res["prefill_b"] = run(model, [sb])[0]
@@ -758,8 +767,9 @@ def compare(port, ref):
         if key in ref:
             out[key] = diff(port[key], ref[key])
     if "padded" in ref:
-        out["padded_row0"] = diff(port["padded"][0], ref["padded"][0])
-        out["padded_row1"] = diff(port["padded"][1, PAD_B:], ref["padded"][1, PAD_B:])
+        for key in ("padded", "padded_chunked"):
+            out[key + "_row0"] = diff(port[key][0], ref["padded"][0])
+            out[key + "_row1"] = diff(port[key][1, PAD_B:], ref["padded"][1, PAD_B:])
     out["long_chunked"] = diff(port["long_chunked"], ref["long_prefill"])
     return out
 
@@ -778,8 +788,8 @@ def noise_table(fx):
     n = {k: diff(r16[k], r32[k])["max_abs"]
          for k in ("prefill", "stepwise", "chunked", "long_prefill", "long_decode")}
     n["long_chunked"] = n["long_prefill"]
-    n["padded_row0"] = diff(r16["padded"][0], r32["padded"][0])["max_abs"]
-    n["padded_row1"] = diff(r16["padded"][1, PAD_B:], r32["padded"][1, PAD_B:])["max_abs"]
+    n["padded_row0"] = n["padded_chunked_row0"] = diff(r16["padded"][0], r32["padded"][0])["max_abs"]
+    n["padded_row1"] = n["padded_chunked_row1"] = diff(r16["padded"][1, PAD_B:], r32["padded"][1, PAD_B:])["max_abs"]
     if "longk_prefill" in r16:
         n["longk_prefill"] = diff(r16["longk_prefill"], r32["longk_prefill"])["max_abs"]
     return n
@@ -1033,6 +1043,9 @@ class CanonicalParityTest(unittest.TestCase):
                 prefill_vs_stepwise=diff(r["stepwise"], r["prefill"]),
                 prefill_vs_chunked=diff(r["chunked"], r["prefill"]),
                 long_prefill_vs_chunked=diff(r["long_chunked"], r["long_prefill"]),
+                padded_chunked_vs_oneshot=diff(
+                    np.concatenate([r["padded_chunked"][0], r["padded_chunked"][1, PAD_B:]]),
+                    np.concatenate([r["padded"][0], r["padded"][1, PAD_B:]])),
                 padded_row0_vs_batch1=diff(r["padded"][0], np.concatenate([r["prefill"], r["single_a"]])),
                 padded_row1_vs_batch1=diff(r["padded"][1, PAD_B:], np.concatenate([r["prefill_b"],
                                                                                    r["single_b"]])))
@@ -1142,28 +1155,39 @@ class CanonicalParityTest(unittest.TestCase):
         self.assertEqual(toks, fx.meta["greedy_tokens_f32"])
 
     def test_d_padded_batch_through_kernel_and_gather_paths(self):
-        """Left-padded batch with both sparse thresholds at 0: prefill through
-        the block-sparse kernel (per-row token lists) and decode through the
-        gather path. Still the reference's function, row by row (the mlx-vlm
-        D1 failure mode is a ragged decode that drops the selection)."""
+        """Both sparse thresholds at 0. A left-padded batch (PAD_B not a
+        multiple of the compress ratio, so the rows complete blocks on
+        different steps) prefilled one-shot and in CHUNK-token chunks through
+        the block-sparse kernel (per-row token lists and block phase), then
+        decoded through the gather path. Each against the reference (the mlx-vlm D1 failure mode is a ragged decode that drops
+        the selection)."""
         import numpy as np
         fx = self.fx
         model = fx.model("fp32", qsa_sparse_prefill_min_kv=0, qsa_sparse_decode_min_kv=0)
         cls = type(model.layers[QSA_LAYERS[0]].self_attn)
-        k0, g0 = cls.paths.kernel, cls.paths.gather
         sa, sb = fx.seqs["seq_a"], fx.seqs["seq_b"]
-        cache = model.make_cache(left_padding=[0, PAD_B])
-        rows = [run(model, [sa, [EOS] * PAD_B + sb], cache)]
-        for i in range(N_EXT):
-            rows.append(run(model, [[fx.seqs["ext_a"][i]], [fx.seqs["ext_b"][i]]], cache))
-        got = np.concatenate(rows, axis=1)
-        ref = refs(fx, "f32")["padded"]
-        d0, d1 = diff(got[0], ref[0]), diff(got[1, PAD_B:], ref[1, PAD_B:])
-        paths = dict(kernel=cls.paths.kernel - k0, gather=cls.paths.gather - g0)
-        fx.record("d_padded_sparse_paths", dict(row0=d0, row1=d1, paths=paths))
-        self.assertEqual(paths, dict(kernel=len(QSA_LAYERS), gather=N_EXT * len(QSA_LAYERS)))
-        self.assertLessEqual(d0["max_abs"], FP32_TOL)
-        self.assertLessEqual(d1["max_abs"], FP32_TOL)
+        ref = refs(fx, "f32")
+        out = {}
+        for label, chunk in (("oneshot", None), ("chunked", CHUNK)):
+            k0, g0 = cls.paths.kernel, cls.paths.gather
+            cache, batch = model.make_cache(left_padding=[0, PAD_B]), [sa, [EOS] * PAD_B + sb]
+            if chunk is None:
+                rows = [run(model, batch, cache)]
+            else:
+                rows = [run(model, [r[s:s + chunk] for r in batch], cache) for s in range(0, LEN_A, chunk)]
+            for i in range(N_EXT):
+                rows.append(run(model, [[fx.seqs["ext_a"][i]], [fx.seqs["ext_b"][i]]], cache))
+            got = np.concatenate(rows, axis=1)
+            out[label] = dict(row0=diff(got[0], ref["padded"][0]), row1=diff(got[1, PAD_B:], ref["padded"][1, PAD_B:]),
+                              kernel=cls.paths.kernel - k0, gather=cls.paths.gather - g0)
+        fx.record("d_padded_sparse_paths", out)
+        self.assertEqual(out["oneshot"]["kernel"], len(QSA_LAYERS))
+        self.assertGreater(out["chunked"]["kernel"], len(QSA_LAYERS))
+        for label in ("oneshot", "chunked"):
+            with self.subTest(prefill=label):
+                self.assertEqual(out[label]["gather"], N_EXT * len(QSA_LAYERS))
+                self.assertLessEqual(out[label]["row0"]["max_abs"], FP32_TOL)
+                self.assertLessEqual(out[label]["row1"]["max_abs"], FP32_TOL)
 
     # ---------------------------------------------------------------- (e)
     def test_e_tie_aware_comparisons(self):
