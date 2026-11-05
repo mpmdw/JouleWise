@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman
 from joulewise.align.apple.endpoint import _StreamObservation
-from joulewise.align.apple.thermal import ThermalSession, drain_decode, slow_slope, validate_policy
+from joulewise.align.apple.thermal import ThermalSession, drain_decode, slow_slope, validate_gate_policy as validate_policy
 from joulewise.align.apple.workload import EpisodeRuntimeAdapter, EpisodeSpec
 from joulewise.align.records import Episode, from_json
 from joulewise.clock import FakeClock
@@ -82,7 +82,7 @@ class GateTests(unittest.TestCase):
             obj.reader._transport.values = lambda t: (40, 40)
             obj.sample()
         clock.sleep = advance
-        obj.thread = object()  # advance() supplies asynchronous batches.
+        obj.sidecar._thread = object()  # advance() supplies asynchronous batches.
         gate = obj.wait('G1', turn=1)
         self.assertEqual(gate['outcome'], 'released')
         self.assertEqual(gate['duration_s'], 5)
@@ -108,14 +108,16 @@ class GateTests(unittest.TestCase):
         obj.start()
         class Stop:
             calls = 0
+            def is_set(self):
+                return self.calls >= 120
             def wait(self, delay):
                 self.calls += 1
                 if self.calls > 120:
                     return True
                 clock.sleep(delay + (.003 if self.calls % 2 else .001))
                 return False
-        obj.stop_event = Stop()
-        obj._loop()
+        obj.sidecar._stop = Stop()
+        obj.sidecar._loop()
         self.assertLess(clock.now(), 121)
         self.assertTrue(all(r['finished']['monotonic_after_ns'] - r['monotonic_ns'] == 200_000 for r in obj.rows))
         from joulewise.align.apple.thermal_desk import _coverage
@@ -128,7 +130,8 @@ class GateTests(unittest.TestCase):
         p = policy()
         del p['window_reference']
         obj, _ = session(config=p)
-        obj.rows = obj.rows[6:]
+        for _ in range(6):
+            obj.sidecar.readings.popleft()
         obj.capture_reference('first')
         self.assertIsNotNone(obj.reference)
 

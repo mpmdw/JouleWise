@@ -28,7 +28,7 @@ from joulewise.align.records import (
     Condition, Episode, ToolCall, Turn, from_json, to_json, to_jsonable,
 )
 from joulewise.bundle_read import BundleReader
-from joulewise.clock import Clock, ClockStamp
+from joulewise.clock import Clock, ClockStamp, SystemClock
 from joulewise.interfaces import AdapterFailure, AdapterResult, PowerSample, RunContext, RuntimeEvent, RuntimeResult
 from joulewise.schemas import BenchmarkConfig, FailureReason, RuntimeBackend
 from joulewise.provenance import prompt_provenance
@@ -135,10 +135,13 @@ class EpisodeSpec:
         if spec.warmup_condition not in (None, 'benign'):
             raise ValueError('neutral warmup_condition must be benign')
         if spec.thermal is not None:
-            from joulewise.align.apple.thermal import validate_policy
-            validate_policy(spec.thermal)
-            if spec.warmup_condition != 'benign' or spec.max_episode_seconds is not None:
-                raise ValueError('thermal cells require neutral warmup and no legacy wall guard')
+            from joulewise.align.apple.thermal import validate_policy, validate_gate_policy
+            if 'sensors' in spec.thermal:
+                validate_gate_policy(spec.thermal)
+                if spec.warmup_condition != 'benign' or spec.max_episode_seconds is not None:
+                    raise ValueError('thermal cells require neutral warmup and no legacy wall guard')
+            else:
+                validate_policy(spec.thermal)
         return spec
 
 
@@ -156,6 +159,7 @@ class EpisodeRuntimeAdapter:
         self._runtime_ready = False
         self._failed_episode_result: RuntimeResult | None = None
         self.thermal = None
+        self.thermal_sidecar = None
         self.thermal_factory = thermal_factory
         self.thermal_status_reader = None
 
@@ -188,14 +192,22 @@ class EpisodeRuntimeAdapter:
             self.task.reset(self.spec.seed)
             self.task.system_prompt(self.spec.condition)
             self.task.user_prompt()
-            if self.spec.thermal is not None:
-                from joulewise.align.apple.thermal import ThermalSession
-                factory = self.thermal_factory or ThermalSession
-                self.thermal = factory(self.spec.thermal, self.clock, context,
-                                       **({'status_reader': self.thermal_status_reader}
-                                          if self.thermal_status_reader is not None else {}))
-                self.thermal.start()
+            # Identity readiness has no bundle context and must open no sensor.
+            if self.spec.thermal is not None and (context is not None or not isinstance(self.clock, SystemClock)):
+                from joulewise.align.apple.thermal import ThermalSession, Sidecar
+                if 'sensors' in self.spec.thermal:
+                    factory = self.thermal_factory or ThermalSession
+                    self.thermal = factory(self.spec.thermal, self.clock, context,
+                                           **({'status_reader': self.thermal_status_reader}
+                                              if self.thermal_status_reader is not None else {}))
+                    self.thermal.start()
+                else:
+                    if context is None:
+                        raise ValueError('thermal collection requires bundle outputs')
+                    self.thermal_sidecar = Sidecar(context.outputs_dir, self.spec.thermal)
+                    self.thermal_sidecar.start()
         except Exception as exc:
+            self._close_thermal()
             self.flags.append(f"task_unavailable:{type(exc).__name__}:{exc}")
             return AdapterResult(
                 ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
@@ -226,8 +238,11 @@ class EpisodeRuntimeAdapter:
                 # New cells always reserve prefill + the full admitted decode
                 # cap within 40,960, including when the model limit is unread.
                 self.prepared["max_context_tokens"] = min(40960, self.prepared["max_context_tokens"] or 40960)
+            if not result.ok:
+                self._close_thermal()
             return replace(result, metadata=self.prepared)
         except Exception as exc:
+            self._close_thermal()
             self.flags.append(f"runtime_unavailable:{type(exc).__name__}:{exc}")
             return AdapterResult(
                 ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
@@ -338,6 +353,8 @@ class EpisodeRuntimeAdapter:
             raise AdapterFailure(
                 FailureReason.RUNTIME_UNAVAILABLE, "align_episode was not prepared"
             )
+        if self.spec.thermal is not None and self.thermal is None and self.thermal_sidecar is None:
+            raise AdapterFailure(FailureReason.RUNTIME_UNAVAILABLE, 'thermal collection requires bundle outputs')
         # Reserve no additional G0 allowance: cooling and the episode share
         # the R1-derived slack below the runner's member cap. Never reset that
         # deadline after a 600 s timeout or a 300 s unobserved wait.
@@ -715,11 +732,10 @@ class EpisodeRuntimeAdapter:
     def cleanup(
         self, config: BenchmarkConfig, context: RunContext | None = None,
     ) -> AdapterResult:
-        if self.thermal is not None:
-            self.thermal.close()
-        if self.runtime is None:
-            return AdapterResult(ok=True)
-        result = self.runtime.cleanup(config, context)
+        try:
+            result = self.runtime.cleanup(config, context) if self.runtime is not None else AdapterResult(ok=True)
+        finally:
+            self._close_thermal()
         if self._failed_episode_result is not None:
             failed = self._failed_episode_result
             return replace(result, metadata={
@@ -728,6 +744,15 @@ class EpisodeRuntimeAdapter:
                 "episode_outcome": failed.workload_provenance["episode_outcome"],
             })
         return result
+
+    def _close_thermal(self):
+        try:
+            if self.thermal is not None:
+                self.thermal.close()
+            elif self.thermal_sidecar is not None:
+                self.thermal_sidecar.stop()
+        finally:
+            self.thermal = self.thermal_sidecar = None
 
 
 def read_episode_bundle(bundle: Path) -> Episode:
