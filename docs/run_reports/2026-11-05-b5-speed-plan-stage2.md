@@ -100,7 +100,61 @@ argument fallback changes: `python3.13 -B -m unittest
 tests.b5_analysis.test_pack_parallel` passed 6 tests in 236.609 s under the
 concurrent machine load.
 
+## Step 11
+
+Each sensitivity pass keeps its complete primary self-check first, then derives
+alpha/beta projections and extraction reports independently. The parent consumes
+them in pack order, merges consumed archive censuses and retains the original
+floor composition and contrast loops. The primary-bound pass still precedes the
+wider-bound pass; disclosures and fill still follow both. Caller-owned consumer
+and validator seams retain serial execution.
+
+The retained full-size joined window matched all **449 registered outputs,
+15 accumulated records and all archive censuses**. This includes the sensitivity
+record, step results/output map, all three disclosure files and fill input.
+Wall time at 3 workers was **2752.383 → 2607.381 s (5.3% reduction)**. The
+[complete ledger](2026-11-05-b5-speed-plan-stage2-11.json) records each output
+hash and both matching commitments; the output commitment is
+`b18ebf2619b541ca79fbd7de8449c94b45968d03699458d61f648de01318fb92`.
+
+This is one retained-prefix pair under variable load, not a reliable production
+gain. Log phase boundaries showed the candidate's internal sensitivity/step-results
+block taking longer, while the overall step finished sooner. No causal timing
+attribution is established. Disclosure and fill replays remain in the measured
+step. This benchmark version did not persist per-pack success/fallback counters
+for step 11, so no full-size worker-consumption or kernel-only scaling claim is
+made from its total time. The focused successful transport test explicitly
+asserts successful worker results. The next slice adds parent-side telemetry.
+
+Focused verification:
+
+- `python3.13 -B -m unittest tests.b5_analysis.test_sensitivity_parallel`:
+  1 test passed in 20.056 s, covering successful transport and competing
+  project/extract/equality refusals with the same first refusal as serial.
+- `python3.13 -B -m unittest tests.b5_analysis.test_sensitivity.PassTests`:
+  20 tests passed in 13.660 s (primary checks, numeric equality, independent
+  values, context isolation, monotonicity and pass order).
+- `python3.13 -B -m unittest tests.b5_analysis.test_step11_null_outcomes`:
+  9 tests passed in 9.715 s (D-190 null states through sensitivity, disclosures
+  and fill).
+
+An attempted run of the broader `tests.b5_analysis.test_sensitivity` module
+completed its 20 pass tests, then was interrupted during `SeamTests.setUpClass`
+in the unrelated synthetic fiducial pulse refit to preserve the user's test-time
+budget. It is not counted as a passing module. The bounded class above was
+rerun to obtain a complete result. No full suite was run.
+
 ## Handoff and limits
+
+Some Git review/status and local-commit commands omitted the explicit
+`GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1` guard.
+The shell did not supply those variables by default. Normal Git configuration
+lookups by those commands therefore cannot be ruled out; this report does not
+certify zero outside-clone configuration access. No such configuration path was
+explicitly opened or searched. Benchmark/test commands use the guard, and all
+remaining Git commands explicitly set it and disable external excludes,
+attributes, fsmonitor and hooks. No measurement path was intentionally supplied
+to Git. Git subprocess filesystem access was not traced beyond these guards.
 
 Coordination files are intentionally untouched under the user's explicit fence.
 No commit is pushed or promoted. Final promotion still needs the lead's review,
