@@ -5,8 +5,8 @@ Authority: council FINAL-DESIGN §2.2 and B3, available with
 This implementation is B3,
 based on pilot-9 `c9a0a3943`. It does not fill R0/R1 slots or authorize a run.
 
-`EpisodeSpec` carries two optional fields, which campaign generation preserves
-in `workload_profile.prompt_text`:
+`EpisodeSpec` carries two fields that must be enabled together or both omitted.
+Campaign generation preserves them in `workload_profile.prompt_text`:
 
 ```json
 {
@@ -20,10 +20,11 @@ in `workload_profile.prompt_text`:
 These are illustrative values, not selected operating parameters. R1 chooses
 the model's budget and measures its member intercept `I_m`. The deadman is
 `(1750 - I_m) / 1.13544` seconds of episode time; 1086 seconds is the council's
-transferred-intercept example. The code requires finite positive values and
-caps the decode admission threshold at the configured context cap, at most
-40960. Model-specific floors, multiples of 1024 and member-sizing decisions
-remain the kit/R1 lane's responsibility.
+transferred-intercept example. The code requires finite positive values, bounds
+`deadman_s` strictly below `1800 / 1.13544` (about 1585.29 s), and caps the decode
+admission threshold at the configured context cap, at most 40960. That permissive
+bound uses a zero member intercept; the kit/R1 lane must enforce the tighter
+model-specific formula above, floors, multiples of 1024 and member sizing.
 
 Before turn k, cumulative emitted decode must be strictly below the episode
 budget. Each admitted turn retains its full `max_tokens` cap. Thus a budget

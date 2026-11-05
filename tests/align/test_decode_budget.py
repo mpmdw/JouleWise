@@ -5,6 +5,7 @@ No model mirrors, SHADE caches, measurement bundles or network are accessed.
 from dataclasses import replace
 from contextlib import contextmanager
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import signal
@@ -71,6 +72,21 @@ def read(path):
 
 
 class SpecTests(unittest.TestCase):
+    def test_controls_are_paired_and_deadman_precedes_the_member_kill(self):
+        spec = episode_spec(hidden=False)
+        for update in ({'max_episode_decode_tokens': 8192}, {'deadman_s': 1086}):
+            with self.subTest(update=update), self.assertRaisesRegex(ValueError, 'together'):
+                EpisodeSpec.from_text(replace(spec, **update).to_text())
+        # Council member law, with zero intercept: even this most permissive
+        # bound must fire strictly before the 1800 s outer kill.
+        ceiling = 1800 / 1.13544
+        for seconds in (ceiling, ceiling + .01, 5000):
+            with self.subTest(seconds=seconds), self.assertRaisesRegex(ValueError, 'below'):
+                EpisodeSpec.from_text(replace(spec, max_episode_decode_tokens=8192, deadman_s=seconds).to_text())
+        paired = replace(spec, max_episode_decode_tokens=8192, deadman_s=ceiling - .000001)
+        self.assertEqual(EpisodeSpec.from_text(paired.to_text()), paired)
+        self.assertEqual(EpisodeSpec.from_text(spec.to_text()), spec)
+
     def test_new_config_fields_round_trip_and_distinguish_counterbalanced_cells(self):
         base = replace(episode_spec(hidden=False), max_episode_decode_tokens=8192, deadman_s=1086)
         self.assertEqual(EpisodeSpec.from_text(base.to_text()), base)
@@ -100,6 +116,33 @@ class SpecTests(unittest.TestCase):
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_endpoint_error_after_text_is_failed_even_when_budget_exhausts(self):
+        with tempfile.TemporaryDirectory() as d:
+            for budget, deadman in ((None, None), (100, 1086)):
+                with self.subTest(budget=budget), patch(
+                    'joulewise.align.apple.endpoint.reasoning_tokens_from_ids',
+                    side_effect=RuntimeError('synthetic accounting fault after text'),
+                ):
+                    bundle, status, _ = run(Path(d) / str(budget), budget=budget, deadman=deadman)
+                    self.assertEqual(status.status.value, 'failed', status)
+                    ep = read_episode_bundle(bundle)
+                    self.assertTrue(ep.turns[0].tool_calls)
+                    self.assertTrue(any(f.startswith('endpoint_error:') for f in ep.flags))
+                    if budget is not None:
+                        self.assertIn('episode.decode_budget:1', ep.flags)
+                        self.assertTrue(ep.hardware['token_budget']['stop_reason'].startswith('endpoint_error:'))
+                        failure = read(bundle / 'outputs/align_failure.json')
+                        self.assertEqual(failure['episode_outcome']['stop_condition'], 'endpoint_error')
+                    self.assertEqual(end_state(ep), 'runner.error')
+                    summary = episode_summary(bundle)
+                    self.assertEqual(summary['end_state'], 'runner.error')
+                    for fault in ('episode_error:RuntimeError:synthetic', 'endpoint_error:RuntimeError:synthetic',
+                                  'runner.error:synthetic'):
+                        faulted = replace(ep, flags=('episode.decode_budget:1', fault))
+                        self.assertEqual(end_state(faulted), 'runner.error')
+                        self.assertEqual(end_state(replace(faulted, flags=(*faulted.flags, 'episode.deadman:1'))),
+                                         'episode.deadman:1')
+
     def test_exact_threshold_and_overshoot_keep_the_full_admitted_turn(self):
         with tempfile.TemporaryDirectory() as d:
             for budget, counts, reason in ((180, [180], 'episode.decode_budget:1'),
@@ -176,6 +219,73 @@ class AdmissionTests(unittest.TestCase):
 
 
 class DeadmanTests(unittest.TestCase):
+    def test_alarm_during_disarm_keeps_returned_token_and_restores_handler(self):
+        self._check_disarm_race(lambda token: token)
+
+    @unittest.skipUnless(importlib.util.find_spec('mlx') is not None, 'requires importable MLX')
+    def test_mlx_evaluated_token_survives_alarm_during_disarm(self):
+        import mlx.core as mx
+
+        def evaluate_token(token):
+            value = mx.array([token], dtype=mx.int32) + mx.array([0], dtype=mx.int32)
+            mx.eval(value)
+            return value.item()
+
+        self._check_disarm_race(evaluate_token)
+
+    def _check_disarm_race(self, evaluate_token):
+        clock = SystemClock()
+        config = base_config()
+        config = replace(config, hardware_target=replace(config.hardware_target, runtime_backend=RuntimeBackend.MLX))
+        runtime = MlxRuntimeAdapter(clock)
+        runtime._model, runtime._tokenizer = object(), ReviewTokenizer()
+        emitted = []
+
+        def stream_generate(*args, **kwargs):
+            for token in (100, 101):
+                emitted.append(token)
+                yield SimpleNamespace(token=evaluate_token(token), text='x', finish_reason=None)
+
+        runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
+        previous = object()
+        handlers, alarms = [previous], []
+
+        def install(sig, handler):
+            handlers.append(handler)
+
+        def timer(which, seconds):
+            if seconds == 0 and emitted == [100, 101] and not alarms:
+                alarms.append(True)
+                handlers[-1](signal.SIGALRM, None)
+
+        endpoint = MlxEndpoint(runtime, config, clock, episode_domain='fake-stream',
+                               deadman=EpisodeDeadman(clock, clock.stamp(), 30), enforce_turn_cap=True)
+        with patch.object(signal, 'getsignal', return_value=previous), patch.object(
+            signal, 'getitimer', return_value=(0.0, 0.0)
+        ), patch.object(signal, 'signal', side_effect=install), patch.object(signal, 'setitimer', side_effect=timer):
+            result = endpoint.chat([ChatMessage('user', 'fake')], max_tokens=2, temperature=0, seed=None)
+        self.assertEqual(alarms, [True])
+        self.assertEqual(result.completion_tokens, 2)
+        self.assertEqual(endpoint.turn_provenance[0]['generation']['output_token_ids'], [100, 101])
+        self.assertEqual(result.raw_usage['raw_text'], 'xx')
+        self.assertIs(handlers[-1], previous)
+
+    def test_disarm_failure_still_restores_the_previous_handler(self):
+        clock = SystemClock()
+        previous = object()
+
+        def timer(which, seconds):
+            if seconds == 0:
+                raise RuntimeError('synthetic disarm failure')
+
+        with patch.object(signal, 'getsignal', return_value=previous), patch.object(
+            signal, 'getitimer', return_value=(0.0, 0.0)
+        ), patch.object(signal, 'signal') as install, patch.object(signal, 'setitimer', side_effect=timer):
+            with self.assertRaisesRegex(RuntimeError, 'synthetic disarm failure'):
+                with EpisodeDeadman(clock, clock.stamp(), 30).guard():
+                    pass
+        self.assertEqual(install.call_args.args, (signal.SIGALRM, previous))
+
     def test_boundary_expiry_uses_monotonic_time_at_equality(self):
         clock = FakeClock()
         deadman = EpisodeDeadman(clock, clock.stamp(), 5)
@@ -326,13 +436,20 @@ class AnchorRegressionTests(unittest.TestCase):
             self.assertIsNone(spec.deadman_s)
 
     def test_120_second_guard_checks_only_at_turn_boundaries(self):
-        with tempfile.TemporaryDirectory() as parent:
-            # Exercise macOS-style aliased temp paths on every platform.
-            real_root = Path(parent)/'canonical'
-            real_root.mkdir()
-            alias = Path(parent)/'alias'
-            alias.symlink_to(real_root, target_is_directory=True)
-            d = str(alias)
+        self._check_legacy_guard_hashes()
+
+    def test_legacy_anchor_hashes_with_symlinked_temp_root(self):
+        self._check_legacy_guard_hashes(symlinked=True)
+
+    def _check_legacy_guard_hashes(self, *, symlinked=False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            if symlinked:
+                target = root / 'physical'
+                target.mkdir()
+                root = root / 'alias'
+                root.symlink_to(target, target_is_directory=True)
+            d = str(root)
             clock = ScaledClock(20)
             with scale_work(clock):
                 bundle, status, _ = run_native_review(Path(d), 'think', clock,
@@ -364,7 +481,7 @@ class AnchorRegressionTests(unittest.TestCase):
             payloads['policy'] = json.dumps({k: provenance[k] for k in
                 ('sampler', 'output_policy', 'episode_outcome')}, sort_keys=True)
             for name, text in payloads.items():
-                normalized = text.replace(str(Path(d).resolve()), '<synthetic-root>').replace(d, '<synthetic-root>')
+                normalized = text.replace(str(root.resolve()), '<synthetic-root>').replace(d, '<synthetic-root>')
                 self.assertEqual(hashlib.sha256(normalized.encode()).hexdigest(), expected[name], name)
 
 

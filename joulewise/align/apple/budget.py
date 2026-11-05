@@ -49,9 +49,11 @@ class EpisodeDeadman:
             if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0):
                 raise RuntimeError("ALIGN deadman cannot replace an active timer")
             previous = signal.getsignal(signal.SIGALRM)
+            armed = True
 
             def expire(signum, frame):
-                raise DeadmanExpired()
+                if armed:
+                    raise DeadmanExpired()
 
         try:
             if real:
@@ -60,8 +62,13 @@ class EpisodeDeadman:
             yield
         finally:
             if real:
-                signal.setitimer(signal.ITIMER_REAL, 0)
-                signal.signal(signal.SIGALRM, previous)
+                # The operation has returned. A pending alarm delivered during
+                # disarm must not discard its result or interrupt restoration.
+                armed = False
+                try:
+                    signal.setitimer(signal.ITIMER_REAL, 0)
+                finally:
+                    signal.signal(signal.SIGALRM, previous)
 
 
 def budget_record(spec, turns, stop_reason, *, incomplete=False, effective_context_cap=None):

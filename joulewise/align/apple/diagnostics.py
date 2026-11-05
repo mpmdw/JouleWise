@@ -69,10 +69,9 @@ def end_state(episode, turn_rows=()):
     flags = list(episode.flags)
     for row in turn_rows:
         flags.extend(row.get('flags', ()))
-    for prefix in ('episode.deadman:', 'episode.decode_budget:'):
-        stop = next((f for f in flags if f.startswith(prefix)), None)
-        if stop:
-            return stop
+    deadman = next((f for f in flags if f.startswith('episode.deadman:')), None)
+    if deadman:
+        return deadman
     for prefix in ('thermal.gate_timeout:', 'thermal.hold_timeout:'):
         stop = next((f for f in flags if f.startswith(prefix)), None)
         if stop:
@@ -82,6 +81,9 @@ def end_state(episode, turn_rows=()):
         return 'thermal.incomplete'
     if any(f.startswith(('episode_error:', 'endpoint_error:', 'runner.error')) for f in flags):
         return 'runner.error'
+    budget = next((f for f in flags if f.startswith('episode.decode_budget:')), None)
+    if budget:
+        return budget
     context = next((f for f in flags if f.startswith(('episode.context_limit:', 'episode.time_guard:'))), None)
     if context:
         return context
