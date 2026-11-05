@@ -1159,7 +1159,10 @@ class CanonicalParityTest(unittest.TestCase):
         multiple of the compress ratio, so the rows complete blocks on
         different steps) prefilled one-shot and in CHUNK-token chunks through
         the block-sparse kernel (per-row token lists and block phase), then
-        decoded through the gather path. Each against the reference (the mlx-vlm D1 failure mode is a ragged decode that drops
+        decoded through the gather path; and a single row decoded through the
+        gather path's one-row branch (every slot valid), which single-request
+        decode takes past 8192 tokens on the released config. Each against the
+        reference (the mlx-vlm D1 failure mode is a ragged decode that drops
         the selection)."""
         import numpy as np
         fx = self.fx
@@ -1180,6 +1183,13 @@ class CanonicalParityTest(unittest.TestCase):
             got = np.concatenate(rows, axis=1)
             out[label] = dict(row0=diff(got[0], ref["padded"][0]), row1=diff(got[1, PAD_B:], ref["padded"][1, PAD_B:]),
                               kernel=cls.paths.kernel - k0, gather=cls.paths.gather - g0)
+        g0, s0 = cls.paths.gather, cls.paths.gather_single
+        long = fx.seqs["long"]
+        cache = model.make_cache()
+        run(model, [long[:LONG_PREFIX]], cache)
+        single = np.concatenate([run(model, [[long[t]]], cache)[0] for t in range(LONG_PREFIX, LONG_LEN)])
+        out["single_row"] = dict(vs_ref=diff(single, ref["long_decode"]), gather=cls.paths.gather - g0,
+                                 gather_single=cls.paths.gather_single - s0)
         fx.record("d_padded_sparse_paths", out)
         self.assertEqual(out["oneshot"]["kernel"], len(QSA_LAYERS))
         self.assertGreater(out["chunked"]["kernel"], len(QSA_LAYERS))
@@ -1188,6 +1198,11 @@ class CanonicalParityTest(unittest.TestCase):
                 self.assertEqual(out[label]["gather"], N_EXT * len(QSA_LAYERS))
                 self.assertLessEqual(out[label]["row0"]["max_abs"], FP32_TOL)
                 self.assertLessEqual(out[label]["row1"]["max_abs"], FP32_TOL)
+        full_slots = sum(1 for t in range(LONG_PREFIX, LONG_LEN) if (t + 1) % RATIO == RATIO - 1)
+        self.assertEqual(out["single_row"]["gather"], (LONG_LEN - LONG_PREFIX) * len(QSA_LAYERS))
+        self.assertEqual(out["single_row"]["gather_single"], full_slots * len(QSA_LAYERS))
+        self.assertGreater(full_slots, 0)
+        self.assertLessEqual(out["single_row"]["vs_ref"]["max_abs"], FP32_TOL)
 
     # ---------------------------------------------------------------- (e)
     def test_e_tie_aware_comparisons(self):

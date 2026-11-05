@@ -1492,7 +1492,7 @@ class QSAAttention(nn.Module):
     """[HF Qwen4ExpTextAttention:811-893] gated GQA attention, QSA selection."""
 
     # Path counters (diagnostics; plain class attribute).
-    paths = SimpleNamespace(dense=0, mask=0, kernel=0, gather=0)
+    paths = SimpleNamespace(dense=0, mask=0, kernel=0, gather=0, gather_single=0)
 
     def __init__(self, args: TextModelArgs):
         super().__init__()
@@ -1553,6 +1553,7 @@ class QSAAttention(nn.Module):
         p.gather += 1
         idx = sel.idx                                                      # (B, W)
         if idx.shape[0] == 1 and sel.valid is None:
+            p.gather_single += 1  # one row, every slot valid (released config: decode past 8192)
             ks, vs = mx.take(keys, idx[0], axis=2), mx.take(values, idx[0], axis=2)
             return mx.fast.scaled_dot_product_attention(q, ks, vs, scale=self.scale)
         g = mx.maximum(idx, 0)[:, None, :, None]
