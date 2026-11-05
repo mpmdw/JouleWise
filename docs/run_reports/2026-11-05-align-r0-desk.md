@@ -187,3 +187,10 @@ observed failing before its fix; final commit mapping and checks follow below.
   lead action rather than run failures. Inconclusive/error results still fail
   completion. Two regressions fail before/pass after. A completed R0 does not
   authorize R1 or waive the resulting checkpoint/fallback actions.
+
+- A1 / binding amendment: active pins, accepted config, CLI defaults and R0
+  completion now require D only. Qwen3-Next cannot be requested or loaded through
+  this CLI; Flash-Next is not added. Regression fails before/passes after. The
+  cached council ref lacks `FINAL-DESIGN-AMENDMENT-1.md`; no network is allowed,
+  so this applies the user's explicit amendment summary. Exact amendment text
+  and revised disk/member arithmetic remain unverified pending the lead's ref.

@@ -85,7 +85,7 @@ class FakeBackend:
 
 
 def config_at(root):
-    return {"schema": "joulewise.align.r0.config.v1", "models": {"N": {"source": str(root / "N")},
+    return {"schema": "joulewise.align.r0.config.v1", "models": {
             "D": {"source": str(root / "D")}}, "shade_cache": str(root / "shade"),
             "disk_path": str(root), "custody_parents": [str(root / "custody")], "offloads": []}
 
@@ -276,17 +276,17 @@ class R0ChecksTest(unittest.TestCase):
 
     def test_memory_swap_peak_and_token_positions(self):
         backend = FakeBackend()
-        self.assertEqual(r0.memory_peak(backend, "N")["status"], "pass")
-        bad = backend.memory_peak(context=40960, decode_budget=8192)
+        self.assertEqual(r0.memory_peak(backend, "D")["status"], "pass")
+        bad = backend.memory_peak(context=40960, decode_budget=6144)
         bad["swap_after_bytes"] = 1
         with patch.object(backend, "memory_peak", return_value=bad):
-            self.assertEqual(r0.memory_peak(backend, "N")["status"], "fail")
+            self.assertEqual(r0.memory_peak(backend, "D")["status"], "fail")
         bad.update(swap_after_bytes=0, positions=40959, errors=[])
         with patch.object(backend, "memory_peak", return_value=bad):
-            self.assertEqual(r0.memory_peak(backend, "N")["status"], "fail")
+            self.assertEqual(r0.memory_peak(backend, "D")["status"], "fail")
         bad.update(positions=40960, errors=["Resource limit"])
         with patch.object(backend, "memory_peak", return_value=bad):
-            self.assertEqual(r0.memory_peak(backend, "N")["status"], "fail")
+            self.assertEqual(r0.memory_peak(backend, "D")["status"], "fail")
 
     def test_deadline_bypasses_native_exception_handlers_and_is_recorded(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -328,6 +328,14 @@ class R0ChecksTest(unittest.TestCase):
         config = config_at(Path("/tmp/fake"))
         validate_config(config)
         config["models"]["D"]["revision"] = "new-pin"
+        with self.assertRaises(ValueError):
+            validate_config(config)
+
+    def test_amendment_one_selects_d_only_and_refuses_dropped_next(self):
+        config = config_at(Path("/tmp/synthetic-r0-config"))
+        self.assertEqual(validate_config(config)["models"].keys(), {"D"})
+        self.assertEqual(set(r0.PINS), {"D"})
+        config["models"]["N"] = {"source": "/tmp/synthetic-dropped-next"}
         with self.assertRaises(ValueError):
             validate_config(config)
         config = config_at(Path("/tmp/fake"))

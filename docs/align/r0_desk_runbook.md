@@ -3,10 +3,10 @@
 Run **on the measurement Mac only**, with no armed/active chain and all agent
 apps/CLI sessions closed. This is selection data, not R1, thermal validation or
 an arm authorization. Authority: council `219fb1515`, FINAL-DESIGN §§2.1, 2.2,
-2.8. Keep the pinned stack: Python measurement venv, mlx 0.31.2, mlx-lm 0.31.3,
+2.8 plus Amendment 1: **D only**; Qwen3-Next is dropped and Flash-Next is later. Keep the pinned stack: Python measurement venv, mlx 0.31.2, mlx-lm 0.31.3,
 transformers 5.12.1. First integrate/review Stage-1 B1/B2 from
-`lane/2026-11-05-align-v4-s1`; this runner refuses the old endpoint. Integrate
-the SMC lane when ready. Do not run these commands from an agent session.
+Stage-1 `d01288e25` (imported in this fix round); the production endpoint now
+accepts `reasoning_effort`. Integrate the SMC lane before live R0. Do not run these commands from an agent session.
 
 1. In Terminal at the integrated checkout, set the interpreter and config.
    The paths below are **examples to edit**, never auto-discovered. Model
@@ -21,11 +21,10 @@ the SMC lane when ready. Do not run these commands from an agent session.
    nano .desk/align-r0/config.json
    ```
 
-   Set both local model sources, SHADE cache parent, the measurement filesystem
+   Set the local D model source, SHADE cache parent, the measurement filesystem
    `disk_path`, any **additional measurement custody parents**, and verified pilot8/9
    offload destinations. `disk_path` must be on the measurement volume, not
-   the offload volume. N revision is `9a2b46347bb170cb2924092175fa21554fe585a9`;
-   D is `815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9`.
+   the offload volume. D revision is `815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9`.
 
    The real shared custody parent is `$JOULEWISE_CUSTODY_PARENT`, defaulting to
    `~/night-custody`; `JOULEWISE_ADDITIONAL_CUSTODY_PARENTS` (JSON array) is also
@@ -66,7 +65,7 @@ the SMC lane when ready. Do not run these commands from an agent session.
    a new output directory; R1 owns the adoption decision.
 
 4. Read `report.md` and its full `report.json`. Exit 0 means the selected
-   checks passed; **`complete_r0: true` requires every check for both models**.
+   checks passed; **`complete_r0: true` requires every check for D**.
    Both files are updated after each check. Preserve failed/partial attempts.
    Local model SHA-256 lists authenticate the observed bytes only, not an HF
    revision. The SMC hook calls `scripts/align_smc_enumerate.py --output DIR`;
@@ -75,15 +74,14 @@ the SMC lane when ready. Do not run these commands from an agent session.
 Interpretation: NLL uses the first 2,049 rendered benign SHADE IDs (2,048 next-token
 targets), ≤3.0 nats/token. Synthetic rewrite tables diagnose templates; **generated**
 transitions decide B7 (≥12 eligible transitions, D any closed-reasoning rewind;
-N >10%). Insufficient transitions are inconclusive. D tries default xhigh,
-medium, low, stopping at the first pass; N tries caps 4,096 then 8,192. Both
-use spam/bank, indices 91–92, ≤6 turns/16,384 tokens. Screens admit only full-cap
+under Amendment 1). Insufficient transitions are inconclusive. D tries default xhigh,
+medium, low, stopping at the first pass. Episodes use spam/bank, indices 91–92, ≤6 turns/16,384 tokens. Screens admit only full-cap
 turns that fit this total. D envelopes must parse ≥95% with no unsupported-format
 flags. Long decode reaches 40,960 positions, logging
 memory every 256 tokens; failure retries metadata evaluation at simulated
 4,096-token boundaries and decode end. This is a diagnostic mitigation, not a
-production change. Memory uses full context, N/D floor budgets 8,192/6,144,
-guess bars 60/45 decimal GB, no swap growth. Disk needs ≥80 decimal GB free
+production change. Memory uses full context, D floor budget 6,144,
+guess bar 45 decimal GB, no swap growth. Disk needs ≥80 decimal GB free
 after present weights and both offload hash matches (W1 two copies 37.2 GB;
 D windows 52.9 GB). R1 must freeze actual budgets and other slots. The lead
 reviews/commits the live record and handles B7, fallbacks, or a stack ruling

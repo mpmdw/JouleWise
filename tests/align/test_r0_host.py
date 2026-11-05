@@ -133,7 +133,7 @@ class R0HostTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = config_at(root)
-            for tag in ("N", "D"):
+            for tag in ("D",):
                 folder = root / tag
                 folder.mkdir()
                 (folder / "model").write_text("tiny fake weight")

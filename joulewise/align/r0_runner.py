@@ -36,8 +36,8 @@ def _path(value):
 def validate_config(config):
     if set(config) - {"schema", "models", "shade_cache", "disk_path", "custody_parents", "offloads"}:
         raise ValueError("unknown R0 config field")
-    if config.get("schema") != "joulewise.align.r0.config.v1" or set(config.get("models", {})) != {"N", "D"}:
-        raise ValueError("R0 config requires schema v1 and models N and D")
+    if config.get("schema") != "joulewise.align.r0.config.v1" or set(config.get("models", {})) != {"D"}:
+        raise ValueError("R0 config requires schema v1 and D only (Amendment 1)")
     for entry in config["models"].values():
         if set(entry) != {"source"}:
             raise ValueError("model entries contain only source; council pins cannot be overridden")
@@ -184,7 +184,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                     "template": {"diagnostic"}}
         bad = [r for r in report["checks"] if r["status"] not in outcomes.get(r["check"], {"pass"})]
         report["status"] = "fail" if bad else "pass"
-        report["complete_r0"] = (set(checks) == set(CHECKS) and set(models) == {"N", "D"}
+        report["complete_r0"] = (set(checks) == set(CHECKS) and set(models) == {"D"}
                                   and not bad and report["evidence_kind"] == "live_desk")
         report["decisions_pending_lead_action"] = [
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
@@ -205,13 +205,13 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard):
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="new exclusive record directory")
     parser.add_argument("--checks", default=",".join(CHECKS), help="comma-separated: " + ",".join(CHECKS))
-    parser.add_argument("--models", default="N,D")
+    parser.add_argument("--models", default="D", help="D only under Amendment 1")
     parser.add_argument("--timeout", type=int, default=7200,
                         help="seconds per check, or per decode attempt / ladder episode / generated turn")
     parser.add_argument("--inventory", type=Path, help="hash this root only, before offload; output is a new JSON file")
     args = parser.parse_args(argv)
     checks, models = args.checks.split(","), args.models.split(",")
-    if (not set(checks) <= set(CHECKS) or not set(models) <= {"N", "D"}
+    if (not set(checks) <= set(CHECKS) or set(models) != {"D"}
             or len(checks) != len(set(checks)) or len(models) != len(set(models)) or args.timeout <= 0):
         parser.error("invalid checks, models or timeout")
     config = validate_config(json.loads(args.config.read_text()))

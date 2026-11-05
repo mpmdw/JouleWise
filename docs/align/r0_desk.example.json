@@ -1,7 +1,6 @@
 {
   "schema": "joulewise.align.r0.config.v1",
   "models": {
-    "N": {"source": "/Volumes/ALIGN_MODELS/Qwen3-Next-80B-A3B-Thinking-4bit"},
     "D": {"source": "/Volumes/ALIGN_MODELS/Qwen3.8-27B-8bit"}
   },
   "shade_cache": "/Volumes/ALIGN_INPUTS/shade",

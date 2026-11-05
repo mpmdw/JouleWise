@@ -15,9 +15,6 @@ from joulewise.align.apple.sampling import episode_seed
 from joulewise.align.interfaces import ChatMessage, ChatResult
 
 PINS = {
-    "N": {"name": "Qwen3-Next-80B-A3B-Thinking-4bit", "tag": "qwen3-next-80b-a3b-thinking",
-          "revision": "9a2b46347bb170cb2924092175fa21554fe585a9", "bytes": 44_860_367_003,
-          "family": "qwen3_next", "bits": 4, "peak_bytes": 60_000_000_000, "budget": 8192},
     "D": {"name": "Qwen3.8-27B-8bit", "tag": "qwen3.8-27b",
           "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9", "bytes": 29_531_521_322,
           "family": "qwen3_5", "bits": 8, "peak_bytes": 45_000_000_000, "budget": 6144},
