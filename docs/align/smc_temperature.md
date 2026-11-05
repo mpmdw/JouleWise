@@ -101,22 +101,30 @@ core files modified by the rejected PR (`hazards/smc.py`, `hazards/monitor.py`,
 PR #658's base `c9a0a3943`. No temperature journal is added to custody hazards,
 and no temperature field is added to CampaignPolicy.
 
-The optional ALIGN `EpisodeSpec.thermal` slot has the existing sensor-map
+The diagnostic ALIGN `EpisodeSpec.thermal` slot has the existing sensor-map
 shape `{s_fast, s_slow, fan_keys, r0_sha256}`. Key names come from R1; the
 R0 digest is provenance only. The slot is omitted when unset, preserving
 anchor spec bytes and legacy identity. When set, the slot is included in
 the ALIGN execution identity, and `EpisodeRuntimeAdapter.prepare` starts
-`thermal.Sidecar` before native runtime preparation. Cleanup stops it in a
+`thermal.Sidecar` before native runtime preparation. Cleanup stops it after native cleanup in a
 finally block, including runtime cleanup failure; failed preparation closes
-it immediately. It therefore covers idle, warmup, gates, episode and holds.
+it immediately. It therefore covers idle, warmup, gates, episode and holds. Context-free
+identity readiness starts no collector and cannot execute a measured member.
+
+PR #666 migration adds the optional gate-map form of `EpisodeSpec.thermal`,
+with this sensor map under `sensors` plus the frozen R1 gate/hold controls.
+`thermal_gates.ThermalSession` wraps the same Sidecar and consumes its locked
+`snapshot()`; it starts no second collector. See [thermal_gates.md](thermal_gates.md)
+for G0/G1/H, deadman, attribution and U1–U6. The sensor-only slot and public
+collector functions below remain supported.
 
 Public surfaces for #666:
 
 | Surface | Contract / migration |
 |---|---|
 | `thermal.Sidecar(outputs_dir, config, *, reader=None, ctx=None)` | One in-process reader/thread; `start()`, `tick()`, `stop()`; `start(background=False)` is a test seam. Writes create-once `outputs/align_thermal.jsonl`. |
-| `Sidecar.readings` | Recent reading rows, deque of 3,600; collector appends concurrently. Gate integration must synchronize any iteration (collector `_lock`) or add an accessor. |
-| `Sidecar.event(kind, values)` | Records `align_thermal_gate` or `align_thermal_hold` phase boundaries with timestamps. #666 owns gate decisions, RuntimeEvent emission and attribution. This PR supplies collection, not G0/G1/H algorithms. |
+| `Sidecar.readings` | Recent reading rows, deque of 3,600; collector appends concurrently. Use `Sidecar.snapshot()` for a stable, locked view; never iterate the live deque concurrently. |
+| `Sidecar.event(kind, values)` | Records `align_thermal_gate` or `align_thermal_hold` phase boundaries with timestamps. #666 owns gate decisions, RuntimeEvent emission and attribution. The gate-map session supplies G0/G1/H without changing diagnostic collection. |
 | `thermal.validate_policy`, `keys`, `sample`, `Coverage`, `coverage` | Existing function names and calling signatures preserved. `sample` adds raw/type evidence under `readings`. Validation is of an ALIGN slot, despite the legacy helper name. |
 | `hazards.temperature`, `hazards.smc_enumeration` | Compatibility imports of the single ALIGN implementations; no second collector. New code should import `align.apple` directly. |
 | `smc_reader.Reader` | Enumeration lives here; `hazards.smc.Reader.enumerate_sensors`, `CMD_GET_KEY_BY_INDEX` and the added hazard decoders are removed to restore pinned code. `read/read_key/close` retain normal signatures, with additive raw metadata. |

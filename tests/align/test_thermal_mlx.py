@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman
 from joulewise.align.apple.endpoint import _StreamObservation
-from joulewise.align.apple.thermal import drain_decode
+from joulewise.align.apple.thermal_gates import drain_decode
 from tests.align.test_thermal_gate import policy, session
 
 
@@ -56,6 +56,6 @@ class NativeMlxThermalTests(unittest.TestCase):
         observer = _StreamObservation(SimpleNamespace(stream_generate=lambda: self.stream(600)),
                                       max_tokens=600, thermal=obj,
                                       deadman=EpisodeDeadman(clock, clock.stamp(), 100))
-        with patch('joulewise.align.apple.thermal.drain_decode', cancel):
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', cancel):
             self.assertEqual([r.token for r in observer.stream_generate()], expected)
         self.assertTrue(observer.deadman_expired)

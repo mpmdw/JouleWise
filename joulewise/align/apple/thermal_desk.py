@@ -11,7 +11,7 @@ import math
 from statistics import fmean, stdev
 
 from joulewise.align.attribution import attribute_episode
-from joulewise.hazards import temperature
+from joulewise.align.apple import thermal as temperature
 
 NS = 1_000_000_000
 
@@ -127,9 +127,9 @@ def normalize_journal(rows):
 def _coverage(rows, a, b, keys):
     counter = temperature.Coverage(a, keys)
     for row in rows:
-        if a <= row['monotonic_ns'] < b:
-            counter.observe(row['monotonic_ns'], row['finished']['monotonic_after_ns'],
-                            {'sensors': row['sensors'], 'errors': row.get('errors', {})})
+        # Preserve the collector's grid and its bracketing edge samples.
+        counter.observe(row['monotonic_ns'], row['finished']['monotonic_after_ns'],
+                        {'sensors': row['sensors'], 'errors': row.get('errors', {})})
     return counter.report(b)['all_keys']
 
 
@@ -498,7 +498,7 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
     checks.extend('inconclusive' if t[k] is None else 'pass' if t[k] else 'fail'
                   for t in turns for k in ('os_nominal', 'pm_nominal'))
     checks.extend('pass' if c['sample_fraction'] is not None and c['sample_fraction'] >= .99
-                  and all(b-a <= 2*NS for a, b in c['gaps_ns']) else 'fail'
+                  and c.get('max_interval_ns') is not None and c['max_interval_ns'] <= 2*NS else 'fail'
                   for r in observed for c in r['coverage'])
     checks.extend('pass' if t['pm_max_gap_s'] <= max(1, 5*r['pm_period_s']) else 'fail'
                   for r in observed for t in r['turn_observation'])
@@ -591,8 +591,9 @@ def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, regis
     os_readings = [(r['finished']['monotonic_ns'], r['values'].get('level')) for r in os_journal
                    if r.get('kind') == 'reading' and not r.get('error')]
     if not os_readings:
-        os_readings = [(r['monotonic_ns'], r.get('status', {}).get('os_level')) for r in gate_journal
-                       if r.get('kind') == 'sample' and r.get('status', {}).get('os_level') is not None]
+        os_readings = [(r['monotonic_ns'], r.get('status', {}).get('os_level'))
+                       for r in normalize_journal(gate_journal)
+                       if r.get('status', {}).get('os_level') is not None]
     config = json.loads(read_bytes(bundle/'config.json'))
     registered = ([(t, v) for t, v in os_readings if registered_span_ns[0] <= t <= registered_span_ns[1]]
                   if registered_span_ns is not None else None)

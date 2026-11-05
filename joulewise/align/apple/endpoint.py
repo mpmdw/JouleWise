@@ -216,7 +216,7 @@ class _StreamObservation:
                             and count % thermal.policy['chunk_tokens'] == 0
                             and (max_tokens is None or count < max_tokens)
                             and self.finish_reason not in ('stop', 'eos', 'length', 'max_tokens')):
-                        from joulewise.align.apple.thermal import drain_decode
+                        from joulewise.align.apple.thermal_gates import drain_decode
                         # Drain before the hold's entry stamp, under the model
                         # alarm. Never dispatch next(stream) to obtain a boundary.
                         try:
@@ -500,7 +500,7 @@ class MlxEndpoint:
                 completion_tokens = record.output_tokens
                 new_events = record.events
                 if self.thermal is not None:
-                    from joulewise.align.apple.thermal import split_decode_events
+                    from joulewise.align.apple.thermal_gates import split_decode_events
                     new_events = split_decode_events(new_events, [r for r in self.thermal.intervals
                         if r['kind'] == 'H' and r['turn'] == turn_index])
                 self.prompt_token_ids.extend(record.prompt_token_ids)

@@ -2,20 +2,23 @@
 
 **PROVISIONAL: synthetic verification only.** Authority is FINAL-DESIGN §§1(c–e),
 2.4–2.6 and B5/B6/B9 on `origin/lane/2026-11-05-align-window-council`.
-The pinned controller and MLX runtime are unchanged. The fix round restores
-the hazard monitor and SMC reader byte-for-byte to the pre-#658 pilot-9 base;
-the inherited changes had violated this boundary. Extra decoders/enumeration
-now live in `align/apple/smc.py`, over the unchanged core transport/reader.
-The optional monitor task lives in `align/apple/temperature_monitor.py`,
-selected by `scripts/align_temperature_monitor.py` only for a temperature policy.
+The controller, MLX runtime, hazard monitor/SMC reader, b5 driver/harvest and
+schemas retain their issued bytes. The five files affected by the rejected
+#658 API match pilot-9 `c9a0a3943` exactly. Extra decoders/enumeration live in
+`align/apple/smc_reader.py`, over the unchanged core transport/reader.
+Collection uses #658's fixed `thermal.Sidecar`; there is no campaign-policy
+hook or temperature monitor subclass/launcher.
 This layer also imports the merged token-budget work.
 It does not register, size, arm or run a measurement window.
 
 ## Configuration and launch contract
 
-`EpisodeSpec.thermal` opts in; unset fields are omitted from serialized specs,
-identities and output. The required `warmup_condition: "benign"` gives both
-conditions the same warmup prompt. An example with **synthetic** sensor keys:
+`EpisodeSpec.thermal` supports #658's sensor-only map
+`{s_fast, s_slow, fan_keys, r0_sha256}` for diagnostic collection, or the gate
+map below, whose `sensors` member has that same shape. `validate_policy`
+validates sensors; `thermal_gates.validate_gate_policy` validates the gate map. Unset fields
+are omitted from serialized specs, identities and output. For gates, the
+required `warmup_condition: "benign"` gives both conditions the same warmup prompt. An example with **synthetic** sensor keys:
 
 ```json
 {
@@ -51,7 +54,7 @@ module does not discover or mutate shared window custody. Omitting the
 reference in later members would incorrectly create another reference.
 
 The v4 launcher passes `registry=ThermalRegistry()` from
-`joulewise.align.apple.thermal` to the existing controller `run_benchmark`.
+`joulewise.align.apple.thermal_gates` to the existing controller `run_benchmark`.
 It binds this runtime to the actual telemetry adapter regardless of resolution
 order. `PowermetricsStatus` reads complete frames incrementally from that
 adapter's current capture and reads the existing OS notify bus. It launches
@@ -64,10 +67,22 @@ not select this registry: kit v4 must wire it explicitly.
 ## Runtime behavior
 
 The in-process sidecar starts during prepare, before load/idle/warmup, and
-stops at cleanup. It samples at 1 Hz and writes `outputs/align_thermal.jsonl`:
-paired epoch/monotonic brackets, decoded native values and types, per-key
-errors, observed OS/PM state, and gate events. The existing window monitor's
-`temperature.jsonl` remains usable as independent desk evidence.
+stops after native runtime cleanup, including cleanup failure. Failed prepare
+closes it immediately. Context-free identity readiness opens no collector;
+a measured workload requires one. `thermal_gates.ThermalSession` wraps exactly one
+`Sidecar`, consuming locked snapshots rather than creating another reader,
+thread or journal. The synthetic-clock seam can operate in memory.
+
+The sidecar samples on absolute 1 Hz deadlines and writes
+`outputs/align_thermal.jsonl` in schema `joulewise.align_thermal.v1`:
+three-clock started/finished stamps, decoded values, type/raw bytes, per-key
+errors, and observed OS/PM status under `values`. Status parsing sits outside
+the SMC bracket. `Sidecar.event` records `align_thermal_gate` /
+`align_thermal_hold` begin/end boundaries; end rows contain the finalized
+interval. Hold ends are published after the next dispatch, preserving the
+exact dispatch boundary. Writes flush each row and fsync periodically/on stop.
+No journal is added to the pinned window monitor. Explicit external thermal
+journals remain usable as independent desk evidence.
 
 - G0 is after neutral warmup and before the episode stamp. Ten consecutive
   samples must satisfy both one-sided upper temperature bands, slow-sensor
@@ -122,7 +137,10 @@ Native decode phase markers are also split around holds, so the unchanged
 reducer receives disjoint phases. Original binary64 epoch boundary values are
 retained beside paired integer stamps to avoid re-quantization overlaps.
 
-`thermal_desk.member_record` recomputes coverage from either journal form.
+`thermal_desk.member_record` recomputes coverage from Sidecar or legacy
+sample rows, using the collector's grid, 100 ms tolerance and excluded partial
+edge cells. It retains bracketing samples and requires actual
+`max_interval_ns <= 2e9`; absent bounds cannot pass U1.
 Gate releases are always verified against the bundle's `align_thermal.jsonl`,
 which records the gate's actual decision sample. An external monitor journal
 supplies coverage and independent nearby-temperature cross-checks; its sample

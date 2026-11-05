@@ -10,7 +10,8 @@ from unittest.mock import patch
 
 from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman
 from joulewise.align.apple.endpoint import _StreamObservation
-from joulewise.align.apple.thermal import ThermalSession, drain_decode, slow_slope, validate_gate_policy as validate_policy
+from joulewise.align.apple.smc_reader import Reader
+from joulewise.align.apple.thermal_gates import ThermalSession, drain_decode, slow_slope, validate_gate_policy as validate_policy
 from joulewise.align.apple.workload import EpisodeRuntimeAdapter, EpisodeSpec
 from joulewise.align.records import Episode, from_json
 from joulewise.clock import FakeClock
@@ -54,7 +55,7 @@ class Transport:
 def session(*, values=None, config=None):
     clock = FakeClock()
     transport = Transport(clock, values)
-    obj = ThermalSession(config or policy(), clock, reader=smc.Reader(transport),
+    obj = ThermalSession(config or policy(), clock, reader=Reader(transport),
                          status_reader=lambda: {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': round(obj.clock.now()*NS)})
     obj.start()
     for _ in range(60):
@@ -64,6 +65,27 @@ def session(*, values=None, config=None):
 
 
 class GateTests(unittest.TestCase):
+    def test_gate_windows_use_sidecar_grid_across_caller_slot_boundaries(self):
+        from joulewise.hazards.base import Stamp
+        # Every valid 70 ms read crosses the caller's phase-anchored slot.
+        obj, clock = session()
+        self.addCleanup(obj.close)
+        obj.sidecar.readings.clear()
+        for second in range(61):
+            # Use explicit three-clock stamps: the collector's grid starts at 0.
+            values = {'sensors': {'Tfak': 40., 'Tslw': 40.}, 'errors': {},
+                      'status': {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': second * NS}}
+            obj.sidecar.readings.append({'module': 'temperature', 'kind': 'reading', 'values': values,
+                                        'started': Stamp(second*NS, second*NS, second*NS).to_json(),
+                                        'finished': Stamp(second*NS+70_000_000, second*NS+70_000_000,
+                                                          second*NS+70_000_000).to_json()})
+        clock.sleep(.03)
+        obj.reference = None
+        obj.capture_reference('first')
+        self.assertEqual(obj.reference['fast_c'], 40.)
+        self.assertEqual(slow_slope(obj.rows, round(clock.now()*NS), 'Tslw'), 0.)
+        self.assertEqual(obj.wait('G0')['outcome'], 'released')
+
     def test_batched_samples_cannot_skip_an_out_of_band_read(self):
         obj, clock = session()
         obj.wait('G0')
@@ -222,7 +244,7 @@ class HoldTests(unittest.TestCase):
             obj.sample()
         observation = _StreamObservation(SimpleNamespace(stream_generate=lambda: self.stream(300, clock)),
                                          max_tokens=300, thermal=obj)
-        with patch('joulewise.align.apple.thermal.drain_decode', lambda stream: None):
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', lambda stream: None):
             self.assertEqual(len(list(observation.stream_generate())), 300)
         self.assertFalse(observation.thermal_aborted)
         self.assertIn('thermal.state_unobserved', obj.flags)
@@ -242,14 +264,17 @@ class HoldTests(unittest.TestCase):
             drained.append(clock.now())
         native = SimpleNamespace(stream_generate=lambda: self.stream(600, clock))
         observation = _StreamObservation(native, max_tokens=600, thermal=obj)
-        with patch('joulewise.align.apple.thermal.drain_decode', drain):
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', drain):
             tokens = [r.token for r in observation.stream_generate()]
         self.assertEqual(tokens, list(range(600)))
         holds = [r for r in obj.intervals if r['kind'] == 'H']
         self.assertEqual([h['token_count'] for h in holds], [256, 512])
         for hold, drained_at in zip(holds, drained):
             self.assertEqual(hold['start_ns'], round(drained_at*NS))
-            self.assertGreaterEqual(hold['duration_s'], 4)
+            # Absolute collector ticks retain their phase across hold entry.
+            # The latest pre-entry sample plus four new ticks qualify.
+            samples = [r for r in obj.rows if hold['start_ns']-NS < r['monotonic_ns'] <= hold['exit_sample_ns']]
+            self.assertGreaterEqual(len(samples), 5)
         self.assertFalse(observation.deadman_expired)
 
     def test_hold_timeout_returns_partial_tokens_and_closes_generator(self):
@@ -264,7 +289,7 @@ class HoldTests(unittest.TestCase):
             finally:
                 closed.append(True)
         observation = _StreamObservation(SimpleNamespace(stream_generate=stream), max_tokens=600, thermal=obj)
-        with patch('joulewise.align.apple.thermal.drain_decode', lambda stream: None):
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', lambda stream: None):
             tokens = list(observation.stream_generate())
         self.assertEqual(len(tokens), 256)
         self.assertTrue(observation.thermal_aborted)
@@ -282,7 +307,7 @@ class HoldTests(unittest.TestCase):
                 closed.append(True)
         observation = _StreamObservation(SimpleNamespace(stream_generate=stream), max_tokens=600, thermal=obj,
                                          deadman=EpisodeDeadman(clock, clock.stamp(), 100))
-        with patch('joulewise.align.apple.thermal.drain_decode', side_effect=DeadmanExpired):
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', side_effect=DeadmanExpired):
             self.assertEqual([r.token for r in observation.stream_generate()], list(range(256)))
         self.assertTrue(observation.deadman_expired)
         self.assertEqual(observation.finish_reason, 'episode.deadman')
@@ -303,7 +328,7 @@ class HoldTests(unittest.TestCase):
                 dispatches.append(round(clock.now()*NS))
                 yield SimpleNamespace(token=i, finish_reason=None)
         observation = _StreamObservation(SimpleNamespace(stream_generate=stream), max_tokens=300, thermal=obj)
-        with patch('joulewise.align.apple.thermal.drain_decode', lambda stream: None):
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', lambda stream: None):
             self.assertEqual(len(list(observation.stream_generate())), 300)
         hold = obj.intervals[-1]
         self.assertEqual(hold['end_ns'], dispatches[256])
@@ -315,7 +340,7 @@ class HoldTests(unittest.TestCase):
         deadman = EpisodeDeadman(clock, clock.stamp(), 100)
         observation = _StreamObservation(SimpleNamespace(stream_generate=lambda: self.stream(300, clock)),
                                          max_tokens=300, thermal=obj, deadman=deadman)
-        with patch('joulewise.align.apple.thermal.drain_decode', lambda stream: None):
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', lambda stream: None):
             self.assertEqual(len(list(observation.stream_generate())), 300)
         self.assertFalse(deadman.expired())
         obj.reader._transport.values = lambda t: (60, 60)
@@ -458,7 +483,7 @@ class WorkloadTests(unittest.TestCase):
 class StatusWiringTests(unittest.TestCase):
     def test_pm_tap_parses_only_latest_complete_frame(self):
         import plistlib
-        from joulewise.align.apple.thermal import PowermetricsStatus
+        from joulewise.align.apple.thermal_gates import PowermetricsStatus
         with tempfile.TemporaryDirectory() as d:
             path = Path(d)/'fake.plist'
             frame = plistlib.dumps({'thermal_pressure': 'Nominal'})
@@ -474,7 +499,7 @@ class StatusWiringTests(unittest.TestCase):
 
     def test_pm_tap_reads_only_complete_frames_and_observes_new_capture(self):
         import plistlib
-        from joulewise.align.apple.thermal import PowermetricsStatus
+        from joulewise.align.apple.thermal_gates import PowermetricsStatus
         class Notify:
             closed = False
             def read(self):
@@ -503,7 +528,7 @@ class StatusWiringTests(unittest.TestCase):
             self.assertTrue(notify.closed)
 
     def test_registry_binds_the_same_telemetry_in_either_resolution_order(self):
-        from joulewise.align.apple.thermal import ThermalRegistry
+        from joulewise.align.apple.thermal_gates import ThermalRegistry
         clock = FakeClock()
         runtime = EpisodeRuntimeAdapter(MockRuntimeAdapter(clock), clock)
         telemetry = object()
@@ -520,7 +545,7 @@ class StatusWiringTests(unittest.TestCase):
 
 
 class NativeIntegrationTests(unittest.TestCase):
-    def held_run(self, root, *, timeout=False, expire_drain=False):
+    def held_run(self, root, *, timeout=False, expire_drain=False, dropout=False):
         from tests.align.test_apple_endpoint import run_native_review
         class TickClock(FakeClock):
             sidecar = None
@@ -535,7 +560,7 @@ class NativeIntegrationTests(unittest.TestCase):
         clock = TickClock()
         original_init, original_start = ThermalSession.__init__, ThermalSession.start
         def init(obj, p, c, context=None, **kwargs):
-            original_init(obj, p, c, context, reader=smc.Reader(Transport(c)),
+            original_init(obj, p, c, context, reader=Reader(Transport(c)),
                           status_reader=lambda: {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': round(c.now()*NS)})
         def start(obj):
             # Seed the real prepare-to-warmup history on a fake clock only.
@@ -555,8 +580,11 @@ class NativeIntegrationTests(unittest.TestCase):
             if timeout:
                 clock.sidecar.reader._transport.values = lambda t: (60, 60)
                 clock.sidecar.sample()
+            if dropout:
+                clock.sidecar.reader._transport.values = lambda t: (None, 40)
+                clock.sidecar.sample()
         with patch.object(ThermalSession, '__init__', init), patch.object(ThermalSession, 'start', start), patch(
-            'joulewise.align.apple.thermal.drain_decode', drain
+            'joulewise.align.apple.thermal_gates.drain_decode', drain
         ):
             return run_native_review(root, 'think', clock, spec_updates={
                 'thermal': policy(heavy=True), 'warmup_condition': 'benign',
@@ -584,7 +612,15 @@ class NativeIntegrationTests(unittest.TestCase):
             intervals = ep.hardware['thermal']['intervals']
             self.assertEqual([r['kind'] for r in intervals], ['G0', 'G1', 'H'])
             self.assertEqual(intervals[-1]['token_count'], 256)
-            self.assertTrue((held/'outputs/align_thermal.jsonl').is_file())
+            journal = [json.loads(line) for line in (held/'outputs/align_thermal.jsonl').read_text().splitlines()]
+            self.assertEqual((journal[0]['kind'], journal[-1]['kind']), ('session_start', 'session_end'))
+            phases = [r for r in journal if r['kind'] in ('align_thermal_gate', 'align_thermal_hold')]
+            self.assertEqual([r['values']['state'] for r in phases], ['begin', 'end']*3)
+            self.assertEqual([r['values']['gate'] for r in phases if r['values']['state'] == 'end'], intervals)
+            self.assertTrue(all(r['schema'] == 'joulewise.align_thermal.v1' for r in journal))
+            reading = next(r for r in journal if r['kind'] == 'reading')
+            self.assertEqual(reading['values']['readings']['Tfak']['data_type'], 'flt ')
+            self.assertEqual(reading['values']['readings']['Tfak']['raw_hex'], struct.pack('<f', 40.).hex())
 
     def test_native_hold_timeout_preserves_partial_ids_and_dispatches_no_tools(self):
         from joulewise.align.apple.workload import read_episode_bundle
@@ -598,6 +634,19 @@ class NativeIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(ep.main_task_score)
             self.assertTrue(ep.hardware['token_budget']['incomplete'])
             self.assertEqual(ep.hardware['token_budget']['decode_tokens_used'], 436)
+
+    def test_unobserved_hold_keeps_completed_tools_and_capability(self):
+        from joulewise.align.apple.workload import read_episode_bundle
+        with tempfile.TemporaryDirectory() as d:
+            bundle, status, _ = self.held_run(Path(d), dropout=True)
+            ep = read_episode_bundle(bundle)
+            self.assertEqual(status.status.value, 'succeeded')
+            self.assertEqual([t.decode_tokens for t in ep.turns], [180, 260])
+            self.assertIn('thermal.state_unobserved', ep.flags)
+            self.assertTrue(ep.turns[-1].tool_calls)
+            self.assertFalse(ep.hardware['token_budget']['incomplete'])
+            self.assertEqual(ep.hardware['thermal']['intervals'][-1]['outcome'], 'unobserved')
+            self.assertIsNotNone(ep.main_task_score)
 
     def test_endpoint_records_partial_turn_when_drain_alarm_fires(self):
         from joulewise.align.apple.workload import read_episode_bundle

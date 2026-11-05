@@ -15,7 +15,7 @@ from tests.align.test_thermal_gate import policy
 
 def member(name='one', energy=1000, slow=40.):
     return {'id': name, 'model': 'synthetic', 'pair': 'spam', 'condition': 'benign', 'gated': True,
-            'start_ns': 0, 'flags': [], 'coverage': [{'sample_fraction': 1., 'gaps_ns': []}],
+            'start_ns': 0, 'flags': [], 'coverage': [{'sample_fraction': 1., 'gaps_ns': [], 'max_interval_ns': 0}],
             'registered_os_observed': True,
             'turn_observation': [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': 0}],
             'pm_period_s': .1, 'turn_admissions': 1, 'intervals': [],
@@ -85,6 +85,7 @@ class DeskTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             bundle, _, _ = helper.held_run(Path(d))
             sidecar = [json.loads(line) for line in (bundle/'outputs/align_thermal.jsonl').read_text().splitlines()]
+            sidecar = desk.normalize_journal(sidecar)
             monitor = [{'module': 'temperature', 'kind': 'reading',
                         'started': {'monotonic_ns': r['monotonic_ns'] + NS//5},
                         'finished': {'monotonic_ns': r['monotonic_ns'] + NS//5},
@@ -154,14 +155,15 @@ class DeskTests(unittest.TestCase):
         result = desk.acceptance([m], pairs=[(m, m)])
         self.assertEqual([result[k]['status'] for k in ('U1', 'U2', 'U3')], ['pass']*3)
         cases = [('coverage', [{'sample_fraction': .989, 'gaps_ns': []}]),
-                 ('coverage', [{'sample_fraction': .99, 'gaps_ns': [[0, 2*NS+1]]}]),
+                 ('coverage', [{'sample_fraction': .99, 'gaps_ns': [], 'max_interval_ns': 2*NS+1}]),
+                 ('coverage', [{'sample_fraction': 1., 'gaps_ns': []}]),
                  ('turn_observation', [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': 1.001}])]
         for key, value in cases:
             changed = deepcopy(m)
             changed[key] = value
             with self.subTest(key=key):
                 self.assertEqual(desk.acceptance([changed])['U1']['status'], 'fail')
-        m['coverage'] = [{'sample_fraction': .99, 'gaps_ns': [[0, 2*NS]]}]
+        m['coverage'] = [{'sample_fraction': .99, 'gaps_ns': [[0, 2*NS]], 'max_interval_ns': 2*NS}]
         self.assertEqual(desk.acceptance([m])['U1']['status'], 'pass')
         m['intervals'] = [{'kind': 'H', 'outcome': 'timeout'}]
         m['turn_admissions'] = 50

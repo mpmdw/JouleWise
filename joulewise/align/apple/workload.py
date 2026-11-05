@@ -135,7 +135,8 @@ class EpisodeSpec:
         if spec.warmup_condition not in (None, 'benign'):
             raise ValueError('neutral warmup_condition must be benign')
         if spec.thermal is not None:
-            from joulewise.align.apple.thermal import validate_policy, validate_gate_policy
+            from joulewise.align.apple.thermal import validate_policy
+            from joulewise.align.apple.thermal_gates import validate_gate_policy
             if 'sensors' in spec.thermal:
                 validate_gate_policy(spec.thermal)
                 if spec.warmup_condition != 'benign' or spec.max_episode_seconds is not None:
@@ -194,7 +195,8 @@ class EpisodeRuntimeAdapter:
             self.task.user_prompt()
             # Identity readiness has no bundle context and must open no sensor.
             if self.spec.thermal is not None and (context is not None or not isinstance(self.clock, SystemClock)):
-                from joulewise.align.apple.thermal import ThermalSession, Sidecar
+                from joulewise.align.apple.thermal import Sidecar
+                from joulewise.align.apple.thermal_gates import ThermalSession
                 if 'sensors' in self.spec.thermal:
                     factory = self.thermal_factory or ThermalSession
                     self.thermal = factory(self.spec.thermal, self.clock, context,
@@ -455,7 +457,7 @@ class EpisodeRuntimeAdapter:
                     calls: list[ToolCall] = []
                     observed_calls = []
                     thermal_abort = self.thermal is not None and any(
-                        r['kind'] == 'H' and r['turn'] == index and r['outcome'] != 'released'
+                        r['kind'] == 'H' and r['turn'] == index and r['outcome'] in ('timeout', 'deadman')
                         for r in self.thermal.intervals)
                     for call_index, call in enumerate(() if thermal_abort else result.tool_calls):
                         if deadman is not None and deadman.expired():

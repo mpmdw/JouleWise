@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from dataclasses import replace
+from unittest import mock
 
 from joulewise.hazards import base, monitor, temperature
 from joulewise.schemas import CampaignPolicy, SchemaError
@@ -25,6 +27,53 @@ class FakeSensors:
 
 
 class TemperatureTests(unittest.TestCase):
+    def test_sidecar_journal_replaces_monitor_journal_with_three_clock_custody(self):
+        from joulewise.align.apple.thermal import Sidecar
+        from joulewise.align.apple.thermal_desk import normalize_journal, _coverage
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mac = FakeMac(root)
+            mac.clocks.read_cost_ns = 0
+            sidecar = Sidecar(root/'outputs', POLICY, reader=FakeSensors(),
+                              ctx=base.Context(clocks=mac.clocks))
+            sidecar.start(background=False)
+            start = mac.clocks.monotonic_ns()
+            sidecar.tick()
+            mac.clocks.advance(3)
+            sidecar.tick()
+            sidecar.stop()
+            lines = [json.loads(line) for line in sidecar.path.read_text().splitlines()]
+            self.assertEqual([r['kind'] for r in lines], ['session_start', 'reading', 'reading', 'session_end'])
+            self.assertEqual(lines[0]['values']['thermal'], POLICY)
+            for line in lines:
+                base.Stamp.from_json(line['started'])
+                base.Stamp.from_json(line['finished'])
+            coverage = _coverage(normalize_journal(lines), start, start+3*NS, temperature.keys(POLICY))
+            self.assertLess(coverage['sample_fraction'], 1)
+            self.assertFalse((root/'hazards/monitor/temperature.jsonl').exists())
+
+    def test_sidecar_replaces_monitor_fast_loop_at_one_hz(self):
+        from joulewise.align.apple.thermal import Sidecar
+        with tempfile.TemporaryDirectory() as directory:
+            mac = FakeMac(Path(directory))
+            mac.clocks.read_cost_ns = 0
+            sidecar = Sidecar(Path(directory)/'outputs', POLICY, reader=FakeSensors(),
+                              ctx=base.Context(clocks=mac.clocks))
+            sidecar.start(background=False)
+            deadline = mac.clocks.monotonic_ns()+3*NS
+            class Stop:
+                def is_set(self):
+                    return mac.clocks.monotonic_ns() >= deadline
+                def wait(self, seconds):
+                    mac.clocks.advance(seconds)
+                    return self.is_set()
+            sidecar._stop = Stop()
+            sidecar._loop()
+            sidecar._stop = mock.Mock()
+            sidecar.stop()
+            lines = [json.loads(line) for line in sidecar.path.read_text().splitlines()]
+            self.assertEqual(sum(r['kind'] == 'reading' for r in lines), 3)
+
     def test_bad_samples_are_null_zero_fan_and_constant_temperature_are_good(self):
         result = temperature.sample(FakeSensors(), temperature.keys(POLICY))
         self.assertEqual(result["sensors"]["F0Ac"], 0)
@@ -93,3 +142,47 @@ class TemperatureTests(unittest.TestCase):
         result = temperature.coverage(lines, 0, 7 * NS, ["TG0D"])["all_keys"]
         self.assertEqual(result["sample_fraction"], 4 / 7)
         self.assertEqual(result["gaps_ns"], [[NS, 5 * NS]])
+
+
+class EpisodeSlotTests(unittest.TestCase):
+    """The former driver-policy tests now exercise the ALIGN config boundary."""
+    def spec_config(self, slot):
+        from tests.align.test_apple_campaign import base_config, episode_spec
+        spec = replace(episode_spec(hidden=False), thermal=slot)
+        config = base_config()
+        return spec, replace(config, workload_profile=replace(config.workload_profile, prompt_text=spec.to_text()))
+
+    def test_episode_slot_passes_the_sensor_pin_to_the_sidecar(self):
+        from joulewise.align.apple import thermal
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+        from joulewise.clock import FakeClock
+        from joulewise.interfaces import AdapterResult
+        _, config = self.spec_config(POLICY)
+        runtime = mock.Mock()
+        runtime.prepare.return_value = AdapterResult(ok=True)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(thermal, 'Sidecar') as factory:
+            adapter = EpisodeRuntimeAdapter(runtime, FakeClock())
+            self.assertTrue(adapter.prepare(config, mock.Mock(outputs_dir=Path(tmp))).ok)
+            factory.assert_called_once_with(Path(tmp), POLICY)
+            adapter.cleanup(config)
+            factory.return_value.stop.assert_called_once()
+
+    def test_changed_sensor_pin_changes_execution_identity(self):
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+        from joulewise.clock import FakeClock
+        adapter = EpisodeRuntimeAdapter(None, FakeClock())
+        _, first = self.spec_config(POLICY)
+        _, changed = self.spec_config({**POLICY, 'r0_sha256': 'b'*64})
+        a, b = (adapter.identity_projection_metadata(c)['sampler']['execution_policy']['thermal']
+                for c in (first, changed))
+        self.assertEqual(a, POLICY)
+        self.assertNotEqual(a, b)
+
+    def test_unset_slot_disables_collection_and_path_fields_are_rejected(self):
+        from joulewise.align.apple.workload import EpisodeSpec
+        spec, _ = self.spec_config(None)
+        self.assertNotIn('thermal', json.loads(spec.to_text()))
+        # Paths are text only: unknown fields refuse before any dereference.
+        bad, _ = self.spec_config({**POLICY, 'path': '/synthetic/model-or-data'})
+        with self.assertRaises(ValueError):
+            EpisodeSpec.from_text(bad.to_text())
