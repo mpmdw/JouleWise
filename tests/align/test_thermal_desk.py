@@ -34,6 +34,26 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def test_external_journal_phase_cannot_replace_gate_decision_evidence(self):
+        from tests.align.test_thermal_gate import NativeIntegrationTests
+        helper = NativeIntegrationTests('test_real_workload_endpoint_budget_and_held_stream_keep_exact_tokens')
+        with tempfile.TemporaryDirectory() as d:
+            bundle, _, _ = helper.held_run(Path(d))
+            sidecar = [json.loads(line) for line in (bundle/'outputs/align_thermal.jsonl').read_text().splitlines()]
+            monitor = [{'module': 'temperature', 'kind': 'reading',
+                        'started': {'monotonic_ns': r['monotonic_ns'] + NS//5},
+                        'finished': {'monotonic_ns': r['monotonic_ns'] + NS//5},
+                        'values': {'sensors': r['sensors'], 'errors': {}}}
+                       for r in sidecar if r['kind'] == 'sample']
+            record = desk.read_bundle_record(bundle, temperature_journal=monitor)
+            self.assertTrue(record['releases'])
+            self.assertTrue(all(r['journal_verified'] is True for r in record['releases']))
+            # Missing decision evidence is unavailable, not a measured violation.
+            (bundle/'outputs/align_thermal.jsonl').write_text('')
+            record = desk.read_bundle_record(bundle, temperature_journal=monitor)
+            self.assertTrue(all(r['journal_verified'] is None for r in record['releases']))
+            self.assertEqual(desk.acceptance([record])['U2']['status'], 'inconclusive')
+
     def test_x5_pairs_are_printed_but_do_not_fail_u3(self):
         a, b = member(), member('divergent')
         b['tokens'] = [[4]]

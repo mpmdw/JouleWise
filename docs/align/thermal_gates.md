@@ -104,8 +104,12 @@ Native decode phase markers are also split around holds, so the unchanged
 reducer receives disjoint phases. Original binary64 epoch boundary values are
 retained beside paired integer stamps to avoid re-quantization overlaps.
 
-`thermal_desk.member_record` recomputes coverage and releases from either
-journal form, integrates the real attribution segments, weights decode clocks
+`thermal_desk.member_record` recomputes coverage from either journal form.
+Gate releases are always verified against the bundle's `align_thermal.jsonl`,
+which records the gate's actual decision sample. An external monitor journal
+supplies coverage and independent nearby-temperature cross-checks; its sample
+phase need not match the sidecar. Missing decision samples are inconclusive;
+observed mismatches fail. The desk integrates the real attribution segments, weights decode clocks
 by active time excluding holds, and exports exclusions in the selected meter
 trace's clock domain, alongside its mapping uncertainty and paired stamps.
 It prints gross episode energy/latency beside turn-owned energy.

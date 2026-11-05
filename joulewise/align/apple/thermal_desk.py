@@ -134,7 +134,8 @@ def _coverage(rows, a, b, keys):
 
 
 def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
-                  turn_rows=(), source='powermetrics', channel='gpu_power', registered_os_readings=None):
+                  turn_rows=(), source='powermetrics', channel='gpu_power', registered_os_readings=None,
+                  gate_journal=None):
     """Derive checks from raw observations, not a stored pass bit.
 
     OS readings: [monotonic_ns, level]. PM samples: {start_ns,end_ns,state,
@@ -145,6 +146,7 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
     gated = thermal is not None
     thermal = thermal or {'policy': {}, 'intervals': []}
     rows = normalize_journal(journal)
+    decision_rows = normalize_journal(gate_journal) if gate_journal is not None else rows
     policy = thermal['policy']
     keys = temperature.keys(policy['sensors']) if gated else ()
     intervals = thermal['intervals']
@@ -155,17 +157,21 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
     for gate in intervals:
         if gate['outcome'] != 'released':
             continue
-        samples = [r for r in rows if r['monotonic_ns'] == gate.get('exit_sample_ns')]
+        samples = [r for r in decision_rows if r['monotonic_ns'] == gate.get('exit_sample_ns')]
         release = None if len(samples) != 1 else {role: samples[0]['sensors'].get(policy['sensors'][sensor])
                                                  for role, sensor in (('fast_c', 's_fast'), ('slow_c', 's_slow'))}
-        same = release is not None and release == gate['release']
-        if gate['kind'] != 'G0':
+        same = None if release is None else release == gate['release']
+        if gate['kind'] != 'G0' and same is not None:
             # Trust neither a ratcheted gate reference nor a claimed release.
             ref = g0['release'] if g0 else None
             same = (same and ref is not None and gate['reference'] == ref
                     and all(release[k] is not None and release[k] <= ref[k] + policy[d]
                             for k, d in (('fast_c', 'delta_fast_c'), ('slow_c', 'delta_slow_c'))))
-        releases.append({'kind': gate['kind'], 'journal_verified': bool(same), 'release': release})
+        nearest = min(rows, key=lambda r: abs(r['monotonic_ns']-gate['exit_sample_ns'])) if rows and gate.get('exit_sample_ns') is not None else None
+        crosscheck = ({'sample_ns': nearest['monotonic_ns'], 'sensors': nearest['sensors']}
+                      if nearest is not None and abs(nearest['monotonic_ns']-gate['exit_sample_ns']) <= 2*NS else None)
+        releases.append({'kind': gate['kind'], 'journal_verified': same, 'release': release,
+                         'temperature_crosscheck': crosscheck})
     attributed = attribute_episode(episode, source=source, channel=channel)
     owned = sum(s.energy.joules for s in attributed.segments if s.turn is not None)
     clocks, turn_observation = [], []
@@ -471,7 +477,8 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
     range_c = max(slow)-min(slow) if slow else None
     release_checks = [v['journal_verified'] for r in included for v in r['releases']]
     u2 = combine(['pass' if range_c is not None and range_c <= 3 else 'fail' if range_c is not None else 'inconclusive',
-                  'pass' if release_checks and all(release_checks) else 'fail' if release_checks else 'inconclusive'])
+                  combine(['inconclusive' if v is None else 'pass' if v else 'fail' for v in release_checks])
+                  if release_checks else 'inconclusive'])
     pair_results = [identical_pair(a, b) for a, b in pairs
                     if 'thermal.state_unobserved' not in a.get('flags', []) and 'thermal.state_unobserved' not in b.get('flags', [])]
     eligible_pairs = [p['status'] for p in pair_results if p['status'] != 'excluded']
@@ -527,7 +534,8 @@ def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, regis
             return [json.loads(line) for line in read_bytes(path).splitlines() if line.strip()]
         except FileNotFoundError:
             return []
-    journal = temperature_journal if temperature_journal is not None else jsonl(bundle/'outputs/align_thermal.jsonl')
+    gate_journal = jsonl(bundle/'outputs/align_thermal.jsonl')
+    journal = temperature_journal if temperature_journal is not None else gate_journal
     rich = jsonl(bundle/'rich_telemetry.jsonl')
     pm = []
     trace = next((t for t in ep.power_traces if t.source == 'powermetrics' and t.channel == 'gpu_power'), None)
@@ -547,12 +555,13 @@ def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, regis
     os_readings = [(r['finished']['monotonic_ns'], r['values'].get('level')) for r in os_journal
                    if r.get('kind') == 'reading' and not r.get('error')]
     if not os_readings:
-        os_readings = [(r['monotonic_ns'], r.get('status', {}).get('os_level')) for r in journal
+        os_readings = [(r['monotonic_ns'], r.get('status', {}).get('os_level')) for r in gate_journal
                        if r.get('kind') == 'sample' and r.get('status', {}).get('os_level') is not None]
     config = json.loads(read_bytes(bundle/'config.json'))
     registered = ([(t, v) for t, v in os_readings if registered_span_ns[0] <= t <= registered_span_ns[1]]
                   if registered_span_ns is not None else None)
     record = member_record(ep, journal, os_readings=os_readings, pm_samples=pm,
+                           gate_journal=gate_journal,
                            pm_period_s=1/config['sampling']['power_hz'],
                            registered_os_readings=registered,
                            turn_rows=jsonl(bundle/'outputs/align_turns.jsonl'))
