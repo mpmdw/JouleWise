@@ -262,10 +262,10 @@ class CacheTests(unittest.TestCase):
 
     def test_spec_legacy_bytes_and_governed_policy_digest(self):
         spec = episode_spec(hidden=False)
-        legacy = asdict(spec)
-        for key in ('prompt_cache', 'enable_thinking', 'max_context_tokens', 'sampler', 'max_episode_seconds'):
-            if legacy[key] is None:
-                del legacy[key]
+        # Explicit pre-controls contract; adding optional dataclass fields must
+        # not silently change the legacy serialization oracle.
+        legacy = {key: asdict(spec)[key] for key in ('task_factory', 'condition', 'seed',
+            'max_turns', 'max_tokens', 'temperature', 'task_kwargs', 'mock_turns', 'schema')}
         self.assertEqual(spec.to_text(), json.dumps(legacy, sort_keys=True, separators=(',', ':'), allow_nan=False))
         adapter = EpisodeRuntimeAdapter(None, FakeClock())
         adapter.prepared = {"version": "synthetic", "model_artifact_identity": {"sha256": "a" * 64}}
@@ -293,6 +293,8 @@ class CacheTests(unittest.TestCase):
         sampled = replace(spec, temperature=.6, sampler=policy)
         self.assertNotEqual(identity(spec), identity(sampled))
         self.assertNotEqual(identity(spec), identity(replace(spec,max_episode_seconds=120)))
+        self.assertNotEqual(identity(spec), identity(replace(spec,max_episode_decode_tokens=8192)))
+        self.assertNotEqual(identity(spec), identity(replace(spec,deadman_s=1086)))
         self.assertEqual(identity(spec), identity(replace(spec,sampler=None,max_episode_seconds=None)))
         with self.assertRaisesRegex(ValueError, 'prompt_cache'):
             EpisodeSpec.from_text(replace(spec, prompt_cache='wrong').to_text())
