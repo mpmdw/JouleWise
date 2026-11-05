@@ -22,11 +22,11 @@ def sha256_value(value: bytes) -> str:
 
 
 def sha256_raw(raw: bytes) -> str:
-    return sha256_value(raw)
+    return hashlib.sha256(raw).hexdigest()
 
 
 def sha256_data(data: bytes) -> str:
-    return sha256_value(data)
+    return hashlib.sha256(data).hexdigest()
 
 
 def sha256_text(text: str) -> str:
@@ -116,24 +116,6 @@ def collect_exact_keys(value: Any, expected: set[str], where: str, errors: list[
     if extra:
         errors.append(f"{where}: unrecognized key(s): {', '.join(extra)}")
     return not missing and not extra
-
-
-def parse_finite_float(value: str, reject: Callable[[str], None]) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        reject(value)
-    return parsed
-
-
-def parse_finite_int(value: str, reject: Callable[[str], None]) -> int:
-    parsed = int(value)
-    try:
-        finite_projection = math.isfinite(float(parsed))
-    except OverflowError:
-        finite_projection = False
-    if not finite_projection:
-        reject(value)
-    return parsed
 
 
 def unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

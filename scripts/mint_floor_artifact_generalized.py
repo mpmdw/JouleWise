@@ -33,12 +33,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.strict_io import (
-    parse_finite_float as _strict_parse_finite_float,
-    parse_finite_int as _strict_parse_finite_int,
-)
-
-
 from joulewise.whole_window import (  # noqa: E402
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -1477,11 +1471,21 @@ def _reject_nonfinite_json(value: str) -> None:
 
 
 def _parse_finite_json_float(value: str) -> float:
-    return _strict_parse_finite_float(value, _reject_nonfinite_json)
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_json(value)
+    return parsed
 
 
 def _parse_finite_json_int(value: str) -> int:
-    return _strict_parse_finite_int(value, _reject_nonfinite_json)
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_json(value)
+    return parsed
 
 
 def _strict_json_value(raw: bytes, label: str) -> Any:

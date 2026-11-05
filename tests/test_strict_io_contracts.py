@@ -15,6 +15,7 @@ import math
 import os
 from pathlib import Path, PurePosixPath
 import random
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -185,6 +186,51 @@ class StrictIOContracts(unittest.TestCase):
                 for raw in ('{"a":1,"a":2}', '{"o":{"é":1,"é":2}}'):
                     with self.assertRaises(ValueError):
                         json.loads(raw, object_pairs_hook=fn)
+
+    def test_json_callback_recursion_boundary(self):
+        # Parser admission depends on stack headroom. A forwarding wrapper is
+        # not equivalent to these callbacks, even when ordinary values match.
+        def reference_float(value):
+            parsed = float(value)
+            if not math.isfinite(parsed):
+                reject(value)
+            return parsed
+
+        def reference_int(value):
+            parsed = int(value)
+            try:
+                finite = math.isfinite(float(parsed))
+            except OverflowError:
+                finite = False
+            if not finite:
+                reject(value)
+            return parsed
+
+        def admitted(callback, kind, depth):
+            def pressure(remaining):
+                if remaining:
+                    return pressure(remaining - 1)
+                json.loads("0.0" if kind.endswith("float") else "0", **{kind: callback})
+            try:
+                pressure(depth)
+                return True
+            except RecursionError:
+                return False
+
+        previous = sys.getrecursionlimit()
+        try:
+            sys.setrecursionlimit(180)
+            for location, kind in CONTRACTS.items():
+                if kind not in ("parse_finite_float", "parse_finite_int"):
+                    continue
+                callback = binding(location)
+                parse_kind = "parse_float" if kind.endswith("float") else "parse_int"
+                reference = reference_float if kind.endswith("float") else reference_int
+                for depth in range(130, 190):
+                    self.assertEqual(admitted(callback, parse_kind, depth),
+                                     admitted(reference, parse_kind, depth), (location, depth))
+        finally:
+            sys.setrecursionlimit(previous)
 
     def test_exact_keys_and_paths(self):
         rng = random.Random(510)

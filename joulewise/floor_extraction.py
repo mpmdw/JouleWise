@@ -46,8 +46,6 @@ from joulewise.strict_io import (
     finite_or_none as _common_mode_finite,
     finite_or_none as _finite,
     is_lower_sha256 as _is_sha256,
-    parse_finite_float as _strict_parse_finite_float,
-    parse_finite_int as _strict_parse_finite_int,
 )
 
 
@@ -2001,11 +1999,21 @@ def _reject_nonfinite_admission_number(value: str) -> None:
 
 
 def _parse_finite_admission_float(value: str) -> float:
-    return _strict_parse_finite_float(value, _reject_nonfinite_admission_number)
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_admission_number(value)
+    return parsed
 
 
 def _parse_finite_admission_int(value: str) -> int:
-    return _strict_parse_finite_int(value, _reject_nonfinite_admission_number)
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_admission_number(value)
+    return parsed
 
 
 def _strict_admission_json_value(raw: bytes, label: str) -> Any:
