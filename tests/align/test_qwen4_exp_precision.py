@@ -103,10 +103,24 @@ class TestNativePrecision(unittest.TestCase):
         actual = port.delta_update(q, k, v, a, b, log, bias, None, mask, False, True)
         for got, want in zip(actual, expected):
             self.assert_bits_equal(got, want)
-        # Check both a supplied state and the native kernel path against ops.
-        kernel = port.delta_update(q, k, v, a, b, log, bias, state, mask, True, True)
-        for got, want in zip(kernel, expected):
-            np.testing.assert_allclose(np.array(got), np.array(want), atol=1e-7, rtol=1e-5)
+        # Supplied state, native kernel path: it must really dispatch the pinned
+        # kernel with the rounded bf16 beta (as the reference's b.sigmoid()).
+        beta = port.sigmoid_gate(b, True)
+        with patch.object(port, "gated_delta_kernel", wraps=port.gated_delta_kernel) as native:
+            kernel = port.delta_update(q, k, v, a, b, log, bias, state, mask, True, True)
+        self.assertEqual(native.call_count, 1)
+        self.assertEqual(native.call_args.args[4].dtype, mx.bfloat16)
+        for got, want in zip(kernel, port.gated_delta_kernel(q, k, v, g, beta, state, mask)):
+            self.assert_bits_equal(got, want)
+        # Pinned mlx-lm 0.31.3 semantics differ at masked steps, independently
+        # of this flag or beta's dtype: both freeze the state, but the kernel
+        # writes y = 0 while the ops path still emits y from the discarded
+        # update. Compare unmasked outputs and state; pin the kernel's zeros.
+        keep = np.array(mask)[0]
+        got_y, want_y = np.array(kernel[0]), np.array(expected[0])
+        np.testing.assert_allclose(got_y[:, keep], want_y[:, keep], atol=1e-7, rtol=1e-5)
+        np.testing.assert_array_equal(got_y[:, ~keep], 0)
+        np.testing.assert_allclose(np.array(kernel[1]), np.array(expected[1]), atol=1e-7, rtol=1e-5)
         for gate, enabled in ((b, False), (b.astype(mx.float32), True)):
             original = port.gated_delta_update(q, k, v, a, gate, log, bias, None, mask, use_kernel=False)
             actual = port.delta_update(q, k, v, a, gate, log, bias, None, mask, False, enabled)
