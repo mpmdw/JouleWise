@@ -36,6 +36,17 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def test_u4_requires_both_sentinel_equivalence_and_anchor_moments(self):
+        anchors = {str(i): {str(j): 1000+100*j for j in range(4)} for i in range(3)}
+        windows = {str(i): [1000] for i in range(3)}
+        self.assertEqual(desk.cross_window(windows, 1000, anchor_sessions=anchors)['status'], 'pass')
+        self.assertEqual(desk.cross_window({str(i): [1010] for i in range(3)}, 1000,
+                                           anchor_sessions=anchors)['status'], 'fail')
+        self.assertEqual(desk.cross_window(windows, 1000)['status'], 'inconclusive')
+        self.assertEqual(desk.cross_window({}, None, anchor_sessions=anchors)['status'], 'inconclusive')
+        result = desk.acceptance([member()], u4={'status': 'pass'})
+        self.assertEqual(result['U4']['status'], 'inconclusive')
+
     def test_energy_quality_refuses_unmapped_uncovered_and_unbounded_evidence(self):
         for flag in ('clock.mapping_missing', 'clock.uncertainty_missing', 'clock.mapping_ambiguous',
                      'clock.episode_domain_mismatch', 'duty.uncovered'):
@@ -184,16 +195,17 @@ class DeskTests(unittest.TestCase):
         self.assertEqual(desk.identical_pair(a, b)['exclusion'], 'X5')
 
     def test_u4_windows_are_clusters_and_inconclusive_is_distinct(self):
-        result = desk.cross_window({'a': [1000, 1000], 'b': [1001], 'c': [999]}, 1000)
+        anchors_ok = {str(i): {str(j): 1000+j*100 for j in range(4)} for i in range(3)}
+        result = desk.cross_window({'a': [1000, 1000], 'b': [1001], 'c': [999]}, 1000, anchor_sessions=anchors_ok)
         self.assertEqual(result['status'], 'pass')
-        self.assertEqual(result['df'], 2)
+        self.assertEqual(result['sentinels']['df'], 2)
         self.assertEqual(desk.cross_window({'a': [1000], 'b': [1000]}, 1000)['status'], 'inconclusive')
         self.assertEqual(desk.cross_window({'a': [960], 'b': [1000], 'c': [1040]}, 1000)['status'], 'inconclusive')
         self.assertEqual(desk.cross_window({'a': [1003], 'b': [1003], 'c': [1003]}, 1000)['status'], 'fail')
         def anchors(offsets):
             return {str(i): {str(j): 1000+j*100+v for j in range(4)} for i, v in enumerate(offsets)}
-        self.assertEqual(desk.cross_window({}, None, anchor_sessions=anchors([-6, 0, 6]))['status'], 'pass')
-        self.assertEqual(desk.cross_window({}, None, anchor_sessions=anchors([-7, 0, 7]))['status'], 'fail')
+        self.assertEqual(desk.cross_window({'a': [1000], 'b': [1000], 'c': [1000]}, 1000, anchor_sessions=anchors([-6, 0, 6]))['status'], 'pass')
+        self.assertEqual(desk.cross_window({'a': [1000], 'b': [1000], 'c': [1000]}, 1000, anchor_sessions=anchors([-7, 0, 7]))['status'], 'fail')
 
     def test_u5_light_bound_scaling_and_heavy_pairs_only(self):
         light = desk.state_sensitivity(heavy=False, smaller_pair_sr_j=400, mean_energy_j=2000,

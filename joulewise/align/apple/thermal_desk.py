@@ -345,24 +345,28 @@ def deciding_experiment(runs):
     return result
 
 
-def cross_window(windows, reference_j, *, anchor_sessions=None):
-    if anchor_sessions is not None:
-        if len(anchor_sessions) < 3 or any(len(r) != 4 for r in anchor_sessions.values()):
-            return {'status': 'inconclusive', 'reason': 'requires K >= 3 anchor sessions'}
-        cells = list(next(iter(anchor_sessions.values())))
-        if any(set(r) != set(cells) for r in anchor_sessions.values()):
-            return {'status': 'inconclusive', 'reason': 'requires same four anchors in every session'}
-        matrix = [[r[c] for c in cells] for r in anchor_sessions.values()]
-        means = [fmean(row) for row in matrix]
-        cell_means = [fmean(col) for col in zip(*matrix)]
-        grand = fmean(means)
-        k, j = len(matrix), len(cells)
-        ms_window = j*sum((v-grand)**2 for v in means)/(k-1)
-        ms_error = sum((v-means[w]-cell_means[c]+grand)**2 for w, row in enumerate(matrix)
-                       for c, v in enumerate(row))/((k-1)*(j-1))
-        sigma = math.sqrt(max(0, (ms_window-ms_error)/j))
-        return {'status': 'pass' if sigma <= 6 else 'fail', 'anchor_sigma_j': sigma, 'K': k,
-                'ms_window_j2': ms_window, 'ms_error_j2': ms_error, 'method': 'balanced crossed-anchor moment'}
+def _anchor_moments(anchor_sessions):
+    if anchor_sessions is None:
+        return {'status': 'inconclusive', 'reason': 'requires K >= 3 anchor sessions'}
+    if len(anchor_sessions) < 3 or any(len(r) != 4 for r in anchor_sessions.values()):
+        return {'status': 'inconclusive', 'reason': 'requires K >= 3 anchor sessions'}
+    cells = list(next(iter(anchor_sessions.values())))
+    if any(set(r) != set(cells) for r in anchor_sessions.values()):
+        return {'status': 'inconclusive', 'reason': 'requires same four anchors in every session'}
+    matrix = [[r[c] for c in cells] for r in anchor_sessions.values()]
+    means = [fmean(row) for row in matrix]
+    cell_means = [fmean(col) for col in zip(*matrix)]
+    grand = fmean(means)
+    k, j = len(matrix), len(cells)
+    ms_window = j*sum((v-grand)**2 for v in means)/(k-1)
+    ms_error = sum((v-means[w]-cell_means[c]+grand)**2 for w, row in enumerate(matrix)
+                   for c, v in enumerate(row))/((k-1)*(j-1))
+    sigma = math.sqrt(max(0, (ms_window-ms_error)/j))
+    return {'status': 'pass' if sigma <= 6 else 'fail', 'anchor_sigma_j': sigma, 'K': k,
+            'ms_window_j2': ms_window, 'ms_error_j2': ms_error, 'method': 'balanced crossed-anchor moment'}
+
+
+def _sentinel_equivalence(windows, reference_j):
     if len(windows) < 3 or not reference_j or any(not runs for runs in windows.values()):
         return {'status': 'inconclusive', 'reason': 'requires >= 3 windows and W1 sentinel reference'}
     means = [fmean((v-reference_j)/reference_j for v in runs) for runs in windows.values()]
@@ -370,6 +374,20 @@ def cross_window(windows, reference_j, *, anchor_sessions=None):
     ci = interval(mean, stdev(means)/math.sqrt(len(means)), len(means)-1)
     return {'status': 'fail' if abs(mean) > .0025 else bounded(mean, ci, .005),
             'mean_fraction': mean, 'ci90_fraction': ci, 'df': len(means)-1, 'window_means': means}
+
+
+
+def _combined_u4(value):
+    if not value or not all(isinstance(value.get(k), dict) and value[k].get('status') in
+                            ('pass', 'fail', 'inconclusive') for k in ('anchors', 'sentinels')):
+        return {'status': 'inconclusive', 'reason': 'U4 requires both sentinel equivalence and anchor moments'}
+    return {**value, 'status': combine([value[k]['status'] for k in ('anchors', 'sentinels')])}
+
+
+def cross_window(windows, reference_j, *, anchor_sessions=None):
+    """U4 is conjunctive: sentinel equivalence AND the 30B anchor moment bar."""
+    return _combined_u4({'anchors': _anchor_moments(anchor_sessions),
+                         'sentinels': _sentinel_equivalence(windows, reference_j)})
 
 
 def state_sensitivity(*, heavy, smaller_pair_sr_j, mean_energy_j, mean_30b_energy_j=None,
@@ -506,7 +524,7 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
                       'turn_admissions': admissions, 'g1_h_timeouts': timeouts, 'g0_timeouts': g0_timeouts},
                'U2': {'status': u2, 'g0_slow_range_c': range_c},
                'U3': {'status': combine(eligible_pairs) if eligible_pairs else 'inconclusive', 'pairs': pair_results},
-               'U4': u4 or {'status': 'inconclusive', 'reason': 'requires cross-window evidence'},
+               'U4': _combined_u4(u4),
                'U5': u5 or {'status': 'inconclusive', 'reason': 'requires pair s_r and state sensitivity evidence'},
                'U6': u6 or {'status': 'inconclusive', 'reason': 'requires frozen-fit benign residuals'}}
     hardware = combine([results[f'U{k}']['status'] for k in range(1, 6)])

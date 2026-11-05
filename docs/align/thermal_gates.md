@@ -150,8 +150,10 @@ window's journal must not exclude every member in that window.
   decode clock. Per-turn differences are diagnostic. Missing IDs are
   inconclusive; observed divergence is X5.
 - U4: unweighted window means, W−1 df, point bar ±0.25%, 90% interval within
-  ±0.5%. The four-anchor, K≥3 branch uses the balanced crossed-anchor moment
-  estimator: `sigma_w²=max(0,(MS_window-MS_interaction)/4)` and the 6 J bar.
+  ±0.5%, **and** the four-anchor, K≥3 balanced crossed-anchor moment
+  estimator: `sigma_w²=max(0,(MS_window-MS_interaction)/4)` with the 6 J bar.
+  `cross_window` always returns both `sentinels` and `anchors`, combining their
+  statuses. `acceptance` requires both parts; a lone status cannot pass U4.
 - U5: maximum absolute 90% contrast endpoint scaled by cell/30B energy for
   light cells. Heavy cells fit energy/temperature pair differences through
   the origin, only with observed, eligible, token-identical pairs; multiply
