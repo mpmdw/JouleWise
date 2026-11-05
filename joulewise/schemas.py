@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Mapping
 
+from joulewise.strict_io import is_finite_float_projection as _is_finite_number
+
 from joulewise.axi_decode_config import (
     AXI_CONFIG_EXTENSION,
     EVENT_SEMANTICS_VERSION,
@@ -275,14 +277,6 @@ class FailureReason(str, Enum):
     UNSUPPORTED_WORKLOAD = "unsupported_workload"
     CLEANUP_FAILED = "cleanup_failed"
     UNKNOWN_ERROR = "unknown_error"
-
-
-def _is_finite_number(value: Any) -> bool:
-    return (
-        isinstance(value, int | float)
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-    )
 
 
 def _semantic_prompt_sources(values: Mapping[str, Any]) -> list[str]:

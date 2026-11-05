@@ -90,3 +90,7 @@ def finite_or_none(value: object) -> float | None:
         return None
     converted = float(value)
     return converted if math.isfinite(converted) else None
+
+
+def is_finite_float_projection(value: object) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(float(value))

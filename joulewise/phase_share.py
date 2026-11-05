@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
+from joulewise.strict_io import is_finite_float_projection as _finite
+
 from joulewise.bundle_read import TracePoint, Window
 from joulewise.reduce import _integrate
 
@@ -73,14 +75,6 @@ class PhaseBoundaryEnvelope:
     joint_normalized_decode_minus_prefill: Interval
     independent_box_normalized_decode_minus_prefill: Interval
     curve: tuple[PhaseBoundaryPoint, ...]
-
-
-def _finite(value: object) -> bool:
-    return (
-        not isinstance(value, bool)
-        and isinstance(value, (int, float))
-        and math.isfinite(float(value))
-    )
 
 
 def _interval(values: list[float]) -> Interval:

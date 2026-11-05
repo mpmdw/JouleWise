@@ -19,7 +19,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
 
+
 from joulewise.strict_io import (
+    is_finite_float_projection as _finite_number,
     json_utf8_bytes_strict as _canonical_bytes,
     sha256_raw as _sha256,
 )
@@ -574,14 +576,6 @@ def _phase_for_metric(metric: str, *, cell_id: str) -> str:
             f"{cell_id} metric is not a phase_energy_j metric",
         )
     return metric[len(prefix) :]
-
-
-def _finite_number(value: Any) -> bool:
-    return (
-        not isinstance(value, bool)
-        and isinstance(value, (int, float))
-        and math.isfinite(float(value))
-    )
 
 
 def _observe_member(
