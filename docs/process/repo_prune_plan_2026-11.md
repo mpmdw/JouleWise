@@ -482,3 +482,21 @@ blobs and owning-lane consumers, creates the preservation tag, then deletes
 exactly Stage 1's five files on the requested branch and repeats focused checks
 on that resulting tree before committing locally. The session report records
 remaining blockers and the absence of a post-deletion result.
+
+## Lead rulings on the NEEDS-ED items (2026-11-05, laptop lead, before any deletion stage)
+
+Most items are lead calls. Ed decides only the two marked **ED**.
+
+| Item | Ruling |
+|---|---|
+| 01 Phase-1 / release gates | Lead cites them at landing. Stage PRs open only after the release, after recompute agreement, and after #649 merges. Gate evidence is cited in each PR. |
+| 02 Git storage | Resolved. Sol clones now have a writable `.git` (`--add-dir <clone>/.git`); the shared object store is repo code and may be read. |
+| 03 Tag verification | Each stage PR verifies the preserving tag's peeled commit and tree in a normal clone and cites them. |
+| 04 Stage-1 CLI probes | Approved for deletion. The preserving tag keeps them recoverable; no external caller is known. |
+| 05 Stage-2 helper boundaries | Delegated to the stage author. The extraction is reviewed by Opus and, given its size, by ultrareview. Sealed pack evidence is never regenerated. |
+| 06 NVIDIA/SSH/remote stack | **ED**: is NVIDIA or remote GPU measurement (ALIGN gpukit/jetson/nvml lanes) still planned? If yes, Stage 3 is dropped. |
+| 07 Old formats | Readers stay for every format a sealed or registered record references; only writers retire. Synthetic golden equivalence is required. |
+| 08 Byte contracts | Approved as proposed. The independent implementations listed stay independent. |
+| 09 Kernel/queue deletion | Deferred until after FREEZE-BY-COMMIT phase 1 lands; the lead reconciles it with decision 7a then. |
+| 10 Site / RPT-001 outputs | **ED**: may the advisor site and rendered reports be built on demand instead of tracked? |
+| 11 Archive relocation | Not pursued. Stage 8 is dropped: zero projected deletion and high custody risk. |
