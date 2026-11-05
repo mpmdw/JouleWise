@@ -1,10 +1,14 @@
-# ALIGN hybrid prompt-cache checkpoints (PROVISIONAL native gate)
+# ALIGN hybrid prompt-cache checkpoints
 
 This extends `episode_prefix` for mlx-lm's non-rotating `KVCache` /
 `ArraysCache` mixture. The serving pins remain mlx 0.31.2 and mlx-lm 0.31.3.
-No production model, energy experiment, or measurement-data replay validates
-this extension yet. The native numerical unittest must pass before use in a
-new ALIGN measurement window.
+The PR #657 review reports the pre-fix native gate passing **4/4** on those pins,
+with bitwise matched-schedule restored logits at boundaries 512 and 73 for both
+families and dtypes; its benchmark also passed. This fix round cannot run MLX.
+The revised 2048-token/context path and new native context test require a lead
+rerun. Production-model/template and measurement readiness remain PROVISIONAL.
+Amendment 1's W1 contains Qwen3.8-27B only; Next is dropped and Flash-Next is
+later. Next code/tests here are historical implementation coverage.
 
 ## Boundary and ownership
 
@@ -17,6 +21,13 @@ Every eventual restore is independently gated by the **actual next prompt's**
 token LCP. Templates that rewrite earlier history can use an older checkpoint;
 if none survives, the existing whole-cache rebuild applies. A tokenizer that
 does not support a closed-history render needs native integration work.
+
+With limit zero/None, the endpoint does not render or encode closed history.
+Enabled checkpoints still pay for a second full-history render/encode inside
+`generation_setup`. Its cost as context grows has not been measured. R1 must
+quantify that overhead before enabled use in a measurement window; the U6
+turn-index residual cannot be assumed unaffected. A constant-suffix boundary
+optimization is deferred until it can be verified against the actual templates.
 
 Prefill to that boundary in chunks of at most 2048 tokens (the pinned native
 non-speculative step size), then checkpoint before
@@ -92,8 +103,10 @@ object overhead, active model/cache memory and allocator fragmentation are
 excluded. Creating a checkpoint can temporarily retain N+1 snapshots before
 eviction; active recurrence can later allocate new storage. Shared buffers make
 logical payload totals different from incremental allocator bytes. No energy-model term,
-predictor, exclusion rule or stopping rule changes. Non-hybrid execution-policy
-identity and generated record/event bytes remain unchanged.
+predictor, exclusion rule or stopping rule changes. Legacy specs omitting the
+new field retain their execution-policy identity. Newly authored specs include
+the explicit limit (including zero) in identity for every model. Disabled and
+non-hybrid runtime record/event bytes retain the existing cache behavior.
 
 ## Config-derived memory
 
@@ -109,7 +122,8 @@ checkpoint payload       = linear_layers * (convolution + recurrent)
 The following estimates assume bf16 convolution history (two bytes) and fp32
 recurrent state (four bytes). Weight quantization does not change this assumed
 cache precision. The native gate also checks the formula against actual tiny
-model arrays; that check has **not run** in the implementation clone.
+model arrays; the review reports it passed on tiny models. The production
+runtime dtypes remain unverified by this fix round.
 
 | Model / evidence | Linear / full layers | Conv bytes/layer | Recurrent bytes/layer | Payload/checkpoint | Two retained |
 |---|---:|---:|---:|---:|---:|
@@ -120,16 +134,18 @@ Qwen3.8 uses Hk=16, Hv=48, Dk=Dv=128, kernel=4 and 64 layers.
 `tests/align/fixtures/qwen38_config.json` is a byte-for-byte copy of this clone's
 `.hf-qwen38/config.json`, SHA-256
 `8f80874ac3ad8fa386d3f6dc0ea85377f703376e009a03dee0360e08e289a25d`.
-Its `mamba_ssm_dtype` says float32. External publication/revision provenance was
-not independently checked offline.
+Its `mamba_ssm_dtype` says float32. The review verified these bytes against
+mlx-community/Qwen3.8-27B-8bit at revision `815b83c0`.
 
 The Next row is now computed from the user-supplied mlx-community
 `.hf-next/config.json`: 48 layers, full attention every fourth layer, Hk=16,
 Hv=32, Dk=Dv=128 and kernel=4. The byte-identical retained fixture is
 `tests/align/fixtures/qwen3_next_config.json`, SHA-256
 `f5a5422b8e3d47733f0073ff22dec1dc4a7832fec5fc1cf36eba31ace03cf0c4`.
-The real config confirms the earlier conditional arithmetic. Its upstream
-revision/publication provenance was not independently authenticated offline.
+The real config confirms the earlier conditional arithmetic. The review
+verified these bytes against mlx-community/Qwen3-Next-80B-A3B-Thinking-4bit at
+revision `9a2b4634`. This offline fix round checked equality with the review's
+retained configs; it did not repeat network authentication.
 Config shape verification does not verify live runtime cache dtypes.
 
 Reproduce both calculations without model or measurement data:
@@ -147,12 +163,14 @@ PY
 
 ## Exactness gate and limitations
 
-**2026-11-05 follow-up:** the pinned installation is now available at
-`/private/tmp/jwsol/venv-mlx/bin/python`, but this sandbox cannot obtain a Metal
-device. Both exactness and timing stop before model creation. See
-`docs/run_reports/2026-11-05-align-cache-checkpoint-native.md` for attempted
-commands and the two-family inference-mode gate. Max absolute logit difference,
-runtime cache shapes/dtypes and native resource cost remain **unmeasured**.
+**2026-11-05 review update:** the review reports the original native exactness
+gate and benchmark passed with mlx 0.31.2 / mlx-lm 0.31.3, and restored logits
+were bitwise equal to matched-schedule full re-prefill (max absolute difference
+zero in that comparison). This supersedes the earlier sandbox-blocked evidence,
+without turning the earlier failed attempts into passes. These are supplied
+review results. They do not validate this fix round's revised schedule/context,
+quantized production trajectories or energy behavior. See the run reports for
+the evidence split and exact lead rerun commands.
 
 `tests.align.test_cache_checkpoint` provides synthetic mechanics and complete
 non-hybrid endpoint-byte regression against base c9a0a3943. These checks do not
@@ -168,15 +186,15 @@ restoration, native offsets, cache dtype/payload and finite logits.
 
 Repeat full re-prefills establish determinism. Restored suffix logits must be
 bitwise identical (uint8 views) to full fresh re-prefills using the same prefix/
-suffix schedule. No tolerance is accepted. Prefix lengths 512 and 73 exercise
-both aligned and partial boundaries; at 512 the reference is also ordinary
-512-token chunked full prefill. A separate one-call full prefill reports bitwise
+suffix schedule. No tolerance is accepted. Prefix lengths 2048 and 73 exercise
+both aligned and partial boundaries; at 2048 the reference is also ordinary
+2048-token chunked full prefill. A separate one-call full prefill reports bitwise
 status and actual maximum absolute difference as a diagnostic. Deterministic
 kernels alone do not imply equality across different chunk/matmul shapes.
 This gate cannot establish arbitrary chunk-schedule equality, real-template
 stability or production-weight behavior.
 
-The four native tests skip only when MLX/MLX-LM packages are absent. Installed
+The five native tests skip only when MLX/MLX-LM packages are absent. Installed
 but unusable packages, pin mismatch or Metal device denial fail setup. A skip
 or setup failure is not numerical evidence. The stdlib-only probe tests check
 real-config model-family routing and memory arithmetic, and ensure estimation

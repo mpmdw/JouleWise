@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from contextlib import contextmanager
+import hashlib
 import json
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -103,7 +104,11 @@ def hybrid_endpoint(model_config, limit=0):
     class Tokenizer:
         eos_token_ids = {0}
 
+        def __init__(self):
+            self.renders = []
+
         def apply_chat_template(self, messages, *, add_generation_prompt, **kwargs):
+            self.renders.append(add_generation_prompt)
             return json.dumps(json.loads(messages[-1]['content']) + ([90] if add_generation_prompt else []))
 
         def encode(self, text, **kwargs):
@@ -171,7 +176,10 @@ class CheckpointTests(unittest.TestCase):
         self.assertIsNot(self.cache.cache[0], saved.recurrent[0])
 
     def test_real_122b_policy_and_runtime_agree_and_unknown_hybrids_fail_closed(self):
-        cfg = json.loads((Path(__file__).with_name('fixtures') / 'qwen35_122b_config.json').read_text())
+        raw = (Path(__file__).with_name('fixtures') / 'qwen35_122b_config.json').read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),
+                         'fc1c3921b5146143cda7a5feed445cc31c8929cc3f164f967ec6340b448086eb')
+        cfg = json.loads(raw)
         self.assertEqual(cfg['model_type'], 'qwen3_5_moe')
         self.assertEqual(cfg['text_config']['model_type'], 'qwen3_5_moe_text')
         self.assertEqual(cfg['text_config']['num_hidden_layers'], 48)
@@ -190,6 +198,7 @@ class CheckpointTests(unittest.TestCase):
                 self.assertEqual(endpoint._episode_cache.checkpoint_limit, expected)
                 self.assertEqual(len(endpoint._episode_cache.checkpoints), int(bool(expected)))
                 self.assertEqual(fed, [[90]] if expected else [[1, 2, 3, 90]])
+                self.assertEqual(endpoint.runtime._tokenizer.renders, [True, False] if expected else [True])
 
     def test_manual_prefill_matches_native_context_chunks_and_allocator_cleanup(self):
         active = set()
@@ -446,7 +455,6 @@ class CompatibilityAndSizingTests(unittest.TestCase):
         self.assertEqual(hybrid['fallback'], 'checkpoint_then_whole_cache_rebuild_on_untrimmable_rewrite')
 
     def test_next_supplied_config_payload(self):
-        import hashlib
         raw = (Path(__file__).with_name('fixtures') / 'qwen3_next_config.json').read_bytes()
         self.assertEqual(hashlib.sha256(raw).hexdigest(),
                          'f5a5422b8e3d47733f0073ff22dec1dc4a7832fec5fc1cf36eba31ace03cf0c4')

@@ -1,8 +1,16 @@
 # ALIGN hybrid cache checkpoint implementation — 2026-11-05
 
-Status: **implemented and synthetically verified; native exactness and Next
-published-config sizing remain unverified**. No production readiness or energy
-savings claim is made.
+Current status: **opt-in, rebuild-only by default; fixes and current evidence
+are recorded in [Fix round](2026-11-05-align-cache-checkpoint-native.md#fix-round)**.
+The review reports the original native gate passed 4/4 and both supplied config
+hashes match pinned upstream revisions. This fix round does not rerun native
+tests. No production readiness or energy savings claim is made.
+
+The sections below preserve the original implementation run's historical
+evidence, counts and limitations. They are superseded by the linked fix round
+where they describe current defaults, native status, provenance or copy cost.
+The self-reported **intake slip** below remains part of the custody record;
+no unqualified claim of a clean custody audit is made.
 
 Branch: `lane/2026-11-05-align-cache-checkpoint`.
 Base: `c9a0a39437614176bf4e14ff1565a6e4537328fb`.
