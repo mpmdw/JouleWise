@@ -24,7 +24,9 @@ from pathlib import Path, PurePosixPath
 from types import ModuleType
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+
 from joulewise.strict_io import (
+    json_pretty_utf8_strict as _render_json,
     sha256_value as _sha256_bytes,
 )
 
@@ -783,13 +785,6 @@ def validate_projection_receipt(value: object) -> Mapping[str, Any]:
         )
     _validate_supersedes(receipt["supersedes"], "receipt.supersedes")
     return receipt
-
-
-def _render_json(value: Any) -> bytes:
-    return (
-        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
-        + "\n"
-    ).encode("utf-8")
 
 
 def _gnu_sidecar(digest: str, filename: str) -> bytes:
