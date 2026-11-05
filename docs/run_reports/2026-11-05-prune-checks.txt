@@ -1,0 +1,186 @@
+"""Offline source checks. Never open evidence, fixtures, or restricted paths."""
+import ast
+import collections
+import hashlib
+import importlib
+import json
+import os
+from pathlib import Path
+import sys
+
+ROOT = Path.cwd()
+STAGE1 = ['scripts/axi_sb_static_batch_spike.py', 'scripts/axi_sc_spec_decode_spike.py',
+          'scripts/codex_usage_probe.py', 'scripts/gen_affine_smoke.py',
+          'scripts/measure_claude_cold_start.sh']
+ENV = dict(os.environ, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1')
+SOURCE_SUFFIXES = {'.py', '.js', '.mjs', '.ts', '.tsx', '.sh', '.zsh', '.css'}
+EXCLUDED = ('docs/process_traces/', 'docs/legacy/', 'docs/paper/', 'tests/fixtures/', 'analysis/')
+
+def git(*args):
+    import subprocess
+    return subprocess.check_output(['git', *args], env=ENV)
+
+def safe(path):
+    return 'restricted' not in Path(path).parts
+
+def source(path):
+    return (safe(path) and Path(path).suffix in SOURCE_SUFFIXES
+            and not path.startswith(EXCLUDED))
+
+def tracked():
+    return [p for p in git('ls-files', '-z').decode().split('\0') if p and safe(p)]
+
+def metrics():
+    paths = [p for p in tracked() if source(p) and Path(p).is_file()]
+    blobs = [Path(p).read_bytes() for p in paths]
+    print(json.dumps(dict(source_files=len(paths), source_loc=sum(b.count(b'\n') for b in blobs),
+                          source_bytes=sum(map(len, blobs)))))
+
+def census():
+    operational = {'.mcp.json', '.codex/config.toml', 'pyproject.toml', 'package.json',
+                   'README.md', 'AGENTS.md', 'CLAUDE.md', 'AGENT_PLAN.md', 'docs/agent_playbook.md'}
+    paths = [p for p in tracked() if p not in STAGE1 and Path(p).is_file()
+             and (source(p) or p in operational or p.startswith('.github/'))]
+    hits = {p: [] for p in STAGE1}
+    for path in paths:
+        text = Path(path).read_text()
+        for retired in STAGE1:
+            if retired in text or Path(retired).stem in text:
+                hits[retired].append(path)
+    print(json.dumps(dict(files_scanned=len(paths), references=hits), indent=2))
+    if any(hits.values()): raise SystemExit(1)
+
+def preservation():
+    for ref in ['origin/main', 'b5/collection', 'b5/analysis-r2']:
+        print(ref, git('rev-parse', ref+'^{commit}', ref+'^{tree}').decode().split())
+    for path in STAGE1:
+        now = git('show', 'origin/main:'+path)
+        sealed = git('show', 'b5/collection:'+path)
+        assert now == sealed
+        print(path, 'MATCH', git('rev-parse', 'b5/collection:'+path).decode().strip(),
+              hashlib.sha256(now).hexdigest(), len(now), now.count(b'\n'))
+
+def graph(ref):
+    # Only source code in joulewise/scripts, parsed from Git; no script execution.
+    names = git('ls-tree', '-r', '--name-only', ref, 'joulewise', 'scripts').decode().splitlines()
+    paths = [p for p in names if safe(p) and p.endswith('.py')]
+    modules = {p.removesuffix('.py').replace('/', '.').removesuffix('.__init__'):p for p in paths}
+    graph = {p:set() for p in paths}
+    origins = {}
+    for path in paths:
+        data = git('show', ref+':'+path).decode()
+        tree = ast.parse(data, filename=path)
+        mod = path.removesuffix('.py').replace('/', '.').removesuffix('.__init__')
+        package = mod if path.endswith('/__init__.py') else mod.rpartition('.')[0]
+        for n in ast.walk(tree):
+            targets = []
+            if isinstance(n, ast.Import): targets = [a.name for a in n.names]
+            elif isinstance(n, ast.ImportFrom):
+                prefix = n.module or ''
+                if n.level:
+                    prefix = '.'.join(package.split('.')[:len(package.split('.'))-n.level+1]
+                                      + ([prefix] if prefix else []))
+                targets = [prefix]+[prefix+'.'+a.name for a in n.names]
+            elif isinstance(n, ast.Constant) and isinstance(n.value, str):
+                if n.value in modules: targets = [n.value]
+                elif n.value in graph:
+                    graph[path].add(n.value)
+                    origins[path,n.value] = n.lineno
+            for target in targets:
+                if target in modules and modules[target] != path:
+                    graph[path].add(modules[target])
+                    origins[path,modules[target]] = n.lineno
+    def route(root, target):
+        queue = collections.deque([[root]])
+        visited = {root}
+        while queue:
+            chain = queue.popleft()
+            if chain[-1] == target: return chain
+            for child in sorted(graph[chain[-1]]-visited):
+                visited.add(child)
+                queue.append(chain+[child])
+    targets = ['joulewise/bundle.py', 'joulewise/arm_readiness.py',
+               'joulewise/arm_readiness_evidence_t0.py']
+    root = 'scripts/run_b5_analysis.py'
+    print('REF',ref)
+    for target in targets:
+        chain = route(root,target)
+        print('ROUTE',target,chain)
+        if chain:
+            for a,b in zip(chain,chain[1:]):print('EDGE',a,origins[a,b],b)
+    seen=set()
+    queue=[root]
+    while queue:
+        path=queue.pop()
+        if path in seen:continue
+        seen.add(path)
+        queue.extend(graph[path]-seen)
+    inventory=json.loads(git('show', 'origin/lane/2026-11-05-repo-prune-p2:docs/process/repo_prune_inventory_2026-11.json'))
+    print('RETIRED_OVERLAP',sorted(seen & set(inventory['groups']['arm_code_envelope']['paths'])))
+    print('S1_OVERLAP',sorted(seen & set(STAGE1)))
+
+def smoke():
+    import tempfile
+    # Preload harness dependencies before installing the guards.
+    import ctypes
+    import importlib.util
+    paths=[]
+    for directory,dirs,files in os.walk(ROOT/'joulewise', followlinks=False):
+        dirs[:]=sorted(d for d in dirs if d not in {'restricted','__pycache__'}
+                       and not (Path(directory)/d).is_symlink())
+        for name in sorted(files):
+            p=Path(directory)/name
+            if name.endswith('.py') and name != '__main__.py' and not p.is_symlink():
+                paths.append(p)
+    temp=Path('/private/tmp/jw-prune-s12-smoke')
+    temp.mkdir(exist_ok=True)
+    tempfile.tempdir=str(temp)
+    sys.path.insert(0,str(ROOT))
+    # No user site, cwd symlink resolution beyond the clone, data opens, writes,
+    # hardware/network/process launch. System interpreter sources may be read.
+    library_roots=[os.path.abspath(p) for p in sys.path if p and not p.startswith('/Users/')]
+    def check(path):
+        if isinstance(path,int):return None
+        value=os.path.abspath(os.fsdecode(path))
+        if 'restricted' in Path(value).parts:raise PermissionError('restricted path denied')
+        if value.startswith('/Users/') and not (value==str(ROOT) or value.startswith(str(ROOT)+'/')):
+            raise PermissionError('outside-clone home path denied')
+        return value
+    def audit(event,args):
+        if event=='open':
+            p=check(args[0])
+            if p is None:return
+            mode=args[1]; flags=args[2]
+            if (isinstance(mode,str) and any(c in mode for c in 'wax+')) or flags & (os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC):
+                raise PermissionError('write denied during import')
+            if not p.endswith(('.py','.pyc','.so','.dylib','.zip')):
+                raise PermissionError('non-source read denied during import')
+            if not (p.startswith(str(ROOT)+'/joulewise/') or p.startswith(str(ROOT)+'/scripts/') or any(p.startswith(r+'/') for r in library_roots)):
+                raise PermissionError('non-library source read denied')
+        if (event.startswith(('socket.','subprocess.','os.spawn','os.exec')) or
+            event in {'os.system','os.fork','os.forkpty','pty.spawn'}):
+            raise PermissionError('process/network denied during import')
+        if event in {'os.listdir','os.scandir'}:check(args[0])
+        if event.startswith('os.') and event in {'os.remove','os.rename','os.rmdir','os.mkdir','os.symlink','os.link','os.truncate','os.chmod','os.chown'}:
+            raise PermissionError('filesystem mutation denied during import')
+        if event=='ctypes.dlopen' and args[0] is not None:check(args[0])
+    # Stat-family operations are not all exposed as audit events.
+    for name in ('stat','lstat','access','readlink'):
+        original=getattr(os,name)
+        def guarded(path,*args,_original=original,**kwargs):
+            check(path)
+            return _original(path,*args,**kwargs)
+        setattr(os,name,guarded)
+    sys.addaudithook(audit)
+    passed=[]
+    for p in sorted(paths):
+        name=str(p.relative_to(ROOT)).removesuffix('.py').replace('/','.').removesuffix('.__init__')
+        importlib.import_module(name)
+        passed.append(name)
+    print('PASS',len(passed),'non-CLI package modules; source-only reads; process/network/write denial')
+    print('COMPILED ONLY: joulewise.__main__ (compileall); CLI never imported')
+
+if __name__=='__main__':
+    command=sys.argv[1]
+    if command=='graph':graph(sys.argv[2])
+    else:globals()[command]()
