@@ -50,6 +50,15 @@ this fix does not invent mappings. `require_origin_main=True` now honors its
 name by requiring positive containment; it is independent of the registered
 analysis gate, which paper custody requests instead (F2).
 
+M2: the registration is independently pinned by full literal triples in
+`RegistrationAuthorityTests`, cross-checked against the clerical identity
+table in RUN_STATE item 146 and against all three annotated Git objects.
+The prior record printed only abbreviated collection and r2 identities;
+the original-analysis tag's existing message names its full commit/tree.
+Full tag-object literals were not previously present in the cited ruled
+records, so item 146 now records their explicit expansion. These reviewed
+local objects are the source; this is not a new scientific release ruling.
+
 ## Rebind scope
 
 - `joulewise/identity_pins.py`: F2 release identity replaces remote-main

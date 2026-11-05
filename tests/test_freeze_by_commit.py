@@ -228,5 +228,38 @@ class CommitFreezeTests(unittest.TestCase):
             self.assertEqual(raised.exception.reason_code, "readiness_identity_environment_dirty")
 
 
+class RegistrationAuthorityTests(unittest.TestCase):
+    def test_b5_registration_matches_item_146_and_independent_literal_pins(self):
+        # M2: clerical full-ID expansion of the ruled RUN_STATE 146 record;
+        # docs/process/freeze_p1_rebind.md explains the abbreviated predecessors.
+        expected = {
+            "b5/collection": {
+                "tag_object": "dbf91f4ba108017c8973b0f0ad8c6819b4300422",
+                "commit": "c27485347c9629b857df81665b5b1b8d10dcd36a",
+                "tree": "30dc0681fbea919338f639075389bde0161f7c21",
+            },
+            "b5/analysis": {
+                "tag_object": "8b8aa535898142470426050e8b4b2ef64e593e3a",
+                "commit": "2fdc0929d5c214505617145893df2e71ab8a83b5",
+                "tree": "ea994f30a109123cffe19e1b064e1593928f16b3",
+            },
+            "b5/analysis-r2": {
+                "tag_object": "bdaf0c03e74b6fc824e16f607122c0738dab0eb7",
+                "commit": "929fc65c9ce3ff82f0311d28acf76a682edd466f",
+                "tree": "9e89d7ff48999416467129c03ea171fc3a1f3f83",
+            },
+        }
+        registration = json.loads((f.ROOT / f.REGISTRATION).read_bytes())
+        self.assertEqual(registration["active_analysis"], "b5/analysis-r2")
+        self.assertEqual(registration["tags"], expected)
+        record = (f.ROOT / "RUN_STATE.md").read_text().split(
+            '146. **Ed adopted', 1)[1].split('147. **', 1)[0]
+        for tag, fields in expected.items():
+            with self.subTest(tag=tag):
+                row = "| " + " | ".join(f"`{item}`" for item in (tag, *fields.values())) + " |"
+                self.assertIn(row, record)
+                self.assertEqual(f.verify_tag(f.ROOT, tag, fields), fields["commit"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -831,6 +831,14 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 146. **Ed adopted "freeze blocks by commit, not on main" (reported by joulewise-28, 2026-10-30, about 06:20Z).**
 - The plan is `docs/process/freeze_by_commit.md`, on PR #606 (light tier, docs only). joulewise-28 will merge it once CI is green.
 - **Phase 0, now (additive only):** the annotated tag `b5/collection` is pushed at `c27485347` (H_claim, the head named in `sealed_inventory.json`). The orchestrator verified it on origin: the tag object is `dbf91f4ba` and it peels to `c27485347`. The tag `b5/analysis` is added at the merged commit that official attempt C runs on.
+- **Full identity expansion (PR #649 M2, 2026-11-05; clerical):** the following literals expand this item's phase-0 record, the annotated attempt-C tag message (items 144–146 and 156), and item 166's r2 release record (D-188/D-189/D-190). Verified from existing local Git objects; no tags or scientific registrations changed. `tests/test_freeze_by_commit.py` pins these independently of `freeze_commits.json` and cross-checks this table. This records previously abbreviated identities; it is not a claim that all full tag-object literals were printed here before this fix.
+
+| Tag | Annotated tag object | Peeled commit | Tree |
+| --- | --- | --- | --- |
+| `b5/collection` | `dbf91f4ba108017c8973b0f0ad8c6819b4300422` | `c27485347c9629b857df81665b5b1b8d10dcd36a` | `30dc0681fbea919338f639075389bde0161f7c21` |
+| `b5/analysis` | `8b8aa535898142470426050e8b4b2ef64e593e3a` | `2fdc0929d5c214505617145893df2e71ab8a83b5` | `ea994f30a109123cffe19e1b064e1593928f16b3` |
+| `b5/analysis-r2` | `bdaf0c03e74b6fc824e16f607122c0738dab0eb7` | `929fc65c9ce3ff82f0311d28acf76a682edd466f` | `9e89d7ff48999416467129c03ea171fc3a1f3f83` |
+
 - **Phase 1, immediately after the block-5 release:**
   - Freeze tests check the tag's tree instead of main's bytes.
   - The step-5 identity check becomes "HEAD is the registered analysis commit or a ruled descendant".
