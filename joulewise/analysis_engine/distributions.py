@@ -24,14 +24,7 @@ _BETA_MAX_ITERATIONS = 10_000
 _MAX_EXACT_SIGN_FLIP_BLOCKS = 20
 
 
-def _finite_float(value: float, *, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{name} must be a finite number")
-    converted = float(value)
-    if not math.isfinite(converted):
-        raise ValueError(f"{name} must be a finite number")
-    return converted
-
+from joulewise.strict_io import require_finite as _finite_float
 
 def _validated_df(df: int) -> int:
     if isinstance(df, bool) or not isinstance(df, int) or df < 1:

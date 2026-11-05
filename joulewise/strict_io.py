@@ -94,3 +94,12 @@ def finite_or_none(value: object) -> float | None:
 
 def is_finite_float_projection(value: object) -> bool:
     return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(float(value))
+
+
+def require_finite(value: object, *, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite number")
+    converted = float(value)
+    if not math.isfinite(converted):
+        raise ValueError(f"{name} must be a finite number")
+    return converted

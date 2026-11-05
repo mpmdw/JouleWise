@@ -47,6 +47,8 @@ _INDEPENDENT_RUN = "independent_run"
 _VARIANCE_NEGATIVE_TOLERANCE = 1.0e-12
 
 
+from joulewise.strict_io import require_finite as _finite_number
+
 @dataclass(frozen=True)
 class Interval:
     """One finite closed interval in the estimator's base unit."""
@@ -162,15 +164,6 @@ class PairedEstimate:
     t_statistic: float | None
     raw_p: float
     jackknife_estimates: tuple[float, ...] = ()
-
-
-def _finite_number(value: object, *, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{name} must be a finite number")
-    converted = float(value)
-    if not math.isfinite(converted):
-        raise ValueError(f"{name} must be a finite number")
-    return converted
 
 
 def _nonnegative_number(value: object, *, name: str) -> float:
