@@ -43,7 +43,7 @@ def pinned_sources(root):
         path = root / name
         path.write_bytes(raw)
         paths.append(path)
-    return {str(p): sha256(p) for p in paths}
+    return {str(p.resolve()): sha256(p) for p in paths}
 
 
 def synthetic_sources(root):
@@ -52,7 +52,7 @@ def synthetic_sources(root):
     module.write_text('VERSION = "synthetic provenance fixture"\n')
     converter = root / "canonical_converter.py"
     converter.write_text(f'MODULE_SHA256 = "{sha256(module)}"\n')
-    return {str(p): sha256(p) for p in (module, converter)}
+    return {str(p.resolve()): sha256(p) for p in (module, converter)}
 
 
 def host_rules(source, hashing=False):

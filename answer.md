@@ -1,93 +1,77 @@
-# Qwen4 gold streaming handoff
+# Canonical gold adapter handoff — 2026-11-05
 
-Implemented on `lane/2026-11-05-qwen4exp-gold-stream`, based on
-`f48da184b63de7eca7f6158a02ef8e5b6de1c3de` (the checked-out PR #667 head).
-Implementation commit: **`78fe672a1`**. A following documentation commit contains
-this handoff and the dated run report. Nothing was pushed.
+Implemented on `lane/2026-11-05-qwen4exp-gold-adapter`, based on
+`a6f9df9b3b31344e19ebcc819bd409945091f0a4`. Implementation commit:
+`e42910830` (`feat(align): add gold/v1 adapter for the canonical qwen4_exp port`).
+The companion commit (`test(align): normalize fixture paths and record gold adapter handoff`)
+records this report and normalizes temporary fixture paths for macOS aliases.
+Nothing was pushed or merged.
 
-## What was built
+The adapter covers embeddings and stream replication, both decoder types and
+their MoE, sparse PLE at zero-based layer 1, the final mixer/norm, and chunked
+vocabulary projection. It calls the canonical forward methods, including their
+bf16 RoPE, fp32 router ranking and DeltaNet eps adapter. Routed storage dispatch
+calls the canonical `FusedSwitchGLU` with one expert resident at a time.
 
-- `scripts/run_qwen4_gold_stream.py` and `joulewise/align/qwen4_gold/stream.py`:
-  pinned HF metadata/downloads, complete-shard LFS SHA256 checks, disk guards,
-  unit-major scheduling, durable lifecycle/chain manifest, exclusive driver
-  lock, source/runtime/adapter fingerprints, and restart validation.
-- `stream_ple.py`: exact official Transformers 5.22.1 hashing through its own
-  `forward`, bounded extraction of raw PLE row bytes into `.npy`, and one sparse
-  checkpoint shim for both backends. Missing rows raise.
-- `stream_convert.py`: optional per-unit canonical maxfit fragments, using the
-  canonical converter helpers and quantization policy; per-tensor progress,
-  complete bf16 PLE export with recoverable append spans, and SHA256 manifests.
-- Minimal runner/worker additions reuse the harness's existing reference
-  `output.npy` traces and real input snapshots. These already contain every
-  residual stream. Workers remain serial and offline; all stream-run HF paths
-  are under `--work` and Xet is disabled.
-- Twenty focused unittest tests and an appended laptop run plan in
-  [gold_parity.md](docs/align/qwen4_exp_port/gold_parity.md).
+`--adapter-dependency` must declare **both** `qwen4_exp.py` and
+`canonical_converter.py` (or `align_convert_qwen4_exp.py`). The coordinator now
+passes their absolute paths/digests to workers and records them explicitly in
+`provenance.json`. The adapter imports the verified file bytes using importlib
+module specs, checks the converter's module/stack pins, reuses `sources()` and
+`target_shape()`, and records both source SHA256s in worker metadata. The module
+pin is `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37`.
+There is no package-tree model import or copied model math.
 
-The index excludes **333 vision tensors and 31 MTP tensors** from computation.
-All 131 physical files still contain needed text weights, so these exclusions
-do not eliminate whole-file downloads.
+Files touched:
 
-## Blocking disk-policy ruling
+- `joulewise/align/qwen4_gold/canonical_adapter.py` — new adapter.
+- `joulewise/align/qwen4_gold/runner.py` — dependency request/provenance plumbing.
+- `tests/test_qwen4_gold_canonical_adapter.py` — CPU checks and three native tests.
+- `tests/test_qwen4_gold_stream.py` — require `mlx.core` and explicit native opt-in for sparse-gather testing.
+- `docs/align/qwen4_exp_port/gold_parity.md` — exact adapter and native commands.
+- `answer.md` and `docs/run_reports/2026-11-05-qwen4exp-gold-adapter.md` — handoff.
 
-**NEEDS_RULING:** may the laptop run use `--shared-shards restage`?
+## What ran here
 
-The requested default, `--shared-shards retain`, keeps originals through their
-last user. Official meta tensor shapes and the supplied index prove a lower
-bound of **24.110 GiB staged at layer 8**, excluding MTP and headers. Alongside
-the 25 GiB free reserve, this cannot fit approximately 40 GB free disk. The
-default driver refuses that plan before downloading weight shards.
-
-Options considered:
-
-1. Keep originals: provide substantially more disk and raise the staging cap.
-2. **Recommended:** approve the explicit `restage` exception. Authenticate a
-   full source, retain only a byte-exact current-unit view, delete the original,
-   and download it again for later units. This is implemented and tested; it
-   is not silently enabled.
-
-Blocked work is the native laptop run under the literal whole-shard policy.
-Restaging should need roughly 9 GiB staging plus about 3 GiB short-prompt
-evidence, with enforced guards, but **that real-weight peak has not been
-measured**. Expect about 360 GB downloads with retention or about 460 GB with
-restaging; pinned HF metadata produces the exact plan.
-
-## Verification
-
-All commands were offline; numerical tests used two threads. Final results:
-
-| Command | Result |
-|---|---|
-| `/private/tmp/jwsol/venv-ref/bin/python -B -m unittest tests.test_qwen4_gold_stream` | **20 tests OK, 2 native-only skips**, 57.667 s |
-| `/private/tmp/jwsol/venv-ref/bin/python -B -m unittest tests.test_qwen4_gold_parity` | **20 tests OK**, 0.693 s |
-| `python3.13 -B -m unittest tests.test_qwen4_gold_stream` | **20 tests OK, 17 optional-dependency skips** |
-| Targeted `compileall`, CLI `--help`, `git diff --check` | Passed |
-
-Tests cover download/delete order, original shared retention, restaging byte
-equality, free-space/staging refusal, partial downloads, kills around subset
-commit/deletion, interrupted units/cases and PLE extraction, sparse/full PLE
-lookup equality, SHA corruption refusal, complete-table conversion resume,
-and multiple PLE parts sharing one source file.
-
-The end-to-end test runs real official tiny reference workers, interrupts and
-resumes them, then compares all four layers and endpoints in fp32/bf16 against
-an independently loaded full tiny model. Its candidate is an explicit
-**trace-copy test double**, so it establishes reference/coordinator behavior,
-not MLX parity. Total targeted test time across development was about nine
-minutes. The full test suite and Block-5 pipeline were never run.
-
-## Exact native commands
-
-The canonical branch was already available locally at
-`65763077aec03235d149517f6c97a7cda987a74c`. No network fetch was attempted under
-the standing no-network rule, and the branch was not merged. Its model SHA256
-is `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37`;
-converter SHA256 is
-`18eed9d2843e7f981dc22f8c8de3daa52e766bee23af29af88a81541192e965f`.
-
-First run native tests outside this sandbox:
+Each unittest module ran separately, with no full-suite invocation. For the
+first three commands the environment was:
 
 ```bash
+export PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2
+```
+
+| Command | Final result |
+|---|---|
+| `/private/tmp/jwsol/venv-both/bin/python -B -m unittest -v tests.test_qwen4_gold_canonical_adapter` | 10 tests, 7 passed, 3 native tests skipped; 6.001 s |
+| `/private/tmp/jwsol/venv-both/bin/python -B -m unittest -v tests.test_qwen4_gold_parity` | 20 passed; 0.800 s |
+| `/private/tmp/jwsol/venv-both/bin/python -B -m unittest -v tests.test_qwen4_gold_stream` | 20 tests, 18 passed, 2 native tests skipped; 123.016 s |
+| `python3.13 -B -m unittest -v tests.test_qwen4_gold_canonical_adapter` | Bare interpreter: 3 passed, 7 optional/native tests skipped |
+| `python3.13 -m compileall -q joulewise tests` | Passed |
+| `git diff --check` / `git diff --cached --check` | Passed |
+
+CPU checks covered every official tiny-index name, canonical parameter paths,
+packed/unpacked expert shapes, ignoring unrelated shards, checkpoint I64 hash
+buffers in both hash paths, dependency mutation rejection, and provenance/request
+digests. The existing streaming chain/oracle test uses a trace-copy candidate;
+its result is harness evidence, not MLX parity.
+
+Earlier checks found a missing constant in the test's host-only AST extraction
+(fixed) and an existing sparse native test that attempted Metal in the sandbox
+(failed with `No Metal device available`; fixed the opt-in gate and reran the
+module successfully). Including those attempts, test time remained under five
+minutes. No commands targeted real measurement inputs, the block-5 pipeline,
+network access, or user data paths outside the authorized clone/shared Git
+objects. Coordination-state files were preserved as instructed.
+
+## Exact native commands — next step for the lead
+
+Run from this clone in a native Metal session, with the pinned Transformers
+5.22.1, MLX 0.31.2 and mlx-lm 0.31.3 stack. These commands use only synthetic
+checkpoints and local shard serving; neither downloads weights.
+
+```bash
+GOLD_ADAPTER="$PWD/joulewise/align/qwen4_gold/canonical_adapter.py"
 GOLD_CANONICAL=/private/tmp/jw-gold-canonical-65763077
 mkdir -p "$GOLD_CANONICAL"
 git show 65763077aec03235d149517f6c97a7cda987a74c:joulewise/align/models/qwen4_exp.py > "$GOLD_CANONICAL/qwen4_exp.py"
@@ -97,66 +81,35 @@ JW_GOLD_CANONICAL_MODULE="$GOLD_CANONICAL/qwen4_exp.py" \
 JW_GOLD_CANONICAL_CONVERTER="$GOLD_CANONICAL/canonical_converter.py" \
 PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 \
-/private/tmp/jwsol/venv-both/bin/python -B -m unittest tests.test_qwen4_gold_stream
+/private/tmp/jwsol/venv-both/bin/python -B -m unittest -v tests.test_qwen4_gold_canonical_adapter
+
+JW_GOLD_CANONICAL_MODULE="$GOLD_CANONICAL/qwen4_exp.py" \
+JW_GOLD_CANONICAL_CONVERTER="$GOLD_CANONICAL/canonical_converter.py" \
+PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 \
+/private/tmp/jwsol/venv-both/bin/python -B -m unittest -v tests.test_qwen4_gold_stream
 ```
 
-The two previously skipped tests are
-`OfficialTinyPLETests.test_native_mlx_sparse_gather` and
-`NativeConversionTests.test_maxfit_uses_canonical_quantization_and_resumes_per_tensor`.
-The combined native venv needs Transformers 5.22.1, Torch, NumPy, safetensors,
-MLX 0.31.2 and mlx-lm 0.31.3.
+The new native tests assert PASS for every required trace of all seven tiny
+units, fp32/bf16 and real/random inputs, through actual `--make-tiny` parity
+workers. The third test runs the streaming driver with sparse PLE, restaging,
+and completed-run resume. The run plan supplies both source files as repeatable
+`--adapter-dependency` arguments for subsequent lead-controlled runs.
+All three native tests must actually execute; a skipped run does not satisfy
+the native gate. Python 3.11 was not exercised in this sandbox.
 
-After approving restaging, set `GOLD_ADAPTER` to the lead's canonical gold/v1
-adapter. The canonical model file itself is not a gold adapter. Then:
+## Risks and open questions
 
-```bash
-GOLD_ADAPTER="${GOLD_ADAPTER:?export the canonical gold/v1 adapter path}"
-GOLD_WORK="$PWD/runs/qwen4-gold-stream-20261105"
-
-env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE \
-/private/tmp/jwsol/venv-ref/bin/python -B scripts/run_qwen4_gold_stream.py \
-  --work "$GOLD_WORK" \
-  --ref-python /private/tmp/jwsol/venv-ref/bin/python \
-  --mlx-python /private/tmp/jwsol/venv-mlx/bin/python \
-  --mlx-module "$GOLD_ADAPTER" \
-  --adapter-dependency "$GOLD_CANONICAL/qwen4_exp.py" \
-  --shared-shards restage --min-free-gb 25 --max-staging-gb 12 \
-  --max-gb 12 --timeout 3600 --resume
-```
-
-Add `--plan-only` first for pinned metadata and exact estimates; remove that
-flag to start. Add dependency flags for any other imported adapter sources.
-The command uses the fixed built-in 9/8-token prompts; choose an explicit
-`--prompts-json` before starting if desired. Repeat the same actual command to
-resume. Do not change budgets, source code, adapter, prompts or environments
-within a run.
-
-Optional conversion must be chosen at the initial invocation by adding:
-
-```bash
-  --convert-out /absolute/lead/chosen/Dropbox-or-external-volume/qwen4-maxfit \
-  --canonical-converter "$GOLD_CANONICAL/canonical_converter.py" \
-  --canonical-module "$GOLD_CANONICAL/qwen4_exp.py"
-```
-
-## Unverified work and risks
-
-- **No native MLX execution or real-weight parity was run.** No GOAL item 5
-  PASS is asserted. The lead must supply/verify the actual canonical adapter.
-- Live HF API/download behavior was mocked; its installed API signatures were
-  inspected. Real transfer throughput, disk peak, worker RSS/Metal allocation
-  and numerical results require the native run.
-- Whole maxfit output needs roughly 210 GB, including the full approximately
-  102 GB PLE table. A Dropbox folder on the same SSD does not supply capacity
-  automatically. Guards stop when space is insufficient. There is no cloud
-  upload or automatic eviction.
-- Conversion writes unit fragments with `complete_model: false`, not an
-  assembled canonical model. Dense MLX quantization is native-test pending;
-  full-table bf16 copying/resume is tested on CPU fixtures. Full-model
-  assembly/loading validation remains a later step.
-- Short-prompt parity does not validate long QSA pruning, decode/cache,
-  generation quality, or the separate GOAL item 11 Mac validation.
-
-The exact next step is the shared-shard ruling, followed by the combined native
-tests, adapter verification and the metadata preflight. The lead reviews and
-pushes; no coordination-state files or kernel tasks were changed.
+- **Native numerical parity is unverified.** All three new MLX tests skipped
+  here. MLX/Metal execution and the one-expert storage dispatch still need the
+  native command above; no real-weight or MLX PASS is claimed.
+- Canonical router/QSA tie rules can differ from Torch's unspecified tied
+  `topk` order. The existing exact-set/mask gates remain unchanged and fail
+  closed. No tolerance or reference-semantic adjustment was made.
+- Backend reduction/rounding, especially bf16 attention and expert dispatch,
+  must satisfy the existing gates natively; CPU mapping tests cannot establish
+  this. Real-scale peak memory and elapsed time are unmeasured.
+- The adapter selects the canonical prefill mask path to export `qsa.mask`;
+  performance dispatch and decode/cache parity are outside this harness's scope.
+- No new ruling was needed for implementation. The streaming plan's existing
+  lead-owned shared-shard ruling remains a prerequisite to a real laptop run.
