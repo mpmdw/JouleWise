@@ -10,7 +10,8 @@ Thunderbolt/USB4**, APFS, excluded from Spotlight and Time Machine (step 9).
 `JW_GOLD`, rolling bf16 shards, caches, converted model and paged n-gram table
 live there. A separate durable backup device is preferable; gold scratch and
 the sole independent custody backup must not compete for unbudgeted space.
-Internal SSD alone cannot hold the converted model plus the next ALIGN window.
+Internal space for the converted model plus the next ALIGN window has not
+been demonstrated; the external plan remains the admitted setup path.
 The nominal gold streaming peak is 120 GB; full bf16 is roughly 360 GB/131
 shards and must never be downloaded as a resident whole checkpoint.
 
@@ -19,8 +20,8 @@ at line 45, and item 170 / PR #662 (`lane/2026-11-05-runstate-170-align-pause`).
 **Pilots 8 and 9 must not be auto-offloaded by `offload.py`.** Pilot 9 is
 `/Users/edr/night-align/pilot-v8-20261105T102850Z`; its capture directories
 `runs-parent/*/instrument_validation/*` stay on the Mac through block-5 release.
-Pilot 8 may be considered only after a structure-only locator review finds
-none subject to that rule; otherwise keep it and STOP for the lead's ruling.
+All pilot roots, including pilot 8, and capture-bearing trees stay until
+after block-5 release. No pilot source bytes are reclaimable in this pause.
 Pilots 0–7 are already deleted/offloaded and cannot reclaim more source bytes.
 
 Code references: port PR #664 `lane/2026-11-05-align-flashnext-port`, base
@@ -260,8 +261,10 @@ checkout is required. The model census reads only `git show <full-sha>:<path>`. 
 from PR #661's `docs/align/r0_desk.example.json`. Keep `disk_path` on the
 **measurement internal volume**; the example's `/Volumes/ALIGN_MODELS` is not
 appropriate for the measurement disk gate. Set all custody parents. Set
-`offloads[].destination` to separate **uncompressed, non-symlink materialized
-copies** on independent storage, not tar.zst or an HF snapshot of symlinks.
+`offloads[].destination` to separate **uncompressed directory copies** on
+independent storage. Copy regular files as bytes and preserve pilot view
+symlinks as links; never follow their targets. Model mirrors require regular
+materialized files, not HF snapshot symlinks; tar.zst is not an R0 directory.
 Pilot 9's source is retained even though R0's schema calls its copy an offload.
 
 ```zsh
@@ -322,17 +325,18 @@ UNKNOWN is KEEP. A source listing alone does not prove absence from the ledger:
 require a structure-only review of **all ledger locators** under that root,
 without exposing values, bound to the source manifest/archive in step 8.
 
-Candidate order: (1) verify/second-copy existing pilots 0–7 archives; they
-reclaim zero deleted-source bytes; (2) pilot 8 only if no locator falls under
-retention and all gates pass; (3) models outside **every** printed model KEEP
-entry, every mandatory root and every sealed/live dependency. **Tier 3 is
-empty under the present KEEP roots/known roster; budget zero reclaimed bytes
-from it.** Do not use cache removal, calibration custody, B6/BYTES or personal
-roots as a fallback. Pilot 9 is not a candidate in this pause.
+Current reclaim candidates are **only PUBLIC MODEL WEIGHTS NOT IN ANY PLAN**
+under the exact N5a gates in step 8. Verify/second-copy existing pilots 0–7
+archives, but they reclaim no deleted-source bytes. All pilot roots and
+capture-bearing trees stay until after block-5 release. The model roots remain
+mandatory KEEP; step 8 has one narrowly approved model-descendant exception.
+Expected Next-80B and Qwen3.5-122B names are hypotheses, not approvals. Until the
+complete census and Ed's specific list pass, **budget zero reclaimed bytes**.
+No cache-wide, custody, calibration, B6/BYTES or personal-tree removal is granted.
 
 **STOP 3:** R0 inventories for both pilots saved outside sources; materialized
 copy destinations agreed and budgeted, full model KEEP printed and reviewed,
-pilot 8's retention census ruled or root retained. R0 must use both [coordination patches](r0_disk_gate_patch.md): pilot view
+both Mac pilot roots retained. R0 must use both [coordination patches](r0_disk_gate_patch.md): pilot view
 symlinks are recorded as exact target text without following them; model
 inventories still require materialized files. Restricted content still refuses;
 retain the source and ask the lead rather than weakening that boundary.
@@ -343,8 +347,8 @@ paused Ed-only procedure; full R0 remains its own lead-controlled gate.
 
 `RUN_STATE.md:45` capture retention stays in force until block-5 release,
 including removed attempts and ALIGN capture directories. Pilot 9 stays
-**entirely on the Mac**; no split-root deletion or locator rewrite. If pilot
-8 has even one protected locator, keep it too and STOP for the lead's ruling.
+**entirely on the Mac**, and pilot 8 stays too; no split-root deletion or
+locator rewrite. Their copies provide redundancy without source removal.
 B5 originals on both machines and the transfer/recompute dependencies are
 KEEP; the analysis laptop is not spare scratch storage. A previous transfer
 receipt does not prove coverage of an unrelated current root.
@@ -379,8 +383,8 @@ single-copy archives; they remain protected after copying.
 
 **STOP 4:** Ed/lead review exact candidates, KEEP and dependency/retention
 coverage. Keep everything UNKNOWN. The external storage plan does not require
-removing pilot 9 or taking bytes from protected roots. If the full ledger
-locator review is unavailable, pilot 8 stays and no deletion proceeds.
+removing either pilot or taking bytes from protected evidence. Unavailable
+locator review makes the proposed public model UNKNOWN and KEEP.
 
 ## 5. Check quota, staging space and throughput for the selected roots only
 
@@ -813,77 +817,91 @@ destinations are these verified directories. tar.zst cannot satisfy R0.
 If source content changed since the frozen inventory, STOP and retain it.
 Pilot 9's Mac source stays intact regardless of a passing external copy.
 
-## 8. Ed-only deletion, one reviewed root per receipt
+## 8. Ed-only deletion of approved public weights (ruling N5a)
 
-No batch deletion loop. No `find ... -delete`, cache purge, worktree prune,
-snapshot deletion or recursive parent removal. Ed reviews the exact source,
-KEEP exclusions, cloud round-trip manifest, independent restore receipt and
-current launchd pause **immediately before** each deletion. First deletion
-requires Ed's YES against that manifest (standing offload authority in
-`TASK_QUEUE.md:843`); this brief's broad approval does not authenticate bytes.
+This is the only class currently eligible to reclaim internal source space:
+**PUBLIC MODEL WEIGHTS NOT IN ANY PLAN**, under `jw_models` or the HF hub.
+No cloud copy is required for this class. It does not grant an approval list.
+Pilot roots and capture-bearing trees remain until after block-5 release.
 
-Before approval, save `$JW_ITEM/retention-review.json` with exactly these
-keys: `source` (exact source path), `manifest_sha256`, `archive_sha256`, and
-`no_retained_ledger_locators: true`. The authorized custody operator supplies
-this structure-only ruling from the locator census; agents do not open the
-ledger. Both `independent-receipt.txt` and `ed-approval.txt` must contain the
-exact source path, source-manifest SHA-256 **and archive SHA-256** for this
-item. An unrelated receipt cannot authorize deletion.
+For each exact proposed model directory, Ed and an independent reviewer must
+first review the complete step-3 census from all six refs. Every registration
+identity pin, BYTES roster, B6 §1.4 roster, ALIGN v4 kit, amendment-1 plan and
+v4 R0 config participates. Path containment or a model identity alias in any
+of them is KEEP. Dropping Next-80B or Qwen3.5-122B from ALIGN alone is insufficient:
+BYTES/B6 or historical pins may still reference them. Never infer eligibility
+from the expected candidate names. No real candidate was inspected here.
+The reviewed BYTES roster at `c58282f87369c73c5b0a25d8a5a217555758c6d8`
+already names **Qwen3-Next-80B-A3B-Instruct-4bit** and
+**Qwen3.5-122B-A10B-4bit**. Those identities stay KEEP under this all-plans
+rule. Other Next variants still require the complete six-ref census.
+
+Use a new item directory outside the source. Save `source-path.txt` as one
+canonical absolute line, `source.json` from the reviewed `tree` helper,
+`source.sha256` as its exact checksum receipt, and `source-after.json` with
+identical bytes. All model files must be regular, nlink-1 **blob bytes**, never
+snapshot symlinks, and every file must appear in the SHA-256 inventory. No
+shared HF cache cleanup is authorized. Save the complete step-3 result as
+`model-census.json`; it is replayed from its full Git SHAs before deletion.
+
+`public-weights.json` has exactly these fields: `source` (the exact approved
+path), `repo_id` (the exact public HF org/repo), `revision` (40 lowercase hex
+characters), `manifest_sha256`, `census_sha256`, and `files` (an exhaustive
+mapping from each local manifest file path to its HF repo filename at that
+revision). This mapping covers blob-cache names too; no symlinks are followed.
+The independent review receipt `independent-receipt.txt` must bind the exact
+source, both digests, repo id and revision. `retention-review.json` must equal:
+
+```json
+{"source":"<exact source>","manifest_sha256":"<source.json digest>","model_class":"public-weights","no_retained_ledger_locators":true,"no_measurement_data":true}
+```
+
+Ed approves the **specific list**, not a wildcard, cache root or model family.
+For each item save `ed-approval.json` as `{"approver":"Ed","approved":[CLAIM]}`,
+where CLAIM is the complete exact `public-weights.json` object. Any changed
+path, manifest, repo, revision, census or file mapping requires a new approval.
+These local receipts record Ed's review; creating JSON is not approval itself.
+
+At deletion time the guard makes an unauthenticated **HEAD** request to the
+HF API `/api/models/ORG/REPO/revision/FULL_SHA` and HEAD-checks every mapped
+file at `/ORG/REPO/resolve/FULL_SHA/FILENAME`. Private/gated, missing, failed
+or ambiguous responses refuse. No network was used to author or test this
+procedure; HF API behavior remains an operator-time gate. This class relaxes
+only mandatory model-root containment for this exact approved descendant.
+It never relaxes the root itself, another KEEP entry, path/inode checks,
+retention, pause/census, 30 GB floor, manifests, permissions/flags/ACLs,
+source recheck, exclusive pointer publication or the validated journal.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-source "${JW_ITEM:?Set exact item}/item-env.zsh"
-# Ed only; a single fail-closed program owns every check and the deletion.
-shasum -a 256 -c "$JW_OP/manifest-helper.sha256"
-python3.13 -I -B "$JW_OP/align_offload_delete_root.py" delete \
-  --item "$JW_ITEM" --keep "$JW_OP/KEEP.txt" --remote "$JW_REMOTE" \
-  --journal "$JW_OP/deletions.tsv"
-jw_disk_check
+: "${JW_PUBLIC_ITEM:?Set reviewed exact item directory with Ed approval}"
+python3.13 -I -B "$JW_CANON/scripts/align_offload_delete_root.py" delete \
+  --model-class public-weights --item "$JW_PUBLIC_ITEM" \
+  --keep "$JW_OP/KEEP.txt" --journal "$JW_OP/deletions.tsv" \
+  > "$JW_PUBLIC_ITEM/freed-bytes.json"
 ```
 
-The program reads `source-path.txt`; shell `JW_SRC` cannot redirect it. It
-requires all mandatory KEEP entries to exist and compares device/inode identity
-of the source and KEEP entries through their ancestors (including APFS case
-aliases). Symlink ancestors, `..`, noncanonical spelling and whitespace refuse.
-The only source classes are exact `pilot-v*-*` children of
-`/Users/edr/night-align` or exact paths in the lead-reviewed
-`$JW_OP/approved-models.txt`; KEEP still overrides that list. Pilot 9's
-`pilot-v8-*` and every capture-bearing tree refuse. Model deletion under
-`jw_models` or the shared HF cache is therefore unavailable in this pause.
+The success JSON reports `source_regular_bytes` and the observed filesystem
+`available_bytes_delta`. APFS sharing/snapshots and concurrent allocations can
+make them differ; report both and budget only measured available space.
+The `.OFFLOADED.json` pointer records `model_class=public-weights`, exact HF
+identity, manifest/census digests, HEAD receipt and regular-file bytes; it does
+not claim a cloud archive exists. **Freed in this authoring session: 0 bytes.**
 
-All source/cloud/round-trip digests, both bound receipts, retention review,
-file flags and ACLs must pass. The program also checks this operation's exact
-STOP, current writer/agent census and 30 GB journal-filesystem floor; `fileproviderctl evaluate` must freshly report
-`isUploaded=1` for both cloud objects immediately before deletion. Any
-preflight failure exits nonzero with **no deletion** and a
-`REFUSED_NO_DELETE` TSV row. The program checks writable directories and
-pre-stages the pointer before calling `shutil.rmtree`, then publishes
-`$JW_SRC.OFFLOADED.json` and `DELETE_AUTHORIZED`/`DELETED` TSV rows. A later
-OS/I/O failure can still cause partial removal: `FAILED_PARTIAL` is recorded,
-and the `.pending` pointer retains recovery coordinates. STOP and resolve
-against the original manifest; never report it as completed. This is not a
-filesystem transaction and requires the proved no-writer pause throughout.
-Keep local pointers, immutable manifests and receipts, and verify cloud plus
-independent copies of the operation journal.
 
-Explicitly evict only the verified uploaded tar after independent verification
-to reclaim its local staging bytes; do not delete the cloud object:
+No batch deletion loop, cache purge or recursive parent removal. The guard
+reads source-path.txt, checks exact path spellings/ancestor identities, and
+publishes DELETE_AUTHORIZED/DELETED journal states plus an exclusive pointer.
+Preflight refusals write REFUSED_NO_DELETE only to a validated regular,
+single-link item.parent/deletions.tsv journal; invalid journals are untouched.
+A later OS failure is FAILED_PARTIAL and may leave partial removal and a
+.pending pointer. Preserve them and request review against the original
+manifest. The proved no-writer pause remains required throughout.
 
-```zsh
-source "${JW_OP:?Set existing operation}/env.zsh"
-source "${JW_ITEM:?Set exact item}/item-env.zsh"
-jw_uploaded "$JW_REMOTE/$JW_ID.tar.zst"
-/usr/bin/brctl evict "$JW_REMOTE/$JW_ID.tar.zst"
-jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" yes
-/bin/df -k /System/Volumes/Data > "$JW_OP/df-current.txt"
-```
-
-**STOP 8:** record actual available bytes and `(available_after -
-available_before) * 1024` from `df -k`. Delete only the already-approved,
-eligible leaf. Stop once the combined step-9 budget is met; **150 GB internal
-is not reachable from the present eligible set**. Never remove snapshots,
-retained pilot 9 or KEEP to force a disk gate. If pilot 8 is ineligible or
-clones reclaim less than estimated, keep it and report the shortfall.
+**STOP 8:** record actual df before/after and the success JSON's regular bytes
+and available-space delta. Budget only measured current available space.
+All pilot and capture-bearing sources remain, regardless of backup success.
+Stop once the admitted need is met; an unmet budget keeps the operation paused.
 
 ## 9. Combined internal/external budget and primary external-SSD plan
 
@@ -960,21 +978,31 @@ change needs a ruling, keep the pause and ask the lead.
 
 ### 9b. Honest reachable space and one combined admission
 
-The planning estimate after pilot 9 is **about 66 GB internal available**, plus
-**about 26 GB for pilot 8 only if eligible**, or **about 92 GB**. This is not a
-promise: pilot 9 is retained, clone sharing reduces reclamation, and pilot 8
-may also stay. Record actual `df` before/after each allowed deletion. Pilots
-0–7 reclaim zero deleted-source bytes and tier 3 is empty. No extra 26 GB is
-credited for pilot 9. Without a measured 80 GB internal free, R0's disk gate
-still fails even when models are external; retain sources and STOP for the
-lead's storage/r0 ruling. External space cannot be substituted for that gate.
+Measure current internal available bytes with df. **The only new source
+space reclaimable now is class (a): public model weights unreferenced by every
+required plan/pin, with exact HF revision/blob manifest, fresh HEAD checks and
+Ed's specific approval.** No candidate list or byte total is established in this
+blind session. Budget zero until those gates pass, then use measured available
+space, not logical model sizes or promises about APFS clones.
 
-Internal SSD alone **CANNOT** fund the roughly **120 GB streaming peak + 30 GB
-floor = 150 GB**, or keep the **95 GB converted model + 41.2 GB next ALIGN
-window + 30 GB floor = 166.2 GB**. The older 150 GB offload target is unreachable
-from this eligible set. Conversion on the internal SSD is not admitted.
-`JW_GOLD` and converted weights remain external after gold; no later internal
-copy is implied by reaching a checkpoint.
+Pilot roots and capture-bearing trees stay until after block-5 release.
+Pilots 0–7 have already lost their local sources and offer zero more source
+reclaim; pilots 8/9 contribute **zero**. The former conditional 26 GB pilot-8
+credit is withdrawn. Existing archive hydration/eviction only returns its own
+staging allocation; it cannot reclaim an already-deleted source again.
+
+R0 requires the amendment-1 window-1 bundle need for **two copies + 30 GB**,
+cited to the pinned amendment/config in the [R0 patch series](r0_disk_gate_patch.md).
+The actual W1 bytes and full amendment SHA remain unknown here; the gate
+refuses until the lead installs them. There is no flat internal-free threshold.
+
+The external plan budgets roughly **120 GB streaming peak + 30 GB floor =
+150 GB**, replaced by actual frozen simultaneous bounds before use. Internal
+conversion has no current measured admission. Keeping 95 GB converted output
+internally would additionally require the current amendment's next-window
+allocation plus 30 GB; the older 41.2 GB window estimate is not a current pin.
+Keep JW_GOLD, converted weights and paged tables external under the primary
+plan; no later internal copy is implied by reaching a checkpoint.
 
 Use this single budget before packaging, hydration, copying, setup and every
 gold unit. Fill **all** remaining allocations, and repeat after metadata pins,
@@ -985,8 +1013,8 @@ current `df` once, not again as future bytes. Use maximum **simultaneous** use.
 |---|---|
 | Internal, per offload | One archive upper bound from `source.json`, cloud hydration, probe copies and small journal/control writes. Keep source resident until step 8 passes. Retained pilot 9 and all KEEP weights remain. |
 | Internal, future selection/measurement | After present weights/copies: R0 requires **amendment-1 window-1 bundle bytes for two copies + 30 GB** on the internal measurement `disk_path`. Pin the plan/config citation and actual bytes; there is no flat 80 GB gate. Next ALIGN separately admits its reviewed allocation plus the floor. Use the larger bound for simultaneous needs; see [R0 patch series](r0_disk_gate_patch.md). |
-| External, R0 | Both uncompressed pilot 8/9 materialized copies, matching the pre-offload inventories; complete non-symlink N/D model mirrors if not already present (**44.86 GB N**, about **28 GB D** are estimates). Do not count a compressed tar or HF symlinks as a mirror. Keep inventories/config/results outside sources. |
-| External, durable custody | Existing ALIGN 0–7, H/H2, R7 archive/manifest copies, newly eligible archives, plus **largest complete restore workspace**. If this is gold's device, all copies compete in the same budget and remain resident. Otherwise budget/check the backup device separately. |
+| External, R0 | Both uncompressed pilot 8/9 materialized copies, matching the pre-offload inventories; complete materialized mirrors of the reviewed v4 R0 models if not already present, using their exact pinned inventories and measured bytes. Do not count a compressed tar or HF symlinks as a mirror. Keep inventories/config/results outside sources. |
+| External, durable custody | Existing ALIGN 0–7, H/H2, R7 archive/manifest copies, any separately approved new backup archives, plus **largest complete restore workspace**. If this is gold's device, all copies compete in the same budget and remain resident. Otherwise budget/check the backup device separately. |
 | External, streaming gold | Remaining converted output up to **95 GB**, maximum simultaneous bounded bf16/download/temp unit initially **15 GB**, and remaining env/cache/metadata/activation/journal overhead initially **10 GB**, plus **30 GB floor**. Replace estimates with the actual frozen schedule; incomplete downloads, output temp/atomic overlap, caches and re-downloads count. |
 | Whole operation | Every filesystem passes its own current-free ≥ remaining simultaneous allocations + required floor; the amendment-1 R0 two-copy-plus-floor gate and future ALIGN gate also pass before those stages. Do not add free bytes across disks to satisfy any single-filesystem constraint. |
 
@@ -1488,70 +1516,3 @@ peak working bytes and lowest free bytes, conversion/end-to-end outcomes, unused
 model revision inventory, and pilot-9 harvest/pause/restoration status.
 Report UNKNOWN, BLOCKED and PROVISIONAL explicitly. **No offload or hardware
 validation occurred merely because this runbook was written.**
-
-## Public weights deletion receipt contract (round-2 ruling N5a)
-
-This is the only class currently eligible to reclaim internal source space:
-**PUBLIC MODEL WEIGHTS NOT IN ANY PLAN**, under `jw_models` or the HF hub.
-No cloud copy is required for this class. It does not grant an approval list.
-Pilot roots and capture-bearing trees remain until after block-5 release.
-
-For each exact proposed model directory, Ed and an independent reviewer must
-first review the complete step-3 census from all six refs. Every registration
-identity pin, BYTES roster, B6 §1.4 roster, ALIGN v4 kit, amendment-1 plan and
-v4 R0 config participates. Path containment or a model identity alias in any
-of them is KEEP. Dropping Next-80B or Qwen3.5-122B from ALIGN alone is insufficient:
-BYTES/B6 or historical pins may still reference them. Never infer eligibility
-from the expected candidate names. No real candidate was inspected here.
-
-Use a new item directory outside the source. Save `source-path.txt` as one
-canonical absolute line, `source.json` from the reviewed `tree` helper,
-`source.sha256` as its exact checksum receipt, and `source-after.json` with
-identical bytes. All model files must be regular, nlink-1 **blob bytes**, never
-snapshot symlinks, and every file must appear in the SHA-256 inventory. No
-shared HF cache cleanup is authorized. Save the complete step-3 result as
-`model-census.json`; it is replayed from its full Git SHAs before deletion.
-
-`public-weights.json` has exactly these fields: `source` (the exact approved
-path), `repo_id` (the exact public HF org/repo), `revision` (40 lowercase hex
-characters), `manifest_sha256`, `census_sha256`, and `files` (an exhaustive
-mapping from each local manifest file path to its HF repo filename at that
-revision). This mapping covers blob-cache names too; no symlinks are followed.
-The independent review receipt `independent-receipt.txt` must bind the exact
-source, both digests, repo id and revision. `retention-review.json` must equal:
-
-```json
-{"source":"<exact source>","manifest_sha256":"<source.json digest>","model_class":"public-weights","no_retained_ledger_locators":true,"no_measurement_data":true}
-```
-
-Ed approves the **specific list**, not a wildcard, cache root or model family.
-For each item save `ed-approval.json` as `{"approver":"Ed","approved":[CLAIM]}`,
-where CLAIM is the complete exact `public-weights.json` object. Any changed
-path, manifest, repo, revision, census or file mapping requires a new approval.
-These local receipts record Ed's review; creating JSON is not approval itself.
-
-At deletion time the guard makes an unauthenticated **HEAD** request to the
-HF API `/api/models/ORG/REPO/revision/FULL_SHA` and HEAD-checks every mapped
-file at `/ORG/REPO/resolve/FULL_SHA/FILENAME`. Private/gated, missing, failed
-or ambiguous responses refuse. No network was used to author or test this
-procedure; HF API behavior remains an operator-time gate. This class relaxes
-only mandatory model-root containment for this exact approved descendant.
-It never relaxes the root itself, another KEEP entry, path/inode checks,
-retention, pause/census, 30 GB floor, manifests, permissions/flags/ACLs,
-source recheck, exclusive pointer publication or the validated journal.
-
-```zsh
-source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_PUBLIC_ITEM:?Set reviewed exact item directory with Ed approval}"
-python3.13 -I -B "$JW_CANON/scripts/align_offload_delete_root.py" delete \
-  --model-class public-weights --item "$JW_PUBLIC_ITEM" \
-  --keep "$JW_OP/KEEP.txt" --journal "$JW_OP/deletions.tsv" \
-  > "$JW_PUBLIC_ITEM/freed-bytes.json"
-```
-
-The success JSON reports `source_regular_bytes` and the observed filesystem
-`available_bytes_delta`. APFS sharing/snapshots and concurrent allocations can
-make them differ; report both and budget only measured available space.
-The `.OFFLOADED.json` pointer records `model_class=public-weights`, exact HF
-identity, manifest/census digests, HEAD receipt and regular-file bytes; it does
-not claim a cloud archive exists. **Freed in this authoring session: 0 bytes.**

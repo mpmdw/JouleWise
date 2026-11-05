@@ -103,3 +103,128 @@ Runbook pilot copies preserve links with cp -pRP. Exact delivered two-patch
 series applies sequentially in the test's synthetic checkout.
 `python3.13 -B -m unittest tests.test_align_offload_r0_patch`: PASS, 4 tests.
 No R0 branch, model data, real pilot or measurement view target was accessed.
+
+N5c: reconciled the whole runbook: current source reclaim is only class (a),
+all pilot/capture trees stay until after block-5 release, conditional pilot-8
+reclaim credit is withdrawn, and the earlier empty-model-tier/flat-80-GB claims
+are superseded. Step 8 now exposes only the public-weights operator command;
+backup work remains copy-only for retained evidence. No candidate or internal
+free-space estimate is invented. Budget zero reclaim until the full census
+and specific approval pass; report regular bytes and actual available delta.
+External gold remains the current storage plan, with actual measured admission
+still required. The public receipt contract is now step 8, not an appendix.
+`python3.13 -B -m unittest tests.test_align_offload_runbook`: PASS, 3 tests;
+retention/reclaim contract and all shell/Python documentation syntax checked
+without executing any documented command.
+
+## Final findings and clause map
+
+The Git-only BYTES roster inspection at full commit
+c58282f87369c73c5b0a25d8a5a217555758c6d8 names
+Qwen3-Next-80B-A3B-Instruct-4bit and Qwen3.5-122B-A10B-4bit. Under the explicit
+all-plans/pins ruling these identities remain KEEP, even after ALIGN drops
+them. A regression test now pins that disposition. Other Next variants are
+not classified here: amendment/v4 objects and a complete census are missing.
+No real candidate path, model file or measurement was inspected.
+
+Final N1 review also covers abnormal child-supervisor exit: the guard stops
+surviving group members even if the group leader is already dead. This and
+its regression test were folded into the single N1 commit. Unit heartbeat
+writes are mocked so the low-space/unmount tests reach their intended gates.
+The native synthetic guard-death tests run real isolated Python processes.
+
+| Ruling clause | Production site | Biting assertion | Counterfactual |
+| --- | --- | --- | --- |
+| N5a(1), every plan/pin | model_keep.derive + delete_root.replay_census/unreferenced | disjoint Git histories, modified receipt refusal, referenced alias/path refusal | model dropped from ALIGN still present in BYTES remains KEEP |
+| N5a(2), exact repo/revision and every blob | public_evidence + tree + check_hf_downloadable | full-SHA, manifest, mapping and link tests | revision=main, changed blob or snapshot link refuses |
+| N5a(3), fresh HEAD | check_hf_downloadable at final deletion gate | API and per-file HEAD URL/method/no-auth checks | missing/gated revision or file refuses before rmtree |
+| N5a(4), specific Ed list | public_evidence | exact JSON claim equality | changed source/revision/list or another approver refuses |
+| N5a, relax only exact model containment | check_keep(public_path=src) | mandatory root, other KEEP and another-path tests | approved source's root/sibling/descendant KEEP cannot be removed |
+| N5b, W1 two copies + floor | R0 patch 1 required_free_bytes/disk_census | exact boundary +/-1 byte; malformed/null citation/budget tests | old flat threshold and missing amendment budget cannot pass |
+| N5b, record view link text | R0 patch 2 inventory/CLI | dangling/view target text, only regular local file opened | no target descent; default model inventory still refuses links |
+| N5c, pilots/capture trees stay | delete_root common retention + runbook step 8/9b | all-pilot and instrument_validation refusal, public-only operator command | conditional pilot-8 reclaim credit removed |
+
+## Final verification
+
+Each unittest command ran sequentially, one module at a time; no full suite.
+All use Python 3.13 and synthetic filesystem fixtures. Latest results:
+
+| Command | Result |
+| --- | --- |
+| `python3.13 -B -m unittest tests.test_align_offload_disk_guard` | PASS, 7 tests, 0.905 s |
+| `python3.13 -B -m unittest tests.test_align_offload_delete_root` | PASS, 49 tests, 0.351 s |
+| `python3.13 -B -m unittest tests.test_align_offload_model_keep` | PASS, 4 tests, 2.740 s |
+| `python3.13 -B -m unittest tests.test_align_offload_public_weights` | PASS, 13 tests, 0.131 s after final BYTES-reference regression |
+| `python3.13 -B -m unittest tests.test_align_offload_r0_patch` | PASS, 4 tests, 0.092 s |
+| `python3.13 -B -m unittest tests.test_align_offload_runbook` | PASS, 3 tests, 0.649 s; all current zsh fences and Python heredocs parse |
+| `python3.13 -B -m unittest tests.test_docs_freshness` | PASS, 31 tests, 1.360 s after final documentation changes |
+
+Total: 111 targeted tests, all passing; cumulative iterations far below
+20 minutes. Compilation command also PASS (exit 0):
+`PYTHONPYCACHEPREFIX=/private/tmp/jwsol/mbp-offload-4/tmp/compile-cache python3.13 -m compileall -q joulewise tests scripts/align_offload_delete_root.py scripts/align_offload_disk_guard.py scripts/align_offload_model_keep.py`.
+`git diff --check 43ce366556423eb2ff8be273af9caa83ec3d4138` PASS.
+Protected-path diff against base is empty for RUN_STATE.md, TASK_QUEUE.md,
+docs/process/state_kernel.json and tests/test_gen_state.py. No tasks registered.
+
+## Changed files and local commits
+
+Changed: scripts/align_offload_disk_guard.py, align_offload_delete_root.py,
+align_offload_model_keep.py; their three existing test modules; new
+tests/test_align_offload_public_weights.py, test_align_offload_r0_patch.py,
+test_align_offload_runbook.py; docs/align/mbp_offload_and_gold_setup.md,
+r0_disk_gate_patch.md; this report. No R0-branch file changed.
+
+Local commits are one per review item, with N5 split into its requested
+public-policy, two R0 patch-series, and retention/documentation pieces.
+Local commit inventory (the N5c commit containing this final report is HEAD):
+
+- 2e44820d1 — N1 guard lifetime and signal safety.
+- 9b4fc4b7c — N2 validated journal.
+- 77caa147a — N3 closed upload parser.
+- d6c338f40 — N4 protected flags.
+- e9fa8920e — N7 executable census.
+- e2f1c1b78 — N6 multi-ref Git census.
+- 923c8ae04 — N5a public-weights deletion policy/tests.
+- 740003268 — N5b patch 1, disk gate.
+- 6863e8e5f — N5b patch 2, symlink inventory.
+- HEAD — N5c current reclaim/retention reconciliation and final handoff.
+
+No push.
+
+## Limits, open questions and exact next step
+
+No network, real data/model inventory, source deletion, offload, release,
+harvest, analysis pipeline, hardware measurement or native MLX execution.
+No paths under /Users/edr outside this clone were intentionally accessed;
+Git object reads through the expressly allowed shared alternate supplied only
+repository code/plan/registration text. Synthetic restricted directories in
+TMPDIR contained no study data. No raw evidence/run bundle was modified.
+
+Remaining operational gates, not silently completed:
+
+- Lead supplies locally available full SHAs for amendment 1, ALIGN v4 kit and
+  v4 R0 config. Current cached refs lack them. Full census must pass from Git
+  objects; no merged checkout or inferred model path substitutes. The two
+  BYTES-listed expected candidates above remain KEEP under the given rule.
+- Lead records the actual amendment W1 per-copy bundle bytes and full citation
+  in a reviewed v4 R0 config. Delivered patches verify the formula/types and
+  citation shape, not semantic extraction of a number from unavailable prose.
+- Ed captures the real step-5 successful fileproviderctl sample and tool/macOS
+  version; lead reviews and commits its exact grammar/sample digest. Until
+  then all operational cloud upload checks deliberately refuse.
+- Ed's exact public-model list/manifest/revision approval and successful
+  deletion-time unauthenticated HF HEAD checks are still required. Live API
+  HEAD/redirect behavior is unverified; any unsupported response refuses.
+  Freed here: 0 bytes; no eligible model list or real capacity is claimed.
+- R0 lead rebases/applies the two delivered patches to #661's reviewed v4
+  source, runs its native config/disk/inventory tests and then the approved
+  operator inventories. Guard native process-state T checks for SIGHUP,
+  SIGKILL and worker groups should run on the target Mac: /bin/ps was denied
+  here, so these tests establish live-but-nonexecuting synthetic writers.
+  Model/R0/MLX and real iCloud/hardware validation remain outside this sandbox.
+
+Next exact step: lead reviews these local commits, resolves the missing Git
+pins/plan budget and coordinates the two documented patches with #661.
+Preserve the pause and pilot roots; follow the existing Ed-only handoff only
+after the recorded parser, census, disk and specific-approval gates pass.
+No new independent SAFE verdict is claimed by this implementation run.
