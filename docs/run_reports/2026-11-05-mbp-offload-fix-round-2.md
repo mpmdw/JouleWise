@@ -82,3 +82,13 @@ space delta separately. Actual source deletions/freed bytes here: NONE / 0.
 `python3.13 -B -m unittest tests.test_align_offload_delete_root`: PASS, 49 tests.
 `python3.13 -B -m unittest tests.test_align_offload_public_weights`: PASS, 12 tests.
 These are synthetic tests, not HF availability or model eligibility validation.
+
+N5b patch 1: docs/align/r0_disk_gate_patch.md carries a reviewable diff against
+R0 49e78e178, not edits to that branch. Gate = reviewed amendment-1 W1 bytes
+per copy * 2 + 30,000,000,000. Config requires two copies and full amendment
+SHA:path citation; old/missing/null budgets refuse. The numeric plan value is
+not available here and remains an explicit R0-lead review gate. The example
+intentionally refuses rather than inventing a value. Runbook formula updated.
+`python3.13 -B -m unittest tests.test_align_offload_r0_patch`: PASS, 2 tests;
+exact shipped patch applies to cached code, synthetic boundary +/-1 byte and
+missing/malformed inputs tested. No R0 or model/hardware probe executed.

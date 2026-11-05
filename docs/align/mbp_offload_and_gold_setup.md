@@ -980,11 +980,11 @@ current `df` once, not again as future bytes. Use maximum **simultaneous** use.
 | Filesystem / stage | Remaining new bytes to fund, in addition to current resident bytes |
 |---|---|
 | Internal, per offload | One archive upper bound from `source.json`, cloud hydration, probe copies and small journal/control writes. Keep source resident until step 8 passes. Retained pilot 9 and all KEEP weights remain. |
-| Internal, future selection/measurement | After present weights/copies: R0 needs **≥80 GB free** on its configured measurement `disk_path`. Next ALIGN requires the actual next kit footprint (historical 41.2 GB) plus **30 GB**, or any larger reviewed window budget. Use `max(80 GB, next_window + 30 GB, pending internal write + 30 GB)` for the relevant next stages. |
+| Internal, future selection/measurement | After present weights/copies: R0 requires **amendment-1 window-1 bundle bytes for two copies + 30 GB** on the internal measurement `disk_path`. Pin the plan/config citation and actual bytes; there is no flat 80 GB gate. Next ALIGN separately admits its reviewed allocation plus the floor. Use the larger bound for simultaneous needs; see [R0 patch series](r0_disk_gate_patch.md). |
 | External, R0 | Both uncompressed pilot 8/9 materialized copies, matching the pre-offload inventories; complete non-symlink N/D model mirrors if not already present (**44.86 GB N**, about **28 GB D** are estimates). Do not count a compressed tar or HF symlinks as a mirror. Keep inventories/config/results outside sources. |
 | External, durable custody | Existing ALIGN 0–7, H/H2, R7 archive/manifest copies, newly eligible archives, plus **largest complete restore workspace**. If this is gold's device, all copies compete in the same budget and remain resident. Otherwise budget/check the backup device separately. |
 | External, streaming gold | Remaining converted output up to **95 GB**, maximum simultaneous bounded bf16/download/temp unit initially **15 GB**, and remaining env/cache/metadata/activation/journal overhead initially **10 GB**, plus **30 GB floor**. Replace estimates with the actual frozen schedule; incomplete downloads, output temp/atomic overlap, caches and re-downloads count. |
-| Whole operation | Every filesystem passes its own current-free ≥ remaining simultaneous allocations + required floor; the internal R0 ≥80 GB gate and future ALIGN gate also pass before those stages. Do not add free bytes across disks to satisfy any single-filesystem constraint. |
+| Whole operation | Every filesystem passes its own current-free ≥ remaining simultaneous allocations + required floor; the amendment-1 R0 two-copy-plus-floor gate and future ALIGN gate also pass before those stages. Do not add free bytes across disks to satisfy any single-filesystem constraint. |
 
 Layer 0's roughly 24-shard union and layer 1's roughly 35-shard/100 GB bf16
 n-gram table need bounded subunits, not entire unions staged simultaneously.
@@ -1416,9 +1416,10 @@ the SSD.
    Spotlight/other service state recorded at pause. Keep the new large model
    external volume excluded from indexing and Time Machine. Keep the converted
    model and paged n-gram table external; recheck volume identity and the agreed
-   power boundary. R0 still needs at least 80 GB internal free after present
-   weights; independently admit the next kit's exact measurement-volume budget
-   plus the 30 GB floor. Use the larger bound for the next stage.
+   power boundary. R0 requires amendment-1 window-1 bundle bytes for two copies plus 30 GB
+   internal free after present weights, with the full plan/config citation.
+   Independently admit the next kit's exact measurement-volume budget plus
+   the 30 GB floor. Use the larger bound for the next stage.
 3. Restore any temporarily unloaded non-measurement infrastructure from the
    saved exact plists and restore original disabled states. Do not resume a
    DONE BYTES/B6 loop. With Ed's go, remove **only this operation's** STOP
