@@ -177,12 +177,15 @@ class StrictIOContracts(unittest.TestCase):
                 cases = [[], [("é", 1)], [("a", 1), ("a", 2)], [("x", 1), ("y", 2), ("x", 3)]]
                 cases += [[(rng.choice(["a", "é", "😀"]), rng.randrange(100))
                            for _ in range(rng.randrange(8))] for _ in range(100)]
+                def expected_pairs(pairs):
+                    result = {}
+                    for key, value in pairs:
+                        if key in result:
+                            raise ValueError(f"duplicate JSON key {key!r}")
+                        result[key] = value
+                    return result
                 for pairs in cases:
-                    if len(dict(pairs)) != len(pairs):
-                        with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
-                            fn(pairs=pairs)
-                    else:
-                        self.assertEqual(fn(pairs=pairs), dict(pairs))
+                    self.assertEqual(outcome(fn, pairs=pairs), outcome(expected_pairs, pairs), location)
                 for raw in ('{"a":1,"a":2}', '{"o":{"é":1,"é":2}}'):
                     with self.assertRaises(ValueError):
                         json.loads(raw, object_pairs_hook=fn)
@@ -237,6 +240,10 @@ class StrictIOContracts(unittest.TestCase):
         for location, kind in CONTRACTS.items():
             fn = binding(location)
             if kind == "collect_exact_keys":
+                for value in (None, [], "a", 0):
+                    errors = ["prior"]
+                    self.assertFalse(fn(value, {"a"}, "field", errors))
+                    self.assertEqual(errors, ["prior", "field: must be an object"])
                 for _ in range(100):
                     expected = set(rng.sample(["a", "b", "é"], rng.randrange(4)))
                     value = {k: 1 for k in rng.sample(["a", "b", "é"], rng.randrange(4))}
@@ -289,6 +296,22 @@ class StrictIOContracts(unittest.TestCase):
                         fn(path=path, raw=raw)
                         self.assertEqual(path.read_bytes(), raw)
                         self.assertEqual(list(path.parent.iterdir()), [path])
+                    events = []
+                    descriptor = []
+                    real_fsync, real_replace = os.fsync, os.replace
+                    def sync(fd):
+                        events.append("fsync")
+                        descriptor.append(fd)
+                        return real_fsync(fd)
+                    def replace(source, target):
+                        events.append("replace")
+                        self.assertEqual(Path(source).read_bytes(), b"complete")
+                        with self.assertRaises(OSError):
+                            os.fstat(descriptor[0])  # closed before publication
+                        return real_replace(source, target)
+                    with patch.object(os, "fsync", side_effect=sync), patch.object(os, "replace", side_effect=replace):
+                        fn(path, b"complete")
+                    self.assertEqual(events, ["fsync", "replace"])
                     before = path.read_bytes()
                     for failed in ("fsync", "replace"):
                         with patch.object(os, failed, side_effect=OSError("injected")):
