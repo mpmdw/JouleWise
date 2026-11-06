@@ -1,0 +1,13 @@
+{
+  "schema": "joulewise.align.r0.config.v1",
+  "measurement_hw_model": "REPLACE_WITH_MEASUREMENT_MAC_HW_MODEL",
+  "anchor_source": "/Volumes/ALIGN_MODELS/Qwen3-30B-A3B-4bit",
+  "models": {
+    "D": {"source": "/Volumes/ALIGN_MODELS/Qwen3.8-27B-8bit"}
+  },
+  "shade_cache": "/Volumes/ALIGN_INPUTS/shade",
+  "disk_path": "/Volumes/ALIGN_MODELS",
+  "custody_parents": [],
+  "smc_step": {"idle_seconds": 300, "load_seconds": 900, "recovery_seconds": 600},
+  "offloads": []
+}

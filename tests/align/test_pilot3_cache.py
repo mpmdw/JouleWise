@@ -253,6 +253,17 @@ class CacheTests(unittest.TestCase):
             self.assertEqual(metadata['workload_provenance']['cache_policy'], 'episode_prefix')
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
+    def test_campaign_does_not_match_across_checkpoint_policies(self):
+        from joulewise.align.apple.campaign import _counterbalanced
+        benign = replace(episode_spec(hidden=False), hybrid_checkpoint_limit=None)
+        for limit in (0, 3):
+            with self.subTest(limit=limit):
+                ordered, flags = _counterbalanced((
+                    benign, replace(benign, condition='sabotage', hybrid_checkpoint_limit=limit)))
+                self.assertEqual(len(ordered), 2)
+                self.assertIn('unmatched_condition_cells_retained', flags)
+        self.assertEqual(_counterbalanced((benign, replace(benign, condition='sabotage')))[1], ())
+
     def test_campaign_does_not_match_across_cache_policies(self):
         from joulewise.align.apple.campaign import _counterbalanced
         spec = episode_spec(hidden=False)
@@ -261,11 +272,13 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(len(ordered), 2)
 
     def test_spec_legacy_bytes_and_governed_policy_digest(self):
-        spec = episode_spec(hidden=False)
-        legacy = asdict(spec)
-        for key in ('prompt_cache', 'enable_thinking', 'max_context_tokens', 'sampler', 'max_episode_seconds'):
-            if legacy[key] is None:
-                del legacy[key]
+        # None represents a historical omitted checkpoint field. New specs
+        # explicitly carry the rebuild-only default 0 in their policy hash.
+        spec = replace(episode_spec(hidden=False), hybrid_checkpoint_limit=None)
+        # Explicit pre-controls contract; adding optional dataclass fields must
+        # not silently change the legacy serialization oracle.
+        legacy = {key: asdict(spec)[key] for key in ('task_factory', 'condition', 'seed',
+            'max_turns', 'max_tokens', 'temperature', 'task_kwargs', 'mock_turns', 'schema')}
         self.assertEqual(spec.to_text(), json.dumps(legacy, sort_keys=True, separators=(',', ':'), allow_nan=False))
         adapter = EpisodeRuntimeAdapter(None, FakeClock())
         adapter.prepared = {"version": "synthetic", "model_artifact_identity": {"sha256": "a" * 64}}
@@ -285,6 +298,9 @@ class CacheTests(unittest.TestCase):
                                                 'requested_temperature': spec.temperature, 'max_tokens': spec.max_tokens})
         self.assertEqual(identity(spec), identity(replace(spec, prompt_cache=None)))
         self.assertNotEqual(identity(spec), identity(replace(spec, prompt_cache='episode_prefix')))
+        self.assertEqual(EpisodeSpec.from_text(spec.to_text()).to_text(), spec.to_text())
+        self.assertNotEqual(identity(spec), identity(replace(spec, hybrid_checkpoint_limit=0)))
+        self.assertEqual(len({identity(replace(spec, hybrid_checkpoint_limit=limit)) for limit in (0, 1, 2)}), 3)
         native = MlxRuntimeAdapter(FakeClock())
         native._mlx_lm = SimpleNamespace(make_sampler=lambda **kwargs: kwargs,
                                          stream_generate=lambda *args, **kwargs: iter(()))
@@ -293,6 +309,10 @@ class CacheTests(unittest.TestCase):
         sampled = replace(spec, temperature=.6, sampler=policy)
         self.assertNotEqual(identity(spec), identity(sampled))
         self.assertNotEqual(identity(spec), identity(replace(spec,max_episode_seconds=120)))
+        budgeted = replace(spec, max_episode_decode_tokens=8192, deadman_s=1086)
+        self.assertNotEqual(identity(spec), identity(budgeted))
+        self.assertNotEqual(identity(budgeted), identity(replace(budgeted, max_episode_decode_tokens=9216)))
+        self.assertNotEqual(identity(budgeted), identity(replace(budgeted, deadman_s=1087)))
         self.assertEqual(identity(spec), identity(replace(spec,sampler=None,max_episode_seconds=None)))
         with self.assertRaisesRegex(ValueError, 'prompt_cache'):
             EpisodeSpec.from_text(replace(spec, prompt_cache='wrong').to_text())

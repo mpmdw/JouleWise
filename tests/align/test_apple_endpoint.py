@@ -365,13 +365,13 @@ class AppleReviewRegressionTests(unittest.TestCase):
                         self.assertIn("no_model_call_returned_tokens", summary.failure_message)
                         self.assertFalse((bundle / "outputs/align_episode.json").exists())
                     else:
-                        self.assertIn('"stop_condition": "endpoint_error"', summary.failure_message)
+                        self.assertIn('"stop_condition": "runner.error"', summary.failure_message)
                         episode = read_episode_bundle(bundle)
                         self.assertEqual([turn.decode_tokens for turn in episode.turns], [180, 0])
                         self.assertTrue(any(flag.startswith("endpoint_error:RuntimeError:") for flag in episode.flags))
                         failure = json.loads((bundle / "outputs/align_failure.json").read_text())
                         self.assertEqual(failure["episode_outcome"], {
-                            "emitted_tokens": 180, "stop_condition": "endpoint_error",
+                            "emitted_tokens": 180, "stop_condition": "runner.error",
                         })
                         self.assertTrue((bundle / "outputs/align_transcript.jsonl").is_file())
                         metadata = json.loads((bundle / "metadata.json").read_text())

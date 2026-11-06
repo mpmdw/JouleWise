@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 
 from joulewise.desk_compress import read_bytes
+from joulewise.align.apple.stop_precedence import primary_stop
 
 read_marking_tool_names = ("get_unread_emails",)
 
@@ -69,23 +70,26 @@ def end_state(episode, turn_rows=()):
     flags = list(episode.flags)
     for row in turn_rows:
         flags.extend(row.get('flags', ()))
-    if any(f.startswith(('episode_error:', 'endpoint_error:', 'runner.error')) for f in flags):
-        return 'runner.error'
-    context = next((f for f in flags if f.startswith(('episode.context_limit:', 'episode.time_guard:'))), None)
-    if context:
-        return context
-    ended = next((f for f in flags if f.startswith('episode.end_task:')), None)
-    if ended:
-        return ended
+    intervals = episode.hardware.get('thermal', {}).get('intervals', ())
+    stop = primary_stop(flags, thermal_intervals=intervals, default='')
+    # Turn-count and per-turn token-budget flags are not episode stops in the
+    # desk presentation: a cut on an earlier turn does not end the episode, and
+    # a turn-count stop keeps its historical 'episode.max_turns' label. Those
+    # cases fall through to the v0 presentation rules below.
+    if stop and stop not in ('turn_token_budget_reached', 'turn_budget_reached'):
+        if stop == 'episode.deadman':
+            return next(f for f in flags if f.startswith('episode.deadman:'))
+        if stop in ('episode.decode_budget', 'episode.context_limit', 'episode.time_guard',
+                    'episode.end_task'):
+            return next(f for f in reversed(flags) if f.startswith(stop + ':'))
+        return stop
     if 'turn_budget_reached' in flags or 'episode.max_turns' in flags:
         return 'episode.max_turns'
+    # v0-only presentation rules follow the governed stop classifier.
     cuts = [f for f in flags if f.startswith(('turn_token_budget_reached:', 'episode.turn_token_budget_reached:'))
             and episode.turns and f.rsplit(':', 1)[-1] == str(episode.turns[-1].index)]
     if cuts:
         return cuts[-1]
-    # v0's native stop inside a thought was labelled a normal return.
-    # A token-budget cut takes precedence as the cause; both conditions remain
-    # visible in the retained turn flags and the summary's unclosed boolean.
     if 'ended_in_unclosed_reasoning' in flags or (
         episode.turns and not episode.turns[-1].tool_calls and turn_rows
         and 'unclosed_reasoning_span' in turn_rows[-1].get('flags', ())
@@ -97,7 +101,7 @@ def end_state(episode, turn_rows=()):
 
 
 def evidence_precheck(bundle, target_paths=None):
-    value = json.loads(read_bytes(Path(bundle) / 'summary_metrics.json')).get('window_evidence_precheck', {})
+    value = json.loads(read_bytes(Path(bundle) / 'summary_metrics.json')).get('window_evidence_precheck') or {}
     rows = []
     def visit(obj, path):
         if not isinstance(obj, dict):

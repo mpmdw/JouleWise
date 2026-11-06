@@ -616,6 +616,45 @@ def _segments(episode: Episode, flags: list[str]) -> list[tuple[int | None, str,
                 overlaid.append((turn, phase, b, end, call_id))
         parts = overlaid
 
+    # Thermal intervals are already on the episode monotonic clock. Holds
+    # overlay decode; gates occupy gaps. Reject malformed custody rather than
+    # silently charging cooling time to a turn. Absent policy is byte-identical.
+    thermal = episode.hardware.get('thermal', {})
+    previous = None
+    for interval in thermal.get('intervals', ()):
+        if interval['kind'] not in ('G0', 'G1', 'H'):
+            raise ValueError('unknown thermal exclusion kind')
+        a, b = interval['start_ns'], interval['end_ns']
+        if type(a) is not int or type(b) is not int or b < a:
+            raise ValueError('invalid thermal exclusion interval')
+        if previous is not None and a < previous:
+            raise ValueError('overlapping thermal exclusion intervals')
+        previous = b
+        if interval['kind'] == 'G0':
+            if b > episode.start_ns:
+                raise ValueError('G0 overlaps episode')
+            continue
+        if not episode.start_ns <= a <= b <= episode.end_ns:
+            raise ValueError('thermal exclusion outside episode')
+        if a == b:
+            continue
+        kind = 'hold' if interval['kind'] == 'H' else 'gate'
+        overlaid = []
+        for turn, phase, start, end, call_id in parts:
+            if end <= a or start >= b:
+                overlaid.append((turn, phase, start, end, call_id))
+                continue
+            if kind == 'hold' and (phase != 'decode' or turn != interval['turn']):
+                raise ValueError('hold must be contained in its decode phase')
+            if kind == 'gate' and phase != 'gap':
+                raise ValueError('gate overlaps owned work')
+            if start < a:
+                overlaid.append((turn, phase, start, a, call_id))
+            overlaid.append((None, kind, max(start, a), min(end, b), None))
+            if end > b:
+                overlaid.append((turn, phase, b, end, call_id))
+        parts = overlaid
+
     # Coalesce tools crossing model/gap boundaries, retaining distinct calls
     # even when two calls from the same turn are back-to-back.
     merged: list[tuple[int | None, str, int, int, int | None]] = []

@@ -110,6 +110,13 @@ def reference_template():
     return bundle
 
 
+# Fixture-only stopping date: registered end_t0_before dates (alpha/beta/gamma
+# 2026-11-02, BYTES 2026-11-05) are in the past in wall time, so a real-clock
+# loop would Close the queue at NEXT. Keep the end a year ahead of the run.
+FIXTURE_END_T0_BEFORE = (__import__('datetime').datetime.now(__import__('datetime').timezone.utc)
+                         + __import__('datetime').timedelta(days=365)).isoformat()
+
+
 class Clock:
     def __init__(self):
         self.value = time.time()
@@ -184,6 +191,9 @@ class Round:
             # The fixed-pack queue uses only its own tree; beta's NEXT is a
             # rotation assertion and never starts another measured session.
             value['status'] = 'registered'
+            # Fixture-only: the committed end_t0_before has passed in wall time; the
+            # loop under test must not close the queue on the real calendar.
+            value['stopping'] = {**value['stopping'], 'end_t0_before': FIXTURE_END_T0_BEFORE}
             regs[p] = Registration(value, commit_time=0)
         lanes = resolve(self.measurement, self.loop_root, run=self.run, config=config, clock=self.clock)
         lanes.driver.launchctl_bin = str(self.launchctl)
@@ -639,6 +649,7 @@ def bytes_rehearsal(root):
         path = measurement / f'configs/b6/packs/{pack}/registration.json'
         value = read(path)
         value.update(status='registered')
+        value['stopping'] = {**value['stopping'], 'end_t0_before': FIXTURE_END_T0_BEFORE}
         value.pop('draft_notes', None)
         for estimator in value['estimators']:
             estimator['version'] = 'synthetic-rehearsal'

@@ -11,6 +11,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Optional renderer coverage supplements the dependency-free core shards.
+  align-templates:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install template renderer
+        run: python -m pip install 'jinja2>=3.1,<4'
+      - name: Check real Qwen templates
+        run: python -B -m unittest tests.align.test_xml_tool_calls
+      - name: Check history policy and effort ladder
+        run: python -B -m unittest tests.align.test_history_rendering
+
   quick:
     needs: changes
     if: needs.changes.outputs.code == 'true'

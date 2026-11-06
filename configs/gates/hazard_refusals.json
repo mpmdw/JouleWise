@@ -176,6 +176,7 @@
   },
   "not_scanned": {
    "joulewise/align/apple/workload.py": "alignment_workload",
+   "joulewise/align/apple/registry_select.py": "alignment_workload",
    "joulewise/b6/analysis_lane.py": "data",
    "joulewise/b6/desk_identity.py": "desk",
    "joulewise/b6/plan_inputs.py": "desk",
@@ -1500,6 +1501,7 @@
   {"file": "joulewise/cli.py", "function": "_cmd_run_body", "kind": "raise", "detail": "SchemaError|frozen-cooldown-anchor-json requires workload_profile", "count": 1, "guard": "5c9b9029cb8ea8af", "category": "INTERNAL", "protects": "usage boundary moved from _cmd_run (same conditions as e6b6a0ce): run_campaign renders this argv and passes only anchors that already pass cooldown_anchor_eligibility (scripts/run_campaign.py _cooldown_anchor_eligibility)", "added": "adeccc4c0", "note": "Sol F9: not NUMBER_INTEGRITY; reclassified"},
   {"file": "joulewise/cli.py", "function": "_cmd_run_body", "kind": "raise", "detail": "SchemaError|instrument-calibration-dir and instrument-power-policy", "count": 1, "guard": "6f4a2a5c0edd0ec0", "category": "INTERNAL", "protects": "usage boundary moved from _cmd_run (same conditions as e6b6a0ce): option pairing and the dwell minimum on argv the chain renders; a rendered chain cannot violate them", "added": "adeccc4c0", "note": "Sol F9: not NUMBER_INTEGRITY; reclassified"},
   {"file": "joulewise/cli.py", "function": "_cmd_run_body", "kind": "raise", "detail": "SchemaError|post-window-sampling-dwell-s must be", "count": 1, "guard": "d09129c4c26ed7b7", "category": "INTERNAL", "protects": "usage boundary moved from _cmd_run (same conditions as e6b6a0ce): option pairing and the dwell minimum on argv the chain renders; a rendered chain cannot violate them", "added": "adeccc4c0", "note": "Sol F9: not NUMBER_INTEGRITY; reclassified"},
+  {"file": "joulewise/cli.py", "function": "_cmd_run_body", "kind": "raise", "detail": "SchemaError|thermal gate cells", "count": 1, "guard": "729f0754e88014cf", "category": "INTERNAL", "protects": "usage boundary on the prospective align_episode branch only (WP14(c) cited rebind, docs/align/council-2026-11-05/WP14-RULINGS.md): a thermal-gate registry exists only for an ALIGN episode with a gate map, and gate cells need a fresh process per member, so repetitions > 1 is refused before any collection. No registered HAZARD pack reaches it.", "added": "ALIGN v4 WP14(c)"},
   {"file": "joulewise/cli.py", "function": "_cmd_validate_bundle", "kind": "return_code", "detail": "2", "count": 1, "guard": "fb8393d821cb5ac9", "category": "BASELINE"},
   {"file": "joulewise/cli.py", "function": "_hazard_sigterm_salvage.handler", "kind": "raise", "detail": "SystemExit|SIGTERM_EXIT_STATUS", "count": 1, "guard": "e3b0c44298fc1c14", "category": "INTERNAL", "protects": "propagates a SIGTERM the member received (member cap or driver stop) after salvaging its bytes; the stop decision is the sender's", "added": "adeccc4c0"},
   {"file": "joulewise/cli.py", "function": "_load_config", "kind": "raise", "detail": "SchemaError|config is not", "count": 1, "guard": "dc02352945717936", "category": "BASELINE"},
