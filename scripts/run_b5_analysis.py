@@ -53,6 +53,10 @@ shadow_<permille>) that names restricted/logs/run-vdl-mode-<token>.json, which t
 beside restricted/decisions/step-codes.jsonl (one row per record step with its raw refusal code,
 for the D-188 result-equivalence comparator, then one random whitespace-only salt line so the
 record's digest of it reveals no redacted code) in the outputs of the last step that ran.
+JOULEWISE_B5_PACK_PARALLEL (speed only, never an output change): unset or "on" lets the independent
+per-pack computations of steps 3b, 5, 10 and 11 run ahead in a bounded pool and be consumed in pack
+order; "off" keeps the serial r2 path; a comma-separated list of pack function names (bracket_pack,
+prepare_producer, reported_pack, derive_pack) enables only those.
 
 What the run prints: on standard error one line per step as it ends, "step <id> <pack or -> <status>",
 where the status is one of ok, tooling_refusal, outcome_class, unclassified_refusal, not_run; on

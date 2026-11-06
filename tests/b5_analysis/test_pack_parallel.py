@@ -36,6 +36,20 @@ def bracket_fixture_worker(task):
 
 
 class PackTransportTests(unittest.TestCase):
+    def test_operator_switch_keeps_the_serial_path(self):
+        with arc.analysis_run_caches({}, workers=3):
+            calls = [(('a',), {}), (('b',), {})]
+            for value, expected in (('off', False), ('read_pack', True), ('bracket_pack, derive_pack', False),
+                                    ('on', True)):
+                with patch.dict('os.environ', {pp.PACK_PARALLEL_ENV: value}):
+                    self.assertIs(pp.pack_scheduling_enabled(read_pack), expected)
+                    if not expected:
+                        self.assertIsNone(pp.pack_map(read_pack, calls))
+        with patch.dict('os.environ', {}, clear=False):
+            import os
+            os.environ.pop(pp.PACK_PARALLEL_ENV, None)
+            self.assertTrue(pp.pack_scheduling_enabled(read_pack))
+
     def test_opaque_caller_argument_keeps_the_serial_path(self):
         with arc.analysis_run_caches({}, workers=3):
             self.assertIsNone(pp.pack_map(read_pack, [((lambda: None,), {}), ((lambda: None,), {})]))

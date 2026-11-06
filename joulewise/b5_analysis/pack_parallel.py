@@ -99,12 +99,34 @@ def run_pack(task):
     return members.MemberOutcome(ok, value, records, firings, _snapshot(physics), vdl_new=delta, cost=cost)
 
 
+PACK_PARALLEL_ENV = 'JOULEWISE_B5_PACK_PARALLEL'
+
+
+def pack_scheduling_enabled(function) -> bool:
+    """Operator switch for pack scheduling; every value keeps the same outputs.
+
+    Unset or ``on``: every pack computation may run ahead. ``off``: none (the
+    r2 serial path). Otherwise a comma-separated list of pack function names
+    (for example ``bracket_pack,derive_pack``) that may run ahead.
+    """
+    import os
+
+    raw = os.environ.get(PACK_PARALLEL_ENV, 'on').strip()
+    if raw == 'on':
+        return True
+    if raw == 'off':
+        return False
+    return function.__name__ in {name.strip() for name in raw.split(',')}
+
+
 def pack_map(function, calls):
     """Compute ahead; never account an unconsumed pack. None keeps the serial path."""
     from concurrent.futures import ProcessPoolExecutor
 
     caches = arc.current()
     if caches is None or caches.workers < 2 or len(calls) < 2 or members.fill_active():
+        return None
+    if not pack_scheduling_enabled(function):
         return None
     reference = function.__module__ + ':' + function.__qualname__
     if '<' in reference or _program(reference) is not function:
