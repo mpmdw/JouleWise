@@ -251,12 +251,84 @@ class SourceTests(unittest.TestCase):
             self.assertEqual(row["bytes_present"], 60)
             self.assertEqual(json.loads((run / "download.progress.jsonl").read_text())["bytes_present"], 60)
 
+    def test_progress_ignores_unset_xet_cache_instead_of_walking_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp); hub = base / "hub"; run = base / "run"
+            blobs = hub / "models--Qwen--Qwen3.8-Flash-Next" / "blobs"; blobs.mkdir(parents=True)
+            (blobs / "a").write_bytes(b"a" * 10); run.mkdir()
+            (base / "cwd-noise").write_bytes(b"n" * 1000)
+            plan = base / "plan.json"; plan.write_text(json.dumps({"total_bytes": 100, "metadata": {}}))
+            args = live.parse_args(["progress", "--metadata", str(plan), "--run-dir", str(run),
+                                    "--volume", str(base), "--once"])
+            env = {k: v for k, v in os.environ.items() if k != "HF_XET_CACHE"}
+            env["HF_HUB_CACHE"] = str(hub)
+            cwd = os.getcwd()
+            try:
+                os.chdir(base)
+                with patch.dict(os.environ, env, clear=True):
+                    row = live.progress(args)
+            finally:
+                os.chdir(cwd)
+            self.assertEqual(row["bytes_present"], 10)
+
+    def test_convert_phase_eta_does_not_add_the_conversion_budget_again(self):
+        import datetime as dt
+        now = dt.datetime(2026, 11, 7, 12, tzinfo=dt.timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp); hub = base / "hub"; run = base / "run"
+            (hub / "models--Qwen--Qwen3.8-Flash-Next" / "blobs").mkdir(parents=True); run.mkdir()
+            (run / "convert.progress.jsonl").write_text(json.dumps(
+                {"monotonic_elapsed": 3600, "bytes_written": 50, "bytes_total_expected": 100}) + "\n")
+            plan = base / "plan.json"; plan.write_text(json.dumps({"total_bytes": 0, "metadata": {}}))
+            # 1 h conversion remaining + 1 h verify/eject margin fits a 3 h cutoff.
+            cutoff = (now + dt.timedelta(hours=3)).isoformat()
+            args = live.parse_args(["progress", "--metadata", str(plan), "--run-dir", str(run),
+                                    "--volume", str(base), "--once", "--cutoff", cutoff])
+            with patch.dict(os.environ, {"HF_HUB_CACHE": str(hub)}), \
+                 patch.object(live, "utc_now", return_value=now), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                row = live.progress(args)
+            self.assertEqual(row["phase"], "convert")
+            self.assertAlmostEqual(row["eta_seconds"], 3600)
+            self.assertFalse(row["eta_past_cutoff"])
+
+    def test_download_receipt_gets_timing_without_an_artifact_key(self):
+        info = types.SimpleNamespace(sha=live.REVISION, siblings=[
+            types.SimpleNamespace(rfilename="config.json", size=2, blob_id="b", lfs=None)])
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp); snapshot = base / "snapshot"; snapshot.mkdir()
+            out = base / "run" / "download.json"
+            hub = types.SimpleNamespace(HfApi=Mock(return_value=Mock(model_info=Mock(return_value=info))),
+                                        snapshot_download=Mock(return_value=str(snapshot)))
+            with patch.dict(sys.modules, {"huggingface_hub": hub}), \
+                 patch.dict(os.environ, {"HF_HUB_CACHE": str(base / "hub")}), \
+                 patch.object(sys, "platform", "darwin"), \
+                 patch.object(live, "external", side_effect=Path), \
+                 patch.object(live, "measurement_agents_loaded", return_value=[]), \
+                 patch.object(live, "volume_info", return_value={}), \
+                 patch.object(live, "cache_environment", return_value={}), \
+                 patch.object(live, "download_free_space_need", return_value=0), \
+                 patch.object(os, "statvfs", return_value=types.SimpleNamespace(f_bavail=10**12, f_frsize=1)), \
+                 patch.object(live, "verify_source", return_value={"config.json": "d"}), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(live.main(["download", "--validation-only", "--out", str(out)]), 0)
+            receipt = json.loads(out.read_text())
+            self.assertEqual(receipt["total_bytes"], 2)
+            self.assertIn("elapsed_seconds", receipt)
+            self.assertFalse(Path(str(out) + ".attempt.json").exists())
+
 
 class ReportFixtureTests(unittest.TestCase):
-    def test_real_macos_iostat_header_variants(self):
-        for raw in ("          disk4\n    KB/t xfrs   MB\ndisk4  16.00 100 1234.50\n",
-                    "disk4\n KB/t xfrs MB read MB writ\ndisk4 8.0 2 10.0 20.0\n"):
-            self.assertEqual(reporting.iostat_cumulative_mb(raw, "disk4"), float(raw.splitlines()[-1].split()[-1]))
+    def test_real_macos_iostat_output(self):
+        # Captured from `iostat -Id disk0` on macOS 15: the numeric row has no
+        # device-name prefix.
+        raw = "              disk0 \n    KB/t xfrs   MB \n   96.67 520062923 49096104.01 \n"
+        self.assertEqual(reporting.iostat_cumulative_mb(raw, "disk0"), 49096104.01)
+        two = "              disk0               disk4 \n    KB/t xfrs   MB     KB/t xfrs   MB \n" \
+              "   96.67 520 4909.01    16.00 100 1234.50 \n"
+        self.assertEqual(reporting.iostat_cumulative_mb(two, "disk4"), 1234.50)
+        with self.assertRaises(ValueError):
+            reporting.iostat_cumulative_mb(raw, "disk4")
 
     def test_report_pending_prediction_miss_and_speed_ranges(self):
         template = "{{PERFORMANCE_ROWS}}\n{{EVIDENCE}}\n{{NEXT_ACTIONS}}\n{{SYNTHETIC}}"

@@ -48,9 +48,10 @@ def utc_now():
 
 def timing(started, finished, total_bytes):
     elapsed = max(0.0, (finished - started).total_seconds())
+    total = int(total_bytes) if total_bytes is not None else None
     return {"started_utc": started.isoformat(), "finished_utc": finished.isoformat(),
-            "elapsed_seconds": elapsed, "total_bytes": int(total_bytes),
-            "mean_MBps": (int(total_bytes) / 1e6 / elapsed) if elapsed else None}
+            "elapsed_seconds": elapsed, "total_bytes": total,
+            "mean_MBps": (total / 1e6 / elapsed) if elapsed and total is not None else None}
 
 
 def write_json(path, data):
@@ -241,7 +242,8 @@ def download(args):
     digests = verify_source(snapshot, metadata)
     return {"schema": "qwen4exp-source/v1", "repo": REPO_ID, "revision": REVISION,
             "snapshot": str(snapshot), "metadata": metadata, "sha256": digests,
-            "max_workers": getattr(args, "max_workers", 2)}
+            "max_workers": getattr(args, "max_workers", 2),
+            "total_bytes": sum(int(m["size"]) for m in metadata.values())}
 
 
 def convert(args):
@@ -294,12 +296,13 @@ def progress(args):
     expected = int(plan.get("total_bytes") or sum(int(v["size"]) for v in plan["metadata"].values()))
     hub = Path(os.environ["HF_HUB_CACHE"])
     blobs = hub / ("models--" + REPO_ID.replace("/", "--")) / "blobs"
-    xet = Path(os.environ.get("HF_XET_CACHE", ""))
+    # An unset HF_XET_CACHE must not become Path("") == cwd and count the repo.
+    xet = Path(os.environ["HF_XET_CACHE"]) if os.environ.get("HF_XET_CACHE") else None
     output = args.progress_path or (args.run_dir / "download.progress.jsonl")
     samples = []
     while True:
         now = utc_now()
-        downloaded = tree_bytes(blobs) + tree_bytes(xet)
+        downloaded = tree_bytes(blobs) + (tree_bytes(xet) if xet else 0)
         samples.append((now.timestamp(), downloaded))
         rates = {}
         for minutes in (1, 5, 15):
@@ -322,7 +325,10 @@ def progress(args):
         past = False
         if args.cutoff and eta is not None:
             cutoff = datetime.fromisoformat(args.cutoff.replace("Z", "+00:00"))
-            past = now.timestamp() + eta + args.convert_budget_h * 3600 + 3600 > cutoff.timestamp()
+            # During conversion the ETA already is the remaining conversion
+            # time; only the download phase adds the conversion budget.
+            budget = args.convert_budget_h * 3600 if row["phase"] == "download" else 0
+            past = now.timestamp() + eta + budget + 3600 > cutoff.timestamp()
         row["eta_past_cutoff"] = past
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("a") as stream:
@@ -878,7 +884,7 @@ def main(argv=None):
             raise
         finished = utc_now()
         total = result.get("total_bytes")
-        if total is None:
+        if total is None and "artifact" in result:
             total = sum(p.stat().st_size for p in Path(result["artifact"]).iterdir() if p.is_file())
         result.update(timing(started, finished, total))
     write_json(args.out, result)

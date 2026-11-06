@@ -20,13 +20,27 @@ TARGETS = {512: (400, 30), 2048: (550, 30)}
 
 
 def iostat_cumulative_mb(text, device):
-    """Parse macOS ``iostat -Id diskN`` (KB/t, xfrs, cumulative MB)."""
-    for line in reversed(text.splitlines()):
-        fields = line.split()
-        if fields and fields[0] == device:
-            numbers = [float(x) for x in fields[1:] if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", x)]
-            if numbers:
-                return numbers[-1]
+    """Parse macOS ``iostat -Id diskN`` cumulative MB.
+
+    Real output is a device-name line, a ``KB/t xfrs MB`` units line per
+    device, then one numeric row with three columns per device (the values
+    row carries no device name)::
+
+                  disk4
+        KB/t xfrs   MB
+       96.67 5200 4909.01
+    """
+    number = re.compile(r"[-+]?\d+(?:\.\d+)?")
+    lines = [line.split() for line in text.splitlines() if line.strip()]
+    for i, fields in enumerate(lines):
+        if device in fields and all(not number.fullmatch(x) for x in fields):
+            column = fields.index(device)
+            for values in lines[i + 1:]:
+                if values and all(number.fullmatch(x) for x in values):
+                    if len(values) >= 3 * (column + 1):
+                        return float(values[3 * column + 2])
+                    break
+            break
     raise ValueError(f"iostat cumulative MB missing for {device}")
 
 
