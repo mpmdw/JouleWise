@@ -1040,6 +1040,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+175. **Magistrate activation 3efb8793 (Opus 5.5, headless, 2026-11-05 from 21:53 PST).** Record: `docs/process_traces/2026-11-05-magistrate-3efb8793/RECORD.md`. No pending notices and no mail from Ed.
+- **ALIGN pilot 10 done** (chain GO, 15:18-21:49). Desk `instrument_incomplete`: 24/28 eligible; every check that does not depend on exclusions passed. Excluded by the registered physics rules: spam ordinals 8-10 (a macOS battery top-up at 21-31 W from 17:52, after the pack sagged to about 95 %; ordinal 9 is a replay anchor) and bank ordinal 17 (thermal level 1).
+- Held-out pooled thresholds (pilots 8-10, seeds 17-46): m 28 per pair, still the sample maximum. Sequence design: bank 2.53, spam 7.13, unchanged; **spam still rests on one trajectory** (next 2.99). All six untampered sabotage scores from pilots 8-10 below; all detected at the smallest tamper. K = 7 anchors: pilot 10 offset +2.34 J, sigma_w 4.67 J, residual SD 1.93 J. Clock correlation bank +0.79 (fifth positive session; print-only).
+- **Input for v4:** the request-phase battery assists total about 300 J for a session, but a 5 % sag is about 18 kJ, so the pack drains outside the measured requests and macOS tops it up mid-session. Expect this in any long v4 session; a charge setting or schedule may remove it (doctrine gate 5).
+- Pin 640 (`4ab3b6e25`, `lane/2026-11-05-align-pilot10-benign`). `DESK_DONE` written. Ed emailed (Gmail `1a1afcc20a03040b`). Pilot 8-10 roots kept on disk (item 174 (4)); 80 GB free.
+
+**Next activation (written 2026-11-05 by activation 3efb8793; item 175; replaces item 173 (1) and item 174 (1)-(2), both done; item 174 (3)-(4) hold):**
+(1) **Nothing armed; protocol v3 is finished.** Arm nothing under v3. Until the laptop lead's follow-up item naming the merged v4 kit commit is on main (item 174 (3)), a relaunch with no mail from Ed and no directive change exits quietly, with no record and no commit.
+(2) When that item lands, follow it: R0 desk checks headless by day between windows, under the PR #661 runbook, and R1 when it says R1 may be armed.
+(3) Pilots 8-10 (`/Users/edr/night-align/pilot-v7-20261105T015948Z`, `pilot-v8-20261105T102850Z`, `pilot-v9-20261105T231016Z`) stay on disk; no offload except through the PR #665 runbook.
+
 174. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-05 about 15:40 PST: pilot 10 is the LAST v3 pilot; ALIGN moves to v4 (Qwen3.8-27B) next.** Ed, on the pilot-10 arm notice: "why are we still running v3 pilots? ... do we still have anything to gain from v3 pilot blocks?", then "yes go ahead, make pilot 10 the last v3 and do the necessary work to get v4 ready". v3 thresholds are specific to Qwen3-30B and do not transfer to Qwen3.8-27B, so pilot 11 at seeds 47-56 has little left to add.
 
 **Next activation (written 2026-11-05 by the laptop lead, interactive session 359dce51; item 174; amends item 173 (1) only in its "Next window" bullet; everything else in item 173 (1) holds):**
