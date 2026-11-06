@@ -71,6 +71,18 @@ class ShippedTableTest(unittest.TestCase):
 
 
 class ReferenceVerdictTest(unittest.TestCase):
+    def test_finite_happy_path_profile_is_byte_identical_to_legacy_arithmetic(self):
+        losses = losses_from_bins(D_MLX_BINS)
+        profile = r0.loss_profile(losses, revision=r0.PINS["D"]["revision"],
+                                  fixture_sha256=D_FIXTURE, stack_versions={"mlx": "test"})
+        legacy = {"schema": r0.NLL_PROFILE_SCHEMA, "model_revision": r0.PINS["D"]["revision"],
+                  "fixture_sha256": D_FIXTURE, "stack_versions": {"mlx": "test"},
+                  "targets": len(losses), "losses_sha256": r0.digest(losses),
+                  "nll_nats_per_token": sum(losses) / len(losses),
+                  "bins256": [sum(losses[i:i + 256]) / len(losses[i:i + 256])
+                              for i in range(0, len(losses), 256)]}
+        self.assertEqual(json.dumps(profile, sort_keys=True), json.dumps(legacy, sort_keys=True))
+
     def test_mean_tolerance(self):
         ref = shipped()
         base = next(e for e in ref["models"] if e["label"] == "D")["reference"]["bins256"]
@@ -549,6 +561,23 @@ class RunnerReportTest(unittest.TestCase):
                 self.assertEqual(load["nll_nonfinite_count"], count)
                 self.assertEqual(load["nll_targets"], 2048)
                 self.assertNotIn("nll_losses", (root / "report.md").read_text())
+
+    def test_finite_overflowing_losses_remain_strict_json_and_fail_the_bar(self):
+        """Regression: sum([1e306] * 2048) used to write Infinity, then become a
+        report_serialization_error instead of preserving the load verdict.
+        """
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(FakeBackend, "nll_losses", return_value=[1e306] * 2048):
+            root = Path(tmp)
+            report, on_disk, load = self.run_load(root)
+            self.assertEqual((report["status"], on_disk["status"], load["status"]),
+                             ("fail", "fail", "fail"))
+            self.assertEqual(load["nll_verdict"]["reason"],
+                             "mean_outside_tolerance+bin_outside_tolerance")
+            self.assertNotEqual(load.get("reason"), "report_serialization_error")
+            self.assertEqual(load["nll_nats_per_token"], 1e306)
+            self.assertEqual(load["nll_verdict"]["max_abs_bin_delta"], 1e306)
+            json.loads((root / "report.json").read_text(), parse_constant=lambda value: self.fail(value))
 
     def test_finite_losses_are_stored_and_kept_out_of_the_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:

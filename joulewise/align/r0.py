@@ -151,11 +151,20 @@ def loss_profile(losses, *, revision, fixture_sha256, stack_versions):
     """What a qualified R0 run pins for exact reproduction: loss-vector digest, mean, bins."""
     losses = [float(v) for v in losses]
     finite = bool(losses) and all(math.isfinite(v) for v in losses)
+    # Preserve the ordinary (and therefore report-byte-compatible) arithmetic for
+    # real NLLs.  If an adversarial finite vector overflows ``sum``, compute its
+    # mathematical mean without first constructing the overflowing total.  A
+    # finite input vector must not leak Infinity into the strict-JSON report.
+    mean = sum(losses) / len(losses) if finite else None
+    if finite and not math.isfinite(mean):
+        mean = sum(value / len(losses) for value in losses)
+    bins = nll_bins(losses) if finite else None
+    if mean is not None and (not math.isfinite(mean) or not all(math.isfinite(v) for v in bins)):
+        mean, bins = None, None
     return {"schema": NLL_PROFILE_SCHEMA, "model_revision": revision, "fixture_sha256": fixture_sha256,
             "stack_versions": dict(stack_versions) if isinstance(stack_versions, dict) else None,
             "targets": len(losses), "losses_sha256": digest(losses),
-            "nll_nats_per_token": sum(losses) / len(losses) if finite else None,
-            "bins256": nll_bins(losses) if finite else None}
+            "nll_nats_per_token": mean, "bins256": bins}
 
 
 def _validate_reproduce(label, entry):
@@ -272,7 +281,14 @@ def reference_entry(config, revision, fixture_sha256):
 
 
 def nll_bins(losses, width=NLL_BIN_WIDTH):
-    return [sum(losses[i:i + width]) / len(losses[i:i + width]) for i in range(0, len(losses), width)]
+    bins = []
+    for i in range(0, len(losses), width):
+        values = losses[i:i + width]
+        mean = sum(values) / len(values)
+        if not math.isfinite(mean) and all(math.isfinite(value) for value in values):
+            mean = sum(value / len(values) for value in values)
+        bins.append(mean)
+    return bins
 
 
 def model_revision(backend):
@@ -308,7 +324,7 @@ def nll_verdict(losses, *, revision, fixture_sha256, references, references_sha2
         # Never fall back to an absolute limit for an unlisted model/fixture.
         return fail("no_reference")
     row.update(mode=entry["mode"], entry=entry.get("label"))
-    if not finite:
+    if not finite or mean is None:
         return fail("nll_not_finite")
     if len(losses) != NLL_TARGETS:
         return fail("target_count_mismatch")

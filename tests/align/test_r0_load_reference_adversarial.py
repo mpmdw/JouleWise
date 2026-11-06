@@ -64,6 +64,13 @@ class SilentPassProbes(unittest.TestCase):
             with self.subTest(n=len(losses)):
                 self.assertEqual(d_verdict(losses)["status"], "fail")
 
+    def test_finite_overflowing_vector_has_finite_means(self):
+        verdict = d_verdict([1e306] * 2048)
+        self.assertEqual(verdict["nll_nats_per_token"], 1e306)
+        self.assertEqual(verdict["bins256"], [1e306] * 8)
+        self.assertEqual(verdict["reason"], "mean_outside_tolerance+bin_outside_tolerance")
+        json.dumps(verdict, allow_nan=False)
+
     def test_identity_must_be_exact(self):
         for revision in ("", D_REV.upper(), D_REV[:8], " " + D_REV):
             with self.subTest(revision=revision):
