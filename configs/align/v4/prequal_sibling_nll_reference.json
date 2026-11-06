@@ -1,0 +1,58 @@
+{
+  "schema": "joulewise.align.r0.nll_reference.v1",
+  "description": "Prequal-only R0 load NLL table for the off-Mac sibling backend (joulewise/align/prequal.py SiblingBackend). Same format and verdict as configs/align/v4/r0_nll_reference.json (r0.validate_references / r0.nll_verdict); the sibling names its own revision (nll_reference_revision), so it can never be judged against D's entry. A sibling pass qualifies the R0 load code path only, never D's numerics (docs/align/v4/R0-LOAD-REFERENCE-NOTE.md, 'Prequal off-Mac').",
+  "bin_width": 256,
+  "targets": 2048,
+  "models": [
+    {
+      "label": "prequal-sibling",
+      "name": "mlx-community/Qwen3.5-0.8B-8bit",
+      "revision": "87e768fbfa03994095f3d14527c80c5ae70c5758",
+      "mode": "reference",
+      "fixture_sha256": "792beb565106c53ed77695c7ccbb998b11300b3ba25e485c8c0069dcb710ac42",
+      "targets": 2048,
+      "reference": {
+        "nll_nats_per_token": 0.4669,
+        "bins256": [
+          1.4805,
+          0.3635,
+          0.6806,
+          0.5135,
+          0.1038,
+          0.0846,
+          0.0875,
+          0.421
+        ]
+      },
+      "tolerance": {
+        "mean_nats_per_token": 0.1,
+        "bin_nats_per_token": 0.5,
+        "basis": "D's bar (configs/align/v4/r0_nll_reference.json), which the R0 load executing review applied to this sibling for its fault-injection table (docs/align/reviews/2026-11-06-r0-load-reference-executing-review.md). Observed |mlx - hf32| on this fixture: 0.0005 (mlx bf16 0.4674), 0.0006 (mlx 8-bit 0.4663)."
+      },
+      "provenance": {
+        "implementation": "HF transformers 5.22.1, Qwen3_5DecoderLayer, float32 weights and activations, layer-streamed",
+        "upstream_repo": "Qwen/Qwen3.5-0.8B",
+        "upstream_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+        "upstream_revision_basis": "The diagnosis did not record the 0.8B revision. Qwen/Qwen3.5-0.8B main has had no commit after 2026-03-02 (HF commit list read 2026-11-06), so main at the 2026-11-06 run is 2fc06364.",
+        "upstream_dtype": "bfloat16",
+        "script": {
+          "path": "docs/align/r0/2026-11-06-d-nll-diagnosis/scripts/stream27.py",
+          "branch": "lane/2026-11-06-r0-d-nll-diagnosis",
+          "commit": "62bc719f73da4874bb9fd1a2d5c0ee2d1d8f0881"
+        },
+        "results": {
+          "path": "docs/align/r0/2026-11-06-d-nll-diagnosis/results/qwen35_08b_stream.json",
+          "sha256": "859487332939ff3fcce986167ee0840384a5c9eb205480b88339dc1c208e4ddf",
+          "variant": "variants.hf32.start_0"
+        },
+        "date": "2026-11-06",
+        "bins": "Mean per-target NLL over consecutive 256-target bins of variants.hf32.start_0.per_token (2,048 targets), rounded to 4 decimals.",
+        "fixture": "D's pinned R0 load ids (sha 792beb56...ac42); the sibling shares D's vocab and the prequal renders with D's tokenizer.",
+        "cross_checks_nats_per_token": {
+          "mlx_lm_bf16_upstream": 0.4674,
+          "mlx_lm_8bit": 0.4663
+        }
+      }
+    }
+  ]
+}

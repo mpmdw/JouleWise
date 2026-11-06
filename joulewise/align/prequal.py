@@ -16,7 +16,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 import hashlib
 import importlib.util
-import inspect
 import json
 import math
 import os
@@ -35,6 +34,9 @@ D_REPO = "mlx-community/Qwen3.8-27B-8bit"
 STACK = {"mlx": "0.31.2", "mlx-lm": "0.31.3", "transformers": "5.12.1"}
 PINS_PATH = REPO / "configs/align/v4/qwen38-27b-8bit-hf-pins.json"
 REFERENCE_PATH = REPO / "configs/align/v4/prequal_r0_reference.json"
+# The sibling's own R0 load NLL entry (mode reference, HF fp32 0.4669), in R0's table format.
+SIBLING_NLL_REFERENCE_PATH = REPO / "configs/align/v4/prequal_sibling_nll_reference.json"
+SIBLING_NLL_LABEL = "prequal-sibling"
 R0_CONFIG_PATH = REPO / "configs/align/v4/r0_desk.json"
 ANCHOR_REVISION = "d388dead1515f5e085ef7a0431dd8fadf0886c57"
 WEIGHT_PREFIX = "model-"
@@ -62,7 +64,7 @@ MAC_ONLY = {
     "launcher.preflight": "AC power and free disk on the Mac",
     "launcher.launch (live)": "LaunchAgent bootstrap, desk fence handoff, Spotlight pause on the Mac",
     "r1.*": "powermode A-B-A, soak, high-power adoption, thermal/deadman/OS-load measurement",
-    "w1.w1_disk_gate": "80 GB free and offload re-hash on the Mac's disk",
+    "w1.w1_disk_gate": "80 GB free and offload re-hash on the Mac's disk (align_v4_session install --w1-disk-config)",
     "w1.install": "launchd census and agent installation on the Mac",
     "w1.disk_snapshot": "statvfs/important-capacity on the Mac",
     "magistrate.census/fence/span": "live process table, desk fence and plan span on the Mac",
@@ -137,6 +139,9 @@ class Context:
 
     def reference(self):
         return json.loads((self.repo / REFERENCE_PATH.relative_to(REPO)).read_text())
+
+    def sibling_nll_references(self):
+        return json.loads((self.repo / SIBLING_NLL_REFERENCE_PATH.relative_to(REPO)).read_text())
 
     def hf_api(self):
         if self._hf_api is None:
@@ -251,6 +256,9 @@ class SiblingBackend:
         info = build_sibling_dir(ctx)
         backend = _r0_mlx().MlxBackend("D", str(info["dir"]), str(ctx.shade_cache()), NullGuard())
         backend.prequal_sibling = {k: (str(v) if isinstance(v, Path) else v) for k, v in info.items()}
+        # The hybrid dir carries D's config revision; the NLL verdict must key on the
+        # sibling's own artifact (r0.model_revision), never borrow D's 11.064 entry.
+        backend.nll_reference_revision = info["revision"]
         return backend
 
 
@@ -484,22 +492,73 @@ def check_kit(ctx):
         problems.append("identity_pins derivation tree_sha256")
     inputs = kit.read_inputs(ctx.repo)
     pending = kit.pending_inputs(inputs)
+    d_identity = "pending"
+    if not any(p.startswith("WP11.") for p in pending):
+        # A filled WP11 must bind the pinned shards at every stage, not only at W1.
+        try:
+            d_identity = kit.validate_d_identity(inputs["WP11"], kit.read_d_pins(ctx.repo))
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            d_identity = f"{type(exc).__name__}: {exc}"
+            problems.append("WP11 D identity: " + d_identity)
     readiness = None
     try:
-        params = inspect.signature(kit.require_ready).parameters
-        if len(params) >= 2 and hasattr(kit, "read_r1_slots"):
-            kit.require_ready(inputs, kit.read_r1_slots(ctx.repo))
-        else:
-            kit.require_ready(inputs)
+        # Inputs, D identity and the R1-derived sizing_b5.json: what prepare/arm require.
+        kit.require_w1_ready(ctx.repo)
         readiness = "ready"
     except (ValueError, OSError, KeyError, TypeError) as exc:
         readiness = f"{type(exc).__name__}: {exc}"
     if ctx.stage == "w1" and readiness != "ready":
-        problems.append("W1 requires require_ready to pass: " + readiness)
+        problems.append("W1 requires require_w1_ready to pass: " + readiness)
     return {"status": "fail" if problems else "pass", "problems": problems, "files_checked": len(files),
             "members": len(plan["members"]), "pending_inputs": pending, "require_ready": readiness,
-            "stage": ctx.stage,
+            "d_identity_folded_sha256": d_identity, "stage": ctx.stage,
             "note": "Pending inputs are expected before R0/R1; only stage w1 requires readiness."}
+
+
+def check_w1_plan(ctx):
+    """R1 kit checks: the W1 plan template and validator, L1, the fit rule, and the filled plan."""
+    from scripts import align_v4_kit as kit, validate_align_v4_w1_plan as validator
+    plan = json.loads((ctx.repo / kit.KIT / "collection_plan.json").read_bytes())
+    inputs, r1_slots = kit.read_inputs(ctx.repo), kit.read_r1_slots(ctx.repo)
+    template_path = ctx.repo / kit.KIT / "night_plan.template.json"
+    problems = []
+    if template_path.read_bytes() != validator.template_bytes(plan):
+        problems.append("night_plan.template.json drifted from collection_plan.json (--regenerate-template)")
+    try:
+        validator.validate(json.loads(template_path.read_bytes()), inputs, r1_slots, collection_plan=plan)
+        problems.append("validator accepted the PENDING_R1 template")
+    except ValueError as exc:
+        template_refusal = str(exc)
+        if "PENDING_R1" not in template_refusal:
+            problems.append("template refused for a reason other than its placeholders: " + template_refusal)
+    # Lead ruling L1 and the A1 fit rule on the planning costs (no measured values).
+    l1 = {"t_dead_tail_20": kit.l1_t_dead(300.0, 20.0), "t_dead_tail_75": kit.l1_t_dead(300.0, 75.0)}
+    if not math.isclose(l1["t_dead_tail_20"], (1750 - 300) / kit.DEADMAN_FACTOR) or not math.isclose(
+            l1["t_dead_tail_75"], (1800 - 300 - 75 - 10) / kit.DEADMAN_FACTOR):
+        problems.append("l1_t_dead does not implement lead ruling L1")
+    kit.check_l1_member_fit(300.0, l1["t_dead_tail_75"], 75.0)
+    def planning(ordinal, budget):
+        role = kit.ROSTER[ordinal - 1][0]
+        return 1800 if role == "D" else 3131.27 / 4 if role == "anchor" else 1150 if role.endswith("G") else 850
+    fit = kit.fit_roster(8192, planning)
+    if fit["programmed_span_s"] != 26927 or fit["actions"]:
+        problems.append(f"fit_roster on the Amendment-1 planning costs: {fit}")
+    filled, verdict = kit.read_w1_plan(ctx.repo), None
+    if filled is None:
+        verdict = f"pending: {kit.W1_PLAN} (the R1-filled template) is not committed"
+        if ctx.stage == "w1":
+            problems.append("W1 requires the R1-filled " + str(kit.W1_PLAN))
+    else:
+        try:
+            verdict = {"status": "VALID", **validator.validate(filled, inputs, r1_slots, collection_plan=plan)}
+        except ValueError as exc:
+            verdict = f"REFUSED: {exc}"
+            problems.append(f"{kit.W1_PLAN} refused: {exc}")
+        if not (ctx.repo / kit.SIZING).is_file():
+            problems.append(f"{kit.SIZING} missing beside {kit.W1_PLAN} (regenerate the kit)")
+    return {"status": "fail" if problems else "pass", "problems": problems, "stage": ctx.stage,
+            "w1_plan": verdict, "l1": l1, "fit_rule_planning_span_s": fit["programmed_span_s"],
+            "note": "Validator, L1 and fit rule self-tests run at every stage; stage w1 requires the filled plan."}
 
 
 def check_d_pins(ctx):
@@ -554,15 +613,25 @@ def check_pin_verifier(ctx):
     hub["checks"][0]["models"]["D"]["files"].append({"path": ".cache/huggingface/download/x.metadata",
                                                      "bytes": 1, "sha256": "0" * 64})
     bookkeeping = verifier.verify(hub, pins)
+    # Only the exact top-level hf --local-dir prefix is exempt (PR #686, f1ae2d3be).
+    nested = json.loads(json.dumps(report))
+    nested["checks"][0]["models"]["D"]["files"].append({"path": "sub/.cache/huggingface/x.safetensors",
+                                                        "bytes": 1, "sha256": "0" * 64})
+    nested_result = verifier.verify(nested, pins)
     problems = []
     if clean:
         problems.append(f"verifier rejects an exact pinned inventory: {clean}")
     if not tampered:
         problems.append("verifier accepts a size mismatch")
+    if bookkeeping:
+        problems.append(f"verifier rejects .cache/huggingface/ bookkeeping: {bookkeeping}")
+    if not nested_result:
+        problems.append("verifier exempts a non-top-level .cache/huggingface/ path")
     row = {"status": "fail" if problems else "pass", "problems": problems,
            "hf_cache_bookkeeping_result": bookkeeping,
-           "known_behavior": ("The verifier FAILs on .cache/huggingface/ bookkeeping files; RUN_STATE item 179 "
-                              "ruled that acceptable for the 2026-11-06 re-run. Fix or rule before W1.")}
+           "hf_cache_bookkeeping_counted": getattr(verifier, "bookkeeping", lambda r: None)(hub),
+           "known_behavior": ("The verifier counts and reports top-level .cache/huggingface/ bookkeeping and "
+                              "does not compare it (PR #686, f1ae2d3be; RUN_STATE item 179).")}
     if ctx.r0_report:
         found = verifier.verify(json.loads(Path(ctx.r0_report).read_text()), pins)
         row["r0_report"] = {"path": str(ctx.r0_report), "problems": found,
@@ -850,10 +919,37 @@ def check_model_load(ctx):
             "fidelity": SiblingBackend.fidelity}
 
 
+def generation_ran_end_to_end(generation):
+    """Problems if R0's generation check did not run render -> greedy decode -> parse ->
+    tool_envelopes -> schema validation. Its pass/fail outcome is not judged here."""
+    if not isinstance(generation, dict) or not generation.get("attempts"):
+        return ["generation check did not run"]
+    problems = []
+    first = generation["attempts"][0]
+    if first.get("decode") != "greedy":
+        problems.append("first generation attempt was not greedy")
+    for index, attempt in enumerate(generation["attempts"]):
+        turn = attempt.get("turn") or {}
+        if not turn.get("prompt_token_ids") or not isinstance(attempt.get("prompt_sha256"), str):
+            problems.append(f"attempt {index}: no rendered prompt")
+        if not isinstance(turn.get("tokens"), int) or turn["tokens"] <= 0:
+            problems.append(f"attempt {index}: no decoded tokens")
+        envelopes = attempt.get("envelopes")
+        if not isinstance(envelopes, dict) or "attempted_envelopes" not in envelopes:
+            problems.append(f"attempt {index}: tool_envelopes accounting missing")
+        if attempt.get("status") not in ("pass", "fail") or not isinstance(attempt.get("problems"), list):
+            problems.append(f"attempt {index}: no generation verdict")
+        if any(str(p).startswith("schema_ref_unresolved") for p in attempt.get("problems") or ()):
+            problems.append(f"attempt {index}: schema validation could not run")
+    if generation.get("status") not in ("pass", "fail"):
+        problems.append("generation check has no verdict")
+    return problems
+
+
 def check_load(ctx):
     from joulewise.align import r0
     backend = _model_backend(ctx)
-    result = r0.load_coherence(backend)
+    result = r0.load_coherence(backend, references=ctx.sibling_nll_references())
     ref = ctx.reference()
     problems = []
     if result["nll_prompt_sha256"] != ref["nll_prompt"]["sha256"]:
@@ -862,14 +958,30 @@ def check_load(ctx):
         problems.append("NLL is not finite")
     if result["short"]["prompt_token_ids"] and digest(result["short"]["prompt_token_ids"]) != ref["short"]["prompt_token_ids_sha256"]:
         problems.append("short prompt ids differ from the Mac's")
+    verdict = result["nll_verdict"]
+    if verdict.get("status") != "pass":
+        problems.append(f"sibling NLL verdict {verdict.get('status')}: {verdict.get('reason')}")
+    if verdict.get("entry") != SIBLING_NLL_LABEL or verdict.get("model_revision") != ctx.sibling_revision:
+        problems.append("NLL verdict did not use the sibling's own reference entry")
+    generation = result.get("generation")
+    problems.extend(generation_ran_end_to_end(generation))
     trip = result["tool_round_trip"]
     return {"status": "fail" if problems else "pass", "problems": problems, "backend": ctx.model_backend,
-            "nll_nats_per_token": result["nll_nats_per_token"], "d_nll_limit": 3.0,
-            "nll_vs_d_limit_is_diagnostic": True, "coherent": result["coherent"],
+            "nll_nats_per_token": result["nll_nats_per_token"],
+            "nll_verdict": {k: verdict.get(k) for k in ("status", "reason", "mode", "entry", "model_revision",
+                                                        "fixture_sha256", "reference_nll_nats_per_token",
+                                                        "delta_nats_per_token", "max_abs_bin_delta")},
+            "generation_outcome_is_diagnostic": True,
+            "generation_outcome": ({k: generation.get(k) for k in ("status", "problems", "requested_tool",
+                                                                   "retried", "decode", "tokens")}
+                                   if isinstance(generation, dict) else None),
+            "r0_load_status_is_diagnostic": True, "r0_load_status": result.get("status"),
+            "coherent": result["coherent"],
             "echo_round_trip_succeeded": trip["succeeded"], "echo_error": trip["error"],
             "short_tokens": result["short"]["tokens"], "short_visible_tail": result["short"]["visible_text"][-80:],
-            "fidelity": ("Code path only (load, render, chunked-cache NLL loop, chat, parse, tool reply, "
-                         "second turn). The NLL value is the sibling's, not D's: R0 load stays on the Mac.")}
+            "fidelity": ("Code path only (load, render, chunked-cache NLL loop with the sibling's own HF fp32 "
+                         "reference entry, chat, parse, tool reply, second turn, and R0's generation check end to "
+                         "end). The verdict is the sibling's, not D's: R0 load stays on the Mac.")}
 
 
 def check_generated(ctx):
@@ -888,7 +1000,7 @@ def check_generated(ctx):
 
 AIR_CHECKS = (
     ("stack", check_stack), ("r0-config", check_r0_config), ("launcher", check_launcher),
-    ("kit", check_kit), ("d-pins", check_d_pins), ("d-pin-verifier", check_pin_verifier),
+    ("kit", check_kit), ("w1-plan", check_w1_plan), ("d-pins", check_d_pins), ("d-pin-verifier", check_pin_verifier),
     ("d-tokenizer-files", check_tokenizer_files), ("template-render", check_template_render),
     ("nll-fixture-ids", check_nll_fixture), ("template-rewrites", check_template_rewrites),
     ("tool-roundtrip", check_tool_roundtrip), ("checkpoint-native", check_checkpoint_native),
@@ -931,7 +1043,10 @@ def run(ctx, *, only=None, skip=()):
                 "joulewise/align/prequal.py", "scripts/align_v4_prequal.py", "joulewise/align/r0.py",
                 "joulewise/align/r0_mlx.py", "joulewise/align/r0_runner.py", "scripts/align_v4_kit.py",
                 "configs/align/v4/r0_desk.json", "configs/align/v4/qwen38-27b-8bit-hf-pins.json",
-                "configs/align/v4/prequal_r0_reference.json") if (ctx.repo / p).is_file()},
+                "configs/align/v4/prequal_r0_reference.json", "configs/align/v4/r0_nll_reference.json",
+                "configs/align/v4/prequal_sibling_nll_reference.json", "scripts/validate_align_v4_w1_plan.py",
+                "configs/campaigns/align_v4/registration/inputs.json")
+                if (ctx.repo / p).is_file()},
             "model_backend": ctx.model_backend, "total_seconds": round(time.monotonic() - started, 3),
             "authority": "RUN_STATE item 183 (no check pinned to the Mac if it can run elsewhere); "
                          "Ed 2026-11-06: checks that measure the Mac itself stay on the Mac.",
