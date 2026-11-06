@@ -187,7 +187,8 @@ class WorkedExamples(unittest.TestCase):
         for actual,val in zip(e["metrology_interval_j"],[1.037072,4.962928]): self.close(actual,val,6)
 
     def test_S9_holm(self):
-        for p,expected in (([.01,.04],[.02,.04]),([.03,.2],[.06,.2]),([.001,None],[.002,1.])):
+        # Blind D-190 ruling, 2026-11-05: a missing test keeps its null.
+        for p,expected in (([.01,.04],[.02,.04]),([.03,.2],[.06,.2]),([.001,None],[.002,None])):
             with self.subTest(p=p): self.assertEqual(r.holm(p),expected)
 
     def test_S10_outcome(self):
