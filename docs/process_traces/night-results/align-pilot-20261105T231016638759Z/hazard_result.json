@@ -1,0 +1,443 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-align/pilot-v9-20261105T231016Z/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "4acf18520e05056439eaaed4380ae9ba89f09ddbdbcc30fe2ca37f1aeac895a1",
+    "sidecar_sha256": "4acf18520e05056439eaaed4380ae9ba89f09ddbdbcc30fe2ca37f1aeac895a1",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-bound-collection"
+      },
+      {
+        "kind": "neg8_corpus_retry_decision",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-bound-collection.retry-decision"
+      },
+      {
+        "kind": "neg8_corpus_collected",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-bound-derivation.corpus"
+      },
+      {
+        "kind": "bound_derivation",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-bound-derivation"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-episodes-a"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-reference-midpoint"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-episodes-b"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-reference-end"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "align-pilot-v3-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 1928518716484833,
+    "monotonic_raw_ns": 1928518716484583,
+    "wall_s": 1793944181.7327008
+  },
+  "faults": {
+    "bound_derivation_failed": false,
+    "post_bracket_failed": false,
+    "reasons": []
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 447,
+    "head": "83e2dac59d347f34052f5713280d62ef60bb01d8",
+    "path": "/Users/edr/night-align/pilot-v9-20261105T231016Z/custody/night/executed_inventory.json",
+    "sha256": "8c01ffa42faf92e481385e5f0bc00c9e182429f823b97ff17187c0174eac1e55",
+    "status_clean": false
+  },
+  "keep_awake": {
+    "pid": 62579,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-align/pilot-v9-20261105T231016Z/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1928518469540625,
+        "monotonic_raw_ns": 1928518469540250,
+        "wall_s": 1793944181.4857569
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "50501a473fe3853e91d0ad97f38f83c24d9d2192e91af45153625053852c55d0",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-align/pilot-v9-20261105T231016Z/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1928518147691000,
+        "monotonic_raw_ns": 1928518147690416,
+        "wall_s": 1793944181.163907
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 1905294097427708,
+          "monotonic_raw_ns": 1905294097427500,
+          "wall_s": 1793920957.1136441
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.841
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 1928513137466375,
+      "monotonic_raw_ns": 1928513137465875,
+      "wall_s": 1793944176.153683
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 1928518147691000,
+      "monotonic_raw_ns": 1928518147690416,
+      "wall_s": 1793944181.163907
+    },
+    "released": {
+      "monotonic_ns": 1928518147601750,
+      "monotonic_raw_ns": 1928518147600125,
+      "wall_s": 1793944181.163818
+    },
+    "released_after_chain_s": 5.01
+  },
+  "neg8_corpus": {
+    "collected_manifest": {
+      "path": "/Users/edr/night-align/pilot-v9-20261105T231016Z/custody/night/transcript/neg8-settled-corpus.collected.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "committed_manifest": {
+      "path": "/Users/edr/night-align/pilot-v9-20261105T231016Z/measurement/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "errors": [],
+    "members_kept": 18,
+    "members_listed": 18,
+    "pruned": false,
+    "summary": {
+      "path": "/Users/edr/night-align/pilot-v9-20261105T231016Z/custody/night/transcript/neg8-settled-corpus.collected.summary.json",
+      "sha256": "0fe7d2f001e3aa87520408a9cde4df68249a7fdb3fad6e77d0baf21c092956d9"
+    }
+  },
+  "pack_id": "align-pilot-v3",
+  "plan_id": "align-pilot-20261105T231016638759Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": -228,
+    "end": {
+      "monotonic_ns": 1928513137480125,
+      "monotonic_raw_ns": 1928513137477875,
+      "read_skew_ns": 333,
+      "sleep_offset_ns": 1,
+      "uptime_raw_ns": 1928513137477874,
+      "wall_s": 1793944176.153697
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 1905294978419333,
+      "monotonic_raw_ns": 1905294978416666,
+      "read_skew_ns": 958,
+      "sleep_offset_ns": 229,
+      "uptime_raw_ns": 1905294978416437,
+      "wall_s": 1793920957.994636
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 1905017197200166,
+    "monotonic_raw_ns": 1905017197199500,
+    "wall_s": 1793920680.2134159
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 53,
+    "failed": 0,
+    "logged": 53,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 18,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 18,
+        "present": 18,
+        "rc": 0,
+        "role": "corpus",
+        "stage_id": "align-pilot-v3-bound-collection",
+        "status": "OK",
+        "succeeded": 18
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "align-pilot-v3-reference-start",
+        "status": "OK",
+        "succeeded": 3
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 14,
+        "min_valid": 12,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 14,
+        "present": 14,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "align-pilot-v3-episodes-a",
+        "status": "OK",
+        "succeeded": 14
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 0,
+        "ok": 0,
+        "ordinal": 7,
+        "planned": 1,
+        "present": 1,
+        "rc": 0,
+        "role": "reference_midpoint",
+        "stage_id": "align-pilot-v3-reference-midpoint",
+        "status": "OK",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 14,
+        "min_valid": 12,
+        "ok": 0,
+        "ordinal": 8,
+        "planned": 14,
+        "present": 14,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "align-pilot-v3-episodes-b",
+        "status": "OK",
+        "succeeded": 14
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 9,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "align-pilot-v3-reference-end",
+        "status": "OK",
+        "succeeded": 3
+      }
+    ],
+    "planned": 53,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 53,
+    "yield_status": "FULL"
+  },
+  "yield_plan": {
+    "planned": 53,
+    "source": [
+      "driver"
+    ],
+    "stages": 6
+  },
+  "yield_tripwire": {
+    "attempted_seen": 53,
+    "counted_in_settle": 5,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 6,
+    "stalled": false
+  }
+}
