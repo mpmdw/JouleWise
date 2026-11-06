@@ -107,6 +107,38 @@ class DeskFenceTests(WatchdogTestCase):
         self.assertEqual("FENCED", wd._launch_fence(self.harness.storage, self.harness.deps, wd.initial_state()).state)
         self.assertFalse(wd._remote_probe_allowed(self.harness.storage, self.harness.deps, wd.initial_state()))
 
+    def test_stale_removal_by_decide_records_event_and_notice(self):
+        for pid, deadline, why in ((401, self.base.timestamp() + 10, "owner pid dead before deadline"),
+                                   (400, self.base.timestamp(), "deadline passed")):
+            with self.subTest(why=why):
+                record = self.fence(pid=pid, deadline=deadline)
+                self.harness.processes.rows = [wd.ProcessInfo(400, 1, "start", "desk job")]
+                state = wd.initial_state()
+                self.assertTrue(wd.decide(self.harness.storage, self.harness.deps, state).launch)
+                notices = [n for n in state["notice_pending"] if n["kind"] == "desk_fence_stale"]
+                self.assertEqual(1, len(notices))
+                self.assertIn(why, notices[0]["reason"])
+                self.assertIn("spotlight", notices[0]["reason"].lower())
+                events = [json.loads(line) for line in
+                          (self.harness.storage.root / "events.jsonl").read_text().splitlines()]
+                self.assertIn({"kind": "desk_fence_stale_removed", "why": why, "fence": record},
+                              [{k: e.get(k) for k in ("kind", "why", "fence")} for e in events])
+
+    def test_active_fence_and_no_fence_queue_no_notice(self):
+        state = wd.initial_state()
+        wd.decide(self.harness.storage, self.harness.deps, state)
+        self.fence()
+        self.harness.processes.rows = [wd.ProcessInfo(400, 1, "start", "desk job")]
+        wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertEqual([], state["notice_pending"])
+
+    def test_boundary_rechecks_treat_stale_as_inactive_without_removal(self):
+        self.fence(pid=401)
+        self.harness.processes.rows = []
+        self.assertIsNone(wd._launch_fence(self.harness.storage, self.harness.deps, wd.initial_state()))
+        self.assertTrue(wd._remote_probe_allowed(self.harness.storage, self.harness.deps, wd.initial_state()))
+        self.assertTrue((self.harness.storage.root / launcher.FENCE_NAME).exists())
+
     def test_fence_published_during_version_probe_prevents_spawn(self):
         binary = self.temp / "binary"
         binary.write_text("fixture")
@@ -221,6 +253,7 @@ from pathlib import Path
 root=Path(os.environ['WP10_FIXTURE_ROOT'])
 with (root/'signals.log').open('a') as f: f.write(' '.join(sys.argv[1:])+'\\n')
 pid=int(sys.argv[2])
+if sys.argv[1]=='-CONT' and (root/'cont-fail').exists(): sys.exit(1)
 if pid not in (900000001,900000002):
     try: os.kill(pid, getattr(signal,'SIG'+sys.argv[1][1:]))
     except ProcessLookupError: pass
@@ -250,7 +283,8 @@ sys.exit(7 if c['case']=='error' else 0)
         if path.exists() and not (self.root / "worker.done").exists():
             try:
                 os.killpg(int(path.read_text()), signal.SIGKILL)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
+                # macOS reports EPERM for a group whose leader is a zombie.
                 pass
             self.wait_for(lambda: (self.root / "worker.done").exists())
 
@@ -422,6 +456,58 @@ sys.exit(7 if c['case']=='error' else 0)
         self.output.mkdir()
         self.assertEqual(2, self.launch().returncode)
         self.assertEqual(original, launcher.read_fence(self.custody))
+
+    def stale_notice(self):
+        from tests.test_magistrate_watchdog import Harness
+        harness = Harness(self.custody, dt.datetime.now().astimezone())
+        state = wd.initial_state()
+        decision = wd.decide(harness.storage, harness.deps, state)
+        return decision, [n for n in state["notice_pending"] if n["kind"] == "desk_fence_stale"]
+
+    def test_normal_exit_removes_spotlight_record_and_queues_no_notice(self):
+        self.assertEqual(0, self.launch().returncode)
+        self.stop(self.owner)
+        self.wait_for(lambda: launcher.read_fence(self.custody) is None)
+        self.wait_for(lambda: (self.root / "worker.done").exists())
+        self.assertEqual([], list(self.custody.glob("r0-launches/*/spotlight-stopped")))
+        self.assertEqual([], self.stale_notice()[1])
+
+    def test_sigkill_leaves_record_and_watchdog_queues_stale_notice(self):
+        self.config.write_text(json.dumps({"root": str(self.root), "case": "term"}))
+        self.assertEqual(0, self.launch().returncode)
+        self.stop(self.owner)
+        self.wait_for(lambda: (self.root / "runner.started").exists())
+        # launchd SIGKILLs the job's process group; no trap can run.
+        os.killpg(int((self.root / "worker.pid").read_text()), signal.SIGKILL)
+        self.wait_for(lambda: (self.root / "worker.done").exists())
+        self.assertNotIn("-CONT ", (self.root / "signals.log").read_text())
+        record = next(self.custody.glob("r0-launches/*/spotlight-stopped")).read_text().split()
+        self.assertEqual(["900000001", "corespotlightd", "900000002", "spotlightknowledged"], record)
+        decision, notices = self.stale_notice()
+        self.assertTrue(decision.launch)
+        self.assertIsNone(launcher.read_fence(self.custody))
+        self.assertEqual(1, len(notices))
+        self.assertIn("owner pid dead", notices[0]["reason"])
+
+    def test_resume_failure_keeps_fence_for_stale_notice(self):
+        (self.root / "cont-fail").touch()
+        self.assertEqual(0, self.launch().returncode)
+        self.stop(self.owner)
+        self.wait_for(lambda: (self.root / "worker.done").exists())
+        self.assertEqual("2", (self.root / "worker.done").read_text())
+        self.assertIsNotNone(launcher.read_fence(self.custody))
+        self.assertTrue(list(self.custody.glob("r0-launches/*/spotlight-stopped")))
+        self.assertIn("Spotlight resume failed", self.logs())
+        decision, notices = self.stale_notice()
+        self.assertTrue(decision.launch)
+        self.assertEqual(1, len(notices))
+
+    def test_far_future_deadline_is_refused_before_publication(self):
+        result = self.launch("--deadline", str(time.time() + launcher.MAX_DESK_SECONDS + 60))
+        self.assertEqual(2, result.returncode)
+        self.assertIn("more than", result.stderr)
+        self.assertIsNone(launcher.read_fence(self.custody))
+        self.assertFalse((self.root / "launchctl.log").exists())
 
     def test_disk_is_report_only_at_66_gb(self):
         args = SimpleNamespace(pmset_bin=str(self.pmset), disk_path=self.root)

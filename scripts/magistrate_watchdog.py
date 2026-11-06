@@ -1930,12 +1930,25 @@ def reset_backoff_after_reboot(
     )
 
 
-def desk_fence_active(storage: Storage, deps: Dependencies, now_epoch_s: float) -> dict[str, Any] | None:
+def desk_fence_active(
+    storage: Storage,
+    deps: Dependencies,
+    now_epoch_s: float,
+    state: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """A bounded desk job fences relaunches without exempting any agent census.
 
     No fence means no extra process-table call, lock file, or state mutation.
     A malformed/unreadable fence fails closed through the callers' unsafe hold.
     Stale removal shares a lock with the magistrate/LaunchAgent PID handoff.
+
+    Only decide() passes ``state``: it alone removes a stale fence, records the
+    removal and queues a notice. The launcher clears its own fence on every
+    trapped exit path, so a fence the watchdog must remove means launcher
+    cleanup did not finish (SIGKILL, crash or a failed Spotlight resume) and
+    corespotlightd/spotlightknowledged may still be SIGSTOPped. Boundary
+    rechecks treat a stale fence as inactive without removing it; the next
+    tick's decide() removes it and queues the notice.
     """
     path = storage.root / DESK_FENCE_NAME
     if not storage.exists(path):
@@ -1944,6 +1957,7 @@ def desk_fence_active(storage: Storage, deps: Dependencies, now_epoch_s: float) 
         record = read_desk_fence(storage.root)
         if record is None:
             return None
+        why = "deadline passed"
         if record["deadline"] > now_epoch_s:
             try:
                 rows = deps.processes.snapshot()
@@ -1952,7 +1966,24 @@ def desk_fence_active(storage: Storage, deps: Dependencies, now_epoch_s: float) 
             if any(row.pid == record["pid"] and "<defunct>" not in row.command.casefold()
                    for row in rows):
                 return record
+            why = "owner pid dead before deadline"
+        if state is None:
+            return None
         storage.unlink(path)
+        storage.append_jsonl(storage.root / "events.jsonl", {
+            "schema": EVENT_SCHEMA, "kind": "desk_fence_stale_removed", "why": why,
+            "fence": dict(record), "epoch_s": now_epoch_s,
+        })
+        notices = state.setdefault("notice_pending", [])
+        notice_id = f"desk-fence-stale-{record['purpose']}-{record['pid']}"
+        if not any(isinstance(item, dict) and item.get("id") == notice_id for item in notices):
+            notices.append({
+                "id": notice_id, "kind": "desk_fence_stale", "epoch_s": now_epoch_s,
+                "reason": (f"desk fence {record['purpose']} (pid {record['pid']}) removed by the "
+                           f"watchdog: {why}. Launcher cleanup did not finish; check that "
+                           "corespotlightd/spotlightknowledged are not stopped (ps -o stat=) and "
+                           "read r0-launches/<id>/spotlight-stopped and stderr.log under custody."),
+            })
     return None
 
 
@@ -2019,7 +2050,7 @@ def decide(
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
     try:
-        desk = desk_fence_active(storage, deps, wall.timestamp())
+        desk = desk_fence_active(storage, deps, wall.timestamp(), state)
     except (OSError, ValueError, OverflowError, RuntimeError) as exc:
         return Decision("HOLD_UNSAFE", f"desk_fence: {exc}")
     # Delivery is only a candidate for release. The courier and driver can

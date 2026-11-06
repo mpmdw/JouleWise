@@ -20,6 +20,10 @@ import uuid
 
 
 FENCE_NAME = "desk_fence.json"
+# R0 is planned at ~3-6.5 h. The deadline bounds both the runner and the
+# watchdog fence; a cap stops a unit slip (ms for s) or a typo from fencing
+# the magistrate for days if the job hangs or its PID is reused.
+MAX_DESK_SECONDS = 12 * 3600
 
 
 def positive_seconds(value: str) -> float:
@@ -176,6 +180,8 @@ def launch(args) -> None:
     if (args.magistrate_pid <= 1 or not pid_alive(args.magistrate_pid)
             or not math.isfinite(args.deadline) or args.deadline <= time.time()):
         raise ValueError("live magistrate PID and future finite epoch deadline required")
+    if args.deadline > time.time() + MAX_DESK_SECONDS:
+        raise ValueError(f"desk deadline is more than {MAX_DESK_SECONDS} s ahead")
     if args.output.exists():
         raise ValueError("R0 output must be a new record directory")
     runner = args.repo / "scripts/align_r0_checks.py"

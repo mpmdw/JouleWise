@@ -41,7 +41,8 @@ directories belong to the R0 directive.
 ```
 
 `deadline` is Unix wall-clock seconds, supplied explicitly for the entire desk
-including startup and cleanup. The command writes the magistrate PID before
+including startup and cleanup. The launcher refuses a deadline more than
+12 hours ahead, so a unit slip cannot fence the magistrate for days. The command writes the magistrate PID before
 `launchctl bootstrap gui/<uid> <plist>`. The LaunchAgent wrapper atomically
 takes ownership with its own PID. The command waits up to 30 seconds for that
 handoff before reporting success. The wrapper waits up to 180 seconds for the
@@ -55,6 +56,12 @@ plan stand-down deadlines retain precedence. Missing fences preserve ordinary
 watchdog behavior. Dead or defunct PIDs and deadlines at or before the current
 time cause stale removal; subsequent launches still require the existing
 stop/backoff/plan predicates. Malformed or unreadable fences hold unsafe.
+Only the tick's decision removes a stale fence; launch-boundary rechecks
+treat it as inactive and leave the removal to the next tick. Because the
+wrapper clears its own fence on every trapped exit path, a removal by the
+watchdog means launcher cleanup did not finish. Each removal appends a
+`desk_fence_stale_removed` event and queues one `desk_fence_stale` notice in
+`notice_pending`, which the next magistrate mails to Ed.
 
 The separate `.desk-fence.lock` serializes publication, transfer, stale removal
 and ownership-checked cleanup. The resident service lock remains untouched.
@@ -82,11 +89,17 @@ The wrapper sends SIGSTOP to the exact PIDs found by `pgrep -x corespotlightd`
 and `pgrep -x spotlightknowledged`. Its EXIT trap attempts SIGCONT for every
 PID recorded before STOP, including partial pause failures. Normal completion,
 command failure, SIGTERM, SIGINT and SIGHUP all use that cleanup; a running
-R0 child is terminated and reaped first. Resume errors are logged and return
-a failure status. The owned fence is removed only after cleanup, and an older
-job cannot clear a newer job's fence. SIGKILL and host failure cannot run a
-trap. Before live use the lead must verify Spotlight signaling permissions
-and recovery on the measurement Mac.
+R0 child is terminated and reaped first. Before each SIGSTOP the wrapper
+appends `<pid> <name>` to `r0-launches/<id>/spotlight-stopped`; it deletes
+that record only after every SIGCONT succeeds. The owned fence is removed only
+after a fully successful resume, and an older job cannot clear a newer job's
+fence. A resume error is logged, returns a failure status and leaves the fence
+for the watchdog's stale-removal notice. SIGKILL and host failure cannot run a
+trap: the job's processes die, Spotlight stays stopped, and the record plus
+the watchdog's stale notice are the recovery path. To recover, run
+`kill -CONT` on each PID in the record whose `ps -o stat= -p <pid>` shows `T`
+(a reboot also clears it). Before live use the lead must verify Spotlight
+signaling permissions and recovery on the measurement Mac.
 
 The runner command is read from `runner.json` rather than placed in launcher
 ancestor argv, so the existing measurement-chain census does not mistake the

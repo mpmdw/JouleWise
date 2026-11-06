@@ -6,6 +6,11 @@ exit_wait=$7 pmset_bin=$8 disk_path=$9
 shift 9
 pgrep_bin=$1 kill_bin=$2
 shift 2
+runner_spec=$1
+# Durable record of SIGSTOPped Spotlight PIDs. SIGKILL cannot run the trap;
+# the record survives for the operator, and the watchdog's stale-fence notice
+# points at it. Removed only after every SIGCONT succeeds.
+spotlight_record="$(dirname "$runner_spec")/spotlight-stopped"
 child_pid=""
 stopped_pids=""
 
@@ -17,14 +22,23 @@ cleanup() {
         "$kill_bin" -TERM "$child_pid" 2>/dev/null || true
         wait "$child_pid" 2>/dev/null || true
     fi
+    local resumed=1
     for pid in $stopped_pids; do
         # Record failed attempts, including disappeared PIDs, for the operator.
         if ! "$kill_bin" -CONT "$pid"; then
             echo "Spotlight resume failed for pid $pid; operator check required" >&2
             code=2
+            resumed=0
         fi
     done
-    "$python_bin" "$helper" clear --custody-root "$custody" --purpose "$purpose" --pid "$$" || code=2
+    if [[ "$resumed" -eq 1 ]]; then
+        rm -f "$spotlight_record"
+        "$python_bin" "$helper" clear --custody-root "$custody" --purpose "$purpose" --pid "$$" || code=2
+    else
+        # Leave the fence: once this PID is gone the watchdog removes it and
+        # queues a desk_fence_stale notice for Ed.
+        echo "desk fence left for watchdog stale notice; see $spotlight_record" >&2
+    fi
     exit "$code"
 }
 trap cleanup EXIT
@@ -48,6 +62,7 @@ for name in corespotlightd spotlightknowledged; do
             [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 ]] || { echo "invalid Spotlight pid: $pid" >&2; exit 2; }
             # Record before STOP so a partial failure still attempts every CONT.
             stopped_pids="$stopped_pids $pid"
+            echo "$pid $name" >> "$spotlight_record"
             "$kill_bin" -STOP "$pid"
         done
     else
@@ -55,7 +70,7 @@ for name in corespotlightd spotlightknowledged; do
         [[ "$rc" -eq 1 ]] || { echo "Spotlight census failed for $name (exit $rc)" >&2; exit 2; }
     fi
 done
-"$python_bin" "$helper" run --deadline "$deadline" --runner-spec "$1" &
+"$python_bin" "$helper" run --deadline "$deadline" --runner-spec "$runner_spec" &
 child_pid=$!
 wait "$child_pid"
 child_pid=""
