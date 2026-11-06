@@ -13,7 +13,14 @@ gold = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gold)
 
 
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+
 class GoldLogprobMathTests(unittest.TestCase):
+    @unittest.skipUnless(np is not None, "optional NumPy (batch_metrics)")
     def test_identical_logits_have_zero_symmetric_kl(self):
         result = gold.distribution_metrics([1.0, 2.0, -3.0], [1.0, 2.0, -3.0], top_k=2, target_id=0)
         self.assertAlmostEqual(result["kl_bf16_quant"], 0.0, places=14)
@@ -22,6 +29,7 @@ class GoldLogprobMathTests(unittest.TestCase):
         self.assertEqual(result["topk_overlap"], 1.0)
         self.assertAlmostEqual(result["nll_difference"], 0.0, places=14)
 
+    @unittest.skipUnless(np is not None, "optional NumPy (batch_metrics)")
     def test_synthetic_binary_kl_and_reverse(self):
         # softmax(log probabilities) recovers the desired distributions.
         result = gold.distribution_metrics([math.log(.8), math.log(.2)],
@@ -37,12 +45,6 @@ class GoldLogprobMathTests(unittest.TestCase):
             gold.distribution_metrics([1], [1, 2])
         with self.assertRaises(ValueError):
             gold.distribution_metrics([1], [1], target_id=2)
-
-
-try:
-    import numpy as np
-except ImportError:
-    np = None
 
 
 def _sha(path):
@@ -220,6 +222,73 @@ class PrepareGuardTests(unittest.TestCase):
         with mock.patch.object(live, "measurement_agents_loaded", return_value=["com.jw.agent"]):
             with self.assertRaises(ValueError):
                 gold.load_live_adapter(args)
+
+
+class _NoAdapter:
+    """Any use means prepare reached the model before refusing."""
+    def __getattr__(self, name):
+        raise AssertionError(f"prepare touched the adapter ({name}) before checking --out")
+
+
+class PrepareNeverFeedsGoldPassTests(unittest.TestCase):
+    """quant_quality.md: ``prepare`` (maxfit greedy continuations) must not feed the gold pass."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.qref = self.root / "qref"
+        self.work = self.qref / "work"
+        self.work.mkdir(parents=True)
+        (self.work / "manifest.json").write_text(json.dumps({"schema": "qwen4-gold-stream/v1"}))
+        self.prepared = self.root / "elsewhere" / "prepared.json"
+        self.prepared.parent.mkdir()
+        self.prepared.write_text(json.dumps({"schema": gold.SCHEMA, "prompts": [
+            {"name": "p", "token_ids": [1, 2], "text": "t", "tokenizer_revision": "r"}]}))
+
+    def prepare(self, out):
+        return gold.main(["prepare", "--artifact", str(self.root / "artifact"), "--manifest-sha256", "0" * 64,
+                          "--profile", "maxfit", "--chat-template", str(self.root / "t.jinja"),
+                          "--validation-only", "--out", str(out)], adapter=_NoAdapter())
+
+    def prompts_json(self, out):
+        return gold.main(["prompts-json", "--prepared", str(self.prepared), "--out", str(out)])
+
+    def gold_destinations(self):
+        """label -> (out, refusal reason); each case in its own folder so one reason applies."""
+        provenance_file = self.root / "qr" / "prompts.json"
+        provenance_file.parent.mkdir()
+        provenance_file.write_text("[]")
+        provenance_file.with_name("prompts.json.provenance.json").write_text("{}")
+        unfinished = self.root / "other" / "fresh-work"  # the stream stages before its first manifest write
+        (unfinished / "staging" / "checkpoint").mkdir(parents=True)
+        return {"inside": (self.work / "prepared.json", "into a gold-pass"),
+                "nested": (self.work / "parity" / "x" / "prepared.json", "into a gold-pass"),
+                "beside": (self.qref / "prompts.json", "beside a gold-pass"),
+                "unfinished": (unfinished / "prepared.json", "into a gold-pass"),
+                "quality-ref prompts": (provenance_file, "quality-reference prompts file")}
+
+    def check_refusals(self, command):
+        for label, (out, reason) in self.gold_destinations().items():
+            with self.subTest(label):
+                with self.assertRaisesRegex(ValueError, reason):
+                    command(out)
+                self.assertFalse(out.exists() and out.read_text() != "[]", label)
+
+    def test_prepare_refuses_a_gold_pass_destination_before_loading_anything(self):
+        self.check_refusals(self.prepare)
+
+    def test_prompts_json_refuses_a_gold_pass_destination(self):
+        self.check_refusals(self.prompts_json)
+
+    def test_an_unrelated_destination_is_still_allowed(self):
+        out = self.root / "elsewhere" / "rows.json"
+        self.assertEqual(self.prompts_json(out), 0)
+        self.assertEqual(json.loads(out.read_text())[0]["input_ids"], [1, 2])
+        self.assertIsNone(gold.refuse_gold_pass_destination(self.root / "elsewhere" / "prepared.json"))
+        # Another tool's manifest.json is not a gold work folder.
+        (self.root / "elsewhere" / "manifest.json").write_text(json.dumps({"schema": "other/v1"}))
+        self.assertIsNone(gold.refuse_gold_pass_destination(self.root / "elsewhere" / "prepared.json"))
 
 
 if __name__ == "__main__":

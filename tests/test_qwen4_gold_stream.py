@@ -461,7 +461,6 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(path.exists())
 
 
-@unittest.skipUnless(HAS_ARRAYS and HAS_SAFE and HAS_REF, "optional official reference stack")
 def fake_reference_execute(calls):
     """Reference-worker double for --reference-chain-only lifecycle tests.
 
@@ -489,6 +488,7 @@ def fake_reference_execute(calls):
     return execute
 
 
+@unittest.skipUnless(HAS_ARRAYS and HAS_SAFE, "optional NumPy and safetensors")
 class ReferenceChainOnlyTests(unittest.TestCase):
     """Lead ruling L3: the bf16 quality reference pass (head unit + its chain)."""
 
@@ -599,6 +599,7 @@ def _parity_args(work, prompts):
     return args
 
 
+@unittest.skipUnless(HAS_ARRAYS and HAS_SAFE and HAS_REF, "optional official reference stack")
 class OfficialTinyPLETests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

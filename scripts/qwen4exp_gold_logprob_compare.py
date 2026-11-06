@@ -20,7 +20,9 @@ an NPZ.  The e2e profile thresholds are reported as a secondary screen only.
 The bf16 quality reference prompts come from
 ``scripts/qwen4exp_quality_ref_prompts.py`` (lead ruling L3: fixed natural-text
 continuations, never maxfit output).  ``prepare`` (maxfit greedy
-continuations) remains only for diagnostics and must not feed the gold pass.
+continuations) remains only for diagnostics and must not feed the gold pass:
+``prepare`` and ``prompts-json`` refuse an ``--out`` in or beside a gold-stream
+work folder or over a quality-reference prompts file.
 """
 
 from __future__ import annotations
@@ -171,8 +173,48 @@ def load_live_adapter(args: argparse.Namespace) -> Any:
     return adapter
 
 
+def _gold_work_folder(directory: Path) -> bool:
+    """True for a ``qwen4-gold-stream/v1`` work folder, finished or not.
+
+    The stream creates ``staging/checkpoint`` before its first manifest
+    write, so either marker identifies the folder.
+    """
+    manifest = directory / "manifest.json"
+    if manifest.is_file():
+        try:
+            if json.loads(manifest.read_text()).get("schema") == STREAM_SCHEMA:
+                return True
+        except (OSError, ValueError, AttributeError):
+            pass
+    return (directory / "staging" / "checkpoint").is_dir()
+
+
+def refuse_gold_pass_destination(out: Path) -> None:
+    """``prepare`` output (maxfit greedy continuations) never feeds the gold pass.
+
+    Refuses an ``--out`` inside a gold-stream work folder, beside one (the
+    pass root, e.g. ``$QREF`` holding ``work/`` and ``prompts.json``), or
+    over a quality-reference ``--prompts-json`` (it has a
+    ``.provenance.json`` sidecar).
+    """
+    target = Path(out).expanduser().resolve()
+    if target.with_name(target.name + ".provenance.json").exists():
+        raise ValueError(f"refusing to overwrite a quality-reference prompts file: {target}")
+    for directory in (target.parent, *target.parent.parents):
+        if _gold_work_folder(directory):
+            raise ValueError(f"refusing to write prepare output into a gold-pass work folder: {directory}")
+    try:
+        children = list(target.parent.iterdir())
+    except OSError:
+        children = []
+    for child in children:
+        if child.is_dir() and _gold_work_folder(child):
+            raise ValueError(f"refusing to write prepare output beside a gold-pass work folder: {child}")
+
+
 def prepare(args: argparse.Namespace, adapter: Any | None = None) -> int:
     """Generate fixed continuations and retain sufficient distribution data."""
+    refuse_gold_pass_destination(args.out)
     if adapter is None:
         if sys.platform != "darwin" or not args.validation_only:
             raise ValueError("prepare requires macOS and --validation-only (never a measurement window)")
@@ -204,6 +246,7 @@ def prepare(args: argparse.Namespace, adapter: Any | None = None) -> int:
 
 
 def prompts_json(args: argparse.Namespace) -> int:
+    refuse_gold_pass_destination(args.out)
     source = json.loads(args.prepared.read_text())
     if source.get("schema") != SCHEMA:
         raise ValueError("unexpected prepared-file schema")

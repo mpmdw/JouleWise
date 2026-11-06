@@ -205,6 +205,7 @@ class TokenizerPinTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "fetch-tokenizer"):
                 qref.main(["build", "--tokenizer-dir", str(tok), "--out", str(out)], tokenizer=FakeTokenizer())
 
+    @unittest.skipUnless(HAS_JINJA, "jinja2 renders the pinned template")
     def test_preflight_rejects_a_tokenizer_without_the_official_control_ids(self):
         class Plain(FakeTokenizer):
             def encode(self, text, add_special_tokens=True):
