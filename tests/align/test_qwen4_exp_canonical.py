@@ -88,6 +88,19 @@ VISION = {"depth": 1, "hidden_size": 16, "intermediate_size": 32, "num_heads": 2
 N_LAYERS = TEXT["num_hidden_layers"]
 QSA_LAYERS = [i for i, t in enumerate(TEXT["layer_types"]) if t == "full_attention"]
 PLE_LAYERS = [i - 1 for i in TEXT["ple_layer_ids"]]
+
+
+class StaticDecodeConstructionTest(unittest.TestCase):
+    """Linux-safe checks for decode graph-construction invariants."""
+
+    def test_optional_input_sentinel_is_built_once_per_forward(self):
+        source = MODULE_FILE.read_text()
+        forward = source[source.index("class TextModel"):source.index("# Weight names and precision policy")]
+        layer = source[source.index("class DecoderLayer"):source.index("def _compile_decode_piece")]
+        self.assertEqual(forward.count("ctx.decode_empty = mx.zeros((0,), dtype=h.dtype)"), 1)
+        self.assertIn("empty = ctx.decode_empty", layer)
+        self.assertEqual(layer.count("mx.zeros((0,), dtype=h.dtype)"), 1,
+                         "only the direct-layer defensive fallback may allocate")
 RATIO = TEXT["indexer_compress_ratio"]
 TOPK = TEXT["indexer_budget"] // RATIO
 # PAD_B is not a multiple of RATIO, so the padded row's QSA blocks complete on

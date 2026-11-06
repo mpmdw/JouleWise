@@ -1245,6 +1245,12 @@ class _Context:
         self.decode_min_kv = decode_min_kv
         self.kernel_ok = kernel_ok
         self.ngram_emb: Dict[int, mx.array] = {}
+        # A decode call used to construct this zero-length placeholder once
+        # per linear layer.  It is an array input only because mx.compile
+        # cannot represent an absent optional mask/PLE row.  Sharing it for
+        # the whole forward removes Python graph construction without adding
+        # a value-producing node (size == 0 is still the sentinel contract).
+        self.decode_empty: Optional[mx.array] = None
 
 
 class GatedResidual(nn.Module):
@@ -1817,7 +1823,11 @@ class DecoderLayer(nn.Module):
         fn = compiled.get(self.layer_idx)
         if fn is None:
             fn = compiled[self.layer_idx] = _compile_decode_piece(self, "_decode_arrays")
-        empty = mx.zeros((0,), dtype=h.dtype)
+        # TextModel creates one sentinel for the whole decode forward.  Keep a
+        # defensive fallback for direct DecoderLayer callers.
+        empty = ctx.decode_empty
+        if empty is None:
+            empty = mx.zeros((0,), dtype=h.dtype)
         object.__setattr__(self, "_decode_ctx", (ctx, cache))
         try:
             result = fn(h, ctx.ssm_mask if ctx.ssm_mask is not None else empty,
@@ -1975,6 +1985,12 @@ class TextModel(nn.Module):
             ctx.ssm_mask = mx.array(ctx.valid_host)
 
         h = self.model.embed_tokens(inputs)
+        if self.compile_decode and B == 1 and S == 1 and c0.offset != 0:
+            # All compiled linear layers use the same optional-input
+            # placeholder.  Before this cache, the released 48-layer layout
+            # built one mx.zeros graph leaf for each of its 36 linear layers
+            # on every generated token.
+            ctx.decode_empty = mx.zeros((0,), dtype=h.dtype)
         if self._ngram.specs:
             # Host sync: the n-gram rows depend on the token ids just fed.
             self._gather_ngrams(np.asarray(inputs).astype(np.int64), ctx, cache, h.dtype)
