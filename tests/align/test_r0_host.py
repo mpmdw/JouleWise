@@ -12,6 +12,12 @@ from joulewise.measurement_liveness import Census
 from tests.align.test_r0_checks import config_at
 from tests.align.test_r0_step import write_capture
 
+# WP14(a) classifier fixture (docs/align/council-2026-11-05/WP14-RULINGS.md):
+# a die key (t63 <= 5 s, tau <= 300 s) and a heatsink key (t63 > 5 s,
+# 30 s < tau <= 300 s, dT >= 3 degC), with a non-stale idle series. The
+# superseded fitted rule's taus (20 s / 400 s) are record-only under WP14(a).
+WP14A_STEP = {"taus": {"TC0P": 2, "TH0P": 100}, "idle_jitter": 0.02}
+
 
 class R0HostTest(unittest.TestCase):
     def setUp(self):
@@ -279,13 +285,17 @@ class R0HostTest(unittest.TestCase):
                 self.assertEqual(call.call_args.kwargs["timeout"], 2400)
                 output = root / "output"
                 output.mkdir()
-                payload = write_capture(output)
+                payload = write_capture(output, **WP14A_STEP)
                 result = smc_enumeration(root, output)
                 self.assertEqual(result["selection"], {"s_fast": "TC0P", "s_slow": "TH0P"})
                 self.assertEqual(result["status"], "pass")
+                self.assertIn("exponential_fit_diagnostic", result)
                 self.assertEqual(result["smc_source_commit"], "58525031a")
                 self.assertEqual(result["selection_status"], "PROVISIONAL")
-                self.assertEqual(result["response"]["selection_status"], "PROVISIONAL")
+                # WP14(a): the response is the classifier's; its picks carry the
+                # provisional label, and the retired fit is a diagnostic only.
+                self.assertTrue(result["response"]["picks_provisional"])
+                self.assertEqual(result["exponential_fit_diagnostic"]["selection_status"], "PROVISIONAL")
                 payload["coverage"]["per_key"]["TH0P"]["valid_samples"] = 0
                 (output / "r0.json").write_text(json.dumps(payload))
                 self.assertEqual(smc_enumeration(root, output)["status"], "inconclusive")
@@ -298,7 +308,7 @@ class R0HostTest(unittest.TestCase):
             output = root / "output"
             output.mkdir()
             profile = {"idle_seconds": 400, "load_seconds": 1200, "recovery_seconds": 700}
-            write_capture(output, profile=profile)
+            write_capture(output, profile=profile, **WP14A_STEP)
             with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as call:
                 result = smc_enumeration(root, output, profile)
             self.assertEqual(result["status"], "pass")

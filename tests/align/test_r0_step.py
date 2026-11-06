@@ -13,8 +13,12 @@ from joulewise.align.r0_step import DEFAULT_PROFILE, ProfileRefused, profile_con
 from tests.align.test_r0_checks import FakeBackend, FakeGuard, config_at
 
 
-def synthetic_capture(taus, profile=None):
-    """Independent analytic first-order pulse at 1 Hz, with realistic stamps."""
+def synthetic_capture(taus, profile=None, idle_jitter=0.0):
+    """Independent analytic first-order pulse at 1 Hz, with realistic stamps.
+
+    ``idle_jitter`` cycles idle readings through 0, 1 and 2 jitter steps so the
+    WP14(a) classifier's stale-idle gate (>=3 distinct idle values) can pass.
+    """
     profile = profile_config(profile)
     idle, load, recovery = (profile[k] for k in ("idle_seconds", "load_seconds", "recovery_seconds"))
     total = idle + load + recovery
@@ -26,7 +30,7 @@ def synthetic_capture(taus, profile=None):
         values = {}
         for key, tau in taus.items():
             if phase == "idle":
-                rise = 0.0
+                rise = idle_jitter * (second % 3)
             elif phase == "load":
                 rise = 10 * (1 - math.exp(-(t - idle) / tau))
             else:
@@ -47,8 +51,8 @@ def synthetic_capture(taus, profile=None):
                 key: {"expected_samples": total, "valid_samples": total} for key in taus}}}, samples
 
 
-def write_capture(output, taus=None, profile=None):
-    payload, samples = synthetic_capture(taus or {"TC0P": 20, "TH0P": 400}, profile)
+def write_capture(output, taus=None, profile=None, idle_jitter=0.0):
+    payload, samples = synthetic_capture(taus or {"TC0P": 20, "TH0P": 400}, profile, idle_jitter)
     raw = ("\n".join(json.dumps(s) for s in samples) + "\n").encode()
     payload.update(samples_journal="samples.jsonl", samples_sha256=hashlib.sha256(raw).hexdigest())
     (output / "samples.jsonl").write_bytes(raw)
