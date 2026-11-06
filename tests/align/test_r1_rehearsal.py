@@ -34,11 +34,12 @@ PMSET_TEMPLATE = (
 class FakeWorld:
     def __init__(self, fail_kind=None, fail_restore=False, interrupt_kind=None,
                  t_decline=None, busy_once=(), sudo_listing=None, unsettled_soak_once=False,
-                 release_c=None, released=True):
+                 release_c=None, released=True, ignore_automatic=False):
         self.mode = 0
         self.attempts = {}
         self.release_c = release_c or {}
         self.released = released
+        self.ignore_automatic = ignore_automatic
         self.calls = []
         self.fail_kind = fail_kind
         self.fail_restore = fail_restore
@@ -61,7 +62,8 @@ class FakeWorld:
             mode = int(argv[-1])
             if mode == 0 and self.fail_restore:
                 return completed(argv, code=1, err="restore denied")
-            self.mode = mode
+            if not (mode == 0 and self.ignore_automatic):
+                self.mode = mode
             return completed(argv)
         kind = argv[argv.index("--r1-kind") + 1]
         # Like a real runtime, write into --output so directory custody is testable.
@@ -173,6 +175,18 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(runtime_calls, [])
             self.assertFalse((Path(td) / "registration/r1_slots.json").exists())
 
+    def test_restore_command_success_without_automatic_readback_keeps_marker(self):
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td) / "restore-required"
+            marker.write_text("prior crash\n")
+            world = FakeWorld(ignore_automatic=True)
+            world.mode = 2
+            guard = r1.PowerModeGuard(world, marker)
+            with self.assertRaisesRegex(r1.Refusal, "cannot_restore"):
+                guard.__enter__()
+            self.assertTrue(marker.exists())
+            self.assertEqual(world.mode, 2)
+
     def test_power_helper_uses_only_the_two_allowed_sudo_commands(self):
         with tempfile.TemporaryDirectory() as td:
             world = FakeWorld()
@@ -193,6 +207,13 @@ class R1Tests(unittest.TestCase):
             with patch.object(r1, "_run", world):
                 self.assertEqual(r1.run(self.args(td)), 3)
             self.assertFalse([call for call in world.calls if "--r1-kind" in call])
+
+    def test_sudo_rule_match_is_command_exact_not_a_prefix(self):
+        listing = ("(root) NOPASSWD: /usr/bin/pmset -c powermode 0\n"
+                   "(root) NOPASSWD: /usr/bin/pmset -c powermode 20\n")
+        guard = r1.PowerModeGuard(lambda argv: completed(argv, out=listing))
+        with self.assertRaisesRegex(r1.Refusal, "powermode 2"):
+            guard.__enter__()
 
     def test_zsh_chain_verifies_sudo_listing(self):
         chain = (Path(__file__).resolve().parents[2] / "scripts/night_chains/align_r1_rehearsal.zsh").read_text()
@@ -251,6 +272,37 @@ class R1Tests(unittest.TestCase):
         del result["deadman"]["phases_s"]["tail"]
         with self.assertRaisesRegex(r1.Refusal, "tail"):
             r1.deadman_summary("d", result)
+
+    def test_deadman_refuses_negative_phase_accounting(self):
+        phases = {name: 1.0 for name in r1.DEADMAN_PHASES}
+        phases["H"] = -1.0
+        result = {"admitted_turns": 3, "x7": False,
+                  "deadman": {"T_dead_s": 100.0, "phases_s": phases}}
+        with self.assertRaisesRegex(r1.Refusal, "non-negative"):
+            r1.deadman_summary("d", result)
+
+    def test_atomic_json_preserves_the_previous_record_and_happy_bytes(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "record.json"
+            value = {"z": [1, 2], "a": "same bytes"}
+            expected = json.dumps(value, indent=2, sort_keys=True) + "\n"
+            r1._atomic_json(path, value)
+            self.assertEqual(path.read_text(), expected)
+            previous = path.read_bytes()
+            with patch.object(r1.os, "replace", side_effect=OSError("synthetic crash")):
+                with self.assertRaisesRegex(OSError, "synthetic crash"):
+                    r1._atomic_json(path, {"replacement": True})
+            self.assertEqual(path.read_bytes(), previous)
+            self.assertFalse((path.parent / ".record.json.tmp").exists())
+
+    def test_registration_cannot_overwrite_the_measurement_record(self):
+        with tempfile.TemporaryDirectory() as td:
+            args = self.args(td, registration=Path(td) / "run/r1_result.json")
+            with patch.object(r1, "_run", FakeWorld()):
+                self.assertEqual(r1.run(args), 3)
+            record = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertEqual(record["status"], "refused")
+            self.assertIn("registration inside R1 custody", record["error"])
 
     def test_cooldown_after_d_waits_for_soak_up_to_1500_s_and_records_curve(self):
         rows = {row[0]: row for row in r1.phase_plan(False)}

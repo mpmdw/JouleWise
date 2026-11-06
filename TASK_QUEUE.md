@@ -1356,3 +1356,9 @@ the author and integration repairs; later council work orders remain separate.
 
 - [ ] Execute the native/hardware verification checklist in
   `docs/run_reports/2026-11-06-align-v4-wp15.md`; cloud work remains PROVISIONAL.
+
+## ALIGN v4 R1 adversarial review (2026-11-06)
+
+- [x] Review and harden crash restoration, deadman accounting, signal races,
+  admission, thermal exclusion, and measurement-record custody. Evidence:
+  `docs/align/reviews/sol-burn-r1-review.md`.

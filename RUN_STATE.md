@@ -7233,3 +7233,10 @@ WP15 is implemented on the WP14-rulings integration lane: the unified WP14(a)
 classifier, WP14(b) reference custody, and cited WP14(c) CLI registry rebind are
 covered by synthetic unittests. Native SMC/MLX/APFS and cross-stage hardware
 verification remains as listed in `docs/run_reports/2026-11-06-align-v4-wp15.md`.
+
+## ALIGN v4 R1 adversarial review (2026-11-06)
+
+The High Power rehearsal review is complete. Verified powermode restoration,
+exact sudo admission, non-negative deadman phase accounting, and atomic
+checkpointed measurement-record custody are implemented and documented in
+`docs/align/reviews/sol-burn-r1-review.md`. No hardware work was performed.

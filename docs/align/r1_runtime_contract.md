@@ -86,3 +86,16 @@ Each returns:
 - `e_D_j_per_token`: the step-D decode energy divided by decode tokens.
 
 The R1 chain refuses (exit 3) until every field is present.
+
+## Crash and record custody
+
+- `r1_result.json` is created with `status: running` before sudo or runtime
+  work. It is checkpointed after each accepted phase and replaced atomically
+  with file and directory fsync, so a crash leaves either the preceding valid
+  JSON checkpoint or the next complete checkpoint, never truncated JSON.
+- `r1_slots.json` uses the same atomic replacement. An explicit registration
+  path outside the R1 output remains supported, but a path inside the output
+  must be exactly `<output>/r1_slots.json`; it cannot alias a segment or
+  `r1_result.json`.
+- Automatic restore is successful only after `pmset -g custom` reads AC
+  `powermode 0`. Command exit zero alone does not clear the persistent marker.

@@ -17,6 +17,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -113,10 +114,18 @@ class PowerModeGuard(AbstractContextManager):
         result = self.runner(self.AUTO)
         self.records.append({"point": "restore_automatic", "exit_code": result.returncode,
                              "stdout": result.stdout, "stderr": result.stderr})
-        self.armed = False
-        if result.returncode == 0 and self.marker is not None:
+        # A successful pmset exit is not evidence that the requested state was
+        # installed.  Read the AC profile back before clearing the durable
+        # crash marker.  Keep this verification out of ``records`` so the
+        # successful R1 measurement record remains byte-identical.
+        verified = False
+        if result.returncode == 0:
+            observed = self.runner(self.QUERY)
+            verified = observed.returncode == 0 and parse_ac_powermode(observed.stdout) == 0
+        self.armed = not verified
+        if verified and self.marker is not None:
             self.marker.unlink(missing_ok=True)
-        return result.returncode == 0
+        return verified
 
     def __enter__(self):
         # Ed ruling 2026-11-05 (PLAN "High Power A-B-A is IN R1"): verify the
@@ -124,7 +133,10 @@ class PowerModeGuard(AbstractContextManager):
         listing = self._must(self.LIST, "sudo_list_refused")
         text = listing.stdout + listing.stderr
         for required in ("/usr/bin/pmset -c powermode 0", "/usr/bin/pmset -c powermode 2"):
-            if required not in text:
+            # sudo -l may print comma-separated commands.  A substring check
+            # also accepts e.g. ``powermode 20`` as authority for mode 2.
+            if re.search(r"(?:^|:\s*|,\s*)" + re.escape(required) + r"\s*(?=,|$)", text,
+                         flags=re.MULTILINE) is None:
                 raise Refusal("powermode.sudo_rule_missing: " + required)
         # Prove restore before any work, and leave the host Automatic.
         if not self.restore():
@@ -332,6 +344,28 @@ def _finite_number(value, label):
     return float(value)
 
 
+def _atomic_json(path, value):
+    """Durably replace one JSON record without exposing partial bytes."""
+    raw = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name("." + path.name + ".tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def deadman_summary(name, result):
     """Ruling 1(a)/(d): deadman consumption by phase, predicted turns, duty bar."""
     block = result.get("deadman")
@@ -342,6 +376,8 @@ def deadman_summary(name, result):
         raise Refusal(f"{name}.deadman.T_dead_s must be positive")
     phases = {key: _finite_number(block["phases_s"].get(key), f"{name}.deadman.{key}")
               for key in DEADMAN_PHASES}
+    if any(value < 0 for value in phases.values()):
+        raise Refusal(f"{name}: deadman phase durations must be non-negative")
     turns = result.get("admitted_turns")
     if isinstance(turns, bool) or not isinstance(turns, int) or turns < 0:
         raise Refusal(f"{name}: admitted_turns must be a non-negative integer")
@@ -539,7 +575,18 @@ def run(args):
     marker = Path(marker).resolve()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    reg = args.registration.resolve()
+    expected_reg = (output / "r1_slots.json").resolve()
+    # Admission check: do not spend a rehearsal whose registration would
+    # overwrite a segment or the top-level measurement record.
+    admission_error = (f"registration inside R1 custody must be {expected_reg}"
+                       if reg != expected_reg and reg.is_relative_to(output) else None)
     record = {"schema": SCHEMA, "status": "running", "phases": [], "powermode": []}
+    record_path = output / "r1_result.json"
+    # This is the sole top-level measurement record.  Put a durable running
+    # checkpoint in custody before sudo/model work so SIGKILL leaves an
+    # intelligible record rather than no record (or truncated JSON).
+    _atomic_json(record_path, record)
     results = {}
     # Resolve the runner at call time so synthetic rehearsals can replace the
     # complete command boundary (runtime, SMC journal, sudo and pmset).
@@ -562,6 +609,8 @@ def run(args):
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         old_handlers[sig] = signal.signal(sig, stop)
     try:
+        if admission_error:
+            raise Refusal(admission_error)
         with guard:
             soak_reference = None
             for name, kind, duration, workload_class in phase_plan(args.include_4bit):
@@ -578,6 +627,7 @@ def run(args):
                     curve = results[name].get("recovery_curve")
                     if not isinstance(curve, list) or not curve:
                         raise Refusal(f"{name}: runtime omitted the recovery curve (ruling 1(c))")
+                _atomic_json(record_path, record)
 
             # Ed ruling: A-B-A, Automatic / High Power / Automatic.  Ruling 16:
             # each leg starts only after a G0-style release against the soak;
@@ -594,6 +644,7 @@ def run(args):
                                        release_first=True, extra={"powermode": mode})
                 legs[label] = result["t_decline_s"]
                 releases[label] = row["g0_release"]["released"]
+                _atomic_json(record_path, record)
             adoption = high_power_adoption(legs["A1"], legs["B"], legs["A2"])
             unreleased = sorted(label for label, ok in releases.items() if not ok)
             if unreleased:
@@ -605,6 +656,7 @@ def run(args):
             # the driver records but never re-implements calibration custody.
             harvested = _invoke(args.runtime, "harvest", output / "harvest", soak_reference=soak_reference)
             record["phases"].append({"name": "harvest", "class": "light", "result": harvested})
+            _atomic_json(record_path, record)
         slots = derive_slots(results.get("step_D_prefill_10k_decode_4096") or {})
         temperature_summary = planning_temperature_summary(
             [results[f"planning_turn_R_plus_{int(offset)}C"] for offset in PLANNING_START_OFFSETS_C])
@@ -623,9 +675,7 @@ def run(args):
                         "deadman_budget": deadman, "duty_bar": duty,
                         "max_r1_tail_s": max(row["phases_s"]["tail"] for row in deadman),
                         "projected_mde": mde}
-        reg = args.registration.resolve()
-        reg.parent.mkdir(parents=True, exist_ok=True)
-        reg.write_text(json.dumps(registration, indent=2, sort_keys=True) + "\n")
+        _atomic_json(reg, registration)
         record.update(status="complete", **{k: v for k, v in registration.items() if k not in ("schema", "source")})
         return 0
     except BaseException as error:
@@ -637,7 +687,7 @@ def run(args):
         # exceptions raised by context teardown itself.
         guard.restore()
         record["powermode"] = guard.records
-        (output / "r1_result.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+        _atomic_json(record_path, record)
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
 
