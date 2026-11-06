@@ -1040,6 +1040,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+184. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 14:30 PST: kit delivery. The R0 load-check fix (PR #686) is merged into `lane/2026-11-05-align-pilot10-benign` at `84848dc68`.** This delivers what item 183 promised. Under item 181, whether and when to re-run R0 is the magistrate's call. This item schedules nothing.
+- **What changed in the `load` check:**
+  - **Old check:** an absolute NLL ≤ 3.0 on the SHADE ids. It was invalid for D. Upstream Qwen3.8-27B in HF fp32 also scores 11.06 on those ids (`lane/2026-11-06-r0-d-nll-diagnosis`), so the 11.04 was the model, not our artifact or runtime.
+  - **New check, part 1: reference equivalence.**
+    - Compares against `configs/align/v4/r0_nll_reference.json`, keyed by (revision, fixture), with an explicit mode per model.
+    - D: mean within ±0.10 and every 256-id bin within ±0.5 of the reference (11.0642).
+    - The anchor stays in absolute mode at 3.0.
+    - It fails closed with `no_reference` or `invalid_reference_config`.
+  - **New check, part 2: generation.**
+    - The full SHADE prompt at effort `low`. Greedy decoding first.
+    - One retry with the production sampler at seed 96, only on `hit_cap` or `unclosed_reasoning`.
+    - It passes only on exactly one schema-valid call to the requested tool, `analyze_spam_patterns`.
+  - **Optional exact-reproduction tier:** reports `not_pinned` until a pin exists. Take the pin from the first qualified live R0, in a reviewed edit to the table.
+- **Evidence:**
+  - CI green on head `c712318e5` (all 30 jobs, plus the gate ledger).
+  - Executing review: `docs/align/reviews/2026-11-06-r0-load-reference-executing-review.md`.
+  - Fable cold pass: `docs/align/reviews/2026-11-06-r0-load-reference-fable-cold-pass.md`.
+  - Dispositions: `docs/run_reports/2026-11-06-r0-load-reference-merge-gate.md`.
+  - Runbook: `docs/align/r0_desk_runbook.md`.
+- **Measurement checkout:** fast-forward it to `lane/2026-11-05-align-pilot10-benign` (`84848dc68` or later) before any R0. `scripts/launch_align_r0.py` still runs from canonical main.
+- **Coming next, no action needed now:**
+  - The R1 kit, fix round 4, is in review. R1 needs a passing R0 for its reasoning effort.
+  - A repo prune of main is being prepared. Before it merges, a later item will list any path a measurement script reads.
+
 183. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 09:45 PST: Ed answered item 182's escalation (`1a1b1e32c3a29358`) in the interactive session.** Ed: "to both the questions being asked, if it improves the process of getting the science done faster, and does not harm anything, of course. dont miss the forrest for the trees e.g. pin a check to the measurement mac that could happen ahead of time or faster on a different machine or whatever, the only condition is this devbox isnt permanently on, but it will be permanently on and yours for the next 3 days so we can get a big sprint done".
 - **(i) Off-Mac reference check: yes.** It is running now on the laptop (the MacBook Air), not as a cloud seat. A small same-architecture `qwen3_5` sibling is scored on the record's 2,049 ids under both mlx_lm and HF transformers, then compared layer by layer if they diverge. If that is not conclusive, the 27B bf16 HF reference follows. Results go to `lane/2026-11-06-r0-d-nll-diagnosis`.
 - **(ii) D artifact or runtime pin may change** if the diagnosis points at one, through the usual review gates:
