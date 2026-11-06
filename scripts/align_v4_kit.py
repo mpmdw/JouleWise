@@ -41,7 +41,8 @@ SPAN_LIMIT_S = 26940
 SCAFFOLD_S = 4995
 BUDGET_FLOOR = 6144
 
-# Ordinals remain stable after dropping 18; the late replay remains ordinal 18.
+# Ordinals are stable. After council ruling 1(g)'s swap the late replay of 5 is
+# ordinal 17 and development index 93 is ordinal 18.
 # name, pair, condition, seed index. Arm letters refer only to the contrast.
 ROSTER = (
     ('anchor', 'spam_filter_update', 'benign', 1),
@@ -104,7 +105,64 @@ def read_r1_slots(root=ROOT):
     return json.loads((Path(root) / R1_SLOTS).read_bytes())
 
 
-def require_ready(inputs, r1_slots=None):
+R1_SLOTS_SCHEMA = 'joulewise.align.r1_slots.v1'
+R1_HARDWARE_SOURCE = 'R1 hardware rehearsal'
+R1_SYNTHETIC_SOURCE = 'R1 synthetic rehearsal'
+HIGH_POWER_VERDICTS = ('adopt', 'not_adopted', 'inconclusive')
+U5_VERDICTS = ('pass', 'fail', 'inconclusive')
+# Council ruling 1(e): steps 1-4 of the named fallback order. A recorded step
+# lets a failed duty bar admit; nothing else does.
+DUTY_FALLBACK_STEPS = (1, 2, 3, 4)
+
+
+def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
+    """Bind r1_slots to R1 evidence (executing review MEDIUM-3).
+
+    The record must be the R1 driver's own (schema and hardware source; the
+    synthetic source only for the WP22/tests harness that asks for it), its
+    step-d I_D must equal inputs.R1.I_D, the frozen AC powermode must follow
+    the A-B-A verdict, max_r1_tail_s must be the largest gated-run tail, U5
+    must carry a verdict, every ruling 20 census must have passed, and the
+    duty bar must pass or carry a recorded lead fallback step (ruling 1(e)).
+    """
+    if not isinstance(r1_slots, dict) or r1_slots.get('schema') != R1_SLOTS_SCHEMA:
+        raise ValueError(f'R1 r1_slots must be a {R1_SLOTS_SCHEMA} record')
+    allowed = (R1_HARDWARE_SOURCE, R1_SYNTHETIC_SOURCE) if synthetic else (R1_HARDWARE_SOURCE,)
+    if r1_slots.get('source') not in allowed:
+        raise ValueError(f'R1 r1_slots source must be {R1_HARDWARE_SOURCE!r}, not {r1_slots.get("source")!r}')
+    slots = r1_slots.get('slots')
+    if not isinstance(slots, dict) or not finite(slots.get('I_D')):
+        raise ValueError('R1 r1_slots must carry the step-d slots with a finite I_D')
+    if not finite(inputs['R1']['I_D']) or not math.isclose(inputs['R1']['I_D'], slots['I_D'],
+                                                           rel_tol=0, abs_tol=1e-9):
+        raise ValueError(f'inputs.R1.I_D {inputs["R1"]["I_D"]!r} differs from r1_slots.slots.I_D {slots["I_D"]!r}')
+    high = r1_slots.get('high_power')
+    if not isinstance(high, dict) or high.get('verdict') not in HIGH_POWER_VERDICTS:
+        raise ValueError('R1 r1_slots must carry the ruling 16 A-B-A verdict')
+    if r1_slots['ac_powermode'] != (2 if high['verdict'] == 'adopt' else 0):
+        raise ValueError('R1 r1_slots ac_powermode disagrees with the A-B-A verdict')
+    u5 = r1_slots.get('u5')
+    if not isinstance(u5, dict) or u5.get('verdict') not in U5_VERDICTS or u5.get('c') != 1.0:
+        raise ValueError('R1 r1_slots must carry the U5 verdict with c = 1.0 (lead ruling L2)')
+    budget = r1_slots.get('deadman_budget')
+    tails = [((row or {}).get('phases_s') or {}).get('tail') for row in budget] if isinstance(budget, list) else []
+    if not tails or not all(finite(t) for t in tails) or r1_slots['max_r1_tail_s'] != max(tails):
+        raise ValueError('R1 r1_slots max_r1_tail_s must be the largest gated-run tail in deadman_budget')
+    volumes = r1_slots.get('external_volumes')
+    if not isinstance(volumes, list) or not volumes or any(
+            (row or {}).get('verdict') != 'PASS' for row in volumes):
+        raise ValueError('R1 r1_slots must record passing external-volume censuses (ruling 20)')
+    duty = r1_slots.get('duty_bar')
+    if not isinstance(duty, dict) or type(duty.get('pass')) is not bool:
+        raise ValueError('R1 r1_slots must carry the ruling 1(d) duty bar verdict')
+    if not duty['pass']:
+        fallback = duty.get('lead_fallback')
+        if (not isinstance(fallback, dict) or fallback.get('step') not in DUTY_FALLBACK_STEPS
+                or not isinstance(fallback.get('authority'), str) or not fallback['authority'].strip()):
+            raise ValueError('R1 duty bar failed and no lead fallback step (ruling 1(e)) is recorded')
+
+
+def require_ready(inputs, r1_slots=None, *, synthetic=False):
     pending = pending_inputs(inputs)
     if pending:
         raise ValueError('v4 kit BLOCKED by placeholders: ' + ', '.join(pending))
@@ -132,6 +190,7 @@ def require_ready(inputs, r1_slots=None):
     tail = r1_slots.get('max_r1_tail_s')
     if not finite(tail) or tail < 0:
         raise ValueError('R1 r1_slots must record a finite, non-negative max_r1_tail_s')
+    check_r1_evidence(inputs, r1_slots, synthetic=synthetic)
     expected = l1_t_dead(slots['I_D'], tail)
     if not finite(slots['T_dead']) or not math.isclose(slots['T_dead'], expected, rel_tol=1e-9):
         raise ValueError('R1.T_dead must equal min((1750 - I_D) / 1.13544, '
@@ -434,18 +493,25 @@ def _identities(root, files, members, inputs):
 
 
 def validate_powermode_members(plan, observed_by_run):
-    """Arm/desk secondary validation; frozen pilot analysis remains untouched."""
+    """Arm/desk secondary validation; frozen pilot analysis remains untouched.
+
+    A member whose plan carries no frozen series value (expected not 0 or 2)
+    is a mismatch even when nothing was observed: None == None is not a match
+    (cold pass LOW 1).
+    """
     mismatches = []
     for member in plan['members']:
         expected = member.get('ac_powermode')
         observed = observed_by_run.get(member['run_id'])
-        if observed != expected:
+        if type(expected) is not int or expected not in (0, 2) or observed != expected:
             mismatches.append({'run_id': member['run_id'], 'expected': expected, 'observed': observed})
     return {'instrument_ok': not mismatches, 'powermode_mismatches': mismatches}
 
 
 def arm_powermode_check(plan, observed_ac_powermode):
     expected = plan.get('runtime_requirements', {}).get('ac_powermode')
+    if type(expected) is not int or expected not in (0, 2):
+        raise ValueError(f'AC powermode: the plan freezes no series value (got {expected!r})')
     if observed_ac_powermode != expected:
         raise ValueError(f'AC powermode mismatch: expected {expected}, observed {observed_ac_powermode}')
 

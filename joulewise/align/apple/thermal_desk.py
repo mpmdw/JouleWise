@@ -256,6 +256,10 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
             'turn_admissions': len(episode.turns) + sum(r['kind'] == 'G1' and r['outcome'] in ('timeout', 'deadman') for r in intervals),
             'intervals': intervals, 'releases': releases, 'g0_slow_c': g0['release']['slow_c'] if g0 else None,
             'tokens': exact_tokens, 'decode_clocks_mhz': clocks, 'turn_owned_j': owned,
+            # Cold pass LOW 5: a custody-invalid member's energy is re-attributed
+            # with no thermal intervals, so it omits every hold; say so.
+            'turn_owned_basis': ('reattributed_without_thermal_intervals' if custody_invalid
+                                 else 'attributed'),
             'turn_owned_half_width_j': owned_half if math.isfinite(owned_half) else None,
             'gross_episode_half_width_j': gross_half if math.isfinite(gross_half) else None,
             'per_turn': per_turn,
@@ -714,6 +718,32 @@ def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, regis
     return record
 
 
+TOOL_CALL_TABULATED = (
+    # Lead decision (a), round 4: JSON-path (30B) malformed calls, recorded only.
+    ('malformed_json_turns', 'episode.malformed_tool_call.json:'),
+    # Lead decision (b), round 4 / ruling 2(d): refused XML calls, visible, not excluded.
+    ('unsupported_xml_turns', 'episode.unsupported_tool_call_format:'),
+    # WP8 F1: XML-path malformed calls; these are also calibration exclusions.
+    ('malformed_xml_turns', 'episode.malformed_tool_call:'),
+)
+
+
+def tool_call_table(members):
+    """Per-member turns carrying each tabulated tool-call flag (print only)."""
+    rows = []
+    for m in members:
+        row = {'id': m['id'], 'model': m.get('model')}
+        for key, prefix in TOOL_CALL_TABULATED:
+            row[key] = sorted(int(f.rsplit(':', 1)[1]) for f in m.get('flags', ())
+                              if f.startswith(prefix) and f.rsplit(':', 1)[1].isdigit())
+        if any(row[key] for key, _ in TOOL_CALL_TABULATED):
+            rows.append(row)
+    totals = {key: sum(len(r[key]) for r in rows) for key, _ in TOOL_CALL_TABULATED}
+    return {'members': rows, 'turn_totals': totals,
+            'excluding': ['malformed_xml_turns'],
+            'not_excluding': ['malformed_json_turns', 'unsupported_xml_turns']}
+
+
 def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=None):
     """Additive PILOT.json thermal section; keep v3 desk bytes unchanged.
 
@@ -761,7 +791,8 @@ def window_report(members, *, cross_windows=None, sensitivity=None, monitoring=N
             reports[f'{model}/{window}'] = result
     contrast_runs = [m for m in members if m.get('template') in ('X', 'Y') and m.get('arm') in ('S', 'G')]
     return {'schema': 'joulewise.align.thermal_desk.v1', 'model_windows': reports,
-            'deciding_experiment': deciding_experiment(contrast_runs), 'members': members}
+            'deciding_experiment': deciding_experiment(contrast_runs), 'members': members,
+            'tool_call_flags': tool_call_table(members)}
 
 
 def markdown_report(report):
@@ -779,8 +810,17 @@ def markdown_report(report):
                  '| Member | Turn-owned GPU J | Gross episode GPU J | Gross latency s | Exclusions |',
                  '|---|---|---|---|---|'])
     for m in report['members']:
-        rows.append('| '+m['id']+' | '+str(m.get('turn_owned_j'))+' | '+str(m.get('gross_episode_j'))+' | '+
+        owned = str(m.get('turn_owned_j'))
+        if m.get('turn_owned_basis') == 'reattributed_without_thermal_intervals':
+            owned += ' (re-attributed without thermal intervals; holds not excluded)'
+        rows.append('| '+m['id']+' | '+owned+' | '+str(m.get('gross_episode_j'))+' | '+
                     str(m.get('gross_latency_s'))+' | '+', '.join(calibration_exclusions(m))+' |')
+    table = report.get('tool_call_flags') or tool_call_table(report['members'])
+    rows.extend(['', '| Member | JSON malformed turns (recorded) | XML refused turns (recorded) | XML malformed turns (excluded) |',
+                 '|---|---|---|---|'])
+    for row in table['members']:
+        rows.append('| '+' | '.join(str(v) for v in (row['id'], row['malformed_json_turns'],
+                                                    row['unsupported_xml_turns'], row['malformed_xml_turns']))+' |')
     rows.extend(['', '| Member | Gate | Turn | Tokens | Duration s | Release slow °C | Slope °C/min | Outcome |',
                  '|---|---|---|---|---|---|---|---|'])
     for member in report['members']:

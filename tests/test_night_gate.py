@@ -78,6 +78,11 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
         night_gate.BOOT_SESSION_ARGV: result(
             night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
         ),
+        # run_night's host-level AC powermode admission (HIGH-3, 2026-11-06).
+        ("/usr/bin/pmset", "-g", "custom"): result(
+            ("/usr/bin/pmset", "-g", "custom"),
+            stdout="Battery Power:\n powermode 0\nAC Power:\n powermode 0\n",
+        ),
     }
 
 
@@ -1652,6 +1657,7 @@ class NightGateTests(unittest.TestCase):
                 "night_chain_launch_failed",
                 "night_courier_running",
                 "night_courier_unavailable",
+                "night_refused_ac_powermode",
                 "night_plan_overruns_deadman",
                 "night_record_exists",
                 "night_window_exceeded",

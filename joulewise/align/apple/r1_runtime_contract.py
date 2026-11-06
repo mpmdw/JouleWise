@@ -16,7 +16,9 @@ from __future__ import annotations
 import subprocess
 import time
 
-QUIET_FIELDS = ("cpu_busy_cores", "census")
+# cpu_busy_t_s: one sample time (s, segment clock) per cpu_busy_cores value,
+# so the driver can bound journal gaps (executing review MEDIUM-1).
+QUIET_FIELDS = ("cpu_busy_cores", "cpu_busy_t_s", "census")
 DEADMAN_PHASES = ("G0", "G1", "H", "decode", "prefill", "tool", "tail")
 GATED_D_KINDS = ("d-spam-benign-s1-a", "d-spam-benign-s1-b", "d-bank-benign-s1")
 PLANNING_KINDS = tuple(f"d-planning-turn-r-plus-{offset}c" for offset in (0, 2, 4))
@@ -134,7 +136,9 @@ class LoadJournal:
         self.runner = runner
         self.clock = clock
         self.cpu_busy_cores = []
+        self.cpu_busy_t_s = []
         self.census = []
+        self.t0 = clock()
 
     def snapshot(self, label):
         rows = process_table(self.runner)
@@ -144,7 +148,9 @@ class LoadJournal:
     def sample(self):
         value = busy_cores(process_table(self.runner), self.exclude_roots)
         self.cpu_busy_cores.append(value)
+        self.cpu_busy_t_s.append(self.clock() - self.t0)
         return value
 
     def fields(self):
-        return {"cpu_busy_cores": list(self.cpu_busy_cores), "census": list(self.census)}
+        return {"cpu_busy_cores": list(self.cpu_busy_cores), "cpu_busy_t_s": list(self.cpu_busy_t_s),
+                "census": list(self.census)}

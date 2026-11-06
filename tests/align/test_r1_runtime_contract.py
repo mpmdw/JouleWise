@@ -29,7 +29,7 @@ class ContractTests(unittest.TestCase):
 
     def test_driver_needs_are_declared(self):
         fields = {f for key in contract.KIND_FIELDS for f in contract.required_fields(key, quiet=True)}
-        for name in ("cpu_busy_cores", "census", "sensor_series_c", "recovery_curve", "deadman.phases_s",
+        for name in ("cpu_busy_cores", "cpu_busy_t_s", "census", "sensor_series_c", "recovery_curve", "deadman.phases_s",
                      "admitted_turns", "x7", "energy_j", "e_D_j_per_token", "released", "t_decline_s",
                      "delta_slow_c", "g0_release_c", "reference_c", "slots",
                      "battery_drain_pct_per_h", "charge_resume_soc_pct"):
@@ -42,7 +42,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(contract.missing_fields("d-spam-benign-s1-a", result, quiet=False),
                          ["deadman.phases_s.tail"])
         self.assertEqual(contract.missing_fields("step-30b", {}, quiet=True),
-                         ["cpu_busy_cores", "census", "battery_drain_pct_per_h"])
+                         ["cpu_busy_cores", "cpu_busy_t_s", "census", "battery_drain_pct_per_h"])
         with self.assertRaisesRegex(ValueError, "no kind"):
             contract.required_fields("unknown", quiet=False)
 
@@ -67,6 +67,7 @@ class LoadJournalTests(unittest.TestCase):
         journal.snapshot("end")
         fields = journal.fields()
         self.assertEqual(len(fields["cpu_busy_cores"]), 61)
+        self.assertEqual(len(fields["cpu_busy_t_s"]), 61)
         self.assertEqual([c["label"] for c in fields["census"]], ["start", "end"])
         self.assertFalse(r1.os_load_verdict("seg", fields)["redo"])  # 0.32 cores < 0.5
         busy = contract.LoadJournal((), runner=ps)
@@ -83,6 +84,8 @@ class LoadJournalTests(unittest.TestCase):
         doc = (Path(__file__).resolve().parents[2] / "docs/align/r1_runtime_contract.md").read_text()
         for kind in contract.KIND_FIELDS:
             self.assertIn(f"`{kind}`", doc)
+        for field in contract.QUIET_FIELDS:
+            self.assertIn(f"`{field}`", doc)
         self.assertIn("--soak-reference", doc)
         for field in ("`battery_drain_pct_per_h`", "`charge_resume_soc_pct`", "runtime_custody.json"):
             self.assertIn(field, doc)

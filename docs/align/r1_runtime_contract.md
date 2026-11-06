@@ -46,9 +46,12 @@ Each returns:
 | field | type | meaning |
 |---|---|---|
 | `cpu_busy_cores` | list of finite numbers, 1 per second | Background CPU load in cores: summed %CPU / 100 of every process outside the measured runtime's own process tree. The driver redoes the segment when the load is > 0.5 core for 60 consecutive seconds. |
+| `cpu_busy_t_s` | list of finite numbers, same length | The time of each `cpu_busy_cores` sample in seconds on the segment's own clock (nondecreasing). |
 | `census` | non-empty list | Process census: the full process table at least at segment start and end. |
 
-`LoadJournal` in the contract module is the reference implementation of both fields. It uses `ps -A -o pid=,ppid=,pcpu=,comm=` and excludes the runtime's PID tree. A redo of a heavy segment starts only after a `g0-release-soak` release, never straight after the contaminated attempt.
+The journal must cover the segment (executing review MEDIUM-1). With W the wall seconds the driver measured around the invocation, R1 refuses unless there are at least 0.9·W − 5 samples and no two consecutive sample times are more than 5 s apart. Without that, one sample could stand for an 1,800 s soak and the 60 s-sustained rule would be vacuous.
+
+`LoadJournal` in the contract module is the reference implementation of these fields. It uses `ps -A -o pid=,ppid=,pcpu=,comm=` and excludes the runtime's PID tree. A redo of a heavy segment starts only after a `g0-release-soak` release, never straight after the contaminated attempt.
 
 ## Fields per kind
 
@@ -87,9 +90,19 @@ Each returns:
   3. It runs `g0-release-soak`, then the leg.
 
   A leg is redone, after another release, on sustained load. If any accepted leg's release timed out (`released: false`), adoption is INCONCLUSIVE and the series stays Automatic.
+- **Duty bar and L1 (ruling 1(d), lead ruling L1; executing review MEDIUM-2).** On the R1 record the driver computes L1 T_dead = min((1750 − I_D)/1.13544, (1800 − I_D − max_tail − 10)/1.13544) from the step-d `I_D` and the largest gated-run tail, prints it (`R1 L1: {...}` on stdout) and stores it as `l1` in r1_slots with the member fit I_D + 1.13544·T_dead + tail + 10 for the armed and the effective T_dead. The 40 % G0 + G1 + H share is judged against min(armed T_dead, L1), the value W1 will arm.
+- **Ruling 20 (external volumes).** The driver takes a volume census (`/sbin/mount` plus `diskutil info -plist`, through `joulewise/align/apple/external_volume.py` pinned to status `off`) at t0, before every runtime invocation and before it writes r1_slots, and refuses R1 if any external volume is mounted. It records every census in `r1_result.json` and r1_slots (`external_volumes`) and takes a last, recorded-only census in the terminal record.
 - **Ruling 7.** Each ALIGN episode bundle records `hardware.ac_powermode = {value, source, observed_at: "episode_start"}`.
   - The value is read through `EpisodeRuntimeAdapter.powermode_reader`. `ThermalRegistry(powermode_reader=...)` binds it, and a real run defaults to a read-only `pmset -g custom`.
   - The v4 desk compares every member's recorded value with the frozen series value, using `validate_powermode_members`. Any mismatch, or an unobserved value, sets the `ac_powermode_members` check false, so `instrument_ok` is false.
+
+## Host-level power-mode admission (executing review HIGH-3)
+
+`run_night` refuses every plan class (`night_refused_ac_powermode`) unless the AC-profile `powermode` read from `pmset -g custom` equals the plan's optional `ac_powermode` (0 or 2; absent means 0). If `$MEASUREMENT_ROOT/.align-r1-high-power` exists, it first runs the narrow `sudo -n /usr/bin/pmset -c powermode 0`, removes the marker only after that succeeds, and reads the mode again. A failed read is retried once. The v4 session `install` (W1/D arm) applies the same admission against the kit's frozen series value and writes `staging/v4-arm-NNN.json` with the observed value, the exact pmset text and the ruling 20 volume census, admitted or not.
+
+## Re-runs
+
+A re-run into an existing `<NIGHT_DIR>/align-r1` refuses (exit 3) without a traceback and never overwrites an earlier `r1_result.json`; if the directory holds none (a SIGKILLed run), the refusal is written there.
 
 ## The WP15 runtime (`joulewise/align/apple/r1_runtime.py`)
 

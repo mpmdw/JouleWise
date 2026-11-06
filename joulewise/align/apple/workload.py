@@ -21,7 +21,7 @@ from typing import Any, Mapping
 from joulewise.align.apple.endpoint import MlxEndpoint
 from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman, budget_record
 from joulewise.align.apple.endpoint import MlxEndpoint, template_execution_policy
-from joulewise.align.apple.xml_tool_calls import validate_model_family
+from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES, validate_model_family
 from joulewise.align.apple.stop_precedence import has_fault, primary_stop
 from joulewise.align.apple.sampler import (
     NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping, _stamp_record, _restore_stamp,
@@ -437,6 +437,12 @@ class EpisodeRuntimeAdapter:
                 # at G0 entry instead of burning the gate cap (WP8 F2/F5).
                 raise AdapterFailure(FailureReason.UNKNOWN_ERROR, str(exc)) from exc
         powermode = self._observe_ac_powermode()
+        # A G0 that did not release (timeout: X2; unobserved: X4; deadman: X7)
+        # leaves no episode reference, so the member is already excluded and
+        # every later G1 could only be a blind full-cap wait (cold pass
+        # MEDIUM-2). End the member now instead of spending its T_dead.
+        g0_unreleased = (self.thermal is not None and self.thermal.episode_reference is None
+                         and any(r['kind'] == 'G0' for r in self.thermal.intervals))
         start = self.clock.stamp()
         episode_id = context.run_id if context is not None else config.run_id or "align_episode"
         domain = f"joulewise.monotonic:{episode_id}"
@@ -472,9 +478,25 @@ class EpisodeRuntimeAdapter:
                 ]
                 from joulewise.align.apple.sampling import episode_seed, seed_inputs
                 measured_seed = episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair, spec.seed) if spec.sampler is not None else spec.seed
+                xml_path = endpoint.model_family in XML_MODEL_FAMILIES
                 for index in range(spec.max_turns):
                     if deadman is not None and deadman.expired():
                         flags.append(f"episode.deadman:{index}")
+                        break
+                    if g0_unreleased:
+                        flags.append(f"episode.g0_unreleased:{index}")
+                        # reduce.py requires two in-window samples: retain two
+                        # sampler periods of observation, no decode.
+                        required_s = 2 / config.sampling.power_hz
+                        now = self.clock.stamp()
+                        elapsed_s = now.epoch_s - start.epoch_s
+                        if elapsed_s < required_s:
+                            self.clock.sleep(required_s - elapsed_s)
+                            observed = self.clock.stamp()
+                            events.extend((
+                                RuntimeEvent(now.epoch_s, "phase_start", "align_g0_unreleased_stop_observation", "zero-generation sampler observation"),
+                                RuntimeEvent(observed.epoch_s, "phase_end", "align_g0_unreleased_stop_observation", "zero-generation sampler observation"),
+                            ))
                         break
                     if spec.max_episode_decode_tokens is not None and decode_tokens_used >= spec.max_episode_decode_tokens:
                         flags.append(f"episode.decode_budget:{index}")
@@ -527,7 +549,19 @@ class EpisodeRuntimeAdapter:
                                     for flag in turn_endpoint_flags)
                     budget_cut = f"turn_token_budget_reached:{index}" in turn_endpoint_flags
                     if malformed and not budget_cut:
-                        flags.append(f"episode.malformed_tool_call:{index}")
+                        # Lead decision (a), round 4: on the JSON path (30B
+                        # anchors and contrast) a malformed call is recorded
+                        # and tabulated under its own name but is not an
+                        # exclusion or a stop, as in pilots 4-10. On the XML
+                        # path (D) it stays the WP8 F1 exclusion.
+                        flags.append(f"episode.malformed_tool_call:{index}" if xml_path
+                                     else f"episode.malformed_tool_call.json:{index}")
+                    if (xml_path and not budget_cut
+                            and "unsupported_tool_call_format" in turn_endpoint_flags):
+                        # Lead decision (b), round 4, under council ruling 2(d):
+                        # a refused XML call is made visible to the desk (flag
+                        # and tabulation), not an exclusion.
+                        flags.append(f"episode.unsupported_tool_call_format:{index}")
                     # Integer token counts establish that a model call returned work.
                     decode_tokens_used += result.completion_tokens
                     model_returned_tokens |= result.completion_tokens > 0
@@ -624,7 +658,8 @@ class EpisodeRuntimeAdapter:
             events.extend(self.thermal.events)
             events.sort(key=lambda event: event.timestamp_s)
         if not model_returned_tokens and not any(f.startswith(("episode.context_limit:", "episode.time_guard:",
-                                                               "episode.decode_budget:", "episode.deadman:")) for f in flags):
+                                                               "episode.decode_budget:", "episode.deadman:",
+                                                               "episode.g0_unreleased:")) for f in flags):
             # UNKNOWN_ERROR maps to failed; RUNTIME_UNAVAILABLE maps to unsupported
             # and is reserved here for configurations rejected during prepare.
             raise AdapterFailure(
@@ -635,6 +670,7 @@ class EpisodeRuntimeAdapter:
         main_score = None
         side_success = None
         incomplete = any(f.startswith(('episode.deadman:', 'episode.malformed_tool_call:',
+                                       'episode.g0_unreleased:',
                                        'thermal.gate_timeout:', 'thermal.hold_timeout:')) for f in flags)
         if self.thermal is not None:
             incomplete |= any(r['kind'] != 'G0' and r['outcome'] in ('timeout', 'deadman') for r in self.thermal.intervals)
@@ -817,12 +853,19 @@ class EpisodeRuntimeAdapter:
             if not isinstance(self.clock, SystemClock):
                 return None
             from joulewise.align.apple.powermode import observe_ac_powermode as reader
-        from joulewise.align.apple.powermode import SOURCE
-        try:
-            value = reader()
-        except Exception as exc:  # The desk treats an unobserved value as a mismatch.
+        from joulewise.align.apple.powermode import READ_RETRIES, SOURCE
+        errors = []
+        # One retry (cold pass LOW 4): a single transient pmset failure must
+        # not cost the window's ac_powermode_members check.
+        for _ in range(1 + READ_RETRIES):
+            try:
+                value = reader()
+                break
+            except Exception as exc:  # The desk treats an unobserved value as a mismatch.
+                errors.append(f'{type(exc).__name__}: {exc}')
+        else:
             return {'value': None, 'source': SOURCE, 'observed_at': 'episode_start',
-                    'error': f'{type(exc).__name__}: {exc}'}
+                    'error': errors[-1], 'attempts': len(errors)}
         if isinstance(value, bool) or not isinstance(value, int):
             value = None
         return {'value': value, 'source': SOURCE, 'observed_at': 'episode_start'}

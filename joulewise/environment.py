@@ -178,6 +178,7 @@ def empty_environment_snapshot() -> dict[str, Any]:
         "battery_percent": None,
         "battery_state": None,
         "low_power_mode": None,
+        "powermode": None,
         "display_sleep_prevented": None,
         "display_power_state": None,
         "screensaver_engaged": None,
@@ -599,17 +600,23 @@ def _parse_pmset_batt(snapshot: dict[str, Any], text: str) -> None:
 
 
 def _parse_pmset(snapshot: dict[str, Any], text: str) -> None:
+    # Newer macOS reports the tri-state energy mode as `powermode`
+    # (0 automatic, 1 low power, 2 high power); only 1 is low power.
+    # Live-validated 2026-07-18 on macOS 26.5 (Mac15,9): `powermode 0`.
+    # The value itself is exposed too (executing review HIGH-3, 2026-11-06):
+    # High Power (2) is not low power, so low_power_mode alone admits a host
+    # an R1 crash left in High Power. `pmset -g` prints the active profile,
+    # which is the AC profile on AC power; the run_night admission gate reads
+    # the AC profile itself from `pmset -g custom`.
+    mode = re.search(r"^\s*powermode\s+([012])\s*$", text, re.MULTILINE)
+    snapshot["powermode"] = int(mode.group(1)) if mode else None
     # Missing lowpowermode is legitimate on some macOS/hardware combinations.
     match = re.search(r"^\s*lowpowermode\s+([01])\s*$", text, re.MULTILINE)
     if match:
         snapshot["low_power_mode"] = match.group(1) == "1"
         return
-    # Newer macOS reports the tri-state energy mode as `powermode`
-    # (0 automatic, 1 low power, 2 high power); only 1 is low power.
-    # Live-validated 2026-07-18 on macOS 26.5 (Mac15,9): `powermode 0`.
-    match = re.search(r"^\s*powermode\s+([012])\s*$", text, re.MULTILINE)
-    if match:
-        snapshot["low_power_mode"] = match.group(1) == "1"
+    if mode:
+        snapshot["low_power_mode"] = mode.group(1) == "1"
 
 
 def _parse_pmset_assertions(snapshot: dict[str, Any], text: str) -> None:

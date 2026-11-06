@@ -58,6 +58,35 @@ def _probe(
     return night_gate.ProbeResult(argv, exit_code, stdout, stderr, monotonic_ns)
 
 
+AC_POWERMODE_ARGV = ("/usr/bin/pmset", "-g", "custom")
+AC_AUTOMATIC = "Battery Power:\n lowpowermode 0\n powermode 0\nAC Power:\n lowpowermode 0\n powermode 0\n"
+RESTORE_AUTOMATIC_ARGV = ("sudo", "-n", "/usr/bin/pmset", "-c", "powermode", "0")
+
+
+class _PowerHost(dict):
+    """Probe results with a stateful AC powermode and the narrow restore rule."""
+
+    def __init__(self, base, mode, *, restore_code=0, failed_reads=0):
+        super().__init__(base)
+        self.mode, self.restore_code, self.failed_reads = mode, restore_code, failed_reads
+        self.calls = []
+
+    def __getitem__(self, argv):
+        if argv == AC_POWERMODE_ARGV:
+            self.calls.append("read")
+            if self.failed_reads:
+                self.failed_reads -= 1
+                return _probe(argv, exit_code=1, stderr="pmset: transient failure")
+            return _probe(argv, stdout=AC_AUTOMATIC.replace("AC Power:\n lowpowermode 0\n powermode 0",
+                                                            f"AC Power:\n lowpowermode 0\n powermode {self.mode}"))
+        if argv == RESTORE_AUTOMATIC_ARGV:
+            self.calls.append("restore")
+            if self.restore_code == 0:
+                self.mode = 0
+            return _probe(argv, exit_code=self.restore_code, stderr="" if self.restore_code == 0 else "denied")
+        return super().__getitem__(argv)
+
+
 def _green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
     return {
         night_gate.IOREG_BATTERY_ARGV: _probe(
@@ -82,6 +111,8 @@ def _green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
         night_gate.BOOT_SESSION_ARGV: _probe(
             night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
         ),
+        # run_night's host-level AC powermode admission (HIGH-3, 2026-11-06).
+        AC_POWERMODE_ARGV: _probe(AC_POWERMODE_ARGV, stdout=AC_AUTOMATIC),
     }
 
 
@@ -741,6 +772,78 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue((night / "receipt.json").is_file())
         self.assertTrue((night / "refusal.json").is_file())
         self.assertEqual(calls, [])
+
+    # --- Host-level AC powermode admission (executing review HIGH-3) -------
+
+    def _power_host(self, mode, *, restore_code=0, failed_reads=0):
+        host = _PowerHost(self.source.results, mode, restore_code=restore_code, failed_reads=failed_reads)
+        self.source.results = host
+        return host
+
+    def test_host_left_in_high_power_is_refused_before_any_gate_or_chain(self) -> None:
+        host = self._power_host(2)
+        exit_code, calls = self._run_night()
+        self.assertEqual(exit_code, 3)
+        self.assertEqual(calls, [])
+        refusal = json.loads((self.custody / "night/refusal.json").read_text())["refusal"]
+        self.assertEqual(refusal["reason"], "night_refused_ac_powermode")
+        self.assertIn("AC powermode 2 != expected 0", refusal["detail"])
+        self.assertEqual(refusal["evidence"]["observed"], 2)
+        self.assertNotIn("restore", host.calls)
+        result = json.loads((self.custody / "night/result.json").read_text())
+        self.assertEqual(result["aborted_reason"], "night_refused_ac_powermode")
+
+    def test_r1_marker_restores_automatic_then_rechecks_and_admits(self) -> None:
+        host = self._power_host(2)
+        marker = self.root / ".align-r1-high-power"
+        marker.write_text("high-power restoration required\n")
+        exit_code, calls = self._run_night()
+        self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(host.calls, ["read", "restore", "read"])
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+        self.assertIn("R1 High Power marker restored to Automatic",
+                      (self.custody / "night.log").read_text())
+
+    def test_r1_marker_with_failed_restore_refuses_and_keeps_the_marker(self) -> None:
+        self._power_host(2, restore_code=1)
+        marker = self.root / ".align-r1-high-power"
+        marker.write_text("x\n")
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        refusal = json.loads((self.custody / "night/refusal.json").read_text())["refusal"]
+        self.assertEqual(refusal["reason"], "night_refused_ac_powermode")
+        self.assertIn("Automatic restore failed", refusal["detail"])
+        self.assertTrue(marker.exists())
+
+    def test_plan_declared_high_power_admits_a_high_power_host_only(self) -> None:
+        mapping = json.loads(self.plan_path.read_text())
+        mapping["ac_powermode"] = 2
+        self.plan_path.write_text(json.dumps(mapping))
+        self._power_host(2)
+        exit_code, calls = self._run_night()
+        self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+
+    def test_plan_declared_powermode_must_be_zero_or_two(self) -> None:
+        mapping = json.loads(self.plan_path.read_text())
+        for bad in (1, "0", None, True):
+            mapping["ac_powermode"] = bad
+            with self.subTest(bad=bad), self.assertRaisesRegex(night_gate.PlanError, "ac_powermode"):
+                night_gate.NightPlan.from_mapping(mapping)
+
+    def test_one_failed_pmset_read_is_retried_and_two_refuse(self) -> None:
+        host = self._power_host(0, failed_reads=1)
+        exit_code, calls = self._run_night()
+        self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+        self.assertEqual(host.calls, ["read", "read"])
+
+    def test_unobservable_powermode_refuses(self) -> None:
+        self._power_host(0, failed_reads=2)
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        refusal = json.loads((self.custody / "night/refusal.json").read_text())["refusal"]
+        self.assertIn("AC powermode unobserved", refusal["detail"])
 
     def _run_with_clean_dwell(self, outcome, *, dwell_duration=600, off_age=0,
                               manifest_case="first", settle_failure=False, off_wall_lag=0,

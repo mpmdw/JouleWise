@@ -414,6 +414,67 @@ class XmlToolCallTests(unittest.TestCase):
                     self.assertEqual(rows[2], asdict(ChatMessage("assistant", raw)))
 
 
+class ToolCallFlagDecisionTests(unittest.TestCase):
+    """Lead decisions (a) and (b), round 4 (2026-11-06).
+
+    (a) A malformed call on the 30B JSON path is recorded and tabulated as
+        ``episode.malformed_tool_call.json:N`` but is neither an exclusion nor
+        a stop, as in pilots 4-10.
+    (b) A refused XML call (``unsupported_tool_call_format``) on D's path sets
+        ``episode.unsupported_tool_call_format:N``: visible to the desk under
+        council ruling 2(d), tabulated, not an exclusion. A malformed XML call
+        stays the WP8 F1 exclusion ``episode.malformed_tool_call:N``.
+    """
+
+    def run_family(self, family, content):
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+        from joulewise.align.records import Episode, from_json
+        spec = replace(episode_spec(hidden=False), max_turns=2, mock_turns=(
+            {"content": "<think>plan</think>" + content, "completion_tokens": 100, "reasoning_tokens": 1},
+            {"content": "Done", "completion_tokens": 10},
+        ))
+        config = as_config(spec, "tool-flag-decisions")
+        config = replace(config, model=replace(config.model, family=family))
+        clock = FakeClock()
+        runtime = EpisodeRuntimeAdapter(MockRuntimeAdapter(clock), clock)
+        self.assertTrue(runtime.prepare(config).ok)
+        result = runtime.run_workload(config)
+        return from_json(Episode, result.output_artifacts["align_episode.json"]), result
+
+    @staticmethod
+    def exclusions(flags):
+        from joulewise.align.apple.pilot_analysis import episode_ineligibility_reasons
+        from joulewise.align.apple.thermal_desk import calibration_exclusions
+        tool = ("episode.malformed_tool_call", "episode.unsupported_tool_call_format")
+        return ([r for r in calibration_exclusions({"flags": list(flags)}) if r.startswith(tool)]
+                + [r for r in episode_ineligibility_reasons({"summary": {"flags": list(flags)}})
+                   if r.startswith(tool)])
+
+    def test_json_path_malformed_call_is_recorded_not_excluded(self):
+        episode, result = self.run_family("qwen3_moe", '<tool_call>{"name": "lookup", "arguments": </tool_call>')
+        self.assertIn("episode.malformed_tool_call.json:0", episode.flags)
+        self.assertNotIn("episode.malformed_tool_call:0", episode.flags)
+        self.assertEqual(self.exclusions(episode.flags), [])
+        self.assertNotEqual(result.metadata["align_episode"]["stop_condition"], "episode.malformed_tool_call")
+
+    def test_xml_path_refused_call_is_flagged_and_tabulated_not_excluded(self):
+        from joulewise.align.apple.thermal_desk import tool_call_table
+        episode, _ = self.run_family("qwen3_5", '{"name": "lookup", "arguments": {"step": 0}}')
+        self.assertIn("unsupported_tool_call_format", episode.flags)
+        self.assertIn("episode.unsupported_tool_call_format:0", episode.flags)
+        self.assertEqual(self.exclusions(episode.flags), [])
+        table = tool_call_table([{"id": "d-member", "model": "D", "flags": list(episode.flags)}])
+        self.assertEqual(table["members"][0]["unsupported_xml_turns"], [0])
+        self.assertEqual(table["turn_totals"]["unsupported_xml_turns"], 1)
+
+    def test_xml_path_malformed_call_stays_the_wp8_f1_exclusion(self):
+        episode, result = self.run_family("qwen3_5", "<tool_call>\n<function=lookup>\n<parameter=step>\n0\n"
+                                                     "</function>\n</tool_call>")
+        self.assertIn("episode.malformed_tool_call:0", episode.flags)
+        self.assertIn("episode.malformed_tool_call:0", self.exclusions(episode.flags))
+        self.assertEqual(result.metadata["align_episode"]["stop_condition"], "episode.malformed_tool_call")
+
+
 @unittest.skipIf(jinja2 is None, "real template rendering needs optional Jinja2")
 class QwenTemplateTests(unittest.TestCase):
     @classmethod

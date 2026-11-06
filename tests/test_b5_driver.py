@@ -90,6 +90,10 @@ class Census:
             if self.responses:
                 return self.responses.pop(0)
             return probe(argv)
+        if argv == ("/usr/bin/pmset", "-g", "custom"):
+            # run_night's host-level AC powermode admission (HIGH-3, 2026-11-06).
+            return probe(argv, exit_code=0,
+                         stdout="Battery Power:\n powermode 0\nAC Power:\n powermode 0\n")
         raise AssertionError(f"unexpected probe {argv}")
 
     def probes(self):

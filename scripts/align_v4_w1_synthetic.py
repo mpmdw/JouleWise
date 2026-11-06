@@ -34,8 +34,15 @@ R0_SHA = hashlib.sha256(b'synthetic-r0-record').hexdigest()
 I_D = 516.575
 # R1 rehearsal record stand-in: frozen series AC powermode (council ruling 7)
 # and the largest post-deadline tail, which binds T_dead by lead ruling L1.
-SYN_R1_SLOTS = {'schema': 'joulewise.align.r1_slots.v1', 'source': 'SYNTHETIC_WP22_DRY_RUN',
-                'ac_powermode': 0, 'max_r1_tail_s': 30.0}
+# Shaped like the R1 driver's record, so the kit's evidence binding (executing
+# review MEDIUM-3) is exercised; the synthetic source is admitted only because
+# build_kit asks require_ready for it explicitly.
+SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE,
+                'ac_powermode': 0, 'max_r1_tail_s': 30.0, 'slots': {'I_D': I_D},
+                'high_power': {'verdict': 'not_adopted'}, 'u5': {'verdict': 'pass', 'c': 1.0},
+                'deadman_budget': [{'phases_s': {'tail': 30.0}}, {'phases_s': {'tail': 12.0}}],
+                'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
+                'duty_bar': {'pass': True}, 'status_note': 'SYNTHETIC_WP22_DRY_RUN'}
 SYN_INPUTS = {
     'schema_version': 'joulewise.align_v4_inputs.v1',
     'status': 'SYNTHETIC_WP22_DRY_RUN',
@@ -69,7 +76,7 @@ PAIR_GROUPS = {5: 'D-5-17', 17: 'D-5-17', 6: 'X-G', 16: 'X-G', 9: 'X-S', 13: 'X-
 def build_kit(inputs, r1_slots=SYN_R1_SLOTS):
     with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)), \
             patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(r1_slots)):
-        kit.require_ready(deepcopy(inputs), deepcopy(r1_slots))
+        kit.require_ready(deepcopy(inputs), deepcopy(r1_slots), synthetic=True)
         files = kit.build_files(kit.ROOT)
     plan = json.loads(files[kit.KIT / 'collection_plan.json'])
     configs = {m['ordinal']: json.loads(files[Path(m['config_path'])]) for m in plan['members']}

@@ -34,10 +34,29 @@ PMSET_TEMPLATE = (
 )
 
 
+MOUNT_INTERNAL = ("/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)\n"
+                  "devfs on /dev (devfs, local, nobrowse)\n"
+                  "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)\n")
+MOUNT_SSD = MOUNT_INTERNAL + "/dev/disk6s1 on /Volumes/JW-EXT (apfs, local, nodev, nosuid, journaled)\n"
+
+
+def diskutil_plist(device):
+    import plistlib
+    external = device.startswith("/dev/disk6")
+    return plistlib.dumps({"VolumeUUID": "0" * 8 + "-0000-0000-0000-" + "0" * 12,
+                           "VolumeName": "JW-EXT" if external else "Macintosh HD",
+                           "FilesystemType": "apfs", "BusProtocol": "USB" if external else "Apple Fabric",
+                           "WritableVolume": True, "Internal": not external}).decode()
+
+
 class FakeWorld:
     def __init__(self, fail_kind=None, fail_restore=False, interrupt_kind=None,
                  t_decline=None, busy_once=(), sudo_listing=None, unsettled_soak_once=False,
-                 release_c=None, released=True):
+                 release_c=None, released=True, mount_after=None, journal_gap_kind=None, tail=20.0):
+        self.tail = tail
+        self.mounted = False
+        self.mount_after = mount_after
+        self.journal_gap_kind = journal_gap_kind
         self.mode = 0
         self.attempts = {}
         self.release_c = release_c or {}
@@ -57,6 +76,10 @@ class FakeWorld:
     def __call__(self, argv):
         argv = tuple(str(v) for v in argv)
         self.calls.append(argv)
+        if argv == ("/sbin/mount",):
+            return completed(argv, out=MOUNT_SSD if self.mounted else MOUNT_INTERNAL)
+        if argv[:3] == ("/usr/sbin/diskutil", "info", "-plist"):
+            return completed(argv, out=diskutil_plist(argv[3]))
         if argv == r1.PowerModeGuard.LIST:
             return completed(argv, out=self.sudo_listing)
         if argv == r1.PowerModeGuard.QUERY:
@@ -68,6 +91,8 @@ class FakeWorld:
             self.mode = mode
             return completed(argv)
         kind = argv[argv.index("--r1-kind") + 1]
+        if kind == self.mount_after:
+            self.mounted = True  # the SSD is attached while this segment runs
         # Like a real runtime, write into --output so directory custody is testable.
         out = Path(argv[argv.index("--output") + 1])
         out.mkdir(parents=True, exist_ok=False)
@@ -88,6 +113,8 @@ class FakeWorld:
                    "delta_slow_c": 0.5,
                    "energy_j": 100.0 + 3.0 * offset,
                    "cpu_busy_cores": [0.9] * 61 if busy else [0.1] * 61,
+                   "cpu_busy_t_s": ([float(i) for i in range(30)] + [float(i) + 20 for i in range(30, 61)]
+                                    if kind == self.journal_gap_kind else [float(i) for i in range(61)]),
                    "census": [{"pid": 1, "name": "launchd"}],
                    "slots": slots if kind == "step-d" else {}}
         if kind == "idle":
@@ -109,7 +136,7 @@ class FakeWorld:
                            admitted_turns=3, x7=False,
                            deadman={"T_dead_s": 1451.018, "phases_s": {
                                "G0": 120.0, "G1": 150.0, "H": 90.0, "decode": 700.0,
-                               "prefill": 120.0, "tool": 6.0, "tail": 20.0}})
+                               "prefill": 120.0, "tool": 6.0, "tail": self.tail}})
         if kind == "g0-release-soak":
             payload["released"] = self.released
         if kind.startswith("high-power-aba-"):
@@ -117,7 +144,8 @@ class FakeWorld:
         return completed(argv, out=json.dumps(payload))
 
 
-NOON_SAFE = r1.datetime(2026, 11, 7, 2, 0).astimezone()
+PACIFIC = r1.ZoneInfo("America/Los_Angeles")
+NOON_SAFE = r1.datetime(2026, 11, 7, 2, 0, tzinfo=PACIFIC)
 
 
 class R1Tests(unittest.TestCase):
@@ -281,7 +309,7 @@ class R1Tests(unittest.TestCase):
 
     def test_quiet_segments_avoid_the_os_batch_window(self):
         sleeps = []
-        moments = [r1.datetime(2026, 11, 7, 11, 30).astimezone()]
+        moments = [r1.datetime(2026, 11, 7, 11, 30, tzinfo=PACIFIC)]
         def now():
             return moments[-1]
         def sleep(seconds):
@@ -290,7 +318,7 @@ class R1Tests(unittest.TestCase):
         waited = r1.wait_outside_os_batch(1800, now=now, sleep=sleep)
         self.assertEqual(moments[-1].strftime("%H:%M"), "13:15")
         self.assertEqual(waited, sum(sleeps))
-        self.assertEqual(r1.wait_outside_os_batch(600, now=lambda: r1.datetime(2026, 11, 7, 11, 30).astimezone(),
+        self.assertEqual(r1.wait_outside_os_batch(600, now=lambda: r1.datetime(2026, 11, 7, 11, 30, tzinfo=PACIFIC),
                                                   sleep=sleep), 0.0)
 
     def test_persistent_marker_recovers_prior_sigkill_with_fake_pmset_and_sudo(self):
@@ -447,9 +475,11 @@ class R1Tests(unittest.TestCase):
                 return 0.0
             with patch.object(r1, "_run", world), patch.object(r1, "wait_outside_os_batch", wait):
                 self.assertEqual(r1.run(self.args(td)), 0)
+            # The ruling 20 volume census runs before every invocation; skip it here.
+            calls = [c for c in world.calls if c[0] not in ("/sbin/mount", "/usr/sbin/diskutil")]
             for leg in ("high-power-aba-a1", "high-power-aba-b", "high-power-aba-a2"):
-                index = next(i for i, c in enumerate(world.calls) if "--r1-kind" in c and leg in c)
-                window = world.calls[index - 2:index]
+                index = next(i for i, c in enumerate(calls) if "--r1-kind" in c and leg in c)
+                window = calls[index - 2:index]
                 self.assertEqual(window[0][0], "WAIT", leg)
                 self.assertIn("g0-release-soak", window[1], leg)
                 self.assertEqual(window[0][1], r1.QUIET_SEGMENT_BOUND_S + r1.G0_RELEASE_BOUND_S)
@@ -708,6 +738,147 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr)
             argv = (td / "argv").read_text().splitlines()
             self.assertEqual(argv[argv.index("--runtime") + 1], "/opt/runtime")
+
+    # --- Round-4 fixes ----------------------------------------------------
+
+    def test_load_journal_must_cover_the_segment_wall_time(self):
+        # Executing review MEDIUM-1: one sample over an 1,800 s soak was accepted.
+        one = {"cpu_busy_cores": [3.9], "cpu_busy_t_s": [0.0], "census": [{"pid": 1}]}
+        with self.assertRaisesRegex(r1.Refusal, "1 samples over 1800.0 s"):
+            r1.os_load_verdict("idle_soak", one, wall_s=1800.0)
+        full = {"cpu_busy_cores": [0.1] * 1616, "cpu_busy_t_s": [float(i) for i in range(1616)],
+                "census": [{"pid": 1}]}
+        self.assertFalse(r1.os_load_verdict("idle_soak", full, wall_s=1800.0)["redo"])  # 0.9*1800-5 = 1615
+        with self.assertRaisesRegex(r1.Refusal, "one sample time per"):
+            r1.os_load_verdict("idle_soak", {**full, "cpu_busy_t_s": [0.0]}, wall_s=10.0)
+        with self.assertRaisesRegex(r1.Refusal, "nondecreasing"):
+            r1.os_load_verdict("x", {"cpu_busy_cores": [0.1, 0.1], "cpu_busy_t_s": [1.0, 0.0],
+                                     "census": [1]}, wall_s=1.0)
+
+    def test_a_gap_in_the_load_journal_refuses_r1_and_restores_automatic(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(journal_gap_kind="step-30b")
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertIn("21.0 s gap", result["error"])
+            self.assertEqual(world.mode, 0)
+
+    def test_l1_is_evaluated_on_the_r1_record_and_bounds_the_duty_share(self):
+        # Executing review MEDIUM-2 probe P3: a 700 s tail; W1 would arm
+        # L1 = (1800 - 101.5 - 700 - 10)/1.13544 = 870.6 s, not 1,451 s.
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(tail=700.0)
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            registration = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+            l1 = registration["l1"]
+            self.assertAlmostEqual(l1["l1_T_dead_s"], (1800 - 101.5 - 700 - 10) / 1.13544)
+            self.assertEqual(l1["effective_T_dead_s"], l1["l1_T_dead_s"])
+            self.assertFalse(l1["armed_fits"])
+            self.assertTrue(l1["member_fit_ok"])
+            self.assertAlmostEqual(l1["member_fit_worst_armed_s"], 101.5 + 1.13544 * 1451.018 + 700 + 10)
+            # G0 + G1 + H = 360 s: within 40 % of the armed 1,451 s, not of L1's 870.6 s.
+            self.assertFalse(registration["duty_bar"]["pass"])
+            self.assertAlmostEqual(registration["duty_bar"]["duty_T_dead_s"], l1["l1_T_dead_s"])
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(r1, "_run", FakeWorld()):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            registration = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+            self.assertEqual(registration["l1"]["effective_T_dead_s"], 1451.018)
+            self.assertTrue(registration["duty_bar"]["pass"])
+
+    def test_external_volume_at_t0_refuses_before_any_powermode_or_runtime_work(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            world.mounted = True
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            self.assertFalse([c for c in world.calls if "--r1-kind" in c])
+            self.assertNotIn(r1.PowerModeGuard.HIGH, world.calls)
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertIn("external_volume.t0", result["error"])
+            self.assertIn("/Volumes/JW-EXT", result["error"])
+            points = [row["point"] for row in result["external_volumes"]]
+            self.assertEqual(points, ["t0", "terminal"])
+            self.assertEqual(result["external_volumes"][0]["external"][0]["mount_point"], "/Volumes/JW-EXT")
+
+    def test_external_volume_attached_mid_r1_refuses_at_the_next_segment(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(mount_after="step-30b")
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            kinds = [c[c.index("--r1-kind") + 1] for c in world.calls if "--r1-kind" in c]
+            self.assertEqual(kinds[-1], "step-30b")
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertEqual(result["status"], "refused")
+            self.assertIn("external_volume.before:idle:cooldown_after_30b", result["error"])
+            self.assertEqual(world.mode, 0)
+            self.assertFalse((Path(td) / "registration/r1_slots.json").exists())
+
+    def test_clean_r1_records_every_volume_census(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(r1, "_run", FakeWorld()):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            registration = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+            points = [row["point"] for row in registration["external_volumes"]]
+            self.assertEqual(points[0], "t0")
+            self.assertEqual(points[-1], "before_registration")
+            self.assertTrue(all(row["verdict"] == "PASS" for row in registration["external_volumes"]))
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertEqual(result["external_volumes"][-1]["point"], "terminal")
+
+    def test_rerun_into_an_existing_output_is_a_refusal_not_a_traceback(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "run"
+            out.mkdir()
+            (out / "r1_result.json").write_text('{"status": "complete"}\n')
+            world = FakeWorld()
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            self.assertEqual(json.loads((out / "r1_result.json").read_text()), {"status": "complete"})
+            self.assertFalse([c for c in world.calls if "--r1-kind" in c])
+            self.assertEqual(world.mode, 0)
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "run").mkdir()  # a SIGKILLed run left no terminal record
+            with patch.object(r1, "_run", FakeWorld()):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertIn("output directory already exists", result["error"])
+
+    def test_batch_window_is_pacific_wall_time_across_a_dst_change(self):
+        # Cold pass LOW 8. From 23:00 PST on 2027-03-13 (a fixed -08:00 offset,
+        # as datetime.now().astimezone() gave), a 12 h segment ends at 12:00
+        # PDT on 2027-03-14, inside that day's 11:45-13:15 window. The fixed
+        # offset put the window at 12:45-14:15 PDT, so the segment started at
+        # once and ran into the batch window.
+        from datetime import timezone
+        utc = timezone.utc
+        moments = [r1.datetime(2027, 3, 13, 23, 0, tzinfo=timezone(r1.timedelta(hours=-8)))]
+
+        def sleep(seconds):
+            moments.append((moments[-1].astimezone(utc) + r1.timedelta(seconds=seconds)).astimezone(PACIFIC))
+        waited = r1.wait_outside_os_batch(12 * 3600, now=lambda: moments[-1], sleep=sleep)
+        self.assertGreater(waited, 0)
+        self.assertEqual(moments[-1].astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z"), "2027-03-14 13:15 PDT")
+        self.assertEqual(r1._now_local().tzinfo, PACIFIC)
+
+    def test_driver_record_satisfies_the_kit_evidence_binding(self):
+        # MEDIUM-3 end to end: the kit binds exactly what the driver writes.
+        from scripts import align_v4_kit as kit
+        from tests.align.test_v4_kit import ready_inputs
+        for synthetic in (False, True):
+            with self.subTest(synthetic=synthetic), tempfile.TemporaryDirectory() as td:
+                with patch.object(r1, "_run", FakeWorld()):
+                    self.assertEqual(r1.run(self.args(td, synthetic=synthetic)), 0)
+                slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+                inputs, _ = ready_inputs(101.5, slots["max_r1_tail_s"])
+                if synthetic:
+                    with self.assertRaisesRegex(ValueError, "source must be"):
+                        kit.require_ready(inputs, slots)
+                    kit.require_ready(inputs, slots, synthetic=True)
+                else:
+                    kit.require_ready(inputs, slots)
 
     def test_plan_pins_durations_and_gated_held_members(self):
         rows = r1.phase_plan(False)

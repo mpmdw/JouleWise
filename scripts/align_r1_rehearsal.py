@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import AbstractContextManager
-from datetime import datetime, timedelta
+from datetime import datetime, time as wall_time, timedelta
 import json
 import math
 import os
@@ -22,12 +22,14 @@ import subprocess
 import sys
 import time
 from typing import Callable, Sequence
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.align.apple import r1_runtime_contract as contract  # noqa: E402
 from joulewise.align.apple.powermode import parse_ac_powermode  # noqa: E402,F401  (re-exported)
+from joulewise.align.apple import external_volume  # noqa: E402
 
 SCHEMA = "joulewise.align.r1_slots.v1"
 SLOT_NAMES = tuple(f"S{i}" for i in range(1, 10)) + (
@@ -52,8 +54,16 @@ DUTY_FALLBACK_ORDER = (
     "4-bit at the same rung (quantization rule trigger extended to 'duty bar fails')",
     "D screen-only; return to council",
 )
-# Ruling 8: OS daily-batch avoidance and load journal.
+# Ruling 8: OS daily-batch avoidance and load journal. The window is local
+# wall time on the measurement Mac (Pacific); a zoneinfo zone keeps the
+# boundaries right across a DST transition (cold pass LOW 8).
 OS_BATCH_WINDOW_LOCAL = ((11, 45), (13, 15))
+LOCAL_ZONE = ZoneInfo("America/Los_Angeles")
+# Ruling 8 load-journal completeness (executing review MEDIUM-1): about one
+# sample per wall second of the segment, and no gap longer than this.
+CPU_JOURNAL_MIN_RATE = 0.9
+CPU_JOURNAL_SLACK_S = 5
+CPU_JOURNAL_MAX_GAP_S = 5.0
 QUIET_SEGMENT_BOUND_S = 1800           # planning bound for an unscheduled step segment
 CPU_BUSY_CORES_LIMIT = 0.5
 CPU_BUSY_SUSTAINED_S = 60
@@ -212,7 +222,12 @@ def phase_plan(include_4bit=False):
     return phases
 
 
-def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False, contract_key=None):
+def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False, contract_key=None,
+            watch=None):
+    if watch is not None:
+        # Ruling 20: no external volume may be mounted between t0 and the
+        # terminal record; check before every runtime invocation.
+        watch.check(f"before:{kind}:{Path(output).name}")
     argv = list(runtime) + ["--r1-kind", kind, "--output", str(output)]
     if duration is not None:
         argv += ["--duration-s", str(duration)]
@@ -384,8 +399,14 @@ def _finite_number(value, label):
     return float(value)
 
 
-def deadman_summary(name, result):
-    """Ruling 1(a)/(d): deadman consumption by phase, predicted turns, duty bar."""
+def deadman_summary(name, result, duty_t_dead=None):
+    """Ruling 1(a)/(d): deadman consumption by phase, predicted turns, duty bar.
+
+    The 40 % share is judged against ``duty_t_dead`` when given: min(armed
+    T_dead, L1 T_dead) on the R1 record (executing review MEDIUM-2), because
+    W1 arms the L1 value, which is shorter than the armed one once the R1
+    tail exceeds 40 s.
+    """
     block = result.get("deadman")
     if not isinstance(block, dict) or not isinstance(block.get("phases_s"), dict):
         raise Refusal(f"{name}: runtime omitted deadman consumption by phase")
@@ -401,12 +422,13 @@ def deadman_summary(name, result):
     if not isinstance(x7, bool):
         raise Refusal(f"{name}: x7 flag must be boolean")
     gate_hold = phases["G0"] + phases["G1"] + phases["H"]
+    duty = t_dead if duty_t_dead is None else duty_t_dead
     per_turn = ((phases["G1"] + phases["H"] + phases["decode"] + phases["prefill"] + phases["tool"]) / turns
                 if turns else None)
     predicted = ((t_dead - phases["G0"] - phases["tail"]) / per_turn) if per_turn else None
     checks = {"no_x7": not x7, "admitted_turns_ge_3": turns >= DUTY_BAR["min_admitted_turns"],
-              "gate_hold_le_40pct_T_dead": gate_hold <= DUTY_BAR["max_gate_hold_fraction_of_T_dead"] * t_dead}
-    return {"run": name, "T_dead_s": t_dead, "phases_s": phases,
+              "gate_hold_le_40pct_T_dead": gate_hold <= DUTY_BAR["max_gate_hold_fraction_of_T_dead"] * duty}
+    return {"run": name, "T_dead_s": t_dead, "duty_T_dead_s": duty, "phases_s": phases,
             "fraction_of_T_dead": {k: v / t_dead for k, v in phases.items()},
             "gate_hold_s": gate_hold, "admitted_turns": turns, "x7": x7,
             "predicted_turns_per_episode": predicted,
@@ -422,15 +444,38 @@ def _sustained_busy(samples):
     return False
 
 
-def os_load_verdict(name, result):
-    """Ruling 8: a per-second CPU journal and census are required; redo on load."""
+def os_load_verdict(name, result, wall_s=None):
+    """Ruling 8: a per-second CPU journal and census are required; redo on load.
+
+    The journal must cover the segment (executing review MEDIUM-1): at least
+    0.9 samples per wall second of the invocation, less 5 s of start-up
+    slack, with sample times (``cpu_busy_t_s``) nondecreasing and no gap over
+    5 s. Otherwise the 60 s-sustained rule is vacuous, so R1 refuses.
+    """
     samples = result.get("cpu_busy_cores")
     if not isinstance(samples, list) or not samples:
         raise Refusal(f"{name}: runtime omitted the per-second CPU load journal")
     values = [_finite_number(v, f"{name}.cpu_busy_cores") for v in samples]
     if not result.get("census"):
         raise Refusal(f"{name}: runtime omitted the process census")
-    return {"redo": _sustained_busy(values), "seconds": len(values), "max_busy_cores": max(values)}
+    times = result.get("cpu_busy_t_s")
+    if not isinstance(times, list) or len(times) != len(values):
+        raise Refusal(f"{name}: cpu_busy_t_s must give one sample time per cpu_busy_cores value")
+    times = [_finite_number(v, f"{name}.cpu_busy_t_s") for v in times]
+    gaps = [b - a for a, b in zip(times, times[1:])]
+    if any(gap < 0 for gap in gaps):
+        raise Refusal(f"{name}: cpu_busy_t_s is not nondecreasing")
+    max_gap = max(gaps, default=0.0)
+    if max_gap > CPU_JOURNAL_MAX_GAP_S:
+        raise Refusal(f"{name}: CPU load journal has a {max_gap:.1f} s gap (> {CPU_JOURNAL_MAX_GAP_S} s)")
+    required = None
+    if wall_s is not None:
+        required = CPU_JOURNAL_MIN_RATE * wall_s - CPU_JOURNAL_SLACK_S
+        if len(values) < required:
+            raise Refusal(f"{name}: CPU load journal has {len(values)} samples over {wall_s:.1f} s "
+                          f"of wall time (needs >= {required:.1f})")
+    return {"redo": _sustained_busy(values), "seconds": len(values), "max_busy_cores": max(values),
+            "wall_s": wall_s, "required_samples": required, "max_gap_s": max_gap}
 
 
 def soak_detrended(series_by_key):
@@ -453,11 +498,22 @@ def soak_detrended(series_by_key):
     return out
 
 
-def _in_batch_window(moment):
+def _batch_windows(moment):
+    """Today's and tomorrow's 11:45-13:15 Pacific windows as epoch seconds.
+
+    Each boundary is built from the local calendar date in LOCAL_ZONE, so on
+    a DST transition day it still means 11:45 and 13:15 wall time; all
+    comparisons are on absolute (epoch) time, never on fixed-offset wall time.
+    """
     (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
-    start = moment.replace(hour=h0, minute=m0, second=0, microsecond=0)
-    end = moment.replace(hour=h1, minute=m1, second=0, microsecond=0)
-    return start, end
+    day = moment.astimezone(LOCAL_ZONE).date()
+    windows = []
+    for offset in (0, 1):
+        date = day + timedelta(days=offset)
+        start = datetime.combine(date, wall_time(h0, m0), tzinfo=LOCAL_ZONE).timestamp()
+        end = datetime.combine(date, wall_time(h1, m1), tzinfo=LOCAL_ZONE).timestamp()
+        windows.append((start, end))
+    return windows
 
 
 def wait_outside_os_batch(expected_s, *, now=None, sleep=None):
@@ -467,20 +523,20 @@ def wait_outside_os_batch(expected_s, *, now=None, sleep=None):
     waited = 0.0
     while True:
         moment = now()
-        start, end = _in_batch_window(moment)
-        finish = moment + timedelta(seconds=expected_s)
-        overlaps = any(moment < e and finish > s0 for s0, e in (
-            (start, end), (start + timedelta(days=1), end + timedelta(days=1))))
-        if not overlaps:
+        if moment.tzinfo is None:
+            raise ValueError("wait_outside_os_batch needs an aware datetime")
+        t = moment.timestamp()
+        finish = t + expected_s
+        hit = next(((s0, e) for s0, e in _batch_windows(moment) if t < e and finish > s0), None)
+        if hit is None:
             return waited
-        target = end if moment < end else end + timedelta(days=1)
-        delay = max(1.0, (target - moment).total_seconds())
+        delay = max(1.0, hit[1] - t)
         sleep(delay)
         waited += delay
 
 
 def _now_local():
-    return datetime.now().astimezone()
+    return datetime.now(LOCAL_ZONE)
 
 
 def projected_mde(e_d, gated):
@@ -515,7 +571,8 @@ def write_soak_reference(output, soak_row):
 
 def _release_against_soak(args, output, label, soak_reference):
     """A G0-style release against the soak before a leg or a heavy redo."""
-    release = _invoke(args.runtime, "g0-release-soak", output / label, soak_reference=soak_reference)
+    release = _invoke(args.runtime, "g0-release-soak", output / label, soak_reference=soak_reference,
+                      watch=getattr(args, "volume_watch", None))
     if not isinstance(release.get("released"), bool):
         raise Refusal(f"{label}: G0 release status missing")
     return release
@@ -541,7 +598,7 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
                    if release_now else None)
         started = time.time_ns()
         result = _invoke(args.runtime, kind, target, duration, soak_reference=soak_reference,
-                         quiet=quiet, contract_key=contract_key)
+                         quiet=quiet, contract_key=contract_key, watch=getattr(args, "volume_watch", None))
         row = {"name": name, "class": workload_class, "started_ns": started, "ended_ns": time.time_ns(),
                "attempt": attempt, "os_batch_wait_s": waited, "output_dir": str(target), "result": result,
                **(extra or {})}
@@ -550,7 +607,7 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
         if not quiet:
             record["phases"].append(row)
             return result, row
-        verdict = os_load_verdict(name, result)
+        verdict = os_load_verdict(name, result, wall_s=(row["ended_ns"] - row["started_ns"]) / 1e9)
         redo_reason = "cpu_load" if verdict["redo"] else None
         if not redo_reason and contract_key == "idle_soak":
             row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"))
@@ -582,6 +639,61 @@ def _check_gated_t_dead(name, result, step_d):
         raise Refusal(f"{name}: deadman armed T_dead_s {armed} differs from the step-d T_dead slot {t_dead}")
 
 
+class VolumeWatch:
+    """Ruling 20 for R1: no external volume between t0 and the terminal record.
+
+    Reuses ``joulewise.align.apple.external_volume`` with its configuration
+    pinned to status ``off`` (today's rule: any external volume refuses; the
+    SSD amendment is not adopted). Every census is recorded.
+    """
+
+    def __init__(self, runner=None):
+        self.runner = runner
+        self.config = external_volume.validate_config(None)
+        self.records = []
+
+    def census(self, point):
+        run = self.runner or (lambda argv: _run(argv))
+        taken = external_volume.census(run)
+        verdict = external_volume.arm_check(self.config, taken, run=run)
+        self.records.append({"point": point, "verdict": verdict["verdict"], "reasons": verdict["reasons"],
+                             "external": verdict["external"],
+                             "mounts": [{k: row.get(k) for k in ("device", "mount_point", "fs_type", "class")}
+                                        for row in taken.get("mounts", [])]})
+        return verdict
+
+    def check(self, point):
+        verdict = self.census(point)
+        if verdict["verdict"] != external_volume.PASS:
+            raise Refusal(f"external_volume.{point}: " + "; ".join(verdict["reasons"]))
+
+
+def l1_evaluation(i_d, armed_t_dead, max_tail_s):
+    """Lead ruling L1 on the R1 record (executing review MEDIUM-2).
+
+    L1 T_dead = min((1750 - I_D)/1.13544, (1800 - I_D - max_R1_tail - 10)/1.13544)
+    is what W1 will arm. The duty bar's 40 % share is judged against
+    min(armed, L1), and the member fit I_D + 1.13544 T_dead + tail + 10 <= 1800
+    is printed for both the armed and the effective value.
+    """
+    from scripts.align_v4_kit import DEADMAN_FACTOR, L1_MARGIN_S, MEMBER_CAP_S, l1_t_dead
+    i_d = _finite_number(i_d, "step-d.slots.I_D")
+    armed = _finite_number(armed_t_dead, "step-d.slots.T_dead")
+    tail = _finite_number(max_tail_s, "max_r1_tail_s")
+    l1 = l1_t_dead(i_d, tail)
+    effective = min(armed, l1)
+
+    def worst(t_dead):
+        return i_d + DEADMAN_FACTOR * t_dead + tail + L1_MARGIN_S
+
+    return {"authority": "LEAD-RULINGS-1 L1", "I_D": i_d, "max_r1_tail_s": tail,
+            "armed_T_dead_s": armed, "l1_T_dead_s": l1, "effective_T_dead_s": effective,
+            "member_fit_worst_armed_s": worst(armed), "member_fit_worst_effective_s": worst(effective),
+            "member_cap_s": MEMBER_CAP_S,
+            "armed_fits": worst(armed) <= MEMBER_CAP_S + 1e-6,
+            "member_fit_ok": effective > 0 and worst(effective) <= MEMBER_CAP_S + 1e-6}
+
+
 QUIET_KINDS = ("idle", "step-30b", "step-d") + tuple(
     f"d-planning-turn-r-plus-{int(offset)}c" for offset in PLANNING_START_OFFSETS_C)
 
@@ -590,8 +702,9 @@ def run(args):
     marker = getattr(args, 'power_marker', None) or (args.output.parent / '.align-r1-high-power')
     marker = Path(marker).resolve()
     output = args.output.resolve()
-    output.mkdir(parents=True, exist_ok=False)
-    record = {"schema": SCHEMA, "status": "running", "phases": [], "powermode": []}
+    created = False
+    record = {"schema": SCHEMA, "status": "running", "phases": [], "powermode": [], "external_volumes": []}
+    watch = args.volume_watch = VolumeWatch(getattr(args, "volume_runner", None))
     results = {}
     # Resolve the runner at call time so synthetic rehearsals can replace the
     # complete command boundary (runtime, SMC journal, sudo and pmset).
@@ -614,6 +727,15 @@ def run(args):
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         old_handlers[sig] = signal.signal(sig, stop)
     try:
+        # Inside the guard's try (cold pass LOW 2): a rerun into an existing
+        # output directory is a recorded refusal, not a traceback.
+        try:
+            output.mkdir(parents=True, exist_ok=False)
+        except FileExistsError as error:
+            raise Refusal(f"output directory already exists: {output}") from error
+        created = True
+        # Ruling 20 at t0, before any powermode or runtime work.
+        watch.check("t0")
         with guard:
             soak_reference = None
             for name, kind, duration, workload_class in phase_plan(args.include_4bit):
@@ -655,15 +777,22 @@ def run(args):
                             "rule_outcome": adoption}
             # Same thin runtime seam owns the pilot-style authenticated harvest;
             # the driver records but never re-implements calibration custody.
-            harvested = _invoke(args.runtime, "harvest", output / "harvest", soak_reference=soak_reference)
+            harvested = _invoke(args.runtime, "harvest", output / "harvest", soak_reference=soak_reference,
+                                watch=args.volume_watch)
             record["phases"].append({"name": "harvest", "class": "light", "result": harvested})
         slots = derive_slots(results.get("step_D_prefill_10k_decode_4096") or {})
         temperature_summary = planning_temperature_summary(
             [results[f"planning_turn_R_plus_{int(offset)}C"] for offset in PLANNING_START_OFFSETS_C])
         gated = {name: results[name] for name, _ in GATED_D_RUNS}
-        deadman = [deadman_summary(name, result) for name, result in gated.items()]
+        max_tail = max(deadman_summary(name, result)["phases_s"]["tail"] for name, result in gated.items())
+        l1 = l1_evaluation(slots["I_D"], slots["T_dead"], max_tail)
+        print("R1 L1: " + json.dumps(l1, sort_keys=True), flush=True)
+        deadman = [deadman_summary(name, result, duty_t_dead=l1["effective_T_dead_s"])
+                   for name, result in gated.items()]
         duty = {"declared": DUTY_BAR, "pass": all(row["duty_bar"]["pass"] for row in deadman),
-                "fallback_order": list(DUTY_FALLBACK_ORDER)}
+                "duty_T_dead_s": l1["effective_T_dead_s"], "fallback_order": list(DUTY_FALLBACK_ORDER)}
+        # Ruling 20: the last census before the slots are frozen.
+        watch.check("before_registration")
         mde = projected_mde(results["step_D_prefill_10k_decode_4096"].get("e_D_j_per_token"), gated)
         u5 = u5_verdict(temperature_summary, gated)
         battery = battery_report(results, harvested)
@@ -673,8 +802,9 @@ def run(args):
                         "slots": slots, "slot_names": list(SLOT_NAMES),
                         "planning_temperature": temperature_summary, "u5": u5, "ac_powermode": ac_powermode,
                         "high_power": {"t_decline_s": legs, "g0_released": releases, **adoption},
-                        "deadman_budget": deadman, "duty_bar": duty,
-                        "max_r1_tail_s": max(row["phases_s"]["tail"] for row in deadman),
+                        "deadman_budget": deadman, "duty_bar": duty, "l1": l1,
+                        "max_r1_tail_s": max_tail,
+                        "external_volumes": watch.records,
                         "projected_mde": mde, "battery": battery}
         reg = args.registration.resolve()
         reg.parent.mkdir(parents=True, exist_ok=True)
@@ -690,9 +820,29 @@ def run(args):
         # exceptions raised by context teardown itself.
         guard.restore()
         record["powermode"] = guard.records
-        (output / "r1_result.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+        try:
+            watch.census("terminal")  # recorded, never judged here
+        except Exception as error:  # noqa: BLE001 - the terminal record must still be written
+            watch.records.append({"point": "terminal", "verdict": "UNMEASURED",
+                                  "reasons": [f"{type(error).__name__}: {error}"]})
+        record["external_volumes"] = watch.records
+        _write_result(output, record, created)
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
+
+
+def _write_result(output, record, created):
+    """r1_result.json; never overwrites an earlier run's terminal record."""
+    text = json.dumps(record, indent=2, sort_keys=True) + "\n"
+    path = output / "r1_result.json"
+    if created:
+        path.write_text(text)
+        return
+    try:
+        with path.open("x") as handle:
+            handle.write(text)
+    except (FileExistsError, FileNotFoundError, NotADirectoryError):
+        sys.stderr.write("R1 refused without a writable new r1_result.json: " + record.get("error", "") + "\n")
 
 
 def main(argv=None):
