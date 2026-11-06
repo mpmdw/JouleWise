@@ -17,8 +17,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 
 def _volume_identity(path: Path) -> str:
-    """Return an APFS volume identity for an existing path, or refuse."""
-    info = plistlib.loads(subprocess.check_output(["diskutil", "info", "-plist", str(path)]))
+    """Return an APFS volume identity for an existing path, or refuse.
+
+    ``diskutil info`` accepts only a device or mount point and exits 1 for an
+    ordinary path inside a volume, so resolve the backing device with
+    ``df -P`` first (this also follows the system/data firmlinks)."""
+    lines = subprocess.check_output(["df", "-P", str(path)], text=True).splitlines()
+    device = lines[1].split()[0] if len(lines) > 1 and lines[1].split() else ""
+    if not device.startswith("/dev/"):
+        raise ValueError(f"cannot resolve the backing device of {path}")
+    info = plistlib.loads(subprocess.check_output(["diskutil", "info", "-plist", device]))
     if "apfs" not in str(info.get("FilesystemType", "")).lower():
         raise ValueError(f"clone source/destination must be on APFS: {path}")
     identity = info.get("VolumeUUID") or info.get("APFSVolumeUUID")

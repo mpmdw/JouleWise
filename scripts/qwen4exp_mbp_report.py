@@ -23,13 +23,21 @@ def table(headers, rows):
                       *("| " + " | ".join(cell(c) for c in row) + " |" for row in rows)])
 
 
+def ple_resident_gb(stats):
+    """mmap tables report mincore residency; pread (F_NOCACHE) tables have none."""
+    values = [t["resident_bytes"] for t in stats.values() if "resident_bytes" in t]
+    if not values and stats:
+        return "n/a (pread)"
+    return round(sum(values) / 1e9, 3)
+
+
 def render(template, reports, run_id):
     def worker(name):
         return reports.get(name, {}).get("results", {})
     memory = []
     for r in worker("memory.json").get("runs", []):
         memory.append([r["context"], r["prompt_tokens"], round(r["metal"]["peak_bytes"] / 1e9, 3),
-                       round(sum(t["resident_bytes"] for t in r["ple_after"].values()) / 1e9, 3),
+                       ple_resident_gb(r["ple_after"]),
                        r.get("prediction", {}).get("relative_error", "n/a")])
     quality, benchmark = [], []
     for filename, rows in (("quality.json", quality), ("benchmark.json", benchmark)):
@@ -45,7 +53,7 @@ def render(template, reports, run_id):
         before, after = r["ple_before"], r["ple_after"]
         paging.append([r["repeat"], r["major_faults"], r["minor_faults"], r["input_blocks"],
                        sum(after[k]["lookups"] - before[k]["lookups"] for k in after),
-                       round(sum(t["resident_bytes"] for t in after.values()) / 1e9, 3)])
+                       ple_resident_gb(after)])
     evidence = [[name, reports[name].get("verdict", "receipt"), reports[name].get("abort") or ""]
                 if name in reports else [name, "PENDING", "missing"] for name in FILES]
     reference = reports.get("bf16-benchmark.json", {})

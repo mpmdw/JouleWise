@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -55,6 +56,28 @@ class VariantTests(unittest.TestCase):
                     variant.derive(source, pin, destination)
             clone.assert_not_called()
             self.assertFalse(destination.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "diskutil/df volume probe is macOS-only")
+    def test_volume_identity_accepts_paths_inside_a_volume(self):
+        # diskutil info exits 1 for a non-mount-point path; the artifact lives
+        # at /Volumes/JW-EXT/flashnext/<name>, never at a mount point.
+        with tempfile.TemporaryDirectory() as tmp:
+            nested = Path(tmp) / "a" / "b"
+            nested.mkdir(parents=True)
+            identity = variant._volume_identity(nested)
+            self.assertTrue(identity)
+            self.assertEqual(identity, variant._volume_identity(Path(tmp)))
+
+    def test_report_renders_pread_runs_without_mincore_residency(self):
+        from scripts import qwen4exp_mbp_report as reporting
+        pread = {"1": {"io": "pread", "lookups": 5, "gather_seconds": 0.5}}
+        run = dict(context=4096, prompt_tokens=4032, metal={"peak_bytes": 90e9}, repeat=0,
+                   ple_before={"1": {"io": "pread", "lookups": 0, "gather_seconds": 0}}, ple_after=pread,
+                   major_faults=0, minor_faults=0, input_blocks=0)
+        reports = {"memory.json": {"verdict": "completed", "results": {"runs": [run]}},
+                   "paging.json": {"verdict": "completed", "results": {"runs": [run]}}}
+        report = reporting.render(reporting.TEMPLATE.read_text(), reports, "pread")
+        self.assertIn("n/a (pread)", report)
 
 
 HAS_NATIVE = importlib.util.find_spec("mlx") is not None and importlib.util.find_spec("mlx_lm") is not None
