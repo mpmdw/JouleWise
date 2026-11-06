@@ -4456,7 +4456,9 @@ def mint_multi_cell_floor_artifact(
         if BLOCK5_PRODUCERS:
             raise MintError("block5_producer_registry_already_active")
         try:
-            entries = compose_indexed_producers(window_index)
+            # As the emitter (f4d000128): the two producer compositions are
+            # independent and consumed in pack order (b5 under-90 round 2).
+            entries = compose_indexed_producers(window_index, parallel_prepare=True)
             BLOCK5_PRODUCERS.update({str(entry.window.claim_runs_root.resolve()): entry for entry in entries.values()})
             manifest = _load_v2_input_manifest(input_manifest_path)
             if manifest.get("schema_version") != BLOCK5_INPUT_SCHEMA:
