@@ -40,6 +40,16 @@ No extra sampler draws occur. Full prompt and fed-token
 counts continue to include the manually prefetched prefix. A checkpoint is
 never taken after generation in the hope of rewinding recurrent state later.
 
+The prefill callback is ALIGN-local in `apple/endpoint.py`'s stream observer.
+`apple/generation.py` passes an explicit runtime view to the unchanged core
+generation method; it does not replace methods or swap the prepared runtime's
+native module. The view retains the full delta for core accounting while the
+observer feeds only its remaining suffix to the native stream. Per the ALIGN
+v4 plan ruling 4, the complete `joulewise/adapters/mlx_runtime.py` file is restored
+to pilot-10 `83e2dac59`; no new pinned-core rebind is needed. Boundary tests pin
+that complete file and compare disabled-checkpoint output/event/provenance
+bytes with the prior dispatch for both `None` and `0`.
+
 Each checkpoint retains an offset for every attention layer and deep-copies
 the Python containers of **each entire ArraysCache object**, including auxiliary
 metadata. In MLX 0.31.2, `deepcopy(mx.array)` retains the underlying buffer by

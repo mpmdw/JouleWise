@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint
+from joulewise.align.apple.generation import generate_turn
 from joulewise.align.apple.workload import EpisodeRuntimeAdapter, EpisodeSpec
 from joulewise.align.apple.prompt_cache import (
     EpisodePromptCache, checkpoint_size_from_config, hybrid_checkpoint_policy,
@@ -332,22 +333,25 @@ class CheckpointTests(unittest.TestCase):
         runtime._model, runtime._tokenizer = HybridModel(clock), Tokenizer()
         runtime._model_config = {'model_type': 'qwen3_next'}
         records = []
-        generate = runtime._generate
 
         def capture_record(*args, **kwargs):
-            record = generate(*args, **kwargs)
+            record = generate_turn(*args, **kwargs)
             records.append(record)
             return record
 
-        runtime._generate = capture_record
+        capture = patch('joulewise.align.apple.endpoint.generate_turn', side_effect=capture_record)
+        capture.start()
+        self.addCleanup(capture.stop)
 
         def stream_generate(model, tokenizer, prompt, *, prompt_cache, **kwargs):
+            self.assertIs(runtime._mlx_lm, native)
             model([prompt], cache=prompt_cache)
             for token in (7, 0):
                 model([[token]], cache=prompt_cache)
                 yield SimpleNamespace(token=token, text='', finish_reason='stop' if token == 0 else None)
 
-        runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
+        native = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
+        runtime._mlx_lm = native
         config = base_config()
         config = replace(config, hardware_target=replace(config.hardware_target, runtime_backend=RuntimeBackend.MLX))
         endpoint = MlxEndpoint(runtime, config, clock, episode_domain='synthetic', prompt_cache='episode_prefix',

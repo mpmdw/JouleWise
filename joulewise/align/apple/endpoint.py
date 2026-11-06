@@ -19,6 +19,7 @@ from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mapping
 from joulewise.align.apple.sampling import turn_seed
 from joulewise.align.apple.budget import DeadmanExpired
+from joulewise.align.apple.generation import generate_turn
 from joulewise.align.apple.xml_tool_calls import (
     XML_MODEL_FAMILIES, normalize_model_family, parse_xml_calls, validate_model_family,
 )
@@ -253,7 +254,8 @@ def parse_completion(
 class _StreamObservation:
     """Observe native finish reasons without replacing MLX's generation loop."""
 
-    def __init__(self, native: Any, *, deadman=None, max_tokens=None, thermal=None, turn_index=0) -> None:
+    def __init__(self, native: Any, *, deadman=None, max_tokens=None, thermal=None, turn_index=0,
+                 prefill_prompt=None) -> None:
         self.native = native
         self.finish_reason: str | None = None
         self.deadman_expired = False
@@ -261,6 +263,11 @@ class _StreamObservation:
 
         @wraps(native.stream_generate)
         def stream_generate(*args: Any, **kwargs: Any):
+            # The core has already stamped prefill_start. Keep its full delta
+            # intact for accounting; only the native stream sees the tail.
+            if prefill_prompt is not None:
+                # The pinned core passes model, tokenizer, prompt positionally.
+                args = (*args[:2], prefill_prompt(args[2]), *args[3:])
             stream = iter(native.stream_generate(*args, **kwargs))
             if deadman is None and max_tokens is None and thermal is None:
                 for response in stream:
@@ -691,22 +698,17 @@ class MlxEndpoint:
                     native, deadman=self.deadman,
                     max_tokens=max_tokens if self.enforce_turn_cap or self.thermal is not None else None,
                     thermal=self.thermal, turn_index=turn_index,
+                    prefill_prompt=(lambda delta: self._episode_cache.prefill_checkpoint(delta, cache_metadata))
+                        if self.cache_policy == "episode_prefix" and self._checkpoint_policy else None,
                 )
-                # Sequential in-process turns own this prepared runtime. Restore
-                # the module even on a native fault; identity/probes see it intact.
-                self.runtime._mlx_lm = observation
-                try:
-                    record = self.runtime._generate(
-                        None, [], None, max_tokens, suppress_eos=False,
-                        prepare_prompt=prepare_prompt,
-                        **({"sampler_policy": dict(self.sampler), "per_turn_seed": turn_seed(seed, turn_index)} if self.sampler is not None else {}),
-                        **({"stream_options": stream_options, "cache_accounting": True,
-                            "setup_metadata": cache_setup_metadata, "reconcile_prompt": reconcile_prompt,
-                            "prefill_prompt": lambda delta: self._episode_cache.prefill_checkpoint(delta, cache_metadata)}
-                           if self.cache_policy == "episode_prefix" else {}),
-                    )
-                finally:
-                    self.runtime._mlx_lm = native
+                record = generate_turn(
+                    self.runtime, observation, None, [], None, max_tokens, suppress_eos=False,
+                    prepare_prompt=prepare_prompt,
+                    **({"sampler_policy": dict(self.sampler), "per_turn_seed": turn_seed(seed, turn_index)} if self.sampler is not None else {}),
+                    **({"stream_options": stream_options, "cache_accounting": True,
+                        "setup_metadata": cache_setup_metadata, "reconcile_prompt": reconcile_prompt}
+                       if self.cache_policy == "episode_prefix" else {}),
+                )
                 if self.cache_policy == "episode_prefix" and not observation.deadman_expired and not observation.thermal_aborted:
                     self._episode_cache.finish(record.prompt_token_ids, record.output_token_ids, cache_metadata)
                     cached_tokens = cache_metadata["cached_prompt_tokens"]
