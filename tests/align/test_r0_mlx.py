@@ -23,6 +23,8 @@ class Array:
         return Array([a - b for a, b in zip(self.data, other.data)])
     def item(self):
         return self.data
+    def tolist(self):
+        return list(self.data)
 
 
 class FakeCore:
@@ -92,6 +94,44 @@ class ShimTest(unittest.TestCase):
         self.assertAlmostEqual(nll, -math.log(0.75))
         self.assertEqual(seen, ids[:-1])
         self.assertEqual(len(backend.mx.eval_calls), 3)
+
+    def test_nll_losses_are_per_target_and_nll_is_their_mean(self):
+        backend = MlxBackend.__new__(MlxBackend)
+        backend.mx, backend.guard = FakeCore(), FakeGuard()
+        cache = [SimpleNamespace(state=[])]
+        backend.runtime = SimpleNamespace(_model=lambda array, *, cache: Array(
+            [[0, math.log(3)] if token == 0 else [math.log(3), 0] for token in array.data[0]]))
+        with patch.dict("sys.modules", {"mlx_lm": SimpleNamespace(), "mlx_lm.models": SimpleNamespace(),
+                                        "mlx_lm.models.cache": SimpleNamespace(make_prompt_cache=lambda model: cache)}):
+            ids = [0, 1, 1] + [i % 2 for i in range(256)]
+            losses = backend.nll_losses(ids)
+            mean = backend.nll(ids)
+        self.assertEqual(len(losses), len(ids) - 1)
+        self.assertAlmostEqual(losses[1], -math.log(0.25))  # 1 -> 1 is the unlikely transition
+        self.assertAlmostEqual(mean, sum(losses) / len(losses))
+
+    def test_greedy_session_has_no_sampler_and_chat_mode_must_match(self):
+        seen = []
+        class Endpoint:
+            def __init__(self, *args, sampler=None, **kwargs):
+                self.sampler = sampler
+            def chat(self, messages, **kwargs):
+                seen.append(kwargs)
+                return SimpleNamespace(raw_usage={"joulewise": {"flags": []}})
+        backend = MlxBackend.__new__(MlxBackend)
+        backend.guard, backend.tag = FakeGuard(), "D"
+        backend.runtime = backend.config = backend.clock = backend.prepared = None
+        with patch("joulewise.align.apple.endpoint.MlxEndpoint", Endpoint):
+            backend.new_session(None, greedy=True)
+            self.assertIsNone(backend.endpoint.sampler)
+            with self.assertRaises(RuntimeError):
+                backend.chat([], [], 16, 1)
+            backend.chat([], [], 16, None, greedy=True)
+            self.assertEqual((seen[-1]["temperature"], seen[-1]["seed"]), (0.0, None))
+            backend.new_session(None)
+            self.assertEqual(backend.endpoint.sampler["temperature"], 1.0)
+            with self.assertRaises(RuntimeError):
+                backend.chat([], [], 16, None, greedy=True)
 
     def test_fixed_context_uses_episode_cache_exact_positions_and_absent_metadata(self):
         backend = MlxBackend.__new__(MlxBackend)

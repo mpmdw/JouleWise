@@ -167,7 +167,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (Path(__file__), Path(r0.__file__), REPO / "joulewise/align/r0_host.py",
                          REPO / "joulewise/align/r0_mlx.py", REPO / "joulewise/align/r0_step.py",
-                         REPO / "scripts/align_r0_checks.py")}
+                         REPO / "scripts/align_r0_checks.py", r0.NLL_REFERENCE_PATH)}
         report["config_sha256"] = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         report["checkout_head"] = command(("git", "-C", str(REPO), "rev-parse", "HEAD")).strip()
         for name, fn in (("host", host_snapshot), ("disk", lambda: disk_census(config, r0.PINS, guard.check))):

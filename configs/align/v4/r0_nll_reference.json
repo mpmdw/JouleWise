@@ -1,0 +1,65 @@
+{
+  "schema": "joulewise.align.r0.nll_reference.v1",
+  "description": "R0 load-check NLL verdict per model. Keyed by (artifact revision, fixture sha256 = r0.digest of the 2,049 pinned ids). Every model names its mode: 'reference' = pass iff |mean - reference| <= tolerance.mean_nats_per_token AND every 256-target bin within tolerance.bin_nats_per_token; 'absolute' = pass iff 0 <= mean <= nll_limit. A model/fixture not listed here fails closed (reason no_reference). See docs/align/v4/R0-LOAD-REFERENCE-NOTE.md.",
+  "bin_width": 256,
+  "targets": 2048,
+  "models": [
+    {
+      "label": "D",
+      "name": "mlx-community/Qwen3.8-27B-8bit",
+      "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+      "mode": "reference",
+      "fixture_sha256": "792beb565106c53ed77695c7ccbb998b11300b3ba25e485c8c0069dcb710ac42",
+      "targets": 2048,
+      "reference": {
+        "nll_nats_per_token": 11.0642,
+        "bins256": [4.5679, 10.2525, 10.3264, 7.9248, 13.1373, 15.4235, 15.8555, 11.0259]
+      },
+      "tolerance": {
+        "mean_nats_per_token": 0.10,
+        "bin_nats_per_token": 0.5,
+        "basis": "Observed |mlx - hf32| on this fixture: mean 0.021 (mlx_lm bf16 upstream), 0.029 (fresh 8-bit and the D tensors), 0.028 (R0 chunked path, 11.0368); worst 256-target bin 0.243 (bf16), 0.255 (8-bit/D), 0.193 (R0 chunked). Tolerances are ~3.5x and ~2x the worst observed. A runtime/artifact fault of the kind R0 exists to catch moves the mean by nats, not hundredths."
+      },
+      "provenance": {
+        "implementation": "HF transformers 5.22.1, Qwen3_5DecoderLayer, float32 weights and activations (torch MPS), layer-streamed",
+        "upstream_repo": "Qwen/Qwen3.8-27B",
+        "upstream_revision": "8c0b3d30f3ae96f5c7f774de704bf0ada83e422a",
+        "upstream_dtype": "bfloat16",
+        "script": {
+          "path": "docs/align/r0/2026-11-06-d-nll-diagnosis/scripts/stream27.py",
+          "branch": "lane/2026-11-06-r0-d-nll-diagnosis",
+          "commit": "62bc719f73da4874bb9fd1a2d5c0ee2d1d8f0881",
+          "sha256": "4af4fd79f3c646d0d329823fa8ac6de0a468b7736abd0e0cc22c9cfda6dbf642",
+          "git_blob_sha1": "2e400192897499caa9e55f1a21aac17eeb1af260"
+        },
+        "results": {
+          "path": "docs/align/r0/2026-11-06-d-nll-diagnosis/results/qwen38_27b_stream.json",
+          "sha256": "da18045e5f7c6a8e2e3e52a49bfae3f4a63b7e071fbf891b948901abae0f85c4",
+          "variant": "variants.hf32.start_0"
+        },
+        "date": "2026-11-06",
+        "bins": "Mean per-target NLL over consecutive 256-target bins of variants.hf32.start_0.per_token (2,048 targets), rounded to 4 decimals; their mean equals the reference mean.",
+        "fixture": "First 2,049 rendered ids of benign SHADE spam_filter_update (seed index 91), system + user + tools, enable_thinking=True, default effort; the ids recorded by R0 on 2026-11-06 (records/2026-11-06-align-r0-v4-rerun, docs/align/r0/2026-11-06-rerun/report.json).",
+        "cross_checks_nats_per_token": {
+          "mlx_lm_bf16_upstream": 11.0431,
+          "mlx_lm_fresh_8bit": 11.0356,
+          "mlx_lm_D_artifact": 11.0356,
+          "r0_rerun_chunked_128": 11.0368
+        }
+      }
+    },
+    {
+      "label": "anchor",
+      "name": "mlx-community/Qwen3-30B-A3B-4bit",
+      "revision": "d388dead1515f5e085ef7a0431dd8fadf0886c57",
+      "mode": "absolute",
+      "fixture_sha256": null,
+      "nll_limit": 3.0,
+      "provenance": {
+        "basis": "Original FINAL-DESIGN load bar kept for the qwen3_moe anchor, which does model its own system/tool block: 0.37 nats/token under the pinned mlx stack on the same text re-encoded with its tokenizer (bins 1.32 0.21 0.60 0.34 0.08 0.01 0.04 0.31). No HF reference computed. fixture_sha256 null = any fixture (the anchor scores its own re-encoding).",
+        "evidence": "records/2026-11-06-align-r0-v4-rerun: docs/align/r0/2026-11-06-rerun/NOTE.md (controls table) and diagnostics/anchor_control.py",
+        "date": "2026-11-06"
+      }
+    }
+  ]
+}
