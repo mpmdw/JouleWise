@@ -297,8 +297,29 @@ SHA-256 for large files, upstream Git blob identity for small files, plus
 ordinary SHA-256 for all files in the receipt. No unpinned Python is fetched.
 
 ```sh
-"$PY" -B scripts/qwen4exp_mbp_live.py download --validation-only --out "$RUN/download.json"
+"$PY" -B scripts/qwen4exp_mbp_live.py download --validation-only --plan-only --out "$RUN/download.plan.json"
+"$PY" -B scripts/qwen4exp_mbp_live.py progress --metadata "$RUN/download.plan.json" \
+  --run-dir "$RUN" --interval 60 --cutoff 2026-11-07T20:00:00Z &
+PROGRESS_PID=$!
+"$PY" -B scripts/qwen4exp_mbp_live.py download --validation-only --max-workers 2 --out "$RUN/download.json"
+kill "$PROGRESS_PID" 2>/dev/null || true
 export SOURCE_RECEIPT="$RUN/download.json"
+```
+
+The plan performs the single pinned `model_info` request and downloads no
+payload. Progress imports neither MLX nor Hugging Face, makes no network call,
+counts complete and `.incomplete` blob bytes plus the Xet cache, and appends
+1/5/15-minute rates, ETA, and JW-EXT free space to
+`download.progress.jsonl`. `ETA_PAST_CUTOFF` includes the four-hour conversion
+budget and one-hour verify/eject margin. Download and conversion receipts, and
+their `.attempt.json` failure sidecars, retain UTC start/finish, elapsed time,
+bytes and mean MB/s. Before conversion, a full collecting check may be run as:
+
+```sh
+"$PY" -B scripts/qwen4exp_mbp_live.py verify-source --validation-only \
+  --snapshot "$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["SOURCE_RECEIPT"]))["snapshot"])')" \
+  --metadata "$SOURCE_RECEIPT"
+# Add --quarantine only to move bad cache blobs aside and unlink their snapshot links.
 ```
 
 Set the source path from the completed receipt, then convert. The standalone
@@ -323,6 +344,9 @@ SHA-256. The wrapper additionally writes ordinary `convert.json.SHA256SUMS`
 **outside** the strict artifact directory. Never add reports or sidecars
 inside the artifact. On interruption preserve the partial directory, choose
 a new artifact/output name and restart conversion; conversion is not resumable.
+Conversion progress is appended outside the artifact at
+`$RUN/convert.progress.jsonl`. The converter script SHA-256 for this kit is
+`736cfce348fa27696ccbdf97f7fcfca3c28251d7079586d0621fa84e04f045fb`.
 
 Each native invocation below hashes the artifact once through the canonical
 `load_verified_model` gate, pins the module and 0.31.x stack, then uses the

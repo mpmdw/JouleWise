@@ -39,7 +39,9 @@ import re
 import shutil
 import stat
 import struct
+import time
 import sys
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -482,7 +484,7 @@ def expected_parameters(rules, text_config):
 
 
 def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=None, ngram_group_size=32,
-            module_file=MODULE_FILE, shard_bytes=SHARD_BYTES):
+            module_file=MODULE_FILE, shard_bytes=SHARD_BYTES, progress_path=None):
     import numpy as np
     rules = load_rules(module_file)
     ple_storage = rules.ple_storage_for(profile, ple_storage, group_size)
@@ -547,6 +549,25 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
         current.append(item)
         size += item[4]
     shards += [current] if current else []
+    progress_started = time.monotonic()
+    progress_path = Path(progress_path) if progress_path is not None else None
+    total_units = len(plan) + len(tables)
+    completed_units = completed_bytes = 0
+    # This is an allocation-plan estimate, known before conversion starts.  It
+    # deliberately excludes the tiny JSON/module files written at the end.
+    total_expected = sum(item[4] for item in plan)
+    total_expected += sum(sum(math.prod(e[3]) * 2 for e in entries) for entries in tables.values())
+
+    def progress(current_file):
+        if progress_path is None:
+            return
+        row = {"utc_time": datetime.now(timezone.utc).isoformat(),
+               "monotonic_elapsed": time.monotonic() - progress_started,
+               "tensors_done": completed_units, "tensors_total": total_units,
+               "bytes_written": completed_bytes, "bytes_total_expected": total_expected,
+               "current_file": str(current_file)}
+        with progress_path.open("a") as stream:
+            stream.write(json.dumps(row, separators=(",", ":")) + "\n")
     for number, shard in enumerate(shards, 1):
         name = f"model-{number:05d}-of-{len(shards):05d}.safetensors"
         writer = TensorFile(output / name, {t: spec for item in shard for t, spec in item[3].items()})
@@ -570,9 +591,16 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
             for tensor in tensors:
                 weight_map[tensor] = name
         writer.close()
+        completed_units += len(shard)
+        completed_bytes += (output / name).stat().st_size
+        progress(output / name)
     for layer, entries in sorted(tables.items()):
         ngram_layers[str(layer)], ngram_manifest[str(layer)] = write_ngram_table(
             rules, output, layer, entries, specs[layer], ple_storage, ngram_group_size)
+        completed_units += 1
+        record = output / ngram_layers[str(layer)]["file"]
+        completed_bytes += record.stat().st_size
+        progress(record)
 
     config_out = dict(model_type="qwen4_exp", architectures=["Qwen4ExpForConditionalGeneration"],
                       model_file="qwen4_exp.py", jw_format=FORMAT, text_config=c,

@@ -1458,7 +1458,13 @@ class CanonicalParityTest(unittest.TestCase):
         if again.exists():
             import shutil
             shutil.rmtree(again)
-        m2 = conv.convert(fx.reference.ckpt, again, profile="bf16")
+        progress = fx.ref_dir / "conv-repeat.progress.jsonl"
+        progress.unlink(missing_ok=True)
+        m2 = conv.convert(fx.reference.ckpt, again, profile="bf16", progress_path=progress)
+        self.assertEqual((again / "manifest.json").read_bytes(), (out / "manifest.json").read_bytes())
+        rows = [json.loads(line) for line in progress.read_text().splitlines()]
+        self.assertTrue(rows)
+        self.assertEqual(rows[-1]["tensors_done"], rows[-1]["tensors_total"])
         same = {k: v for k, v in m2["files"].items() if manifest["files"].get(k) == v}
         self.assertEqual(set(same), set(manifest["files"]), "conversion must be deterministic")
         raw = {}

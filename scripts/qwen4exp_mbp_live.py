@@ -22,6 +22,8 @@ import stat
 import subprocess
 import sys
 import time
+import shutil
+from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -38,6 +40,18 @@ SMALL_FILES = ("config.json", "model.safetensors.index.json", "tokenizer.json",
                "tokenizer_config.json", "special_tokens_map.json", "generation_config.json",
                "chat_template.jinja", "vocab.json", "merges.txt")
 NATIVE = ("memory", "quality", "benchmark", "hosted", "performance", "paging")
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+def timing(started, finished, total_bytes):
+    elapsed = max(0.0, (finished - started).total_seconds())
+    total = int(total_bytes) if total_bytes is not None else None
+    return {"started_utc": started.isoformat(), "finished_utc": finished.isoformat(),
+            "elapsed_seconds": elapsed, "total_bytes": total,
+            "mean_MBps": (total / 1e6 / elapsed) if elapsed and total is not None else None}
 
 
 def write_json(path, data):
@@ -144,6 +158,40 @@ def verify_source(snapshot, metadata, *, expected_shards=131):
     return result
 
 
+def verify_source_all(snapshot, metadata, *, expected_shards=131):
+    """Return all per-file failures without weakening ``verify_source``."""
+    snapshot = Path(snapshot)
+    failures, digests = [], {}
+    try:
+        index = json.loads((snapshot / "model.safetensors.index.json").read_text())
+        shards = sorted(set(index["weight_map"].values()))
+        if len(shards) != expected_shards or any(Path(n).name != n for n in shards):
+            failures.append({"file": "model.safetensors.index.json", "reason": "source shard inventory mismatch"})
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        failures.append({"file": "model.safetensors.index.json", "reason": str(exc)})
+    for name, meta in sorted(metadata.items()):
+        try:
+            if Path(name).name != name or name in (".", ".."):
+                raise ValueError("non-flat source name")
+            path = snapshot / name
+            if path.stat().st_size != int(meta["size"]):
+                raise ValueError("source size mismatch")
+            digest = raw_sha256(path)
+            if meta.get("sha256"):
+                matches = digest == meta["sha256"]
+            else:
+                if path.stat().st_size > 32 * 2**20:
+                    raise ValueError("large source requires an LFS SHA-256")
+                blob = path.read_bytes()
+                matches = hashlib.sha1(f"blob {len(blob)}\0".encode() + blob).hexdigest() == meta["blob_id"]
+            if not matches:
+                raise ValueError("source digest mismatch")
+            digests[name] = digest
+        except (OSError, ValueError, KeyError) as exc:
+            failures.append({"file": name, "reason": str(exc)})
+    return digests, failures
+
+
 SOURCE_BUDGET = 650e9  # source ~360 + maxfit ~211 + hashing/conversion headroom
 
 
@@ -176,6 +224,9 @@ def download(args):
         if name in SMALL_FILES or re.fullmatch(r"model-\d{5}-of-00131\.safetensors", name):
             metadata[name] = {"size": item.size, "blob_id": item.blob_id,
                               "sha256": item.lfs.sha256 if item.lfs else None}
+    if getattr(args, "plan_only", False):
+        return {"schema": "qwen4exp-source-plan/v1", "repo": REPO_ID, "revision": REVISION,
+                "metadata": metadata, "total_bytes": sum(int(m["size"]) for m in metadata.values())}
     # Keep checkpoint + one ~211 GB build + hashing/conversion headroom. A
     # resumed transfer is credited the source bytes already in the cache.
     blobs = Path(os.environ["HF_HUB_CACHE"]) / ("models--" + REPO_ID.replace("/", "--")) / "blobs"
@@ -185,12 +236,14 @@ def download(args):
         raise ValueError(f"need >={need / 1e9:.1f} GB free on JW-EXT for source + maxfit + headroom "
                          f"({SOURCE_BUDGET / 1e9:.0f} GB on a fresh start, less source bytes already cached)")
     snapshot = external(snapshot_download(REPO_ID, revision=REVISION, allow_patterns=list(metadata),
-                                          cache_dir=os.environ["HF_HUB_CACHE"], max_workers=2))
+                                          cache_dir=os.environ["HF_HUB_CACHE"], max_workers=getattr(args, "max_workers", 2)))
     for name in metadata:
         external(snapshot / name)  # HF symlinks must stay on this external cache.
     digests = verify_source(snapshot, metadata)
     return {"schema": "qwen4exp-source/v1", "repo": REPO_ID, "revision": REVISION,
-            "snapshot": str(snapshot), "metadata": metadata, "sha256": digests}
+            "snapshot": str(snapshot), "metadata": metadata, "sha256": digests,
+            "max_workers": getattr(args, "max_workers", 2),
+            "total_bytes": sum(int(m["size"]) for m in metadata.values())}
 
 
 def convert(args):
@@ -210,7 +263,9 @@ def convert(args):
     st = os.statvfs(VOLUME)
     if st.f_bavail * st.f_frsize < need:
         raise ValueError("insufficient free external disk space for this build")
-    converter.convert(source, artifact, profile=args.profile, group_size=64, ple_storage="bf16")
+    progress_path = args.out.parent / "convert.progress.jsonl"
+    converter.convert(source, artifact, profile=args.profile, group_size=64, ple_storage="bf16",
+                      progress_path=progress_path)
     # Plain sha256 sidecar lives OUTSIDE strict converter inventory. Converter
     # manifest v2 uses SHA256(concat(chunk SHA256s)) for files >256 MiB.
     sums = Path(str(args.out) + ".SHA256SUMS")
@@ -222,6 +277,85 @@ def convert(args):
             "source_receipt_sha256": raw_sha256(args.source_receipt),
             "manifest_sha256": raw_sha256(artifact / "manifest.json"),
             "module_sha256": converter.MODULE_SHA256, "plain_sha256s": str(sums)}
+
+
+def tree_bytes(path):
+    total = 0
+    if Path(path).is_dir():
+        for root, _, files in os.walk(path):
+            for name in files:
+                try:
+                    total += (Path(root) / name).stat().st_size
+                except FileNotFoundError:
+                    pass
+    return total
+
+
+def progress(args):
+    plan = json.loads(Path(args.metadata).read_text())
+    expected = int(plan.get("total_bytes") or sum(int(v["size"]) for v in plan["metadata"].values()))
+    hub = Path(os.environ["HF_HUB_CACHE"])
+    blobs = hub / ("models--" + REPO_ID.replace("/", "--")) / "blobs"
+    # An unset HF_XET_CACHE must not become Path("") == cwd and count the repo.
+    xet = Path(os.environ["HF_XET_CACHE"]) if os.environ.get("HF_XET_CACHE") else None
+    output = args.progress_path or (args.run_dir / "download.progress.jsonl")
+    samples = []
+    while True:
+        now = utc_now()
+        downloaded = tree_bytes(blobs) + (tree_bytes(xet) if xet else 0)
+        samples.append((now.timestamp(), downloaded))
+        rates = {}
+        for minutes in (1, 5, 15):
+            prior = next((s for s in samples if s[0] >= now.timestamp() - minutes * 60), samples[0])
+            dt = now.timestamp() - prior[0]
+            rates[f"MBps_{minutes}m"] = max(0, downloaded - prior[1]) / 1e6 / dt if dt else None
+        rate = next((rates[k] for k in ("MBps_15m", "MBps_5m", "MBps_1m") if rates[k]), None)
+        eta = max(0, expected - downloaded) / 1e6 / rate if rate else None
+        row = {"utc_time": now.isoformat(), "bytes_present": downloaded, "total_bytes": expected,
+               **rates, "eta_seconds": eta, "jw_ext_free_bytes": shutil.disk_usage(args.volume).free,
+               "phase": "download"}
+        convert_file = args.run_dir / "convert.progress.jsonl"
+        if convert_file.exists():
+            lines = convert_file.read_text().splitlines()
+            if lines:
+                latest = json.loads(lines[-1]); elapsed = latest.get("monotonic_elapsed", 0)
+                done, total = latest.get("bytes_written", 0), latest.get("bytes_total_expected", 0)
+                eta = (total - done) * elapsed / done if done else None
+                row.update(phase="convert", convert=latest, eta_seconds=eta)
+        past = False
+        if args.cutoff and eta is not None:
+            cutoff = datetime.fromisoformat(args.cutoff.replace("Z", "+00:00"))
+            # During conversion the ETA already is the remaining conversion
+            # time; only the download phase adds the conversion budget.
+            budget = args.convert_budget_h * 3600 if row["phase"] == "download" else 0
+            past = now.timestamp() + eta + budget + 3600 > cutoff.timestamp()
+        row["eta_past_cutoff"] = past
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("a") as stream:
+            stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+        print(json.dumps(row), flush=True)
+        if past:
+            print("ETA_PAST_CUTOFF", flush=True)
+        if args.once:
+            return row
+        time.sleep(args.interval)
+
+
+def quarantine_bad(snapshot, failures, base):
+    destination = Path(base) / "quarantine" / utc_now().strftime("%Y%m%dT%H%M%SZ")
+    moved = []
+    for failure in failures:
+        link = Path(snapshot) / failure["file"]
+        if not link.is_symlink():
+            continue
+        target = link.resolve()
+        destination.mkdir(parents=True, exist_ok=True)
+        dest = destination / target.name
+        if target.exists() and not dest.exists():
+            shutil.move(str(target), dest)
+            moved.append(str(dest))
+        link.unlink()
+    return moved
 
 
 def parse_vm_stat(text):
@@ -393,8 +527,9 @@ def resident_pages(table):
     # Vectorized: a Python loop over the real table's ~6.25M page flags costs
     # ~0.44 s per call, and the memory probe calls this at every prefill chunk
     # and decode forward inside its timed region.
-    import numpy as np
-    resident = int(np.count_nonzero(np.frombuffer(vec, dtype=np.uint8) & 1))
+    # ``bytes`` executes the scan in C and keeps this utility importable on a
+    # bare Python used by non-MLX fixture tests.
+    resident = bytes(vec).translate(bytes((i & 1) for i in range(256))).count(1)
     return {"resident_bytes": resident * page, "mapped_bytes": mm.nbytes}
 
 
@@ -642,7 +777,7 @@ def native_worker(args):
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command", choices=("download", "convert", *NATIVE))
+    p.add_argument("command", choices=("download", "convert", "progress", "verify-source", *NATIVE))
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--validation-only", action="store_true", help="operator asserts no measurement/analysis job is running")
     p.add_argument("--out", type=Path)
@@ -660,11 +795,24 @@ def parse_args(argv=None):
     p.add_argument("--traces", type=Path, help="PR671 hosted-reference JSONL, collected separately")
     p.add_argument("--disk-device", help="paging: diskN of the external physical whole disk, from diskutil list")
     p.add_argument("--provider", default="vllm-selfhost")
+    p.add_argument("--max-workers", type=int, choices=range(2, 9), default=2)
+    p.add_argument("--plan-only", action="store_true")
+    p.add_argument("--metadata", type=Path)
+    p.add_argument("--snapshot", type=Path)
+    p.add_argument("--quarantine", action="store_true")
+    p.add_argument("--interval", type=float, default=60)
+    p.add_argument("--cutoff")
+    p.add_argument("--convert-budget-h", type=float, default=4)
+    p.add_argument("--run-dir", type=Path)
+    p.add_argument("--progress-path", type=Path)
+    p.add_argument("--volume", type=Path, default=VOLUME, help=argparse.SUPPRESS)
+    p.add_argument("--once", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     if (args.decode_tokens < 1 or args.repeats < 1 or not 0.1 <= args.poll_seconds <= 10
             or not 1 <= args.metal_cap_gb <= 115.4 or args.contexts != sorted(set(args.contexts))
-            or any(c not in CONTEXTS for c in args.contexts)):
+            or any(c not in CONTEXTS for c in args.contexts) or args.interval <= 0
+            or args.convert_budget_h < 0):
         p.error("invalid token/repeat/monitor limit or staged contexts")
     return args
 
@@ -677,6 +825,8 @@ def main(argv=None):
                           "reasoning_efforts": EFFORTS, "no_weights_loaded": True,
                           "steps": {"download": "pinned HF metadata -> external cache -> source sha256 receipt",
                                     "convert": "verify source -> streaming converter -> manifest pin + raw SHA256SUMS",
+                                    "progress": "read cache byte counts and append rate/ETA JSONL",
+                                    "verify-source": "check every pinned source file and optionally quarantine bad blobs",
                                     "memory": "supervise load -> 4k/16k/40960 -> 64 decode forwards -> memory prediction",
                                     "quality": "PR671 consistency + NLL + coherence + XML tool round trips",
                                     "benchmark": "PR671 fixed GSM8K30 + IFEval25, optional same-item bf16 report",
@@ -684,8 +834,21 @@ def main(argv=None):
                                     "performance": "3 efforts x staged contexts x (warmup + 3 timed repeats)",
                                     "paging": "two identical 4k passes; mincore + faults + table counters; external iostat"}[args.command]}))
         return 0
+    if args.command == "progress":
+        if not args.metadata or not args.run_dir:
+            raise ValueError("progress requires --metadata PLAN and --run-dir")
+        progress(args)
+        return 0
     if not args.validation_only or sys.platform != "darwin":
         raise ValueError("live runs require macOS and --validation-only; exit agents and stop other jobs first")
+    if args.command == "verify-source":
+        if not args.snapshot or not args.metadata:
+            raise ValueError("verify-source requires --snapshot and --metadata PLAN|RECEIPT")
+        document = json.loads(args.metadata.read_text())
+        digests, failures = verify_source_all(args.snapshot, document["metadata"])
+        moved = quarantine_bad(args.snapshot, failures, VOLUME / "flashnext") if args.quarantine else []
+        print(json.dumps({"verified": len(digests), "mismatches": failures, "quarantined": moved}))
+        return 1 if failures else 0
     if args.out is None:
         raise ValueError("--out is required")
     if agents := measurement_agents_loaded():
@@ -709,7 +872,21 @@ def main(argv=None):
     else:
         if args.command == "convert" and (not args.source_receipt or not args.artifact):
             raise ValueError("convert requires --source-receipt and --artifact")
-        result = download(args) if args.command == "download" else convert(args)
+        started = utc_now()
+        try:
+            result = download(args) if args.command == "download" else convert(args)
+        except BaseException as exc:
+            finished = utc_now()
+            attempt = {"schema": "qwen4exp-attempt/v1", "command": args.command,
+                       "error": f"{type(exc).__name__}: {exc}",
+                       **timing(started, finished, 0)}
+            write_json(str(args.out) + ".attempt.json", attempt)
+            raise
+        finished = utc_now()
+        total = result.get("total_bytes")
+        if total is None and "artifact" in result:
+            total = sum(p.stat().st_size for p in Path(result["artifact"]).iterdir() if p.is_file())
+        result.update(timing(started, finished, total))
     write_json(args.out, result)
     print(json.dumps({"out": str(args.out), "verdict": result.get("verdict", "completed")}))
     return 1 if result.get("verdict") in ("aborted", "fail", "incomplete") else 0
