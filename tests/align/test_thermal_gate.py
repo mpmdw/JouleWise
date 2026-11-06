@@ -13,6 +13,7 @@ from joulewise.align.apple.endpoint import _StreamObservation
 from joulewise.align.apple.smc_reader import Reader
 from joulewise.align.apple.thermal_gates import ThermalSession, drain_decode, slow_slope, validate_gate_policy as validate_policy
 from joulewise.align.apple.workload import EpisodeRuntimeAdapter, EpisodeSpec
+from joulewise.align.apple.diagnostics import end_state
 from joulewise.align.records import Episode, from_json
 from joulewise.clock import FakeClock
 from joulewise.hazards import smc
@@ -458,7 +459,10 @@ class WorkloadTests(unittest.TestCase):
         ep, result = self.run_episode(dropout=True)
         self.assertGreater(len(ep.turns), 1)
         self.assertIn('thermal.state_unobserved', ep.flags)
-        self.assertNotEqual(result.metadata['align_episode']['stop_condition'], 'thermal.incomplete')
+        self.assertEqual(result.metadata['align_episode']['stop_condition'], 'episode_returned')
+        self.assertEqual(end_state(ep), 'returned_without_tool_call')
+        artifact = from_json(Episode, result.output_artifacts['align_episode.json'])
+        self.assertEqual(end_state(artifact), 'returned_without_tool_call')
         self.assertIsNotNone(ep.main_task_score)
 
     def test_g0_timeout_proceeds_with_calibration_exclusion(self):
@@ -646,6 +650,10 @@ class NativeIntegrationTests(unittest.TestCase):
             self.assertTrue(ep.turns[-1].tool_calls)
             self.assertFalse(ep.hardware['token_budget']['incomplete'])
             self.assertEqual(ep.hardware['thermal']['intervals'][-1]['outcome'], 'unobserved')
+            self.assertEqual(end_state(ep), 'episode.decode_budget:2')
+            from scripts.align_pilot_session import episode_summary
+            summary = episode_summary(bundle)
+            self.assertEqual(summary['end_state'], 'episode.decode_budget:2')
             self.assertIsNotNone(ep.main_task_score)
 
     def test_endpoint_records_partial_turn_when_drain_alarm_fires(self):

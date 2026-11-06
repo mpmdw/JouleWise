@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -87,6 +88,34 @@ class KitTests(unittest.TestCase):
         old=h.read(ROOT/'configs/campaigns/align_pilot_v0/plan_tree.json')
         scaffold=lambda t:[s['input'] for s in t['stage_graph'] if s['kind']=='campaign_collection' and '-episodes-' not in s['stage_id']]
         self.assertEqual(scaffold(tree),scaffold(old))
+
+    def test_pilot10_regeneration_matches_frozen_v0_v3_stage_oracle(self):
+        # Run the nominal builder: no replace(... hybrid_checkpoint_limit=None)
+        # compatibility escape hatch is allowed here.  The historical object is
+        # the review's byte oracle rather than the mutable working-tree files.
+        generated = kit.build_files(ROOT)
+        stage_paths = sorted(path for path in generated if path.parts[:3] ==
+                             ('configs', 'campaigns', 'align_pilot_v3') and 'stages' in path.parts)
+        self.assertTrue(stage_paths)
+        for path in stage_paths:
+            with self.subTest(path=path):
+                oracle = subprocess.run(
+                    ('git', 'show', f'83e2dac59:{path.as_posix()}'), cwd=ROOT,
+                    check=True, stdout=subprocess.PIPE).stdout
+                self.assertEqual(generated[path], oracle)
+        # Earlier stage anchors are inputs to the same pilot lineage and must
+        # remain frozen too; the v3 builder must never rewrite their bytes.
+        for version in range(3):
+            prefix = f'configs/campaigns/align_pilot_v{version}/stages/'
+            paths = subprocess.run(
+                ('git', 'ls-tree', '-r', '--name-only', '83e2dac59', prefix), cwd=ROOT,
+                check=True, text=True, stdout=subprocess.PIPE).stdout.splitlines()
+            self.assertTrue(paths, prefix)
+            for name in paths:
+                with self.subTest(path=name):
+                    oracle = subprocess.run(('git', 'show', f'83e2dac59:{name}'), cwd=ROOT,
+                                            check=True, stdout=subprocess.PIPE).stdout
+                    self.assertEqual((ROOT/name).read_bytes(), oracle)
 
     def test_member_specific_model_identity_pins(self):
         reg=ROOT/kit.KIT/'registration'
