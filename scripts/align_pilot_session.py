@@ -37,17 +37,18 @@ NONFINITE = 'estimate.nonfinite'
 TURN_COUNTS = ('context_tokens', 'prefill_tokens', 'decode_tokens', 'hidden_tokens')
 
 
-def prepare(measurement_root, session_root, **kwargs):
-    return h.prepare(measurement_root, session_root, kit=KIT, pack_id=PACK_ID,
-                     session_prefix='align-pilot-', **kwargs)
+def prepare(measurement_root, session_root, *, kit=KIT, pack_id=PACK_ID,
+            session_prefix='align-pilot-', **kwargs):
+    return h.prepare(measurement_root, session_root, kit=kit, pack_id=pack_id,
+                     session_prefix=session_prefix, **kwargs)
 
 
 def install(session_root, **kwargs):
     return h.install(session_root, **kwargs)
 
 
-def _member_rows(state):
-    directory = Path(state.get('registration_dir', Path(state['measurement_root']) / KIT / 'registration')).parent
+def _member_rows(state, *, kit=KIT):
+    directory = Path(state.get('registration_dir', Path(state['measurement_root']) / kit / 'registration')).parent
     plan = h.read(directory / 'collection_plan.json')
     return plan['members']
 
@@ -265,7 +266,8 @@ def cross_pilot_identity(members, compare_session):
     return dict(result)
 
 
-def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None):
+def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
+         kit=KIT, desk_schema=SCHEMA):
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
@@ -274,7 +276,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         raise ValueError('terminal record is required before desk')
     claim_root = state.get('runs_roots', {}).get('claim')
     if not claim_root:
-        registration = Path(state.get('registration_dir', Path(state['measurement_root']) / KIT / 'registration'))
+        registration = Path(state.get('registration_dir', Path(state['measurement_root']) / kit / 'registration'))
         tree = h.read(registration.parent / 'plan_tree.json')
         claim_root = Path(state['inputs']['runs_parent']) / tree['roots']['claim_root_leaf']
     runs_root = Path(claim_root)
@@ -288,7 +290,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
             targets[member['run_id']] = [c['target_precheck_path'] for c in member.get('cells', [])
                 if c.get('target') is not False and isinstance(c.get('target_precheck_path'), list) and c['target_precheck_path']]
     members = []
-    for row in _member_rows(state):
+    for row in _member_rows(state, kit=kit):
         bundle = runs_root / row['run_id']
         entry = {k: row[k] for k in ('run_id', 'task_pair', 'condition', 'repeat', 'ordinal')}
         for key in ('model_id', 'block'):
@@ -361,7 +363,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         checks['I4_' + field] = (False if 'fail' in values else True if values and all(v == 'pass' for v in values) else 'not_evaluated')
     checks['chain_eligibility'] = checks['chain_eligibility'] and not excluded
     checks['harvest_exclusions_recorded'] = exclusions is not None
-    pilot = {'schema_version': SCHEMA, 'non_claim': True, 'session_id': state['session_id'],
+    pilot = {'schema_version': desk_schema, 'non_claim': True, 'session_id': state['session_id'],
              'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
              'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
              'I4_prime': i4, 'raw_within_cell_energy_sd': raw_spread, 'residual_analysis': residuals,
@@ -377,7 +379,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     from joulewise.align.apple.pilot_analysis import finite_json
     pilot = finite_json(pilot)
     h.write(output / 'PILOT.json', pilot)
-    status = {'schema_version': SCHEMA, 'non_claim': True, 'plan_id': state['session_id'],
+    status = {'schema_version': desk_schema, 'non_claim': True, 'plan_id': state['session_id'],
               'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
               'harvest_argv': argv, 'harvest_exit': result.returncode,
               'members_excluded': pilot['members_excluded'],
@@ -427,7 +429,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     return status
 
 
-def main(argv=None):
+def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
+         prepare_fn=prepare, install_fn=install, session_prefix='align-pilot-'):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('prepare')
@@ -440,11 +443,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
-            prepare(args.measurement_root, args.session_root)
+            prepare_fn(args.measurement_root, args.session_root, kit=kit, pack_id=pack_id,
+                       session_prefix=session_prefix)
         elif args.command == 'install':
-            install(args.session_root)
+            install_fn(args.session_root)
         else:
-            status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session)
+            status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session,
+                          kit=kit, desk_schema=desk_schema)
             return 0 if status['harvest_status'] in ('ok', 'not_run') and status['pilot_status'] == 'instrument_ok' else 2
         return 0
     except (OSError, ValueError, RuntimeError, KeyError) as exc:
