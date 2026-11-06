@@ -23,8 +23,9 @@ Stages (docs/analysis/b5/DEVIATION-LOG.md, DLE-1):
 (b) The independent recompute (scripts/independent_recompute_b5.py --member-detail --workers N) on the
     indexed archive, claim-runs and bound-runs roots of each analysed window.
 (c) The comparator (scripts/compare_b5_recompute.py) against the dry-run custody, with the release bar set
-    (configs/analysis/b5/recompute_bars.json unless --bars) and each window's withheld meter record when the
-    harvest wrote one.
+    (configs/analysis/b5/recompute_bars.json, whose bytes must hash to RELEASE_BARS_SHA256, the set RS item 83
+    ruling 1 bound blind; there is no other bar set for a release) and each window's withheld meter record when
+    the harvest wrote one.
 
 Release condition: (a) verified, the recompute exits 0 with comparison_stopped false, and the comparator
 exits 0 (every family passes, nothing unmapped, no absent step-11 output, no non-finite step-11 value).
@@ -49,6 +50,18 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 RECOMPUTE = ROOT / "scripts/independent_recompute_b5.py"
 COMPARATOR = ROOT / "scripts/compare_b5_recompute.py"
+RELEASE_BARS = ROOT / "configs/analysis/b5/recompute_bars.json"
+# The release bar set fixed blind (RS item 83 ruling 1; bar_set b5_release_recompute_coded_7e322b76, file as of
+# 048085b3e). A release check runs with these bytes or refuses; alternate bars are audit work, never a release.
+RELEASE_BARS_SHA256 = "2f65bba22c0afd23a637cabb5079e1c5dc6a367d53d956f77c20ead416813892"
+# The only identifiers the public verdict may carry from the comparator's output (its NUMERIC, METER and
+# CATEGORICAL families and its STEP11_SOURCES labels); anything else is unreadable output, never printed.
+FAMILIES = frozenset({"run_phase_energy_j", "floor_j", "floor_gate_j", "dominance_ratio", "reported_cell_j",
+                      "contrast_j", "contrast_p", "descriptive_ratio", "per_token_j", "b_op_s", "count",
+                      "meter_j", "meter_w", "machine_j", "rho", "window_edge_s", "outcome_word", "dominance_branch",
+                      "p42_status", "holm_order", "kept_units", "exclusions_rederivation", "battery_term",
+                      "routing_id"})
+STEP11_LABELS = frozenset({"fill", "disclosure"})
 SCHEMA = "joulewise.b5_lean_release_verdict.v1"
 RECORD = "dry-run/B5-BLIND-DRY-RUN-RECORD.json"
 RESTRICTED = "dry-run/restricted"
@@ -259,10 +272,10 @@ def verify_digests(custody, index_path, pinned, repo, threads=8):
             if seen.setdefault(output["name"], output["sha256"]) != output["sha256"]:
                 raise Refusal("dry_run_record_invalid")
             outputs.append(output)
-    restricted = Path(custody) / RESTRICTED
     for output in outputs:
         try:
-            actual = hashlib.sha256(read_nofollow(restricted, output["name"])).hexdigest()
+            # From the custody root, so dry-run/ and restricted/ themselves are also refused as links.
+            actual = hashlib.sha256(read_nofollow(custody, RESTRICTED + "/" + output["name"])).hexdigest()
         except OSError:
             actual = None
         if actual != output["sha256"]:
@@ -297,11 +310,9 @@ def recompute_argv(entries, out, workers, python):
     return argv + ["--member-detail", "--workers", str(workers), "--out", str(out)]
 
 
-def comparator_argv(custody, recompute_out, index_path, entries, out, bars, python):
+def comparator_argv(custody, recompute_out, index_path, entries, out, python):
     argv = [python, "-B", str(COMPARATOR), "--l9-custody", str(custody), "--recompute", str(recompute_out),
-            "--window-index", str(index_path), "--restricted-out", str(out)]
-    if bars:
-        argv += ["--bars", str(bars)]
+            "--window-index", str(index_path), "--restricted-out", str(out), "--bars", str(RELEASE_BARS)]
     for pack in PACKS:
         if pack in entries and (Path(entries[pack]["archive_root"]) / "withheld/meter.json").is_file():
             argv += ["--harvest-meter", pack + "=" + str(Path(entries[pack]["archive_root"]) / "withheld/meter.json")]
@@ -327,11 +338,11 @@ def stage_recompute(entries, restricted, workers, python):
     return status, None
 
 
-def stage_compare(custody, entries, index_path, restricted, bars, python):
+def stage_compare(custody, entries, index_path, restricted, python):
     """Stage (c). Returns (status dict, refusal code or None, disagreement)."""
     out = restricted / "comparison.json"
     started = time.monotonic()
-    code = run_program(comparator_argv(custody, restricted / "recompute.json", index_path, entries, out, bars, python),
+    code = run_program(comparator_argv(custody, restricted / "recompute.json", index_path, entries, out, python),
                        restricted, "comparator")
     status = {"exit": code, "wall_ms": int((time.monotonic() - started) * 1000)}
     try:
@@ -348,14 +359,16 @@ def stage_compare(custody, entries, index_path, restricted, bars, python):
     families = {}
     for family, row in sorted(counts.items()):
         if not (isinstance(row, dict) and type(row.get("pass")) is int and type(row.get("fail")) is int
-                and re.fullmatch(r"[a-z0-9_]+", family)):
+                and family in FAMILIES):
             return status, "comparison_output_unreadable", False
         families[family] = {"verdict": "agree" if row["fail"] == 0 else "hold", "pass": row["pass"], "fail": row["fail"]}
-    status["bar_set"] = result.get("bar_set") if isinstance(result.get("bar_set"), str) else None
+    status["bars_sha256"] = RELEASE_BARS_SHA256
     status["families"] = families
     status["step11"] = {"unmapped": len(cover.get("unmapped") or []), "nonfinite": len(cover.get("nonfinite") or []),
                         "uncovered_numeric": len(cover.get("uncovered_numeric") or []),
-                        "absent_sources": sorted(str(s) for s in cover.get("absent_sources") or [])}
+                        "absent_sources": sorted(s for s in cover.get("absent_sources") or [] if s in STEP11_LABELS)}
+    if len(status["step11"]["absent_sources"]) != len(cover.get("absent_sources") or []):
+        return status, "comparison_output_unreadable", False
     status["structure_flags"] = len(result.get("structure_flags") or [])
     disagreement = any(row["fail"] for row in families.values())
     if code == 0 and not disagreement and not status["step11"]["unmapped"] and not status["step11"]["nonfinite"] \
@@ -366,17 +379,29 @@ def stage_compare(custody, entries, index_path, restricted, bars, python):
     return status, "comparator_refused", False
 
 
-def release(custody, index_path, pinned, restricted_out, *, workers=10, bars=None, repo=ROOT,
-            python=sys.executable):
-    """Stages (a)-(c). Returns (verdict dict, exit code). Writes values only under restricted_out."""
+def release(custody, index_path, pinned, restricted_out, *, workers=10, repo=ROOT, python=sys.executable):
+    """Stages (a)-(c). Returns (verdict dict, exit code). Writes values only under restricted_out.
+
+    Exit 0 only with a final verdict of agree: a verdict the structure guard replaced is a hold, exit 2.
+    """
+    verdict, code = _release(custody, index_path, pinned, restricted_out, workers=workers, repo=repo, python=python)
+    if verdict.get("verdict") != "agree" and code == 0:
+        code = 2
+    return verdict, code
+
+
+def _release(custody, index_path, pinned, restricted_out, *, workers, repo, python):
     restricted = Path(restricted_out)
-    verdict = {"schema": SCHEMA, "verdict": "hold", "reason": None, "pinned_commit": pinned,
+    verdict = {"schema": SCHEMA, "verdict": "hold", "reason": None,
+               "pinned_commit": pinned if isinstance(pinned, str) and HEX40.fullmatch(pinned) else None,
                "stages": {"digests": {"status": "not_run"}, "recompute": {"status": "not_run"},
                           "comparator": {"status": "not_run"}}}
     stages = verdict["stages"]
     started = time.monotonic()
     try:
         verdict["release_checkout"] = {"commit": check_checkout(repo), "clean": True}
+        if file_sha256(RELEASE_BARS) != RELEASE_BARS_SHA256:
+            raise Refusal("release_bars_differ")
         record, entries, counts = verify_digests(custody, index_path, pinned, repo)
     except Refusal as exc:
         stages["digests"] = {"status": "refused"}
@@ -390,7 +415,7 @@ def release(custody, index_path, pinned, restricted_out, *, workers=10, bars=Non
     if refusal:
         verdict["reason"] = refusal
         return finish(verdict, restricted, started), 2
-    status, refusal, disagreement = stage_compare(custody, entries, index_path, restricted, bars, python)
+    status, refusal, disagreement = stage_compare(custody, entries, index_path, restricted, python)
     stages["comparator"] = {"status": "disagree" if disagreement else ("refused" if refusal else "agree"), **status}
     if refusal:
         verdict["reason"] = refusal
@@ -431,7 +456,6 @@ def main(argv=None):
     parser.add_argument("--restricted-out", required=True,
                         help="new folder for the recompute output, the comparison and the programs' streams")
     parser.add_argument("--workers", type=int, default=10, help="recompute member worker processes (default 10)")
-    parser.add_argument("--bars", default=None, help="comparator bar set; default the comparator's release set")
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be a positive integer")
@@ -441,7 +465,7 @@ def main(argv=None):
         print(json.dumps({"schema": SCHEMA, "verdict": "hold", "reason": exc.code}, sort_keys=True))
         return 2
     verdict, code = release(args.custody, args.window_index, args.pinned_commit, restricted,
-                            workers=args.workers, bars=args.bars)
+                            workers=args.workers)
     print(json.dumps(verdict, sort_keys=True, indent=1))
     return code
 

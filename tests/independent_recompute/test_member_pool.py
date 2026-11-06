@@ -8,16 +8,20 @@ JW_B5_FULLSIZE_RECOMPUTE=1 (JW_B5_FULLSIZE_DIR names a reusable extraction folde
 import contextlib
 import io
 import json
+import multiprocessing
+import multiprocessing.connection
 import os
 from pathlib import Path
 import subprocess
+import signal
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
 from . import fullsize_window
-from .support import ROOT, SCRIPT, full_pack, recompute, remove_member
+from .support import ROOT, SCRIPT, bundle, full_pack, recompute, remove_member
 
 
 def run_subprocess(args, out, workers):
@@ -122,6 +126,37 @@ class MemberPoolTests(unittest.TestCase):
         self.addCleanup(pool.close)
         self.assertIsNone(pool.take("ALPHA", self.root, "x", .045, "science"))
         self.assertIsNone(pool.procs)
+
+    def test_worker_killed_during_a_large_reply_refuses_instead_of_hanging(self):
+        claim = self.root / "dead-worker"
+        path = bundle(claim, "big-r01")
+        metadata = json.loads((path / "metadata.json").read_text())
+        metadata["padding"] = "x" * (8 << 20)   # unused by the recompute; makes the reply far larger than a pipe
+        (path / "metadata.json").write_text(json.dumps(metadata))
+        pool = recompute.MemberPool(2)
+        self.addCleanup(pool.close)
+        previous = signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError("pool hung")))
+        self.addCleanup(signal.signal, signal.SIGALRM, previous)
+        signal.alarm(120)
+        self.addCleanup(signal.alarm, 0)
+        pool.prefetch("ALPHA", claim, "big-r01", .045, "science")
+        busy = pool.result_readers[pool.busy.index(next(k for k in pool.busy if k is not None))]
+        self.assertTrue(multiprocessing.connection.wait([busy], 100))   # the reply has started to arrive
+        for process in pool.procs:
+            os.kill(process.pid, signal.SIGKILL)
+            process.join()
+        with self.assertRaisesRegex(RuntimeError, "member pool worker exited"):
+            pool.take("ALPHA", claim, "big-r01", .045, "science")
+
+    def test_close_leaves_no_thread_or_child_with_a_backlog(self):
+        threads = threading.active_count()
+        for _ in range(3):
+            pool = recompute.MemberPool(3)
+            for i in range(200):
+                pool.prefetch("ALPHA", self.root / "nowhere", f"missing-r{i:03}", .045, "science")
+            pool.close()
+            self.assertEqual(multiprocessing.active_children(), [])
+            self.assertEqual(threading.active_count(), threads)
 
     def test_workers_must_be_positive(self):
         for value in ("0", "-1", "x"):

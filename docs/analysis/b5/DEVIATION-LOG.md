@@ -90,6 +90,8 @@ of branch `lane/2026-11-06-b5-lean-release`.
   2. **(b) Independent recompute.** Run `scripts/independent_recompute_b5.py` on the indexed roots, with
      `--member-detail --workers N`.
   3. **(c) Comparator.** Run `scripts/compare_b5_recompute.py` against the dry-run custody, with the release bar set.
+     That set is `configs/analysis/b5/recompute_bars.json`, the set RS item 83, ruling 1 bound blind. It is pinned by
+     SHA-256 in `release_b5.py`; other bars refuse.
 
   The release condition is all of: (a) verified, the recompute exiting 0 with `comparison_stopped` false, and the
   comparator exiting 0 (every family passes, nothing unmapped, no absent or non-finite step-11 output). There is no

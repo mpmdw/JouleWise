@@ -311,6 +311,44 @@ class ReleaseTests(unittest.TestCase):
         self.assertIsNone(FLOAT.search(result.stdout))
         self.assertEqual(result.stderr, "")
 
+    def test_symlinked_restricted_folder_refuses(self):
+        restricted = self.custody / rel.RESTRICTED
+        moved = self.root / "moved-restricted"
+        restricted.rename(moved)
+        restricted.symlink_to(moved, target_is_directory=True)
+        verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["reason"]), (2, rel.DIFFERS))
+
+    def test_release_bars_are_pinned(self):
+        bars = json.loads(rel.RELEASE_BARS.read_text())
+        bars["families"]["contrast_j"]["absolute"] = 1000.0
+        loose = self.root / "loose-bars.json"
+        loose.write_text(json.dumps(bars))
+        with mock.patch.object(rel, "RELEASE_BARS", loose):
+            verdict, code, _ = self.release(ours=self.disagreeing())
+        self.assertEqual((code, verdict["reason"]), (2, "release_bars_differ"))
+        self.assertEqual(verdict["stages"]["recompute"]["status"], "not_run")
+        self.assertEqual(rel.file_sha256(rel.RELEASE_BARS), rel.RELEASE_BARS_SHA256)
+        self.assertNotIn("--bars", rel.main.__code__.co_consts)
+
+    def test_guard_replaced_verdict_never_exits_zero(self):
+        with mock.patch.object(rel, "FLOAT_TOKEN", re.compile("agree")):
+            verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["verdict"], verdict["reason"]), (2, "hold", "verdict_not_structure_only"))
+
+    def test_verdict_carries_only_registered_identifiers(self):
+        verdict, _, _ = self.release()
+        self.assertEqual(verdict["stages"]["comparator"]["bars_sha256"], rel.RELEASE_BARS_SHA256)
+        self.assertNotIn("bar_set", verdict["stages"]["comparator"])
+        self.assertLessEqual(set(verdict["stages"]["comparator"]["families"]), rel.FAMILIES)
+        verdict, code, _ = self.release(pinned="not_resolvable")
+        self.assertEqual((code, verdict["reason"], verdict["pinned_commit"]), (2, "pinned_commit_invalid", None))
+
+    def disagreeing(self):
+        ours = copy.deepcopy(self.ours)
+        ours["contrasts"][tc.DECODE]["dbar_j"] += 1.0
+        return ours
+
     def test_no_repository_import(self):
         text = (ROOT / "scripts/release_b5.py").read_text()
         self.assertNotRegex(text, r"(?m)^\s*(from|import)\s+(joulewise|scripts|tests)\b")

@@ -25,11 +25,11 @@ import itertools
 import json
 import math
 import multiprocessing
+import multiprocessing.connection
 from pathlib import Path
 import pickle
 import platform
 import plistlib
-import queue
 import re
 import statistics
 import struct
@@ -521,17 +521,29 @@ class Member:
                 "m_s": self.m, "s_s": self.s, "tokens": self.tokens}
 
 
-def _member_worker(tasks, results):
+def _member_worker(index, channels):
     """Pool worker: build each member exactly as Window.member builds it, with a private Reader.
 
-    The reply is pickled here, so a payload that cannot be pickled becomes an error the parent re-raises
-    where the serial run would have built the member, never a lost reply.
+    It keeps only its own task reader and result writer and closes every other pipe end it inherited, so a
+    worker that dies part way through a reply leaves its result pipe at end of file (the parent then refuses,
+    never blocks). The reply is pickled here, so a payload that cannot be pickled becomes an error the parent
+    re-raises where the serial run would have built the member, never a lost reply.
     """
+    for number, ((task_reader, task_writer), (result_reader, result_writer)) in enumerate(channels):
+        task_writer.close()
+        result_reader.close()
+        if number != index:
+            task_reader.close()
+            result_writer.close()
+    (tasks, _), (_, results) = channels[index]
     while True:
-        task = tasks.get()
+        try:
+            task = tasks.recv()
+        except EOFError:
+            return
         if task is None:
             return
-        key, path, run_id, pack, bop, member_role = task
+        path, run_id, pack, bop, member_role = task
         try:
             flags = []
             reader = Reader(pack, flags)
@@ -544,7 +556,7 @@ def _member_worker(tasks, results):
                 payload = pickle.dumps((exc, None), pickle.HIGHEST_PROTOCOL)
             except Exception:
                 payload = pickle.dumps((RuntimeError(type(exc).__name__), None), pickle.HIGHEST_PROTOCOL)
-        results.put((key, payload))
+        results.send_bytes(payload)
 
 
 class MemberPool:
@@ -561,47 +573,79 @@ class MemberPool:
     read are merged into the window's set. A member asked for under a key that was not prefetched (another
     root, role or bound) is built in-process; a prefetched member that is never asked for is discarded.
 
-    Workers are forked once, before any queue thread exists, and receive only plain tuples (no code is
-    pickled), so the script also runs a pool when it is loaded by file path rather than imported by name.
+    Transport: each worker has its own task pipe and result pipe, and holds one task at a time; the parent keeps
+    the backlog and hands the next task to whichever worker replies. No queue thread exists in either process.
+    Workers are forked once, from a process with no thread of ours, and receive only plain tuples (no code is
+    pickled), so the script also runs a pool when it is loaded by file path rather than imported by name. A
+    worker that exits, or a reply cut short, raises RuntimeError in the parent (guarded_main: exit 2).
     """
 
     def __init__(self, workers):
         self.workers = workers
         self.procs = None
-        self.pending = set()
+        self.submitted = {}
+        self.backlog = []
         self.done = {}
 
     def _start(self):
         context = multiprocessing.get_context("fork")
-        self.tasks, self.results = context.Queue(), context.Queue()
-        self.procs = [context.Process(target=_member_worker, args=(self.tasks, self.results), daemon=True)
-                      for _ in range(self.workers)]
-        for process in self.procs:
+        channels = [(context.Pipe(duplex=False), context.Pipe(duplex=False)) for _ in range(self.workers)]
+        self.procs = []
+        for index in range(self.workers):
+            process = context.Process(target=_member_worker, args=(index, channels), daemon=True)
             process.start()
+            self.procs.append(process)
+        for (task_reader, _), (_, result_writer) in channels:
+            task_reader.close()
+            result_writer.close()
+        self.task_writers = [task_writer for (_, task_writer), _ in channels]
+        self.result_readers = [result_reader for _, (result_reader, _) in channels]
+        self.busy = [None] * self.workers
+
+    def _dispatch(self):
+        for index, key in enumerate(self.busy):
+            if key is None and self.backlog:
+                key = self.backlog.pop(0)
+                self.busy[index] = key
+                self.task_writers[index].send(self.submitted[key])
+
+    def _collect(self, block):
+        """Read every reply that is ready (with block, wait for at least one); refuse on a worker's exit."""
+        readers = {self.result_readers[i]: i for i, key in enumerate(self.busy) if key is not None}
+        sentinels = {process.sentinel: process for process in self.procs}
+        if not readers and block:
+            raise RuntimeError("member pool has no task in flight")
+        for ready in multiprocessing.connection.wait([*readers, *sentinels], None if block else 0):
+            if ready in sentinels:
+                raise RuntimeError("member pool worker exited")
+            index = readers[ready]
+            try:
+                payload = ready.recv_bytes()
+            except (EOFError, OSError):
+                raise RuntimeError("member pool worker exited") from None
+            self.done[self.busy[index]] = payload
+            self.busy[index] = None
+        self._dispatch()
 
     def prefetch(self, pack, root, run_id, bop, member_role):
         key = (pack, str(root), run_id, bop, member_role)
-        if key in self.pending:
+        if key in self.submitted:
             return
         if self.procs is None:
             self._start()
-        self.pending.add(key)
-        self.tasks.put((key, str(Path(root) / run_id), run_id, pack, bop, member_role))
+        self.submitted[key] = (str(Path(root) / run_id), run_id, pack, bop, member_role)
+        self.backlog.append(key)
+        self._collect(block=False)
 
     def take(self, pack, root, run_id, bop, member_role):
         """The worker's (state, flags, files) for this key, or None when it was not prefetched."""
         key = (pack, str(root), run_id, bop, member_role)
-        if key not in self.pending:
+        if key not in self.submitted:
             return None
         while key not in self.done:
-            try:
-                done, payload = self.results.get(timeout=1.0)
-            except queue.Empty:
-                if any(process.exitcode is not None for process in self.procs):
-                    raise RuntimeError("member pool worker exited")
-                continue
-            self.done[done] = payload
-        self.pending.discard(key)
+            self._collect(block=True)
+        self._collect(block=False)
+        del self.submitted[key]
         error, result = pickle.loads(self.done.pop(key))
         if error is not None:
             raise error
@@ -615,11 +659,11 @@ class MemberPool:
             process.terminate()
         for process in self.procs:
             process.join()
-        for channel in (self.tasks, self.results):
-            channel.cancel_join_thread()
-            channel.close()
+        for connection in (*self.task_writers, *self.result_readers):
+            connection.close()
         self.procs = None
-        self.pending.clear()
+        self.submitted.clear()
+        self.backlog.clear()
         self.done.clear()
 
 
