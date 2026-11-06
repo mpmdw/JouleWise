@@ -48,7 +48,7 @@ Each returns:
 | `step-d` | | quiet fields; `slots` (S1-S9, B_D, I_D, T_dead, N_chunk, t_decline: finite numbers; `class`: `heavy` or `light`); `e_D_j_per_token` (> 0) |
 | `idle-until-soak` | R | `recovery_curve`: non-empty list of `[t_s, S_slow °C]`. Idle until S_slow is within δ of R, or 1,500 s (ruling 1(c)). |
 | `x-g` | | none |
-| `d-spam-benign-s1-a`, `d-spam-benign-s1-b`, `d-bank-benign-s1` | | `energy_j`; `admitted_turns` (int ≥ 0); `x7` (bool); `deadman.T_dead_s` (> 0); `deadman.phases_s.{G0,G1,H,decode,prefill,tool,tail}` (finite seconds) (ruling 1(a), 1(d)) |
+| `d-spam-benign-s1-a`, `d-spam-benign-s1-b`, `d-bank-benign-s1` | | `energy_j`; `admitted_turns` (int ≥ 0); `x7` (bool); `deadman.T_dead_s` (the deadman the run armed at G0 entry; it must equal the `step-d` `slots.T_dead`, or R1 refuses at that run); `deadman.phases_s.{G0,G1,H,decode,prefill,tool,tail}` (finite seconds) (ruling 1(a), 1(d)) |
 | `d-planning-turn-r-plus-0c`, `d-planning-turn-r-plus-2c`, `d-planning-turn-r-plus-4c` | R | quiet fields; `reference_c` (R, identical across the three); `g0_release_c` (the S_slow **measured** at release); `delta_slow_c` (the gate band, identical across the three, > 0); `energy_j`. The driver refuses a release outside R + offset ± δ_slow and fits β_T on the measured release temperatures (ruling 6). |
 | `d-4bit` | | none (optional) |
 | `g0-release-soak` | R | `released`: true if S_slow came within δ of R before the G0 cap (600 s), false on timeout |

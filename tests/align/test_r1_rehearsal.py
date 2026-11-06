@@ -507,6 +507,32 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(result["status"], "aborted")
             self.assertEqual({sig: signal.getsignal(sig) for sig in previous}, previous)
 
+    def test_gated_d_runs_must_arm_the_step_d_t_dead(self):
+        # Executing review 2026-11-06: the duty bar (ruling 1(d)) is a share of
+        # T_dead, and the driver took each gated run's T_dead_s on trust. A run
+        # reporting 5,000 s (past the workload's own 1800/1.13544 bound) passed
+        # the bar. Every gated run must arm the one T_dead R1 freezes.
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+
+            def runner(argv):
+                result = world(argv)
+                if "--r1-kind" in argv and "d-spam-benign-s1-b" in argv:
+                    payload = json.loads(result.stdout)
+                    payload["deadman"]["T_dead_s"] = 5000.0
+                    result = completed(argv, out=json.dumps(payload))
+                return result
+            with patch.object(r1, "_run", runner):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            self.assertEqual(world.mode, 0)
+            self.assertFalse((Path(td) / "registration/r1_slots.json").exists())
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertIn("D_spam_benign_s1_gated_held_b", result["error"])
+            self.assertIn("T_dead", result["error"])
+            kinds = [c[c.index("--r1-kind") + 1] for c in world.calls if "--r1-kind" in c]
+            # Fail fast: nothing after the offending run.
+            self.assertEqual(kinds[-1], "d-spam-benign-s1-b")
+
     def test_zsh_chain_signal_burst_still_restores_automatic(self):
         # The chain's own trap must also survive a second signal: with
         # ``trap - ... TERM`` the next TERM killed both the shell and its

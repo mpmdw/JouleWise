@@ -517,6 +517,19 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
     raise Refusal(f"{name}: segment still contaminated after {MAX_SEGMENT_REDOS} redos")
 
 
+GATED_NAMES = frozenset(name for name, _ in GATED_D_RUNS)
+
+
+def _check_gated_t_dead(name, result, step_d):
+    """Ruling 1 / L1: one deadman, armed at G0 entry and consumed by G0, G1
+    and H, is the T_dead R1 freezes. A gated run that armed any other value
+    makes its duty-bar share and its tail meaningless, so refuse at once."""
+    t_dead = _finite_number(((step_d or {}).get("slots") or {}).get("T_dead"), "step-d.slots.T_dead")
+    armed = _finite_number((result.get("deadman") or {}).get("T_dead_s"), f"{name}.deadman.T_dead_s")
+    if not math.isclose(armed, t_dead, rel_tol=1e-9, abs_tol=1e-6):
+        raise Refusal(f"{name}: deadman armed T_dead_s {armed} differs from the step-d T_dead slot {t_dead}")
+
+
 QUIET_KINDS = ("idle", "step-30b", "step-d") + tuple(
     f"d-planning-turn-r-plus-{int(offset)}c" for offset in PLANNING_START_OFFSETS_C)
 
@@ -559,6 +572,8 @@ def run(args):
                     contract_key="idle_soak" if name == "idle_soak" else None)
                 if name == "idle_soak":
                     soak_reference = write_soak_reference(output, row)
+                if name in GATED_NAMES:
+                    _check_gated_t_dead(name, results[name], results.get("step_D_prefill_10k_decode_4096"))
                 if kind == "idle-until-soak":
                     curve = results[name].get("recovery_curve")
                     if not isinstance(curve, list) or not curve:
