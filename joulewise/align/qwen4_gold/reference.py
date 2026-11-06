@@ -22,6 +22,7 @@ def run_reference(request, checkpoint):
     config = Qwen4ExpTextConfig(**checkpoint.text)
     config._attn_implementation = "eager"
     traces = {}
+    qsa_ties = {"topk_calls": 0, "straddling_ties": 0}
     ids = torch.tensor(request["input_ids"], dtype=torch.long)
     unit = request["unit"]
     hidden = None if request.get("hidden") is None else torch.from_numpy(
@@ -122,6 +123,7 @@ def run_reference(request, checkpoint):
             else:
                 attention.q_norm.register_forward_hook(lambda m, a, o: capture("attention.q_norm", o))
                 attention.k_norm.register_forward_hook(lambda m, a, o: capture("attention.k_norm", o))
+                deterministic_qsa_ties(attention.indexer, torch, qsa_ties)
                 attention.indexer.register_forward_hook(lambda m, a, o: capture("qsa.mask", o == 0 if o.is_floating_point() else o))
             def router_hook(m, a, o):
                 capture("router.logits", o[0]); capture("router.weights", o[1]); capture("router.experts", o[2])
@@ -146,7 +148,46 @@ def run_reference(request, checkpoint):
     return traces, {"transformers": transformers.__version__, "torch": torch.__version__,
                     "reference_source_sha256": sha256(inspect.getfile(ref)),
                     "device": "cpu", "experts": "official forward with sliced storage",
+                    "qsa_topk": dict(qsa_ties, tie_rule="score descending, block ascending"),
                     "reads": checkpoint.reads}
+
+
+def deterministic_qsa_ties(indexer, torch, counts):
+    """Fix the official QSA indexer's unspecified top-k tie order.
+
+    Qwen4ExpTextQSAIndexer.forward selects blocks with ``scores.topk(k, dim=0)``.
+    relu makes a block score exactly 0.0 whenever every indexer head's dot
+    product is <= 0, so exact ties at the k-th score occur in practice, and
+    torch.topk leaves the order of equal values unspecified. The official
+    selected set is then not a function of the inputs, and an exact
+    ``qsa.mask`` gate against it would compare with an arbitrary draw.
+    Inside this indexer's forward only, topk returns the stable
+    (score descending, block ascending) order: one of torch.topk's permitted
+    outputs. It selects a different set than torch's own call only on an exact
+    tie straddling the k-th score; scores are untouched, and the indexer's
+    scatter makes the index order irrelevant. Same rule as the canonical port
+    (D0, ``topk_mask_lowest_index``) and its validation reference ("REF").
+    The MoE router's topk is not touched.
+    """
+    from unittest.mock import patch
+
+    def topk(values, k, dim=-1, largest=True, sorted=True):
+        if not largest or values.dim() != 1:
+            raise RuntimeError("unexpected QSA indexer topk call")
+        counts["topk_calls"] += 1
+        order = torch.sort(-values, dim=0, stable=True).indices
+        if k < values.shape[0] and bool(values[order[k - 1]] == values[order[k]]):
+            counts["straddling_ties"] += 1
+        index = order[:k]
+        return torch.return_types.topk((values.gather(0, index), index))
+
+    forward = indexer.forward
+
+    def tie_ordered_forward(*args, **kwargs):
+        with patch.object(torch.Tensor, "topk", topk):
+            return forward(*args, **kwargs)
+    # Instance attribute: nn.Module.__call__ still runs the registered hooks.
+    indexer.forward = tie_ordered_forward
 
 
 def make_tiny(root):

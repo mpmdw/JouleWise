@@ -106,6 +106,21 @@ reimplemented in the harness. Meta construction avoids eager full allocations.
 Only the official expert module's matrix storage is replaced by indexed disk
 slice proxies; its official `forward` still computes routing and accumulation.
 
+QSA top-k tie order is fixed, not left to torch. The official indexer selects
+blocks with `scores.topk(k, dim=0)`; relu makes a block score exactly `0.0`
+whenever every indexer head's dot product is `<= 0`, and `torch.topk` leaves
+the order of equal values unspecified, so on an exact tie straddling the k-th
+score the official selected set is not a function of the inputs. Inside the
+indexer's forward only, the reference worker's `topk` returns the stable
+(score descending, block ascending) order, one of torch's permitted outputs;
+scores are untouched and every other selection is the same set. This is the
+canonical port's rule (D0) and its validation reference ("REF"). Reference
+metadata records `qsa_topk` call and straddling-tie counts. The MoE router's
+top-k is not touched. Found natively: the tiny fp32 random case at layer 3 has
+a three-way exact-zero tie for the second block of query 8 (blocks 0, 1, 3);
+the canonical rule picks block 0, unpatched torch picked block 1, and the
+resulting one-row mask difference propagated into every downstream trace.
+
 The reference observes:
 
 - DeltaNet or QSA attention output; DeltaNet gated norm or Q/K norms; exact QSA
@@ -255,7 +270,8 @@ full head logits; it does not retain whole fp64 copies or mmap pages. Reports
 include maximum absolute error,
 maximum relative error (denominator floor `1e-12`), relative L2 error, cosine,
 and fraction within tolerance. Zero versus zero has cosine 1; a zero/nonzero
-pair has cosine 0. Expert sets, PLE ids and QSA masks require exact agreement.
+pair has cosine 0. Expert sets, PLE ids and QSA masks require exact agreement
+(QSA masks against the tie-ordered reference above).
 Fp32's bound accommodates reduction order. Each BF16 allowance is four representable steps near one (`0.03125 = 4*2^-7`);
 the combined `atol+rtol*abs(a)` allowance is eight such steps at `abs(a)=1`
 (sixteen unit roundoffs). This is a **provisional engineering bound**, with

@@ -207,6 +207,26 @@ class BF16Tests(unittest.TestCase):
             checkpoint = IndexedCheckpoint(root)
             self.assertTrue(torch.equal(values, checkpoint.read("model.hash", framework="torch", dtype="native")))
 
+    def test_qsa_topk_ties_break_to_lowest_block_inside_indexer_only(self):
+        import torch
+        from joulewise.align.qwen4_gold.reference import deterministic_qsa_ties
+
+        class Indexer(torch.nn.Module):
+            def forward(self, scores, k):
+                return scores.topk(k, dim=0).indices
+
+        # Query 8 of the native tiny fp32 random case: three exact zeros.
+        scores = torch.tensor([0., 0., 1.7015357, 0.])
+        indexer, counts, seen = Indexer(), {"topk_calls": 0, "straddling_ties": 0}, []
+        original = torch.Tensor.topk
+        deterministic_qsa_ties(indexer, torch, counts)
+        indexer.register_forward_hook(lambda m, a, o: seen.append(o))
+        self.assertEqual(indexer(scores, 2).tolist(), [2, 0])
+        self.assertEqual(indexer(torch.tensor([3., 1., 2.]), 2).tolist(), [0, 2])
+        self.assertEqual(len(seen), 2)  # registered hooks still run
+        self.assertEqual(counts, {"topk_calls": 2, "straddling_ties": 1})
+        self.assertIs(torch.Tensor.topk, original)  # patched only inside the indexer forward
+
 
 @unittest.skipUnless(HAS_ARRAYS, "optional NumPy")
 class VerdictTests(unittest.TestCase):
