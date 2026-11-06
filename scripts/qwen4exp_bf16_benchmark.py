@@ -88,6 +88,8 @@ def main(argv=None):
         return 0
     if not args.validation_only or not all((args.endpoint, args.tokenizer, args.identity, args.out)):
         p.error("live collection requires --validation-only, --endpoint, --tokenizer, --identity, --out")
+    if agents := live.measurement_agents_loaded():
+        raise ValueError("measurement launchd agent(s) loaded; unload before validation: " + ", ".join(agents))
     args.out = live.external(args.out)
     if args.out.exists():
         raise ValueError("preserve existing evidence; use a new output")

@@ -47,6 +47,58 @@ class DryRunTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "validation-only"):
             live.main(["memory"])
 
+    def test_loaded_night_agent_refuses_every_live_command(self):
+        listing = subprocess.CompletedProcess(["launchctl"], 0, "PID\tStatus\tLabel\n"
+                                              "-\t0\tcom.apple.Finder\n-\t0\tcom.joulewise.night\n"
+                                              "-\t0\tcom.joulewise.night-probe.p1\n", "")
+        with patch.object(subprocess, "run", return_value=listing):
+            self.assertEqual(live.measurement_agents_loaded(),
+                             ["com.joulewise.night", "com.joulewise.night-probe.p1"])
+        b6 = subprocess.CompletedProcess(["launchctl"], 0, "PID\tStatus\tLabel\n-\t0\tcom.joulewise.magistrate\n"
+                                         "123\t0\tcom.joulewise.b6loop\n-\t0\tcom.joulewise.b6wake.1\n", "")
+        with patch.object(subprocess, "run", return_value=b6):
+            self.assertEqual(live.measurement_agents_loaded(), ["com.joulewise.b6loop", "com.joulewise.b6wake.1"])
+        with patch.object(subprocess, "run", return_value=listing):
+            for command in ("download", "convert", *live.NATIVE):
+                with self.subTest(command=command), patch.object(sys, "platform", "darwin"), \
+                     patch.object(live, "external", side_effect=AssertionError("touched disk")), \
+                     patch.object(live, "volume_info", side_effect=AssertionError("touched disk")):
+                    with self.assertRaisesRegex(ValueError, "com.joulewise.night"):
+                        live.main([command, "--validation-only", "--out", "/Volumes/JW-EXT/x.json"])
+            with patch.object(reference, "urlopen", side_effect=AssertionError("network")), \
+                 patch.object(live, "external", side_effect=AssertionError("touched disk")):
+                with self.assertRaisesRegex(ValueError, "com.joulewise.night"):
+                    reference.main(["--validation-only", "--endpoint", "https://fixture.invalid/v1",
+                                    "--tokenizer", "/x", "--identity", "/x", "--out", "/x"])
+
+    def test_unlisted_or_unreadable_launchd_state(self):
+        clean = subprocess.CompletedProcess(["launchctl"], 0, "PID\tStatus\tLabel\n-\t0\tcom.apple.Finder\n", "")
+        with patch.object(subprocess, "run", return_value=clean):
+            self.assertEqual(live.measurement_agents_loaded(), [])
+        with patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "err")):
+            with self.assertRaisesRegex(ValueError, "launchd"):
+                live.measurement_agents_loaded()
+
+    def test_mincore_count_is_vectorized_page_flag_count(self):
+        import mmap
+        page = mmap.PAGESIZE
+        flags = bytes([1, 0, 3, 2, 1])  # bit 0 = MINCORE_INCORE
+
+        class FakeLibc:
+            def __init__(self):
+                self.mincore = self
+
+            def __call__(self, base, length, vec):
+                ctypes_vec = (vec._type_ * len(vec)).from_address(ctypes.addressof(vec))
+                ctypes_vec[:len(flags)] = list(flags)
+                return 0
+
+        import ctypes
+        mapped = types.SimpleNamespace(ctypes=types.SimpleNamespace(data=page * 10), nbytes=5 * page)
+        with patch.object(ctypes, "CDLL", return_value=FakeLibc()):
+            stats = live.resident_pages(types.SimpleNamespace(_mm=mapped))
+        self.assertEqual(stats, {"resident_bytes": 3 * page, "mapped_bytes": 5 * page})
+
     def test_stages_are_ordered_and_caps_cannot_be_raised(self):
         for options in (["--contexts", "40960", "4096"], ["--metal-cap-gb", "128"],
                         ["--poll-seconds", "60"], ["--decode-tokens", "0"]):
@@ -156,6 +208,9 @@ class MemoryTests(unittest.TestCase):
                         dict(pressure_level=2), dict(free_percent=9), dict(compressor_bytes=4e9)):
             with self.subTest(changes=changes):
                 self.assertIsNotNone(live.unsafe_memory(before, system_sample(**changes)))
+        # A headroom-only stop must be distinguishable from kernel pressure.
+        self.assertIn("free percentage", live.unsafe_memory(before, system_sample(free_percent=9)))
+        self.assertIn("pressure level 2", live.unsafe_memory(before, system_sample(pressure_level=2)))
 
     def test_supervisor_terminates_worker_and_preserves_abort_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -306,6 +361,48 @@ class NativeMlxTests(unittest.TestCase):
             stats = live.table_stats(adapter.model)
             self.assertEqual(len(stats), 2)
             self.assertTrue(all(t["lookups"] > 0 and t["io"] == "mmap" for t in stats.values()))
+
+    def test_native_worker_memory_and_performance_on_verified_canonical_fixture(self):
+        # The Saturday worker body itself (Metal cap/limits, tokenizer
+        # preflight, real-template contexts, PLE path/cap checks, rung journal,
+        # per-effort medians) on the tiny random checkpoint; never real weights.
+        if not (importlib.util.find_spec("torch") and importlib.util.find_spec("transformers")):
+            self.skipTest("native canonical smoke requires pinned torch/transformers too")
+        from tests.align import test_qwen4_exp_canonical as canonical
+        reason = canonical._skip_reason()
+        if reason:
+            self.skipTest(reason)
+        import qwen4exp_e2e_eval as e2e
+        from tests.test_qwen4exp_e2e_eval import _CharTokenizer
+        fixture_template = Path(__file__).resolve().parent / "fixtures" / "qwen4exp_chat_template.jinja"
+        real_template = e2e.ChatTemplate
+        with tempfile.TemporaryDirectory() as tmp, patch.object(canonical, "WORK_ROOT", Path(tmp)):
+            artifact = canonical.Fixture().converted("maxfit")
+            pin = live.raw_sha256(artifact / "manifest.json")
+            with patch.object(live, "external", side_effect=lambda p: Path(p).resolve()), \
+                 patch("transformers.AutoTokenizer.from_pretrained", return_value=_CharTokenizer(256)), \
+                 patch.object(e2e, "tokenizer_preflight", return_value={"ok": True, "fixture": True}), \
+                 patch.object(e2e, "ChatTemplate", side_effect=lambda _p: real_template(fixture_template)):
+                out = Path(tmp) / "memory.json"
+                args = live.parse_args(["memory", "--artifact", str(artifact), "--manifest-sha256", pin,
+                                        "--contexts", "4096", "--decode-tokens", "4", "--out", str(out)])
+                result = live.native_worker(args)
+                self.assertEqual(result["verdict"], "incomplete")  # 16k/40,960 rungs not run.
+                (run,) = result["runs"]
+                self.assertEqual(run["prompt_tokens"] + run["decode_forwards"], 4096)
+                self.assertEqual(len(run["generated_ids"]), 5)
+                self.assertGreater(run["metal"]["peak_bytes"], 0)
+                self.assertLessEqual(result["effective_metal_cap_bytes"], 115.4e9)
+                self.assertTrue(all(Path(t["path"]).is_relative_to(artifact.resolve())
+                                    for t in result["ple_after"].values()))
+                self.assertEqual(len(Path(str(out) + ".rungs.jsonl").read_text().splitlines()), 1)
+                args = live.parse_args(["performance", "--artifact", str(artifact), "--manifest-sha256", pin,
+                                        "--contexts", "4096", "--decode-tokens", "2", "--repeats", "1",
+                                        "--out", str(Path(tmp) / "performance.json")])
+                result = live.native_worker(args)
+                self.assertEqual([(m["context"], m["reasoning_effort"]) for m in result["medians"]],
+                                 [(4096, e) for e in live.EFFORTS])
+                self.assertEqual(len(result["runs"]), 2 * len(live.EFFORTS))  # warmup + 1 timed each.
 
     def test_timed_prefill_decode_matches_real_generate_step_on_tiny_hybrid(self):
         # Reuse the tiny random GDN + attention + MoE model; never real weights.

@@ -75,6 +75,25 @@ def volume_info():
     return info
 
 
+# Night chain, dead-man and night probes (com.joulewise.night*), plus the
+# block-6 collection loop and its wake jobs, which arm/collect measurements.
+MEASUREMENT_AGENT_PREFIXES = ("com.joulewise.night", "com.joulewise.b6loop", "com.joulewise.b6wake")
+
+
+def measurement_agents_loaded():
+    """Loaded launchd measurement agents (night chain, b6 loop, probes).
+
+    A validation day that overruns must never share the Mac with a scheduled
+    measurement window, so a loaded night agent refuses every live command.
+    Unload per the lead's procedure before validation; restore after eject.
+    """
+    listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=10)
+    if listing.returncode != 0:
+        raise ValueError("cannot list launchd agents to rule out a measurement window")
+    labels = [line.split("\t")[-1].strip() for line in listing.stdout.splitlines()[1:]]
+    return sorted(label for label in labels if label.startswith(MEASUREMENT_AGENT_PREFIXES))
+
+
 def cache_environment():
     base = VOLUME / "flashnext"
     values = {"HF_HOME": str(base / "hf"), "HF_HUB_CACHE": str(base / "hf/hub"),
@@ -216,8 +235,13 @@ def sample_system(pid=None):
 def unsafe_memory(before, now):
     if now["swap_used_bytes"] > 0 or now["swapouts"] != before["swapouts"]:
         return "swap present or swapouts changed"
-    if now["pressure_level"] != 1 or now["free_percent"] < 10:
-        return "memory pressure not normal or free percentage below 10"
+    # Separate reasons: a free-percentage-only stop (no swap, normal kernel
+    # pressure) is a headroom margin, which the lead must distinguish from
+    # real pressure before ruling maxfit unfit.
+    if now["pressure_level"] != 1:
+        return f"kernel memory pressure level {now['pressure_level']} (not normal 1)"
+    if now["free_percent"] < 10:
+        return f"memory_pressure free percentage {now['free_percent']} below 10"
     if now["compressor_bytes"] - before["compressor_bytes"] > 2e9:
         return "compressor grew by more than 2 GB"
     return None
@@ -340,11 +364,16 @@ def resident_pages(table):
     libc.mincore.restype = ctypes.c_int
     if libc.mincore(base, count * page, vec) != 0:
         raise OSError(ctypes.get_errno(), "mincore failed")
-    return {"resident_bytes": sum(1 for b in vec if b & 1) * page, "mapped_bytes": mm.nbytes}
+    # Vectorized: a Python loop over the real table's ~6.25M page flags costs
+    # ~0.44 s per call, and the memory probe calls this at every prefill chunk
+    # and decode forward inside its timed region.
+    import numpy as np
+    resident = int(np.count_nonzero(np.frombuffer(vec, dtype=np.uint8) & 1))
+    return {"resident_bytes": resident * page, "mapped_bytes": mm.nbytes}
 
 
 def table_stats(model):
-    return {str(k): {**resident_pages(t), "lookups": t.lookups, "unique_rows": t.unique_rows,
+    return {str(k): {**resident_pages(t), "path": str(t.path), "lookups": t.lookups, "unique_rows": t.unique_rows,
                      "major_faults": t.major_faults, "gather_seconds": t.seconds,
                      "record_bytes": t.record_bytes, "io": t.io, "format": t.fmt}
             for k, t in model.ngram_tables().items()}
@@ -485,6 +514,8 @@ def native_worker(args):
     if not preflight["ok"]:
         raise ValueError("tokenizer preflight failed")
     initial = table_stats(adapter.model)
+    for stats in initial.values():
+        external(stats["path"])  # PLE must page from JW-EXT, never an internal copy.
     check_tables(initial)
     def checkpoint():
         if mx.get_peak_memory() > args.metal_cap_gb * 1e9:
@@ -631,6 +662,8 @@ def main(argv=None):
         raise ValueError("live runs require macOS and --validation-only; exit agents and stop other jobs first")
     if args.out is None:
         raise ValueError("--out is required")
+    if agents := measurement_agents_loaded():
+        raise ValueError("measurement launchd agent(s) loaded; unload before validation: " + ", ".join(agents))
     args.out = external(args.out)
     if args.out.exists():
         raise ValueError("preserve existing evidence; choose a new --out")
