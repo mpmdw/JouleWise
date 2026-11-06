@@ -27,7 +27,7 @@ def policy(**updates):
     return {'sensors': {'s_fast': 'Tfak', 's_slow': 'Tslw', 'fan_keys': [], 'r0_sha256': 'a'*64},
             'delta_fast_c': 1., 'delta_slow_c': 1., 'turn_cap_s': 30.,
             'per_turn': True, 'heavy': False, 'chunk_tokens': 256,
-            'window_reference': {'fast_c': 40., 'slow_c': 40., 'source_member': 'first', 'span_ns': [0, 60*NS]}, **updates}
+            'window_reference': {'role': 'capture'}, **updates}
 
 
 class Transport:
@@ -62,6 +62,7 @@ def session(*, values=None, config=None):
     for _ in range(60):
         clock.sleep(1)
         obj.sample()
+    obj.capture_reference('first')
     return obj, clock
 
 
@@ -118,7 +119,6 @@ class GateTests(unittest.TestCase):
 
     def test_fixed_rate_sampling_with_parse_cost_and_phase_jitter(self):
         p = policy()
-        del p['window_reference']
         clock = FakeClock()
         def read(keys):
             clock.sleep(.0002)
@@ -151,7 +151,6 @@ class GateTests(unittest.TestCase):
 
     def test_reference_accepts_ninety_percent_complete_slots(self):
         p = policy()
-        del p['window_reference']
         obj, _ = session(config=p)
         for _ in range(6):
             obj.sidecar.readings.popleft()
@@ -176,7 +175,8 @@ class GateTests(unittest.TestCase):
         obj.close()
 
     def test_hot_g0_timeout_proceeds_and_fast_sensor_also_gates(self):
-        obj, _ = session(values=lambda t: (45, 40))
+        obj, _ = session()
+        obj.reader._transport.values = lambda t: (45, 40)
         gate = obj.wait('G0')
         self.assertEqual(gate['duration_s'], 600)
         self.assertEqual(gate['outcome'], 'timeout')
@@ -215,7 +215,6 @@ class GateTests(unittest.TestCase):
 
     def test_idle_reference_is_last_sixty_seconds_and_is_not_replaced(self):
         p = policy()
-        del p['window_reference']
         obj, clock = session(values=lambda t: (38 + t/60, 40 + t/60), config=p)
         obj.capture_reference('window-first')
         self.assertEqual(obj.reference['span_ns'], [0, 60*NS])

@@ -92,3 +92,16 @@ class MeasurementCoreBoundaryTests(unittest.TestCase):
             with patch.object(native, 'stream_generate', observe):
                 chat(endpoint, [1, 2, 3])
             self.assertFalse(any(f.startswith('endpoint_error') for f in endpoint.flags), endpoint.flags)
+
+    def test_wp14_c_untouched_execution_path_files(self):
+        expected = {
+            'scripts/run_campaign.py': '734820b2467a4296d07001ead3af4f8f0def451bb1a4ab130f3d87457716efc7',
+            'joulewise/controller.py': 'a50b0b66098a0d12b4fa7598ea6b317992e52ec7af128372edcf57a3dd880c90',
+            'joulewise/adapters/__init__.py': '32917f9f483bf66158a38318e05f751dc976443dc1c234b534ccdb3ffdbad54a',
+            'joulewise/__main__.py': 'fb8ca2a72fae8f2b3a725b457d7befd8f9761620922457166553d0eaaa95c33e',
+            'joulewise/bundle.py': '871d71c71082fc01da6534c82095ce8932a1caa31202c82fd72837be0d9ef1d8',
+        }
+        root = Path(__file__).resolve().parents[2]
+        for name, digest in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(hashlib.sha256((root/name).read_bytes()).hexdigest(), digest)

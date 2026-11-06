@@ -28,10 +28,11 @@ def capture(specs=None):
 
 
 class SelectionTests(unittest.TestCase):
-    def test_r0_emits_no_sensor_classification_or_policy(self):
+    def test_r0_emits_provisional_sensor_classification(self):
         result = r0.rank(capture())
-        self.assertIsNone(result["s_fast"])
-        self.assertIsNone(result["s_slow"])
+        self.assertEqual(result["s_fast"], "TDIE")
+        self.assertEqual(result["s_slow"], "THEA")
+        self.assertTrue(result["picks_provisional"])
         report = {"response": result, "inventory": {"keys": [], "unsupported_types": {
             "TUNK": {"data_type": "zzzz", "error": "unsupported"}}},
             "coverage": {"all_keys": {"sample_fraction": 1}}}
@@ -54,13 +55,14 @@ class SelectionTests(unittest.TestCase):
     def test_design_boundaries_and_physical_tie_breaks(self):
         def row(key, rise, t63, tau):
             return {"key": key, "observed_rise": rise, "t63_s": t63,
-                    "tau_s": tau, "eligible": True, "amplitude_to_noise": 1e9}
+                    "tau_s": tau, "class": ("die" if t63 <= 5 and tau <= 300 else
+                    "heatsink" if t63 > 5 and rise >= 3 and 30 < tau <= 300 else "record-only")}
         result = r0.select_keys([row("TFAS", 18, 5, 2), row("TNOT", 99, 5.001, 2),
                                  row("THEA", 3, 80, 300), row("TSML", 2.999, 80, 299),
                                  row("TCHS", 50, 100, 300.001)])
         self.assertEqual(result, {"s_fast": "TFAS", "s_slow": "THEA"})
         self.assertEqual(r0.select_keys([row("TB00", 18, 2, 200), row("TA00", 18, 2, 200)]),
-                         {"s_fast": "TA00", "s_slow": "TA00"})
+                         {"s_fast": "TA00", "s_slow": None})
 
     def test_one_degree_quantized_small_rise_cannot_win(self):
         data = capture({"TDIE": (2, 2, 18, .15), "TINT": (2, 2, 3, .2)})
@@ -100,8 +102,9 @@ class SelectionTests(unittest.TestCase):
                 t = row["elapsed_s"]-300
                 row["values"]["sensors"]["TMIX"] = 30+9*(1-math.exp(-t/2))+9*(1-math.exp(-t/200))
         result = r0.rank(data, stage="r1")
-        self.assertGreater(result["ranking"][0]["t63_s"], 5)
-        self.assertIsNone(result["s_fast"])
+        self.assertGreater(result["ranking"][0]["t63_end_s"], 5)
+        self.assertLessEqual(result["ranking"][0]["t63_s"], 5)
+        self.assertEqual(result["s_fast"], "TMIX")
         data["samples"] = [r for r in data["samples"] if r["elapsed_s"] < 920]
         data["phases"][2]["end_s"] = 920
         self.assertIsNone(r0.rank(data, stage="r1")["s_slow"])

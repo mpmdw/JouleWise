@@ -220,3 +220,12 @@ rule: do not accept its proposals as filled council slots without reconciliation
 R1 must verify pinned-generator lookahead draining, token identity, resume
 transients, device-clock coverage, sidecar overhead and cleanup under load.
 No hardware, real meter trace, model mirror or blinded study data was accessed.
+
+## WP14(b) window-reference custody supersession
+
+Every gate-map policy requires exactly one role form: the first member uses
+`{"role":"capture"}` and consumers use `{"role":"consume", "source_run_id":
+..., "source_config_sha256": ...}`. Inline temperatures are retired. The
+capture member exclusively creates `outputs/align_window_reference.json` with
+schema `joulewise.align_window_reference.v1`; consumers bind the source config,
+sensor policy, canonical record digest, and recomputed source-journal samples.
