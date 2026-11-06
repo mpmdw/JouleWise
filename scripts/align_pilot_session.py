@@ -437,7 +437,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
 
 def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
          prepare_fn=prepare, install_fn=install, session_prefix='align-pilot-',
-         desk_extra_checks=None):
+         desk_extra_checks=None, install_options=()):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('prepare')
@@ -447,13 +447,18 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     commands.choices['desk'].add_argument('--no-harvest', action='store_true', help='Extract to session/inspection/<utc>-<unique>/; preserve harvest files and skip archive/compression.')
     commands.choices['desk'].add_argument('--compare-session', type=Path)
+    # Kit-specific install arguments (flag, argparse options), forwarded as keywords.
+    for flag, options in install_options:
+        commands.choices['install'].add_argument(flag, **options)
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
             prepare_fn(args.measurement_root, args.session_root, kit=kit, pack_id=pack_id,
                        session_prefix=session_prefix)
         elif args.command == 'install':
-            install_fn(args.session_root)
+            extra = {flag.lstrip('-').replace('-', '_'): getattr(args, flag.lstrip('-').replace('-', '_'))
+                     for flag, _ in install_options}
+            install_fn(args.session_root, **extra)
         else:
             status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session,
                           kit=kit, desk_schema=desk_schema,

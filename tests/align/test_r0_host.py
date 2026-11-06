@@ -214,6 +214,24 @@ class R0HostTest(unittest.TestCase):
             self.assertTrue(result["anchor"]["files"])
             self.assertEqual(result["design"]["W1_two_copies_bytes"], 37_400_000_000)
             self.assertEqual(result["smc_step_budget"]["capture_seconds"], 1800)
+            # R0 states what the W1 arm gate will require, from the gate's own constant.
+            need = result["w1_requirement"]
+            self.assertEqual(need["gate"], "joulewise.align.r0_host.w1_disk_gate")
+            self.assertIn("align_v4_session.py install", need["called_by"])
+            self.assertEqual(need["required_free_bytes_after_r0"], 80_000_000_000)
+            self.assertFalse(need["free_space_would_pass_now"])
+            self.assertEqual(need["shortfall_bytes"], 14_000_000_000)
+            self.assertEqual(need["offload_labels_rehashed_at_arm"], ["pilot10"])
+            self.assertFalse(need["offloads_checked_by_r0"])
+            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_000_000_000)):
+                self.assertTrue(disk_census(config, PINS)["w1_requirement"]["free_space_would_pass_now"])
+            with patch("joulewise.align.r0_host.W1_REQUIRED_FREE_BYTES", 90_000_000_000), \
+                    patch("shutil.disk_usage", return_value=SimpleNamespace(free=85_000_000_000)):
+                need = disk_census(config, PINS)["w1_requirement"]
+                self.assertEqual((need["required_free_bytes_after_r0"], need["free_space_would_pass_now"]),
+                                 (90_000_000_000, False))
+                self.assertEqual(w1_disk_gate(dict(config, offloads=[]))["required_free_bytes_after_r0"],
+                                 90_000_000_000)
 
     def test_w1_requires_configured_verified_offloads_and_80_decimal_gb(self):
         with tempfile.TemporaryDirectory() as tmp:

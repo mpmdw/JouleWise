@@ -1,0 +1,717 @@
+{
+  "authority": "RUN_STATE item 183 (no check pinned to the Mac if it can run elsewhere); Ed 2026-11-06: checks that measure the Mac itself stay on the Mac.",
+  "checkout": {
+    "branch": "lane/2026-11-06-align-v4-prequal",
+    "dirty": false,
+    "head": "105e78c692e7ed7002ffe0667445a86b9279c1cf"
+  },
+  "checks": [
+    {
+      "check": "stack",
+      "interpreter": "/private/tmp/jwprequal-venv/bin/python",
+      "mismatch": {},
+      "note": "tokenizers is not pinned by the measurement venv contract; recorded only.",
+      "required": {
+        "mlx": "0.31.2",
+        "mlx-lm": "0.31.3",
+        "transformers": "5.12.1"
+      },
+      "seconds": 0.055,
+      "status": "pass",
+      "versions": {
+        "huggingface_hub": "1.33.0",
+        "jinja2": "3.1.6",
+        "mlx": "0.31.2",
+        "mlx-lm": "0.31.3",
+        "tokenizers": "0.22.2",
+        "transformers": "5.12.1"
+      }
+    },
+    {
+      "check": "r0-config",
+      "config_sha256": "e6329401504de4731b3a27abbdc7a7f39ec693b026574ae51839c980a9015e3b",
+      "file_sha256": "48f03cd568c82b3eb57510b98ee1d13dd8ca6669ec558482e719aeaf8a859c46",
+      "mac_paths_not_checked": [
+        "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
+        "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
+        "/Users/edr/.cache/joulewise/shade",
+        "/Users/edr"
+      ],
+      "note": "Schema, pins and cross-references only; the Mac's own paths are checked by R0.",
+      "problems": [],
+      "seconds": 0.323,
+      "smc_step_budget": {
+        "capture_seconds": 1800,
+        "journal_bytes_estimate": 29491200,
+        "journal_bytes_per_slot_estimate": 16384,
+        "journal_estimate_note": "16 KiB per 1 Hz slot; verify actual size after enumeration.",
+        "profile": {
+          "idle_seconds": 300,
+          "load_seconds": 900,
+          "recovery_seconds": 600
+        },
+        "sample_period_seconds": 1,
+        "timeout_seconds": 2400
+      },
+      "status": "pass"
+    },
+    {
+      "check": "launcher",
+      "fidelity": "Real launch()/run() code and the real config; Mac paths, launchd, preflight (AC/disk) and Spotlight stay on the Mac.",
+      "interpreter": {
+        "argv0": "/private/tmp/jwprequal-venv/bin/python",
+        "base_prefix": "/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13",
+        "exit_code": 0,
+        "is_symlink": true,
+        "prefix": "/private/tmp/jwprequal-venv",
+        "resolves_to": "/opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/bin/python3.13",
+        "stderr_tail": "",
+        "versions": {
+          "mlx": "0.31.2",
+          "mlx-lm": "0.31.3",
+          "transformers": "5.12.1"
+        }
+      },
+      "launch_stdout": "{\"label\": \"com.joulewise.align-r0.5d610db206b8464d82f308bf0d80d4d0\", \"plist\": \"/private/tmp/jwprequal-tmp/final.work/launcher-run/custody/r0-launches/5d610db206b8464d82f308bf0d80d4d0/com.joulewise.align-r0.5d610db206b8464d82f308bf0d80d4d0.plist\", \"fence\": {\"deadline\": 1793989351.292783, \"pid\": 79651, \"purpose\": \"align-r0:5d610db206b8464d82f308bf0d80d4d0\"}, \"next\": \"exit the magistrate session now\"}",
+      "launcher": {
+        "blobs": {
+          "launch_align_r0.py": "9882b275fd59df136eb3f0a7e485f8d0bedb3967",
+          "run_align_r0_launchagent.sh": "84f65411c620dc0f139bedfc8cbd0f4ce2cfcd80"
+        },
+        "source": "origin/main"
+      },
+      "problems": [],
+      "run_help_exit": 0,
+      "runner_json": [
+        "/private/tmp/jwprequal-venv/bin/python",
+        "/Users/edr/code/CapstoneProject/jw-wt/v4-prequal/scripts/align_r0_checks.py",
+        "--config",
+        "/Users/edr/code/CapstoneProject/jw-wt/v4-prequal/configs/align/v4/r0_desk.json",
+        "--output",
+        "/private/tmp/jwprequal-tmp/final.work/launcher-run/r0-output"
+      ],
+      "seconds": 0.858,
+      "status": "pass",
+      "substitutions": {
+        "--output/--disk-path/--custody-root": "/private/tmp/jwprequal-tmp/final.work/launcher-run",
+        "--python-bin": "/private/tmp/jwprequal-venv/bin/python",
+        "--repo": "/Users/edr/code/CapstoneProject/jw-wt/v4-prequal",
+        "launchctl": "faked: bootstrap spawns a claimer that takes the fence"
+      }
+    },
+    {
+      "check": "kit",
+      "files_checked": 29,
+      "members": 18,
+      "note": "Pending inputs are expected before R0/R1; only stage w1 requires readiness.",
+      "pending_inputs": [
+        "WP11.identity_unit",
+        "WP11.artifact_inventory",
+        "WP11.local_file_verification",
+        "WP18.X.max_turns",
+        "WP18.X.token_fixture_sha256",
+        "WP18.Y.max_turns",
+        "WP18.Y.token_fixture_sha256",
+        "R0.reasoning_effort",
+        "R1.B_D",
+        "R1.I_D",
+        "R1.T_dead",
+        "R1.thermal_policy",
+        "WP15.runtime_entrypoint"
+      ],
+      "problems": [],
+      "require_ready": "ValueError: v4 kit BLOCKED by placeholders: WP11.identity_unit, WP11.artifact_inventory, WP11.local_file_verification, WP18.X.max_turns, WP18.X.token_fixture_sha256, WP18.Y.max_turns, WP18.Y.token_fixture_sha256, R0.reasoning_effort, R1.B_D, R1.I_D, R1.T_dead, R1.thermal_policy, WP15.runtime_entrypoint",
+      "seconds": 1.826,
+      "stage": "r0",
+      "status": "pass"
+    },
+    {
+      "check": "d-pins",
+      "downloaded_weight_bytes": 0,
+      "fidelity": "Remote listing only; the Mac's local copy is re-hashed by R0 disk + the verifier.",
+      "files": 19,
+      "lfs_pinned": 7,
+      "problems": [],
+      "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+      "seconds": 0.611,
+      "status": "pass",
+      "weight_bytes": 29501218479
+    },
+    {
+      "check": "d-pin-verifier",
+      "hf_cache_bookkeeping_result": [
+        "unpinned local file .cache/huggingface/download/x.metadata"
+      ],
+      "known_behavior": "The verifier FAILs on .cache/huggingface/ bookkeeping files; RUN_STATE item 179 ruled that acceptable for the 2026-11-06 re-run. Fix or rule before W1.",
+      "problems": [],
+      "r0_report": {
+        "only_hf_cache_bookkeeping": true,
+        "path": "/private/tmp/jwprequal-tmp/rec/report.json",
+        "problems": [
+          "unpinned local file .cache/huggingface/.gitignore",
+          "unpinned local file .cache/huggingface/CACHEDIR.TAG",
+          "unpinned local file .cache/huggingface/download/.gitattributes.lock",
+          "unpinned local file .cache/huggingface/download/.gitattributes.metadata",
+          "unpinned local file .cache/huggingface/download/README.md.lock",
+          "unpinned local file .cache/huggingface/download/README.md.metadata",
+          "unpinned local file .cache/huggingface/download/chat_template.jinja.lock",
+          "unpinned local file .cache/huggingface/download/chat_template.jinja.metadata",
+          "unpinned local file .cache/huggingface/download/config.json.lock",
+          "unpinned local file .cache/huggingface/download/config.json.metadata",
+          "unpinned local file .cache/huggingface/download/generation_config.json.lock",
+          "unpinned local file .cache/huggingface/download/generation_config.json.metadata",
+          "unpinned local file .cache/huggingface/download/merges.txt.lock",
+          "unpinned local file .cache/huggingface/download/merges.txt.metadata",
+          "unpinned local file .cache/huggingface/download/model-00001-of-00006.safetensors.lock",
+          "unpinned local file .cache/huggingface/download/model-00001-of-00006.safetensors.metadata",
+          "unpinned local file .cache/huggingface/download/model-00002-of-00006.safetensors.lock",
+          "unpinned local file .cache/huggingface/download/model-00002-of-00006.safetensors.metadata",
+          "unpinned local file .cache/huggingface/download/model-00003-of-00006.safetensors.lock",
+          "unpinned local file .cache/huggingface/download/model-00003-of-00006.safetensors.metadata",
+          "unpinned local file .cache/huggingface/download/model-00004-of-00006.safetensors.lock",
+          "unpinned local file .cache/huggingface/download/model-00004-of-00006.safetensors.metadata",
+          "unpinned local file .cache/huggingface/download/model-00005-of-00006.safetensors.lock",
+          "unpinned local file .cache/huggingface/download/model-00005-of-00006.safetensors.metadata",
+          "unpinned local file .cache/huggingface/download/model-00006-of-00006.safetensors.lock",
+          "unpinned local file .cache/huggingface/download/model-00006-of-00006.safetensors.metadata",
+          "unpinned local file .cache/huggingface/download/model.safetensors.index.json.lock",
+          "unpinned local file .cache/huggingface/download/model.safetensors.index.json.metadata",
+          "unpinned local file .cache/huggingface/download/preprocessor_config.json.lock",
+          "unpinned local file .cache/huggingface/download/preprocessor_config.json.metadata",
+          "unpinned local file .cache/huggingface/download/processor_config.json.lock",
+          "unpinned local file .cache/huggingface/download/processor_config.json.metadata",
+          "unpinned local file .cache/huggingface/download/tokenizer.json.lock",
+          "unpinned local file .cache/huggingface/download/tokenizer.json.metadata",
+          "unpinned local file .cache/huggingface/download/tokenizer_config.json.lock",
+          "unpinned local file .cache/huggingface/download/tokenizer_config.json.metadata",
+          "unpinned local file .cache/huggingface/download/video_preprocessor_config.json.lock",
+          "unpinned local file .cache/huggingface/download/video_preprocessor_config.json.metadata",
+          "unpinned local file .cache/huggingface/download/vocab.json.lock",
+          "unpinned local file .cache/huggingface/download/vocab.json.metadata",
+          "unpinned local file .cache/huggingface/trees/815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9.json"
+        ]
+      },
+      "seconds": 0.006,
+      "status": "pass"
+    },
+    {
+      "bytes": 30302843,
+      "check": "d-tokenizer-files",
+      "files": [
+        ".gitattributes",
+        "README.md",
+        "chat_template.jinja",
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model.safetensors.index.json",
+        "preprocessor_config.json",
+        "processor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "video_preprocessor_config.json",
+        "vocab.json"
+      ],
+      "path": "/private/tmp/jwprequal-hf/hub/models--mlx-community--Qwen3.8-27B-8bit/snapshots/815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+      "revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+      "seconds": 0.085,
+      "status": "pass",
+      "verified": "size + LFS sha256 or git blob sha1 against configs/align/v4 pins"
+    },
+    {
+      "check": "template-render",
+      "mac_equivalence": {
+        "echo_prompt_ids_match_mac": true,
+        "short_prompt_ids_match_mac": true
+      },
+      "note": "R1 drives D through the same endpoint and W1 member specs; its prompts are covered by the W1 rows. Effort 'xhigh' passes no kwarg, as R0 and the kit do.",
+      "problems": [],
+      "reference": {
+        "branch": "records/2026-11-06-align-r0-v4-rerun",
+        "checkout_head": "f3af22b94a92b8d8b58d7cd9dbebed554a30fb91",
+        "commit": "bdaf0c03e74b6fc824e16f607122c0738dab0eb7",
+        "host": "Mac15,9 (measurement MacBook Pro)",
+        "launch_id": "5eb457807c404f3da497bd799f91d92a",
+        "note": "Software-only fields copied from the measurement-Mac R0 re-run. No energy, thermal or timing value is used.",
+        "path": "docs/align/r0/2026-11-06-rerun/report.json",
+        "sha256": "857ed2859ee0ef7a82c00e3a3bb425c8325eecf9262a717db86b5577ab91c780"
+      },
+      "renders": [
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "f9deaf13231a377e7cef90deb1f30af7799bcb396a02db801ef7ad148ac6fd8d",
+          "label": "r0.short",
+          "problems": [],
+          "text_sha256": "25181685e2e00e87669eda6f4f02144ad780c37ddeadb06d374a6e09a6d2a11f",
+          "tokens": 74
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "458aa4dabf715fb9813f52ed4a762bc600c2e1157a60f9ecc0be3e09bebcfc37",
+          "label": "r0.echo",
+          "problems": [],
+          "text_sha256": "c37c43e627a75310750354ac9888c1dc60a2ca3ecadd225fdcd353897e88f6e4",
+          "tokens": 331
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "58331b8f1cfa1b65680202032c66d1170ccbd7b0e4a8cd72f28ffe7139d02a6d",
+          "label": "r0.ladder.spam_filter_update.91",
+          "problems": [],
+          "text_sha256": "e42b8bac3ecc7166216ebc79f6c2fbe4a4a7aba4d424363b147838ab6158ccf5",
+          "tokens": 6554
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "fd4c1675e23c70dac0e9ebcffd7609599f5f76d6d08cf5ddec7c39738151dc89",
+          "label": "r0.ladder.bank_transfer_2.92",
+          "problems": [],
+          "text_sha256": "f82de2324f89092550b5ec01bdae448e4652855b9c3ddf40ecbfece426033d90",
+          "tokens": 10059
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "bffdd7d2fb869639db8c5751f1565833bb6756bd87ffe036f3db707682866079",
+          "label": "r0.short",
+          "problems": [],
+          "text_sha256": "719597fa4e09317e1f1b622120d190db1ef98c504d902b18c7cf32be4047f6e3",
+          "tokens": 32
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "a418e6696c370a6ba34ac59948ee7f4f9ef23141e70cb1728d050f4b6731c243",
+          "label": "r0.echo",
+          "problems": [],
+          "text_sha256": "48a5dd1312da8df7835bcae545ae73aa24caebcf4d3d0b9b1c57605e08f242a4",
+          "tokens": 293
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "b533109edb5e8c49983e84ef75f14854abd9492fed8ee6e83ae227add7fe4c25",
+          "label": "r0.ladder.spam_filter_update.91",
+          "problems": [],
+          "text_sha256": "434e178dba9f54f721c8d40eaa4d69cc38b200ca8bccabcaece911d65a8af975",
+          "tokens": 6516
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "77ca487454df77103c09e75823b194c44801f49ea9c826c52afcfb84cdc27e51",
+          "label": "r0.ladder.bank_transfer_2.92",
+          "problems": [],
+          "text_sha256": "9b23b848efc2b8d46e93c7807a6d3077ef5dace8567fd4318c3ae53f913d3cf8",
+          "tokens": 10021
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "b01f93b0eb3a9c6492b08eb1fce210e23e8e97060da8a1ac4bb8bd77aba197d6",
+          "label": "r0.short",
+          "problems": [],
+          "text_sha256": "937ed7385e440a26448a51be853510cdd2cff02627a47b8b60f64efdc5d5382b",
+          "tokens": 62
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "48cf514aefc5667a6ee990d453aa8674b8da6ae45bb84f73bdad779f060f3be0",
+          "label": "r0.echo",
+          "problems": [],
+          "text_sha256": "1ab992f6060571bf97d7570ab0e10a790f47517019753570ad695f6342e4a889",
+          "tokens": 319
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "5608716c8ae82ae45bae7226203193076308fe1aef920e4abd39ae92d22569f2",
+          "label": "r0.ladder.spam_filter_update.91",
+          "problems": [],
+          "text_sha256": "d01a3255dcb1e8cee9ac015f7ccbed028e08167d484be636e0fba34992cee001",
+          "tokens": 6542
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "7c432f5d9859baeff6c714f935afdd3e2a97622bcae0f60a7ba836d78ff64720",
+          "label": "r0.ladder.bank_transfer_2.92",
+          "problems": [],
+          "text_sha256": "9d7e045b12ba14fe7f7d97e282a1170a76a7af80cd11babde398b73536cb869f",
+          "tokens": 10047
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "58331b8f1cfa1b65680202032c66d1170ccbd7b0e4a8cd72f28ffe7139d02a6d",
+          "label": "w1.D.spam_filter_update.benign.1",
+          "problems": [],
+          "text_sha256": "e42b8bac3ecc7166216ebc79f6c2fbe4a4a7aba4d424363b147838ab6158ccf5",
+          "tokens": 6554
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "b533109edb5e8c49983e84ef75f14854abd9492fed8ee6e83ae227add7fe4c25",
+          "label": "w1.D.spam_filter_update.benign.1",
+          "problems": [],
+          "text_sha256": "434e178dba9f54f721c8d40eaa4d69cc38b200ca8bccabcaece911d65a8af975",
+          "tokens": 6516
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "5608716c8ae82ae45bae7226203193076308fe1aef920e4abd39ae92d22569f2",
+          "label": "w1.D.spam_filter_update.benign.1",
+          "problems": [],
+          "text_sha256": "d01a3255dcb1e8cee9ac015f7ccbed028e08167d484be636e0fba34992cee001",
+          "tokens": 6542
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "fd4c1675e23c70dac0e9ebcffd7609599f5f76d6d08cf5ddec7c39738151dc89",
+          "label": "w1.D.bank_transfer_2.benign.1",
+          "problems": [],
+          "text_sha256": "f82de2324f89092550b5ec01bdae448e4652855b9c3ddf40ecbfece426033d90",
+          "tokens": 10059
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "77ca487454df77103c09e75823b194c44801f49ea9c826c52afcfb84cdc27e51",
+          "label": "w1.D.bank_transfer_2.benign.1",
+          "problems": [],
+          "text_sha256": "9b23b848efc2b8d46e93c7807a6d3077ef5dace8567fd4318c3ae53f913d3cf8",
+          "tokens": 10021
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "7c432f5d9859baeff6c714f935afdd3e2a97622bcae0f60a7ba836d78ff64720",
+          "label": "w1.D.bank_transfer_2.benign.1",
+          "problems": [],
+          "text_sha256": "9d7e045b12ba14fe7f7d97e282a1170a76a7af80cd11babde398b73536cb869f",
+          "tokens": 10047
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "6f33708b16d5a36be2c9c682dbab02528c51534bcdfefdbc3b6756e0421764b3",
+          "label": "w1.D.spam_filter_update.sabotage.1",
+          "problems": [],
+          "text_sha256": "ed1890c893fe24aed832d58c227ade278856cbb0753627b7555b91a5da28ffd5",
+          "tokens": 7322
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "34025d1cac60c28909f7deae7c7bb75736f03702931d4e82c6d11ee3b6426a0c",
+          "label": "w1.D.spam_filter_update.sabotage.1",
+          "problems": [],
+          "text_sha256": "6398fee0f91051d1a905744e8243fb3f455c4dd788045e011e79cea12acb9092",
+          "tokens": 7284
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "e1e2562da678768cc08ac0d01ec9886907c0c331ecb67b7dc0a3da6b1c878a34",
+          "label": "w1.D.spam_filter_update.sabotage.1",
+          "problems": [],
+          "text_sha256": "3b4663a2d463b108794a41b36d9f3f12ecc6701f9fc699304e9f203636582c43",
+          "tokens": 7310
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "6e48742964830d8239518e2ce7f2b0311f215013e3ef69971b66865cf263a7da",
+          "label": "w1.D.bank_transfer_2.sabotage.1",
+          "problems": [],
+          "text_sha256": "7a0d9731daaeeb392a729f3fa9a2589a50d4a2306bcf096c160caa33e1298c62",
+          "tokens": 11278
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "1daedb7bd822eebc6a11b6f00bfaca40a3dfe360624a79805b51390ea19afaa5",
+          "label": "w1.D.bank_transfer_2.sabotage.1",
+          "problems": [],
+          "text_sha256": "2a7bf98c5b3654d097ae30678add7030ff590288be6d6a6b9c40657434223428",
+          "tokens": 11240
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "5a3cbc8803795b8360ddc0aa6a193f0539d340d132fa41688621fad7a259405b",
+          "label": "w1.D.bank_transfer_2.sabotage.1",
+          "problems": [],
+          "text_sha256": "44642f54459d64b64ae9550634be180e2533671bd58468191567ff25ab0cc7a9",
+          "tokens": 11266
+        },
+        {
+          "effort": "xhigh(default)",
+          "ids_sha256": "fd4c1675e23c70dac0e9ebcffd7609599f5f76d6d08cf5ddec7c39738151dc89",
+          "label": "w1.D.bank_transfer_2.benign.93",
+          "problems": [],
+          "text_sha256": "f82de2324f89092550b5ec01bdae448e4652855b9c3ddf40ecbfece426033d90",
+          "tokens": 10059
+        },
+        {
+          "effort": "medium",
+          "ids_sha256": "77ca487454df77103c09e75823b194c44801f49ea9c826c52afcfb84cdc27e51",
+          "label": "w1.D.bank_transfer_2.benign.93",
+          "problems": [],
+          "text_sha256": "9b23b848efc2b8d46e93c7807a6d3077ef5dace8567fd4318c3ae53f913d3cf8",
+          "tokens": 10021
+        },
+        {
+          "effort": "low",
+          "ids_sha256": "7c432f5d9859baeff6c714f935afdd3e2a97622bcae0f60a7ba836d78ff64720",
+          "label": "w1.D.bank_transfer_2.benign.93",
+          "problems": [],
+          "text_sha256": "9d7e045b12ba14fe7f7d97e282a1170a76a7af80cd11babde398b73536cb869f",
+          "tokens": 10047
+        }
+      ],
+      "seconds": 48.528,
+      "status": "pass"
+    },
+    {
+      "canonical_roundtrip": true,
+      "check": "nll-fixture-ids",
+      "expected_sha256": "792beb565106c53ed77695c7ccbb998b11300b3ba25e485c8c0069dcb710ac42",
+      "fidelity": "IDs only; scoring them needs a model (see load under a model backend).",
+      "max_id": 248045,
+      "problems": [],
+      "rendered_tokens": 6554,
+      "seconds": 2.165,
+      "sha256": "792beb565106c53ed77695c7ccbb998b11300b3ba25e485c8c0069dcb710ac42",
+      "status": "pass",
+      "tokens": 2049
+    },
+    {
+      "check": "template-rewrites",
+      "note": "R0's own synthetic template check, run here without a model. It cannot decide B7.",
+      "prefix_stable": false,
+      "problems": [],
+      "rewritten_prefix_tokens": [
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12
+      ],
+      "seconds": 0.11,
+      "status": "diagnostic"
+    },
+    {
+      "cases": [
+        {
+          "calls": 1,
+          "case": "mac_echo_turn_1_to_turn_2",
+          "flags": [
+            "reasoning_open_tag_prefilled_or_missing",
+            "reasoning_token_count_unavailable"
+          ],
+          "second_prompt_matches_mac": true,
+          "second_prompt_tokens": 513,
+          "tool_outputs": [
+            "{\"value\":\"desk-check\",\"ok\":true}"
+          ],
+          "visible_matches_mac": true
+        },
+        {
+          "calls": 0,
+          "case": "mac_short_call_count",
+          "expected": 0,
+          "ok": true
+        },
+        {
+          "calls": 1,
+          "case": "mac_echo_first_call_count",
+          "expected": 1,
+          "ok": true
+        },
+        {
+          "calls": 1,
+          "case": "mac_echo_second_call_count",
+          "expected": 1,
+          "ok": true
+        },
+        {
+          "case": "shade_tools_parse_and_history",
+          "round_tripped": 41,
+          "tools": 41
+        },
+        {
+          "calls": 0,
+          "case": "reject_truncated",
+          "flags": [
+            "reasoning_open_tag_prefilled_or_missing",
+            "malformed_tool_call:xml:unclosed_parameter",
+            "reasoning_token_count_unavailable"
+          ]
+        },
+        {
+          "calls": 0,
+          "case": "reject_unknown_tool",
+          "flags": [
+            "reasoning_open_tag_prefilled_or_missing",
+            "malformed_tool_call:xml:unknown_function",
+            "reasoning_token_count_unavailable"
+          ]
+        },
+        {
+          "calls": 0,
+          "case": "reject_json_envelope",
+          "flags": [
+            "reasoning_open_tag_prefilled_or_missing",
+            "malformed_tool_call:xml:expected_function",
+            "reasoning_token_count_unavailable"
+          ]
+        },
+        {
+          "attempted_envelopes": 2,
+          "case": "r0_tool_envelopes_on_mac_turns",
+          "malformed_turns": 0,
+          "parse_fraction": 1.0,
+          "parsed_calls": 2,
+          "status": "pass",
+          "truncated_envelopes": 0,
+          "unsupported_format": false
+        }
+      ],
+      "check": "tool-roundtrip",
+      "problems": [],
+      "seconds": 1.945,
+      "status": "pass"
+    },
+    {
+      "check": "checkpoint-native",
+      "exit_code": 0,
+      "fidelity": "Restore exactness on tiny qwen3_5/qwen3_next configs on any Metal GPU. W1 runs D with hybrid_checkpoint_limit 0; B7 timing and the D verdict stay on the Mac.",
+      "result": {
+        "bitwise_rows": 11,
+        "exactness_rows": 24,
+        "families": [
+          "qwen3_5",
+          "qwen3_next"
+        ],
+        "final": {
+          "pins": {
+            "mlx": "0.31.2",
+            "mlx-lm": "0.31.3"
+          },
+          "status": "passed"
+        }
+      },
+      "seconds": 12.799,
+      "status": "pass",
+      "stderr_tail": ""
+    },
+    {
+      "backend": "sibling",
+      "check": "model-load",
+      "device": {
+        "architecture": "applegpu_g16g",
+        "device_name": "Apple M4",
+        "max_buffer_length": 12884901888,
+        "max_recommended_working_set_size": 17179885568,
+        "memory_size": 25769803776,
+        "resource_limit": 499000
+      },
+      "fidelity": "sibling: exercises the production load/render/NLL/chat/parse/history code path with D's tokenizer and template; does not qualify D's weights or numerics",
+      "mlx_lm_version": "0.31.3",
+      "model_config_name": "qwen3_5",
+      "seconds": 6.553,
+      "sibling": {
+        "bytes": 1027976863,
+        "dir": "/private/tmp/jwprequal-tmp/final.work/sibling-hybrid",
+        "layers": 24,
+        "revision": "87e768fbfa03994095f3d14527c80c5ae70c5758",
+        "source": "/private/tmp/jwprequal-hf/hub/models--mlx-community--Qwen3.5-0.8B-8bit/snapshots/87e768fbfa03994095f3d14527c80c5ae70c5758",
+        "substitutions": {
+          "config.json:eos_token_id": [
+            248046,
+            248044
+          ],
+          "tokenizer_and_template": "D @ 815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9"
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "backend": "sibling",
+      "check": "load",
+      "coherent": true,
+      "d_nll_limit": 3.0,
+      "echo_error": null,
+      "echo_round_trip_succeeded": true,
+      "fidelity": "Code path only (load, render, chunked-cache NLL loop, chat, parse, tool reply, second turn). The NLL value is the sibling's, not D's: R0 load stays on the Mac.",
+      "nll_nats_per_token": 0.46584999095648527,
+      "nll_vs_d_limit_is_diagnostic": true,
+      "problems": [],
+      "seconds": 167.621,
+      "short_tokens": 2393,
+      "short_visible_tail": " place: 10 + 20 = 30.\n3.  Combine the results: 12 + 30 = 42.\n\nThe sum is 42.\n\n42",
+      "status": "pass"
+    },
+    {
+      "backend": "sibling",
+      "check": "generated",
+      "closed_reasoning": [
+        true,
+        true
+      ],
+      "fidelity": "Generated-turn template re-render path with sibling output; B7 for D is decided on the Mac.",
+      "off_spec_echo_turns": 0,
+      "problems": [],
+      "requested": 12,
+      "rewritten_prefix_tokens": [
+        0,
+        0
+      ],
+      "seconds": 37.356,
+      "sibling_checkpoint_verdict": {
+        "eligible_transitions": 2,
+        "reason": "Need at least 12 generated transitions (closed reasoning for D); do not waive B7.",
+        "status": "inconclusive"
+      },
+      "status": "diagnostic",
+      "transitions": 2
+    }
+  ],
+  "claims": "Software/model/config/fixture pre-qualification only. Grants no arm, R0 or R1 result.",
+  "failed": [],
+  "host": {
+    "hw_memsize": "25769803776",
+    "hw_model": "Mac16,13",
+    "interpreter": "/private/tmp/jwprequal-venv/bin/python",
+    "platform": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+    "python": "3.13.18"
+  },
+  "implementation_sha256": {
+    "configs/align/v4/prequal_r0_reference.json": "93395f3779a0556e6a894015df14be3b6603b61339fe209769c7229d2d3e79fd",
+    "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
+    "configs/align/v4/r0_desk.json": "48f03cd568c82b3eb57510b98ee1d13dd8ca6669ec558482e719aeaf8a859c46",
+    "joulewise/align/prequal.py": "adbd87784cd1d562b7e05e4fcf57f2e27629e37d028bf8526a3f93c26d648e83",
+    "joulewise/align/r0.py": "395c034f91b924867fe3bbc4000ead19c38320e5f98b89f67b0a5098081196db",
+    "joulewise/align/r0_mlx.py": "5206d08b75cc57621ed8b098bf488c22d0991497e41fcaa39b131311ad3d3504",
+    "joulewise/align/r0_runner.py": "1f70f623f21aa25772b37b157fa0e29ff7688520cfcd3afeb1d8d992d0a54663",
+    "scripts/align_v4_kit.py": "73d1b1f558e24015538b766ca1c4da5dd00e8657fdf1777d9457b08611722dda",
+    "scripts/align_v4_prequal.py": "5506eef0d451fcf27087193d4e8008203d3ccdda9db5253f0943c654b1f9b0d2"
+  },
+  "mac_only": {
+    "launcher.launch (live)": "LaunchAgent bootstrap, desk fence handoff, Spotlight pause on the Mac",
+    "launcher.preflight": "AC power and free disk on the Mac",
+    "magistrate.census/fence/span": "live process table, desk fence and plan span on the Mac",
+    "r0.disk": "free bytes and D/anchor file hashes on the Mac's own disk",
+    "r0.generated/checkpoint (D, B7)": "B7 verdict and timing with real D generation",
+    "r0.host": "pmset AC/powermode/thermal, iogpu.wired_limit_mb, hw.memsize on the Mac",
+    "r0.host-identity": "hw.model == Mac15,9 and >=128 GiB",
+    "r0.ladder": "effort-rung selection by decode cost on the M3 Max",
+    "r0.load (D numerics)": "teacher-forced NLL of the real D weights (needs the 29.5 GB artifact)",
+    "r0.long-decode": "40,960-position Metal memory growth",
+    "r0.memory": "peak Metal memory and swap at the context cap",
+    "r0.model-load (D)": "loading the real D artifact into Metal memory",
+    "r0.smc": "SMC key enumeration and GPU step response (S_fast/S_slow)",
+    "r1.*": "powermode A-B-A, soak, high-power adoption, thermal/deadman/OS-load measurement",
+    "w1.disk_snapshot": "statvfs/important-capacity on the Mac",
+    "w1.install": "launchd census and agent installation on the Mac",
+    "w1.w1_disk_gate": "80 GB free and offload re-hash on the Mac's disk"
+  },
+  "model_backend": "sibling",
+  "not_run": [],
+  "schema": "joulewise.align.v4.prequal.v1",
+  "stage": "r0",
+  "status": "pass",
+  "total_seconds": 281.514
+}

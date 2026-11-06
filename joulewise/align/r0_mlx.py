@@ -13,6 +13,24 @@ from joulewise.align.r0 import PINS
 from joulewise.align.r0_host import swap_bytes
 
 
+def backend_config(tag, source):
+    """The production R0 BenchmarkConfig; shared with off-Mac prequalification."""
+    from joulewise.schemas import BenchmarkConfig
+    pin = PINS[tag]
+    return BenchmarkConfig.from_mapping({
+        "schema_version": "0.1", "run_id": "align-r0-" + tag,
+        "model": {"name": pin["name"], "family": pin["family"], "source": str(source),
+                  "revision": pin["revision"], "weight_format": "mlx", "context_window": 40960},
+        "quantization": {"name": f"int{pin['bits']}", "bits": pin["bits"], "group_size": 64},
+        "hardware_target": {"id": "macbook_m3_max", "transport": "local", "runtime_backend": "mlx",
+                            "telemetry_backend": "powermetrics", "device_kind": "apple_silicon_unified_memory"},
+        "workload_profile": {"name": "align_r0", "prompt_tokens": 2048, "output_tokens": 4096,
+                             "repetitions": 1, "warmup_runs": 1},
+        "sampling": {"power_hz": 1, "idle_seconds": 0, "warmup_seconds": 0},
+        "run_metadata": {"project": "joulewise", "tags": ["align-r0-selection", "align-model=" + pin["tag"]]},
+    })
+
+
 class ObservedNative:
     def __init__(self, native, guard):
         self.native, self.guard = native, guard
@@ -34,7 +52,6 @@ class MlxBackend:
         from joulewise.align.apple.endpoint import MlxEndpoint
         from joulewise.align.shade.upstream import PinnedUpstream
         from joulewise.clock import SystemClock
-        from joulewise.schemas import BenchmarkConfig
         from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 
         # B1/B2 belong to Stage 1. Fail explicitly instead of shadowing them in
@@ -42,28 +59,20 @@ class MlxBackend:
         if (not callable(getattr(MlxEndpoint, "assistant_history_message", None))
                 or "chat_template_kwargs" not in inspect.signature(MlxEndpoint).parameters):
             raise RuntimeError("Stage-1 B2 history/effort API missing; integrate before live R0")
+        stack = {}
         for dist, expected in (("mlx", "0.31.2"), ("mlx-lm", "0.31.3"), ("transformers", "5.12.1")):
-            if version(dist) != expected:
-                raise RuntimeError(f"stack pin mismatch: {dist} requires {expected}, found {version(dist)}")
+            stack[dist] = version(dist)
+            if stack[dist] != expected:
+                raise RuntimeError(f"stack pin mismatch: {dist} requires {expected}, found {stack[dist]}")
+        # Keys the R0 load exact-reproduction tier (r0.reproduction_verdict).
+        self.stack_versions = stack
         source = Path(source)
         if not source.is_absolute() or not source.is_dir():
             raise ValueError("model.source must be an existing absolute local directory; no downloads")
         self.tag, self.guard = tag, guard
-        pin = PINS[tag]
         self.clock = SystemClock()
         self.upstream = PinnedUpstream(cache_dir=shade_cache, allow_fetch=False)
-        self.config = BenchmarkConfig.from_mapping({
-            "schema_version": "0.1", "run_id": "align-r0-" + tag,
-            "model": {"name": pin["name"], "family": pin["family"], "source": str(source),
-                      "revision": pin["revision"], "weight_format": "mlx", "context_window": 40960},
-            "quantization": {"name": f"int{pin['bits']}", "bits": pin["bits"], "group_size": 64},
-            "hardware_target": {"id": "macbook_m3_max", "transport": "local", "runtime_backend": "mlx",
-                                "telemetry_backend": "powermetrics", "device_kind": "apple_silicon_unified_memory"},
-            "workload_profile": {"name": "align_r0", "prompt_tokens": 2048, "output_tokens": 4096,
-                                 "repetitions": 1, "warmup_runs": 1},
-            "sampling": {"power_hz": 1, "idle_seconds": 0, "warmup_seconds": 0},
-            "run_metadata": {"project": "joulewise", "tags": ["align-r0-selection", "align-model=" + pin["tag"]]},
-        })
+        self.config = backend_config(tag, source)
         guard.check(force=True)
         self.runtime = MlxRuntimeAdapter(self.clock)
         prepared = self.runtime.prepare(self.config)
@@ -85,12 +94,15 @@ class MlxBackend:
         self.runtime.cleanup(self.config)
         self.mx.clear_cache()
 
-    def new_session(self, effort):
+    def new_session(self, effort, *, greedy=False):
         from joulewise.align.apple.endpoint import MlxEndpoint
+        # greedy=True: no sampler policy, i.e. the endpoint's pinned greedy path
+        # (R0 load generation check); otherwise the production sampler.
         self.endpoint = MlxEndpoint(
             self.runtime, self.config, self.clock, episode_domain="align-r0",
             prepare_metadata=self.prepared, enable_thinking=True, prompt_cache="episode_prefix",
-            sampler={"temperature": 1.0 if self.tag == "D" else 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0},
+            sampler=None if greedy else {"temperature": 1.0 if self.tag == "D" else 0.6,
+                                         "top_p": 0.95, "top_k": 20, "min_p": 0},
             chat_template_kwargs=None if effort is None else {"reasoning_effort": effort},
         )
 
@@ -109,10 +121,13 @@ class MlxBackend:
         raw = f"Check echo {index}.\n</think>\n\n{body}"
         return raw, self.encode(raw + "<|im_end|>")
 
-    def chat(self, messages, tools, max_tokens, seed):
+    def chat(self, messages, tools, max_tokens, seed, *, greedy=False):
+        if greedy != (getattr(self.endpoint, "sampler", None) is None):
+            raise RuntimeError("greedy chat requires a greedy session (new_session(..., greedy=True)) and vice versa")
         self.guard.check(force=True)
         result = self.endpoint.chat(messages, tools=tools, max_tokens=max_tokens,
-                                    temperature=1.0 if self.tag == "D" else 0.6, seed=seed)
+                                    temperature=0.0 if greedy else 1.0 if self.tag == "D" else 0.6,
+                                    seed=None if greedy else seed)
         self.guard.check()
         flags = result.raw_usage.get("joulewise", {}).get("flags", [])
         if any(flag.startswith("endpoint_error:") for flag in flags):
@@ -130,23 +145,29 @@ class MlxBackend:
             raise RuntimeError(f"offline pinned SHADE task unavailable: {task.flags}")
         return task
 
-    def nll(self, ids):
+    def nll_losses(self, ids):
+        """Per-target teacher-forced NLL (nats), 128-token chunks over one cache."""
         from mlx_lm.models.cache import make_prompt_cache
         mx = self.mx
         cache = make_prompt_cache(self.runtime._model)
-        total, count = 0.0, len(ids) - 1
+        values, count = [], len(ids) - 1
         for start in range(0, count, 128):
             self.guard.check()
             end = min(count, start + 128)
             logits = self.runtime._model(mx.array([ids[start:end]]), cache=cache).astype(mx.float32)
             targets = mx.array([ids[start + 1:end + 1]])
             losses = mx.logsumexp(logits, axis=-1) - mx.take_along_axis(logits, targets[..., None], axis=-1).squeeze(-1)
-            value = mx.sum(losses)
-            mx.eval(value, [c.state for c in cache])
-            total += value.item()
+            mx.eval(losses, [c.state for c in cache])
+            values.extend(float(v) for v in losses[0].tolist())
         del cache
         mx.clear_cache()
-        return total / count
+        if len(values) != count:
+            raise RuntimeError(f"NLL produced {len(values)} target losses for {count} targets")
+        return values
+
+    def nll(self, ids):
+        values = self.nll_losses(ids)
+        return sum(values) / len(values)
 
     def _fixed_context(self, prompt_size, output_size, *, eval_metadata):
         from joulewise.align.apple.prompt_cache import EpisodePromptCache

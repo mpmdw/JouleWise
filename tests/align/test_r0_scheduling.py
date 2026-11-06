@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.align import r0, r0_runner
-from tests.align.test_r0_checks import FakeBackend, FakeGuard, config_at
+from tests.align.test_r0_checks import FakeBackend, FakeGuard, config_at, patch_references
 
 
 class SchedulingTest(unittest.TestCase):
@@ -16,6 +16,7 @@ class SchedulingTest(unittest.TestCase):
             probe = patch.object(r0_runner, name, return_value={"status": status, "fake": True})
             probe.start()
             self.addCleanup(probe.stop)
+        patch_references(self)
 
     def run_fake(self, root, checks=None, **kwargs):
         return r0_runner.execute(config_at(root), root, list(r0_runner.CHECKS) if checks is None else checks,

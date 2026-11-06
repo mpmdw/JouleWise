@@ -3,7 +3,7 @@
     "D": "WP11",
     "anchor_commit": "83e2dac59",
     "tree_path": "configs/campaigns/align_v4/plan_tree.json",
-    "tree_sha256": "a618c44aa10b2926b08c36d733410908f7a58125d7cda1e4bb9a90a949694b7d"
+    "tree_sha256": "ccc3a2cd2a435a0c4265990fa04772e79ca5171a0075da25e2c79611ef2454ef"
   },
   "non_claim": true,
   "runtime_versions": {
@@ -233,9 +233,9 @@
         "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json"
       ],
       "flags": [
-        "PENDING_WP11_D_IDENTITY"
+        "runtime_stack_unobserved"
       ],
-      "model_artifact_sha256": null,
+      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
       "model_name": "Qwen3.8-27B-8bit",
       "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
       "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
@@ -247,9 +247,9 @@
         "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e08.json"
       ],
       "flags": [
-        "PENDING_WP11_D_IDENTITY"
+        "runtime_stack_unobserved"
       ],
-      "model_artifact_sha256": null,
+      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
       "model_name": "Qwen3.8-27B-8bit",
       "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
       "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
@@ -261,9 +261,9 @@
         "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e11.json"
       ],
       "flags": [
-        "PENDING_WP11_D_IDENTITY"
+        "runtime_stack_unobserved"
       ],
-      "model_artifact_sha256": null,
+      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
       "model_name": "Qwen3.8-27B-8bit",
       "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
       "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
@@ -275,9 +275,9 @@
         "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e14.json"
       ],
       "flags": [
-        "PENDING_WP11_D_IDENTITY"
+        "runtime_stack_unobserved"
       ],
-      "model_artifact_sha256": null,
+      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
       "model_name": "Qwen3.8-27B-8bit",
       "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
       "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
@@ -289,9 +289,9 @@
         "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e17.json"
       ],
       "flags": [
-        "PENDING_WP11_D_IDENTITY"
+        "runtime_stack_unobserved"
       ],
-      "model_artifact_sha256": null,
+      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
       "model_name": "Qwen3.8-27B-8bit",
       "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
       "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
@@ -303,9 +303,9 @@
         "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e18.json"
       ],
       "flags": [
-        "PENDING_WP11_D_IDENTITY"
+        "runtime_stack_unobserved"
       ],
-      "model_artifact_sha256": null,
+      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
       "model_name": "Qwen3.8-27B-8bit",
       "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
       "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",

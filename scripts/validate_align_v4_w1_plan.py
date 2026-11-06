@@ -108,7 +108,8 @@ def template_bytes(collection_plan: dict | None = None) -> bytes:
     return (json.dumps(build_template(collection_plan), indent=2, sort_keys=True) + "\n").encode()
 
 
-def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = None) -> dict:
+def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = None, *,
+             collection_plan: dict | None = None) -> dict:
     pending = list(_placeholder_paths(value))
     if pending:
         _fail("refused PENDING_R1 placeholder(s): " + ", ".join(pending))
@@ -182,7 +183,8 @@ def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = No
     expected = {"anchor": 4, "X-S": 2, "X-G": 2, "Y-S": 2, "Y-G": 2, "D": 6}
     if {role: roles.count(role) for role in expected} != expected or set(roles) != set(expected):
         _fail("member roles do not match the Amendment-1 window-1 roster")
-    registered = json.loads(COLLECTION_PLAN.read_text())
+    registered = (collection_plan if collection_plan is not None
+                  else json.loads(COLLECTION_PLAN.read_text()))
     bindings = MEMBER_BINDINGS
     if [[row.get(key) for key in bindings] for row in members] != [
             [row.get(key) for key in bindings] for row in registered["members"]]:

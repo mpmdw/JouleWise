@@ -32,6 +32,13 @@ COUNCIL_COMMIT = '6eb1ff5be'
 WINDOW_PLAN_COMMIT = '40c569cfd'
 INPUTS = KIT / 'registration/inputs.json'
 R1_SLOTS = KIT / 'registration/r1_slots.json'
+# The R1-filled copy of night_plan.template.json (validate_align_v4_w1_plan.py).
+# FINAL-DESIGN B8: W1 sizing comes from R1, so sizing_b5.json is derived from
+# this file and does not exist before it is committed.
+W1_PLAN = KIT / 'registration/w1_plan.json'
+SIZING = KIT / 'registration/sizing_b5.json'
+D_PINS = Path('configs/align/v4/qwen38-27b-8bit-hf-pins.json')
+D_REPO = 'mlx-community/Qwen3.8-27B-8bit'
 D_TAG = 'qwen3.8-27b'
 D_REVISION = '815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9'
 D_SOURCE = '/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit'
@@ -101,8 +108,50 @@ def pending_inputs(inputs):
     return pending
 
 
+# What each owner's placeholder is waiting for. require_ready prints the
+# reason for every owner that is still pending, so the block names its source.
+PENDING_REASONS = {
+    'WP11': ('D identity unit, artifact inventory and local file verification for the pinned '
+             '8-bit artifact (the R0 record\'s model_artifact_identity checked against '
+             'configs/align/v4/qwen38-27b-8bit-hf-pins.json).'),
+    'WP18': ('Mac-side (lead + magistrate), not derivable off the Mac: X = pilot-7 '
+             'align-pilot-v3-episodes-b-e25 (spam/sabotage, seed index 16) and Y = '
+             'align-pilot-v3-episodes-b-e18 (spam/benign, index 14). max_turns = that member\'s '
+             'recorded pilot-7 turn count (FINAL-DESIGN 2.5; Amendment 1: both arms stop at the '
+             'recorded pilot-7 turn count), never the configured 12-turn ceiling. '
+             'token_fixture_sha256 = SHA-256 of the committed WP18 token-id fixture built from those '
+             'two members\' align_turns.jsonl in the pilot 6-7 offload copy and p7-PILOT.json '
+             '(plan WP18; CHAIR ruling 9(d)).'),
+    'R0': 'R0.reasoning_effort stays a placeholder until R0 passes.',
+    'R1': ('R1 hardware rehearsal (scripts/align_r1_rehearsal.py): B_D, I_D, T_dead (lead ruling L1) '
+           'and the thermal policy.'),
+    'WP15': 'WP15 supplies the operator-pinned W1 runtime entrypoint.',
+}
+
+
+def pending_message(pending):
+    owners = list(dict.fromkeys(path.split('.', 1)[0] for path in pending))
+    return ('v4 kit BLOCKED by placeholders: ' + ', '.join(pending) + ' | '
+            + ' | '.join(f'{owner}: {PENDING_REASONS.get(owner, "pending")}' for owner in owners))
+
+
 def read_r1_slots(root=ROOT):
     return json.loads((Path(root) / R1_SLOTS).read_bytes())
+
+
+def read_w1_plan_bytes(root=ROOT):
+    """The committed R1-filled W1 plan's bytes, or None while R1 has not supplied it."""
+    path = Path(root) / W1_PLAN
+    return path.read_bytes() if path.is_file() else None
+
+
+def read_w1_plan(root=ROOT):
+    raw = read_w1_plan_bytes(root)
+    return None if raw is None else json.loads(raw)
+
+
+def read_d_pins(root=ROOT):
+    return json.loads((Path(root) / D_PINS).read_bytes())
 
 
 R1_SLOTS_SCHEMA = 'joulewise.align.r1_slots.v1'
@@ -165,7 +214,7 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
 def require_ready(inputs, r1_slots=None, *, synthetic=False):
     pending = pending_inputs(inputs)
     if pending:
-        raise ValueError('v4 kit BLOCKED by placeholders: ' + ', '.join(pending))
+        raise ValueError(pending_message(pending))
     if r1_slots is None:
         r1_slots = read_r1_slots()
     if r1_slots.get('ac_powermode') not in (0, 2):
@@ -182,7 +231,8 @@ def require_ready(inputs, r1_slots=None, *, synthetic=False):
         # Fable LOW-3: the runtime is an argv list, never one shell string.
         raise ValueError('WP15.runtime_entrypoint must be a non-empty argv list of strings')
     if inputs['R0']['reasoning_effort'] not in ('xhigh', 'medium', 'low'):
-        raise ValueError('R0 reasoning effort must be a selected ladder rung')
+        raise ValueError('R0.reasoning_effort stays a placeholder until R0 passes; then it must be '
+                         'the selected ladder rung (xhigh, medium or low)')
     slots = inputs['R1']
     validate_budget(slots['B_D'])
     if not finite(slots['I_D']) or not 0 <= slots['I_D'] < 1750:
@@ -241,6 +291,123 @@ def check_l1_member_fit(i_d, t_dead, max_r1_tail_s):
         raise ValueError(f'L1: I_D + 1.13544*T_dead + max_r1_tail_s + 10 = {worst:.3f} s '
                          f'exceeds the {MEMBER_CAP_S} s member cap (or T_dead <= 0)')
     return worst
+
+
+def validate_d_identity(wp11, pins):
+    """WP11 binds the exact pinned D weights, independently of the Mac's record.
+
+    The artifact inventory is the governed model_artifact_identity file set the
+    R0 load recorded on the Mac. Every weight shard's sha256 and size must equal
+    the HF LFS pin at D_REVISION, and the folded sha256 must recompute from the
+    pins, so a wrong or partial copy cannot be registered as D.
+    """
+    from joulewise.provenance import folded_model_artifact_sha256
+    unit = wp11.get('identity_unit') if isinstance(wp11, dict) else None
+    inventory = wp11.get('artifact_inventory') if isinstance(wp11, dict) else None
+    verification = wp11.get('local_file_verification') if isinstance(wp11, dict) else None
+    if not all(isinstance(v, dict) for v in (unit, inventory, verification)):
+        raise ValueError('WP11 D identity, inventory and verification must be objects')
+    if (unit.get('model_source') != D_SOURCE or unit.get('model_revision') != D_REVISION
+            or not valid_digest(unit.get('model_artifact_sha256'))):
+        raise ValueError('WP11 D identity must bind the pinned 8-bit artifact')
+    if pins.get('repo') != D_REPO or pins.get('revision') != D_REVISION:
+        raise ValueError('D HF pins must name the pinned repo and revision')
+    weights = {name: row for name, row in pins['files'].items() if name.endswith('.safetensors')}
+    if not weights or any(not valid_digest(row.get('sha256')) for row in weights.values()):
+        raise ValueError('D HF pins must carry an LFS sha256 for every weight shard')
+    if (inventory.get('kind') != 'file_set' or inventory.get('algorithm') != 'sha256'
+            or inventory.get('status') != 'ok' or inventory.get('root') != D_SOURCE):
+        raise ValueError('WP11 artifact inventory must be an ok sha256 file_set rooted at the D source')
+    expected = {name: row['sha256'] for name, row in weights.items()}
+    if inventory.get('files') != expected:
+        raise ValueError('WP11 artifact inventory files must equal the HF LFS pins of the D weight shards')
+    rows = inventory.get('inventory')
+    if not isinstance(rows, list) or sorted(
+            (r.get('path'), r.get('sha256'), r.get('size_bytes')) for r in rows if isinstance(r, dict)
+    ) != sorted((name, row['sha256'], row['size']) for name, row in weights.items()) or len(rows) != len(weights):
+        raise ValueError('WP11 artifact inventory rows must equal the pinned shard names, hashes and sizes')
+    folded = folded_model_artifact_sha256(expected)
+    if not (folded == inventory.get('folded_sha256') == unit['model_artifact_sha256']
+            == verification.get('folded_sha256')):
+        raise ValueError('WP11 D artifact sha256 must be the folded sha256 of the pinned weight shards')
+    if verification.get('status') != 'verified':
+        raise ValueError('WP11 local_file_verification must record status verified')
+    return folded
+
+
+def derive_sizing(root, w1_plan, inputs, r1_slots, tree, collection_plan, w1_plan_raw):
+    """sizing_b5.json from the R1-filled W1 plan (FINAL-DESIGN B8, Amendment 1 arithmetic).
+
+    Member seconds are R1's (the validated plan's member_s). Span, window and the
+    1,800 s spent cap are the validator's. Disk is the pilot-3 law the design uses
+    (FINAL-DESIGN 2.5: per member ceil(OLS bundle_bytes(member_s) + largest positive
+    residual), plus the measured scaffold bytes, two copies), read from the frozen
+    align_pilot_v3 sizing at ANCHOR_COMMIT.
+    """
+    from scripts import validate_align_v4_w1_plan as validator
+    result = validator.validate(w1_plan, inputs, r1_slots, collection_plan=collection_plan)
+    law_path = SOURCE_KIT / 'registration/sizing_b5.json'
+    law_raw = frozen(root, ANCHOR_COMMIT, law_path)
+    source = json.loads(law_raw)['packs']['align-pilot-v3']
+    disk = source['disk_member_law']
+    scaffold_bytes = source['disk_derivation']['scaffold_bytes']
+    rows = w1_plan['align_v4']['members']
+    seconds = {row['ordinal']: row['member_s'] for row in rows}
+    member_bytes = {ordinal: math.ceil(disk['intercept'] + disk['slope'] * value
+                                       + disk['largest_positive_residual'])
+                    for ordinal, value in seconds.items()}
+    n = len(rows)
+    scaffold_count = sum(s['expected_count'] for s in tree['stage_graph']
+                         if s['kind'] == 'campaign_collection') - n
+    b_bytes = sum(member_bytes.values()) + scaffold_bytes
+    t_stream = max(seconds.values())
+    return {'schema_version': 'joulewise.b5_sizing.v1', 'non_claim': True,
+            'derivation': ('ALIGN v4 W1 sizing from the R1-filled W1 plan (FINAL-DESIGN B8). member_s per '
+                           'member is R1\'s; programmed_span_s = ceil(scaffold_s + sum member_s); '
+                           'T_stream_max_s = max member_s (<= 1,800 s spent cap). Disk per member = '
+                           'ceil(pilot-3 OLS bundle_bytes(member_s) + largest positive pilot-3 residual); '
+                           'B = sum + measured pilot-3 scaffold bytes; two copies (FINAL-DESIGN 2.5, '
+                           'Amendment 1: 18.71 GB per copy at the planning member_s).'),
+            'sources': {'w1_plan': {'path': W1_PLAN.as_posix(), 'sha256': sha(w1_plan_raw)},
+                        'disk_law': {'commit': ANCHOR_COMMIT, 'path': law_path.as_posix(),
+                                     'sha256': sha(law_raw), 'pointer': '/packs/align-pilot-v3/disk_member_law'}},
+            'packs': {PACK_ID: {
+                'pack_id': PACK_ID, 'flags': [], 'align_members': n, 'scaffold_members': scaffold_count,
+                'member_count': n + scaffold_count, 'B_D': inputs['R1']['B_D'],
+                'member_seconds': {str(k): v for k, v in sorted(seconds.items())},
+                'align_s': result['align_s'], 'scaffold_s': SCAFFOLD_S,
+                'programmed_span_s': result['programmed_span_s'], 'window_max_s': result['window_max_s'],
+                'span_limit_s': SPAN_LIMIT_S, 'T_stream_max_s': t_stream,
+                'member_cap': {'spent_s': MEMBER_CAP_S}, 'fits_spent_cap': t_stream <= MEMBER_CAP_S,
+                'disk_member_law': disk,
+                'member_upper_bytes': {str(k): v for k, v in sorted(member_bytes.items())},
+                'estimated_footprint_bytes': 2 * b_bytes,
+                'disk_derivation': {'formula': ('ceil(pilot-3 OLS bundle_bytes(member_s) + largest positive '
+                                                'pilot-3 residual) per member; plus measured pilot-3 scaffold; '
+                                                'two copies'),
+                                    'peak_copies': 2, 'B_bytes': b_bytes, 'scaffold_bytes': scaffold_bytes,
+                                    'extra_wait_peak_bytes': 0, 'fixed_retained_bytes': 0}}}}
+
+
+def require_sizing(root=ROOT):
+    """prepare needs registration/sizing_b5.json; it exists only once R1 has filled the W1 plan."""
+    if read_w1_plan_bytes(root) is None:
+        raise ValueError(
+            f'v4 kit BLOCKED: {SIZING} is not derivable yet. W1 sizing comes from R1 (FINAL-DESIGN B8): '
+            'fill a copy of night_plan.template.json with R1\'s member_s, B_D, I_D, T_dead, '
+            f'max_r1_tail_s and thermal policy, commit it as {W1_PLAN} (it must pass '
+            'scripts/validate_align_v4_w1_plan.py), then regenerate the kit, which derives sizing_b5.json.')
+    if not (Path(root) / SIZING).is_file():
+        raise ValueError(f'{SIZING} is missing; regenerate the kit from {W1_PLAN}')
+
+
+def require_w1_ready(root=ROOT):
+    """Everything W1 prepare/arm needs from the kit: inputs, D identity, R1 sizing."""
+    inputs = read_inputs(root)
+    if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
+        validate_d_identity(inputs['WP11'], read_d_pins(root))
+    require_ready(inputs, read_r1_slots(root))
+    require_sizing(root)
 
 
 def valid_digest(value):
@@ -315,6 +482,9 @@ def build_files(root=ROOT):
     root = Path(root)
     inputs = read_inputs(root)
     files = {INPUTS: (root / INPUTS).read_bytes(), R1_SLOTS: (root / R1_SLOTS).read_bytes()}
+    w1_plan_raw = read_w1_plan_bytes(root)
+    if w1_plan_raw is not None:
+        files[W1_PLAN] = w1_plan_raw
     ac_powermode = read_r1_slots(root).get("ac_powermode")
     old_tree = json.loads(frozen(root, ANCHOR_COMMIT, SOURCE_KIT / 'plan_tree.json'))
     tree = _rewrite(old_tree)
@@ -451,13 +621,17 @@ def build_files(root=ROOT):
     chain.stage_plan(tree)  # Preserve the real calibrated scaffold's graph.
     files[KIT / 'plan_tree.json'] = raw_json(tree)
     _identities(root, files, members, inputs)
+    if w1_plan_raw is not None:
+        files[SIZING] = raw_json(derive_sizing(root, json.loads(w1_plan_raw), inputs, read_r1_slots(root),
+                                               tree, plan, w1_plan_raw))
     files[KIT / 'registration/sizing_preview.json'] = raw_json(dict(
         status='PROVISIONAL_NOT_ARM_SIZING', non_claim=True, align_members=18, scaffold_s=SCAFFOLD_S,
         planning_align_s=21931.27, planning_span_s=26927, span_limit_s=SPAN_LIMIT_S,
         planning_window_max_s=44640, planning_two_copy_GB=37.4,
         member_seconds={'anchor': 3131.27 / 4, 'D': 1800, 'G': 1150, 'S': 850},
         fit_rule=['drop ordinal 18', 'lower B_D by 1024 to 6144', 'return to lead'],
-        note='R1 must replace guesses, requalify budget, derive sizing_b5.json and disk before prepare.'))
+        note=('R1 must replace guesses and requalify budget; sizing_b5.json is derived from the '
+              'R1-filled registration/w1_plan.json, never from this preview.')))
     files[KIT / 'README.md'] = README.encode()
     return files
 
@@ -476,6 +650,8 @@ def _identities(root, files, members, inputs):
             unit = deepcopy(inputs['WP11']['identity_unit']) or dict(
                 model_source=D_SOURCE, model_name='Qwen3.8-27B-8bit', model_revision=D_REVISION,
                 model_artifact_sha256=None, stack_identity={}, flags=['PENDING_WP11_D_IDENTITY'])
+            # Like the inherited 30B units: no C4 stack identity is observed.
+            unit.setdefault('stack_identity', {})
             artifact = inputs['WP11']['artifact_inventory']
         else:
             unit, artifact = deepcopy(old_model), deepcopy(old_artifact)
@@ -488,7 +664,8 @@ def _identities(root, files, members, inputs):
                         tree_sha256=sha(files[KIT / 'plan_tree.json']))))
     files[KIT / 'registration/model_artifact_inventory.json'] = raw_json(dict(non_claim=True, artifacts=artifacts))
     files[KIT / 'registration/local_file_verification.json'] = raw_json(dict(
-        status='PROVISIONAL_PENDING_WP11', D=inputs['WP11']['local_file_verification'],
+        status=('PROVISIONAL_PENDING_WP11' if inputs['WP11']['local_file_verification'] is None
+                else 'WP11_D_FROM_R0_RECORD'), D=inputs['WP11']['local_file_verification'],
         inherited_30B_commit=ANCHOR_COMMIT, note='No local files were inspected by this builder.'))
 
 
@@ -527,7 +704,7 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
     if check:
-        require_ready(read_inputs(source_root), read_r1_slots(source_root))
+        require_w1_ready(source_root)
     return files
 
 
@@ -544,9 +721,13 @@ conditions), development 93 at ordinal 18, and a replay of 5 at 17. Development
 The window-plan draft's D index 101 is superseded by synthesized WP16/A1.
 Checkpointing is explicitly off for D throughout the series, superseding A1.
 
-WP11 must provide D file identities/inventory/verification; WP18 must provide
-X=b-e25/index16 and Y=b-e18/index14 historical max_turns and fixture digests.
-No configured 12-turn fallback is used for the contrast. R0 must select effort;
+WP11 (supplied) binds D's six weight shards: the R0 re-run record's governed
+model_artifact_identity, checked shard by shard against the HF LFS pins at
+815b83c0 (configs/align/v4/qwen38-27b-8bit-hf-pins.json); the folded sha256
+recomputes from the pins alone. WP18 (Mac-side) must provide X=b-e25/index16
+and Y=b-e18/index14 recorded pilot-7 turn counts and the token-id fixture
+digest. No configured 12-turn fallback is used for the contrast.
+R0.reasoning_effort stays a placeholder until R0 passes.
 R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
@@ -560,10 +741,17 @@ WP15 must wire the thermal launcher and custody for R: 5 captures its last
 The scaffold's campaign commands remain a skeleton pending that wiring.
 No synthetic sensor, reference temperature, model digest or turn count is used.
 
-Sizing_preview.json contains A1's planning guesses only. No arm-compatible
-sizing_b5.json is supplied. Use fit_roster with R1 measured cost estimates:
+Sizing_preview.json contains A1's planning guesses only. sizing_b5.json comes
+from R1 (FINAL-DESIGN B8): once registration/w1_plan.json (the R1-filled copy
+of night_plan.template.json) is committed and validates, the kit derives
+sizing_b5.json from its member_s (span, window, T_stream_max_s) and the
+pilot-3 disk law (two copies). Until then --check and prepare refuse with
+that reason. Use fit_roster with R1 measured cost estimates:
 drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
+W1 arm (align_v4_session.py install --w1-disk-config) runs the R0 host
+w1_disk_gate: >=80 decimal GB free after R0 and every configured offload
+re-hashed; anything but pass refuses the arm.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.

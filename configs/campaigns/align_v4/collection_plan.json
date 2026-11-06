@@ -1078,9 +1078,6 @@
   "midpoint_after_ordinal": 9,
   "non_claim": true,
   "pending_inputs": [
-    "WP11.identity_unit",
-    "WP11.artifact_inventory",
-    "WP11.local_file_verification",
     "WP18.X.max_turns",
     "WP18.X.token_fixture_sha256",
     "WP18.Y.max_turns",
