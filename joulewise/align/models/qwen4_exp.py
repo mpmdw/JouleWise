@@ -1,4 +1,6 @@
-# Copyright 2026 JouleWise. Canonical MLX port of the official Qwen
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Ed R (mpmdw)
+# Canonical MLX port of the official Qwen
 # ``qwen4_exp`` (Qwen3.8-Flash-Next) text decoder.
 #
 # Authority: transformers 5.22.1 ``models/qwen4_exp/modeling_qwen4_exp.py``
@@ -11,8 +13,9 @@
 # following the binding recommendation of
 # docs/align/qwen4_exp_port/differential_sol_vs_twin.md (D0-D10).
 #
-# Loaded by mlx-lm 0.31.3 through ``config.json`` ``model_file``
-# (``mlx_lm.utils.load_model``), so it is ONE self-contained file: it imports
+# Packaged for mlx-lm 0.31.3's ``config.json`` ``model_file`` support; the
+# verified loader injects the same module classes directly. It is therefore
+# ONE self-contained file and imports
 # only numpy, mlx and the pinned mlx_lm. No ``from __future__ import
 # annotations``: mlx-lm does not register the module in ``sys.modules``, which
 # dataclasses need to resolve string annotations. Community PR #1788 code was
@@ -258,8 +261,8 @@ class ModelArgs(BaseModelArgs):
     (perf.md §3); every path computes the same function.
     """
 
-    model_type: str
-    text_config: dict
+    model_type: str = "qwen4_exp"
+    text_config: dict = field(default_factory=dict)
     ngram_tables: dict = field(default_factory=dict)
     qsa_sparse_prefill_min_kv: int = QSA_SPARSE_PREFILL_MIN_KV
     qsa_sparse_decode_min_kv: int = QSA_SPARSE_DECODE_MIN_KV
@@ -269,7 +272,7 @@ class ModelArgs(BaseModelArgs):
     def from_dict(cls, params):
         text = params.get("text_config", params)
         return cls(
-            model_type=params["model_type"],
+            model_type=params.get("model_type", "qwen4_exp"),
             text_config=dict(text),
             ngram_tables=dict(params.get("ngram_tables") or {}),
             qsa_sparse_prefill_min_kv=int(params.get("qsa_sparse_prefill_min_kv", QSA_SPARSE_PREFILL_MIN_KV)),
@@ -2103,6 +2106,16 @@ class Model(nn.Module):
     @property
     def layers(self):
         return self.language_model.model.layers
+
+    @property
+    def head_dim(self):
+        """Attention head width exposed through the standard mlx-lm API."""
+        return self.language_model.args.head_dim
+
+    @property
+    def n_kv_heads(self):
+        """Number of key/value heads exposed through the standard mlx-lm API."""
+        return self.language_model.args.num_key_value_heads
 
     def make_cache(self, left_padding: Optional[Sequence[int]] = None):
         """Per-layer caches; ``left_padding`` (one int per row) carries the

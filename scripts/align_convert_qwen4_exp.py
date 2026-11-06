@@ -3,8 +3,10 @@
 
 Converts a local HF checkpoint (the released bf16 ``Qwen4ExpForConditional
 Generation`` serialization, or an fp32 one) into the format loaded by
-``joulewise/align/models/qwen4_exp.py`` through mlx-lm 0.31.3's
-``model_file`` hook. Started from the Sol port's converter
+``joulewise/align/models/qwen4_exp.py``. Artifacts retain mlx-lm 0.31.3's
+``model_file`` metadata for ordinary loading; the verified loader executes the
+hashed source bytes and injects its classes explicitly. Started from the Sol
+port's converter
 (lane/2026-11-05-align-flashnext-port, scripts/align_convert_qwen4_exp.py):
 
 * Streaming. Shard headers are inventoried first; every tensor is then read
@@ -50,7 +52,7 @@ PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 # sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
 # default. Rebind it with every module change (the canonical test checks it
 # against the file; canonical.md records it under "Pin").
-MODULE_SHA256 = "c3d4a0bf8d137c6673f1c7e3f92745f9ce45d223e55566704ba27fc4365783bb"
+MODULE_SHA256 = "204c4589090c27fcbb4abbef259862a49169d88b509a0a88e717a1f23d7f1ae6"
 EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
 DTYPES = {"BF16": "<u2", "F32": "<f4", "F16": "<f2", "I64": "<i8"}

@@ -5,8 +5,9 @@ random checkpoint, saved in bf16 in the released serialized layout
 (``Qwen4ExpForConditionalGeneration``: ``model.language_model.*``, per-expert
 ``mlp.experts.{e}.*``, n-gram ``shard_*`` pieces plus hash buffers, a vision
 tower and a fake ``mtp.*`` file the converter must drop), converted with
-``scripts/align_convert_qwen4_exp.py`` and loaded through mlx-lm 0.31.3's
-``model_file`` hook. Every text layer type is present (GatedDeltaNet, QSA with
+``scripts/align_convert_qwen4_exp.py``. Artifacts exercise mlx-lm 0.31.3's
+``model_file`` hook on the plain-load path; normal test loads use the verified
+class-injection path. Every text layer type is present (GatedDeltaNet, QSA with
 an indexer that really drops blocks, PLE at two ``ple_layer_index`` values,
 hyper-connections, MoE + shared expert). hidden_size 192: sqrt(192) is not
 bf16-representable, as sqrt(2560) is not, so the PLE gate divisor (D8) is
@@ -697,7 +698,8 @@ class Fixture:
     def model(self, profile, convert_options=None, **overrides):
         """Load through ``load_verified_model`` (both pins: the manifest sha256
         recorded at conversion, the converter's module pin) and mlx-lm's
-        ``model_file`` hook; ``overrides`` are mlx-lm ``model_config`` keys."""
+        verified class-injection path; ``overrides`` are mlx-lm
+        ``model_config`` keys."""
         options = convert_options or {}
         key = (profile, json.dumps(options, sort_keys=True), json.dumps(overrides, sort_keys=True))
         if key not in self._models:
