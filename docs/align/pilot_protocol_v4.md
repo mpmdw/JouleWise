@@ -5,17 +5,19 @@ WP20, 2026-11-05. This document follows the configuration, roster, seed,
 instrument, analysis and sizing order of [protocol v3](pilot_protocol_v3.md).
 It carries the council design through Amendment 1 and the later execution-plan
 rulings. It does not certify implementation, native qualification or review.
-WP14's three unresolved decisions remain explicit below. Protocol v4's blind
-Fable + Opus registration gate is required for W1 registration; WP20 itself is
-not a prerequisite to arm R1. `V:1–8; F:589–612; P:196–207,247–250`
+WP14's three rulings are installed below; implementation and live qualification
+remain pending. Protocol v4's blind Fable + Opus registration gate is required
+for W1 registration; WP20 itself is not a prerequisite to arm R1.
+`V:1–8; F:589–612; P:196–207,247–250`
 
 ## Authority and source pins
 
 Amendment 1 supersedes the original council design where they differ. The later
 lead execution plan supplies the checkpoint, effort API, disk and headless
-rulings. This draft does not adjudicate WP14. The assigned base is integration
-commit `c8ef6b2f6`, built on pilot-10 `83e2dac59`, with `c9a0a3943` recorded
-absorbed. Trial fix-up `b49bace62` is reference only. `A:3; P:5–26,43–55`
+rulings. WP14 governs sensor selection, R custody and the registry route in
+the three sections below. The assigned base is integration commit `c8ef6b2f6`,
+built on pilot-10 `83e2dac59`, with `c9a0a3943` recorded absorbed. Trial fix-up
+`b49bace62` is reference only. `A:3; P:5–26,43–55`
 
 Citation syntax is `key:line-range`. Git-backed sources can be retrieved without
 network access using `git show <commit>:<path>`; the council files need not be
@@ -32,6 +34,7 @@ present in this checkout. Source paths describing external data are text only.
 | G | `c8ef6b2f6`, `docs/align/thermal_gates.md` |
 | B | `c8ef6b2f6`, `docs/align/token_admission_budget.md` |
 | H | `c8ef6b2f6`, `docs/align/hybrid_cache_checkpoints.md` |
+| W | `a17ed96c8`, `docs/align/council-2026-11-05/WP14-RULINGS.md`, §§(a)–(c) and Supersession summary |
 
 The following are specifications and unfilled slots, not observations from R0
 or R1. The earlier Window-1 survey (`40c569cfd`,
@@ -177,64 +180,153 @@ lookahead before a hold begins; resume at dispatch. Print gross episode
 energy/latency beside turn-owned energy. Native timing, identity and overhead
 remain R1 qualifications. `F:470–473,497–510; G:69–85,97–103,127–138,214–222`
 
-### PENDING-RULING — WP14(a): sensor-selection rule
+### WP14(a): sensor-selection rule
 
-**Question:** which sensor-selection rule governs the frozen S1–S4 slots?
+**Authority:** WP14-RULINGS.md §(a), “Decision: the v4 classifier”, “What R0
+computes” and “What R1 computes”. One model-free classifier supplies R0's
+provisional candidates/bar and R1's final selection. It supersedes the fitted
+R0 selection bullets and corrects council §2.6; the 300/900/600 s R0 capture
+profile and its short-load refusal remain. `W:67–95,108–136,381–391`
 
-- **Council option:** S_fast is the largest ΔT among keys with heating
-  t63 ≤5 s. S_slow has the longest cooling τ among keys with ΔT ≥3 °C and
-  τ ≤300 s; slower chassis keys are recorded but not gated.
-- **R0 step-ruling option:** fitted S_fast τ <30 s over the first 120 s of
-  load; fitted S_slow 120 <τ <900 s, confirmed on recovery. The fixed capture
-  profile is idle/load/recovery = 300/900/600 s.
+Classify a full-inventory 1 Hz journal with idle ≥300 s and recovery ≥600 s.
+Temperature keys must have unit °C; each phase needs coverage ≥99%, failed
+reads <1% and at least five valid samples, with at least three distinct idle
+values. Set q = max(0.05 °C, type quantum, smallest observed idle step, idle
+SD). `F*` and non-temperature keys are never selected.
 
-Sources: `P:196–200; F:461–468; R:10–36`. Current #658 documentation already
-describes the council-style R1 classifier and inventory-only R0 (`T:66–94`);
-that implementation does not itself settle the written-authority conflict.
-The capture-profile ruling is distinct from choosing final R1 sensor roles.
-**Recommendation:** obtain WP14's written reconciliation; this skeleton makes
-no sensor-rule choice. **Blocked:** final role-selection text and pins, and
-any claim that R0 proposals qualify R1 slots.
+T0 is the idle median. ΔT is the median of the last 10% of load minus T0;
+ΔT60 is the median over load-relative [50,60] s minus T0, requiring at least
+five valid samples. t63 is the first interpolated crossing of
+T0 + 0.632×ΔT60, rather than the end-of-load rise; retain the old value as
+`t63_end_s` for information only. Cooling τc is the interpolated 1/e crossing
+of T_rec0−T0 from the first observed recovery sample; unresolved τc is null.
+Nothing is fitted. `W:70–95`
 
-### PENDING-RULING — WP14(b): window-reference R custody
+| Class | All required conditions | Selection |
+|---|---|---|
+| die (fast) | ΔT >3q; ΔT60 >3q; t63 ≤5 s; resolved τc ≤300 s | S_fast: largest ΔT |
+| heatsink (slow) | ΔT ≥3.0 °C; t63 >5 s; resolved 30 s <τc ≤300 s | S_slow: longest τc |
+| record-only | All other keys, including τc >300 s or unresolved | Record the reason; never gate |
 
-The scientific reference is fixed: medians of fast/slow temperatures over the
-last 60 s of the first sidecar member's configured idle (W1: member 5), retained
-in custody and every bundle. Later fresh processes must use the same R.
-`F:475–477; A:49; G:48–54`
+Ties break lexically. The classes are disjoint; no manual substitution is
+allowed. A null pick in either class means no selection and invokes the
+council's IOHID / X4 ruling. R0's thermometry bar additionally requires each
+top pick to have >99% valid 1 Hz slots over ≥600 s and <1% failed reads;
+otherwise the result is inconclusive. Keep `r0_step.rank_response` only as
+status-neutral `exponential_fit_diagnostic`. R0 picks stay **PROVISIONAL** and
+configure R1's gated runs without filling slots. If R0 precedes WP4c, the lead
+evaluates this bar offline from its authenticated journal; this is not a rerun.
+`W:90–95,108–121`
 
-**Question:** which authenticated cross-process handoff is admitted?
-**Plan-recommended option:** member 5 writes a custody file; later members'
-specs carry its path plus a digest; runtime verifies the file when reading it.
-`P:198,202–207`. The existing inline `window_reference` map is an implementation
-input, not an alternative custody ruling. The plan names no approved fallback;
-if the chair chooses another mechanism, it must be written explicitly.
-**Recommendation:** the plan's file/path/digest mechanism, subject to WP14's
-contract. **Blocked:** final custody schema, publication/read lifecycle and
-spec fields. WP15 must prove later-member digest mismatch refuses; omitting R
-in later members and capturing a fresh reference is not an allowed substitute.
-`G:48–65; P:205–207`
+R1 captures every inventoried `T*`/`F*` key around both planning turns: the last
+300 s of quiet before prefill, load from prefill dispatch through last decode,
+then 600 s recovery. Select on D's 10k-fed-prefill + 4,096-seeded-decode step
+under the adopted series mode (Automatic, or High Power if A-B-A adopts it).
+Classify the 30B step for the record only. Fill S1–S4 and the classification
+table from D; either null pick fails R1's thermometry bar. If R1 changes R0's
+picks, record `r1.sensor_pick_changed`: the gated runs retain token-identity
+use, while S6 tuning and S7 recovery are computed for the R1 picks from the
+full-inventory journals and verified by the lead before W1 freeze. WP16 must
+require both `r0_sha256` and the R1 classification digest and refuse keys
+outside R1's die/heatsink lists. Implementation and native evidence remain
+WP4c/WP15–WP17 obligations. `W:123–151`
 
-### PENDING-RULING — WP14(c): ThermalRegistry reach
+### WP14(b): window-reference R custody
 
-**Question:** how does a gated member select `ThermalRegistry` at
-`run_benchmark` through the pinned campaign runner?
+**Authority:** WP14-RULINGS.md §(b), “Decision” and “Implementation
+consequences”. R remains the fast/slow medians over the last 60 s of idle
+before warmup in the first sidecar member (W1: ordinal 5; D_k: early
+sentinel). Later fresh processes, including a later campaign stage, consume
+that same R under the same runs root. `W:175–183,197–284`
 
-- **Align-local entry-point option:** inject the registry from an align-local
-  launcher, preserving the pinned runner.
-- **Cited-rebind option:** explicitly rebind the pinned runner with the required
-  authority and boundary evidence.
+Every gate map requires `window_reference`, in exactly one of these forms:
 
-These are WP14's two options, not two admitted execution routes.
-`P:199–207`. The existing library accepts `registry=ThermalRegistry()` at
-`run_benchmark`, but the ordinary v3 runner does not select it automatically.
-`G:56–65`. **Recommendation:** chair ruling before WP15 wiring; no route is
-selected here. **Blocked:** final launcher contract and readiness declaration.
-WP15 must prove gated D selects the registry and anchors remain unchanged.
+```json
+{"role": "capture"}
+{"role": "consume", "source_run_id": "align-v4-episodes-a-e05", "source_config_sha256": "<64 hex>"}
+```
+
+The frozen digest binds the source member's **bundle config bytes**, not the
+future reference content: SHA-256 of
+`json.dumps(BenchmarkConfig.from_mapping(cfg).to_dict(), indent=2, sort_keys=True) + "\n"`.
+No file path is stored in the spec. Inline temperatures are retired; consumers
+must never capture a replacement R. `W:185–206`
+
+At warmup entry, the capture member writes its own
+`outputs/align_window_reference.json` exclusively (same-directory temporary
+file, `os.link` to a previously absent final name, file and directory fsync).
+The `joulewise.align_window_reference.v1` record binds source run/config,
+sensor keys and sensor-policy digest, warmup-entry/60 s/median/0.9 rule,
+monotonic and epoch [start,end) spans, coverage, the exact contributing
+sample rows, medians, source journal name and `record_sha256`. Canonical JSON
+is `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)`;
+record bytes add one newline, and `record_sha256` hashes all other fields.
+Coverage ≥90% gives `captured`; lower coverage gives `unobserved`, null
+medians, empty samples and X4. A write failure stops the member with
+`thermal.window_reference_write_failed`. `W:207–232`
+
+With a real context, the consumer loads custody in `EpisodeRuntimeAdapter.prepare`
+**before `runtime.prepare`**, without loading a model on refusal. Identity
+readiness (`context is None`) reads no custody. Derive the path as
+`context.bundle_path.parent / source_run_id / "outputs" / "align_window_reference.json"`.
+The source id must be unchanged by sanitization and differ from the consumer id;
+the bundle, outputs directory and file must not be symlinks, and the resolved
+path must stay inside the runs root. In order, verify existence, exact schema
+and canonical bytes/self-digest, source id/config digest against spec and
+source config bytes, and sensor map/policy digest against the consumer policy.
+For `captured`, reload the source journal, recompute the ruled span and
+coverage, and require ≥0.9 coverage, identical contributing rows and exactly
+equal medians. `W:234–246`
+
+Successful consumers retain R plus custody record/source-config/final-journal
+digests in their thermal record. An authenticated `unobserved` record proceeds
+with reference None, the existing G0 timed 300 s wait, X4 and
+`thermal.window_reference_unobserved`; it never recaptures. Integrity failures
+refuse with the ruled path/missing/corrupt/binding-mismatch/unverified flag and
+`AdapterResult(ok=False, RUNTIME_UNAVAILABLE)`; `--max-failures 1` stops the
+stage. Failure before capture requires a new window on resume. WP16 checks
+exactly one capture at the first thermal ordinal, all consumers bound to its
+independently recomputed config digest, identical sensor maps and no thermal
+fields on anchors. R1 must exercise a consumer in a second campaign stage;
+the desk checks one capture, identical consumer record digests and journal
+recomputation, setting `instrument_ok` false on mismatch. These are required
+implementation checks, not evidence of completion here. `W:240–284`
+
+### WP14(c): ThermalRegistry reach
+
+**Authority:** WP14-RULINGS.md §(c), “Decision”, “Citation and review” and
+“Implementation consequences”. Use the cited in-place change to the run verb
+in `joulewise/cli.py`, with an align-local selector. An alternate entry point,
+campaign-runner rebind and stateful default registry are rejected.
+`W:307–352`
+
+`joulewise.align.apple.registry_select.registry_for_config(config)` never
+raises and returns `ThermalRegistry()` only for an `align_episode` workload
+whose JSON prompt contains a `thermal` mapping with `sensors`. It imports
+only `json` at module level and imports the gate implementation lazily for
+that case. Anchors, v3, sensor-only diagnostics, malformed prompts and
+non-align workloads return None. `cli._cmd_run_body` invokes the selector
+only for `align_episode`, then forwards `registry=registry` to its existing
+`run_benchmark` call. A selected thermal registry with repetitions >1 raises
+`SchemaError` before a bundle is created; thermal members require a fresh
+process. `W:330–346,367–376`
+
+Keep `scripts/run_campaign.py`, `controller.py`, `adapters/__init__.py`,
+`__main__.py`, `bundle.py` and `mlx_runtime.py` unchanged by this wiring.
+Anchors keep their config bytes, `python -m joulewise run` entry and default
+registry path. No v4 stage may set `--cli-cmd`; WP16 must refuse it. Cite the
+CLI rebind at the call site and in the implementation commit, with the WP15
+Opus executing-review paper explicitly covering the hunk. The historical
+`file@c27485347…:joulewise/cli.py` registry pin stays untouched; do not add
+`cli.py` to `NUMBER_BEARING_PATHS` or add an executing-review ledger row for
+it. WP15's boundary checks compare the five specified core files to the WP6
+head, and R1 must show bound `PowermetricsStatus` observations in gated
+members' thermal records. Wiring, boundary and native qualification remain
+pending their owning work packages. `W:347–379`
 
 ### Gate semantics and unfilled R1 slots
 
-Subject to the three rulings above, retain these council rules:
+Under the three WP14 rulings above, retain these council rules:
 
 - Bands δ_fast/slow = max(1.0 °C, 3×idle SD) from R1's 30-min soak. If R1's
   median G1 wait exceeds 90 s, tune δ_slow in 0.5 °C steps to ≤90 s and
@@ -419,10 +511,11 @@ direct 140 W MagSafe and any cooler in place but off. Keep it fixed during the
 series. This draft does not perform or certify that checklist.
 `P:281–295,322–331; F:620–626`
 
-**PENDING-REGISTRATION — lead:** install the three written WP14 rulings next to
-the council amendment; resolve desk conventions; bind authenticated R0/R1
-slots, model hashes, kit/desk commits, WP18 fixtures, live/native evidence and
-Ed's outstanding capacity/Q4/Q6 dispositions and Q5 sudo-rule installation.
+**PENDING-REGISTRATION — lead:** verify implementation of the three WP14
+rulings above in their owning work packages; resolve desk conventions; bind
+authenticated R0/R1 slots, model hashes, kit/desk commits, WP18 fixtures,
+live/native evidence and Ed's outstanding capacity/Q4/Q6 dispositions and
+Q5 sudo-rule installation.
 Complete WP21's full desk,
 WP22's synthetic W1 dry run, WP23's post-R1 frozen plan, and blind Fable +
 Opus protocol cold gate. The lead then verifies slots, span/disk, ledger pin,
