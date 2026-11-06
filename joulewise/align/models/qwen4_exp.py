@@ -2035,10 +2035,11 @@ def ngram_buffer_expected(args: TextModelArgs, key: str) -> List[int]:
     return list(spec.head_offsets)
 
 
-# Precision profiles (S qwen4_exp_tables.py:157-222). maxfit / maxfit5: ONLY the
-# routed experts quantized (6 / 5 bit, group 64, affine); every other float
-# weight native bf16; the n-gram table bf16 on disk (GOAL precision target).
-MAXFIT_BITS = {"maxfit": 6, "maxfit5": 5}
+# Precision profiles (S qwen4_exp_tables.py:157-222). maxfit / maxfit5 /
+# maxfit4: ONLY the routed experts quantized (6 / 5 / 4 bit, group 64,
+# affine); every other float weight native bf16; the n-gram table bf16 on disk
+# (GOAL precision target).
+MAXFIT_BITS = {"maxfit": 6, "maxfit5": 5, "maxfit4": 4}
 PROFILES = ("fp32", "bf16", "mixed", *MAXFIT_BITS)
 
 

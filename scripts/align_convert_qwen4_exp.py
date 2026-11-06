@@ -18,8 +18,8 @@ Generation`` serialization, or an fp32 one) into the format loaded by
   bug). The parity test cross-checks the bytes against ``mx.load``.
 * Precision profiles (``quantization_for`` in the module): ``maxfit`` (the
   GOAL target: 6-bit group-64 routed experts, everything else native bf16,
-  the n-gram table bf16 on disk), ``maxfit5`` (5-bit fallback), ``bf16``,
-  ``fp32``, ``mixed``.
+  the n-gram table bf16 on disk), ``maxfit5`` (5-bit fallback), ``maxfit4``
+  (4-bit contingency), ``bf16``, ``fp32``, ``mixed``.
 * The n-gram PLE table is never an MLX weight: its shards are appended into one
   memory-mappable record file per PLE layer (``NgramTable`` format).
 * Routed experts become the fused ``switch_mlp.gate_up_proj`` [E, 2I, H] (gate
@@ -50,7 +50,7 @@ PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 # sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
 # default. Rebind it with every module change (the canonical test checks it
 # against the file; canonical.md records it under "Pin").
-MODULE_SHA256 = "ce0800b90be398d49b5561539e987d347ae05a11b2ae3cef7f05ba6c612081d6"
+MODULE_SHA256 = "c3d4a0bf8d137c6673f1c7e3f92745f9ce45d223e55566704ba27fc4365783bb"
 EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
 DTYPES = {"BF16": "<u2", "F32": "<f4", "F16": "<f2", "I64": "<i8"}
@@ -606,7 +606,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("checkpoint", type=Path)
     p.add_argument("output", type=Path)
-    p.add_argument("--profile", choices=("fp32", "bf16", "mixed", "maxfit", "maxfit5"), default="maxfit")
+    p.add_argument("--profile", choices=("fp32", "bf16", "mixed", "maxfit", "maxfit5", "maxfit4"),
+                   default="maxfit")
     p.add_argument("--group-size", type=int, choices=(32, 64, 128), default=64)
     p.add_argument("--ple-storage", choices=("f32", "bf16", "q8", "q4"),
                    help="n-gram table format (default: bf16 for maxfit*/bf16, f32 for fp32, q4 for mixed)")

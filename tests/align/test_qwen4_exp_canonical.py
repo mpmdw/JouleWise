@@ -105,6 +105,22 @@ FP32_TOL = 1e-4
 INTERNAL_FP32_TOL = 2e-5
 BF16_VS_F32_RATIO = 1.25
 BF16_VS_B16_RATIO = 1.5
+# (f) expert-quantized profiles, bf16 compute: per bit width, the (mean-abs,
+# max-abs) ratios of the port's error vs the fp32 reference with the same
+# dequantized experts to that reference's own bf16 error. The port's 4/5/6-bit
+# experts are separately gated in fp32 at FP32_TOL (the defect detector).
+# Evidence (MISSING-12 review, tiny fixture, mlx 0.31.2): max-abs is set by
+# bf16 flips of near-tied experts (router margins 2e-4 to 4e-3, median 3e-2),
+# which the quantized kernel and the reference's bf16 matmul hit at different
+# tokens: two equally valid bf16 realizations of the same packed weights (mlx's
+# bf16 gather_qmm, and gather_qmm in fp32 rounded to bf16) gave max-abs ratios
+# 0.49 / 1.93 (6-bit), 1.06 / 0.96 (5-bit), 1.28 / 1.36 (4-bit), no bit-width
+# trend. mean-abs: shipped <= 1.21 (exact-precision kernel <= 1.14): mlx's
+# bf16 gather_qmm rounds 3-4.5x more than a bf16 matmul on the same
+# dequantized weights at 4, 5 and 6 bits alike (8 bit: 1x), an error the
+# reference's bf16 run does not have. Equal values: no evidence for a
+# bit-width dependence; a new width needs its own evidence.
+QUANT_BF16_BOUND = {6: (1.5, 2.5), 5: (1.5, 2.5), 4: (1.5, 2.5)}
 # Isolated components, bf16: minimum fraction of output elements bitwise
 # equal to the reference (differential prototype: 1.000 HC / PLE / mixer /
 # head / router, 0.999 MoE, 0.969 DeltaNet whose fp32 state recurrence is
@@ -1388,14 +1404,22 @@ class CanonicalParityTest(unittest.TestCase):
     # ---------------------------------------------------------------- (f)
     def _expert_quantized_bound(self, profile, bits):
         """``profile`` = ``bits``-bit group-64 routed experts, everything else
-        bf16. Bound, (b)'s on the same weights: the quantized port vs the fp32
-        REFERENCE run with the same dequantized expert weights (dequantized in
-        fp32, exactly the kernel's scale * q + bias) must stay within 1.25x
-        that reference's own bf16 error (the bf16 reference with those weights
-        vs the fp32 one): the only remaining difference is bf16 compute,
-        including bf16 flips of near-tied experts that the reference's own
-        bf16 run shares. The quantization effect itself (vs the bf16 port, vs
-        fp32 REF) is measured and recorded."""
+        bf16, against the fp32 REFERENCE run with the same dequantized expert
+        weights (dequantized in fp32, exactly the kernel's scale * q + bias):
+
+        * fp32 (the defect detector): the fp32 port with these packed experts
+          (gather_qmm on fp32 activations, scales and biases: exact
+          dequantization) equals that reference within FP32_TOL, top-1
+          identical, prefill / stepwise (unsorted gather) / long prefill.
+        * bf16 (the profile as shipped): mean-abs and max-abs error within
+          QUANT_BF16_BOUND[bits] times that reference's own bf16 error (the
+          bf16 reference with those weights vs the fp32 one). Max-abs alone
+          was (b)'s 1.25: it is set by bf16 flips of near-tied experts at
+          different tokens in the port and the reference, and failed maxfit4
+          stepwise at 1.28 with no port defect (see QUANT_BF16_BOUND).
+
+        The quantization effect itself (vs the bf16 port, vs fp32 REF) is
+        measured and recorded."""
         import mlx.core as mx
         import numpy as np
         from mlx.utils import tree_flatten
@@ -1417,14 +1441,37 @@ class CanonicalParityTest(unittest.TestCase):
         self.assertEqual(len(quantized), 2 * N_LAYERS)
         refq = fx.reference.compute_dequantized(dequant, f"q{bits}-" + fx.conv_dir.name)
         ref_q, ref_q16 = refq["f32"], refq["b16"]
+        keys = ("prefill", "stepwise", "long_prefill")
+
+        # fp32: a fresh fp32 load whose routed experts are this profile's
+        # packed weights with fp32 scales and biases.
+        m32, _ = fx.converter().load_verified_model(fx.converted("fp32"), fx.manifest_pin("fp32"))
+        m32.eval()
+        for lq, l32 in zip(model.layers, m32.layers):
+            for name in ("gate_up_proj", "down_proj"):
+                src, dst = getattr(lq.mlp.switch_mlp, name), getattr(l32.mlp.switch_mlp, name)
+                E, O, I = dst.weight.shape
+                q = type(src)(I, O, E, bias=False, group_size=src.group_size, bits=src.bits, mode=src.mode)
+                q.weight, q.scales, q.biases = src.weight, src.scales.astype(mx.float32), src.biases.astype(mx.float32)
+                setattr(l32.mlp.switch_mlp, name, q)
+        r32 = port_scenarios(m32, fx.seqs)
+        del m32
+        fp32 = {k: diff(r32[k], ref_q[k]) for k in keys}
+
         r = port_scenarios(model, fx.seqs)
         noise = noise_table(fx)
+        mean_abs = lambda a, b: float(np.abs(np.asarray(a, np.float64) - np.asarray(b, np.float64)).mean())
+        mean_bound, max_bound = QUANT_BF16_BOUND[bits]
         table = {}
-        for k in ("prefill", "stepwise", "long_prefill"):
+        for k in keys:
             d = diff(r[k], ref_q[k])
             own = diff(ref_q16[k], ref_q[k])["max_abs"]
-            table[k] = dict(vs_ref_dequantized_f32=d["max_abs"], ref_dequantized_bf16_noise=own,
-                            ratio=d["max_abs"] / own, cos=d["cos"],
+            own_mean = mean_abs(ref_q16[k], ref_q[k])
+            table[k] = dict(fp32_vs_ref_dequantized_f32=fp32[k]["max_abs"], fp32_top1=fp32[k]["top1"],
+                            vs_ref_dequantized_f32=d["max_abs"], ref_dequantized_bf16_noise=own,
+                            ratio=d["max_abs"] / own, mean_abs=mean_abs(r[k], ref_q[k]),
+                            ref_dequantized_bf16_mean_noise=own_mean,
+                            ratio_mean=mean_abs(r[k], ref_q[k]) / own_mean, cos=d["cos"],
                             ratio_to_unquantized_noise=d["max_abs"] / noise[k],
                             quant_effect_vs_bf16_port=diff(r[k], self.port("bf16")[k])["max_abs"],
                             quant_effect_vs_ref_f32=diff(r[k], refs(fx, "f32")[k])["max_abs"],
@@ -1432,7 +1479,10 @@ class CanonicalParityTest(unittest.TestCase):
         fx.record(f"f_{profile}", table)
         for k, row in table.items():
             with self.subTest(scenario=k):
-                self.assertLessEqual(row["ratio"], BF16_VS_F32_RATIO, f"{k}: {row}")
+                self.assertLessEqual(row["fp32_vs_ref_dequantized_f32"], FP32_TOL, f"{k}: {row}")
+                self.assertEqual(row["fp32_top1"], 1.0, f"{k}: {row}")
+                self.assertLessEqual(row["ratio_mean"], mean_bound, f"{k}: {row}")
+                self.assertLessEqual(row["ratio"], max_bound, f"{k}: {row}")
 
     def test_f_maxfit_quantized_within_bound(self):
         """maxfit (the GOAL target): 6-bit group-64 routed experts."""
@@ -1442,6 +1492,34 @@ class CanonicalParityTest(unittest.TestCase):
         """maxfit5 (the 5-bit fallback), same bound (validation round 1: the
         profile was listed as delivered without test evidence)."""
         self._expert_quantized_bound("maxfit5", 5)
+
+    def test_f_maxfit4_quantized_within_bound(self):
+        """maxfit4 is the later-day 4-bit contingency: routed experts only,
+        group 64, with every other weight and the PLE table kept in bf16."""
+        self._expert_quantized_bound("maxfit4", 4)
+
+    def test_f_maxfit4_policy_conversion_and_verified_load(self):
+        """The contingency is selectable end to end, without broadening the
+        quantized set or changing the bf16 PLE representation."""
+        fx = self.fx
+        model = fx.model("maxfit4")
+        policy = g(model, "quantization_for")
+        self.assertEqual(policy("language_model.model.layers.0.mlp.switch_mlp.down_proj",
+                                (TEXT["num_experts"], TEXT["hidden_size"],
+                                 TEXT["moe_intermediate_size"]), "maxfit4"),
+                         {"group_size": 64, "bits": 4, "mode": "affine"})
+        self.assertIsNone(policy("language_model.model.layers.0.mlp.shared_expert.down_proj",
+                                 (TEXT["hidden_size"], TEXT["shared_expert_intermediate_size"]),
+                                 "maxfit4"))
+        artifact = fx.converted("maxfit4")
+        manifest = json.loads((artifact / "manifest.json").read_text())
+        config = json.loads((artifact / "config.json").read_text())
+        self.assertEqual((manifest["profile"], manifest["ngram_storage"]), ("maxfit4", "bf16"))
+        self.assertEqual(config["quantization"]["bits"], 4)
+        loaded, _ = fx.converter().load_verified_model(
+            artifact, fx.manifest_pin("maxfit4"))
+        self.assertEqual(type(loaded.language_model.model.layers[0].mlp.switch_mlp.down_proj).__name__,
+                         "QuantizedSwitchLinear")
 
     def test_f_mixed_profile_layout_codec_and_sanity(self):
         """``mixed``: experts 4-bit, other wide linears 8-bit, selection-

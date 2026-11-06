@@ -55,7 +55,7 @@ Every row follows the differential's convergence table ("Adopt" column) and the 
 | Caches: cache-carried left padding on mlx-lm's `ArraysCache(left_padding)` / `make_mask` / `advance` protocol; `left_padding` derived on the host from `padding - offset` | C:727-801, C:948-958 | twin T:715-799 (`make_cache(left_padding)`) rebuilt on the mlx-lm protocol | house style (`create_ssm_mask`). Round 1: the inherited lazy `left_padding -= n` grew one graph node and Metal buffer per step on every non-first linear layer (mlx-lm #1632) |
 | Caches: serializable `state` / `meta_state`, registered in `mlx_lm.models.cache` for `load_prompt_cache`; dispatch on the `qwen4_exp_cache` format marker, never class identity | C:774-791, C:873-906, C:937-946 | Sol S:131-198 | ALIGN prefix reuse; the twin's `QSACache.state` setter raised (T:782-784). Round 1: every load rebinds the registered classes, so two loaded models must interoperate |
 | Snapshot / restore (hybrid prefix rewrite) | C:965-1010 | twin T:802-825, extended to the ArraysCache padding counters | Round 1: every entry (layer count and kind, one offset, QSA not forward in time, padding, batch size) is checked before anything is mutated |
-| Precision profiles `maxfit` (6-bit g64 experts, all else bf16, bf16 n-gram on disk) / `maxfit5` / `bf16` / `fp32` / `mixed` | C:1896-1939 | Sol ST:157-222; `mixed` keep-float list = twin T:1421-1447 + Sol's | GOAL precision target. Evidence: maxfit and maxfit5 under bound (f); `mixed` (lossy, no reference bound) checked for layout, q4 codec bound, finiteness and cosine (needs `--ngram-group-size` dividing the n-gram head dim) |
+| Precision profiles `maxfit` (6-bit g64 experts, all else bf16, bf16 n-gram on disk) / `maxfit5` / `maxfit4` (4-bit contingency) / `bf16` / `fp32` / `mixed` | C:1896-1939 | Sol ST:157-222; `mixed` keep-float list = twin T:1421-1447 + Sol's | GOAL precision target. Evidence: maxfit, maxfit5 and maxfit4 under bound (f); `mixed` (lossy, no reference bound) checked for layout, q4 codec bound, finiteness and cosine (needs `--ngram-group-size` dividing the n-gram head dim) |
 | Converter: streaming header inventory, raw bf16 passthrough, bounded row slices, tensors packed into shards of at most 4 GiB, sha256 manifest (files and 256 MiB chunks hashed in parallel, `F_NOCACHE`) + verify, maxfit; `load_verified_model` requires the manifest pin and the module pin and runs the module from its hashed bytes | `scripts/align_convert_qwen4_exp.py` | Sol SC (whole structure) | twin's converter could not read bf16 (D1). Round 1: one file per tensor (1163 open fds), an optional pin, path-based module import and single-threaded hashing were fixed |
 
 
@@ -71,7 +71,7 @@ Every row follows the differential's convergence table ("Adopt" column) and the 
 8. **Converter imports mlx.** The shared rules (names, expected shapes from the module's own lazy parameters, precision policy, n-gram record format) come from the module, so even unquantized conversion imports mlx; Sol's numpy-only path is gone. Sol kept a second, independent parameter enumeration (`parameter_shapes`); here the strict inventory check is against the module itself, which is what `load_model(strict=True)` enforces anyway.
 9. **n-gram record format** is the twin's (`NgramTable`: f32 / bf16 / q8 / q4 with fp16 scales), not Sol's (f32 scales). maxfit uses bf16, where both formats are the raw bf16 bits.
 10. **Unsupported, failing loudly:** the whole BatchGenerator cache protocol, `filter` / `extend` / `extract` / `merge` / `prepare` / `finalize`, on both cache classes (cache-carried padding and the indexer state; round 1 closed `extract` / `prepare` / `finalize`, which were inherited and silently wrong), setting `left_padding` from outside, `input_embeddings` (PLE needs token ids; same as twin), KV-cache quantization (it would drop the indexer state).
-11. **Bound for (f).** "Quantized vs bf16 within the bound" is made testable as (b)'s bound on the same weights. The maxfit (or maxfit5) model must equal the fp32 reference run with the SAME dequantized expert weights (dequantized in fp32, the kernel's own `scale * q + bias`) within 1.25x that reference's own bf16 error: the bf16 reference with those weights vs the fp32 one. Round 1 replaced the earlier denominator, the unquantized model's bf16 noise, which does not cover bf16 flips of near-tied experts that the quantized weights happen to create. The quantization effect itself (vs the bf16 port) is measured and reported, not bounded: it is a property of the recipe, not of the port.
+11. **Bound for (f).** "Quantized vs bf16 within the bound" is made testable as (b)'s bound on the same weights. The maxfit (or maxfit5, or the maxfit4 4-bit contingency) model must equal the fp32 reference run with the SAME dequantized expert weights (dequantized in fp32, the kernel's own `scale * q + bias`) in two gates: in fp32 (the port's packed experts through `gather_qmm` with fp32 scales and biases) within FP32_TOL, and in bf16 within `QUANT_BF16_BOUND[bits]` (mean-abs 1.5x, max-abs 2.5x) that reference's own bf16 error: the bf16 reference with those weights vs the fp32 one. Until the MISSING-12 review the only gate was max-abs within 1.25x, which bf16 flips of near-tied experts decide (see (f)). Round 1 replaced the earlier denominator, the unquantized model's bf16 noise, which does not cover bf16 flips of near-tied experts that the quantized weights happen to create. The quantization effect itself (vs the bf16 port) is measured and reported, not bounded: it is a property of the recipe, not of the port.
 12. **Attention core rounding is the backend's** (validation round 1, replacing the earlier "reference artifact" reading of D9). The port calls `mx.fast.scaled_dot_product_attention` and its own block-sparse kernel. On identical bf16 inputs (probe `qsa_core_probe.py`, QSA-like masks, 40 and 320 queries):
     - MLX's fused SDPA at head_dim 64, MLX's decode kernel (any head_dim) and the block-sparse kernel keep fp32 scores and fp32 probabilities through P.V: 0.9998-1.0 bitwise against an fp32-score, fp32-probability eager core.
     - torch's CPU bf16 SDPA rounds the unnormalised probabilities exp(s - m) to bf16 before P.V, inside a blocked online softmax: 0.958 (40 queries) / 0.847 (320) against that emulation, 0.61-0.68 against MLX. It is reproducible across thread counts and batch composition (Fable), so it is not reference noise.
@@ -83,7 +83,7 @@ Every row follows the differential's convergence table ("Adopt" column) and the 
 
 `tests/align/test_qwen4_exp_canonical.py`: **31 tests, all pass** (18 parity tests in `CanonicalParityTest`, 13 validation-round-1 regressions in `ValidationRound1Test`). Native run in `/private/tmp/jwsol/venv-both` (mlx 0.31.2, mlx-lm 0.31.3, torch 2.15.0, transformers 5.22.1), under `nice -n 20 taskpolicy -b`, `OMP_NUM_THREADS=2`, `TMPDIR=/private/tmp/jwcanon`. Peak RSS 914 MiB. The full run that built the torch reference (v6) took 187 s, 89 s of it the reference. The confirmation rerun at the final test commit, with the reference cached, took 58 s (peak RSS 845 MiB).
 
-Fixture: one tiny random `Qwen4ExpForConditionalGeneration` (vision tower included), saved in bf16 with `max_shard_size="200KB"` in the released serialization: `model.language_model.*`, per-expert `mlp.experts.{e}.*`, n-gram `shard_{0..3}` plus hash buffers, and a fake `mtp.*` file. It is converted by the canonical converter (fp32, bf16, maxfit, maxfit5, mixed), and every model is loaded through `load_verified_model` with the manifest sha256 recorded at conversion and the converter's module pin.
+Fixture: one tiny random `Qwen4ExpForConditionalGeneration` (vision tower included), saved in bf16 with `max_shard_size="200KB"` in the released serialization: `model.language_model.*`, per-expert `mlp.experts.{e}.*`, n-gram `shard_{0..3}` plus hash buffers, and a fake `mtp.*` file. It is converted by the canonical converter (fp32, bf16, maxfit, maxfit5, maxfit4, mixed), and every model is loaded through `load_verified_model` with the manifest sha256 recorded at conversion and the converter's module pin.
 - Text config: 8 layers (DeltaNet x3, QSA, DeltaNet x3, QSA); hidden **192** (sqrt not bf16-representable, a multiple of 64 for the maxfit recipe); hc 4; 4 q / 2 kv heads of 64; partial rotary 0.25.
 - QSA indexer: 4 x 32 with budget 16 / ratio 4 (top-4 blocks: 21 of the 40-token prompt's queries drop blocks).
 - DeltaNet 2 k / 4 v heads of 32; MoE 8 experts top-3; PLE at layers 2 and 5 (`ple_layer_index` 0 and 1); EOS inside every prompt.
@@ -191,20 +191,38 @@ Sparse paths forced (both thresholds 0), against REF fp32:
 
 ### (f) expert-quantized profiles vs the bound
 
-The bound is (b)'s on the same weights. The quantized port vs the fp32 REF with the same dequantized experts (dequantized in fp32, exactly the kernel's `scale * q + bias`) must stay within 1.25x that reference's own bf16 error (the bf16 REF with those weights vs the fp32 one). Round 1 corrected two things in the earlier version of this test:
+Reference: the fp32 REF with the same dequantized experts (dequantized in fp32, exactly the kernel's `scale * q + bias`); its own bf16 error is the bf16 REF with those weights vs the fp32 one. Two gates per profile, on prefill, stepwise and long prefill:
+- **fp32, the defect detector.** A fresh fp32 load whose routed experts are the profile's packed weights, with fp32 scales and biases (`gather_qmm` on fp32 is the exact dequantization), must equal REF-q fp32 within FP32_TOL with top-1 identical. A one-bf16-ulp error in the scales of one expert in one layer gives 2.6e-3 (prefill) and 0.13 (long prefill) here, far outside 1e-4 and invisible in the bf16 gate.
+- **bf16, the profile as shipped.** Mean-abs and max-abs error within `QUANT_BF16_BOUND[bits]` = (1.5, 2.5) times REF-q's own bf16 error.
+
+Round 1 corrected two things in the earlier version of this test:
 - It used the unquantized model's noise as the denominator. That fails maxfit5 (1.95) on four bf16 flips of near-tied experts (fp32 margins 4e-5 to 3e-3), three of which the reference's own bf16 run makes too.
 - It used bf16-rounded dequantized weights (5.6e-3 off the kernel's).
 
-| profile, scenario | port vs REF-q fp32 | REF-q's own bf16 error | ratio (<= 1.25) | ratio to the unquantized noise (old denominator) | quantization effect: vs bf16 port | REF-q fp32 vs REF fp32 |
-|---|---:|---:|---:|---:|---:|---:|
-| maxfit (6-bit) prefill | 0.0580 | 0.1181 | **0.49** | 0.79 | 0.1836 | 0.1986 |
-| maxfit stepwise | 0.0758 | 0.1474 | **0.51** | 1.04 | 0.2031 | 0.1986 |
-| maxfit long_prefill | 0.2042 | 0.2568 | **0.79** | 0.87 | 0.2656 | 0.2602 |
-| maxfit5 (5-bit) prefill | 0.1422 | 0.1344 | **1.06** | 1.95 | 0.2109 | 0.2046 |
-| maxfit5 stepwise | 0.1370 | 0.1344 | **1.02** | 1.88 | 0.1641 | 0.2046 |
-| maxfit5 long_prefill | 0.2312 | 0.2895 | **0.80** | 0.98 | 0.2603 | 0.2396 |
+The MISSING-12 review (maxfit4) replaced the only gate then, max-abs within 1.25x, which maxfit4 stepwise failed at 1.28. It is not a port defect:
+- **fp32:** all three profiles match REF-q to 2e-6 to 8e-6 (the gate above).
+- **Kernel:** on the real expert inputs, the port's experts are mlx's own `gather_qmm` (mlx-lm `QuantizedSwitchLinear`). Against `gather_mm` with fp32 activations and the same fp32-dequantized weights, the mean error is 2.8e-3 / 3.8e-3 / 2.8e-3 at 6 / 5 / 4 bits. `gather_mm` on bf16-rounded weights gives 0.85e-3. On synthetic weights the excess is 3-4.5x for the gather kernels at 4, 5 and 6 bits alike and none at 8 bits. This is mlx 0.31.2's bf16 rounding, not the bit width.
+- **Max-abs:** bf16 flips of near-tied experts set it. Stepwise, the shipped kernel and the same packed weights through `gather_qmm` in fp32 (rounded to bf16), two equally valid bf16 realizations, choose different experts in 2-4 of the 320 (token, layer) routings of the 40-token sequence. The flips sit at router margins of 2e-4 to 4e-3 (median margin 3e-2), and the largest logit difference follows a flip. As ratios to REF-q's own error, those two realizations read:
+  - 6-bit: 0.49 and 1.93 (prefill), 0.51 and 1.52 (stepwise)
+  - 5-bit: 1.06 and 0.96
+  - 4-bit: 1.28 and 1.19 (stepwise), 0.97 and 1.36 (prefill)
 
-Both profiles load as exactly 16 `QuantizedSwitchLinear` (6-bit / 5-bit, group 64), with everything else float.
+  No bit-width trend. 2.5 bounds every realization seen (largest 1.93).
+- **Mean-abs:** at most 1.21 shipped and 1.14 with the fp32 kernel. The excess is the kernel rounding above, which REF-q's bf16 run does not have; hence 1.5. The values are equal per bit width because no evidence shows a bit-width dependence; a new width needs its own evidence.
+
+| profile, scenario | fp32 gate: vs REF-q fp32 | bf16: port vs REF-q fp32 (max) | REF-q's own bf16 error (max) | max ratio (<= 2.5) | mean ratio (<= 1.5) | quantization effect: vs bf16 port | REF-q fp32 vs REF fp32 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| maxfit (6-bit) prefill | 4e-06 | 0.0580 | 0.1181 | **0.49** | **0.87** | 0.1836 | 0.1986 |
+| maxfit stepwise | 2e-06 | 0.0758 | 0.1474 | **0.51** | **0.91** | 0.2031 | 0.1986 |
+| maxfit long_prefill | 8e-06 | 0.2042 | 0.2568 | **0.79** | **0.96** | 0.2656 | 0.2602 |
+| maxfit5 (5-bit) prefill | 3e-06 | 0.1422 | 0.1344 | **1.06** | **1.02** | 0.2109 | 0.2046 |
+| maxfit5 stepwise | 4e-06 | 0.1370 | 0.1344 | **1.02** | **1.21** | 0.1641 | 0.2046 |
+| maxfit5 long_prefill | 5e-06 | 0.2312 | 0.2895 | **0.80** | **0.90** | 0.2603 | 0.2396 |
+| maxfit4 (4-bit) prefill | 4e-06 | 0.0891 | 0.0922 | **0.97** | **1.02** | 0.2461 | 0.2393 |
+| maxfit4 stepwise | 8e-06 | 0.1209 | 0.0944 | **1.28** | **1.21** | 0.2969 | 0.2393 |
+| maxfit4 long_prefill | 5e-06 | 0.1980 | 0.2817 | **0.70** | **0.92** | 0.4502 | 0.4482 |
+
+All three profiles load as exactly 16 `QuantizedSwitchLinear` (6 / 5 / 4-bit, group 64), with everything else float. On this fixture the 4-bit quantization effect (vs the bf16 port) is 0.25 / 0.30 / 0.45, against 0.18 / 0.20 / 0.27 at 6 bits. That is a property of the recipe, not of the port. The real-weight quality reference is lead ruling L3 (second gold pass, quant-quality POLICY primary).
 
 `mixed` is a lossy recipe with no reference-derived bound. Converted with `ngram_group_size=16` (the fixture's n-gram head dim is 16; the default 32 is refused before anything is written), it gives:
 - a loaded quantization layout equal to the policy module by module: 54 quantized modules, experts 4-bit, other wide linears including `lm_head` and `embed_tokens` 8-bit, router / indexer / DeltaNet / hyper-connection / conv float;
@@ -280,7 +298,7 @@ Four seats validated the PR head `ce911c6e7` (module sha256 `55aecaea…b11a37f`
 
 ## Pin
 
-`joulewise/align/models/qwen4_exp.py` sha256 `ce0800b90be398d49b5561539e987d347ae05a11b2ae3cef7f05ba6c612081d6` after the MISSING-11 memory fix (it was `027dc03a36cff5455a436bc609537e72643b727f04b1eff93198721f36849564` after the MISSING-11 review fixes, `af26a5a5bf15a6c475f21637989c5f03c6f8bd3a3e0b8824ac99765a99f7f95f` at the unreviewed MISSING-11 head `0715fdf74`, `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 and `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
+`joulewise/align/models/qwen4_exp.py` sha256 `c3d4a0bf8d137c6673f1c7e3f92745f9ce45d223e55566704ba27fc4365783bb` at port r2, the merge of the MISSING-11 compiled-decode lane (`4383e89d7`) and the MISSING-12 maxfit4 lane (`7200b076c`) (it was `ce0800b90be398d49b5561539e987d347ae05a11b2ae3cef7f05ba6c612081d6` after the MISSING-11 memory fix, `79eed8fd0996b8dd7d29d2a3714d9032be77eb6f877372b51c51a1e4ba5bdc13` on the maxfit4 lane alone, whose Pin section here still read `f4ec75d1…`, `027dc03a36cff5455a436bc609537e72643b727f04b1eff93198721f36849564` after the MISSING-11 review fixes, `af26a5a5bf15a6c475f21637989c5f03c6f8bd3a3e0b8824ac99765a99f7f95f` at the unreviewed MISSING-11 head `0715fdf74`, `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 and `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
 - `MODULE_SHA256` in `scripts/align_convert_qwen4_exp.py`, the module `load_verified_model` runs by default. The suite checks it against the file (`test_r1_load_verified_model_requires_both_pins` fails if it is stale).
 - this section, which is a record and is not checked.
 
