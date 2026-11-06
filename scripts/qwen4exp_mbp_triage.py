@@ -18,7 +18,7 @@ import time
 CLASSES = ("PREFLIGHT_SWAP", "ABORT_SWAP", "ABORT_PRESSURE", "ABORT_FLOOR_ONLY",
            "ABORT_COMPRESSOR", "METAL_CAP", "PLE_CAP", "PREDICTION_FAIL",
            "JETSAM_KILL", "METAL_ERROR", "PY_EXCEPTION", "REFUSED",
-           "SIGNAL_CRASH", "INCOMPLETE", "COMPLETED")
+           "SIGNAL_CRASH", "INCOMPLETE", "COMPLETED", "NO_EVIDENCE")
 
 MAXFIT5 = "Use maxfit5; reboot first because swap is in use."
 ACTIONS = {
@@ -36,7 +36,14 @@ ACTIONS = {
     "REFUSED": "Fix on the laptop branch, pull, and rerun.",
     "INCOMPLETE": "Preserve the evidence and have the lead choose the next step.",
     "COMPLETED": "Continue with the next runbook step.",
+    "NO_EVIDENCE": ("No evidence file exists for this --out: check the path. A preflight refusal "
+                    "writes nothing and prints its reason on the probe's terminal; rerun under a "
+                    "new output name once that reason is cleared (reboot first if swap is in use)."),
 }
+# Worker verdicts of a finished run: memory/performance/paging/hosted write
+# "completed"; quality/benchmark carry the e2e verdict ("pass" or, when every
+# stage was skipped, "skipped"). "fail"/"incomplete" are not completions.
+COMPLETED_WORKER_VERDICTS = ("completed", "pass", "skipped")
 
 
 def _json(path, default=None):
@@ -135,12 +142,12 @@ def classify(report, worker, log_text, monitor, rungs, *, log_runner=subprocess.
     details = {}
 
     # Specific signatures beat generic Python exceptions and return codes.
-    if not report and not log_text and not monitor and not worker:
-        # supervise() raises "preflight: ..." before creating ANY evidence file;
-        # main() prints it to the operator's terminal only. Re-sample swap.
-        swap_now = swap_reader()
-        kind = "PREFLIGHT_SWAP" if swap_now > 0 else "REFUSED"
-        details = {"no_evidence": True, "swap_used_bytes_at_triage": swap_now}
+    if not report and not log_text and not monitor and not worker and not rungs:
+        # Nothing to classify: a mistyped --out, or supervise() raised
+        # "preflight: ..." before creating ANY evidence file (main() prints it
+        # to the operator's terminal only). Live swap is context, not evidence.
+        kind = "NO_EVIDENCE"
+        details = {"no_evidence": True, "swap_used_bytes_at_triage": swap_reader()}
     elif "command buffer execution failed" in low or "kiogpucommandbuffercallbackerror" in low:
         kind = "METAL_ERROR"
     elif ((reason.lower().startswith("preflight") and "swap" in reason.lower())
@@ -178,8 +185,12 @@ def classify(report, worker, log_text, monitor, rungs, *, log_runner=subprocess.
         kind = "REFUSED"
     elif isinstance(rc, int) and rc < 0:
         kind = "SIGNAL_CRASH"
-    elif report.get("verdict") == "completed" and (worker or report.get("results", {})).get("verdict", "completed") == "completed":
-        kind = "COMPLETED"
+    elif (report.get("verdict") == "completed" and rc == 0
+          and (worker_verdict := (worker or report.get("results") or {}).get("verdict"))
+          in COMPLETED_WORKER_VERDICTS):
+        kind, details = "COMPLETED", {"worker_verdict": worker_verdict}
+        if worker_verdict == "skipped":
+            details["note"] = "every e2e stage was skipped: the run finished but carries no quality evidence"
     else:
         kind = "INCOMPLETE"
 
