@@ -583,8 +583,9 @@ def write_custody(out, record):
     """Terminal record: digests of every other file in DIR, written last, atomically."""
     out = Path(out)
     files = {}
+    excluded = {out / CUSTODY_NAME, out / (CUSTODY_NAME + ".tmp")}
     for path in sorted(out.rglob("*")):
-        if path.is_file() and not path.is_symlink() and path.name not in (CUSTODY_NAME, CUSTODY_NAME + ".tmp"):
+        if path.is_file() and not path.is_symlink() and path not in excluded:
             try:
                 files[path.relative_to(out).as_posix()] = sha256_file(path)
             except OSError as error:
@@ -647,15 +648,23 @@ class ProcessHeater:
 class ManagedSession:
     def __init__(self, session, closers=(), on_close=None):
         self.session, self.closers, self.on_close = session, list(closers), on_close
+        self.closed = False
 
     def close(self):
-        try:
-            if self.on_close is not None:
-                self.on_close()
-            self.session.close()
-        finally:
-            for closer in self.closers:
+        """Close every owner exactly once; one failure must not strand another."""
+        if self.closed:
+            return
+        self.closed = True
+        errors = []
+        for closer in (self.on_close, self.session.close, *self.closers):
+            if closer is None:
+                continue
+            try:
                 closer()
+            except BaseException as error:  # cleanup continues on TERM/SystemExit too
+                errors.append(error)
+        if errors:
+            raise errors[0]
 
 
 class ProductionBackend:
@@ -841,12 +850,19 @@ class Segment:
 
     def step_d_result(self):
         path = self.out.parent / STEP_D_SEGMENT / RESULT_NAME
+        custody_path = path.parent / CUSTODY_NAME
         try:
-            value = json.loads(path.read_text())
+            raw = path.read_bytes()
+            value = json.loads(raw)
+            custody = json.loads(custody_path.read_bytes())
         except (OSError, ValueError) as error:
-            raise Refused(f"{self.kind} needs the accepted step-d result {path}") from error
+            raise Refused(f"{self.kind} needs the accepted step-d result and custody {path}") from error
         if value.get("kind") != "step-d" or not isinstance(value.get("slots"), dict):
             raise Refused(f"{path} is not an accepted step-d result")
+        expected = (custody.get("files") or {}).get(RESULT_NAME)
+        if (custody.get("schema") != CUSTODY_SCHEMA or custody.get("status") != "complete"
+                or expected != hashlib.sha256(raw).hexdigest()):
+            raise Refused(f"{path} is not bound by complete runtime custody")
         return value
 
     def now_ns(self):
@@ -1105,13 +1121,20 @@ class Segment:
         key = "d_bank" if self.kind == "d-bank-benign-s1" else "d_spam"
         template, tspec = self.template(key)
         require_effort(tspec, key)
-        t_dead = float(slots["T_dead"])
+        try:
+            t_dead = float(slots["T_dead"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise Refused("step-d T_dead is not a finite positive number") from error
+        if not math.isfinite(t_dead) or t_dead <= 0:
+            raise Refused("step-d T_dead is not a finite positive number")
         spec = dict(tspec)
         b_d = slots.get("B_D")
+        if type(b_d) is not int or not 1024 <= b_d <= 40960 or b_d % 1024:
+            raise Refused("step-d B_D is not an admissible 1024-token deadman budget")
         spec.update(deadman_s=t_dead, thermal=self.gated_policy(slots, heavy=True, per_turn=True,
                                                                 chunk_tokens=int(slots["N_chunk"])),
                     warmup_condition="benign",
-                    max_episode_decode_tokens=(int(b_d) if type(b_d) is int and 1024 <= b_d <= 40960 else None))
+                    max_episode_decode_tokens=b_d)
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
         member = self.run_member(config)
         from joulewise.align.apple.thermal_desk import read_bundle_record

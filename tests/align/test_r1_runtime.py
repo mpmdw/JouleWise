@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from types import SimpleNamespace
 
 from joulewise.align.apple import r1_runtime as rt
@@ -157,6 +158,58 @@ class ConformanceTests(unittest.TestCase):
 
 
 class ReadBackTests(unittest.TestCase):
+    def test_terminal_custody_includes_nested_file_with_same_basename(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td)
+            nested = out / "runs/member" / rt.CUSTODY_NAME
+            nested.parent.mkdir(parents=True)
+            nested.write_text("nested bundle custody\n")
+            rt.write_custody(out, {"status": "complete"})
+            self.assertEqual(custody(out)["files"][f"runs/member/{rt.CUSTODY_NAME}"],
+                             rt.sha256_file(nested))
+
+    def test_step_d_consumer_requires_complete_digest_bound_custody(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            step_dir = root / rt.STEP_D_SEGMENT
+            step_dir.mkdir()
+            result = step_dir / rt.RESULT_NAME
+            result.write_text(json.dumps({"kind": "step-d", "slots": {"T_dead": 10, "B_D": 1024}}))
+            segment = SimpleNamespace(out=root / "consumer", kind="d-spam-benign-s1-a")
+            with self.assertRaisesRegex(rt.Refused, "result and custody"):
+                rt.Segment.step_d_result(segment)
+            rt.write_custody(step_dir, {"status": "complete"})
+            self.assertEqual(rt.Segment.step_d_result(segment)["kind"], "step-d")
+            result.write_text(json.dumps({"kind": "step-d", "slots": {"T_dead": 11, "B_D": 1024}}))
+            with self.assertRaisesRegex(rt.Refused, "complete runtime custody"):
+                rt.Segment.step_d_result(segment)
+
+    def test_gated_deadman_refuses_invalid_time_and_decode_budget_before_model(self):
+        segment = object.__new__(rt.Segment)
+        segment.kind = "d-spam-benign-s1-a"
+        segment.step_d_result = mock.Mock(return_value={"slots": {"T_dead": float("nan"), "B_D": 1024}})
+        segment.template = mock.Mock(return_value=({}, {}))
+        with self.assertRaisesRegex(rt.Refused, "T_dead"):
+            segment.k_gated_d()
+        segment.step_d_result.return_value = {"slots": {"T_dead": 10.0, "B_D": 1025}}
+        with self.assertRaisesRegex(rt.Refused, "B_D"):
+            segment.k_gated_d()
+
+    def test_managed_session_closes_all_collectors_once_even_after_failure(self):
+        calls = []
+
+        class Session:
+            def close(self):
+                calls.append("session")
+                raise RuntimeError("SMC close failed")
+
+        managed = rt.ManagedSession(Session(), closers=(lambda: calls.append("powermetrics"),),
+                                    on_close=lambda: calls.append("unregister"))
+        with self.assertRaisesRegex(RuntimeError, "SMC close failed"):
+            managed.close()
+        managed.close()
+        self.assertEqual(calls, ["unregister", "session", "powermetrics"])
+
     def test_pmset_batt_parsing(self):
         parse = rt.parse_pmset_batt
         head = "Now drawing from 'AC Power'\n"
