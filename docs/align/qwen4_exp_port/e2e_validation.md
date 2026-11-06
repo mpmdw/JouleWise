@@ -58,6 +58,13 @@ The estimated cost of the full 12-prompt x 2-repeat collection is **under $0.003
 
 ### Quantization widens the tolerance
 
+**Pass rule (lead ruling L3, 2026-11-06).** The quantization pass rule is one table:
+[quant_quality.md#pass-rules](quant_quality.md#pass-rules). Its quant-quality `POLICY`,
+scored teacher-forced against the layer-streamed bf16 reference, is primary and alone
+admits a recipe. The profile bounds below are secondary screens (hosted FP8
+comparisons, benchmark slack, NLL ratio). Every e2e results file records the primary
+rule under `quality_policy`.
+
 | Profile | Benchmark slack | NLL vs reference | Hosted KL max | Hosted top-1 min | top-k overlap min | in local top 5, min |
 |---|---|---|---|---|---|---|
 | `bf16` | 0.00 | +1 % | 0.03 | 0.97 | 0.90 | 0.995 |
@@ -77,7 +84,7 @@ They are widened for three reasons:
 2. The 3-bit recipe quantizes 121 B of the 177 B text parameters (the routed experts) to 3 bits.
 3. The Featherless reference is itself FP8, so an allowance close to Q8 is included.
 
-**These are provisional.** Once GOAL item 11 can measure the drift of the chosen recipe against the layer-streamed bf16 reference on these prompts, replace each bound with the measured value x 2, plus the FP8 allowance for hosted comparisons. The code keeps them in one place (`THRESHOLDS["profiles"]`), and every results file records the values used.
+**These are provisional.** Once GOAL item 11 can measure the drift of the chosen recipe against the layer-streamed bf16 reference on these prompts, replace each bound with the measured value x 2, plus the FP8 allowance for hosted comparisons. The bf16 reference for these prompts is the second gold pass of quant_quality.md (`--reference-chain-only`). The code keeps them in one place (`THRESHOLDS["profiles"]`), and every results file records the values used.
 
 ## 4. The end-to-end harness
 

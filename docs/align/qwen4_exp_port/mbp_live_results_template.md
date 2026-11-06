@@ -44,7 +44,9 @@ checked at memory-probe checkpoints and after each other probe, with abort.
 
 Human review of generated coherence text and both tool round trips: PENDING.
 NLL per natural/control text, long-tail delta, failures and explanations: PENDING.
-Quantization thresholds are provisional screens; measured bf16 recipe drift: PENDING.
+Quantization pass rule: the quant-quality POLICY against the bf16 gold reference is primary
+(one table: quant_quality.md#pass-rules); the e2e profile thresholds above are secondary screens.
+POLICY classification of this recipe (run_qwen4_quant_quality.py score): PENDING.
 
 ## Fixed benchmark and reference
 

@@ -35,6 +35,7 @@ template. It never quantizes the KV cache, never pads, and always runs batch 1
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import importlib
 import json
@@ -128,7 +129,11 @@ THRESHOLDS: dict[str, Any] = {
         "basis": "Same weights, same tokens: prefill and stepwise differ only by kernel order. "
                  "Argmax must agree except at near-ties; logprob bounds allow bf16 accumulation.",
     },
-    # Quantization profiles. All numbers PROVISIONAL until GOAL item 11 measures
+    # Quantization profiles: SECONDARY screens. The primary quantization pass
+    # rule is the quant-quality POLICY against the bf16 gold reference (one
+    # table: docs/align/qwen4_exp_port/quant_quality.md#pass-rules); every
+    # results file records it under "quality_policy".
+    # All numbers PROVISIONAL until GOAL item 11 measures
     # the drift of the chosen recipe against layer-streamed bf16 on these
     # prompts; then replace with (measured value x 2) plus the FP8 allowance.
     # Anchors (dense models, llama.cpp k-quants, KL vs bf16): Q8_0 ~0.02 KLD /
@@ -152,6 +157,34 @@ THRESHOLDS: dict[str, Any] = {
                            "hosted_top1_min": 0.85, "hosted_topk_overlap_min": 0.70, "hosted_rank5_min": 0.97},
     },
 }
+
+
+QUALITY_POLICY_SOURCE = REPO_ROOT / "joulewise" / "align" / "qwen4_quant_quality.py"
+
+
+def quality_policy_record() -> dict[str, Any]:
+    """The primary quantization pass rule this report defers to.
+
+    One table (docs/align/qwen4_exp_port/quant_quality.md#pass-rules): the
+    quant-quality POLICY, scored against the layer-streamed bf16 reference, is
+    primary and alone admits a quantized variant. ``THRESHOLDS["profiles"]``
+    here are secondary screens (benchmark slack, NLL ratio, hosted-FP8
+    agreement); a pass on them never substitutes for a POLICY classification.
+
+    The literals are read from the module source (never imported): the shade
+    stage needs a process in which ``joulewise`` has not been imported yet.
+    """
+    raw = QUALITY_POLICY_SOURCE.read_bytes()
+    names = {"POLICY", "PASS_RULES_DOC", "SCHEMA"}
+    values = {node.targets[0].id: ast.literal_eval(node.value) for node in ast.parse(raw).body
+              if isinstance(node, ast.Assign) and len(node.targets) == 1
+              and isinstance(node.targets[0], ast.Name) and node.targets[0].id in names}
+    if set(values) != names:
+        raise ValueError(f"quant-quality policy literals not found in {QUALITY_POLICY_SOURCE}")
+    return {"primary": "joulewise.align.qwen4_quant_quality.POLICY", "doc": values["PASS_RULES_DOC"],
+            "schema": values["SCHEMA"], "policy": values["POLICY"], "admits": ["acceptable"],
+            "source_sha256": hashlib.sha256(raw).hexdigest(),
+            "e2e_profiles_role": "secondary screen; not decisive for quantization quality"}
 
 
 def binomial_cdf_below(k: int, n: int, p: float) -> float:
@@ -1581,7 +1614,8 @@ def run(args: argparse.Namespace, adapter: Any | None = None, log: Callable[[str
         "harness": HARNESS_VERSION, "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "items_sha256": items["_file_sha256"], "template": {"path": str(template.path), "sha256": template.sha256,
                                                              "pinned": template.pinned},
-        "quant_profile": args.quant_profile, "thresholds": THRESHOLDS, "config": asdict(config),
+        "quant_profile": args.quant_profile, "thresholds": THRESHOLDS,
+        "quality_policy": quality_policy_record(), "config": asdict(config),
         "environment": environment_record(adapter), "stages": {},
     }
     preflight = tokenizer_preflight(adapter)

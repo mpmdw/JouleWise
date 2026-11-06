@@ -366,6 +366,11 @@ class ReportTests(unittest.TestCase):
         self.assertIn("40960 | 40896 | 112.7 | 2.0 | 0", report)
         self.assertIn("GOAL 6: OPEN", report)
 
+    def test_reference_summary_points_at_the_primary_pass_rule(self):
+        report = reporting.render(reporting.TEMPLATE.read_text(), {}, "fixture-only")
+        self.assertIn('"quantization_pass_rule": "docs/align/qwen4_exp_port/quant_quality.md#pass-rules"', report)
+        self.assertIn("POLICY classification of this recipe", report)
+
     def test_report_dry_run_needs_no_inputs(self):
         with contextlib.redirect_stdout(io.StringIO()), patch.object(Path, "open", side_effect=AssertionError("read")):
             self.assertEqual(reporting.main(["--dry-run"]), 0)

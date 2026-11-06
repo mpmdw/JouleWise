@@ -499,7 +499,10 @@ def compare(traces: Sequence[Mapping[str, Any]], adapter: Any, requests: Mapping
             "verdict": verdict,
             "verdict_kind": "gating" if weight_identical else "advisory: hosted weights not shown identical",
             "hosted_determinism": hosted_determinism(traces), "per_prompt": per_prompt,
-            "adapter_identity": getattr(adapter, "identity", type(adapter).__name__)}
+            "adapter_identity": getattr(adapter, "identity", type(adapter).__name__),
+            # Hosted agreement is a secondary screen; quantization quality is decided by
+            # the quant-quality POLICY against the bf16 gold reference (one table).
+            "quality_policy": e2e.quality_policy_record()}
 
 
 # --------------------------------------------------------------------------

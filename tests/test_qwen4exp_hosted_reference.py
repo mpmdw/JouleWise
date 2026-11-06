@@ -198,6 +198,7 @@ class RequestTests(unittest.TestCase):
         provider = hosted.PROVIDERS["featherless"]
         requests = {r["prompt_id"]: r for r in hosted.build_requests(provider, self.prompts, self.template)}
         good = hosted.compare(stub_traces(adapter, requests), adapter, requests, profile="bf16", top_k=2)
+        self.assertTrue(good["quality_policy"]["doc"].endswith("quant_quality.md#pass-rules"))  # primary rule
         self.assertEqual(good["verdict"], "pass", json.dumps(good["checks"]))
         self.assertEqual(good["aggregate"]["top1_agreement"], 1.0)
         self.assertAlmostEqual(good["aggregate"]["bucketed_kl_mean"], 0.0, places=9)

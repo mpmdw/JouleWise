@@ -20,6 +20,11 @@ REPO_ID = "Qwen/Qwen3.8-Flash-Next"
 REVISION = "de4b8e4d43b917e7706784d8bb445c9af86a3540"
 STREAM_SCHEMA = "qwen4-gold-stream/v1"
 GIB = 1024**3
+# --reference-chain-only (lead ruling L3): the official reference forward only,
+# real inputs, every unit; per-case traces pruned to the chain output, and a
+# unit's chain released once its successor has committed. Only the head unit's
+# outputs (the bf16 quality reference) and the live chain stay on disk.
+CHAIN_ONLY = "REFERENCE_CHAIN_ONLY"
 
 
 def safe_name(name):
@@ -190,7 +195,8 @@ class StreamDriver:
         identity = {"source": self.source_info, "config": self.checkpoint.config,
                     "weight_map": self.checkpoint.weight_map, "stamps": {}}
         args.output = str(self.work / "parity")
-        args.dtypes, args.input_modes = "fp32,bf16", "random,real"
+        self.chain_only = bool(getattr(args, "reference_chain_only", False))
+        args.dtypes, args.input_modes = "fp32,bf16", ("real" if self.chain_only else "random,real")
         args.worker_extra = {"hf_home": str(self.staging / "hf")}
         self.harness = Harness(args, self.checkpoint, identity, self.prompts, self.runtimes)
         self.path = self.work / "manifest.json"
@@ -199,7 +205,8 @@ class StreamDriver:
         fp = digest([STREAM_SCHEMA, self.harness.fingerprint, args.min_free_gb, args.max_staging_gb,
                      str(Path(args.convert_out).resolve()) if args.convert_out else None,
                      {p: sha256(p) for p in (args.canonical_converter, args.canonical_module) if p},
-                     args.shared_shards] + ([rerun["identity"]] if rerun else []))
+                     args.shared_shards] + ([rerun["identity"]] if rerun else [])
+                    + ([{"mode": CHAIN_ONLY}] if self.chain_only else []))
         if self.path.exists():
             self.state = json.loads(self.path.read_text())
             if not args.resume:
@@ -455,6 +462,8 @@ class StreamDriver:
         return Path(row["path"])
 
     def run_unit(self, unit):
+        if self.chain_only:
+            return self.run_reference_unit(unit)
         import numpy as np
         chain = {}
         previous = self.plan["units"][self.plan["units"].index(unit) - 1] if unit != "embed" else None
@@ -499,11 +508,82 @@ class StreamDriver:
             row["failures"] = failure_summary(report)
         return row
 
+    def prune_case(self, output):
+        """Keep only a reference case's chain output (and its request/result).
+
+        Traces and the input snapshot are deleted; the case report is
+        re-pinned to what remains so --resume can reuse the case.
+        """
+        from .core import digest as _digest
+        from .runner import artifacts
+        directory = output.parent.parent
+        for path in directory.rglob("*.npy"):
+            if path != output:
+                path.unlink()
+        report_path = directory / "report.json"
+        report = json.loads(report_path.read_text())
+        report["artifacts"] = artifacts(directory)
+        report["evidence_digest"] = _digest({"fingerprint": report["fingerprint"], "artifacts": report["artifacts"]})
+        report["pruned"] = "traces and input snapshot (reference-chain-only)"
+        write_json(report_path, report)
+
+    def run_reference_unit(self, unit):
+        """The official reference on real inputs only; no MLX, no random cases."""
+        chain, cases = {}, []
+        previous = self.plan["units"][self.plan["units"].index(unit) - 1] if unit != "embed" else None
+        for dtype in ("fp32", "bf16"):
+            for prompt in self.prompts:
+                key = dtype + ":" + prompt["name"]
+                hidden = self.chain_input(previous, key) if previous else None
+                output = self.harness.case(unit, dtype, prompt, "real", hidden, compare=False)
+                if output is None:
+                    raise RuntimeError(f"reference chain incomplete at {unit}/{key}")
+                self.prune_case(output)
+                chain[key] = str(output)
+                cases.append({"case": output.parent.parent.name, "status": CHAIN_ONLY,
+                              "output": str(output.relative_to(self.work)), "output_sha256": sha256(output)})
+        name = f"layer-{int(unit):03d}" if unit.isdigit() else unit
+        result = self.harness.out / (name + ".json")
+        write_json(result, {"schema": STREAM_SCHEMA, "unit": unit, "status": CHAIN_ONLY,
+                            "fingerprint": self.harness.fingerprint, "cases": cases,
+                            "scope": "official reference forward only (real inputs); no MLX parity verdict"})
+        row = {"state": "done", "status": CHAIN_ONLY, "result": str(result), "result_sha256": sha256(result),
+               "artifacts": {c["output"]: c["output_sha256"] for c in cases}, "chain": chain}
+        if self.args.worker_extra.get("sparse_digest"):
+            row["sparse_digest"] = self.args.worker_extra["sparse_digest"]
+        return row
+
+    def release_chain(self):
+        """Delete chain outputs no unit still needs (reference-chain-only).
+
+        A unit's outputs feed only its successor; once that successor has
+        committed they are released. The head unit is the deliverable and is
+        never released. The release is recorded before files are deleted, so
+        a kill in between leaves only harmless extra bytes.
+        """
+        units = self.plan["units"]
+        for unit in list(self.state["units"]):
+            row = self.state["units"][unit]
+            if unit == "head" or row.get("chain_released"):
+                continue
+            successor = units[units.index(unit) + 1]
+            if successor not in self.state["units"]:
+                continue
+            row["chain_released"] = True
+            self.save()
+            for path in self.state["chain"][unit].values():
+                directory = Path(path).parent.parent
+                if directory.is_dir() and self.work in directory.resolve().parents:
+                    shutil.rmtree(directory)
+
     def validate_done(self):
+        allowed = (CHAIN_ONLY,) if self.chain_only else ("PASS", "FAIL")
         for unit, row in self.state["units"].items():
             # FAIL rows exist only from --keep-going: recorded, never retried.
-            if row["status"] not in ("PASS", "FAIL") or sha256(row["result"]) != row["result_sha256"]:
+            if row["status"] not in allowed or sha256(row["result"]) != row["result_sha256"]:
                 raise ValueError(f"completed unit result changed: {unit}")
+            if row.get("chain_released"):
+                continue  # Consumed by its committed successor and deleted by design.
             if row.get("sparse_digest") and sha256(self.work / "sparse-ple/store.json") != row["sparse_digest"]:
                 raise ValueError(f"completed unit sparse PLE contract changed: {unit}")
             for name, checksum in row["artifacts"].items():
@@ -528,6 +608,8 @@ class StreamDriver:
                                f"at unit {self.storage['peak_unit']}; staging cap is {self.args.max_staging_gb:g} GiB")
         self.validate_done()
         self.release()  # Recovers a kill between committing a unit and unlinking its last shard.
+        if self.chain_only:
+            self.release_chain()  # Recovers a kill between a unit commit and its predecessor's release.
         if self.args.shared_shards == "restage":
             for unit in self.state["units"]:
                 path = self.staging / "views" / unit
@@ -558,7 +640,9 @@ class StreamDriver:
             self.state["current_unit"] = {"unit": unit, "state": "running"}
             self.save()
             row = self.run_unit(unit)
-            if row["status"] != "PASS":
+            if self.chain_only:
+                pass  # No parity verdict exists in this mode.
+            elif row["status"] != "PASS":
                 if not getattr(self.args, "keep_going", False):
                     raise RuntimeError(f"parity did not pass at {unit}; see {self.harness.out}")
                 print(f"Unit {unit} FAIL (recorded; --keep-going continues on the reference chain): "
@@ -572,15 +656,19 @@ class StreamDriver:
             for filename in self.plan["shards"][unit]:
                 self.consume(filename, unit)
             self.release()
+            if self.chain_only:
+                self.release_chain()
             if self.args.shared_shards == "restage":
                 shutil.rmtree(active.root)
         failures = [{"unit": unit, "result": row["result"], "cases": row["failures"]}
-                    for unit, row in self.state["units"].items() if row["status"] != "PASS"]
-        summary = {"schema": STREAM_SCHEMA, "status": "FAIL" if failures else "PASS",
+                    for unit, row in self.state["units"].items() if row["status"] not in ("PASS", CHAIN_ONLY)]
+        status = "FAIL" if failures else (CHAIN_ONLY if self.chain_only else "PASS")
+        summary = {"schema": STREAM_SCHEMA, "status": status,
                    "fingerprint": self.state["fingerprint"],
                    "coverage": {"layers": list(range(self.checkpoint.text["num_hidden_layers"])),
-                                "dtypes": ["fp32", "bf16"], "input_modes": ["random", "real"], "endpoints": True,
-                                "full_48_layer_gold": (not failures and self.selected is None
+                                "dtypes": ["fp32", "bf16"], "input_modes": args_modes(self.args), "endpoints": True,
+                                "reference_chain_only": self.chain_only,
+                                "full_48_layer_gold": (not failures and self.selected is None and not self.chain_only
                                                        and self.checkpoint.text["num_hidden_layers"] == 48),
                                 "rerun": self.state.get("rerun")},
                    "failures": failures, "units": self.state["units"], "skipped_keys": self.plan["skipped_keys"]}
@@ -597,6 +685,10 @@ class StreamDriver:
     def convert_unit(self, unit):
         from .stream_convert import convert_unit
         return convert_unit(self, unit)
+
+
+def args_modes(args):
+    return [m for m in ("random", "real") if m in args.input_modes.split(",")]
 
 
 def main(argv=None):
@@ -627,7 +719,13 @@ def main(argv=None):
     parser.add_argument("--units", type=lambda v: [u for u in v.split(",") if u],
                         help="with --rerun-from: comma-separated units (embed, 0..N-1, final, head)")
     parser.add_argument("--rerun-failed", action="store_true", help="with --rerun-from: add every non-PASS unit")
+    parser.add_argument("--reference-chain-only", action="store_true",
+                        help="quality-reference pass (lead ruling L3): official reference forward only on real "
+                             "inputs, traces pruned, chain released after use; keeps the head unit outputs. "
+                             "Requires --prompts-json; no MLX parity verdict")
     args = parser.parse_args(argv)
+    if args.reference_chain_only and (not args.prompts_json or args.rerun_from or args.convert_out):
+        parser.error("--reference-chain-only requires --prompts-json and excludes --rerun-from/--convert-out")
     if (args.units or args.rerun_failed) and not args.rerun_from:
         parser.error("--units/--rerun-failed require --rerun-from")
     args.random_scale = 1.0
@@ -656,4 +754,4 @@ def main(argv=None):
             print(f"Stream stopped: {error}", file=sys.stderr)
             return 2
     print(json.dumps({"status": result["status"], "summary": str(work / "summary.json")}))
-    return 0 if result["status"] == "PASS" else 2
+    return 0 if result["status"] in ("PASS", CHAIN_ONLY) else 2

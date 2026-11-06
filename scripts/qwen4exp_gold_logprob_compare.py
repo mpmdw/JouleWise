@@ -11,10 +11,16 @@ from the run's ``parity/provenance.json``.
 
 Composition with ``joulewise.align.qwen4_quant_quality``: that harness is the
 primary scorer (compact top-k reference, adapter-driven teacher-forced
-scoring, projected-KL lower bound).  This tool adds the prompt-set generator
-(``prepare`` -> ``prompts-json`` -> gold stream ``--prompts-json``) and an
-exact full-vocabulary cross-check (KL both directions plus the bf16-vs-fp32
-reference floor) when full quantized logits are available as an NPZ.
+scoring, projected-KL lower bound), and its ``POLICY`` is the primary pass
+rule here too (one table: docs/align/qwen4_exp_port/quant_quality.md#pass-rules).
+This tool adds an exact full-vocabulary cross-check (KL both directions plus
+the bf16-vs-fp32 reference floor) when full quantized logits are available as
+an NPZ.  The e2e profile thresholds are reported as a secondary screen only.
+
+The bf16 quality reference prompts come from
+``scripts/qwen4exp_quality_ref_prompts.py`` (lead ruling L3: fixed natural-text
+continuations, never maxfit output).  ``prepare`` (maxfit greedy
+continuations) remains only for diagnostics and must not feed the gold pass.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from scripts import qwen4exp_e2e_eval as e2e
     from scripts import qwen4exp_hosted_reference as hosted
+from joulewise.align import qwen4_quant_quality as qq
 
 SCHEMA = "qwen4exp-gold-logprobs/v1"
 REFERENCE = "gold-stream-bf16 (official transformers 5.22.1)"
@@ -73,11 +80,14 @@ def batch_metrics(reference_logits: Any, candidate_logits: Any, *, top_k: int = 
     lr, lc = log_softmax(ref), log_softmax(cand)
     pr, pc = np.exp(lr), np.exp(lc)
     k = min(top_k, ref.shape[1])
-    rt = np.argsort(-lr, axis=1, kind="stable")[:, :k]
-    ct = np.argsort(-lc, axis=1, kind="stable")[:, :k]
+    k5 = min(5, ref.shape[1])  # POLICY's top-5 overlap, independent of --top-k
+    ro = np.argsort(-lr, axis=1, kind="stable")[:, :max(k, k5)]
+    co = np.argsort(-lc, axis=1, kind="stable")[:, :max(k, k5)]
+    rt, ct = ro[:, :k], co[:, :k]
     overlap = np.array([len(set(a.tolist()) & set(b.tolist())) for a, b in zip(rt, ct)]) / k
+    top5 = np.array([len(set(a[:k5].tolist()) & set(b[:k5].tolist())) for a, b in zip(ro, co)]) / k5
     result = {"kl_bf16_quant": (pr * (lr - lc)).sum(axis=1), "kl_quant_bf16": (pc * (lc - lr)).sum(axis=1),
-              "top1_agreement": rt[:, 0] == ct[:, 0], "topk_overlap": overlap}
+              "top1_agreement": rt[:, 0] == ct[:, 0], "topk_overlap": overlap, "top5_overlap": top5}
     if targets is not None:
         targets = np.asarray(targets, dtype=np.int64)
         if targets.shape != (ref.shape[0],) or (targets >= ref.shape[1]).any() or (targets < -1).any():
@@ -111,7 +121,7 @@ def distribution_metrics(reference_logits: Sequence[float], candidate_logits: Se
 def aggregate(columns: Mapping[str, Any]) -> dict[str, Any]:
     import numpy as np
     out: dict[str, Any] = {"positions": int(len(columns["kl_bf16_quant"]))}
-    for key in ("kl_bf16_quant", "kl_quant_bf16", "top1_agreement", "topk_overlap"):
+    for key in ("kl_bf16_quant", "kl_quant_bf16", "top1_agreement", "topk_overlap", "top5_overlap"):
         values = np.asarray(columns[key], dtype=np.float64)
         out[key] = float(values.mean()) if values.size else None
     kl = np.asarray(columns["kl_bf16_quant"], dtype=np.float64)
@@ -206,26 +216,25 @@ def prompts_json(args: argparse.Namespace) -> int:
 
 
 def load_gold_head(work: Path) -> tuple[dict[str, Any], list[dict[str, Any]], Any]:
-    """Return (manifest, prompts, opener) for a completed gold-stream head unit."""
-    manifest = json.loads((work / "manifest.json").read_text())
-    if manifest.get("schema") != STREAM_SCHEMA:
-        raise ValueError("work folder manifest is not qwen4-gold-stream/v1")
-    unit, chain = manifest.get("units", {}).get("head"), manifest.get("chain", {}).get("head")
-    if not unit or unit.get("state") != "done" or not chain:
-        raise ValueError("gold head unit has not completed")
-    provenance = json.loads((work / "parity" / "provenance.json").read_text())
-    prompts = [{"name": p["name"], "input_ids": [int(i) for i in p["input_ids"]]} for p in provenance["prompts"]]
+    """Return (manifest, prompts, opener) for a completed gold-stream head unit.
+
+    Chain paths resolve against the manifest's own folder, so a moved or
+    copied work folder still opens (``qq.manifest_relative``).
+    """
+    try:
+        manifest, unit, chain, prompts, _ = qq.gold_head(work)
+    except ValueError as exc:
+        raise ValueError(str(exc).replace("gold work manifest has an unexpected schema",
+                                          "work folder manifest is not qwen4-gold-stream/v1")) from exc
 
     def opener(dtype: str, name: str) -> tuple[Path, str]:
-        raw = chain.get(f"{dtype}:{name}")
-        if raw is None:
+        if f"{dtype}:{name}" not in chain:
             raise ValueError(f"gold head output missing: {dtype}:{name}")
-        path = Path(raw)
-        rel = str(path.relative_to(work)) if path.is_absolute() else str(path)
-        digest = unit.get("artifacts", {}).get(rel)
-        if digest is None or sha256(work / rel) != digest:
-            raise ValueError(f"manifest hash mismatch: {rel}")
-        return work / rel, digest
+        try:
+            path, _, digest = qq.head_output(work, unit, chain, f"{dtype}:{name}")
+        except ValueError as exc:
+            raise ValueError(f"manifest hash mismatch: {exc}") from exc
+        return path, digest
     return manifest, prompts, opener
 
 
@@ -253,12 +262,19 @@ def compare(args: argparse.Namespace) -> int:
     continuation_from: dict[str, int] = {}
     if args.prepared is not None:
         prepared = json.loads(args.prepared.read_text())
-        if prepared.get("schema") != SCHEMA:
-            raise ValueError("unexpected prepared-file schema")
-        if [(r["name"], r["token_ids"]) for r in prepared["prompts"]] != [(p["name"], p["input_ids"]) for p in prompts]:
-            raise ValueError("prepared prompts differ from the prompts pinned by the gold run")
-        # Position t predicts token t+1: continuation targets start at len(input_ids)-1.
-        continuation_from = {r["name"]: len(r["input_ids"]) - 1 for r in prepared["prompts"]}
+        pinned = [(p["name"], p["input_ids"]) for p in prompts]
+        if isinstance(prepared, list):
+            # scripts/qwen4exp_quality_ref_prompts.py output (the gold --prompts-json).
+            if [(r["name"], r["input_ids"]) for r in prepared] != pinned:
+                raise ValueError("prepared prompts differ from the prompts pinned by the gold run")
+            continuation_from = {r["name"]: int(r["continuation_from"]) - 1 for r in prepared}
+        else:
+            if prepared.get("schema") != SCHEMA:
+                raise ValueError("unexpected prepared-file schema")
+            if [(r["name"], r["token_ids"]) for r in prepared["prompts"]] != pinned:
+                raise ValueError("prepared prompts differ from the prompts pinned by the gold run")
+            # Position t predicts token t+1: continuation targets start at len(input_ids)-1.
+            continuation_from = {r["name"]: len(r["input_ids"]) - 1 for r in prepared["prompts"]}
     quant_sha = sha256(args.quant_logits)
     head_outputs: dict[str, Any] = {}
     columns = {case: {} for case in ("fp32", args.quant_profile)}
@@ -294,21 +310,34 @@ def compare(args: argparse.Namespace) -> int:
                     for key, value in prompt_cols.items():
                         dest.setdefault(key, []).extend(value[p] for p in members)
                 per_prompt[case].append({"name": name, **aggregate(prompt_cols)})
-    tolerance = e2e.THRESHOLDS["profiles"][args.quant_profile]
+    screen = e2e.THRESHOLDS["profiles"][args.quant_profile]
     per_case: dict[str, Any] = {}
     for case, groups in columns.items():
         summary = aggregate(groups["all"])
         per_case[case] = {"summary": summary, "prompts": per_prompt[case],
                           "groups": {g: aggregate(v) for g, v in groups.items() if g != "all"}}
     quant = per_case[args.quant_profile]["summary"]
-    # Same NLL rule as qwen4exp_e2e_eval's NLL stage: relative bound plus an
-    # absolute 0.02-nat floor; never an absolute difference against a ratio.
+    # PRIMARY: the quant-quality POLICY (one table, quant_quality.md#pass-rules).
+    # Exact full-vocabulary KL >= the projected KL that POLICY bounds, so
+    # applying the same bars to it is the conservative reading.
+    classification = qq.classify({"mean_projected_kl": quant["kl_bf16_quant"],
+                                  "p99_projected_kl": quant["kl_bf16_quant_p99"],
+                                  "top1_agreement": quant["top1_agreement"],
+                                  "top5_overlap": quant["top5_overlap"],
+                                  "mean_nll_delta": quant["nll_difference"] if quant["nll_difference"] is not None
+                                  else math.inf})
+    passed = classification == "acceptable"
+    # SECONDARY screen (reported, never decisive): the e2e profile bounds,
+    # with the e2e NLL stage's relative rule plus a 0.02-nat floor.
     nll_ok = (quant["nll_reference"] is None or
-              quant["nll_candidate"] <= quant["nll_reference"] * (1 + tolerance["nll_rel_max"]) + 0.02)
-    passed = (quant["kl_bf16_quant"] <= tolerance["hosted_kl_max"] and
-              quant["top1_agreement"] >= tolerance["hosted_top1_min"] and
-              quant["topk_overlap"] >= tolerance["hosted_topk_overlap_min"] and nll_ok)
-    per_case[args.quant_profile].update(verdict="pass" if passed else "fail", thresholds=tolerance)
+              quant["nll_candidate"] <= quant["nll_reference"] * (1 + screen["nll_rel_max"]) + 0.02)
+    screened = (quant["kl_bf16_quant"] <= screen["hosted_kl_max"] and
+                quant["top1_agreement"] >= screen["hosted_top1_min"] and
+                quant["topk_overlap"] >= screen["hosted_topk_overlap_min"] and nll_ok)
+    per_case[args.quant_profile].update(verdict="pass" if passed else "fail", classification=classification,
+                                        pass_rule=qq.policy_record(),
+                                        e2e_screen={"profile": args.quant_profile, "thresholds": screen,
+                                                    "pass": screened, "role": "secondary; not decisive"})
     per_case["fp32"]["role"] = "reference precision floor (official fp32 vs bf16); no verdict"
     report = {"schema": "qwen4exp-gold-logprob-comparison/v2", "reference": REFERENCE, "unit": "head",
               "work_folder": str(work), "manifest_sha256": sha256(work / "manifest.json"),
@@ -336,7 +365,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--work-folder", type=Path, required=True, help="gold stream work folder (holds manifest.json)")
     p.add_argument("--quant-logits", type=Path, required=True,
                    help="NPZ: prompt name -> teacher-forced [positions, vocab] logits of the quantized model")
-    p.add_argument("--prepared", type=Path, help="prepare output; adds the continuation-only group")
+    p.add_argument("--prepared", type=Path, help="quality-ref --prompts-json (or legacy prepare output); "
+                   "adds the continuation-only group")
     p.add_argument("--quant-profile", choices=("maxfit", "maxfit5"), required=True)
     p.add_argument("--top-k", type=int, default=64)
     p.add_argument("--out", type=Path, required=True); p.set_defaults(func=compare)

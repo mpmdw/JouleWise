@@ -52,7 +52,10 @@ def render(template, reports, run_id):
     ref_summary = {"bf16_report_verdict": reference.get("verdict", "PENDING"),
                    "hosted_identity": reference.get("hosted_identity", "PENDING"),
                    "benchmark_comparison": worker("benchmark.json").get("e2e", {}).get("reference_comparison", "PENDING"),
-                   "hosted_logprobs_verdict": worker("hosted.json").get("hosted", {}).get("verdict", "PENDING")}
+                   "hosted_logprobs_verdict": worker("hosted.json").get("hosted", {}).get("verdict", "PENDING"),
+                   # The primary quantization pass rule (one table; e2e profiles are secondary).
+                   "quantization_pass_rule": worker("quality.json").get("e2e", {}).get("quality_policy", {}).get(
+                       "doc", "docs/align/qwen4_exp_port/quant_quality.md#pass-rules")}
     values = {"RUN_ID": run_id, "SOURCE": json.dumps(reports.get("download.json", {}).get("revision", "PENDING")),
               "ARTIFACT": json.dumps(reports.get("convert.json", {}), indent=2),
               "MEMORY_ROWS": table(["Final context", "Prompt tokens", "Metal peak GB", "PLE resident GB", "Prediction relative error"], memory),

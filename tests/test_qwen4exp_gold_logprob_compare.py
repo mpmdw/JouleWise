@@ -142,6 +142,54 @@ class GoldStreamCompareTests(unittest.TestCase):
                 self.run_compare(root, work, logits, "--prepared", str(prepared))
 
 
+    def test_policy_is_the_primary_pass_rule_and_e2e_is_a_secondary_screen(self):
+        with tempfile.TemporaryDirectory() as root:
+            work, logits = self.make_work(root)
+            code, report = self.run_compare(root, work, logits)
+            quant = report["cases"]["maxfit"]
+            self.assertEqual(quant["classification"], "acceptable")
+            self.assertEqual(quant["pass_rule"]["primary"], "joulewise.align.qwen4_quant_quality.POLICY")
+            self.assertTrue(quant["pass_rule"]["doc"].startswith("docs/align/qwen4_exp_port/quant_quality.md"))
+            self.assertEqual(quant["e2e_screen"]["role"], "secondary; not decisive")
+            self.assertIn("top5_overlap", quant["summary"])
+            # A variant that passes the old e2e screen but not POLICY's p99 bar fails.
+            from unittest import mock
+            from joulewise.align import qwen4_quant_quality as qq
+            strict = {**qq.POLICY, "acceptable": {**qq.POLICY["acceptable"], "p99_projected_kl_max": -1.0}}
+            with mock.patch.object(qq, "POLICY", strict):
+                code, report = self.run_compare(root, work, logits)
+            self.assertEqual(code, 1)
+            self.assertEqual(report["cases"]["maxfit"]["classification"], "marginal")
+            self.assertEqual(report["cases"]["maxfit"]["verdict"], "fail")
+            self.assertTrue(report["cases"]["maxfit"]["e2e_screen"]["pass"])
+
+    def test_moved_work_folder_opens_against_its_manifest(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as root:
+            work, logits = self.make_work(root)
+            moved = Path(root) / "moved" / "work"
+            moved.parent.mkdir()
+            shutil.move(str(work), str(moved))
+            code, report = self.run_compare(root, moved, logits)
+            self.assertEqual(code, 0)
+            self.assertEqual(report["head_outputs"]["tokens-a"]["bf16"],
+                             _sha(moved / "parity/head/tokens-a-bf16-real/reference/output.npy"))
+
+    def test_quality_ref_prompts_json_adds_continuation_group(self):
+        with tempfile.TemporaryDirectory() as root:
+            work, logits = self.make_work(root)
+            prompts = Path(root) / "prompts.json"
+            rows = [{"name": "tokens-a", "input_ids": [3, 1, 4, 1, 5], "continuation_from": 3},
+                    {"name": "tokens-b", "input_ids": [2, 7, 1], "continuation_from": 2}]
+            prompts.write_text(json.dumps(rows))
+            _, report = self.run_compare(root, work, logits, "--prepared", str(prompts))
+            self.assertEqual(report["cases"]["maxfit"]["groups"]["continuation"]["positions"], 5)
+            rows[0]["input_ids"] = [3, 1, 4, 1, 6]
+            prompts.write_text(json.dumps(rows))
+            with self.assertRaises(ValueError):
+                self.run_compare(root, work, logits, "--prepared", str(prompts))
+
+
 class PrepareGuardTests(unittest.TestCase):
     def test_live_load_sets_metal_limits_before_loading_and_checks_ple(self):
         import sys

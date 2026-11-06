@@ -394,6 +394,9 @@ The new maxfit/maxfit5 threshold labels deliberately use the existing strict
 They are not a 6/5-bit error calibration. A passing screen alone cannot close
 GOAL 7. Full-model hosted NLL is unavailable on text-only endpoints; keep that
 relative-NLL check open unless an identical-weight scoring reference exists.
+The decisive quantization rule is the quant-quality POLICY against the
+layer-streamed bf16 reference ([quant_quality.md#pass-rules](quant_quality.md#pass-rules));
+these e2e profile bounds are secondary screens reported against it.
 
 ## 4. Same small benchmarks vs separately hosted bf16
 

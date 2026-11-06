@@ -455,6 +455,20 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(results["stages"], {})
         self.assertTrue(e2e.run(args, adapter=e2e.ScriptedAdapter([]))["tokenizer_preflight"]["ok"])
 
+    def test_results_point_at_the_primary_quant_quality_pass_rule(self):
+        args = e2e.parse_args(["--adapter", "unused", "--chat-template", str(e2e.TEMPLATE_PATHS[1]),
+                               "--stages", "coherence"])
+        results = e2e.run(args, adapter=e2e.ScriptedAdapter([]))
+        rule = results["quality_policy"]  # equality with the imported POLICY: test_qwen4_quant_quality
+        self.assertEqual(rule["primary"], "joulewise.align.qwen4_quant_quality.POLICY")
+        self.assertEqual(set(rule["policy"]), {"acceptable", "marginal"})
+        self.assertEqual(rule["admits"], ["acceptable"])
+        self.assertTrue(rule["doc"].endswith("quant_quality.md#pass-rules"))
+        self.assertIn("secondary", rule["e2e_profiles_role"])
+        doc = (e2e.REPO_ROOT / rule["doc"].split("#")[0]).read_text()
+        self.assertIn("## Pass rules", doc)
+        json.dumps(results, allow_nan=False)  # still serializable
+
     def test_shade_stage_without_checkout_is_skipped_not_failed(self):
         with tempfile.TemporaryDirectory() as directory:
             stub = Path(directory) / "stub.json"

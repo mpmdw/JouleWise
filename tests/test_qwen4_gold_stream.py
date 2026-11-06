@@ -462,6 +462,143 @@ class LifecycleTests(unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_ARRAYS and HAS_SAFE and HAS_REF, "optional official reference stack")
+def fake_reference_execute(calls):
+    """Reference-worker double for --reference-chain-only lifecycle tests.
+
+    Writes every required trace plus output.npy = predecessor + 1, like a
+    worker; any MLX request fails the test.
+    """
+    import numpy as np
+    from joulewise.align.qwen4_gold.core import required_traces
+
+    def execute(python, request, directory, *limits):
+        if request["backend"] != "reference":
+            raise AssertionError("reference-chain-only must never start an MLX worker")
+        calls.append((request["unit"], request["dtype"], request["input_mode"]))
+        directory.mkdir(parents=True, exist_ok=True)
+        config = json.loads((Path(request["checkpoint"]) / "config.json").read_text())
+        base = np.load(request["hidden"]) if request["hidden"] else np.zeros((1, len(request["input_ids"][0]), 4), np.float32)
+        traces = {}
+        for name in sorted(required_traces(config, request["unit"])):
+            traces[name] = name + ".npy"
+            np.save(directory / traces[name], (base + 1).astype(np.float32))
+        result = {"traces": traces, "metadata": {"test_double": True}}
+        write_json(directory / "request.json", request)
+        write_json(directory / "result.json", result)
+        return result
+    return execute
+
+
+class ReferenceChainOnlyTests(unittest.TestCase):
+    """Lead ruling L3: the bf16 quality reference pass (head unit + its chain)."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.fixture = self.base / "fixture"
+        self.work = self.base / "work"
+        synthetic(self.fixture)
+        self.prompts = self.base / "prompts.json"
+        write_json(self.prompts, [{"name": "p-one", "input_ids": [1, 2, 3], "continuation_from": 2},
+                                  {"name": "p-two", "input_ids": [4, 5], "continuation_from": 1}])
+
+    def driver(self, resume=False):
+        args = options(self.work, resume)
+        args.reference_chain_only, args.prompts_json = True, str(self.prompts)
+        return StreamDriver(args, LocalSource(self.fixture, self.work), RUNTIMES)
+
+    def test_reference_only_prunes_traces_releases_chain_and_keeps_the_head(self):
+        import numpy as np
+        calls = []
+        driver = self.driver()
+        with patch("joulewise.align.qwen4_gold.runner.execute", fake_reference_execute(calls)):
+            summary = driver.run()
+        self.assertEqual(summary["status"], "REFERENCE_CHAIN_ONLY")
+        self.assertTrue(summary["coverage"]["reference_chain_only"])
+        self.assertEqual(summary["coverage"]["input_modes"], ["real"])
+        self.assertFalse(summary["coverage"]["full_48_layer_gold"])
+        units = driver.plan["units"]
+        # Every unit, both dtypes, every prompt, real inputs only, reference only.
+        self.assertEqual(calls, [(u, d, "real") for u in units for d in ("fp32", "bf16") for _ in range(2)])
+        # Only the head unit's case directories remain, each holding output.npy alone.
+        left = sorted(str(p.relative_to(self.work / "parity")) for p in (self.work / "parity").rglob("*.npy"))
+        self.assertEqual(left, sorted(f"head/{n}-{d}-real/reference/output.npy"
+                                      for n in ("p-one", "p-two") for d in ("fp32", "bf16")))
+        self.assertTrue(all(driver.state["units"][u].get("chain_released") for u in units[:-1]))
+        self.assertNotIn("chain_released", driver.state["units"]["head"])
+        # The head is the reference chain: embed(1) + 2 layers + final + head = 5.
+        head = np.load(driver.state["chain"]["head"]["bf16:p-one"])
+        self.assertTrue((head == 5).all())
+        # quant-quality capture reads it straight from the work folder.
+        from joulewise.align.qwen4_quant_quality import load_gold
+        logits, prompts, source = load_gold(self.work)
+        self.assertEqual([p["name"] for p in prompts], ["p-one", "p-two"])
+        self.assertEqual(source["head_status"], "REFERENCE_CHAIN_ONLY")
+        np.testing.assert_array_equal(logits["p-two"], np.load(driver.state["chain"]["head"]["bf16:p-two"]))
+        # A completed restart re-validates and does no work.
+        calls.clear()
+        with patch("joulewise.align.qwen4_gold.runner.execute", fake_reference_execute(calls)):
+            self.assertEqual(self.driver(True).run()["status"], "REFERENCE_CHAIN_ONLY")
+        self.assertEqual(calls, [])
+
+    def test_kill_mid_unit_and_before_release_resume_without_rework(self):
+        calls = []
+        driver = self.driver()
+        original = driver.harness.case
+        def kill_in_unit_one(unit, dtype, prompt, *a, **kw):
+            if (unit, dtype, prompt["name"]) == ("1", "fp32", "p-two"):
+                raise SystemExit("kill after the durable, pruned p-one case")
+            return original(unit, dtype, prompt, *a, **kw)
+        driver.harness.case = kill_in_unit_one
+        with patch("joulewise.align.qwen4_gold.runner.execute", fake_reference_execute(calls)), \
+                self.assertRaises(SystemExit):
+            driver.run()
+        self.assertEqual([p.name for p in (self.work / "parity/layer-001/p-one-fp32-real").rglob("*.npy")],
+                         ["output.npy"])
+        calls.clear()
+        resumed = self.driver(True)
+        release = resumed.release_chain
+        state = {"killed": False}
+        def kill_before_first_release():
+            if not state["killed"] and "1" in resumed.state["units"]:
+                state["killed"] = True
+                raise SystemExit("kill between unit commit and chain release")
+            return release()
+        resumed.release_chain = kill_before_first_release
+        with patch("joulewise.align.qwen4_gold.runner.execute", fake_reference_execute(calls)), \
+                self.assertRaises(SystemExit):
+            resumed.run()
+        # The pruned fp32/p-one case of unit 1 was reused; only p-two ran.
+        self.assertEqual(calls.count(("1", "fp32", "real")), 1)
+        self.assertFalse(resumed.state["units"]["0"].get("chain_released"))
+        calls.clear()
+        final = self.driver(True)
+        with patch("joulewise.align.qwen4_gold.runner.execute", fake_reference_execute(calls)):
+            self.assertEqual(final.run()["status"], "REFERENCE_CHAIN_ONLY")
+        self.assertNotIn("1", {c[0] for c in calls})
+        self.assertTrue(final.state["units"]["0"]["chain_released"])
+        self.assertFalse((self.work / "parity/layer-000").exists() and
+                         any((self.work / "parity/layer-000").rglob("*.npy")))
+
+    def test_mode_is_part_of_the_invocation_and_requires_prompts(self):
+        from joulewise.align.qwen4_gold.stream import main
+        with patch("joulewise.align.qwen4_gold.runner.execute", fake_reference_execute([])):
+            self.driver().run()
+        with self.assertRaisesRegex(ValueError, "invocation changed"):
+            StreamDriver(_parity_args(self.work, self.prompts), LocalSource(self.fixture, self.work), RUNTIMES)
+        for extra in ([], ["--prompts-json", str(self.prompts), "--convert-out", str(self.base / "c")],
+                      ["--prompts-json", str(self.prompts), "--rerun-from", str(self.work)]):
+            with self.assertRaises(SystemExit):
+                main(["--work", str(self.base / "w2"), "--mlx-module", __file__, "--reference-chain-only", *extra])
+
+
+def _parity_args(work, prompts):
+    args = options(work, True)
+    args.prompts_json = str(prompts)
+    return args
+
+
 class OfficialTinyPLETests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -727,6 +864,55 @@ class OfficialTinyPLETests(unittest.TestCase):
             for key, path in rerun.state["chain"][first_ple].items():
                 np.testing.assert_array_equal(np.load(path), np.load(resumed.state["chain"][first_ple][key]))
             self.assertEqual(before, {p: sha256(p) for p in root.rglob("*") if p.is_file()})
+
+    def test_reference_chain_only_head_equals_the_full_tiny_model(self):
+        """L3 pass on the official tiny model: official workers only, killed and
+        resumed mid-run; the kept head logits equal from_pretrained's lm_head."""
+        import numpy as np
+        import torch
+        from joulewise.align.qwen4_gold.core import compare_arrays
+        from joulewise.align.qwen4_gold.runner import execute
+        from transformers.models.qwen4_exp.modeling_qwen4_exp import Qwen4ExpForCausalLM
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            prompts = [{"name": "one", "input_ids": [5, 11, 0, 17, 23, 29, 31, 37, 41], "continuation_from": 4},
+                       {"name": "two", "input_ids": [3, 9, 27, 81], "continuation_from": 2}]
+            write_json(root / "prompts.json", prompts)
+            args = options(root / "work")
+            args.shared_shards, args.prompts_json, args.reference_chain_only = "restage", str(root / "prompts.json"), True
+            backends = []
+            def worker(python, request, directory, *limits):
+                backends.append(request["backend"])
+                if request["backend"] == "mlx":
+                    raise AssertionError("no MLX worker in reference-chain-only")
+                return execute(python, request, directory, *limits)
+            driver = StreamDriver(args, LocalSource(self.fixture, root / "work"), RUNTIMES)
+            original = driver.harness.case
+            def kill(*a, **kw):
+                if a[:2] == ("1", "bf16"):
+                    raise SystemExit("kill inside a unit")
+                return original(*a, **kw)
+            driver.harness.case = kill
+            with patch("joulewise.align.qwen4_gold.runner.execute", worker), self.assertRaises(SystemExit):
+                driver.run()
+            args.resume = True
+            resumed = StreamDriver(args, LocalSource(self.fixture, root / "work"), RUNTIMES)
+            with patch("joulewise.align.qwen4_gold.runner.execute", worker):
+                self.assertEqual(resumed.run()["status"], "REFERENCE_CHAIN_ONLY")
+            self.assertEqual(set(backends), {"reference"})
+            kept = sorted(str(p.relative_to(root / "work" / "parity")) for p in (root / "work" / "parity").rglob("*.npy"))
+            self.assertEqual(kept, sorted(f"head/{p['name']}-{t}-real/reference/output.npy"
+                                          for p in prompts for t in ("fp32", "bf16")))
+            for dtype_name, dtype in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
+                model = Qwen4ExpForCausalLM.from_pretrained(self.full, dtype=dtype, attn_implementation="eager",
+                                                            local_files_only=True).eval()
+                for prompt in prompts:
+                    with torch.inference_mode():
+                        full = model(input_ids=torch.tensor([prompt["input_ids"]]), use_cache=False).logits
+                    streamed = np.load(resumed.state["chain"]["head"][f"{dtype_name}:{prompt['name']}"])
+                    metric = compare_arrays(full.float().numpy(), streamed, dtype_name)
+                    self.assertTrue(metric["pass"], (dtype_name, prompt["name"], metric))
+                del model
 
     @unittest.skipUnless(HAS_MLX and os.environ.get("JW_GOLD_CANONICAL_MODULE"),
                          "native Metal/MLX and explicit canonical path required; run on the lead's Mac")
