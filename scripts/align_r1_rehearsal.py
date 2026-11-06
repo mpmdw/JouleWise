@@ -533,7 +533,17 @@ def run(args):
     guard = PowerModeGuard(_run, marker)
     old_handlers = {}
 
+    stopping = []
+
     def stop(signum, _frame):
+        # One-shot: the first signal starts teardown. Later signals are
+        # ignored so they cannot interrupt the Automatic restore (the sudo
+        # child inherits SIG_IGN); the old handlers return in ``finally``.
+        if stopping:
+            return
+        stopping.append(signum)
+        for sig in old_handlers:
+            signal.signal(sig, signal.SIG_IGN)
         raise KeyboardInterrupt(f"signal {signum}")
 
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):

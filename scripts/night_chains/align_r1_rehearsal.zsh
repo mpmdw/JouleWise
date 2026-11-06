@@ -7,7 +7,10 @@ restore_automatic() {
   sudo -n /usr/bin/pmset -c powermode 0
 }
 on_signal() {
-  trap - EXIT HUP INT TERM
+  # Ignore (not default) further signals: a second TERM/INT must not kill this
+  # shell or the restoring sudo, which inherits the ignored disposition.
+  trap - EXIT
+  trap '' HUP INT TERM
   restore_automatic || true
   exit 130
 }

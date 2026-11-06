@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -479,6 +480,68 @@ class R1Tests(unittest.TestCase):
                 self.assertEqual(r1.run(self.args(td)), 3)
             result = json.loads((Path(td) / "run/r1_result.json").read_text())
             self.assertIn("contract fields missing: recovery_curve", result["error"])
+
+    def test_signal_burst_cannot_interrupt_the_automatic_restore(self):
+        # Executing review 2026-11-06: a second TERM/INT during teardown (an
+        # operator pressing Ctrl-C again, or a burst) interrupted every Python
+        # restore attempt and left the host in High Power.
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            state = {"in_b": False}
+
+            def runner(argv):
+                argv = tuple(str(v) for v in argv)
+                if "--r1-kind" in argv and "high-power-aba-b" in argv:
+                    state["in_b"] = True
+                    os.kill(os.getpid(), signal.SIGTERM)       # first signal: abort the leg
+                if argv == r1.PowerModeGuard.AUTO and state["in_b"]:
+                    os.kill(os.getpid(), signal.SIGINT)        # a further signal mid-restore
+                return world(argv)
+            previous = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+            with patch.object(r1, "_run", runner):
+                rc = r1.run(self.args(td, power_marker=Path(td) / "marker"))
+            self.assertEqual(rc, 4)
+            self.assertEqual(world.mode, 0)
+            self.assertFalse((Path(td) / "marker").exists())
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertEqual(result["status"], "aborted")
+            self.assertEqual({sig: signal.getsignal(sig) for sig in previous}, previous)
+
+    def test_zsh_chain_signal_burst_still_restores_automatic(self):
+        # The chain's own trap must also survive a second signal: with
+        # ``trap - ... TERM`` the next TERM killed both the shell and its
+        # restoring sudo, so the backstop never ran.
+        repo = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+            td = Path(td)
+            (td / "bin").mkdir()
+            state, armed = td / "pm_state", td / "armed"
+            state.write_text("0\n")
+            sudo = td / "bin/sudo"
+            sudo.write_text(
+                "#!/bin/zsh\n"
+                'if [[ "$1 $2" == "-n -l" ]]; then\n'
+                '  print "(root) NOPASSWD: /usr/bin/pmset -c powermode 0, /usr/bin/pmset -c powermode 2"; exit 0\n'
+                "fi\n"
+                'if [[ "$1 $2 $3 $4" == "-n /usr/bin/pmset -c powermode" ]]; then\n'
+                f'  if [[ -e {armed} && "$5" == 0 ]]; then kill -TERM 0; sleep 0.5; fi\n'
+                f'  print -r -- "$5" > {state}; exit 0\n'
+                "fi\n"
+                "exit 1\n")
+            shim = td / "py"
+            # Stands in for the driver: High Power is on, then the group is signalled.
+            shim.write_text(f"#!/bin/zsh\nprint 2 > {state}\n: > {armed}\nkill -TERM 0\nsleep 5\n")
+            for path in (sudo, shim):
+                path.chmod(0o755)
+            (td / "mroot").mkdir()
+            env = dict(os.environ, PATH=f"{td / 'bin'}:{os.environ['PATH']}", PY=str(shim),
+                       NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"),
+                       ALIGN_R1_RUNTIME="/usr/bin/true")
+            proc = subprocess.run(["/bin/zsh", str(repo / "scripts/night_chains/align_r1_rehearsal.zsh")],
+                                  env=env, start_new_session=True, capture_output=True, text=True,
+                                  timeout=60)
+            self.assertEqual(state.read_text().strip(), "0", proc.stderr)
+            self.assertEqual(proc.returncode, 130)
 
     def test_plan_pins_durations_and_gated_held_members(self):
         rows = r1.phase_plan(False)
