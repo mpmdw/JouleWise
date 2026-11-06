@@ -348,6 +348,8 @@ def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str
             continue
         value = _gpu(row)
         if value is not None:
+            if not isinstance(row.get("block"), str):
+                return None  # a usable row with no block identity cannot be placed: fail closed
             kept.append((row, value))
     # One time basis for every row: epoch stamps when all rows have them,
     # otherwise the planned ordinal clock for all (never a mix of the two).
@@ -362,9 +364,10 @@ def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str
     # The fit weights block means equally, which is valid while their
     # segment-noise shares are similar. Fail closed (INCONCLUSIVE) when a block
     # kept fewer than half the quiet segments of the fullest block.
-    # A block with no usable quiet segment counts as 0 (it must not just vanish).
+    # Every block seen in any row (any load) counts; one with no usable quiet
+    # segment of this load counts as 0 (it must not just vanish).
     counts = {block: len(grouped.get(block, ())) for block in
-              {row["block"] for row in rows if row.get("load") == load} | set(grouped)}
+              {row.get("block") for row in rows if isinstance(row.get("block"), str)} | set(grouped)}
     if 2 * min(counts.values()) < max(counts.values()):
         return None
     block_rows = [(block, statistics.fmean(t for t, _a, _v in members), members[0][1],

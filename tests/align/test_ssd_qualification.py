@@ -181,6 +181,13 @@ class EvaluateTests(unittest.TestCase):
         emptied += [{**r, "extract_flags": ["segment.coverage_below_95pct"]} for r in world()
                     if r["block"] == "2-detached" and r["load"] == "decode" and r["condition"] == "quiet"]
         self.assertIsNone(q.presence_offset(emptied, load="decode"))  # an all-flagged block is 0, not absent
+        no_decode = [r for r in world() if not (r["block"] == "2-detached" and r["load"] == "decode")]
+        self.assertIsNone(q.presence_offset(no_decode, load="decode"))  # block seen only under idle is 0
+        stray = world() + [{"load": "decode", "condition": "quiet", "extract_flags": ["bad"]}]
+        self.assertEqual(q.presence_offset(stray, load="decode")["df"], 2)  # skipped row, no block: ignored
+        unplaced = world() + [{"load": "decode", "condition": "quiet", "extract_flags": [], "ordinal": 0,
+                               "presence": "attached", "power_w": {"gpu": 25.0}}]
+        self.assertIsNone(q.presence_offset(unplaced, load="decode"))  # usable row, no block: fail closed
 
     def test_time_basis_is_never_mixed(self):
         rows = [{**row, "start_epoch_s": 1.8e9 + row["ordinal"] * 180} for row in world()]
