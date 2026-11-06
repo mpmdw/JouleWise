@@ -132,7 +132,7 @@ def pack_map(function, calls):
     if '<' in reference or _program(reference) is not function:
         return None
     context = members.vdl_context(caches)
-    if context and context.get('entries') is None:
+    if caches.vdl is not None and context.get('entries') is None:
         context = members.vdl_context(caches, caches.vdl.export_entries())
     shares = member_worker_shares(caches.workers, len(calls))
     try:

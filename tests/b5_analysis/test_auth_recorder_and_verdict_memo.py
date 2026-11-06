@@ -181,6 +181,21 @@ class GrammarFailureEquivalence(_Tmp):
 
 
 class MemoRegistration(_Tmp):
+    def test_session_resolves_repeated_authenticated_identity_once(self):
+        path = self.write("resolved-once.json", GOOD_JSON)
+        real = Path.resolve
+        calls = []
+
+        def counted(value, *args, **kwargs):
+            calls.append(os.fspath(value))
+            return real(value, *args, **kwargs)
+
+        with mock.patch.object(Path, "resolve", counted), V2AuthenticationReadSession() as session:
+            for _ in range(4):
+                session.read(path, grammar="json", label="same")
+        self.assertEqual(calls, [os.fspath(path)])
+        self.assertEqual(session.records[str(path)].read_count, 4)
+
     def test_a_memo_hit_registers_the_same_digest_and_counts(self):
         path = self.write("a.json", GOOD_JSON)
         rows = self.write("b.jsonl", GOOD_JSONL)

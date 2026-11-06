@@ -121,7 +121,8 @@ class MemberOutcome:
 # The two run memos shipped to and merged back from worker tasks when the run
 # has a verified store (content-keyed, deterministic, never a firing's value).
 SHIPPED_MEMOS = ('environment_admission.window_thermal_pressure', 'cli.strict_clock_evidence',
-                 'calibration_bracketing.candidate_physics')
+                 'calibration_bracketing.candidate_physics',
+                 'authentication_io.grammar_ok')
 
 
 def _floor_strict_leaf(path, strict):
@@ -303,7 +304,10 @@ def vdl_context(caches, entries: dict | None = None) -> dict:
     """
     store = vdl_store(caches)
     if store is None or serving_stopped(store):
-        return {}
+        # Pure run memos do not depend on the verified store.  In particular,
+        # pack workers must receive and return successful strict-grammar
+        # verdicts even when the operator runs with the store disabled.
+        return {'memos': shipped_memos(caches)}
     if entries is not None:
         entries = {**entries, 'defects': []}
     return {'mode': store.mode, 'commit': store.commit, 'entries': entries, 'memos': shipped_memos(caches)}
@@ -323,10 +327,11 @@ def export_new(caches, context: dict, memos_before: dict) -> dict:
     """What this task added: store entries not shipped to it, new memo entries, side channel."""
     store = vdl_store(caches)
     if store is None:
-        return {}
-    shipped = set(((context.get('entries') or {}).get('entries') or {}))
-    payload = store.export_entries(lambda key, _entry: key not in shipped)
-    payload['counters'] = store.restricted_counters()
+        payload = {}
+    else:
+        shipped = set(((context.get('entries') or {}).get('entries') or {}))
+        payload = store.export_entries(lambda key, _entry: key not in shipped)
+        payload['counters'] = store.restricted_counters()
     tables = getattr(caches, 'memos', None) or {}
     payload['memos'] = {name: {key: value for key, value in tables.get(name, {}).items()
                                if key not in memos_before.get(name, ())}
@@ -368,11 +373,12 @@ def merge_consumed_poison(caches, payload: dict | None) -> None:
 
 def merge_consumed(caches, payload: dict | None) -> None:
     """Poison, entries and shipped memos of a consumed, ok, firing-free outcome (never overwrite)."""
-    store = vdl_store(caches)
-    if store is None or not payload:
+    if not payload:
         return
-    store.merge_entries({'schema': payload.get('schema'), 'entries': payload.get('entries') or {},
-                         'poisoned': payload.get('poisoned', ()), 'defects': ()})
+    store = vdl_store(caches)
+    if store is not None:
+        store.merge_entries({'schema': payload.get('schema'), 'entries': payload.get('entries') or {},
+                             'poisoned': payload.get('poisoned', ()), 'defects': ()})
     tables = getattr(caches, 'memos', None)
     if tables is None:
         return

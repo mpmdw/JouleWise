@@ -103,7 +103,8 @@ class PackTransportTests(unittest.TestCase):
                         self.assertTrue(all(outcome.ok for outcome in outcomes))
                     values = [pp.consume(o, lambda args=args: read_pack(*args))
                               for (args, _), o in zip(calls, outcomes or [None] * len(calls))]
-                    rows.append((values, tuple(vars(r) for r in session.records.values())))
+                    rows.append((values, tuple(vars(r) for r in session.records.values()),
+                                 dict(arc.memo('authentication_io.grammar_ok'))))
             self.assertEqual(*rows)
 
 

@@ -3944,6 +3944,7 @@ def _authenticate_v2_inputs(
     consumption_semantics_id: str | None,
     input_manifest: Mapping[str, Any] | None = None,
     calibration_custody_store: Path | None = None,
+    _producer_plan_ids: tuple[str, ...] | None = None,
 ) -> tuple[
     Mapping[str, V2ProducerInputs],
     Mapping[str, Path],
@@ -3961,6 +3962,7 @@ def _authenticate_v2_inputs(
                     consumption_semantics_id=consumption_semantics_id,
                     input_manifest=input_manifest,
                     calibration_custody_store=calibration_custody_store,
+                    _producer_plan_ids=_producer_plan_ids,
                 )
         except V2AuthenticationInputError as exc:
             raise MintError(str(exc)) from exc
@@ -3971,6 +3973,7 @@ def _authenticate_v2_inputs(
         else _load_v2_input_manifest(input_manifest_path)
     )
     block5 = manifest.get("schema_version") == BLOCK5_INPUT_SCHEMA
+    block5_manifest = manifest if block5 else None
     if block5:
         manifest = _expand_block5_manifest(manifest, manifest_dir=input_manifest_path.parent)
     rows = manifest["producer_plans"]
@@ -3994,6 +3997,28 @@ def _authenticate_v2_inputs(
         if plan_id in by_plan_id:
             raise MintError("v2 input manifest producer plan ids must be unique")
         by_plan_id[plan_id] = row
+
+    # The two block-5 producers are independent authentication programs.  Use
+    # the same ordered pack scheduler as emitter preparation; only consumed
+    # successes replay their authentication rows, memos and deadlines.  A
+    # worker failure is recomputed at its original serial position.
+    if block5 and _producer_plan_ids is None:
+        from joulewise.b5_analysis import pack_parallel as pp
+        plan_ids = tuple(producer["plan"]["plan_id"] for producer in pinset.value["producer_plans"])
+        registry = tuple(BLOCK5_PRODUCERS.values())
+        calls = [((pinset, pinset_path, pinset_sha256, input_manifest_path, consumption_semantics_id,
+                   block5_manifest, calibration_custody_store, (plan_id,), registry), {})
+                 for plan_id in plan_ids]
+        outcomes = pp.pack_map(_authenticate_block5_pack, calls)
+        if outcomes is not None:
+            combined, roots, snapshots = {}, {}, {}
+            for call, outcome in zip(calls, outcomes):
+                part, part_roots, part_snapshots = pp.consume(
+                    outcome, lambda call=call: _authenticate_block5_pack(*call[0], **call[1]))
+                combined.update(part)
+                roots.update(part_roots)
+                snapshots.update(part_snapshots)
+            return combined, roots, snapshots
 
     evidence_core = _fresh_original_core()
     acceptance_path = Path(
@@ -4078,7 +4103,9 @@ def _authenticate_v2_inputs(
 
     result: dict[str, V2ProducerInputs] = {}
     evidence_roots: dict[str, Path] = {}
-    for producer_index, producer in enumerate(pinset.value["producer_plans"]):
+    selected_producers = [producer for producer in pinset.value["producer_plans"]
+                          if _producer_plan_ids is None or producer["plan"]["plan_id"] in _producer_plan_ids]
+    for producer_index, producer in enumerate(selected_producers):
         plan_id = producer["plan"]["plan_id"]
         manifest_row = by_plan_id.get(plan_id)
         if manifest_row is None:
@@ -4319,6 +4346,28 @@ def _authenticate_v2_inputs(
         )
     snapshots = {entry.producer_plan_id: entry.ledger_snapshot for entry in BLOCK5_PRODUCERS.values()}
     return result, evidence_roots, snapshots if block5 else ledger_snapshot
+
+
+def _authenticate_block5_pack(pinset, pinset_path, pinset_sha256, input_manifest_path,
+                              consumption_semantics_id, input_manifest, calibration_custody_store,
+                              producer_plan_ids, registry):
+    """Spawn-safe authentication of one producer with process-local authority."""
+    from joulewise.cli import validate_bundle
+
+    previous = dict(BLOCK5_PRODUCERS)
+    BLOCK5_PRODUCERS.clear()
+    BLOCK5_PRODUCERS.update({str(entry.window.claim_runs_root.resolve()): entry for entry in registry})
+    try:
+        return _authenticate_v2_inputs(
+            pinset=pinset, pinset_path=pinset_path, pinset_sha256=pinset_sha256,
+            input_manifest_path=input_manifest_path,
+            strict_validator=lambda path, strict: validate_bundle(path, strict=strict),
+            consumption_semantics_id=consumption_semantics_id, input_manifest=input_manifest,
+            calibration_custody_store=calibration_custody_store,
+            _producer_plan_ids=producer_plan_ids)
+    finally:
+        BLOCK5_PRODUCERS.clear()
+        BLOCK5_PRODUCERS.update(previous)
 
 
 def _recomputation_json_value(value: object) -> object:

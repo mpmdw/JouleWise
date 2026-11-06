@@ -1053,10 +1053,21 @@ class V2AuthenticationReadSession:
 
     def __init__(self) -> None:
         self._records: dict[str, AuthenticationInputRecord] = {}
+        self._normalized_paths: dict[str, str] = {}
         self._governed_spec_vocabulary_identities: set[str] = set()
         self._lock = threading.RLock()
         self._token: Token[V2AuthenticationReadSession | None] | None = None
         self.instrument_calibration_physics_cache: dict[str, float] = {}
+
+    def _identity(self, path: Path | str) -> str:
+        """Resolve one authenticated path once for this program session."""
+        key = os.fspath(path)
+        with self._lock:
+            identity = self._normalized_paths.get(key)
+            if identity is None:
+                identity = str(Path(path).resolve(strict=False))
+                self._normalized_paths[key] = identity
+            return identity
 
     def __enter__(self) -> V2AuthenticationReadSession:
         if self._token is not None:
@@ -1148,7 +1159,7 @@ class V2AuthenticationReadSession:
     def allow_governed_extraction_spec(self, path: Path | str) -> None:
         """Allow registration declarations only for one named governed spec."""
 
-        identity = str(Path(path).resolve(strict=False))
+        identity = self._identity(path)
         if Path(identity).suffix.lower() != ".json":
             raise ValueError("governed extraction spec must be a JSON file")
         with self._lock:
@@ -1204,7 +1215,7 @@ class V2AuthenticationReadSession:
         grammar: AuthenticationGrammar,
         label: str,
     ) -> bytes:
-        normalized = str(Path(path).resolve(strict=False))
+        normalized = self._identity(path)
         effective = _forced_grammar(normalized, grammar)
         with self._lock:
             with builtins.open(path, "rb") as handle:
@@ -1240,7 +1251,7 @@ class V2AuthenticationReadSession:
         """Read a contained regular file without following any symlink."""
 
         root = Path(directory)
-        identity = str((root / relative).resolve(strict=False))
+        identity = self._identity(root / relative)
         effective = _forced_grammar(identity, grammar)
         with self._lock:
             raw = _read_nofollow_bytes(root, relative)
@@ -1277,7 +1288,7 @@ class V2AuthenticationReadSession:
         """Hash a no-follow read against its pin before strict parsing."""
 
         root = Path(directory)
-        identity = str((root / relative).resolve(strict=False))
+        identity = self._identity(root / relative)
         effective = _forced_grammar(identity, grammar)
         with self._lock:
             raw = _read_nofollow_bytes(root, relative)
