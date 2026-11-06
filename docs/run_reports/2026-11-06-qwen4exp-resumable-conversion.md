@@ -10,6 +10,19 @@ digests they consumed. Resume verifies those records, discards only an
 unjournalled partial shard/span, and removes the journal before producing the
 ordinary deterministic manifest.
 
+Review fix (2026-11-06): `manifest.json` is now written atomically (sibling
+`.tmp`, fsync, rename, directory fsync) before the journal is removed. An
+interrupt between the two used to leave a complete manifest beside a
+"running" journal; resume then hashed the old manifest (and any interrupted
+`.tmp` journal) into the new inventory. Resume now removes leftover `.tmp`
+files, and when `manifest.json` exists it checks the manifest's identity
+(format, pins, profile, grouping, PLE format, module, digest scheme, inputs,
+shard plan) and re-verifies every payload digest: a complete manifest is kept
+and the journal removed; a partial one is rebuilt; a mismatch is refused.
+The same check finishes an artifact whose journal was already removed (the
+wrapper interrupted before its receipt). Test:
+`ValidationRound1Test.test_converter_resume_finishes_a_written_manifest`.
+
 The live wrapper exposes `convert --resume`. Only interruption-style exits
 leave a resumable journal; an ordinary exception marks the journal failed, so
 the existing preserve-and-use-a-new-artifact-name rule remains in force.

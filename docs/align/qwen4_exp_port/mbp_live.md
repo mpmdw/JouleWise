@@ -335,7 +335,7 @@ export SOURCE="$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["S
   --source-receipt "$SOURCE_RECEIPT" --artifact "$ARTIFACT" --profile maxfit --out "$RUN/convert.json"
 export CONVERT_RECEIPT="$RUN/convert.json"
 export PIN="$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["CONVERT_RECEIPT"]))["manifest_sha256"])')"
-(cd "$ARTIFACT" && shasum -a 256 -c "$RUN/convert.json.SHA256SUMS")
+(cd "$ARTIFACT" && shasum -a 256 -c "$CONVERT_RECEIPT.SHA256SUMS")
 ```
 
 Keep the recorded `PIN` independently with the run notes. Do not derive an
@@ -351,7 +351,18 @@ the same artifact name (the evidence output name must still be new):
 "$PY" -B scripts/qwen4exp_mbp_live.py convert --resume --validation-only \
   --source-receipt "$SOURCE_RECEIPT" --artifact "$ARTIFACT" --profile "$PROFILE" \
   --out "$RUN/convert-resumed.json"
+export CONVERT_RECEIPT="$RUN/convert-resumed.json"
+export PIN="$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["CONVERT_RECEIPT"]))["manifest_sha256"])')"
+(cd "$ARTIFACT" && shasum -a 256 -c "$CONVERT_RECEIPT.SHA256SUMS")
 ```
+
+The interrupted attempt wrote no `convert.json`, so `CONVERT_RECEIPT` must
+name the resumed receipt; every later step (and a shell re-entry) reads `PIN`
+from it. A second interruption resumes again under another new name
+(`convert-resumed-2.json`) and re-exports both. An interrupt after the
+converter's manifest is written (including during the wrapper's
+`SHA256SUMS` hashing) resumes without rewriting anything: the complete
+manifest is re-verified against every payload digest and kept.
 
 Resume re-authenticates the source receipt, module and converter pins and every
 completed shard/PLE span before writing. A normal conversion error marks the
@@ -362,7 +373,7 @@ Conversion progress is appended outside the artifact at
 `$RUN/convert.progress.jsonl` (a resumed run appends to the same file and
 reports carried-over verified bytes as `bytes_resumed`). The converter script
 SHA-256 for this kit is
-`6dd944e39094071db281497be4caa7b10dae9cf63d52e3a5cea38ea5624b2be9`.
+`f06e3e01ac16da57ce1b79021b3095ce145faa22a86098792bf46b859ec3d389`.
 
 Each native invocation below hashes the artifact once through the canonical
 `load_verified_model` gate, pins the module and 0.31.x stack, then uses the
@@ -399,9 +410,9 @@ mkdir -p "$RUN"
 cp -n "$SOURCE_RECEIPT" "$RUN/download.json"  # small evidence receipt, not weights
 "$PY" -B scripts/qwen4exp_mbp_live.py convert --validation-only \
   --source-receipt "$SOURCE_RECEIPT" --artifact "$ARTIFACT" --profile maxfit5 --out "$RUN/convert.json"
-export CONVERT_RECEIPT="$RUN/convert.json"
+export CONVERT_RECEIPT="$RUN/convert.json"  # resumed: as in step 1, convert-resumed.json
 export PIN="$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["CONVERT_RECEIPT"]))["manifest_sha256"])')"
-(cd "$ARTIFACT" && shasum -a 256 -c "$RUN/convert.json.SHA256SUMS")
+(cd "$ARTIFACT" && shasum -a 256 -c "$CONVERT_RECEIPT.SHA256SUMS")
 "$PY" -B scripts/qwen4exp_mbp_live.py memory --validation-only \
   --artifact "$ARTIFACT" --manifest-sha256 "$PIN" --profile maxfit5 --out "$RUN/memory.json"
 ```
@@ -572,7 +583,7 @@ ditto "$BASE/evidence" "$EVIDENCE_COPY/evidence"
 ```
 
 The `find` form avoids zsh's "no matches found" abort and also hashes the
-`convert.json.SHA256SUMS` and `paging.json.iostat-*` sidecars.
+`convert*.json.SHA256SUMS` and `paging.json.iostat-*` sidecars.
 
 The report fills [the results template](mbp_live_results_template.md) from
 fixed evidence filenames. Missing checks stay PENDING; no GOAL is auto-closed.

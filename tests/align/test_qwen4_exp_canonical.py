@@ -1962,6 +1962,83 @@ class ValidationRound1Test(unittest.TestCase):
             self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
             self.assertEqual({p.name: conv.sha256(p) for p in out.iterdir() if p.is_file()}, expected)
 
+    def test_converter_resume_finishes_a_written_manifest(self):
+        """The manifest is written atomically before the journal is removed.
+
+        An interrupt between the two left a complete manifest beside a journal
+        that still said "running"; resume rewrote the manifest after hashing
+        the old one into its own inventory. Resume now detects a complete
+        manifest (also after the journal is gone, before the caller's receipt)
+        and finishes; a partial manifest is rebuilt byte-identically.
+        """
+        import shutil
+        import tempfile
+        from unittest import mock
+        fx, conv = self.fx, self.fx.converter()
+        fx.reference.build_checkpoint()
+        options = dict(profile="bf16", shard_bytes=256 * 1024)
+        with tempfile.TemporaryDirectory(dir=fx.ref_dir) as tmp:
+            root = Path(tmp)
+            clean = root / "clean"
+            conv.convert(fx.reference.ckpt, clean, **options)
+            expected_manifest = (clean / "manifest.json").read_bytes()
+            expected = {p.name: conv.sha256(p) for p in clean.iterdir() if p.is_file()}
+            journal_name = conv.JOURNAL_NAME
+
+            def interrupted_after_manifest(out):
+                real_unlink = Path.unlink
+                def unlink(path, *args, **kwargs):
+                    if path.name == journal_name and (path.parent / "manifest.json").is_file():
+                        raise KeyboardInterrupt
+                    return real_unlink(path, *args, **kwargs)
+                with mock.patch.object(Path, "unlink", unlink), self.assertRaises(KeyboardInterrupt):
+                    conv.convert(fx.reference.ckpt, out, **options)
+                self.assertTrue((out / journal_name).is_file())
+                self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
+
+            # 1. Complete manifest + running journal: resume finishes in place.
+            out = root / "after-manifest"
+            interrupted_after_manifest(out)
+            (out / (journal_name + ".tmp")).write_text("{}")  # an interrupted journal write
+            with mock.patch.object(conv, "TensorFile", side_effect=AssertionError("rewrote a shard")):
+                done = conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+            self.assertEqual(json.loads(expected_manifest), done)
+            self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
+            self.assertEqual({p.name: conv.sha256(p) for p in out.iterdir() if p.is_file()}, expected)
+            conv.verify_manifest(out, conv.sha256(clean / "manifest.json"))
+
+            # 2. Journal already removed (interrupted before the caller's receipt).
+            done = conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+            self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
+
+            # 3. Partial manifest (pre-atomic writer) + running journal: rebuilt.
+            out = root / "partial-manifest"
+            interrupted_after_manifest(out)
+            (out / "manifest.json").write_bytes(expected_manifest[: len(expected_manifest) // 2])
+            conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+            self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
+            self.assertEqual({p.name: conv.sha256(p) for p in out.iterdir() if p.is_file()}, expected)
+
+            # 4. A complete manifest whose payload no longer verifies is refused.
+            out = root / "tampered"
+            interrupted_after_manifest(out)
+            shard = sorted(out.glob("model-*.safetensors"))[0]
+            with shard.open("r+b") as f:
+                f.seek(-1, 2)
+                last = f.read(1)
+                f.seek(-1, 2)
+                f.write(bytes([last[0] ^ 1]))
+            with self.assertRaisesRegex(ValueError, "does not match its payload"):
+                conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+            self.assertTrue((out / journal_name).is_file())
+
+            # 5. Neither journal nor manifest: still refused.
+            out = root / "empty"
+            out.mkdir()
+            with self.assertRaisesRegex(ValueError, "journal missing"):
+                conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+            shutil.rmtree(out)
+
     def test_r1_converter_packs_shards_and_bounds_open_files(self):
         """One safetensors file per tensor meant 1163 files for the released
         structure, every one held open by mlx-lm's load_model until the first
