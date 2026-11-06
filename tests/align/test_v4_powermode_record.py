@@ -45,6 +45,26 @@ class BundleRecordTests(unittest.TestCase):
         self.assertIsNone(record["value"])
         self.assertIn("pmset unavailable", record["error"])
 
+    def test_one_transient_read_failure_is_retried(self):
+        # Cold pass LOW 4: one flaky pmset read must not cost the window check.
+        calls = []
+        def flaky():
+            calls.append(1)
+            if len(calls) == 1:
+                raise ValueError("pmset -g custom failed: exit 1")
+            return 2
+        self.assertEqual(run_episode(flaky).hardware["ac_powermode"]["value"], 2)
+        self.assertEqual(len(calls), 2)
+
+    def test_two_read_failures_record_an_unobserved_value(self):
+        calls = []
+        def broken():
+            calls.append(1)
+            raise ValueError("pmset unavailable")
+        record = run_episode(broken).hardware["ac_powermode"]
+        self.assertIsNone(record["value"])
+        self.assertEqual((len(calls), record["attempts"]), (2, 2))
+
     def test_fake_clock_without_reader_records_nothing(self):
         self.assertNotIn("ac_powermode", run_episode().hardware)
 

@@ -38,6 +38,8 @@ def primary_stop(
     ):
         return "thermal.incomplete"
     ordered = (
+        # A G0 that did not release ends the member before any turn.
+        ("episode.g0_unreleased:", "episode.g0_unreleased"),
         ("episode.decode_budget:", "episode.decode_budget"),
         ("episode.end_task:", "episode.end_task"),
         ("episode.time_guard:", "episode.time_guard"),

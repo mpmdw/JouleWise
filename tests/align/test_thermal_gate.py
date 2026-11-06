@@ -572,23 +572,38 @@ class WorkloadTests(unittest.TestCase):
         with self.assertRaisesRegex(AdapterFailure, 'thermal.status_source_missing'):
             self.run_episode(no_status=True)
 
-    def test_g0_timeout_proceeds_with_calibration_exclusion(self):
-        ep, _ = self.run_episode(g0_hot=True)
-        self.assertGreater(len(ep.turns), 0)
+    def test_g0_timeout_ends_the_member_promptly_as_x2(self):
+        # Cold pass MEDIUM-2 (round 4): after a G0 that did not release, every
+        # G1 was a blind full-cap wait (unobserved, no reference) for a member
+        # already excluded as X2. The member now ends before its first turn.
+        ep, result = self.run_episode(g0_hot=True)
+        self.assertEqual(len(ep.turns), 0)
         self.assertIn('thermal.start_gate_timeout', ep.flags)
+        self.assertIn('episode.g0_unreleased:0', ep.flags)
+        self.assertEqual([r['kind'] for r in ep.hardware['thermal']['intervals']], ['G0'])
         self.assertLessEqual(ep.hardware['thermal']['intervals'][0]['end_ns'], ep.start_ns)
+        self.assertEqual(result.metadata['align_episode']['stop_condition'], 'episode.g0_unreleased')
+        # X2 at the desk, and nothing else.
+        from joulewise.align.apple.thermal_desk import calibration_exclusions
+        reasons = calibration_exclusions({'flags': list(ep.flags)})
+        self.assertEqual([r for r in reasons if not r.startswith('energy.')], ['thermal.start_gate_timeout'])
 
-    def test_g0_timeout_consumes_deadman_slack_before_long_episode(self):
+    def test_g0_timeout_no_longer_spends_the_deadman_after_the_gate(self):
+        # Before round 4 the member went on after 600 s of G0 and ran into the
+        # 1,086 s deadman (X2 became X7). Now it ends right after G0.
         ep, result = self.run_episode(g0_hot=True, long_episode=True, deadman_s=1086)
         g0 = ep.hardware['thermal']['intervals'][0]
         self.assertEqual(g0['duration_s'], 600)
         self.assertIn('thermal.start_gate_timeout', ep.flags)
-        self.assertIn('episode.deadman:0', ep.flags)
-        # A fake blocking call can overshoot at its return boundary; it must
-        # not receive another full 1086 seconds after spending 600 in G0.
-        self.assertEqual(len(ep.turns), 1)
-        self.assertLess((ep.end_ns-g0['start_ns'])/NS, 1200)
-        self.assertEqual(result.metadata['align_episode']['stop_condition'], 'episode.deadman')
+        self.assertFalse(any(f.startswith('episode.deadman:') for f in ep.flags))
+        self.assertEqual(len(ep.turns), 0)
+        self.assertLess((ep.end_ns-g0['start_ns'])/NS, 610)
+        self.assertEqual(result.metadata['align_episode']['stop_condition'], 'episode.g0_unreleased')
+
+    def test_released_g0_runs_turns_unchanged(self):
+        ep, result = self.run_episode()
+        self.assertGreater(len(ep.turns), 0)
+        self.assertFalse(any(f.startswith('episode.g0_unreleased') for f in ep.flags))
 
 
 class StatusWiringTests(unittest.TestCase):

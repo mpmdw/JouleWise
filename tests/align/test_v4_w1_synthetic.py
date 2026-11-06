@@ -145,11 +145,11 @@ class InjectedWindowTests(_Window):
         self.assertEqual(self.member(14)['status'], 'failed')
         self.assertTrue(any(f.startswith('episode.deadman:') for f in self.desk_member(14)['calibration_exclusions']))
 
-    @unittest.expectedFailure
-    def test_g0_timeout_flags_and_proceeds_to_a_complete_episode(self):
-        # WP22 F2, open for council ruling 1's duty bar: the deadman starts at
-        # G0 entry (thermal_gates.md; G0/G1/H consume T_dead), so 600 s of G0
-        # leaves D ~486 s for an ~900 s episode: X2 becomes X7 (member failure).
+    def test_g0_timeout_ends_the_member_promptly_as_x2(self):
+        # WP22 F2, resolved in round 4 (cold pass MEDIUM-2): the deadman starts
+        # at G0 entry, so going on after 600 s of G0 left D ~486 s for an
+        # ~900 s episode and X2 became X7. An unreleased G0 now ends the
+        # member before its first turn; it stays X2 and fails nothing.
         self.assertEqual(self.member(8)['status'], 'succeeded')
         self.assertEqual(self.desk_member(8)['calibration_exclusions'], ['thermal.start_gate_timeout'])
 

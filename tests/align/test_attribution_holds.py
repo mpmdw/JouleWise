@@ -75,6 +75,14 @@ class HoldAttributionTests(unittest.TestCase):
         self.assertIn('thermal.custody_invalid', record['flags'])
         from joulewise.align.apple.thermal_desk import calibration_exclusions
         self.assertIn('thermal.custody_invalid', calibration_exclusions(record))
+        # Cold pass LOW 5: the printed energy is labelled as re-attributed.
+        self.assertEqual(record['turn_owned_basis'], 'reattributed_without_thermal_intervals')
+        from joulewise.align.apple.thermal_desk import markdown_report, window_report
+        record.update(id='custody-bad', model='synthetic')
+        self.assertIn('re-attributed without thermal intervals', markdown_report(window_report([record])))
+        clean = member_record(episode(turns=(turn(),), hardware={'thermal': {'policy': policy(), 'intervals': []}}),
+                              [], os_readings=[], pm_samples=[], pm_period_s=1, source='mock', channel='package')
+        self.assertEqual(clean['turn_owned_basis'], 'attributed')
 
 
 if __name__ == '__main__':
