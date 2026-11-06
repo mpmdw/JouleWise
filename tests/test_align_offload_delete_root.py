@@ -50,6 +50,7 @@ class DeleteRootTests(unittest.TestCase):
         self.acl = mock.patch.object(g, 'check_acl_flags').start()
         self.upload = mock.patch.object(g, 'check_uploaded').start()
         self.pause = mock.patch.object(g, 'check_pause_and_disk').start()
+        self.second = mock.patch.object(g, 'independent_copy').start()
         self.prepare()
 
     def prepare(self):
@@ -59,6 +60,12 @@ class DeleteRootTests(unittest.TestCase):
         (self.remote / 'p8.manifest.json').write_bytes(rows)
         self.manifest_sha = g.sha_file(self.item / 'source.json')
         self.archive_sha = g.sha_file(self.archive)
+        (self.item / 'independent-copy.json').write_text('{}')
+        (self.item / 'cloud-proof.json').write_text(json.dumps(dict(
+            schema='joulewise.offload.cloud-roundtrip.v1',
+            source_manifest_sha256=self.manifest_sha, archive_sha256=self.archive_sha,
+            archive=str(self.archive), manifest=str(self.remote / 'p8.manifest.json'),
+            evicted_dataless=True, hydrated_not_dataless=True)))
         (self.item / 'source-path.txt').write_text(str(self.src) + '\n')
         (self.item / 'source.sha256').write_text(self.manifest_sha + '  ' + str(self.item / 'source.json') + '\n')
         (self.item / 'archive.sha256').write_text(self.archive_sha + '  ' + str(self.archive) + '\n')
@@ -154,7 +161,7 @@ class DeleteRootTests(unittest.TestCase):
         self.refused('pilot roots retained')
 
     def test_every_pilot_root_is_retained_until_release(self):
-        for version in (0, 7, 8):
+        for version in (0, 7, 8, 9):
             self.src = self.align / ('pilot-v' + str(version) + '-test')
             self.src.mkdir()
             self.prepare()
@@ -214,7 +221,7 @@ class DeleteRootTests(unittest.TestCase):
         self.refused('capture retention')
 
     def test_acl_flags_upload_or_permissions_failure_refuses(self):
-        for check in (self.acl, self.upload, self.pause):
+        for check in (self.acl, self.upload, self.pause, self.second):
             check.side_effect = g.Refusal('preflight refused')
             self.refused('preflight refused')
             check.side_effect = None
@@ -222,8 +229,18 @@ class DeleteRootTests(unittest.TestCase):
             self.refused('not writable')
 
     def test_source_changes_during_fresh_upload_check_refuses(self):
-        self.upload.side_effect = lambda p: (self.src / 'bytes').write_bytes(b'changed')
+        self.second.side_effect = lambda *a: (self.src / 'bytes').write_bytes(b'changed')
         self.refused('source changed before delete')
+
+    def test_cloud_proof_must_bind_both_hashes_and_actual_transitions(self):
+        proof = self.item / 'cloud-proof.json'
+        for key, value in (('evicted_dataless', False), ('hydrated_not_dataless', False),
+                           ('archive_sha256', '0' * 64), ('source_manifest_sha256', '0' * 64)):
+            self.prepare()
+            data = json.loads(proof.read_text())
+            data[key] = value
+            proof.write_text(json.dumps(data))
+            self.refused('cloud roundtrip proof')
 
     def test_os_failure_logged_as_partial_not_deleted(self):
         with mock.patch.object(g.shutil, 'rmtree', side_effect=OSError('synthetic failure')):
@@ -485,7 +502,7 @@ class HelperTests(unittest.TestCase):
             space = types.SimpleNamespace(f_bavail=40_000_000_000, f_frsize=1)
             with mock.patch.object(g, 'STOP_PATH', stop), mock.patch.object(g.os, 'statvfs', return_value=space), mock.patch.object(g.subprocess, 'run', return_value=types.SimpleNamespace(stdout='1 /sbin/launchd')) as ps:
                 g.check_pause_and_disk(op)
-                self.assertEqual(ps.call_args.args[0], ['/bin/ps', '-axo', 'pid=,comm='])
+                self.assertEqual(ps.call_args.args[0], ['/bin/ps', '-axo', 'pid=,comm=,args='])
                 for command in ('claude', 'codex', 'offload.py', 'align_pilot_session.py',
                                 'harvest.py', 'zstd', '/usr/bin/tar', '/app/claude/versions/2.1.3'):
                     ps.return_value.stdout = '123 ' + command
@@ -509,6 +526,32 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(g.busy_processes('123 /tmp/harvest-project/python3.13\n'), [])
         self.assertEqual(g.busy_processes('123 /tmp/tar-project/other\n'), [])
         self.assertEqual(g.busy_processes('123 /bin/harvest.py\n'), ['123'])
+        for script in ('offload.py', 'align_pilot_session.py', 'harvest.py'):
+            self.assertEqual(g.busy_processes('123 /bin/python3.13 python3.13 /tmp/' +
+                                             script + ' --secret credential\n'), ['123'])
+
+    def test_final_pause_rechecks_lock_and_loaded_launchers(self):
+        with tempfile.TemporaryDirectory() as d:
+            op = Path(d).resolve()
+            stop = op / 'STOP'
+            text = 'ALIGN paused for MBP offload and gold validation; ' + str(op) + '\n'
+            stop.write_text(text)
+            (op / 'our-STOP.txt').write_text(text)
+            lock = op / 'magistrate.lock'
+            lock.write_text(json.dumps(dict(schema='joulewise.magistrate_lock.v1', pid=1234)))
+            with mock.patch.object(g, 'STOP_PATH', stop), \
+                 mock.patch.object(g.os, 'kill') as kill, \
+                 mock.patch.object(g.subprocess, 'run', return_value=types.SimpleNamespace(stdout='1 launchd')) as command, \
+                 mock.patch.object(g.os, 'statvfs', return_value=types.SimpleNamespace(f_bavail=40_000_000_000, f_frsize=1)):
+                with self.assertRaisesRegex(g.Refusal, 'lock owner alive'):
+                    g.check_pause_and_disk(op)
+                command.assert_not_called()
+                kill.side_effect = ProcessLookupError
+                command.return_value.stdout = '123 0 com.joulewise.quiet-kit'
+                with self.assertRaisesRegex(g.Refusal, 'launcher loaded'):
+                    g.check_pause_and_disk(op)
+                command.return_value.stdout = '1 /sbin/launchd'
+                g.check_pause_and_disk(op)
 
     def test_archive_unsafe_duplicate_and_hardlink(self):
         for name, kind, repeat in (('../bad', tarfile.REGTYPE, False),

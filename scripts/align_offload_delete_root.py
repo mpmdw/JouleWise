@@ -11,6 +11,7 @@ import fcntl
 import hashlib
 import json
 import os
+import plistlib
 from pathlib import Path, PurePosixPath
 import re
 import runpy
@@ -19,6 +20,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import time
 import unicodedata
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -33,6 +35,7 @@ MANDATORY_KEEP = tuple(Path(p) for p in (
 ALIGN_ROOT = Path('/Users/edr/night-align')
 MODEL_ROOTS = (Path('/Users/edr/jw_models'), Path('/Users/edr/.cache/huggingface/hub'))
 STOP_PATH = Path('/Users/edr/night-custody/magistrate/STOP')
+VOLUME_ROOT = Path('/Volumes')
 DATALESS = 0x40000000
 LOCK_FLAGS = (0x2 | 0x4 | 0x20000 | 0x40000 |  # uchg/uappnd/schg/sappnd
               0x100000 | 0x80000 | 0x80)  # SF_NOUNLINK/SF_RESTRICTED/UF_DATAVAULT
@@ -95,6 +98,7 @@ def overlaps(src, keep):
 
 def check_keep(src, keep_file, mandatory=None, public_path=None):
     mandatory = MANDATORY_KEEP if mandatory is None else mandatory
+    sha_file(keep_file)  # reject missing, aliased or dataless control data before read
     lines = keep_file.read_text().splitlines()
     require(bool(lines) and len(lines) == len(set(lines)), 'empty/duplicate KEEP')
     keeps = [exact_path(line) for line in lines]  # missing entries refuse
@@ -202,22 +206,144 @@ def check_uploaded(p):
 
 
 def busy_processes(table):
-    """ps comm is executable identity, never arbitrary argv/path arguments."""
+    """Inspect argv locally for interpreter-launched writers; return PIDs only.
+
+    Never print or journal the table: command arguments may contain secrets.
+    Ambiguous matching is conservatively busy. comm alone misses python scripts.
+    """
     pattern = re.compile(r'(?i)(?:claude|codex|offload\.py|align_pilot_session(?:\.py)?|harvest[\w.-]*|zstd|tar)')
+    require(bool(table.strip()), 'empty process census')
     busy = []
     for row in table.splitlines():
-        fields = row.strip().split(None, 1)
-        require(len(fields) == 2 and fields[0].isdigit(), 'unknown process census format')
-        pid, executable = fields
+        fields = row.strip().split(None, 2)
+        require(len(fields) >= 2 and fields[0].isdigit(), 'unknown process census format')
+        pid, executable = fields[:2]
+        argv = fields[2] if len(fields) == 3 else ''
         if (pattern.fullmatch(PurePosixPath(executable).name) or
-                re.fullmatch(r'.*/claude/versions/[\d.]+', executable)):
+                re.fullmatch(r'.*/claude/versions/[\d.]+', executable) or
+                re.search(r'(?i)(?:^|[\s/])(?:offload\.py|align_pilot_session(?:\.py)?|'
+                          r'harvest[\w.-]*)(?=[\s\"\x27]|$)', argv)):
             busy.append(pid)
     return busy
 
 
 def process_census():
-    return busy_processes(subprocess.run(['/bin/ps', '-axo', 'pid=,comm='],
+    return busy_processes(subprocess.run(['/bin/ps', '-axo', 'pid=,comm=,args='],
                           check=True, text=True, capture_output=True).stdout)
+
+
+def external_info(mount):
+    result = subprocess.run(['/usr/sbin/diskutil', 'info', '-plist', str(mount)],
+                            check=True, capture_output=True, timeout=30)
+    return plistlib.loads(result.stdout)
+
+
+def volume_device(path):
+    return path.stat().st_dev
+
+
+def independent_copy(item, src, manifest_sha, archive_sha=None):
+    """Re-read the mounted SSD, archive, manifest AND restored tree, not a claim.
+
+    The exact UUID is enrolled by Ed; a same-name replacement or a bare mount
+    point on the internal disk refuses. All paths must stay on that volume.
+    """
+    receipt = json.loads((item / 'independent-copy.json').read_text())
+    require(set(receipt) == {'schema', 'source', 'manifest_sha256', 'archive_sha256',
+                            'volume', 'volume_uuid', 'archive', 'manifest', 'restore', 'verified_utc'},
+            'independent copy receipt fields')
+    require(receipt['schema'] == 'joulewise.offload.independent-copy.v1' and
+            receipt['source'] == str(src) and receipt['manifest_sha256'] == manifest_sha and
+            re.fullmatch('[0-9a-f]{64}', receipt['archive_sha256']) and
+            (archive_sha is None or receipt['archive_sha256'] == archive_sha),
+            'independent copy binding mismatch')
+    mount = exact_path(receipt['volume'])
+    require(mount.parent == VOLUME_ROOT and os.path.ismount(mount),
+            'independent volume not mounted')
+    info = external_info(mount)
+    require(isinstance(receipt['volume_uuid'], str) and bool(receipt['volume_uuid']) and
+            info.get('VolumeUUID') == receipt['volume_uuid'] and
+            info.get('Internal') is False and info.get('MountPoint') == str(mount) and
+            info.get('FilesystemType', '').casefold() == 'apfs',
+            'independent volume identity mismatch')
+    device = volume_device(mount)
+    require(device not in (volume_device(src), volume_device(item)),
+            'second copy shares source/journal device')
+    paths = [exact_path(receipt[key]) for key in ('archive', 'manifest', 'restore')]
+    require(all(mount in p.parents and volume_device(p) == device for p in paths),
+            'independent copy outside enrolled device')
+    archive_path, manifest, restore = paths
+    require(sha_file(archive_path) == receipt['archive_sha256'] and
+            sha_file(manifest) == manifest_sha and
+            hashlib.sha256(encoded(tree(restore))).hexdigest() == manifest_sha,
+            'independent copy bytes mismatch')
+    return receipt
+
+
+def enroll_second(item, volume, uuid, archive_path, manifest, restore):
+    """Publish one immutable SSD receipt only after full member/restore checks."""
+    item = exact_path(str(item))
+    volume, archive_path, manifest, restore = (
+        exact_path(str(p)) for p in (volume, archive_path, manifest, restore))
+    src = exact_path((item / 'source-path.txt').read_text().rstrip('\n'))
+    manifest_sha = checksum_receipt(item / 'source.sha256', item / 'source.json')
+    require(sha_file(manifest) == manifest_sha and encoded(tree(restore)) == (item / 'source.json').read_bytes(),
+            'second-copy manifest/restore mismatch')
+    archive_sha = sha_file(archive_path)  # refuse dataless before decompression
+    with subprocess.Popen(['zstd', '-dc', str(archive_path)], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL) as child:
+        rows = archive(child.stdout)
+        require(child.wait() == 0, 'second-copy decompression failed')
+    require(encoded(rows) == (item / 'source.json').read_bytes(), 'second-copy member mismatch')
+    receipt = dict(schema='joulewise.offload.independent-copy.v1', source=str(src),
+                   manifest_sha256=manifest_sha, archive_sha256=archive_sha,
+                   volume=str(volume), volume_uuid=uuid, archive=str(archive_path),
+                   manifest=str(manifest), restore=str(restore),
+                   verified_utc=datetime.now(timezone.utc).isoformat())
+    with (item / 'independent-copy.json').open('x') as f:
+        json.dump(receipt, f, sort_keys=True)
+    # A failed device check leaves a receipt but never authorizes deletion.
+    independent_copy(item, src, manifest_sha, receipt['archive_sha256'])
+
+
+def wait_dataless(path, expected):
+    for _ in range(240):
+        if bool(path.lstat().st_flags & DATALESS) == expected:
+            return
+        time.sleep(5)
+    raise Refusal('cloud dataless transition not observed')
+
+
+def cloud_roundtrip(item, remote):
+    """Guarded Ed-only writer: record actual eviction/hydration and full hashes."""
+    item, remote = exact_path(str(item)), exact_path(str(remote))
+    source = item / 'source.json'
+    manifest_sha = checksum_receipt(item / 'source.sha256', source)
+    archive_path, manifest = remote / (item.name + '.tar.zst'), remote / (item.name + '.manifest.json')
+    archive_sha = checksum_receipt(item / 'archive.sha256', archive_path)
+    for name in ('cloud-proof.json', 'cloud-roundtrip.json'):
+        require(not os.path.lexists(item / name), 'roundtrip output already exists')
+    for path in (archive_path, manifest):
+        exact_path(str(path))
+        check_uploaded(path)
+        subprocess.run(['/usr/bin/brctl', 'evict', str(path)], check=True, capture_output=True)
+        wait_dataless(path, True)
+        subprocess.run(['/usr/bin/brctl', 'download', str(path)], check=True, capture_output=True)
+        wait_dataless(path, False)
+    require(sha_file(manifest) == manifest_sha and sha_file(archive_path) == archive_sha,
+            'cloud roundtrip digest mismatch')
+    with subprocess.Popen(['zstd', '-dc', str(archive_path)], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL) as child:
+        rows = archive(child.stdout)
+        require(child.wait() == 0, 'cloud decompression failed')
+    require(encoded(rows) == source.read_bytes(), 'cloud member mismatch')
+    with (item / 'cloud-roundtrip.json').open('xb') as f:
+        f.write(encoded(rows))
+    proof = dict(schema='joulewise.offload.cloud-roundtrip.v1', source_manifest_sha256=manifest_sha,
+                 archive_sha256=archive_sha, archive=str(archive_path), manifest=str(manifest),
+                 evicted_dataless=True, hydrated_not_dataless=True)
+    with (item / 'cloud-proof.json').open('x') as f:
+        json.dump(proof, f, sort_keys=True)
 
 
 def check_pause_and_disk(op):
@@ -225,6 +351,20 @@ def check_pause_and_disk(op):
     ours = exact_path(str(op / 'our-STOP.txt'))
     expected = ('ALIGN paused for MBP offload and gold validation; ' + str(op) + '\n').encode()
     require(stop.read_bytes() == ours.read_bytes() == expected, 'pause STOP mismatch')
+    lock = STOP_PATH.with_name('magistrate.lock')
+    if os.path.lexists(lock):
+        state = json.loads(exact_path(str(lock)).read_text())
+        require(state.get('schema') == 'joulewise.magistrate_lock.v1' and
+                type(state.get('pid')) is int and state['pid'] > 1, 'unknown magistrate lock')
+        try:
+            os.kill(state['pid'], 0)
+        except ProcessLookupError:
+            pass
+        else:
+            raise Refusal('magistrate lock owner alive')
+    for argv in (['/bin/launchctl', 'list'], ['sudo', '-n', '/bin/launchctl', 'list']):
+        loaded = subprocess.run(argv, check=True, text=True, capture_output=True).stdout
+        require('com.joulewise.' not in loaded, 'JouleWise launcher loaded')
     s = os.statvfs(op)
     require(s.f_bavail * s.f_frsize >= 30_000_000_000, 'disk floor')
     require(not process_census(), 'writer/agent census busy')
@@ -364,16 +504,13 @@ def delete_root(item, keep, remote, journal, model_class='archived'):
     # Outside the audit-on-refusal block: invalid journals must receive no write.
     journal_fd = open_journal(journal, item)
     try:
-        require(model_class in ('archived', 'public-weights'), 'unknown model class')
-        public = model_class == 'public-weights'
-        item, keep = (exact_path(str(p)) for p in (item, keep))
-        if not public:
-            remote = exact_path(str(remote))
-        names = (('source-path.txt', 'source.json', 'source.sha256', 'source-after.json',
-                  'independent-receipt.txt', 'retention-review.json', 'public-weights.json',
-                  'model-census.json', 'ed-approval.json') if public else ('source-path.txt', 'source.json', 'source.sha256', 'archive.sha256',
-                     'source-after.json', 'cloud-local.json', 'cloud-roundtrip.json',
-                     'independent-receipt.txt', 'ed-approval.txt', 'retention-review.json'))
+        require(model_class == 'archived',
+                'all deletions require SSD plus server-confirmed iCloud; public-only deletion retired')
+        item, keep, remote = (exact_path(str(p)) for p in (item, keep, remote))
+        names = ('source-path.txt', 'source.json', 'source.sha256', 'archive.sha256',
+                 'source-after.json', 'cloud-local.json', 'cloud-roundtrip.json',
+                 'cloud-proof.json', 'independent-copy.json', 'independent-receipt.txt',
+                 'ed-approval.txt', 'retention-review.json')
         for name in names:
             control = exact_path(str(item / name))
             require(control.is_file() and not getattr(control.stat(), 'st_flags', 0) & DATALESS,
@@ -382,49 +519,50 @@ def delete_root(item, keep, remote, journal, model_class='archived'):
         require(raw.endswith('\n') and raw.count('\n') == 1, 'source-path format')
         src = exact_path(raw[:-1])
         require(src.is_dir(), 'source not directory')
-        require(not overlaps(src, item) and (public or not overlaps(src, remote)) and
+        require(not overlaps(src, item) and not overlaps(src, remote) and
                 not overlaps(src, journal.parent), 'control/source overlap')
         source = item / 'source.json'
         manifest_sha = checksum_receipt(item / 'source.sha256', source)
         pointer = src.with_name(src.name + '.OFFLOADED.json')
         require(not os.path.lexists(pointer), 'pointer already exists')
         archive_sha = ''
-        if public:
-            claim = public_evidence(item, src, manifest_sha)
-            check_keep(src, keep, public_path=src)
-            require(sha_file(item / 'source-after.json') == manifest_sha, 'verification manifest mismatch')
+        check_keep(src, keep)
+        approved = item.parent / 'approved-models.txt'
+        if os.path.lexists(approved):
+            sha_file(approved)
+            model_dirs = approved.read_text().splitlines()
         else:
-            check_keep(src, keep)
-            approved = item.parent / 'approved-models.txt'
-            model_dirs = approved.read_text().splitlines() if approved.exists() else []
-            for line in model_dirs:
-                exact_path(line)
-            pilot = src.parent == ALIGN_ROOT and re.fullmatch(r'pilot-v[0-9]+-[A-Za-z0-9_-]+', src.name)
-            require(not pilot, 'pilot roots retained until block-5 release')
-            require(pilot or str(src) in model_dirs, 'source outside allowed roots')
-            archive_path = remote / (item.name + '.tar.zst')
-            cloud_manifest = remote / (item.name + '.manifest.json')
-            archive_sha = checksum_receipt(item / 'archive.sha256', archive_path)
-            require(sha_file(cloud_manifest) == manifest_sha, 'cloud manifest mismatch')
-            for name in ('cloud-local.json', 'source-after.json', 'cloud-roundtrip.json'):
-                require(sha_file(item / name) == manifest_sha, 'verification manifest mismatch')
-            for name in ('independent-receipt.txt', 'ed-approval.txt'):
-                receipt = (item / name).read_text()
-                require(str(src) in receipt and manifest_sha in receipt and archive_sha in receipt,
-                        'receipt not bound to this source/manifest/archive')
-            retention = json.loads((item / 'retention-review.json').read_text())
-            require(retention == dict(source=str(src), manifest_sha256=manifest_sha,
-                                     archive_sha256=archive_sha, no_retained_ledger_locators=True),
-                    'retention review absent or mismatched')
+            model_dirs = []
+        for line in model_dirs:
+            exact_path(line)
+        pilot = src.parent == ALIGN_ROOT and re.fullmatch(r'pilot-v[0-9]+-[A-Za-z0-9_-]+', src.name)
+        require(not pilot, 'pilot roots retained until block-5 release')
+        require(str(src) in model_dirs, 'source outside allowed roots')
+        archive_path = remote / (item.name + '.tar.zst')
+        cloud_manifest = remote / (item.name + '.manifest.json')
+        archive_sha = checksum_receipt(item / 'archive.sha256', archive_path)
+        require(sha_file(cloud_manifest) == manifest_sha, 'cloud manifest mismatch')
+        for name in ('cloud-local.json', 'source-after.json', 'cloud-roundtrip.json'):
+            require(sha_file(item / name) == manifest_sha, 'verification manifest mismatch')
+        proof = json.loads((item / 'cloud-proof.json').read_text())
+        require(proof == dict(schema='joulewise.offload.cloud-roundtrip.v1',
+                              source_manifest_sha256=manifest_sha, archive_sha256=archive_sha,
+                              archive=str(archive_path), manifest=str(cloud_manifest),
+                              evicted_dataless=True, hydrated_not_dataless=True),
+                'cloud roundtrip proof mismatch')
+        for name in ('independent-receipt.txt', 'ed-approval.txt'):
+            receipt = (item / name).read_text()
+            require(str(src) in receipt and manifest_sha in receipt and archive_sha in receipt,
+                    'receipt not bound to this source/manifest/archive')
+        retention = json.loads((item / 'retention-review.json').read_text())
+        require(retention == dict(source=str(src), manifest_sha256=manifest_sha,
+                                 archive_sha256=archive_sha, no_retained_ledger_locators=True),
+                'retention review absent or mismatched')
         rows = tree(src)
         require(encoded(rows) == source.read_bytes(), 'predelete source mismatch')
-        require(not any('instrument_validation' in PurePosixPath(r[0]).parts for r in rows),
+        require(not any('instrument_validation' in {p.casefold() for p in PurePosixPath(r[0]).parts}
+                        for r in rows),
                 'capture retention: keep root and request ruling')
-        if public:
-            require(not any(r[1] == 'link' for r in rows), 'public model requires blobs, not symlinks')
-            require(not any({'runs', 'runs-parent', 'measurement', 'captures'} &
-                            set(PurePosixPath(r[0]).parts) for r in rows),
-                    'capture-bearing tree is not public model weights')
         for p in (src.parent, item, journal.parent, src, *(src / r[0] for r in rows)):
             # ls -d and lstat check links themselves, never their targets.
             check_acl_flags(p)
@@ -433,21 +571,19 @@ def delete_root(item, keep, remote, journal, model_class='archived'):
             require(os.access(p, os.W_OK | os.X_OK), 'source directory not writable')
         check_pause_and_disk(item.parent)
         before_identity = identity(src)
-        # No operator gap after these fresh upload checks. Ambiguous/failed tool refuses.
-        if public:
-            require(public_evidence(item, src, manifest_sha) == claim, 'public-model evidence changed')
-            head_receipt = check_hf_downloadable(claim, rows)
-            check_keep(src, keep, public_path=src)
-            payload = dict(model_class=model_class, **claim, hf_head=head_receipt)
-        else:
-            check_uploaded(archive_path)
-            check_uploaded(cloud_manifest)
-            check_keep(src, keep)
-            payload = dict(source=str(src), archive=str(archive_path), manifest=str(cloud_manifest),
-                           manifest_sha256=manifest_sha, archive_sha256=archive_sha,
-                           independent_receipt=str(item / 'independent-receipt.txt'))
+        # Re-read the second failure domain before the final source/server checks.
+        independent_copy(item, src, manifest_sha, archive_sha)
+        require(volume_device(archive_path) == volume_device(src),
+                'cloud staging must be on internal source device')
+        check_keep(src, keep)
+        payload = dict(source=str(src), archive=str(archive_path), manifest=str(cloud_manifest),
+                       manifest_sha256=manifest_sha, archive_sha256=archive_sha,
+                       independent_receipt=str(item / 'independent-receipt.txt'))
         require(identity(src) == before_identity and encoded(tree(src)) == source.read_bytes(),
                 'source changed before delete')
+        check_pause_and_disk(item.parent)
+        check_uploaded(archive_path)
+        check_uploaded(cloud_manifest)
         regular_bytes = sum(r[3] for r in rows if r[1] == 'file')
         payload['source_regular_bytes'] = regular_bytes
         free_before = shutil.disk_usage(src.parent).free
@@ -483,6 +619,13 @@ def main():
     sub.add_parser('archive')
     sub.add_parser('census')
     sub.add_parser('uploaded').add_argument('path', type=Path)
+    rt = sub.add_parser('cloud-roundtrip')
+    rt.add_argument('--item', required=True, type=Path)
+    rt.add_argument('--remote', required=True, type=Path)
+    second = sub.add_parser('second-copy')
+    for name in ('item', 'volume', 'archive', 'manifest', 'restore'):
+        second.add_argument('--' + name, required=True, type=Path)
+    second.add_argument('--uuid', required=True)
     for name in ('tree', 'budget'):
         sub.add_parser(name).add_argument('path', type=Path)
     d = sub.add_parser('delete')
@@ -501,6 +644,10 @@ def main():
             require(args.model_class == 'public-weights' or args.remote is not None, '--remote required')
             result = delete_root(args.item, args.keep, args.remote, args.journal, args.model_class)
             print(json.dumps(result, sort_keys=True))
+    elif args.command == 'cloud-roundtrip':
+        cloud_roundtrip(args.item, args.remote)
+    elif args.command == 'second-copy':
+        enroll_second(args.item, args.volume, args.uuid, args.archive, args.manifest, args.restore)
     elif args.command == 'census':
         busy = process_census()
         require(not busy, 'writer/agent census busy; PIDs=' + ','.join(busy))

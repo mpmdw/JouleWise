@@ -5,24 +5,40 @@
 an agent on the analysis laptop or while measurement is active. The analysis
 laptop's 7-worker job and blinded inputs are outside this procedure.
 
-Primary storage plan: Ed attaches a **1–2 TB external NVMe SSD over
-Thunderbolt/USB4**, APFS, excluded from Spotlight and Time Machine (step 9).
-`JW_GOLD`, rolling bf16 shards, caches, converted model and paged n-gram table
-live there. A separate durable backup device is preferable; gold scratch and
-the sole independent custody backup must not compete for unbudgeted space.
-Internal space for the converted model plus the next ALIGN window has not
-been demonstrated; the external plan remains the admitted setup path.
-The nominal gold streaming peak is 120 GB; full bf16 is roughly 360 GB/131
-shards and must never be downloaded as a resident whole checkpoint.
+**Saturday 2026-11-07, DAY ONLY:** Ed attaches the borrowed **WD_Black SN7100
+2 TB NVMe in an OWC Express 1M2 USB4 enclosure**. Wear is no concern. This SSD
+is the independent second copy; server-confirmed iCloud is the first. The order
+is **SSD copy + full verification → iCloud upload + proved eviction/download/
+hash round trip → Ed-only guarded deletion**. No public-downloadability
+exception authorizes deletion without both copies. This update supersedes
+the earlier public-only deletion and attached-external measurement proposals.
 
-Authority: the lead's November 5 rulings in this fix brief, RUN_STATE retention
-at line 45, and item 170 / PR #662 (`lane/2026-11-05-runstate-170-align-pause`).
-**Pilots 8 and 9 must not be auto-offloaded by `offload.py`.** Pilot 9 is
-`/Users/edr/night-align/pilot-v8-20261105T102850Z`; its capture directories
-`runs-parent/*/instrument_validation/*` stay on the Mac through block-5 release.
-All pilot roots, including pilot 8, and capture-bearing trees stay until
-after block-5 release. No pilot source bytes are reclaimable in this pause.
-Pilots 0–7 are already deleted/offloaded and cannot reclaim more source bytes.
+**Eject and physically unplug the SSD before EVERY measurement window,
+including R0 and R1.** Gold setup, rolling bf16 shards, caches, converted
+weights and paged tables may use it by day only. Those external files are
+unavailable to a measurement. Step 13's external-volume census is mandatory
+immediately before arming. An ejected but still plugged-in enclosure is an
+energy confound. The nominal gold peak is 120 GB; never stage the whole
+roughly 360 GB/131-shard bf16 checkpoint.
+
+Authority: RUN_STATE's item-26 capture-retention rule (historically cited as
+line 45), amended item 170 / PR #662 and **items 171–174**. Item 174 ends v3
+after pilot 10; it supersedes the old no-pilot-10 instruction. Wait for its
+terminal record, uninstall, desk, read and pin. No pilot 11 is authorized.
+
+| Backup target | Exact root (operator only; inert text during agent work) |
+|---|---|
+| Pilot 8 | `/Users/edr/night-align/pilot-v7-20261105T015948Z` |
+| Pilot 9 | `/Users/edr/night-align/pilot-v8-20261105T102850Z` |
+| Pilot 10 | `/Users/edr/night-align/pilot-v9-20261105T231016Z` |
+
+Never run auto-deleting `offload.py` on any target. All three pilot/capture
+roots remain KEEP until the lead installs an explicit retention ruling or
+release and a reviewed guard change. The supplied program refuses all pilot
+roots and capture-bearing trees; an approval receipt cannot override it.
+Copying is authorized; no ledger-custody waiver is implied. Pilots 0–7 are
+already offloaded; copy their iCloud-only archives to the SSD (step 7a).
+They offer zero further source reclaim.
 
 Code references: port PR #664 `lane/2026-11-05-align-flashnext-port`, base
 `origin/port/qwen4-exp-mlx`; gold harness PR #667
@@ -79,10 +95,11 @@ Do not remove snapshots or treat marketed capacity as available capacity.
 
 ## 2. Prove the magistrate finished, then pause and disable re-arm
 
-PR #662 must be integrated in the **Mac records checkout** first. Item 170
-must say no auto-offload of pilots 8/9, no pilot 10, and the magistrate must
-finish normal harvest, pin, `p9-PILOT.json` and desk custody, then write
-`~/night-align/pilot-v8-20261105T102850Z/DESK_DONE`. An interactive Claude or
+PR #662 / amended item 170 and later items 171–174 must be integrated in the
+**Mac records checkout** first. Item 170 prohibits auto-offload; item 174
+supersedes its no-pilot-10 instruction. Require pilot 9's DESK_DONE/pin/
+`p9-PILOT.json` and pilot 10's terminal record, uninstall, desk, read, pin and
+`p10-PILOT.json` handoff. An interactive Claude or
 Codex session on the Mac could prevent that desk handoff: **do not start one**
 until this gate completes. Do not stop/bootout a magistrate to force the gate.
 
@@ -99,20 +116,28 @@ export JW_MEAS=/Users/edr/night-custody/measurement/JouleWise-measurement-202611
 : "${JW_RECORDS:?Set exact current Mac records checkout}"
 : "${JW_P9_PIN:?Set exact pilot-9 ledger-pin receipt path}"
 : "${JW_P9_PILOT:?Set exact saved p9-PILOT.json path}"
+: "${JW_P10_PIN:?Set exact pilot-10 pin receipt path}"
+: "${JW_P10_PILOT:?Set exact saved p10-PILOT.json path}"
 : "${JW_OP:?Set one fixed NEW operation directory under night-archive}"
-export JW_RECORDS JW_P9_PIN JW_P9_PILOT JW_OP
+: "${JW_OFFLOAD_CODE_COMMIT:?Set reviewed full tooling commit}"
+export JW_RECORDS JW_P9_PIN JW_P9_PILOT JW_P10_PIN JW_P10_PILOT JW_OP
 # No STOP creation, bootout or uninstall before this function passes.
 jw_pause_check() {
   python3.13 -I -B - <<'PY'
 import json, os, re, subprocess
 from pathlib import Path
 s = (Path(os.environ['JW_RECORDS']) / 'RUN_STATE.md').read_text()
-assert re.search(r'^170\.', s, re.M), 'STOP: item 170 absent in Mac records'
-# Ed also reviews its amended semantics: no pilot8/9 auto-offload or pilot10.
+for item in (170, 171, 172, 173, 174):
+    assert re.search(r'^' + str(item) + r'\.', s, re.M), 'STOP: current directive absent'
+# Ed reviews amended item 170 AND item 174: no auto-offload or further v3 arm.
 assert Path('/Users/edr/night-align/pilot-v8-20261105T102850Z/DESK_DONE').is_file(), 'STOP: no DESK_DONE'
 assert Path(os.environ['JW_P9_PIN']).is_file(), 'STOP: missing pin receipt'
 assert Path(os.environ['JW_P9_PILOT']).name == 'p9-PILOT.json'
 assert Path(os.environ['JW_P9_PILOT']).is_file(), 'STOP: missing desk product'
+assert Path(os.environ['JW_P10_PIN']).is_file(), 'STOP: missing pilot-10 pin'
+assert Path(os.environ['JW_P10_PILOT']).name == 'p10-PILOT.json'
+assert Path(os.environ['JW_P10_PILOT']).is_file(), 'STOP: missing pilot-10 desk'
+assert Path('/Users/edr/night-align/pilot-v9-20261105T231016Z/custody/night/result.json').is_file(), 'STOP: pilot 10 not terminal'
 lock = Path('/Users/edr/night-custody/magistrate/magistrate.lock')
 if lock.exists():
     obj = json.loads(lock.read_text())
@@ -125,7 +150,7 @@ if lock.exists():
         pass
     else:
         raise SystemExit('STOP: lock owner PID still exists; wait for exit')
-# Kernel executable names only; never match or record arbitrary argv tokens.
+# Inspect argv locally for Python-launched writers; export only matched PIDs.
 subprocess.run(['python3.13', '-I', '-B',
                 str(Path(os.environ['JW_CANON']) / 'scripts/align_offload_delete_root.py'),
                 'census'], check=True)
@@ -135,9 +160,13 @@ PY
 jw_pause_check
 # Ed confirms no collection.active, armed plan or scheduled t0; all products sealed.
 mkdir -m 700 "$JW_OP"
+[[ "$JW_OFFLOAD_CODE_COMMIT" == [0-9a-f]## && ${#JW_OFFLOAD_CODE_COMMIT} == 40 ]]
+git -C "$JW_CANON" show "${JW_OFFLOAD_CODE_COMMIT}:scripts/align_offload_delete_root.py" \
+  > "$JW_OP/delete_root.py"
+shasum -a 256 "$JW_OP/delete_root.py" > "$JW_OP/manifest-helper.sha256"
 {
   print -r -- 'setopt interactivecomments errexit nounset pipefail extendedglob noclobber'
-  for name in JW_CANON JW_MEAS JW_RECORDS JW_OP JW_P9_PIN JW_P9_PILOT; do
+  for name in JW_CANON JW_MEAS JW_RECORDS JW_OP JW_P9_PIN JW_P9_PILOT JW_P10_PIN JW_P10_PILOT; do
     printf 'export %s=%q\n' "$name" "${(P)name}"
   done
   functions jw_pause_check
@@ -156,7 +185,8 @@ if extra < 0 or free < 30_000_000_000 + extra:
 PY
 }
 jw_uploaded() {
-  python3.13 -I -B "$JW_CANON/scripts/align_offload_delete_root.py" uploaded "$1"
+  shasum -a 256 -c "$JW_OP/manifest-helper.sha256"
+  python3.13 -I -B "$JW_OP/delete_root.py" uploaded "$1"
 }
 jw_wait_dataless() {
   local file="$1" expected="$2" flags attempt
@@ -246,12 +276,13 @@ Resume first checks `shasum -a 256 -c "$JW_OP/env.sha256"`; it also requires `cm
 no active writer and reviewed disable-state receipts. Optional remote
 `ops/stop*` control is lead-owned; this offline procedure does not push it.
 
-**STOP 2:** Ed attests amended item 170 present, DESK_DONE/pin/p9-PILOT saved,
+**STOP 2:** Ed attests current items 170–174 present, pilot-9 DESK_DONE/pin/
+p9-PILOT and pilot-10 terminal/desk/read/pin/p10-PILOT saved,
 lock owner gone, no named agent/writer, no collection/armed t0, launchers
 absent/disabled, external schedulers accounted for. This check precedes all
 STOP/bootout actions; repeat on resume. Agents must exit before measurements.
 
-After STOP 2, perform the Ed-only purchase/attach subsection **9a** before
+After STOP 2, perform the Ed-only SSD attach subsection **9a** before
 step 3; it is a storage prerequisite, not permission to begin downloads.
 
 ## 3. Mechanical model KEEP census and pre-offload R0 inventories
@@ -290,6 +321,9 @@ cat "$JW_OP/model-KEEP.txt"
 "$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
   --config "$JW_R0_CONFIG" --inventory /Users/edr/night-align/pilot-v8-20261105T102850Z \
   --output "$JW_OP/pilot9-r0-inventory.json"
+"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
+  --config "$JW_R0_CONFIG" --inventory /Users/edr/night-align/pilot-v9-20261105T231016Z \
+  --output "$JW_OP/pilot10-backup-inventory.json"
 jw_disk_check
 ```
 
@@ -325,18 +359,18 @@ UNKNOWN is KEEP. A source listing alone does not prove absence from the ledger:
 require a structure-only review of **all ledger locators** under that root,
 without exposing values, bound to the source manifest/archive in step 8.
 
-Current reclaim candidates are **only PUBLIC MODEL WEIGHTS NOT IN ANY PLAN**
-under the exact N5a gates in step 8. Verify/second-copy existing pilots 0–7
+There are **no currently approved source deletions**. The former public-only
+exception is retired: every deletion requires both verified backup copies. Verify/second-copy existing pilots 0–7
 archives, but they reclaim no deleted-source bytes. All pilot roots and
 capture-bearing trees stay until after block-5 release. The model roots remain
-mandatory KEEP; step 8 has one narrowly approved model-descendant exception.
+mandatory KEEP; this procedure grants no model-root containment exception.
 Expected Next-80B and Qwen3.5-122B names are hypotheses, not approvals. Until the
 complete census and Ed's specific list pass, **budget zero reclaimed bytes**.
 No cache-wide, custody, calibration, B6/BYTES or personal-tree removal is granted.
 
-**STOP 3:** R0 inventories for both pilots saved outside sources; materialized
+**STOP 3:** R0 inventories for pilots 8/9 plus pilot10's backup inventory saved outside sources; materialized
 copy destinations agreed and budgeted, full model KEEP printed and reviewed,
-both Mac pilot roots retained. R0 must use both [coordination patches](r0_disk_gate_patch.md): pilot view
+all three Mac pilot roots retained. R0 must use both [coordination patches](r0_disk_gate_patch.md): pilot view
 symlinks are recorded as exact target text without following them; model
 inventories still require materialized files. Restricted content still refuses;
 retain the source and ask the lead rather than weakening that boundary.
@@ -346,8 +380,8 @@ paused Ed-only procedure; full R0 remains its own lead-controlled gate.
 ## 4. KEEP roots and immutable custody
 
 `RUN_STATE.md:45` capture retention stays in force until block-5 release,
-including removed attempts and ALIGN capture directories. Pilot 9 stays
-**entirely on the Mac**, and pilot 8 stays too; no split-root deletion or
+including removed attempts and ALIGN capture directories. Pilots 8–10 stay
+**entirely on the Mac**; no split-root deletion or
 locator rewrite. Their copies provide redundancy without source removal.
 B5 originals on both machines and the transfer/recompute dependencies are
 KEEP; the analysis laptop is not spare scratch storage. A previous transfer
@@ -383,8 +417,15 @@ single-copy archives; they remain protected after copying.
 
 **STOP 4:** Ed/lead review exact candidates, KEEP and dependency/retention
 coverage. Keep everything UNKNOWN. The external storage plan does not require
-removing either pilot or taking bytes from protected evidence. Unavailable
-locator review makes the proposed public model UNKNOWN and KEEP.
+removing any pilot or taking bytes from protected evidence. Unavailable
+locator review makes the proposed source UNKNOWN and KEEP.
+
+Before copying, Ed saves immutable baseline manifests for readable KEEP data
+and model blobs outside every source, with exact original path bindings and
+authenticated expected digests. Existing custody manifests remain authoritative.
+Checkouts/venvs/plists use saved commit/version/identity records. A blinded
+baseline comes only from its authorized custody operator; agents never read
+it. Missing baselines block step 13's restoration check.
 
 ## 5. Check quota, staging space and throughput for the selected roots only
 
@@ -508,262 +549,219 @@ staging headroom. Extend the ALIGN pause if the verified plan exceeds it.
 Never use “Optimize Mac Storage” as a verified backup. Explicit eviction is
 only for a server-uploaded, verified archive and cannot replace a second copy.
 
-## 6. Offload one CLOSED leaf root at a time; verify all bytes
+## 6. FIRST: copy and fully verify on the SSD
 
-Established procedure: `DATA-OFFLOAD-ICLOUD-01` in `TASK_QUEUE.md:843`;
-`docs/process_traces/2026-09-15-activation-08ca8197/01-data-offload-lane-registration.md:14–24,43–50`.
-The pilot implementation used manifest → `tar | zstd` → re-hash every archive
-member → delete → pointer, and fixed AppleDouble and directory-symlink loss:
-`docs/process_traces/2026-11-04-magistrate-7e06863b/RECORD.md:14–17`.
-Pilots 4–5 were verified offloaded (`RUN_STATE.md:1057`); pilots 6–7 later
-verified 35,387/35,410 files (`docs/process_traces/2026-11-05-magistrate-c110a6c9/RECORD.md:25`).
-Do not invoke the untracked `~/night-archive/seats-7e06863b/offload.py` blindly:
-it deletes automatically and this runbook adds an independent-copy gate.
-`scripts/backup_runs.sh:59` is only an rsync copy, not proof of safety to delete.
-
-For an **existing offload with a surviving local source**, reuse its exact
-archive/manifest paths. Anchor the original authenticated manifest and archive
-digest in a new operation receipt; compare the current source before and after
-verification to that manifest. If its format differs from the helper below,
-the lead must review a complete name/type/length/hash comparison without
-replacing the original trust anchor. Skip only new-archive creation/upload;
-STOP 6a, post-upload eviction/re-download and STOP 6b, independent full restore
-in step 7, and Ed's step-8 deletion still apply. Missing coverage means KEEP.
-Set its hydration/staging byte ceiling from the recorded archive length
-before calling `jw_disk_check`; do not inherit another root's budget.
-The packaging commands below are for a **new** offload only.
-
-Use the reviewed stdlib program `scripts/align_offload_delete_root.py` for
-opaque-byte inventories and deletion. Copy the reviewed bytes once; preserve
-and check its digest at every resume. This helper refuses dataless files
-before opening them, hardlinks, special files, nested filesystems, unsafe
-members and literal blinded directory names. It does not implement the full
-block-5 restricted path map: only the authorized custody operator may run it
-on roots cleared by that map. Agents never read real blinded manifests.
+Run each allocating fence as a reviewed writer file through step 5's guard
+against **both** filesystems, inside tmux plus caffeinate. Device identity,
+quota and source checks are required, not optional. Source bytes stay intact.
+Step 2 pins the reviewed program once; all later invocations use this
+immutable copy, including deletion. `step6-tool.zsh` verifies it on resume.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_OFFLOAD_CODE_COMMIT:?Set reviewed full runbook/tooling commit}"
-git -C "$JW_CANON" cat-file -e "$JW_OFFLOAD_CODE_COMMIT^{commit}"
-git -C "$JW_CANON" show "${JW_OFFLOAD_CODE_COMMIT}:scripts/align_offload_delete_root.py" \
-  > "$JW_OP/align_offload_delete_root.py"
-shasum -a 256 "$JW_OP/align_offload_delete_root.py" > "$JW_OP/manifest-helper.sha256"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/manifest-helper.sha256"
 ```
 
-Hashes do not preserve resource forks, ACLs, xattrs or sparse/hardlink topology.
-Ed must establish those are unnecessary before using the tar flags below;
-otherwise keep the root and obtain a reviewed metadata-preserving method.
-Hardlinks are refused even when two file names hold identical bytes. The
-BYTES helper de-duplicates by inode, so this may make an entire pilot ineligible;
-do not split or silently discard links to get past the guard.
+The helper refuses dataless files **before opening**, hardlinks, special files,
+nested filesystems and unsafe members. Its literal restricted/withheld-name
+check is only added defense: agents must never read real blinded manifests;
+the full registered path map controls operator authorization. Do not run
+analysis, harvest or reducers. HF KEEP baselines hash actual **blobs** using
+`model_artifact_inventory`, not just snapshot links. Hardlinks from inode
+deduplication can make pilots ineligible for this format: retain the source
+and obtain a reviewed preservation method. Tar drops AppleDouble/xattrs; Ed
+must establish that ACLs/resource forks/xattrs/topology are unnecessary or
+STOP for a reviewed preservation format. Original custody manifests stay the
+trust anchors; a new manifest cannot repair pre-existing missing coverage.
 
-For each reviewed CLOSED leaf, fill variables from its inventory row. No
-source may equal/contain/be contained by a KEEP entry; no ancestor root
-deletion. Confirm no external symlink target is needed for restoration; archive
-such targets separately or retain the source. An archived symlink is not a
-copy of its target (especially HF blobs and `.venv`).
+`step6-item.zsh` initializes one item: **pilot8, pilot9 or pilot10**, with the
+exact source from the table. First admit manifest/control bytes from existing
+custody totals. No recursive home search. Resume sources this existing item-env
+and checks its hashes; never initialize a new date to bypass STOP/receipts.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_SRC:?Set one exact approved CLOSED leaf root}"
-: "${JW_ID:?Set unique ledger ID using letters digits dash underscore only}"
-[[ "$JW_ID" == [A-Za-z0-9_-]## ]]
-export JW_SRC JW_ID
-export JW_ITEM="$JW_OP/$JW_ID"
-mkdir "$JW_ITEM"
+source "$JW_OP/external-env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" "$JW_OP/manifest-helper.sha256"
+jw_external_check
+: "${JW_SRC:?Set one exact pilot source from the table}"
+: "${JW_ID:?Set pilot8 pilot9 or pilot10}"
+[[ "$JW_ID" == (pilot8|pilot9|pilot10) ]]
+export JW_SRC JW_ID JW_ITEM="$JW_OP/$JW_ID"
+mkdir -m 700 "$JW_ITEM"
 {
   for name in JW_SRC JW_ID JW_ITEM; do
     printf 'export %s=%q\n' "$name" "${(P)name}"
   done
 } > "$JW_ITEM/item-env.zsh"
-python3.13 -I -B "$JW_OP/align_offload_delete_root.py" tree "$JW_SRC" > "$JW_ITEM/source.json"
-shasum -a 256 "$JW_ITEM/source.json" > "$JW_ITEM/source.sha256"
 printf '%s\n' "$JW_SRC" > "$JW_ITEM/source-path.txt"
+python3.13 -I -B "$JW_OP/delete_root.py" tree "$JW_SRC" > "$JW_ITEM/source.json"
+shasum -a 256 "$JW_ITEM/source.json" > "$JW_ITEM/source.sha256"
+shasum -a 256 "$JW_ITEM/item-env.zsh" > "$JW_ITEM/item-env.sha256"
 ```
 
-The first file only inventories/hashes and writes control receipts; admit its
-bounded manifest/journal allocation. Once source.json exists, compute the
-archive budget from it, then run the packaging file below through the guard.
-Do not type an archive size by hand. Resume uses this same item-env and checks
-the existing source.sha256; do not recreate/overwrite the source inventory.
+`step6-ssd.zsh`, a guarded writer: create the archive **directly on the SSD**,
+then compare every member, make a complete restore and re-hash it. The
+source.json totals compute admission; assume no compression savings. Retain
+the restored tree until the operation closes; deletion re-reads all its bytes.
+These two forms on one SSD still count as only one independent device.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-source "${JW_ITEM:?Set exact item}/item-env.zsh"
-shasum -a 256 -c "$JW_OP/manifest-helper.sha256" "$JW_ITEM/source.sha256"
-test ! -e "$JW_REMOTE/$JW_ID.tar.zst"
-export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/align_offload_delete_root.py" budget "$JW_ITEM/source.json")"
-jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
+source "$JW_OP/external-env.zsh"
+source "${JW_ITEM:?Set existing item}/item-env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" \
+  "$JW_OP/manifest-helper.sha256" "$JW_ITEM/item-env.sha256" "$JW_ITEM/source.sha256"
+jw_external_check
+export JW_SECOND_DIR="$JW_EXTERNAL/JouleWise-backup/${JW_OP:t}/$JW_ID"
+export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/delete_root.py" budget "$JW_ITEM/source.json")"
+export JW_SOURCE_BYTES="$(python3.13 -I -B -c \
+  'import json,sys; print(sum(r[3] for r in json.load(open(sys.argv[1])) if r[1]=="file"))' "$JW_ITEM/source.json")"
+jw_disk_check "$((JW_ARCHIVE_BUDGET_BYTES + JW_SOURCE_BYTES))" "$JW_EXTERNAL"
+mkdir -p "${JW_SECOND_DIR:h}"
+mkdir -m 700 "$JW_SECOND_DIR"
 COPYFILE_DISABLE=1 /usr/bin/tar --no-mac-metadata --no-xattrs -cf - \
-  -C "$JW_SRC" . | zstd -T1 -3 -o "$JW_REMOTE/$JW_ID.tar.zst.partial"
-mv "$JW_REMOTE/$JW_ID.tar.zst.partial" "$JW_REMOTE/$JW_ID.tar.zst"
-zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
-  python3.13 -I -B "$JW_OP/align_offload_delete_root.py" archive > "$JW_ITEM/cloud-local.json"
-cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-local.json"
-python3.13 -I -B "$JW_OP/align_offload_delete_root.py" tree "$JW_SRC" > "$JW_ITEM/source-after.json"
+  -C "$JW_SRC" . | zstd -T1 -3 -o "$JW_SECOND_DIR/$JW_ID.tar.zst.partial"
+test ! -e "$JW_SECOND_DIR/$JW_ID.tar.zst"
+mv -n "$JW_SECOND_DIR/$JW_ID.tar.zst.partial" "$JW_SECOND_DIR/$JW_ID.tar.zst"
+cp -p "$JW_ITEM/source.json" "$JW_SECOND_DIR/$JW_ID.manifest.json"
+zstd -dc "$JW_SECOND_DIR/$JW_ID.tar.zst" | \
+  python3.13 -I -B "$JW_OP/delete_root.py" archive > "$JW_ITEM/ssd-members.json"
+cmp "$JW_ITEM/source.json" "$JW_ITEM/ssd-members.json"
+mkdir -m 700 "$JW_SECOND_DIR/restored"
+zstd -dc "$JW_SECOND_DIR/$JW_ID.tar.zst" | /usr/bin/tar -xpf - -C "$JW_SECOND_DIR/restored"
+python3.13 -I -B "$JW_OP/delete_root.py" second-copy --item "$JW_ITEM" \
+  --volume "$JW_EXTERNAL" --uuid "$JW_EXTERNAL_UUID" \
+  --archive "$JW_SECOND_DIR/$JW_ID.tar.zst" --manifest "$JW_SECOND_DIR/$JW_ID.manifest.json" \
+  --restore "$JW_SECOND_DIR/restored"
+python3.13 -I -B "$JW_OP/delete_root.py" tree "$JW_SRC" > "$JW_ITEM/source-after.json"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/source-after.json"
-shasum -a 256 "$JW_REMOTE/$JW_ID.tar.zst" > "$JW_ITEM/archive.sha256"
-cp -p "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
-export JW_MANIFEST_SHA="$(cut -d ' ' -f1 "$JW_ITEM/source.sha256")"
-printf '%s  %s\n' "$JW_MANIFEST_SHA" "$JW_REMOTE/$JW_ID.manifest.json" \
-  > "$JW_ITEM/cloud-manifest.sha256"
-shasum -a 256 -c "$JW_ITEM/cloud-manifest.sha256"
-jw_disk_check
+shasum -a 256 "$JW_SECOND_DIR/$JW_ID.tar.zst" "$JW_SECOND_DIR/$JW_ID.manifest.json" \
+  > "$JW_ITEM/ssd.sha256"
+shasum -a 256 -c "$JW_ITEM/ssd.sha256"
 ```
 
-Step 2 enables `extendedglob` for the zsh ID pattern above. Use one compression
-worker to limit non-measurement load. A partial archive is not verified; on
-interruption keep the source and use a new ID. **Ed only** may retire the exact
-failed partial after recording failure and checking its path; no glob removal:
+**STOP 6:** all source/member/restore bytes match, copied manifest and archive
+checksums verified, exact UUID and coverage in independent-copy.json. A
+receipt alone never authorizes deletion: step 8 re-reads the attached SSD.
+On interruption preserve source/partial; use a new reviewed attempt ID.
+**Ed only** can retire a failed partial with an exact-path rename, never a glob:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-source "${JW_ITEM:?Set exact item directory}/item-env.zsh"
-: "${JW_RETIRED_ID:?Set unique reviewed retired ID}"
-[[ "$JW_RETIRED_ID" == [A-Za-z0-9_-]## ]]
-test -f "$JW_REMOTE/$JW_ID.tar.zst.partial"
-test ! -L "$JW_REMOTE/$JW_ID.tar.zst.partial"
-test ! -e "$JW_REMOTE/$JW_RETIRED_ID.retired.partial"
-mv -n "$JW_REMOTE/$JW_ID.tar.zst.partial" "$JW_REMOTE/$JW_RETIRED_ID.retired.partial"
+source "$JW_OP/external-env.zsh"
+: "${JW_PARTIAL:?Set exact failed SSD partial path}"
+: "${JW_RETIRED:?Set exact NEW retired path on that SSD}"
+jw_external_check
+test -f "$JW_PARTIAL"
+test ! -L "$JW_PARTIAL"
+test ! -e "$JW_RETIRED"
+mv -n -- "$JW_PARTIAL" "$JW_RETIRED"
 ```
 
-Retiring preserves bytes and uses no delete authority. Budget that retained
-partial until Ed separately approves its exact removal. Do not overwrite an earlier receipt.
-If tar produces an unsupported hardlink member, the helper refuses; use a
-reviewed archival adjustment and verify again, never discard the link silently.
+Record failure and both paths; budget retained bytes. Rename is no deletion
+permission. No automatic cleanup and no overwrite of a prior receipt.
 
-Before the first offload, also use this helper's `tree` command to save
-baseline manifests for readable KEEP data roots and the pinned model files,
-with output under `$JW_OP/keep-manifests/`, never inside a source. Bind each
-manifest to its exact source path in the inventory. Existing authenticated
-manifests remain the trust anchors. If a KEEP root contains real `restricted/`
-directories, the helper refuses: the authorized custody operator must provide
-the baseline receipt without exposing those paths to an agent. Preserve
-checkouts/venvs/plists through their saved identity/version records as well.
-Without these baselines, the restoration checks in step 13 remain blocked.
+## 7. THEN: iCloud upload, server confirmation and proved round trip
 
-**STOP 6a:** all source and cloud-local manifest entries match exactly,
-including name set, empty directories, links, file lengths and SHA-256s. Both
-pre/post source manifests match. No source writers remain. Save full manifest
-digest, total regular bytes, archive bytes and dependency review in the ledger.
-For any eligible evidence root, authenticate coverage against its existing
-custody records as well; a new manifest cannot prove a pre-existing omission.
-B5 originals and calibration capture roots are ineligible in this pause.
-
-Wait for **both archive and manifest** to report uploaded; save per-file state
-and aggregate queue state (the transfer precedent is
-`docs/process_traces/2026-10-28-magistrate-39206674/RECORD.md:88`).
+`step7-cloud.zsh`, a guarded writer. Quota and step 5's **real parser pin**
+must pass first. The parser is unpinned and always refuses until a reviewed
+native sample is installed. Copy from the verified SSD; bind EXPECTED hashes
+to the cloud destinations and check the copied manifest too.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-source "${JW_ITEM:?Set exact item}/item-env.zsh"
+source "$JW_OP/external-env.zsh"
+source "${JW_ITEM:?Set existing item}/item-env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" \
+  "$JW_OP/manifest-helper.sha256" "$JW_ITEM/item-env.sha256" "$JW_ITEM/ssd.sha256"
+jw_external_check
+export JW_SECOND_DIR="$JW_EXTERNAL/JouleWise-backup/${JW_OP:t}/$JW_ID"
+export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/delete_root.py" budget "$JW_ITEM/source.json")"
+jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
+test ! -e "$JW_REMOTE/$JW_ID.tar.zst"
+test ! -e "$JW_REMOTE/$JW_ID.manifest.json"
+cp -p "$JW_SECOND_DIR/$JW_ID.tar.zst" "$JW_REMOTE/$JW_ID.tar.zst"
+cp -p "$JW_SECOND_DIR/$JW_ID.manifest.json" "$JW_REMOTE/$JW_ID.manifest.json"
+python3.13 -I -B - <<'PY'
+import json, os
+from pathlib import Path
+item = Path(os.environ['JW_ITEM'])
+receipt = json.loads((item/'independent-copy.json').read_text())
+for name, sha, dest in [('archive', receipt['archive_sha256'], os.environ['JW_ID']+'.tar.zst'),
+                        ('cloud-manifest', receipt['manifest_sha256'], os.environ['JW_ID']+'.manifest.json')]:
+    with (item/(name+'.sha256')).open('x') as f:
+        f.write(sha+'  '+str(Path(os.environ['JW_REMOTE'])/dest)+'\n')
+PY
+shasum -a 256 -c "$JW_ITEM/archive.sha256" "$JW_ITEM/cloud-manifest.sha256"
+zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
+  python3.13 -I -B "$JW_OP/delete_root.py" archive > "$JW_ITEM/cloud-local.json"
+cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-local.json"
 jw_uploaded "$JW_REMOTE/$JW_ID.tar.zst"
 jw_uploaded "$JW_REMOTE/$JW_ID.manifest.json"
-/usr/bin/brctl status com.apple.CloudDocs
-# Execute ONLY after confirmed server upload; sources remain intact.
-/usr/bin/brctl evict "$JW_REMOTE/$JW_ID.tar.zst"
-/usr/bin/brctl evict "$JW_REMOTE/$JW_ID.manifest.json"
-jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" yes
-jw_wait_dataless "$JW_REMOTE/$JW_ID.manifest.json" yes
-# Budget the bytes still to hydrate; wait for eviction before admission.
-export JW_ARCHIVE_BUDGET_BYTES="$(python3.13 -I -B "$JW_OP/align_offload_delete_root.py" budget "$JW_ITEM/source.json")"
-jw_disk_check "$JW_ARCHIVE_BUDGET_BYTES"
-/usr/bin/brctl download "$JW_REMOTE/$JW_ID.tar.zst"
-/usr/bin/brctl download "$JW_REMOTE/$JW_ID.manifest.json"
-jw_wait_dataless "$JW_REMOTE/$JW_ID.tar.zst" no
-jw_wait_dataless "$JW_REMOTE/$JW_ID.manifest.json" no
-shasum -a 256 -c "$JW_ITEM/cloud-manifest.sha256"
-cmp "$JW_ITEM/source.json" "$JW_REMOTE/$JW_ID.manifest.json"
-shasum -a 256 -c "$JW_ITEM/archive.sha256"
-zstd -dc "$JW_REMOTE/$JW_ID.tar.zst" | \
-  python3.13 -I -B "$JW_OP/align_offload_delete_root.py" archive > "$JW_ITEM/cloud-roundtrip.json"
+python3.13 -I -B "$JW_OP/delete_root.py" cloud-roundtrip --item "$JW_ITEM" --remote "$JW_REMOTE"
+shasum -a 256 -c "$JW_ITEM/archive.sha256" "$JW_ITEM/cloud-manifest.sha256"
 cmp "$JW_ITEM/source.json" "$JW_ITEM/cloud-roundtrip.json"
-jw_disk_check
 ```
 
-**STOP 6b:** a complete post-upload, post-eviction cloud re-read matches every
-entry. Sampling is insufficient under this brief. The July pruning report
-used sampled large traces and explicitly left a single durable copy
-(`docs/run_reports/2026-07-28-icloud-archive-prune.md:24–28,59–60`); that older
-bar does not satisfy this operation's full verification and two-copy rule.
+The hashed program runs fileproviderctl evaluate for BOTH files and requires
+isUploaded=1 with no pending/error/conflict state. For each it evicts, polls
+st_flags until **dataless**, downloads, polls **not dataless**, re-hashes archive
+and manifest, streams every tar member, then publishes cloud-proof.json.
+Asynchronous/no-op eviction or Keep Downloaded timeout is STOP. Keep the
+hydrated files through deletion; the final program repeats server checks.
+No local hash/progress bar/sampling replaces that round trip.
 
-## 7. Require a second independent copy before any irreplaceable deletion
+**STOP 7:** SSD plus server-confirmed iCloud cover every byte. Export only
+redacted facts; keep raw diagnostic/plist/argv/cron records local until Ed
+reviews credentials. Sources and raw custody records remain immutable.
 
-For every irreplaceable root, leave the original until **cloud plus an
-independent durable copy** survive its removal. Prefer an owner-held external
-disk or another device's non-synced storage. APFS clones, a second folder on
-the MBP, another iCloud folder, or the same iCloud account on another device
-are not independent failure domains. The active analysis laptop has a 7-worker
-job: coordinate a quiet verification slot with its lead; do not start work on
-it from this session. B5 laptop custody is KEEP, not spare scratch space.
+### 7a. Copy the existing iCloud-only archives to this SSD (M6)
 
-On an attached independent volume, the MBP can verify/copy under its guarded
-writer. On another host, Ed first copies the reviewed step files and writes a
-host-specific `$JW_OP/env.zsh` with the same shell options, equivalent local
-disk guard and only approved local paths (never use the MBP absolute paths).
-No remote execution from this agent. Ed fills these variables with approved new
-paths; no independent target path is established by the repository. Use a
-non-synced filesystem with enough capacity. Copy the entire uploaded archive,
-source manifest, archive digest and helper there. Verify archive SHA-256,
-and the helper's digest against the MBP journal. Stream every member again,
-and make a complete restore to an empty directory
-(review member names and symlink targets before extraction; never restore on
-top of custody or at the original absolute path):
+Required even when no deletion is eligible: **ALIGN pilots 0–7**, under
+`JouleWise-archive/2026-11-04-align-pilots`, **BYTES H/H2 raw tars** (historical
+RUN_STATE:1239) and **R7 A343/P0/READY**. Ed supplies each exact archive path,
+authenticated original manifest/digest and original reviewed verifier. No
+wildcard hydration or agent reads. One checklist row per item records source,
+coverage, archive/manifest SHA-256, SSD UUID, full member/restore result and UTC.
+
+In a guarded `step7-existing.zsh` writer, admit internal archive hydration and
+SSD archive plus largest complete restore workspace separately. Require
+uploaded, hydrate and poll not-dataless, check **original expected** digests,
+copy to a new SSD item directory, rebind those expected checksums to destination
+filenames and run `shasum -a 256 -c`. Stream ALL members using the original
+format/verifier, restore into an empty directory, re-hash every restored byte
+against the original manifest. Verify copied manifest/helper hashes too. Apply
+the same proved cloud round trip with that original verifier. Missing original
+hash/coverage/parser/quota is BLOCKED; hashing a possibly corrupt copy never
+creates a replacement trust anchor. Preserve the attributed per-item receipt.
+No archive is deleted. Only after verification may the uploaded cloud staging
+copy be evicted; poll dataless. Finish by day or preserve state and eject/unplug
+at day end. The measurement pause continues if work is incomplete.
+
+Save the following as the guarded `step7-existing.zsh` for one original-format
+item. Ed supplies the exact original hashes and a reviewed format-specific
+verifier file whose commands perform BOTH full member and restore comparison,
+with these exported paths. The file is a required input, not a supplied or
+guessed historical interface; absent reviewed verifier means STOP for that row.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-# Independent device, with the same pipefail and helper as step 6.
-: "${JW_SECOND_ARCHIVE:?Set archive path on independent storage}"
-: "${JW_SECOND_MANIFEST:?Set copied source manifest}"
-: "${JW_SECOND_HELPER:?Set copied manifest.py}"
-: "${JW_SECOND_RESTORE:?Set new empty non-synced restore directory}"
-# Use EXPECTED hashes authenticated from the original MBP journal (not new local hashes).
-: "${JW_ARCHIVE_SHA:?Set original archive SHA256}"
-: "${JW_MANIFEST_SHA:?Set original source-manifest SHA256}"
-: "${JW_HELPER_SHA:?Set original helper SHA256}"
-printf '%s  %s\n' "$JW_ARCHIVE_SHA" "$JW_SECOND_ARCHIVE" \
-  "$JW_MANIFEST_SHA" "$JW_SECOND_MANIFEST" "$JW_HELPER_SHA" "$JW_SECOND_HELPER" \
-  > "$JW_SECOND_ARCHIVE.expected.sha256"
-shasum -a 256 -c "$JW_SECOND_ARCHIVE.expected.sha256"
-zstd -dc "$JW_SECOND_ARCHIVE" | python3.13 -I -B "$JW_SECOND_HELPER" archive \
-  > "$JW_SECOND_ARCHIVE.members.json"
-cmp "$JW_SECOND_MANIFEST" "$JW_SECOND_ARCHIVE.members.json"
-mkdir -m 700 "$JW_SECOND_RESTORE"
-zstd -dc "$JW_SECOND_ARCHIVE" | /usr/bin/tar -xpf - -C "$JW_SECOND_RESTORE"
-python3.13 -I -B "$JW_SECOND_HELPER" tree "$JW_SECOND_RESTORE" \
-  > "$JW_SECOND_ARCHIVE.restored.json"
-cmp "$JW_SECOND_MANIFEST" "$JW_SECOND_ARCHIVE.restored.json"
-```
-
-**STOP 7:** Ed obtains a signed/attributed receipt naming device/volume,
-non-synced location, source-manifest SHA-256, archive SHA-256, complete restored
-file/byte counts, result and UTC. Copy receipt back to the MBP journal; retain
-it with an independently stored manifest. Validate the exact root coverage:
-the B5 transfer excluded results-clone and did not include superseded raw
-attempts (`BLOCK5-TRANSFER.md:34–35`; `measurement-corpus18-data.manifest.json:8`).
-An old B5 receipt cannot cover an unrelated B6/BYTES/ALIGN root. A receipt with
-one missing member, pending upload or mismatched digest is not approval.
-
-### 7a. Copy existing single-copy archives while the device is attached
-
-This is required even if **no source deletion** is eligible. Ed supplies an
-exact path inventory from the existing records for: ALIGN pilots **0–7**
-under `JouleWise-archive/2026-11-04-align-pilots`, BYTES **H/H2 raw tars**
-(`RUN_STATE.md:1239`), and R7 captures **A343, P0, READY** (the three iCloud-only
-captures of R7's 17-capture second-copy obligation). No wildcard hydration.
-For each exact archive, copy its authenticated original manifest, original
-archive digest and original verifier to the separate non-synced device. Use
-its original format/verifier if it predates this helper; no replacement trust
-anchor made from a freshly copied corrupt file. Missing original digest or
-coverage is STOP for the lead, not an invented success.
-
-```zsh
-source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_EXISTING_ARCHIVE:?Set one exact existing iCloud archive}"
-: "${JW_EXISTING_MANIFEST:?Set its authenticated existing manifest}"
-: "${JW_EXISTING_COPY:?Set new item directory on independent device}"
-: "${JW_EXISTING_BUDGET:?Set archive hydration plus destination restore budget}"
-jw_disk_check "$JW_EXISTING_BUDGET"
+source "$JW_OP/external-env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" "$JW_OP/manifest-helper.sha256"
+jw_external_check
+: "${JW_EXISTING_ARCHIVE:?Set exact iCloud archive from original custody records}"
+: "${JW_EXISTING_MANIFEST:?Set its original manifest}"
+: "${JW_EXISTING_ARCHIVE_SHA:?Set authenticated original archive digest}"
+: "${JW_EXISTING_MANIFEST_SHA:?Set authenticated original manifest digest}"
+: "${JW_EXISTING_COPY:?Set NEW exact item directory on enrolled SSD}"
+: "${JW_EXISTING_VERIFY_FILE:?Set reviewed original-format verifier writer file}"
+: "${JW_EXISTING_VERIFY_SHA:?Set its reviewed SHA256}"
+: "${JW_EXISTING_INTERNAL_BUDGET:?Set recorded archive plus manifest hydration bytes}"
+: "${JW_EXISTING_SSD_BUDGET:?Set archive plus complete restore and controls}"
+export JW_EXISTING_ARCHIVE JW_EXISTING_MANIFEST JW_EXISTING_COPY
+jw_disk_check "$JW_EXISTING_INTERNAL_BUDGET"
+jw_disk_check "$JW_EXISTING_SSD_BUDGET" "$JW_EXTERNAL"
 jw_uploaded "$JW_EXISTING_ARCHIVE"
 jw_uploaded "$JW_EXISTING_MANIFEST"
 /usr/bin/brctl download "$JW_EXISTING_ARCHIVE"
@@ -771,37 +769,35 @@ jw_uploaded "$JW_EXISTING_MANIFEST"
 jw_wait_dataless "$JW_EXISTING_ARCHIVE" no
 jw_wait_dataless "$JW_EXISTING_MANIFEST" no
 mkdir -m 700 "$JW_EXISTING_COPY"
-cp -p "$JW_EXISTING_ARCHIVE" "$JW_EXISTING_COPY/"
-cp -p "$JW_EXISTING_MANIFEST" "$JW_EXISTING_COPY/"
-# Continue with the original hash receipts and full member/restore verification
-# of step 7, using expected checksums rebound to these destination filenames.
+printf '%s  %s\n' "$JW_EXISTING_ARCHIVE_SHA" "$JW_EXISTING_ARCHIVE" \
+  "$JW_EXISTING_MANIFEST_SHA" "$JW_EXISTING_MANIFEST" \
+  "$JW_EXISTING_VERIFY_SHA" "$JW_EXISTING_VERIFY_FILE" > "$JW_EXISTING_COPY/original.sha256"
+shasum -a 256 -c "$JW_EXISTING_COPY/original.sha256"
+cp -p "$JW_EXISTING_ARCHIVE" "$JW_EXISTING_COPY/archive"
+cp -p "$JW_EXISTING_MANIFEST" "$JW_EXISTING_COPY/manifest"
+printf '%s  %s\n' "$JW_EXISTING_ARCHIVE_SHA" "$JW_EXISTING_COPY/archive" \
+  "$JW_EXISTING_MANIFEST_SHA" "$JW_EXISTING_COPY/manifest" > "$JW_EXISTING_COPY/copied.sha256"
+shasum -a 256 -c "$JW_EXISTING_COPY/copied.sha256"
+/bin/zsh -f -euo pipefail "$JW_EXISTING_VERIFY_FILE"
 ```
 
-Run each as a guarded writer checking BOTH volumes; include destination full
-restore bytes in admission, not just compressed archive length. Verify both
-archive and manifest with `shasum -a 256 -c`, restore to an empty directory,
-re-hash all restored bytes, and save an attributed per-item receipt with both
-SHA-256s and device identity. A checklist requires one verified row per pilot,
-H/H2 tar and R7 capture; report missing rows as BLOCKED. Only then explicitly
-evict its uploaded cloud staging copy and **poll dataless**. Sources and
-cloud objects are never deleted by this backup step.
+### 7b. Materialized R0 copies, retaining all sources
 
-### 7b. Materialized R0 copies without moving retained sources
-
-Use the pre-offload R0 inventories from step 3. Copy **both** pilots into the
-configured independent-device destinations as uncompressed directories. R0's
-inventory records pilot `measurement/` view links as symlinks with their exact
-target text. Preserve those links without dereferencing; never copy target
-contents through them. Model inventories remain strict and refuse links. The
-copy and a full re-inventory must fit the device budget alongside archives,
-restore workspace and gold storage if sharing the device.
+R0's own `--inventory` receipts for **pilot8 and pilot9** must already exist
+from step 3. Also inventory and copy pilot10 for backup. Destinations are
+**uncompressed directories**, never tar.zst. Preserve pilot measurement-view
+symlinks as links without following targets; models require materialized
+non-symlink files. Use both [R0 inventory patches](r0_disk_gate_patch.md).
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
 source "$JW_OP/r0-env.zsh"
-: "${JW_R0_SOURCE:?Set exact source for this pilot}"
-: "${JW_R0_DEST:?Set configured NEW materialized destination}"
-: "${JW_R0_EXPECTED:?Set its original pre-offload R0 inventory JSON}"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256"
+jw_external_check
+: "${JW_R0_SOURCE:?Set exact pilot source}"
+: "${JW_R0_DEST:?Set configured NEW SSD directory destination}"
+: "${JW_R0_EXPECTED:?Set original pre-offload inventory JSON}"
 : "${JW_R0_ACTUAL:?Set NEW comparison receipt path}"
 test ! -e "$JW_R0_DEST"
 mkdir -m 700 "$JW_R0_DEST"
@@ -811,111 +807,81 @@ cp -pRP "$JW_R0_SOURCE/." "$JW_R0_DEST/"
 cmp "$JW_R0_EXPECTED" "$JW_R0_ACTUAL"
 ```
 
-Save as a guarded writer. Reconfirm config `offloads` labels are `pilot8` and
-`pilot9`, their inventory filenames are those exact step-3 receipts and their
-destinations are these verified directories. tar.zst cannot satisfy R0.
-If source content changed since the frozen inventory, STOP and retain it.
-Pilot 9's Mac source stays intact regardless of a passing external copy.
+Run through the two-volume guard, with all remaining bytes admitted. Agree
+labels/destinations before copying; never rewrite original locators. **The SSD
+is absent during R0.** Copy verification is a daytime desk phase; preserve its
+authenticated receipts, then eject/unplug before measurement. If the current
+R0 gate requires probing external destinations during measurement, STOP for
+the R0 lead to separate copy verification from measurement admission. Do not
+claim that gate passes after unplugging or measure with the enclosure attached.
 
-## 8. Ed-only deletion of approved public weights (ruling N5a)
+## 8. LAST: Ed-only deletion through one hashed program
 
-This is the only class currently eligible to reclaim internal source space:
-**PUBLIC MODEL WEIGHTS NOT IN ANY PLAN**, under `jw_models` or the HF hub.
-No cloud copy is required for this class. It does not grant an approval list.
-Pilot roots and capture-bearing trees remain until after block-5 release.
+**No currently approved pilot deletion.** All three pilot/capture roots stay
+until release or an installed ruling and guard change. Obtain a structure-only
+list of **all ledger locators under each source**, without values. Missing or
+retained locators are STOP. Do not split roots, move captures or rewrite
+locators. This is copy-only for pilots 8–10 until the lead resolves retention.
+The former public-weights no-backup path is retired: ALL deletion needs SSD
+plus server-confirmed iCloud. No model or shared-HF-cache cleanup is implied.
 
-For each exact proposed model directory, Ed and an independent reviewer must
-first review the complete step-3 census from all six refs. Every registration
-identity pin, BYTES roster, B6 §1.4 roster, ALIGN v4 kit, amendment-1 plan and
-v4 R0 config participates. Path containment or a model identity alias in any
-of them is KEEP. Dropping Next-80B or Qwen3.5-122B from ALIGN alone is insufficient:
-BYTES/B6 or historical pins may still reference them. Never infer eligibility
-from the expected candidate names. No real candidate was inspected here.
-The reviewed BYTES roster at `c58282f87369c73c5b0a25d8a5a217555758c6d8`
-already names **Qwen3-Next-80B-A3B-Instruct-4bit** and
-**Qwen3.5-122B-A10B-4bit**. Those identities stay KEEP under this all-plans
-rule. Other Next variants still require the complete six-ref census.
+For a separately approved eligible model leaf, mandatory KEEP entries must
+all exist and pass inode/ancestor comparison. The exact source must be in
+`$JW_OP/approved-models.txt`; that list cannot bypass KEEP. Both
+`independent-receipt.txt` and `ed-approval.txt` must contain this source path,
+source-manifest SHA and archive SHA, reviewer/Ed attribution and UTC.
+`retention-review.json` must exactly bind `source`, `manifest_sha256`,
+`archive_sha256`, `no_retained_ledger_locators: true`. An approval file records
+an actual review; writing JSON is no substitute. The technical
+independent-copy.json is checked against the mounted SSD UUID, archive,
+copied manifest and complete restored tree. Keep that restore until completion.
 
-Use a new item directory outside the source. Save `source-path.txt` as one
-canonical absolute line, `source.json` from the reviewed `tree` helper,
-`source.sha256` as its exact checksum receipt, and `source-after.json` with
-identical bytes. All model files must be regular, nlink-1 **blob bytes**, never
-snapshot symlinks, and every file must appear in the SHA-256 inventory. No
-shared HF cache cleanup is authorized. Save the complete step-3 result as
-`model-census.json`; it is replayed from its full Git SHAs before deletion.
-
-`public-weights.json` has exactly these fields: `source` (the exact approved
-path), `repo_id` (the exact public HF org/repo), `revision` (40 lowercase hex
-characters), `manifest_sha256`, `census_sha256`, and `files` (an exhaustive
-mapping from each local manifest file path to its HF repo filename at that
-revision). This mapping covers blob-cache names too; no symlinks are followed.
-The independent review receipt `independent-receipt.txt` must bind the exact
-source, both digests, repo id and revision. `retention-review.json` must equal:
-
-```json
-{"source":"<exact source>","manifest_sha256":"<source.json digest>","model_class":"public-weights","no_retained_ledger_locators":true,"no_measurement_data":true}
-```
-
-Ed approves the **specific list**, not a wildcard, cache root or model family.
-For each item save `ed-approval.json` as `{"approver":"Ed","approved":[CLAIM]}`,
-where CLAIM is the complete exact `public-weights.json` object. Any changed
-path, manifest, repo, revision, census or file mapping requires a new approval.
-These local receipts record Ed's review; creating JSON is not approval itself.
-
-At deletion time the guard makes an unauthenticated **HEAD** request to the
-HF API `/api/models/ORG/REPO/revision/FULL_SHA` and HEAD-checks every mapped
-file at `/ORG/REPO/resolve/FULL_SHA/FILENAME`. Private/gated, missing, failed
-or ambiguous responses refuse. No network was used to author or test this
-procedure; HF API behavior remains an operator-time gate. This class relaxes
-only mandatory model-root containment for this exact approved descendant.
-It never relaxes the root itself, another KEEP entry, path/inode checks,
-retention, pause/census, 30 GB floor, manifests, permissions/flags/ACLs,
-source recheck, exclusive pointer publication or the validated journal.
+`step8-delete.zsh`, **Ed only**; inoperative for all three pilot targets:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_PUBLIC_ITEM:?Set reviewed exact item directory with Ed approval}"
-python3.13 -I -B "$JW_CANON/scripts/align_offload_delete_root.py" delete \
-  --model-class public-weights --item "$JW_PUBLIC_ITEM" \
-  --keep "$JW_OP/KEEP.txt" --journal "$JW_OP/deletions.tsv" \
-  > "$JW_PUBLIC_ITEM/freed-bytes.json"
+source "$JW_OP/external-env.zsh"
+source "${JW_ITEM:?Set reviewed eligible item}/item-env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" \
+  "$JW_OP/manifest-helper.sha256" "$JW_ITEM/item-env.sha256" "$JW_ITEM/source.sha256"
+jw_external_check
+python3.13 -I -B "$JW_OP/delete_root.py" delete --item "$JW_ITEM" \
+  --remote "$JW_REMOTE" --keep "$JW_OP/KEEP.txt" --journal "$JW_OP/deletions.tsv" \
+  > "$JW_ITEM/freed-bytes.json"
 ```
 
-The success JSON reports `source_regular_bytes` and the observed filesystem
-`available_bytes_delta`. APFS sharing/snapshots and concurrent allocations can
-make them differ; report both and budget only measured available space.
-The `.OFFLOADED.json` pointer records `model_class=public-weights`, exact HF
-identity, manifest/census digests, HEAD receipt and regular-file bytes; it does
-not claim a cloud archive exists. **Freed in this authoring session: 0 bytes.**
+All checks and shutil.rmtree are in this program; no shell rm -rf. It refuses
+uncanonical paths, symlink ancestors, missing KEEP, inode overlap, disallowed
+sources, pilots/captures, dataless/hardlink/special files, nested filesystems,
+uchg/schg/uappnd/sappnd and ACLs. It verifies source and all manifests/hashes,
+both attributed receipts, actual SSD bytes and retention review; re-hashes the
+source, then repeats STOP/writer/disk checks and BOTH fileproviderctl upload
+checks immediately before removal. Python-launched writers are detected by
+locally inspected argv; only matched PIDs leave the census. Unknown state
+refuses before deletion, independently of the shell's error handling.
 
-
-No batch deletion loop, cache purge or recursive parent removal. The guard
-reads source-path.txt, checks exact path spellings/ancestor identities, and
-publishes DELETE_AUTHORIZED/DELETED journal states plus an exclusive pointer.
-Preflight refusals write REFUSED_NO_DELETE only to a validated regular,
-single-link item.parent/deletions.tsv journal; invalid journals are untouched.
-A later OS failure is FAILED_PARTIAL and may leave partial removal and a
-.pending pointer. Preserve them and request review against the original
-manifest. The proved no-writer pause remains required throughout.
-
-**STOP 8:** record actual df before/after and the success JSON's regular bytes
-and available-space delta. Budget only measured current available space.
-All pilot and capture-bearing sources remain, regardless of backup success.
-Stop once the admitted need is met; an unmet budget keeps the operation paused.
+An exclusive `.OFFLOADED.json.pending` recovery pointer and fsynced
+DELETE_AUTHORIZED journal row precede removal. Success publishes
+`.OFFLOADED.json` and DELETED. Preflight failure is REFUSED_NO_DELETE;
+OS/I/O failure after removal starts is FAILED_PARTIAL. Keep pending pointer,
+partials and original manifests for lead review; deletion is not transactional.
+Never retry blindly. **STOP 8:** record regular-file bytes and actual available
+space delta separately; credit only measured df space. APFS clones/snapshots
+can make them differ. **Freed in this authoring session: 0 bytes.**
 
 ## 9. Combined internal/external budget and primary external-SSD plan
 
-### 9a. Ed-only purchase/attach gate (after STOP 2, before step 3 copies)
+### 9a. Ed-only Saturday SSD attach gate (after STOP 2, before step 3 copies)
 
-Ed purchases or attaches a **1–2 TB external NVMe SSD**, Thunderbolt/USB4,
-APFS. Ed alone chooses/formats a device in Disk Utility after verifying its
-identity and preserving existing contents. No formatting command is supplied.
-Exclude the volume in **Spotlight Privacy** and Time Machine; verify exclusions
-before writing. Prefer another device for independent durable custody backups,
-so a failed gold scratch drive does not take the backup with it. A copy on the
-same external device as another copy is not a second independent backup.
-A verified external copy is independent of the Mac's internal SSD and iCloud.
-Budget all uses if a single external device supplies that independent copy.
+From Saturday November 7, use the borrowed **WD_Black SN7100 2 TB / OWC
+Express 1M2 USB4** SSD, attached **by day only**. Wear is no concern. Ed checks
+its identity, existing contents and APFS format in Disk Utility; no formatting
+command or permission to erase the borrowed disk is supplied. Set Spotlight
+Privacy and Time Machine exclusions. Record the actual volume UUID, capacity,
+free bytes and enclosure identity. This is the independent second copy,
+separate from internal storage and iCloud; two folders on it are one device.
+Keep backups in `JouleWise-backup`, apart from gold scratch. Budget every use.
+Eject and physically unplug before R0, R1 or any other measurement, every time.
 
 Save this as an Ed-reviewed writer file, run via step 5's guard with both
 internal and external volumes (at this point only small control writes).
@@ -936,6 +902,7 @@ s = subprocess.run(['/usr/sbin/diskutil', 'info', '-plist', str(p)],
                    check=True, capture_output=True).stdout
 d = plistlib.loads(s)
 assert d['VolumeUUID'] == os.environ['JW_EXTERNAL_UUID']
+assert d.get('Internal') is False
 assert d['FilesystemType'].casefold() == 'apfs' and d['MountPoint'] == str(p)
 assert os.stat(p).st_dev != os.stat('/System/Volumes/Data').st_dev
 print('external volume identity PASS')
@@ -963,46 +930,72 @@ before **every** external writer. The guard monitors both filesystems; a
 missing volume/changed device is STOP, not permission to write into an empty
 mountpoint on the internal SSD.
 
-External paging changes throughput, latency, USB/Thunderbolt traffic and power.
-Measure sequential read/write and real page-fault behavior on **synthetic or
-model bytes**, outside a measurement window; record link, enclosure, firmware,
-filesystem, thermal throttling, throughput and n-gram paging policy. The n-gram
-table is paged from this external SSD; do not silently copy it internally.
-A bus-powered enclosure contributes to the laptop/wall boundary differently
-from a separately powered enclosure; the measurement lead must freeze and
-document that boundary and the attached hardware for future energy comparisons.
-Gold parity/setup performance is not energy evidence. Revalidate no-swap memory,
-quiet-state and the measurement boundary before ALIGN; no measurement with
-backup, indexing, downloads or agents active. If an external-paging protocol
-change needs a ruling, keep the pause and ask the lead.
+Gold/setup throughput may be measured on synthetic or model bytes by day,
+outside all measurement windows. Record link/enclosure/firmware, filesystem,
+throughput and thermal behavior; these are setup observations, not energy
+validation. External paging is forbidden during measurements under the day-only
+rule. A model/table required for a later measurement must first fit and be
+verified on internal storage, with its own disk and no-swap admission. Otherwise
+that measurement stays blocked. Neither gold parity nor an attached external
+R0 copy authorizes leaving the enclosure connected.
 
 ### 9b. Honest reachable space and one combined admission
 
-Measure current internal available bytes with df. **The only new source
-space reclaimable now is class (a): public model weights unreferenced by every
-required plan/pin, with exact HF revision/blob manifest, fresh HEAD checks and
-Ed's specific approval.** No candidate list or byte total is established in this
-blind session. Budget zero until those gates pass, then use measured available
-space, not logical model sizes or promises about APFS clones.
+Measure current internal available bytes with df. No deletion candidate or
+byte total is established in this blind session: **budget zero reclaimed bytes**
+until retention, copies and Ed's exact approval all pass. All pilots/capture
+trees remain retained. Pilots 0–7 offer no further source reclaim. Eviction of
+a cloud staging copy returns only that staging allocation.
 
-Pilot roots and capture-bearing trees stay until after block-5 release.
-Pilots 0–7 have already lost their local sources and offer zero more source
-reclaim; pilots 8/9 contribute **zero**. The former conditional 26 GB pilot-8
-credit is withdrawn. Existing archive hydration/eviction only returns its own
-staging allocation; it cannot reclaim an already-deleted source again.
+Post-offload planning budget (decimal GB; historical sizes are estimates,
+not live observations):
 
-R0 requires the amendment-1 window-1 bundle need for **two copies + 30 GB**,
-cited to the pinned amendment/config in the [R0 patch series](r0_disk_gate_patch.md).
-The actual W1 bytes and full amendment SHA remain unknown here; the gate
-refuses until the lead installs them. There is no flat internal-free threshold.
+| Case | Estimated internal available AFTER staging eviction, before journal/new allocations |
+|---|---|
+| Current estimate, all pilot sources retained | about **66 GB**; no pilot reclaim credited |
+| Hypothetical later approval of pilots 8 + 9, about 26 GB each | about **118 GB**, below the 150 GB gold target |
+| Hypothetical later approval of pilot 10 too, another about 26 GB | about **144 GB**, still below 150 GB; actual pilot-10 size unknown |
+| R0 admission | at least **80 GB + remaining journal/control bytes**, AND any larger reviewed plan requirement |
+| Internal 95 GB converted model + historical 41.2 GB next window + 30 GB floor | **166.2 GB + journal**, unavailable in all the estimates above |
 
-The external plan budgets roughly **120 GB streaming peak + 30 GB floor =
-150 GB**, replaced by actual frozen simultaneous bounds before use. Internal
-conversion has no current measured admission. Keeping 95 GB converted output
-internally would additionally require the current amendment's next-window
-allocation plus 30 GB; the older 41.2 GB window estimate is not a current pin.
-Keep JW_GOLD, converted weights and paged tables external under the primary
-plan; no later internal copy is implied by reaching a checkpoint.
+The hypothetical rows authorize nothing. Compute live post-offload availability
+as `F_before + actual_source_available_delta - still_resident_staging - new_journal`.
+Do not count logical sizes, snapshots, purgeable capacity or promised evictions.
+R0's minimum is **80,000,000,000 bytes plus journal**, after model weights; if
+the reviewed amendment-1 gate is larger, also enforce **two copies + 30 GB**
+(`max(80 GB, 2 * W1_bundle_bytes + 30 GB) + remaining journal`). Pin actual
+W1 bytes/config/citation using the [R0 patch series](r0_disk_gate_patch.md).
+Unknown W1/budget or a gate still probing an unplugged SSD is STOP, not waiver.
+
+`step9-budget.zsh` records and enforces the combined internal requirement; it
+reads only filesystem free-space metadata. The budget inputs come from the
+reviewed current plan, never a guessed number or zero for an unknown need.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_W1_BUNDLE_BYTES:?Set pinned amendment-1 one-copy bytes}"
+: "${JW_JOURNAL_REMAINING_BYTES:?Set remaining journal/control allocation}"
+export JW_W1_BUNDLE_BYTES JW_JOURNAL_REMAINING_BYTES
+python3.13 -I -B - <<'PY'
+import json, os
+from pathlib import Path
+w1 = int(os.environ['JW_W1_BUNDLE_BYTES'])
+journal = int(os.environ['JW_JOURNAL_REMAINING_BYTES'])
+assert w1 > 0 and journal > 0, 'STOP: missing allocation bounds'
+s = os.statvfs('/System/Volumes/Data')
+free = s.f_bavail * s.f_frsize
+required = max(80_000_000_000, 2*w1 + 30_000_000_000) + journal
+with Path(os.environ['JW_OP'], 'r0-budget.json').open('x') as f:
+    json.dump(dict(available=free, required=required, shortfall=max(0, required-free)), f)
+assert free >= required, 'STOP: R0 internal disk budget'
+PY
+```
+
+Gold by day may use the external **120 GB streaming peak + 30 GB floor =
+150 GB** bound, replaced by the frozen actual schedule. Keeping its roughly
+95 GB output external does not make it usable for an unplugged measurement.
+The historical 41.2 GB next-window estimate must also be replaced by the current
+kit's exact allocation before arming; independently admit that need + floor.
 
 Use this single budget before packaging, hydration, copying, setup and every
 gold unit. Fill **all** remaining allocations, and repeat after metadata pins,
@@ -1011,9 +1004,9 @@ current `df` once, not again as future bytes. Use maximum **simultaneous** use.
 
 | Filesystem / stage | Remaining new bytes to fund, in addition to current resident bytes |
 |---|---|
-| Internal, per offload | One archive upper bound from `source.json`, cloud hydration, probe copies and small journal/control writes. Keep source resident until step 8 passes. Retained pilot 9 and all KEEP weights remain. |
-| Internal, future selection/measurement | After present weights/copies: R0 requires **amendment-1 window-1 bundle bytes for two copies + 30 GB** on the internal measurement `disk_path`. Pin the plan/config citation and actual bytes; there is no flat 80 GB gate. Next ALIGN separately admits its reviewed allocation plus the floor. Use the larger bound for simultaneous needs; see [R0 patch series](r0_disk_gate_patch.md). |
-| External, R0 | Both uncompressed pilot 8/9 materialized copies, matching the pre-offload inventories; complete materialized mirrors of the reviewed v4 R0 models if not already present, using their exact pinned inventories and measured bytes. Do not count a compressed tar or HF symlinks as a mirror. Keep inventories/config/results outside sources. |
+| Internal, per offload | One archive upper bound from `source.json`, cloud hydration, probe copies and small journal/control writes. Keep source resident until step 8 passes. Retained pilots 8–10 and all KEEP weights remain. |
+| Internal, future selection/measurement | After present weights/copies: R0 requires **amendment-1 window-1 bundle bytes for two copies + 30 GB** on the internal measurement `disk_path`. Pin the plan/config citation and actual bytes; also enforce the 80 GB minimum plus journal. Next ALIGN separately admits its reviewed allocation plus the floor. Use the larger bound for simultaneous needs; see [R0 patch series](r0_disk_gate_patch.md). |
+| External, R0 | Uncompressed pilot 8/9/10 materialized copies, matching the pre-offload inventories; complete materialized mirrors of the reviewed v4 R0 models if not already present, using their exact pinned inventories and measured bytes. Do not count a compressed tar or HF symlinks as a mirror. Keep inventories/config/results outside sources. |
 | External, durable custody | Existing ALIGN 0–7, H/H2, R7 archive/manifest copies, any separately approved new backup archives, plus **largest complete restore workspace**. If this is gold's device, all copies compete in the same budget and remain resident. Otherwise budget/check the backup device separately. |
 | External, streaming gold | Remaining converted output up to **95 GB**, maximum simultaneous bounded bf16/download/temp unit initially **15 GB**, and remaining env/cache/metadata/activation/journal overhead initially **10 GB**, plus **30 GB floor**. Replace estimates with the actual frozen schedule; incomplete downloads, output temp/atomic overlap, caches and re-downloads count. |
 | Whole operation | Every filesystem passes its own current-free ≥ remaining simultaneous allocations + required floor; the amendment-1 R0 two-copy-plus-floor gate and future ALIGN gate also pass before those stages. Do not add free bytes across disks to satisfy any single-filesystem constraint. |
@@ -1026,7 +1019,7 @@ files, partials, shared-shard consumers and activation checkpoints. The exact
 step-11 `weight_map` schedule controls final weight admission. No full 360 GB
 snapshot or duplicate shared HF cache is admitted on either SSD.
 
-**STOP 9:** Ed records volume identities, available bytes and every remaining
+**STOP 9:** the estimated 66 GB retained-source case fails R0; do not claim an arm is unblocked. Ed records volume identities, available bytes and every remaining
 allocation in one budget receipt. External capacity/throughput/exclusions and
 internal future-window budget must pass. Retention overrides capacity; if no
 plan can pass R0/ALIGN internal headroom, STOP for the lead. Do not bypass R0,
@@ -1270,6 +1263,16 @@ of the harness resume identity and may not point at the shared home cache.
 
 ## 12. Reviewed gold-parity harness: stream, compare, convert, journal, prune
 
+**Prospective harness requirements, not Saturday execution authority.** No
+automatic data/model-source deletion is authorized by this section. Before a
+runner may use the pruning lifecycle described below, the lead must review
+its cleanup against this update's two-copy rule and Ed-only hashed deletion
+program, or obtain Ed's explicit separate scratch-retention policy. Until then,
+retain downloaded sources and STOP before a unit that depends on pruning.
+The 120 GB streaming estimate relies on pruning; it is not an admitted bound
+for a no-pruning run. Re-budget retained bytes before continuing. This prevents
+the old gold runner from becoming a back door around step 8.
+
 Harness authority: **PR #667,
 `lane/2026-11-05-align-flashnext-gold-parity` (pushed per the lead)**.
 The port is **PR #664, `lane/2026-11-05-align-flashnext-port`**, based on
@@ -1347,7 +1350,8 @@ Execute this loop in the **frozen `weight_map` group/subunit order**:
 4. **Durable checkpoint, then bf16 cleanup.** Re-read/hash output files and
    activation checkpoints; commit the manifest/index and journal checkpoint
    durably (temporary write, flush/fsync and atomic publication). Only after
-   parity, conversion and restart state are committed may the runner delete
+   parity, conversion and restart state are committed AND the cleanup gate
+   above is satisfied may Ed use the reviewed deletion program to remove
    the exact reproducible bf16 working shards it no longer needs. Record
    each deletion and measured free bytes. Keep LFS metadata, verification
    receipts and gold results. This cleanup authority covers only the new
@@ -1368,7 +1372,8 @@ required by the frozen prompts/tokenization and decoding cases; for each
 shard verify its whole-file LFS hash, gather only the actual needed rows for
 gold parity, and stream **all** table tensors through conversion in bounded
 chunks. Commit that shard's conversion and row-parity/checkpoint evidence,
-then delete its bf16 source before fetching the next. Accumulate actual PLE
+then stop at the cleanup gate before removing its bf16 source or fetching the
+next unit that depends on that space. Accumulate actual PLE
 outputs/state until the layer is complete. Report fixed-prompt row coverage
 honestly; untouched rows are converted, not claimed parity-tested. No full
 100 GB bf16 table or 24-shard layer-0 staging allocation is admitted. If the
@@ -1408,7 +1413,7 @@ stop and report incomplete coverage. No measurement may run while swapping.
 **STOP 12b (each unit):** no next unit or source pruning until the reviewed
 parity/conversion/checkpoint gates above pass and disk admission holds. A failed
 unit retains its bf16 source and evidence; stop and disposition the mismatch
-before retrying. Reproducible official shards may be pruned after this gate;
+before retrying. Official shards remain retained until the cleanup gate passes;
 their pinned provenance and journal remain available for re-download.
 
 **STOP 12c (whole pass):** lead audits all 48 layers, DeltaNet, QSA/indexer,
@@ -1447,12 +1452,44 @@ the SSD.
    no energy claims attach to the setup window. Restore only the reviewed
    Spotlight/other service state recorded at pause. Keep the new large model
    external volume excluded from indexing and Time Machine. Keep the converted
-   model and paged n-gram table external; recheck volume identity and the agreed
-   power boundary. R0 requires amendment-1 window-1 bundle bytes for two copies plus 30 GB
+   model and paged n-gram table external for daytime setup only. They cannot be
+   dependencies of an unplugged window. R0 requires at least 80 GB plus journal
+   AND amendment-1 window-1 bundle bytes for two copies plus 30 GB
    internal free after present weights, with the full plan/config citation.
    Independently admit the next kit's exact measurement-volume budget plus
    the 30 GB floor. Use the larger bound for the next stage.
-3. Restore any temporarily unloaded non-measurement infrastructure from the
+3. Finish the guarded writers, validate backup coverage/receipts, preserve
+   both copies and the redacted journal, and stop every allocating process.
+   **Ed only:** eject the exact enrolled SSD, then physically unplug it.
+   Save this as `step13-eject.zsh`; a failed eject keeps the pause:
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+source "$JW_OP/external-env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" "$JW_OP/manifest-helper.sha256"
+jw_external_check
+python3.13 -I -B "$JW_OP/delete_root.py" census
+/bin/sync
+/usr/sbin/diskutil eject "$JW_EXTERNAL"
+```
+
+   **Physically unplug before the next script.** The magistrate runs the
+   read-only census below immediately before **every** R0, R1 and later arm,
+   with a fresh receipt filename. A nonzero exit prevents arm/install and
+   keeps STOP. It uses `diskutil list -plist external` AND `mount`, refuses
+   unknown/tool-failure state, any mounted non-system external/network/image
+   volume and even attached-but-unmounted external media. It writes only
+   redacted mount points/device IDs; never raw mount options/credentials.
+   An all-clear is an instant census, not proof against later reconnection.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_EXTERNAL_CENSUS_RECEIPT:?Set NEW unique pre-arm JSON receipt path}"
+python3.13 -I -B "$JW_CANON/scripts/external_volume_census.py" \
+  > "$JW_EXTERNAL_CENSUS_RECEIPT"
+```
+
+4. Restore any temporarily unloaded non-measurement infrastructure from the
    saved exact plists and restore original disabled states. Do not resume a
    DONE BYTES/B6 loop. With Ed's go, remove **only this operation's** STOP
    file and restore the magistrate supervisor from its original plist:
@@ -1465,10 +1502,10 @@ rm /Users/edr/night-custody/magistrate/STOP
 /bin/launchctl enable "gui/$(id -u)/com.joulewise.magistrate"
 /bin/launchctl bootstrap "gui/$(id -u)" \
   /Users/edr/Library/LaunchAgents/com.joulewise.magistrate.plist
-/bin/launchctl print "gui/$(id -u)/com.joulewise.magistrate"
+/bin/launchctl list
 ```
 
-4. ALIGN stays paused after pilot 9 until the lead/Ed explicitly schedule its
+5. ALIGN stays paused after pilot 10 until the lead/Ed explicitly schedule its
    return; reaching a gold checkpoint does not authorize another pilot.
    The magistrate verifies pinned checkout/venv/model identity, current
    ledger/acceptance, power/thermal/keepawake/census and disk gates, then
@@ -1484,8 +1521,19 @@ source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_NEXT_SESSION:?Set approved NEW /Users/edr/night-align/session root}"
 "$JW_MEAS/.venv/bin/python" -B "$JW_MEAS/scripts/align_pilot_session.py" \
   prepare --measurement-root "$JW_MEAS" --session-root "$JW_NEXT_SESSION"
-# STOP: normal plan review, notice/ack and install gates; exit all agents
-# through the established arm handoff before measurement t0.
+```
+
+**STOP:** separate normal plan review/notice/ack and exit every agent through
+the established arm handoff. Only the authorized magistrate saves and runs
+the separate install file after those gates. Re-run the census immediately
+before installation; failure prevents the following command:
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+: "${JW_NEXT_SESSION:?Set approved NEW session root}"
+: "${JW_EXTERNAL_CENSUS_RECEIPT:?Set NEW unique pre-arm JSON receipt}"
+python3.13 -I -B "$JW_CANON/scripts/external_volume_census.py" \
+  > "$JW_EXTERNAL_CENSUS_RECEIPT"
 "$JW_MEAS/.venv/bin/python" -B "$JW_MEAS/scripts/align_pilot_session.py" \
   install --session-root "$JW_NEXT_SESSION"
 ```
@@ -1513,6 +1561,7 @@ checkpoint and all 131 shard results, venv locks, harness CLI/commit and
 coverage, streaming journal/resume state and activation hashes, external
 volume/link/paging/power-boundary identity, combined R0/ALIGN disk budget, actual
 peak working bytes and lowest free bytes, conversion/end-to-end outcomes, unused
-model revision inventory, and pilot-9 harvest/pause/restoration status.
+model revision inventory, pilots 8–10 terminal/desk/pin and retained-source
+status, SSD eject/unplug receipt and each pre-arm external-volume census.
 Report UNKNOWN, BLOCKED and PROVISIONAL explicitly. **No offload or hardware
 validation occurred merely because this runbook was written.**
