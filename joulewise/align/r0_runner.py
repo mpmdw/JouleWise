@@ -18,12 +18,18 @@ from joulewise.align.r0_host import (
     QuietGuard, Refused, command, disk_census, host_snapshot, host_identity, inventory, smc_enumeration,
 )
 
-CHECKS = ("host", "disk", "smc", "load", "template", "generated", "ladder", "long-decode", "memory")
+CHECKS = ("host", "disk", "load", "template", "generated", "memory", "smc", "ladder", "long-decode")
+ACCEPTED_OUTCOMES = {"checkpoint": {"required", "not_required"}, "ladder": {"pass", "fallback"},
+                     "template": {"diagnostic"}, "disk": {"diagnostic"}}
 REPO = Path(__file__).resolve().parents[2]
 
 
 class DeadlineExpired(BaseException):
     """Bypass endpoint/native Exception handlers so a timeout cannot be retried."""
+
+
+class _StopChecks(Exception):
+    """The failed receipt is already saved; unwind and close the backend."""
 
 
 def _path(value):
@@ -87,12 +93,17 @@ def save_report(output, report):
         temp.replace(output / name)
 
 
-def execute(config, output, checks, models, *, guard, backend_factory, per_check_timeout=7200):
+def execute(config, output, checks, models, *, guard, backend_factory, per_check_timeout=7200,
+            keep_going=False, long_decode_attempts=2):
+    started_run = time.monotonic()
+    # --checks selects a subset, never overrides the fail-fast phase order.
+    checks = [name for name in CHECKS if name in checks]
     report = {"schema": "joulewise.align.r0.report.v1", "status": "running",
               "created_utc": datetime.now(timezone.utc).isoformat(),
               "config": config, "pins": r0.PINS, "checks": [], "complete_r0": False,
               "evidence_kind": "live_desk" if backend_factory.__module__ == "joulewise.align.r0_mlx" else "injected_backend",
               "selected_checks": checks, "selected_models": models,
+              "keep_going": keep_going, "long_decode_max_attempts": long_decode_attempts,
               "authority": "origin/lane/2026-11-05-align-window-council:docs/align/council-2026-11-05/FINAL-DESIGN.md §§2.1,2.2,2.8",
               "authority_commit": "219fb151515383cbbcde887d096837a829c67396",
               "authority_blob": "0a802a3097a20c9f4dd5e8823d858302ae596785",
@@ -103,24 +114,27 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
     def receipt(name, model, fn, *, incremental=False):
-        guard.check(force=True)
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}
         report["checks"].append(row)
         def progress(data):
             row.update(data)
+            row["check_seconds"] = time.monotonic() - started
+            report["total_seconds"] = time.monotonic() - started_run
             report["census"] = guard.receipts
             save_report(output, report)
         def run_unit(fn):
             guard.check(force=True)
             with deadline(per_check_timeout):
                 return fn()
-        progress({})
         try:
+            guard.check(force=True)
+            progress({})
             result = fn(progress, run_unit) if incremental else run_unit(fn)
             row.update(result)
             guard.check(force=True)
-        except Refused:
+        except Refused as exc:
+            row.update(status="refused", refusal=str(exc))
             raise
         except (Exception, DeadlineExpired) as exc:
             def interrupt(value):
@@ -134,11 +148,15 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                         interrupt(child)
             interrupt(row)
             row.update(status="fail", error=f"{type(exc).__name__}: {exc}")
-        row["check_seconds"] = time.monotonic() - started
-        report["census"] = guard.receipts
-        save_report(output, report)
+        finally:
+            progress({})
+        if not keep_going and row["status"] not in ACCEPTED_OUTCOMES.get(name, {"pass"}):
+            report["stopped_after"] = {"check": name, "model": model, "outcome": row["status"]}
+            raise _StopChecks
         return row
     try:
+        if long_decode_attempts not in (1, 2):
+            raise ValueError("long_decode_attempts must be 1 or 2")
         config = validate_config(config)
         report["config"] = config
         report["smc_step_budget"] = step_budget(config["smc_step"])
@@ -152,63 +170,68 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                          REPO / "scripts/align_r0_checks.py")}
         report["config_sha256"] = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         report["checkout_head"] = command(("git", "-C", str(REPO), "rev-parse", "HEAD")).strip()
-        for name, fn in (("host", host_snapshot), ("disk", lambda: disk_census(config, r0.PINS, guard.check)),
-                         ("smc", lambda: smc_enumeration(REPO, output / "smc", config["smc_step"]))):
+        for name, fn in (("host", host_snapshot), ("disk", lambda: disk_census(config, r0.PINS, guard.check))):
             if name in checks:
                 receipt(name, None, fn)
         model_checks = [c for c in checks if c not in {"host", "disk", "smc"}]
         host_ok = (not model_checks or receipt("host-identity", None,
                    lambda: host_identity(config["measurement_hw_model"]))["status"] == "pass")
         for tag in models:
-            wanted = [c for c in checks if c not in {"host", "disk", "smc"}]
-            if not wanted:
-                continue
-            if not host_ok:
-                for name in wanted:
-                    receipt(name, tag, lambda: {"status": "blocked", "reason": "measurement host identity/capacity gate failed"})
-                continue
             backend = None
+            model_loaded = False
             try:
                 def load_backend():
                     nonlocal backend
                     backend = backend_factory(tag, config["models"][tag]["source"], config["shade_cache"], guard)
                     return backend.device_info()
-                loaded = receipt("model-load", tag, load_backend)
-                if loaded["status"] != "pass":
-                    for name in wanted:
-                        receipt(name, tag, lambda: {"status": "blocked", "reason": "model-load prerequisite failed"})
-                    continue
                 functions = {"load": lambda: r0.load_coherence(backend),
                              "template": lambda: r0.template_rewrites(backend),
                              "generated": lambda: r0.generated_rewrites(backend),
                              "ladder": lambda: r0.ladder(backend, tag),
-                             "long-decode": lambda: r0.long_decode(backend),
+                             "long-decode": lambda: r0.long_decode(backend, max_attempts=long_decode_attempts),
                              "memory": lambda: r0.memory_peak(backend, tag)}
-                for name in wanted:
+                loaded = None
+                for name in (c for c in checks if c not in {"host", "disk"}):
+                    if name == "smc":
+                        # Preserve the original unloaded SMC baseline. Reload
+                        # lazily if ladder/long-decode were also selected.
+                        if backend is not None:
+                            backend.close()
+                            backend = None
+                        loaded = None
+                        receipt("smc", None, lambda: smc_enumeration(REPO, output / "smc", config["smc_step"]))
+                        continue
+                    if not host_ok:
+                        receipt(name, tag, lambda: {"status": "blocked", "reason": "measurement host identity/capacity gate failed"})
+                        continue
+                    if loaded is None:
+                        loaded = receipt("model-load", tag, load_backend)
+                    if loaded["status"] != "pass":
+                        receipt(name, tag, lambda: {"status": "blocked", "reason": "model-load prerequisite failed"})
+                        continue
+                    model_loaded = True
                     composites = {
                         "load": lambda p, u: u(lambda: r0.load_coherence(backend, progress=p)),
                         "generated": lambda p, u: r0.generated_rewrites(backend, progress=p, run_unit=u),
                         "ladder": lambda p, u: r0.ladder(backend, tag, progress=p, run_unit=u),
-                        "long-decode": lambda p, u: r0.long_decode(backend, progress=p, run_unit=u),
+                        "long-decode": lambda p, u: r0.long_decode(
+                            backend, max_attempts=long_decode_attempts, progress=p, run_unit=u),
                     }
                     result = receipt(name, tag, composites.get(name, functions[name]), incremental=name in composites)
                     if name == "generated" and "transitions" in result:
                         receipt("checkpoint", tag, lambda: r0.checkpoint_verdict(tag, result))
-                if tag == "D" and any(c in checks for c in ("load", "generated", "ladder")):
+                if model_loaded and tag == "D" and any(c in checks for c in ("load", "generated", "ladder")):
                     receipt("tool-envelopes", tag, lambda: r0.tool_envelopes(
                         [row for row in report["checks"] if row.get("model") == "D"]))
             finally:
                 if backend is not None:
                     backend.close()
-        outcomes = {"checkpoint": {"required", "not_required"}, "ladder": {"pass", "fallback"},
-                    "template": {"diagnostic"}, "disk": {"diagnostic"}}
-        bad = [r for r in report["checks"] if r["status"] not in outcomes.get(r["check"], {"pass"})]
+        bad = [r for r in report["checks"] if r["status"] not in ACCEPTED_OUTCOMES.get(r["check"], {"pass"})]
         report["status"] = "fail" if bad else "pass"
         report["complete_r0"] = (set(checks) == set(CHECKS) and set(models) == {"D"}
                                   and not bad and report["evidence_kind"] == "live_desk")
-        report["decisions_pending_lead_action"] = [
-            {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
-            for row in report["checks"] if row["status"] in {"required", "fallback"}]
+    except _StopChecks:
+        report["status"] = "fail"
     except ProfileRefused as exc:
         report.update(status="refused", refusal=str(exc), refusal_code=exc.code)
     except Refused as exc:
@@ -216,7 +239,11 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     except Exception as exc:
         report.update(status="fail", error=f"{type(exc).__name__}: {exc}")
     finally:
+        report["decisions_pending_lead_action"] = [
+            {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
+            for row in report["checks"] if row["status"] in {"required", "fallback"}]
         report["census"] = guard.receipts
+        report["total_seconds"] = time.monotonic() - started_run
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
         save_report(output, report)
     return report
@@ -233,6 +260,9 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
     parser.add_argument("--models", default="D", help="D only under Amendment 1")
     parser.add_argument("--timeout", type=int, default=7200,
                         help="seconds per check, or per decode attempt / ladder episode / generated turn")
+    parser.add_argument("--keep-going", action="store_true", help="continue after failed checks; prerequisite gates still apply")
+    parser.add_argument("--long-decode-attempts", type=int, choices=(1, 2), default=2,
+                        help="maximum attempts: one normally, optional metadata retry only after failure (default: 2)")
     parser.add_argument("--inventory", type=Path, help="hash this root only, before offload; output is a new JSON file")
     args = parser.parse_args(argv)
     checks, models = args.checks.split(","), args.models.split(",")
@@ -266,7 +296,8 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
             from joulewise.align.r0_mlx import MlxBackend
             backend_factory = MlxBackend
         report = execute(config, args.output, checks, models, guard=guard,
-                         backend_factory=backend_factory, per_check_timeout=args.timeout)
+                         backend_factory=backend_factory, per_check_timeout=args.timeout,
+                         keep_going=args.keep_going, long_decode_attempts=args.long_decode_attempts)
         print(f"{report['status']}: {args.output / 'report.json'}; complete_r0={report['complete_r0']}")
         return 0 if report["status"] == "pass" else 2
 

@@ -74,8 +74,15 @@ the Terminal launch example below does not satisfy that headless gate.
    `status == "pass"`; this is a storage gate, not an arm authorization.
 
 3. Start the unattended desk run after model preparation.
-   Use a new record directory for every attempt; budget approximately 5.5–6.5 h,
-   including the 30 min SMC profile, potentially longer for long-decode retries.
+   Use a new record directory for every attempt; expect approximately **3–4 h
+   when all checks pass**, including the 30 min SMC profile. This is a planning
+   estimate, not a measured guarantee. A worst-case token-budget estimate at
+   10 decode tok/s is **about 7.3 h plus prefill, inventory and setup overhead**:
+   12 generated turns × 4,096 tokens, six ladder episodes × 16,384, two long
+   decodes × 38,912, memory's 6,144 and load's three × 4,096, plus 30 min SMC.
+   This assumes every rung fails and both decode attempts run. Slower hosts or
+   raised timeouts can take longer; native signal delivery can also delay a
+   deadline. There is no fixed total-run deadline.
    AC power, Automatic initially.
 
    ```sh
@@ -84,11 +91,24 @@ the Terminal launch example below does not satisfy that headless gate.
    ```
 
    Every check can run separately with the same command plus, for example,
-   `--checks template --models D`. Available checks: `host,disk,smc,load,template,generated,ladder,long-decode,memory`.
+   `--checks template --models D`. Available checks, in execution order:
+   `host,disk,load,template,generated,memory,smc,ladder,long-decode`.
+   The host identity and model-load gates precede model checks. A comma-separated
+   subset always follows this order. The model is unloaded before SMC and
+   reloaded afterward for any remaining generations, preserving SMC's unloaded
+   baseline. A failed check stops the run after saving its report; use
+   `--keep-going` for diagnostic continuation. Prerequisite failures still block
+   dependent checks, and census refusals always stop. Diagnostic template/disk
+   results, checkpoint `required` and ladder `fallback` do not trigger a stop;
+   inconclusive checks do.
    A subset does not complete R0. The timeout is 7,200 s per long-decode
    **attempt**, ladder **episode**, generated **turn**, or other check. D's
    38,912-token decode at 10 tok/s takes about 3,891 s per attempt; two attempts
-   get separate deadlines. A slow D host can use `--timeout 14400`. Native
+   get separate deadlines. The default runs one attempt and retries with metadata
+   evaluation only after a failed verdict; `--long-decode-attempts 1` disables
+   that retry (`2` is the default maximum). Exceptions and timeouts fail the
+   check immediately, retaining the existing behavior. A slow D host can use
+   `--timeout 14400`. Native
    calls can delay signal delivery. A timeout fails the current check while
    retaining completed attempts/rungs/turns and sampled in-flight evidence.
    JSON/Markdown are saved at each progress boundary, including memory samples.
@@ -98,7 +118,9 @@ the Terminal launch example below does not satisfy that headless gate.
 
 4. Read `report.md` and its full `report.json`. Exit 0 means the selected
    checks passed; **`complete_r0: true` requires every check for D**.
-   Both files are updated at progress boundaries. Preserve failed/partial attempts.
+   Both files are updated at progress boundaries, with each phase's measured
+   `check_seconds` and the run's `total_seconds` (also shown in Markdown).
+   Preserve failed/partial attempts.
    Checkpoint `required` and ladder `fallback` are valid selection outcomes;
    `decisions_pending_lead_action` must be resolved before R1. Template is
    diagnostic-only. Inconclusive results prevent R0 completion.
@@ -127,7 +149,8 @@ targets), ≤3.0 nats/token. Synthetic rewrite tables diagnose templates; **gene
 transitions decide B7 (≥12 eligible transitions; any closed-reasoning rewind).
 Insufficient transitions are inconclusive. Coherence and echo are diagnostics;
 NLL is the load bar. D tries default xhigh, medium, low, stopping at the first
-pass. Episodes use spam/bank, indices 91–92, ≤6 turns/16,384 tokens. Screens
+pass; skipped rungs record "not run: higher rung passed". Episodes use spam/bank,
+indices 91–92, ≤6 turns/16,384 tokens. Screens
 admit only full-cap turns that fit this total. D envelopes must parse ≥95%
 with no unsupported-format flags. Reasoning quotes are excluded, capped
 incomplete envelopes are reported separately, and tool replies/errors are saved.
