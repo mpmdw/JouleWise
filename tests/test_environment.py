@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from joulewise.environment import (
     collect_environment_snapshot,
+    empty_environment_snapshot,
     evaluate_environment_policy,
 )
 
@@ -1040,6 +1041,15 @@ class PmsetPowerModeParsingTests(unittest.TestCase):
     def test_lowpowermode_key_takes_precedence(self) -> None:
         text = " lowpowermode         1\n powermode            0\n"
         self.assertIs(self._parse(text)["low_power_mode"], True)
+
+    def test_powermode_value_is_exposed_for_the_admission_gate(self) -> None:
+        # Executing review HIGH-3 (2026-11-06): High Power (2) is not low power,
+        # so the snapshot must carry the value itself, not only the boolean.
+        self.assertEqual(self._parse(" powermode            2\n")["powermode"], 2)
+        self.assertEqual(self._parse(" lowpowermode 0\n powermode 2\n")["powermode"], 2)
+        self.assertEqual(self._parse(" powermode 0\n")["powermode"], 0)
+        self.assertIsNone(self._parse(" lowpowermode 0\n")["powermode"])
+        self.assertIn("powermode", empty_environment_snapshot())
 
 
 if __name__ == "__main__":

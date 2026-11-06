@@ -29,7 +29,7 @@ COLD = {
     "night_refused_class_unbuilt", "night_receipt_class_invalid",
     "night_probe_error", "night_aborted_agent_present",
     "night_chain_already_started", "night_chain_alive", "night_chain_launch_failed",
-    "night_courier_running", "night_courier_unavailable",
+    "night_courier_running", "night_courier_unavailable", "night_refused_ac_powermode",
     "night_plan_overruns_deadman", "night_record_exists",
     "night_calibration_refused", "night_window_exceeded",
     # Cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2 (2026-09-23): the

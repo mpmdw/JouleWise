@@ -3981,6 +3981,47 @@ def _hazard_seams():
     return hazard_driver.production_seams(REPO_ROOT)
 
 
+AC_POWERMODE_ARGV = ("/usr/bin/pmset", "-g", "custom")
+
+
+def _admit_ac_powermode(plan: NightPlan, probes: Probes) -> dict[str, Any]:
+    """HIGH-3 host-level admission through the probe seam (tests fake ``run``).
+
+    Reads the AC-profile ``powermode`` (exact key in the ``AC Power:`` block),
+    retried once on a failed read. If ``$MEASUREMENT_ROOT/.align-r1-high-power``
+    exists, Automatic is restored with the narrow sudo rule and the mode is
+    read again. Never raises: a failure is a refusal record.
+    """
+    from joulewise.align.apple import powermode
+
+    def runner(argv):
+        return probes.run(tuple(argv))
+
+    expected = night_gate.DEFAULT_AC_POWERMODE if plan.ac_powermode is None else plan.ac_powermode
+    marker = Path(plan.measurement_root) / powermode.R1_HIGH_POWER_MARKER
+    try:
+        record = powermode.admit_ac_powermode(expected, marker=marker, runner=runner)
+    except Exception as error:  # noqa: BLE001 - admission evidence, never a crash
+        record = {"expected": expected, "observed": None, "marker": str(marker), "marker_present": None,
+                  "admitted": False, "reason": f"admission failed: {type(error).__name__}: {error}"}
+    record["plan_declared"] = plan.ac_powermode
+    return record
+
+
+def _refuse_ac_powermode(custody_root: Path, night_dir: Path, plan: NightPlan, courier_bin: Path | None,
+                         admission: Mapping[str, Any], started_epoch_s: float, started_monotonic_ns: int) -> int:
+    """The HIGH-3 refusal: record it, deliver the notice, never launch."""
+    _append_log(custody_root, "ac powermode admission refused: " + str(admission["reason"]))
+    resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(courier_bin, plan=plan)
+    _record_courier_substitution(custody_root, courier_substitution)
+    _write_standard_refusal_result(
+        custody_root, night_dir, plan, _CODES["refused_ac_powermode"],
+        str(admission["reason"]), started_epoch_s, started_monotonic_ns, evidence=dict(admission))
+    return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED, resolved_courier,
+                             courier_error=courier_error, deadman_epoch_s=deadman_epoch(plan),
+                             courier_bin_substitution=courier_substitution)
+
+
 def run_night(
     plan_path: Path,
     *,
@@ -4030,6 +4071,19 @@ def run_night(
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
+    # Host-level power-mode admission (executing review HIGH-3, 2026-11-06),
+    # before any receipt-class branch: a crash, SIGKILL or power loss during
+    # R1's High Power leg leaves the persistent AC profile at powermode 2,
+    # which the generic low-power gate admits. Refuse unless the AC powermode
+    # equals the plan's declared value (default 0), after restoring Automatic
+    # when the R1 marker under MEASUREMENT_ROOT says a restore is owed.
+    powermode_admission = _admit_ac_powermode(plan, probes)
+    if not powermode_admission["admitted"]:
+        return _refuse_ac_powermode(custody_root, night_dir, plan, courier_bin, powermode_admission,
+                                    started_epoch_s, started_monotonic_ns)
+    _append_log(custody_root, "ac powermode admitted: expected {expected} observed {observed}{restored}".format(
+        expected=powermode_admission["expected"], observed=powermode_admission["observed"],
+        restored=" (R1 High Power marker restored to Automatic)" if powermode_admission["marker_present"] else ""))
     if plan.receipt_class == night_gate.HAZARD_PACK:
         if rehearsal:
             # `rehearse` never runs a real window; HAZARD_PACK has no stub mode.

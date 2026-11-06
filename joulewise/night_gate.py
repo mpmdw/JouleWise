@@ -293,6 +293,7 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
         "night_courier_unavailable",      # the stamped courier binary is missing or not executable
         "night_plan_overruns_deadman",   # t0 + window_max_s + courier deadline is not before the dead-man hour
         "night_record_exists",            # a write-once record proves this night was already invoked
+        "night_refused_ac_powermode",     # AC-profile powermode is not the plan's (default 0), after any R1 High Power marker restore (HIGH-3, 2026-11-06)
         "night_window_exceeded",  # driver wall-clock deadline: chain terminated after the exclusive window end plus shutdown grace
         NON_OBSERVER_EXCLUSION,  # two consecutive envelopes lost to a busy non-observer process; the chain ends (cold gate 10, 2026-09-23, Q2)
     }
@@ -316,6 +317,11 @@ ORDER = (
     "night_refused_boot_clock",
     "night_refused_registration",
 )
+
+# Admissible AC-profile powermode values a plan may declare (0 Automatic,
+# 2 High Power); 1 is Low Power and is never admissible.
+AC_POWERMODES = (0, 2)
+DEFAULT_AC_POWERMODE = 0
 
 _PLAN_KEYS = {
     "schema",
@@ -436,6 +442,10 @@ class NightPlan:
     previous_attempt: dict[str, object] | None = None
     block_archive_root: str | None = None
     null_reservation_restore: dict[str, object] | None = None
+    # The AC-profile powermode run_night admission requires (executing review
+    # HIGH-3, 2026-11-06). Optional in every plan class; absent means 0
+    # (Automatic). Only 0 and 2 (High Power) are admissible values.
+    ac_powermode: int | None = None
 
     @staticmethod
     def from_mapping(value: Mapping[str, object]) -> "NightPlan":
@@ -455,6 +465,8 @@ class NightPlan:
                 raise PlanError("night_plan_malformed", "attempt history requires a pack plan")
         if "null_reservation_restore" in keys:
             expected_keys |= history_keys | {"null_reservation_restore"}
+        if "ac_powermode" in keys:
+            expected_keys = expected_keys | {"ac_powermode"}
         if is_quiet:
             expected_keys = expected_keys | {"quiet_admission"}
         expected_schema = PACK_PLAN_SCHEMA if is_pack else PLAN_SCHEMA
@@ -590,6 +602,7 @@ class NightPlan:
                 "night_plan_malformed",
                 f"registration_path is required for {receipt_class}",
             )
+        ac_powermode = _plan_ac_powermode(value) if "ac_powermode" in keys else None
         previous = value.get("previous_attempt")
         archive_root = value.get("block_archive_root")
         restore = value.get("null_reservation_restore")
@@ -628,6 +641,7 @@ class NightPlan:
                 custody_root=custody_root,
                 registration_path=registration,
                 hazard_window=hazard_window,
+                ac_powermode=ac_powermode,
             )
         return NightPlan(
             plan_id=plan_id,
@@ -647,7 +661,16 @@ class NightPlan:
             previous_attempt=previous,
             block_archive_root=archive_root,
             null_reservation_restore=restore,
+            ac_powermode=ac_powermode,
         )
+
+
+def _plan_ac_powermode(value: Mapping[str, object]) -> int:
+    """The declared AC powermode (executing review HIGH-3): 0 or 2 only."""
+    mode = value.get("ac_powermode")
+    if type(mode) is not int or mode not in AC_POWERMODES:
+        raise PlanError("night_plan_malformed", "ac_powermode must be integer 0 or 2 when present")
+    return mode
 
 
 def validate_attempt_bindings(previous, archive_root, restore=None):

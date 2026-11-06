@@ -216,7 +216,7 @@ def build_plan(plan_id, head, custody_root):
 
 def plan_mapping(plan):
     return {"schema": night_gate.PLAN_SCHEMA, "schema_version": night_gate.PLAN_SCHEMA_VERSION,
-            **{k: v for k, v in asdict(plan).items() if k not in ("pack_night", "quiet_admission")}}
+            **{k: v for k, v in asdict(plan).items() if k not in ("pack_night", "quiet_admission", "ac_powermode")}}
 
 
 def stage_custody(plan, custody_root):
