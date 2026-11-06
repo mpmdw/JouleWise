@@ -6,6 +6,7 @@ exception and its partial census. Callers own isolated staging and publication.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 import io
@@ -119,6 +120,38 @@ def pack_scheduling_enabled(function) -> bool:
     return function.__name__ in {name.strip() for name in raw.split(',')}
 
 
+def _pack_physics(store, call):
+    """Return only physics partitions named by this pack's in-memory inputs.
+
+    Pack arguments contain the already-authenticated metadata used by their
+    archive/context.  Walking those objects is deliberately read-free.  If an
+    unfamiliar argument shape exposes no bound, retain the old whole-store
+    transport: a cache optimisation must never turn a warm computation cold.
+    """
+    from joulewise.whole_window import _effective_bound_partition
+
+    wanted, pending, seen = set(), [call], set()
+    while pending:
+        item = pending.pop()
+        identity = id(item)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if isinstance(item, Mapping):
+            partition = _effective_bound_partition(item)
+            if partition is not None:
+                wanted.add(partition)
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, (tuple, list, set, frozenset)):
+            pending.extend(item)
+        elif hasattr(item, '__dict__'):
+            pending.extend(vars(item).values())
+    if not wanted:
+        return _snapshot(store)
+    return {partition: dict(store[partition]) for partition in wanted if partition in store}
+
+
 def pack_map(function, calls):
     """Compute ahead; never account an unconsumed pack. None keeps the serial path."""
     from concurrent.futures import ProcessPoolExecutor
@@ -141,9 +174,10 @@ def pack_map(function, calls):
         # An opaque caller-owned callback or runtime object keeps the original
         # serial path, like member_map's failed-transport recomputation.
         return None
+    store = caches.physics_store or {}
     tasks = [PackTask(reference, payload, share, active_v2_authentication_session() is not None,
-                      _snapshot(caches.physics_store or {}), context, phase_timing.enabled())
-             for payload, share in zip(payloads, shares)]
+                      _pack_physics(store, call), context, phase_timing.enabled())
+             for call, payload, share in zip(calls, payloads, shares)]
     pool = ProcessPoolExecutor(max_workers=min(caches.workers, len(tasks)),
                                mp_context=multiprocessing.get_context('spawn'))
     outcomes, broken = [], False

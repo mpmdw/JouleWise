@@ -36,6 +36,74 @@ def bracket_fixture_worker(task):
 
 
 class PackTransportTests(unittest.TestCase):
+    def test_each_pack_gets_only_its_bound_physics_partition(self):
+        store = {
+            float(1).hex(): {'alpha-fit': 1.25},
+            float(2).hex(): {'beta-fit': 2.5},
+            float(3).hex(): {'unrelated-fit': 9.0},
+        }
+        calls = [(({'instrument_calibration': {'b_fiducial_s': bound}},), {})
+                 for bound in (1, 2)]
+        slices = [pp._pack_physics(store, call) for call in calls]
+        self.assertEqual(slices, [
+            {float(1).hex(): {'alpha-fit': 1.25}},
+            {float(2).hex(): {'beta-fit': 2.5}},
+        ])
+        # Slicing is transport-only: the warm value seen by each computation
+        # is exactly the value it saw in the former whole-store payload.
+        for call, sliced in zip(calls, slices):
+            partition = float(call[0][0]['instrument_calibration']['b_fiducial_s']).hex()
+            self.assertEqual(sliced[partition], store[partition])
+
+    def test_unknown_pack_shape_falls_back_to_byte_identical_whole_store(self):
+        store = {'partition': {'fit': 1.0}}
+        sliced = pp._pack_physics(store, (('opaque-pack-name',), {}))
+        self.assertEqual(pp.dumps(sliced), pp.dumps(store))
+        self.assertIsNot(sliced, store)
+
+    def test_pack_map_places_the_per_call_slice_in_each_task(self):
+        captured = []
+
+        class Future:
+            def __init__(self, task):
+                self.task = task
+
+            def result(self):
+                return pp.run_pack(self.task)
+
+        class InlinePool:
+            def __init__(self, **_kwargs):
+                pass
+
+            def submit(self, _worker, task):
+                captured.append(task)
+                return Future(task)
+
+            def shutdown(self, **_kwargs):
+                pass
+
+        def calibration_pack(metadata):
+            return metadata['instrument_calibration']['b_fiducial_s']
+
+        # Importable functions are required by pack_map; publish this synthetic
+        # one only for the duration of the scheduling check.
+        calibration_pack.__module__ = __name__
+        calibration_pack.__qualname__ = 'calibration_pack'
+        globals()['calibration_pack'] = calibration_pack
+        store = {float(i).hex(): {f'fit-{i}': float(i)} for i in (1, 2, 3)}
+        calls = [(({'instrument_calibration': {'b_fiducial_s': i}},), {}) for i in (1, 2)]
+        try:
+            with arc.analysis_run_caches(store, workers=2), \
+                    patch('concurrent.futures.ProcessPoolExecutor', InlinePool):
+                outcomes = pp.pack_map(calibration_pack, calls)
+        finally:
+            globals().pop('calibration_pack', None)
+        self.assertTrue(all(outcome.ok for outcome in outcomes))
+        self.assertEqual([task.physics for task in captured], [
+            {float(1).hex(): {'fit-1': 1.0}},
+            {float(2).hex(): {'fit-2': 2.0}},
+        ])
+
     def test_operator_switch_keeps_the_serial_path(self):
         with arc.analysis_run_caches({}, workers=3):
             calls = [(('a',), {}), (('b',), {})]
