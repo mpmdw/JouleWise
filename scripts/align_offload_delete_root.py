@@ -16,6 +16,7 @@ from pathlib import Path, PurePosixPath
 import re
 import runpy
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -30,12 +31,19 @@ MANDATORY_KEEP = tuple(Path(p) for p in (
     '/Users/edr/night-b5', '/Users/edr/night-g2a', '/Users/edr/night-archive',
     '/Users/edr/night-plan-staging', '/Users/edr/night-b6', '/Users/edr/night-bytes',
     '/Users/edr/jw_models', '/Users/edr/.cache/huggingface/hub',
-    '/Users/edr/Library/LaunchAgents',
+    '/Users/edr/Library/LaunchAgents', '/Users/edr/night-align',
 ))
 ALIGN_ROOT = Path('/Users/edr/night-align')
+HOME = Path('/Users/edr')
+# Every existing home-level measurement root must be in KEEP by inode, even one
+# this list has never heard of (N3). Case-insensitive, like APFS.
+MEASUREMENT_ROOT = re.compile(r'(?i)(?:night-.+|jw-b5-.+|jw_models)')
 MODEL_ROOTS = (Path('/Users/edr/jw_models'), Path('/Users/edr/.cache/huggingface/hub'))
 STOP_PATH = Path('/Users/edr/night-custody/magistrate/STOP')
 VOLUME_ROOT = Path('/Volumes')
+# diskutil BusProtocol of real external media. 'Disk Image', 'Apple Fabric',
+# 'Virtual Interface' and unknown values refuse (N7).
+PHYSICAL_BUSES = frozenset({'USB', 'PCI-Express', 'PCI', 'Thunderbolt'})
 DATALESS = 0x40000000
 LOCK_FLAGS = (0x2 | 0x4 | 0x20000 | 0x40000 |  # uchg/uappnd/schg/sappnd
               0x100000 | 0x80000 | 0x80)  # SF_NOUNLINK/SF_RESTRICTED/UF_DATAVAULT
@@ -104,11 +112,36 @@ def check_keep(src, keep_file, mandatory=None, public_path=None):
     keeps = [exact_path(line) for line in lines]  # missing entries refuse
     # Every mandatory spelling must be present, and must exist on this host.
     require(all(str(p) in lines for p in mandatory), 'missing mandatory KEEP')
+    keep_ids = {identity(k) for k in keeps}
+    for p in (*mandatory, *measurement_roots()):
+        try:
+            present = identity(p) in keep_ids
+        except OSError:
+            present = False
+        require(present, 'missing mandatory KEEP (inode): ' + p.name)
     for keep in keeps:
         if (public_path == src and keep in mandatory and keep in MODEL_ROOTS and
                 src != keep and keep in src.parents):
             continue  # only this approved model's mandatory-root containment
         require(not overlaps(src, keep), 'KEEP inode overlap')
+
+
+def measurement_roots(home=None):
+    home = HOME if home is None else home
+    try:
+        children = sorted(home.iterdir())
+    except FileNotFoundError:
+        return []  # no such home on this host
+    return [p for p in children if MEASUREMENT_ROOT.fullmatch(p.name) and p.is_dir()]
+
+
+def under_align_root(src):
+    """Inode test: a case/Unicode spelling variant of night-align still matches."""
+    try:
+        align = identity(ALIGN_ROOT)
+    except FileNotFoundError:
+        return src.parent == ALIGN_ROOT
+    return src.parent == ALIGN_ROOT or any(identity(p) == align for p in src.parents)
 
 
 def tree(root):
@@ -205,31 +238,103 @@ def check_uploaded(p):
     parse_uploaded(result.stdout)
 
 
-def busy_processes(table):
-    """Inspect argv locally for interpreter-launched writers; return PIDs only.
+AGENT_NAMES = frozenset({'claude', 'claude-code', 'codex'})
+SCRIPT_STEMS = frozenset({'offload', 'align_pilot_session', 'magistrate_watchdog',
+                          'advance_b5_ledger_pin', 'align_r0_checks', 'run_night',
+                          'run_b5_analysis', 'align_offload_disk_guard', 'mlx_lm'})
+WRITER_NAMES = frozenset({'tar', 'gtar', 'bsdtar', 'zstd', 'pzstd', 'unzstd', 'zstdmt',
+                          'zstdcat', 'rsync', 'cp', 'ditto', 'dd'})
+SCRIPT_SUFFIXES = ('.py', '.sh', '.zsh', '.js', '.mjs', '.cjs')
 
-    Never print or journal the table: command arguments may contain secrets.
-    Ambiguous matching is conservatively busy. comm alone misses python scripts.
+
+def _stem(name):
+    name = name.casefold()
+    for suffix in SCRIPT_SUFFIXES:
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
+
+def _named(token):
+    """Executable/script basename, or any agent path component (versions dir)."""
+    parts = [p for p in token.split('/') if p]
+    if not parts:
+        return False
+    base = _stem(parts[-1])
+    return (base in AGENT_NAMES or base in SCRIPT_STEMS or base in WRITER_NAMES or
+            base.startswith('harvest') or
+            any(p.casefold() in AGENT_NAMES for p in parts[:-1]))
+
+
+def _module(token):
+    parts = [p.casefold() for p in token.split('.')]
+    return any(p in SCRIPT_STEMS or p.startswith('harvest') for p in parts)
+
+
+def _table(text):
+    if isinstance(text, bytes):
+        text = text.decode('utf-8', 'replace')
+    require(bool(text.strip()), 'empty process census')
+    rows = {}
+    for row in text.splitlines():
+        if not row.strip():
+            continue
+        m = re.fullmatch(r'\s*(\d+)(?:\s+(.*))?', row)
+        require(m is not None, 'unknown process census format')
+        rows[m[1]] = (m[2] or '').strip()
+    return rows
+
+
+def busy_processes(comm_table, args_table, executables=None):
+    """Inspect executable paths and argv locally; return PIDs only.
+
+    Three independent views, each untruncated (review N1):
+    - comm_table: `ps -axww -o pid=,comm=` with comm LAST (macOS truncates a
+      non-last comm to 16 characters). On macOS this is the launch name/path.
+    - args_table: `ps -axww -o pid=,args=` with args LAST, unlimited width:
+      interpreter-launched scripts, `python -m` modules, argv[0] spellings.
+    - executables: pid -> kernel proc_pidpath(), the real executable image,
+      e.g. .../claude/versions/X even when launched via a `claude` symlink or
+      with a disguised argv[0].
+    Never print or journal any of them: argv may contain secrets.
+    Ambiguous matching is conservatively busy.
     """
-    pattern = re.compile(r'(?i)(?:claude|codex|offload\.py|align_pilot_session(?:\.py)?|harvest[\w.-]*|zstd|tar)')
-    require(bool(table.strip()), 'empty process census')
-    busy = []
-    for row in table.splitlines():
-        fields = row.strip().split(None, 2)
-        require(len(fields) >= 2 and fields[0].isdigit(), 'unknown process census format')
-        pid, executable = fields[:2]
-        argv = fields[2] if len(fields) == 3 else ''
-        if (pattern.fullmatch(PurePosixPath(executable).name) or
-                re.fullmatch(r'.*/claude/versions/[\d.]+', executable) or
-                re.search(r'(?i)(?:^|[\s/])(?:offload\.py|align_pilot_session(?:\.py)?|'
-                          r'harvest[\w.-]*)(?=[\s\"\x27]|$)', argv)):
-            busy.append(pid)
-    return busy
+    comm, args = _table(comm_table), _table(args_table)
+    executables = executables or {}
+    busy = set()
+    for pid in set(comm) | set(args):
+        if _named(comm.get(pid, '')) or _named(executables.get(pid, '')):
+            busy.add(pid)
+            continue
+        tokens = args.get(pid, '').split()
+        if any(_named(t) for t in tokens) or any(
+                tokens[i] == '-m' and _module(tokens[i + 1]) for i in range(len(tokens) - 1)):
+            busy.add(pid)
+    return sorted(busy, key=int)
+
+
+def ps_table(field):
+    return subprocess.run(['/bin/ps', '-axww', '-o', 'pid=,' + field + '='],
+                          check=True, capture_output=True).stdout
+
+
+def executable_paths(pids):
+    """Kernel executable path per PID via libproc proc_pidpath (no argv)."""
+    import ctypes
+    lib = ctypes.CDLL('/usr/lib/libproc.dylib')
+    lib.proc_pidpath.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32)
+    buf = ctypes.create_string_buffer(4096)  # PROC_PIDPATHINFO_MAXSIZE
+    paths = {}
+    for pid in pids:
+        if lib.proc_pidpath(int(pid), buf, len(buf)) > 0:
+            paths[pid] = buf.value.decode('utf-8', 'replace')
+    return paths
 
 
 def process_census():
-    return busy_processes(subprocess.run(['/bin/ps', '-axo', 'pid=,comm=,args='],
-                          check=True, text=True, capture_output=True).stdout)
+    comm, args = ps_table('comm'), ps_table('args')
+    pids = set(_table(comm)) | set(_table(args))
+    return busy_processes(comm, args, executable_paths(pids) if sys.platform == 'darwin' else {})
 
 
 def external_info(mount):
@@ -240,6 +345,47 @@ def external_info(mount):
 
 def volume_device(path):
     return path.stat().st_dev
+
+
+def physical_external(info):
+    """Volume, its APFS physical store and that store's whole disk must all be
+    real external USB/Thunderbolt/PCIe(NVMe) media. A disk image on the internal
+    SSD reports Internal=false but BusProtocol 'Disk Image' (N7): refused."""
+    def physical(d):
+        return (isinstance(d, dict) and d.get('Internal') is False and
+                d.get('BusProtocol') in PHYSICAL_BUSES and
+                d.get('VirtualOrPhysical') != 'Virtual' and d.get('MediaName') != 'Disk Image')
+    reason = 'independent copy not on physical external USB/Thunderbolt/NVMe media'
+    require(physical(info), reason)
+    stores = info.get('APFSPhysicalStores')
+    require(isinstance(stores, list) and len(stores) > 0, reason)
+    wholes = []
+    for row in stores:
+        device = row.get('APFSPhysicalStore') if isinstance(row, dict) else None
+        require(isinstance(device, str) and re.fullmatch(r'disk\d+(?:s\d+)*', device), reason)
+        store = external_info(device)
+        parent = store.get('ParentWholeDisk') if isinstance(store, dict) else None
+        require(isinstance(parent, str) and re.fullmatch(r'disk\d+', parent), reason)
+        whole = external_info(parent)
+        require(physical(store) and physical(whole), reason)
+        wholes.append(whole)
+    return wholes
+
+
+def external_volume_identity(mount, uuid, media=None):
+    """Enrolled VolumeUUID AND physical external media (optionally its name)."""
+    require(mount.parent == VOLUME_ROOT and os.path.ismount(mount),
+            'independent volume not mounted')
+    info = external_info(mount)
+    require(isinstance(uuid, str) and bool(uuid) and info.get('VolumeUUID') == uuid and
+            info.get('Internal') is False and info.get('MountPoint') == str(mount) and
+            info.get('FilesystemType', '').casefold() == 'apfs',
+            'independent volume identity mismatch')
+    wholes = physical_external(info)
+    if media is not None:
+        require(bool(media) and all(w.get('MediaName') == media for w in wholes),
+                'independent volume physical media mismatch')
+    return info
 
 
 def independent_copy(item, src, manifest_sha, archive_sha=None):
@@ -258,14 +404,7 @@ def independent_copy(item, src, manifest_sha, archive_sha=None):
             (archive_sha is None or receipt['archive_sha256'] == archive_sha),
             'independent copy binding mismatch')
     mount = exact_path(receipt['volume'])
-    require(mount.parent == VOLUME_ROOT and os.path.ismount(mount),
-            'independent volume not mounted')
-    info = external_info(mount)
-    require(isinstance(receipt['volume_uuid'], str) and bool(receipt['volume_uuid']) and
-            info.get('VolumeUUID') == receipt['volume_uuid'] and
-            info.get('Internal') is False and info.get('MountPoint') == str(mount) and
-            info.get('FilesystemType', '').casefold() == 'apfs',
-            'independent volume identity mismatch')
+    external_volume_identity(mount, receipt['volume_uuid'])
     device = volume_device(mount)
     require(device not in (volume_device(src), volume_device(item)),
             'second copy shares source/journal device')
@@ -526,6 +665,9 @@ def delete_root(item, keep, remote, journal, model_class='archived'):
         pointer = src.with_name(src.name + '.OFFLOADED.json')
         require(not os.path.lexists(pointer), 'pointer already exists')
         archive_sha = ''
+        # Inode-keyed, before KEEP: nothing under night-align (any spelling) is
+        # deletable; night-align is also mandatory KEEP (N3, defense in depth).
+        require(not under_align_root(src), 'pilot roots retained until block-5 release')
         check_keep(src, keep)
         approved = item.parent / 'approved-models.txt'
         if os.path.lexists(approved):
@@ -535,8 +677,6 @@ def delete_root(item, keep, remote, journal, model_class='archived'):
             model_dirs = []
         for line in model_dirs:
             exact_path(line)
-        pilot = src.parent == ALIGN_ROOT and re.fullmatch(r'pilot-v[0-9]+-[A-Za-z0-9_-]+', src.name)
-        require(not pilot, 'pilot roots retained until block-5 release')
         require(str(src) in model_dirs, 'source outside allowed roots')
         archive_path = remote / (item.name + '.tar.zst')
         cloud_manifest = remote / (item.name + '.manifest.json')
@@ -603,7 +743,7 @@ def delete_root(item, keep, remote, journal, model_class='archived'):
         audit(journal_fd, journal, src, 'DELETED', manifest_sha, archive_sha)
         return dict(source=str(src), model_class=model_class, source_regular_bytes=regular_bytes,
                     available_bytes_delta=shutil.disk_usage(src.parent).free - free_before)
-    except Exception:
+    except BaseException:  # Ctrl-C/SIGTERM during rmtree still gets its row (N8)
         try:
             audit(journal_fd, journal, src, 'FAILED_PARTIAL' if started else 'REFUSED_NO_DELETE')
         except (OSError, Refusal):
@@ -611,6 +751,10 @@ def delete_root(item, keep, remote, journal, model_class='archived'):
         raise
     finally:
         os.close(journal_fd)
+
+
+def interrupted(signum, frame):
+    raise KeyboardInterrupt('signal ' + str(signum))
 
 
 def main():
@@ -626,6 +770,10 @@ def main():
     for name in ('item', 'volume', 'archive', 'manifest', 'restore'):
         second.add_argument('--' + name, required=True, type=Path)
     second.add_argument('--uuid', required=True)
+    check = sub.add_parser('volume-check')
+    check.add_argument('--volume', required=True, type=Path)
+    check.add_argument('--uuid', required=True)
+    check.add_argument('--media', required=True, help='whole-disk MediaName enrolled at 9a')
     for name in ('tree', 'budget'):
         sub.add_parser(name).add_argument('path', type=Path)
     d = sub.add_parser('delete')
@@ -641,9 +789,16 @@ def main():
         require(not lock_path.is_symlink(), 'delete lock symlink')
         with lock_path.open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            for signum in (signal.SIGTERM, signal.SIGHUP):
+                signal.signal(signum, interrupted)  # journaled like Ctrl-C (N8)
             require(args.model_class == 'public-weights' or args.remote is not None, '--remote required')
             result = delete_root(args.item, args.keep, args.remote, args.journal, args.model_class)
             print(json.dumps(result, sort_keys=True))
+    elif args.command == 'volume-check':
+        info = external_volume_identity(exact_path(str(args.volume)), args.uuid, args.media)
+        print(json.dumps(dict(volume=str(args.volume), volume_uuid=info.get('VolumeUUID'),
+                              bus=info.get('BusProtocol'), media=args.media,
+                              result='external volume identity PASS'), sort_keys=True))
     elif args.command == 'cloud-roundtrip':
         cloud_roundtrip(args.item, args.remote)
     elif args.command == 'second-copy':
@@ -670,6 +825,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except KeyboardInterrupt as exc:
+        print('STOP: interrupted: ' + str(exc), file=sys.stderr)
+        sys.exit(130)
     except Exception as exc:
         print('STOP: ' + type(exc).__name__ + ': ' + str(exc), file=sys.stderr)
         sys.exit(1)

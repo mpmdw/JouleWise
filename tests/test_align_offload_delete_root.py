@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -47,6 +48,10 @@ class DeleteRootTests(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
         mock.patch.object(g, 'MANDATORY_KEEP', (self.keep_root,)).start()
         mock.patch.object(g, 'ALIGN_ROOT', self.align).start()
+        # Never list the real home; dynamic measurement-root tests use this.
+        self.home = self.root / 'home'
+        self.home.mkdir()
+        mock.patch.object(g, 'HOME', self.home).start()
         self.acl = mock.patch.object(g, 'check_acl_flags').start()
         self.upload = mock.patch.object(g, 'check_uploaded').start()
         self.pause = mock.patch.object(g, 'check_pause_and_disk').start()
@@ -83,7 +88,7 @@ class DeleteRootTests(unittest.TestCase):
             with self.assertRaises(Exception) as caught:
                 self.run_delete()
             if reason:
-                self.assertIn(reason, str(caught.exception))
+                self.assertRegex(str(caught.exception), reason)
             deletion.assert_not_called()
         self.assertTrue(self.src.exists())
         self.assertIn('REFUSED_NO_DELETE', self.journal.read_text())
@@ -108,7 +113,9 @@ class DeleteRootTests(unittest.TestCase):
                 self.refused()
 
     def test_case_variant_allowed_parent_refuses(self):
-        # Real case-insensitive volumes alias this; emulate on case-sensitive CI.
+        # On case-insensitive APFS 'Night-Align' IS night-align: the inode-keyed
+        # pilot check refuses. On a case-sensitive FS it is another directory,
+        # outside the approved list.
         original = self.src
         alias = self.root / 'Night-Align'
         alias.mkdir(exist_ok=True)
@@ -116,7 +123,52 @@ class DeleteRootTests(unittest.TestCase):
         self.src.mkdir(exist_ok=True)
         (self.src / 'bytes').write_bytes(b'x')
         self.prepare()
-        self.refused('outside allowed')
+        self.refused('outside allowed|pilot roots retained')
+
+    def case_variant_pilot(self):
+        """Review N3/S2: approved list + receipts bound to the NIGHT-ALIGN spelling."""
+        real = self.align / 'pilot-v7-20261105T015948Z'
+        real.mkdir()
+        (real / 'bytes').write_bytes(b'opaque synthetic pilot bytes')
+        variant = self.root / 'NIGHT-ALIGN' / real.name
+        if not variant.exists():
+            self.skipTest('case-sensitive filesystem: the variant is not an alias here')
+        mock.patch.object(g, 'MANDATORY_KEEP', (self.keep_root, self.align)).start()
+        self.keep.write_text(str(self.keep_root) + '\n' + str(self.align) + '\n')
+        self.src = variant
+        (self.op / 'approved-models.txt').write_text(str(variant) + '\n')
+        self.prepare()
+        return real
+
+    def test_native_case_variant_pilot_refuses_by_inode(self):
+        real = self.case_variant_pilot()
+        self.refused('pilot roots retained')
+        self.assertTrue(real.is_dir() and (real / 'bytes').is_file())
+        self.assertFalse(os.path.lexists(real.with_name(real.name + '.OFFLOADED.json')))
+
+    def test_native_case_variant_refused_by_mandatory_night_align_keep_alone(self):
+        # Even if the pilot check were absent, night-align is mandatory KEEP and
+        # inode overlap refuses the demonstrated bypass.
+        real = self.case_variant_pilot()
+        with mock.patch.object(g, 'ALIGN_ROOT', self.root / 'not-the-align-root'):
+            self.refused('KEEP inode overlap')
+        self.assertTrue((real / 'bytes').is_file())
+
+    def test_unlisted_home_measurement_root_refuses_until_kept_by_inode(self):
+        for name in ('night-new-lane', 'NIGHT-Other', 'jw-b5-analysis'):
+            with self.subTest(name=name):
+                extra = self.home / name
+                extra.mkdir()
+                self.refused('missing mandatory KEEP \\(inode\\): ' + name)
+                self.journal.unlink()
+                extra.rmdir()
+        (self.home / 'night-notes.txt').write_text('not a directory')
+        (self.home / 'nightly').mkdir()
+        extra = self.home / 'night-new-lane'
+        extra.mkdir()
+        self.keep.write_text(str(self.keep_root) + '\n' + str(extra) + '\n')
+        self.run_delete()
+        self.assertFalse(self.src.exists())
 
     def test_inode_overlap_despite_different_spelling(self):
         # Identity comparison catches an alias even if the OS preserves spelling.
@@ -241,6 +293,26 @@ class DeleteRootTests(unittest.TestCase):
             data[key] = value
             proof.write_text(json.dumps(data))
             self.refused('cloud roundtrip proof')
+
+    def test_interrupt_during_rmtree_logged_as_partial(self):
+        for signal_like in (KeyboardInterrupt('synthetic Ctrl-C'), SystemExit(143)):
+            with self.subTest(kind=type(signal_like).__name__):
+                with mock.patch.object(g.shutil, 'rmtree', side_effect=signal_like):
+                    with self.assertRaises(type(signal_like)):
+                        self.run_delete()
+                rows = self.journal.read_text()
+                self.assertIn('\tDELETE_AUTHORIZED\t', rows)
+                self.assertTrue(rows.rstrip('\n').split('\n')[-1].split('\t')[2] == 'FAILED_PARTIAL')
+                self.assertNotIn('\tDELETED\t', rows)
+                # Pending pointer survives for recovery; a rerun refuses.
+                pending = self.src.with_name(self.src.name + '.OFFLOADED.json.pending')
+                self.assertTrue(pending.is_file())
+                pending.unlink()
+                self.journal.unlink()
+
+    def test_sigterm_handler_raises_interrupt(self):
+        with self.assertRaises(KeyboardInterrupt):
+            g.interrupted(15, None)
 
     def test_os_failure_logged_as_partial_not_deleted(self):
         with mock.patch.object(g.shutil, 'rmtree', side_effect=OSError('synthetic failure')):
@@ -438,6 +510,127 @@ class DeleteRootTests(unittest.TestCase):
         self.refused('special file')
 
 
+def wait_visible(test, pid, timeout=10.0):
+    import time
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        out = subprocess.run(['/bin/ps', '-p', str(pid), '-o', 'pid='], capture_output=True, text=True).stdout
+        if out.strip():
+            time.sleep(0.2)  # let exec complete so comm/args show the new image
+            return
+        time.sleep(0.05)
+    test.fail('spawned process never appeared in ps')
+
+
+@unittest.skipUnless(sys.platform == 'darwin', 'native macOS ps behavior')
+class NativeProcessCensusTests(unittest.TestCase):
+    """Spawn REAL long-path processes and prove the production census sees them.
+
+    Only synthetic sleepers under a TemporaryDirectory; nothing is read or written
+    outside it. Every child is killed in cleanup.
+    """
+    @classmethod
+    def setUpClass(cls):
+        # A copied /bin/sleep (arm64e platform binary) is SIGKILLed outside the
+        # system volume, so compile a real ad-hoc-signed sleeper instead.
+        cls.build = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.build.cleanup)
+        cls.sleeper = Path(cls.build.name).resolve() / 'sleeper'
+        source = cls.sleeper.with_suffix('.c')
+        source.write_text('#include <unistd.h>\nint main(void){sleep(600);return 0;}\n')
+        if shutil.which('cc') is None or subprocess.run(
+                ['cc', '-o', str(cls.sleeper), str(source)], capture_output=True).returncode:
+            raise unittest.SkipTest('no C compiler for a native long-path executable')
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        deep = Path(self.temp.name).resolve()
+        for i in range(10):
+            deep = deep / ('long-path-component-%02d' % i)
+        deep.mkdir(parents=True)
+        self.deep = deep
+        self.assertGreater(len(str(deep)), 200)
+
+    def spawn(self, argv, **kw):
+        child = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, **kw)
+        def stop():
+            child.kill()
+            child.wait()
+            child.stdin.close()
+        self.addCleanup(stop)
+        wait_visible(self, child.pid)
+        return child
+
+    def binary(self, *parts):
+        target = self.deep.joinpath(*parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.sleeper, target)
+        target.chmod(0o755)
+        return target
+
+    def assertBusy(self, child):
+        self.assertIn(str(child.pid), g.process_census())
+
+    def test_symlinked_claude_native_layout_binary(self):
+        real = self.binary('.local', 'share', 'claude', 'versions', '2.1.99')
+        link = self.deep / '.local' / 'bin' / 'claude'
+        link.parent.mkdir(parents=True)
+        link.symlink_to(real)
+        self.assertBusy(self.spawn([str(link), '600']))
+        # The watchdog's PATH launch: argv[0] is the bare name `claude`.
+        self.assertBusy(self.spawn(['claude', '--resume'], executable=str(link)))
+
+    def test_disguised_argv0_still_busy_by_kernel_executable_path(self):
+        real = self.binary('.local', 'share', 'claude', 'versions', '2.1.99')
+        child = self.spawn(['innocuous-name', '600'], executable=str(real))
+        comm = subprocess.run(['/bin/ps', '-p', str(child.pid), '-o', 'comm='],
+                              capture_output=True, text=True).stdout
+        self.assertNotIn('claude', comm)  # only proc_pidpath can see it
+        self.assertIn('/claude/versions/', g.executable_paths([str(child.pid)])[str(child.pid)])
+        self.assertBusy(child)
+
+    def test_symlinked_claude_named_script(self):
+        script = self.deep / 'npm' / 'lib' / 'node_modules' / 'pkg' / 'cli.sh'
+        script.parent.mkdir(parents=True)
+        script.write_text('#!/bin/sh\n/bin/sleep 600\n:\n')
+        script.chmod(0o755)
+        link = self.deep / 'npm' / 'bin' / 'claude'
+        link.parent.mkdir(parents=True)
+        link.symlink_to(script)
+        self.assertBusy(self.spawn([str(link)]))
+
+    def test_long_path_codex_binary(self):
+        codex = self.binary('node_modules', '@openai', 'codex', 'vendor', 'aarch64-apple-darwin', 'codex', 'codex')
+        self.assertGreater(len(str(codex)), 250)
+        self.assertBusy(self.spawn([str(codex), 'exec']))
+
+    def test_long_path_python_scripts_and_modules(self):
+        watchdog = self.deep / 'scripts' / 'magistrate_watchdog.py'
+        watchdog.parent.mkdir(parents=True)
+        watchdog.write_text('import time\ntime.sleep(600)\n')
+        self.assertBusy(self.spawn([sys.executable, '-I', '-B', str(watchdog), '--tick']))
+        package = self.deep / 'fakepkg'
+        package.mkdir()
+        (package / '__init__.py').write_text('')
+        (package / 'harvest_b5.py').write_text('import time\ntime.sleep(600)\n')
+        env = dict(os.environ, PYTHONPATH=str(self.deep))
+        self.assertBusy(self.spawn([sys.executable, '-B', '-m', 'fakepkg.harvest_b5'], env=env))
+
+    def test_real_zstd_in_tar_pipeline(self):
+        zstd = shutil.which('zstd')
+        if zstd is None:
+            self.skipTest('zstd not installed')
+        # zstd blocks reading its stdin pipe; it is a writer until it exits.
+        self.assertBusy(self.spawn([zstd, '-T1', '-3', '-q', '-c']))
+        self.assertBusy(self.spawn(['/usr/bin/tar', '-cf', '-', '-T', '-']))
+
+    def test_benign_long_path_sleeper_is_not_busy(self):
+        child = self.spawn([str(self.binary('tools', 'benign-sleeper')), '600'])
+        self.assertNotIn(str(child.pid), g.process_census())
+
+
 class HelperTests(unittest.TestCase):
     def test_upload_parser_is_closed_until_real_sample_recorded(self):
         for text in ('isUploaded=1', 'isUploaded=1\nisUploading=0\nhasUnresolvedConflicts=0\n'):
@@ -502,7 +695,11 @@ class HelperTests(unittest.TestCase):
             space = types.SimpleNamespace(f_bavail=40_000_000_000, f_frsize=1)
             with mock.patch.object(g, 'STOP_PATH', stop), mock.patch.object(g.os, 'statvfs', return_value=space), mock.patch.object(g.subprocess, 'run', return_value=types.SimpleNamespace(stdout='1 /sbin/launchd')) as ps:
                 g.check_pause_and_disk(op)
-                self.assertEqual(ps.call_args.args[0], ['/bin/ps', '-axo', 'pid=,comm=,args='])
+                calls = [c.args[0] for c in ps.call_args_list if c.args[0][0] == '/bin/ps']
+                # comm and args are each the LAST column, in separate calls, so
+                # macOS never truncates the executable path to 16 characters.
+                self.assertEqual(calls, [['/bin/ps', '-axww', '-o', 'pid=,comm='],
+                                         ['/bin/ps', '-axww', '-o', 'pid=,args=']])
                 for command in ('claude', 'codex', 'offload.py', 'align_pilot_session.py',
                                 'harvest.py', 'zstd', '/usr/bin/tar', '/app/claude/versions/2.1.3'):
                     ps.return_value.stdout = '123 ' + command
@@ -521,14 +718,75 @@ class HelperTests(unittest.TestCase):
                 with self.assertRaisesRegex(g.Refusal, 'STOP mismatch'):
                     g.check_pause_and_disk(op)
 
+    def test_night_align_is_production_mandatory_keep(self):
+        self.assertIn(Path('/Users/edr/night-align'), g.MANDATORY_KEEP)
+        self.assertEqual(g.ALIGN_ROOT, Path('/Users/edr/night-align'))
+        self.assertEqual(g.HOME, Path('/Users/edr'))
+        for name in ('night-align', 'night-custody', 'night-b5', 'night-bytes', 'night-g2a',
+                     'night-b6', 'night-archive', 'night-plan-staging', 'jw_models'):
+            self.assertIn(Path('/Users/edr') / name, g.MANDATORY_KEEP)
+        for name in ('night-align', 'Night-Align', 'jw-b5-analysis', 'jw_models', 'night-x'):
+            self.assertTrue(g.MEASUREMENT_ROOT.fullmatch(name), name)
+        for name in ('nightly', 'night-', 'jw-b5', 'code'):
+            self.assertFalse(g.MEASUREMENT_ROOT.fullmatch(name), name)
+
+    def census(self, comm, args=''):
+        # Synthetic `ps -axww -o pid=,comm=` and `pid=,args=` tables.
+        return g.busy_processes(comm, args or comm)
+
     def test_census_matches_executable_basename_only(self):
-        self.assertEqual(g.busy_processes('123 /bin/python3.13\n'), [])
-        self.assertEqual(g.busy_processes('123 /tmp/harvest-project/python3.13\n'), [])
-        self.assertEqual(g.busy_processes('123 /tmp/tar-project/other\n'), [])
-        self.assertEqual(g.busy_processes('123 /bin/harvest.py\n'), ['123'])
+        self.assertEqual(self.census('123 /bin/python3.13\n'), [])
+        self.assertEqual(self.census('123 /tmp/harvest-project/python3.13\n'), [])
+        self.assertEqual(self.census('123 /tmp/tar-project/other\n'), [])
+        self.assertEqual(self.census('123 /bin/harvest.py\n'), ['123'])
         for script in ('offload.py', 'align_pilot_session.py', 'harvest.py'):
-            self.assertEqual(g.busy_processes('123 /bin/python3.13 python3.13 /tmp/' +
-                                             script + ' --secret credential\n'), ['123'])
+            self.assertEqual(self.census('123 /bin/python3.13\n', '123 python3.13 /tmp/' +
+                                         script + ' --secret credential\n'), ['123'])
+
+    def test_census_review_n1_missed_rows_now_busy(self):
+        # Every row the review showed the old 16-character `comm,args` parse missed.
+        py = '/opt/homebrew/Cellar/python@3.13/3.13.9/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python'
+        long_root = '/Users/edr/' + '/'.join('deep%02d' % i for i in range(12))
+        cases = {
+            'native claude': (long_root + '/.local/share/claude/versions/2.1.99', 'claude --resume'),
+            'claude via symlink': (long_root + '/.local/share/claude/versions/2.1.99',
+                                   '/Users/edr/.local/bin/claude -p'),
+            'long-path codex': (long_root + '/node_modules/@openai/codex/bin/codex', 'codex exec'),
+            'homebrew zstd': ('/opt/homebrew/Cellar/zstd/1.5.7/bin/zstd', 'zstd -T1 -3 -o x.partial'),
+            'npm claude': ('/opt/homebrew/Cellar/node/24.1.0/bin/node',
+                           'node /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js'),
+            'npm claude bin': ('/opt/homebrew/Cellar/node/24.1.0/bin/node', 'node /opt/homebrew/bin/claude'),
+            'watchdog': (py, py + ' -I -B /Users/edr/night-custody/x/scripts/magistrate_watchdog.py --tick'),
+            'ledger pin': (py, 'python3.13 -B scripts/advance_b5_ledger_pin.py --pin 640'),
+            'r0 checks': (py, '.venv/bin/python -B scripts/align_r0_checks.py --config c.json'),
+            'harvest module': (py, 'python3.13 -m joulewise.align.harvest_b5 --root r'),
+            'mlx module': (py, 'python -m mlx_lm.generate --model m'),
+            'run_night': (py, 'python3.13 scripts/run_night.py --plan p'),
+            'rsync': ('/usr/bin/rsync', 'rsync -a a b'),
+            'cp': ('/bin/cp', 'cp -p a b'),
+            'ditto': ('/usr/bin/ditto', 'ditto a b'),
+            'pzstd': ('/opt/homebrew/bin/pzstd', 'pzstd -d x'),
+            'gtar': ('/opt/homebrew/Cellar/gnu-tar/1.35/libexec/gnubin/gtar', 'gtar -cf - .'),
+        }
+        for label, (exe, argv) in cases.items():
+            with self.subTest(label=label):
+                self.assertEqual(g.busy_processes('4242 ' + exe + '\n1 /sbin/launchd\n',
+                                                  '4242 ' + argv + '\n1 /sbin/launchd\n'), ['4242'])
+
+    def test_census_benign_rows_and_formats(self):
+        benign = ('1 /sbin/launchd\n'
+                  '2 /Users/edr/.claude/projects/notes/python3.13\n'  # hidden config dir, not agent
+                  '3 /Applications/Utilities/Terminal.app/Contents/MacOS/Terminal\n'
+                  '4 /bin/zsh\n')
+        args = ('1 /sbin/launchd\n2 python3.13 -c pass\n3 Terminal\n'
+                '4 -zsh\n5 shasum -a 256 /Users/edr/x.tar.zst\n')
+        self.assertEqual(g.busy_processes(benign, args), [])
+        # PID churn between the two ps calls: union of both tables is inspected.
+        self.assertEqual(g.busy_processes('1 /sbin/launchd\n', '1 launchd\n9 tar -xf a\n'), ['9'])
+        self.assertEqual(g.busy_processes(b'7 /bin/cp\n', b'7 cp \xff\n'), ['7'])
+        for comm, args in (('', '1 a'), ('1 a', ''), ('abc def', '1 a')):
+            with self.assertRaises(g.Refusal):
+                g.busy_processes(comm, args)
 
     def test_final_pause_rechecks_lock_and_loaded_launchers(self):
         with tempfile.TemporaryDirectory() as d:
