@@ -465,6 +465,41 @@ separately locked test cohort) defaults off and needs Ed's go before alarms
 are read. One W1 session cannot estimate between-window variability.
 `A:103–125; V:194–199; P:321`
 
+## Discrepancies
+
+This is the exhaustive design/code discrepancy list for the pinned integration
+base `c8ef6b2f6`; the list records conflicts and does not adjudicate them.
+
+- **Checkpoint default.** The design requires the generic field to default to
+  null and to be omitted when unset, while the endpoint constructor, workload
+  dataclass and checkpoint design document on the pinned base default it to
+  `0`. The series-level explicit `hybrid_checkpoint_limit=0` is not itself a
+  discrepancy. `P:14–26; H:55–64`; code:
+  `c8ef6b2f6:joulewise/align/apple/endpoint.py:359–382`,
+  `c8ef6b2f6:joulewise/align/apple/workload.py:73–101`.
+- **Sensor classifier.** The ruled design selects the fast and slow sensors by
+  the model-free step classifier and retains the fitted response only as a
+  diagnostic. The pinned host still imports and calls `rank_response`, whose
+  fitted ranking therefore remains selection-bearing. `W:67–95,108–136`;
+  code: `c8ef6b2f6:joulewise/align/r0_host.py:18,265` and
+  `c8ef6b2f6:joulewise/align/r0_step.py:77–141`.
+- **Window-reference custody.** The ruled design requires one capture record
+  and later source-bound consumers, and retires inline temperatures. The
+  pinned parser instead accepts `window_reference` containing temperatures
+  and custody provenance directly in each policy; it has no ruled
+  capture/consume record path. `W:175–284`; code:
+  `c8ef6b2f6:joulewise/align/apple/thermal_gates.py:60–87,194,383`.
+- **Thermal-registry reach.** The ruled design requires the align-local CLI
+  selector and a lazy registry rebind at the existing run call. The pinned
+  base contains no `joulewise.align.apple.registry_select` module and no
+  `registry_for_config` call in `joulewise/cli.py`. `W:307–376`; code absence
+  established against tree `c8ef6b2f6` at those two ruled paths.
+
+No other disagreement is asserted here: pending slots, unfilled hashes,
+unexecuted native qualifications and proposed analysis conventions are missing
+evidence or unfinished work, not contradictions between implemented behavior
+and the design.
+
 ## Sizing, rehearsal and registration handoff
 
 Planning values are guesses to replace with R1 measurements: 782.82 s per
