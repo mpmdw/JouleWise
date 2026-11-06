@@ -1,0 +1,93 @@
+{
+ "T2_tie": {
+  "softmax_output_dtype": "mlx.core.bfloat16",
+  "bf16_probs_experts_9_10": [
+   0.004486083984375,
+   0.004486083984375
+  ],
+  "fp32_probs_experts_9_10": [
+   0.004475586116313934,
+   0.0044931028969585896
+  ],
+  "reference_selected": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   10
+  ],
+  "vlm_main_path_selected": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   10
+  ],
+  "vlm_decode_path_selected": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   10
+  ],
+  "reference_weight_dtype": "torch.bfloat16"
+ },
+ "T2_synthetic_flip_rate": {
+  "sigma=0.5": {
+   "topk_set_mismatch_rate": 0.08895,
+   "max_weight_err_same_set": 0.0016504228115081787,
+   "mismatch_with_fp32_boundary_tie": 0.07625,
+   "mismatch_without_fp32_tie_P1": 0.0127,
+   "P1_mismatches_where_bf16_rounding_created_the_tie": 0.0127,
+   "fp32_boundary_tie_rate": 0.1399,
+   "bf16_boundary_tie_rate": 0.16275
+  },
+  "sigma=1.0": {
+   "topk_set_mismatch_rate": 0.0732,
+   "max_weight_err_same_set": 0.0026504695415496826,
+   "mismatch_with_fp32_boundary_tie": 0.0732,
+   "mismatch_without_fp32_tie_P1": 0.0,
+   "P1_mismatches_where_bf16_rounding_created_the_tie": 0.0,
+   "fp32_boundary_tie_rate": 0.13675,
+   "bf16_boundary_tie_rate": 0.13675
+  },
+  "sigma=2.0": {
+   "topk_set_mismatch_rate": 0.07535,
+   "max_weight_err_same_set": 0.004616916179656982,
+   "mismatch_with_fp32_boundary_tie": 0.07535,
+   "mismatch_without_fp32_tie_P1": 0.0,
+   "P1_mismatches_where_bf16_rounding_created_the_tie": 0.0,
+   "fp32_boundary_tie_rate": 0.1438,
+   "bf16_boundary_tie_rate": 0.1438
+  },
+  "sigma=4.0": {
+   "topk_set_mismatch_rate": 0.07385,
+   "max_weight_err_same_set": 0.004041075706481934,
+   "mismatch_with_fp32_boundary_tie": 0.07385,
+   "mismatch_without_fp32_tie_P1": 0.0,
+   "P1_mismatches_where_bf16_rounding_created_the_tie": 0.0,
+   "fp32_boundary_tie_rate": 0.13945,
+   "bf16_boundary_tie_rate": 0.13945
+  }
+ },
+ "T6_padded_batch_no_cache": {
+  "row0_unpadded_max_abs": 1.043081283569336e-06,
+  "row1_leftpad10_max_abs": 0.6101850271224976
+ },
+ "F1_transformers_saved_config": "ValueError: Unsupported Qwen4-Exp layer types: {'indexed_attention'}"
+}
