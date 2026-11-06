@@ -306,6 +306,9 @@ def tensor_chunks(entries, max_bytes=32 * 1024 * 1024, raw_bf16=False):
             source._mmap.close()
 
 
+_PLE_SPAN_KEYS = ("input_file", "tensor", "row_start", "row_stop", "byte_start", "byte_stop")
+
+
 def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_bytes=32 * 1024 * 1024,
                       *, journal=None, journal_path=None, input_digests=None):
     """Append the n-gram row shards into one record file; never concatenate.
@@ -328,7 +331,10 @@ def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_
             raise ValueError(f"resume PLE file missing: {name}")
         for i, span in enumerate(prior):
             expected_start = completed[-1]["byte_stop"] if completed else 0
-            if i >= len(entries) or span["tensor"] != entries[i][2] or span["byte_start"] != expected_start:
+            n = entries[i][3][0] if i < len(entries) else -1
+            if (i >= len(entries) or span["tensor"] != entries[i][2] or span["input_file"] != entries[i][1].name
+                    or span["byte_start"] != expected_start or span["row_start"] != row
+                    or span["row_stop"] != row + n or span["byte_stop"] - span["byte_start"] != n * record):
                 raise ValueError(f"resume PLE journal plan mismatch: {name}")
             consumed = {entries[i][1].name: input_digests[entries[i][1].name]}
             if span.get("source_digests") != consumed or span["byte_stop"] > path.stat().st_size:
@@ -343,7 +349,9 @@ def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_
         # An interrupt may leave bytes before the first durable span boundary.
         path.unlink(missing_ok=True)
     with path.open("ab" if prior else "xb") as f:
-        shards.extend({k: v for k, v in span.items() if k not in ("digest", "source_digests")} for span in completed)
+        # The journal is written with sort_keys; rebuild each public span in
+        # the clean run's key order so the resumed manifest is byte-identical.
+        shards.extend({k: span[k] for k in _PLE_SPAN_KEYS} for span in completed)
         for entry in entries[len(completed):]:
             start = f.tell()
             for chunk in tensor_chunks([entry], max_bytes, raw_bf16=fmt == "bf16"):
@@ -354,8 +362,7 @@ def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_
             n = entry[3][0]
             if f.tell() - start != n * record:
                 raise ValueError(f"incomplete n-gram shard: {entry[2]}")
-            public = dict(input_file=entry[1].name, tensor=entry[2], row_start=row, row_stop=row + n,
-                          byte_start=start, byte_stop=f.tell())
+            public = dict(zip(_PLE_SPAN_KEYS, (entry[1].name, entry[2], row, row + n, start, f.tell())))
             shards.append(public)
             f.flush()
             os.fsync(f.fileno())
