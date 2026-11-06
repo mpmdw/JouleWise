@@ -214,6 +214,10 @@ class DeskTests(unittest.TestCase):
                                       mean_30b_energy_j=1000, contrast=desk.deciding_experiment(contrast(12)))
         self.assertEqual(light['status'], 'pass')
         self.assertAlmostEqual(light['point_shift_j'], 24)
+        failed = desk.state_sensitivity(heavy=False, smaller_pair_sr_j=100, mean_energy_j=2000,
+                                       mean_30b_energy_j=1000,
+                                       contrast=desk.deciding_experiment(contrast(12)))
+        self.assertEqual(failed['status'], 'fail')
         pairs = [(member('a', 1000, 40), member('b', 1002, 41)),
                  (member('c', 1000, 40), member('d', 1004, 42)),
                  (member('e', 1000, 40), member('f', 1006, 43))]
@@ -311,6 +315,71 @@ class DeskTests(unittest.TestCase):
             self.assertIn('trace.missing', report['members'][0]['energy_flags'])
             self.assertNotEqual(next(iter(report['model_windows'].values()))['U1']['status'], 'pass')
             self.assertIn('Exact exclusion intervals', (output/'THERMAL.md').read_text())
+
+    def test_k_session_reader_u4_pass_fail_and_inconclusive(self):
+        def write(root, index, offset=0, complete=True):
+            evidence = {'session_id': f's{index}',
+                        'anchors': {str(j): 1000 + 100*j + offset for j in range(4)},
+                        'sentinel_energies_j': {'synthetic': [1000]},
+                        'sentinel_reference_j': 1000}
+            if not complete:
+                evidence.pop('anchors')
+            path = root/f'p{index}.json'
+            path.write_text(json.dumps({'session_id': f's{index}', 'v4_desk_evidence': evidence}))
+            return path
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            good = [write(root, i, offset) for i, offset in enumerate((-6, 0, 6))]
+            result = desk.session_desk_evidence(good)
+            self.assertEqual(result['cross_windows']['synthetic']['status'], 'pass')
+            bad = [write(root, i, offset) for i, offset in enumerate((-7, 0, 7))]
+            self.assertEqual(desk.session_desk_evidence(bad)['cross_windows']['synthetic']['status'], 'fail')
+            incomplete = [write(root, i, complete=False) for i in range(3)]
+            self.assertEqual(desk.session_desk_evidence(incomplete)['cross_windows']['synthetic']['status'],
+                             'inconclusive')
+            empty = root/'empty.json'
+            empty.write_text('{}')
+            self.assertEqual(desk.session_desk_evidence([empty])['status'], 'inconclusive')
+
+    def test_k_session_adapter_is_explicit_and_carries_u5_u6(self):
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for i in range(3):
+                path = Path(d)/f'{i}.json'
+                path.write_text('{}')
+                paths.append(path)
+            u5 = {'synthetic': {'status': 'fail'}}
+            u6 = {'synthetic': {'status': 'inconclusive'}}
+            def adapter(_pilots):
+                return {'anchors': {str(i): {str(j): 1000+100*j for j in range(4)} for i in range(3)},
+                        'sentinels': {'synthetic': {str(i): [1000] for i in range(3)}},
+                        'sentinel_reference_j': 1000, 'u5': u5, 'u6': u6}
+            result = desk.session_desk_evidence(paths, adapter=adapter)
+            self.assertEqual(result['adapter'], 'external')
+            self.assertEqual(result['sensitivity'], u5)
+            self.assertEqual(result['monitoring'], u6)
+
+    def test_session_reader_computes_u5_u6_from_portable_inputs(self):
+        benign = [{'pair': pair, 'start_ns': i, 'residual_j': [0., 0., 0.]}
+                  for pair in ('spam', 'bank') for i in range(6)]
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for i in range(3):
+                part = {'session_id': str(i), 'anchors': {str(j): 1000+100*j for j in range(4)},
+                        'sentinel_energies_j': {'synthetic': [1000]}, 'sentinel_reference_j': 1000}
+                if i == 0:
+                    part['u5_inputs'] = {'synthetic': {'heavy': False, 'smaller_pair_sr_j': 400,
+                        'mean_energy_j': 2000, 'mean_30b_energy_j': 1000,
+                        'contrast': desk.deciding_experiment(contrast(12))}}
+                    part['u6_inputs'] = {'synthetic': {'benign': benign, 'mean_turn_j': 100,
+                        'mean_30b_turn_j': 100, 'mean_episode_j': 3000,
+                        'split_rule': 'within_pair_episode_order'}}
+                path = Path(d)/f'{i}.json'
+                path.write_text(json.dumps({'v4_desk_evidence': part}))
+                paths.append(path)
+            result = desk.session_desk_evidence(paths)
+            self.assertEqual(result['sensitivity']['synthetic']['status'], 'pass')
+            self.assertEqual(result['monitoring']['synthetic']['status'], 'pass')
 
 
 if __name__ == '__main__':
