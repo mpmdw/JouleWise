@@ -390,22 +390,27 @@ def resident_pages(table):
     libc.mincore.restype = ctypes.c_int
     if libc.mincore(base, count * page, vec) != 0:
         raise OSError(ctypes.get_errno(), "mincore failed")
-    # Vectorized: a Python loop over the real table's ~6.25M page flags costs
-    # ~0.44 s per call, and the memory probe calls this at every prefill chunk
-    # and decode forward inside its timed region.
-    import numpy as np
-    resident = int(np.count_nonzero(np.frombuffer(vec, dtype=np.uint8) & 1))
+    # C-level bytes translation avoids a Python loop over ~6.25M page flags
+    # and does not make the operational probe depend on NumPy.
+    resident = bytes(vec).translate(bytes(i & 1 for i in range(256))).count(1)
     return {"resident_bytes": resident * page, "mapped_bytes": mm.nbytes}
 
 
 def table_stats(model):
-    return {str(k): {**resident_pages(t), "path": str(t.path), "lookups": t.lookups, "unique_rows": t.unique_rows,
-                     "major_faults": t.major_faults, "gather_seconds": t.seconds,
-                     "record_bytes": t.record_bytes, "io": t.io, "format": t.fmt}
-            for k, t in model.ngram_tables().items()}
+    result = {}
+    for key, table in model.ngram_tables().items():
+        stats = {"path": str(table.path), "lookups": table.lookups, "unique_rows": table.unique_rows,
+                 "major_faults": table.major_faults, "gather_seconds": table.seconds,
+                 "record_bytes": table.record_bytes, "io": table.io, "format": table.fmt}
+        if table.io == "mmap":
+            stats.update(resident_pages(table))
+        result[str(key)] = stats
+    return result
 
 
-def check_tables(stats):
+def check_tables(stats, io_mode="mmap"):
+    if io_mode == "pread":
+        return
     if sum(t["resident_bytes"] for t in stats.values()) > PLE_CAP:
         raise ValueError("PLE resident file pages exceed operational 21.5 GB cap")
 
@@ -432,8 +437,8 @@ def load_adapter(args):
     if hashlib.sha256(raw_config).hexdigest() != manifest["files"]["config.json"]:
         raise ValueError("config digest mismatch")
     config = json.loads(raw_config)
-    if config["ngram_tables"]["io"] != "mmap":
-        raise ValueError("PLE must use mmap")
+    if config["ngram_tables"]["io"] not in ("mmap", "pread") or config["ngram_tables"]["io"] != args.ple_io:
+        raise ValueError("config ngram_tables.io must match --ple-io")
     model, _ = converter.load_verified_model(artifact, args.manifest_sha256)
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(artifact, local_files_only=True, trust_remote_code=False)
@@ -542,12 +547,12 @@ def native_worker(args):
     initial = table_stats(adapter.model)
     for stats in initial.values():
         external(stats["path"])  # PLE must page from JW-EXT, never an internal copy.
-    check_tables(initial)
+    check_tables(initial, args.ple_io)
     def checkpoint():
         if mx.get_peak_memory() > args.metal_cap_gb * 1e9:
             raise ValueError("Metal peak exceeds default working-set cap")
         if args.command == "memory":
-            check_tables(table_stats(adapter.model))
+            check_tables(table_stats(adapter.model), args.ple_io)
     result = {"verdict": "completed", "manifest_sha256": args.manifest_sha256,
               "module_sha256": __import__("align_convert_qwen4_exp").MODULE_SHA256,
               "environment": {p: importlib.metadata.version(p) for p in ("mlx", "mlx-lm", "transformers")},
@@ -568,19 +573,26 @@ def native_worker(args):
                 for repeat in range(count):
                     mx.reset_peak_memory()
                     before = table_stats(adapter.model)
+                    vm_before = parse_vm_stat(subprocess.check_output(["vm_stat"], text=True)) if args.ple_io == "pread" else None
                     disk_before = record_disk(args, f"r{repeat}-before") if args.command == "paging" else None
                     usage0 = resource.getrusage(resource.RUSAGE_SELF)
                     run = timed_tokens(adapter, ids, args.decode_tokens, checkpoint)
                     usage = resource.getrusage(resource.RUSAGE_SELF)
                     disk_after = record_disk(args, f"r{repeat}-after") if args.command == "paging" else None
                     after = table_stats(adapter.model)
-                    check_tables(after)
+                    vm_after = parse_vm_stat(subprocess.check_output(["vm_stat"], text=True)) if args.ple_io == "pread" else None
+                    check_tables(after, args.ple_io)
                     run.update(context=length, reasoning_effort=effort, repeat=repeat,
                                warmup=args.command == "performance" and repeat == 0,
                                ple_before=before, ple_after=after, metal=metal_stats(mx),
                                major_faults=usage.ru_majflt - usage0.ru_majflt,
                                minor_faults=usage.ru_minflt - usage0.ru_minflt,
                                input_blocks=usage.ru_inblock - usage0.ru_inblock)
+                    if args.ple_io == "pread":
+                        run["pread_io"] = {"file_backed_page_delta_bytes": vm_after["file_backed_bytes"] - vm_before["file_backed_bytes"],
+                                           "input_blocks": run["input_blocks"],
+                                           "table_gather_seconds_delta": sum(after[k]["gather_seconds"] - before[k]["gather_seconds"] for k in after),
+                                           "residency_cap": "not applicable: pread uses F_NOCACHE and bypasses the file cache"}
                     if args.command == "paging":
                         run.update(disk_before=disk_before, disk_after=disk_after,
                                    cache_state="unknown" if repeat == 0 else "warm repeat")
@@ -636,7 +648,7 @@ def native_worker(args):
                       hosted=json.loads(Path(str(args.out) + ".hosted.json").read_text()))
     checkpoint()
     result.update(metal=metal_stats(mx), ple_after=table_stats(adapter.model))
-    check_tables(result["ple_after"])
+    check_tables(result["ple_after"], args.ple_io)
     return result
 
 
@@ -650,6 +662,7 @@ def parse_args(argv=None):
     p.add_argument("--manifest-sha256")
     p.add_argument("--source-receipt", type=Path)
     p.add_argument("--profile", choices=("maxfit", "maxfit5"), default="maxfit")
+    p.add_argument("--ple-io", choices=("mmap", "pread"), default="mmap")
     p.add_argument("--contexts", type=int, nargs="+", default=list(CONTEXTS))
     p.add_argument("--decode-tokens", type=int, default=64)
     p.add_argument("--prefill-step", type=int, choices=(512, 2048), default=512)
@@ -682,7 +695,7 @@ def main(argv=None):
                                     "benchmark": "PR671 fixed GSM8K30 + IFEval25, optional same-item bf16 report",
                                     "hosted": "PR671 offline teacher-forced top-k comparison (no requests)",
                                     "performance": "3 efforts x staged contexts x (warmup + 3 timed repeats)",
-                                    "paging": "two identical 4k passes; mincore + faults + table counters; external iostat"}[args.command]}))
+                                    "paging": "two identical 4k passes; mmap: mincore; pread: vm_stat file-backed delta + ru_inblock + table seconds; external iostat"}[args.command]}))
         return 0
     if not args.validation_only or sys.platform != "darwin":
         raise ValueError("live runs require macOS and --validation-only; exit agents and stop other jobs first")

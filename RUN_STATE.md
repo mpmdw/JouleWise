@@ -8136,3 +8136,10 @@ work. The generated region controls task selection.
 - Git author identity on this machine auto-selected as
   `Ed R <edr@Eds-MacBook-Pro.local>`. Amend future commits if a
   different identity is needed.
+
+## CHECKPOINT 2026-11-06 — MISSING-8 PLE pread variant implemented
+
+The Saturday Qwen4 experimental live-kit lane now has a verified, same-APFS
+clonefile derivation from the canonical mmap artifact to a pread artifact,
+plus live-runner telemetry and fixture/native coverage. Native MLX/Metal checks
+remain for the lead on the 128 GB M3 Max; no real weights were used here.

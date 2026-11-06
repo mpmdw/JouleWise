@@ -1353,3 +1353,10 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+
+## 2026-11-06 Direct Brief — MISSING-8
+
+- **IMPLEMENTED (native gate pending):** PLE `pread` artifact derivation without
+  reconversion and corresponding Saturday live-runner I/O/telemetry selection.
+  Fixture tests pass without MLX; the lead must run the skipped native tests on
+  the M3 Max before the 2026-11-07 live kit.
