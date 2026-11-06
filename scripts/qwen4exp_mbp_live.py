@@ -246,6 +246,72 @@ def download(args):
             "total_bytes": sum(int(m["size"]) for m in metadata.values())}
 
 
+CONVERT_JOURNAL = ".conversion-progress.json"  # align_convert_qwen4_exp.JOURNAL_NAME
+CONVERT_RESUME_MARGIN = 20e9  # never admit a resume with less than this free
+
+
+def convert_budget(profile):
+    """Free bytes a fresh build requires: artifact plus ~30 GB headroom."""
+    return 240e9 if profile == "maxfit" else 225e9
+
+
+def converted_bytes_kept(artifact):
+    """Bytes of an interrupted conversion that a resume keeps rather than rewrites.
+
+    Counted only from what the converter will verify and keep: every shard
+    named in its progress journal, and each PLE file up to its last journaled
+    span (the converter truncates the rest). Unjournaled shards are deleted
+    and rewritten (TensorFile preallocates sparse files, so their size means
+    nothing) and are not credited. With the journal already removed, a complete
+    manifest.json keeps every payload file it lists. Symlinks never count; an
+    unreadable journal/manifest credits nothing (the converter then refuses).
+    """
+    artifact = Path(artifact)
+
+    def size(name):
+        if not isinstance(name, str) or Path(name).name != name or name in (".", ".."):
+            return 0  # only plain files directly inside the artifact
+        try:
+            info = (artifact / name).lstat()
+        except OSError:
+            return 0
+        return info.st_size if stat.S_ISREG(info.st_mode) else 0
+
+    journal_path = artifact / CONVERT_JOURNAL
+    try:
+        journal_info = journal_path.lstat()
+    except FileNotFoundError:
+        journal_info = None
+    except OSError:
+        return 0
+    if journal_info is not None:
+        if not stat.S_ISREG(journal_info.st_mode):
+            return 0
+        try:
+            journal = json.loads(journal_path.read_text())
+            kept = sum(size(name) for name in journal.get("shards", {}))
+            for layer, spans in journal.get("ple", {}).items():
+                if spans:
+                    name = f"ngram-L{int(layer):03d}.{journal['ple_storage']}.bin"
+                    kept += min(int(spans[-1]["byte_stop"]), size(name))
+            return kept
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError):
+            return 0
+    try:
+        manifest = json.loads((artifact / "manifest.json").read_text())
+        return sum(size(name) for name in manifest["files"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return 0
+
+
+def convert_free_space_need(artifact, profile, resume):
+    """Free bytes the conversion requires; a resume is credited kept output."""
+    budget = convert_budget(profile)
+    if not resume:
+        return budget
+    return max(budget - converted_bytes_kept(artifact), CONVERT_RESUME_MARGIN)
+
+
 def convert(args):
     import align_convert_qwen4_exp as converter
     receipt = json.loads(external(args.source_receipt).read_text())
@@ -261,10 +327,14 @@ def convert(args):
         raise ValueError("conversion output must be new; preserve failed attempts")
     if args.resume and not artifact.exists():
         raise ValueError("--resume requires an interrupted conversion artifact")
-    need = 240e9 if args.profile == "maxfit" else 225e9
+    # A resume is credited the verified output it keeps (journaled shards and
+    # PLE spans), so a mostly written artifact is not refused for space it
+    # already occupies.
+    need = convert_free_space_need(artifact, args.profile, args.resume)
     st = os.statvfs(VOLUME)
     if st.f_bavail * st.f_frsize < need:
-        raise ValueError("insufficient free external disk space for this build")
+        raise ValueError(f"insufficient free external disk space for this build: need >={need / 1e9:.1f} GB "
+                         f"({convert_budget(args.profile) / 1e9:.0f} GB fresh, less output a resume keeps)")
     progress_path = args.out.parent / "convert.progress.jsonl"
     converter.convert(source, artifact, profile=args.profile, group_size=64, ple_storage="bf16",
                       progress_path=progress_path, resume_from=artifact if args.resume else None)

@@ -196,6 +196,106 @@ class SourceTests(unittest.TestCase):
                                                       ple_storage="bf16", resume_from=artifact,
                                                       progress_path=base / "convert.progress.jsonl")
 
+    def interrupted_artifact(self, artifact, shard_bytes=0, ple_bytes=0, ple_written=0):
+        """Interrupted maxfit output as the converter leaves it, sparse so it costs no disk."""
+        artifact.mkdir()
+        journal = dict(status="running", ple_storage="bf16", shards={}, ple={})
+        if shard_bytes:
+            name = "model-00001-of-00002.safetensors"
+            with (artifact / name).open("wb") as f:
+                f.truncate(shard_bytes)
+            journal["shards"][name] = {"digest": "d" * 64, "source_digests": {}}
+        if ple_bytes:
+            with (artifact / "ngram-L001.bf16.bin").open("wb") as f:
+                f.truncate(ple_written)  # an unjournaled tail beyond the last span
+            journal["ple"]["1"] = [{"byte_start": 0, "byte_stop": ple_bytes}]
+        # The shard being written when interrupted: preallocated, unjournaled.
+        with (artifact / "model-00002-of-00002.safetensors").open("wb") as f:
+            f.truncate(4 * 2 ** 30)
+        (artifact / ".conversion-progress.json").write_text(json.dumps(journal))
+
+    def run_convert_with_free(self, base, artifact, free, resume=True):
+        snapshot = base / "source"
+        snapshot.mkdir(exist_ok=True)
+        metadata = self.make_snapshot(snapshot)
+        receipt = base / "source.json"
+        receipt.write_text(json.dumps(dict(revision=live.REVISION, repo=live.REPO_ID,
+                                           snapshot=str(snapshot), metadata=metadata, sha256={"a": "b"})))
+        converter = types.SimpleNamespace(convert=Mock(side_effect=AssertionError("admitted")),
+                                          MODULE_SHA256="a" * 64)
+        args = live.parse_args(["convert", *(["--resume"] if resume else []), "--source-receipt", str(receipt),
+                                "--artifact", str(artifact), "--out", str(base / "convert.json")])
+        with patch.dict(sys.modules, {"align_convert_qwen4_exp": converter}), \
+             patch.object(live, "external", side_effect=Path), \
+             patch.object(live, "verify_source", return_value={"a": "b"}), \
+             patch.object(os, "statvfs", return_value=types.SimpleNamespace(f_bavail=free // 4096, f_frsize=4096)):
+            live.convert(args)
+
+    def test_resume_with_most_output_written_is_admitted_at_80_gb_free(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            artifact = base / "maxfit"
+            # 150 GB of journaled shards + 50 GB of journaled PLE spans = 200 GB kept.
+            self.interrupted_artifact(artifact, shard_bytes=150 * 10**9, ple_bytes=50 * 10**9,
+                                      ple_written=51 * 10**9)
+            with self.assertRaisesRegex(AssertionError, "admitted"):
+                self.run_convert_with_free(base, artifact, 80 * 10**9)
+            self.assertEqual(live.converted_bytes_kept(artifact), 200 * 10**9)
+            self.assertEqual(live.convert_free_space_need(artifact, "maxfit", resume=True), 40e9)
+
+    def test_resume_with_nothing_kept_is_refused_at_80_gb_free(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            artifact = base / "maxfit"
+            self.interrupted_artifact(artifact)  # only the preallocated unjournaled shard
+            self.assertEqual(live.converted_bytes_kept(artifact), 0)
+            with self.assertRaisesRegex(ValueError, r"insufficient free external disk space.*240\.0 GB"):
+                self.run_convert_with_free(base, artifact, 80 * 10**9)
+
+    def test_fresh_conversion_is_never_credited(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            artifact = base / "maxfit"
+            self.assertEqual(live.convert_free_space_need(artifact, "maxfit", resume=False), 240e9)
+            self.assertEqual(live.convert_free_space_need(artifact, "maxfit5", resume=False), 225e9)
+            with self.assertRaisesRegex(ValueError, "insufficient free external disk space"):
+                self.run_convert_with_free(base, artifact, 80 * 10**9, resume=False)
+
+    def test_resume_keeps_a_safety_margin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            artifact = base / "maxfit5"
+            self.interrupted_artifact(artifact, shard_bytes=224 * 10**9)
+            self.assertEqual(live.convert_free_space_need(artifact, "maxfit5", resume=True),
+                             live.CONVERT_RESUME_MARGIN)
+            with self.assertRaisesRegex(ValueError, "insufficient free external disk space"):
+                self.run_convert_with_free(base, artifact, 10 * 10**9)
+
+    def test_resume_credit_counts_only_kept_regular_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = Path(tmp) / "a"
+            artifact.mkdir()
+            outside = Path(tmp) / "outside.bin"
+            with outside.open("wb") as f:
+                f.truncate(10**9)
+            (artifact / "linked.safetensors").symlink_to(outside)
+            journal = artifact / ".conversion-progress.json"
+            journal.write_text(json.dumps(dict(ple_storage="bf16", ple={}, shards={
+                "linked.safetensors": {}, "../outside.bin": {}, str(outside): {}, "missing.safetensors": {}})))
+            self.assertEqual(live.converted_bytes_kept(artifact), 0)
+            journal.write_text("{not json")
+            self.assertEqual(live.converted_bytes_kept(artifact), 0)
+            # Journal removed after a complete manifest: its listed payload is kept.
+            journal.unlink()
+            (artifact / "model-00001-of-00001.safetensors").write_bytes(b"x" * 1000)
+            (artifact / "manifest.json").write_text(json.dumps(
+                {"files": {"model-00001-of-00001.safetensors": "d", "linked.safetensors": "d"}}))
+            self.assertEqual(live.converted_bytes_kept(artifact), 1000)
+
+    def test_journal_name_matches_converter(self):
+        from scripts import align_convert_qwen4_exp as converter
+        self.assertEqual(live.CONVERT_JOURNAL, converter.JOURNAL_NAME)
+
     def test_download_free_space_credits_cached_blobs_for_resume(self):
         metadata = {"model-00001-of-00131.safetensors": {"size": 300 * 10**9},
                     "config.json": {"size": 10}}

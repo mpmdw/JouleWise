@@ -270,7 +270,8 @@ one at a time; no full suite while sharing this machine.
 
 Expected, as run natively on the M4 Air on 2026-11-05 (mlx 0.31.2, mlx-lm
 0.31.3, transformers 5.22.1, torch 2.15.0, Metal): `test_qwen4exp_mbp_live`
-32 tests OK, 0 skips (30 on 11-05 plus the two 11-06 download-resume tests); `test_qwen4exp_e2e_eval` 37 OK, 1 skip (item rebuild
+47 tests OK, 0 skips (re-run on the same stack on 2026-11-06 after the convert-resume
+free-space fix; 30 on 11-05); `test_qwen4exp_e2e_eval` 37 OK, 1 skip (item rebuild
 needs `QWEN4EXP_ITEM_SOURCES`, fetched public sources; acceptable);
 `test_qwen4exp_hosted_reference` 13 OK, 0 skips. Any other skip is OPEN.
 
@@ -363,6 +364,14 @@ from it. A second interruption resumes again under another new name
 converter's manifest is written (including during the wrapper's
 `SHA256SUMS` hashing) resumes without rewriting anything: the complete
 manifest is re-verified against every payload digest and kept.
+
+A resume's free-space check is credited the output it keeps: the sizes of the
+shards in the converter's progress journal plus each PLE file up to its last
+journaled span (or, once the journal is gone, the payload files a complete
+`manifest.json` lists). It needs the fresh budget (240 GB maxfit, 225 GB
+otherwise) less that credit, never under 20 GB, so with 200 GB of maxfit
+already kept 80 GB free is enough. An unjournaled shard in progress is not
+credited; it is deleted and rewritten. A fresh convert is never credited.
 
 Resume re-authenticates the source receipt, module and converter pins and every
 completed shard/PLE span before writing. A normal conversion error marks the
