@@ -30,6 +30,15 @@ The arguments, each the only thing of its kind the run takes:
                        steps 1, 2 and 4 (spawned; every record decision stays serial in this
                        process). Default: JOULEWISE_B5_ANALYSIS_WORKERS, else min(8, CPU count - 2);
                        1 is the serial path. The record and every output are the same for every N.
+--resume               Optional (lane b5-robust). Continue the interrupted run in the existing mode
+                       directory from its last step checkpoint (restricted/resume/checkpoint.json).
+                       The checkpoint must match this invocation (mode, analysis commit and checkout
+                       state, window-index digest, store mode); every checkpointed file is re-hashed,
+                       anything a crashed step left behind is moved to restricted/resume/abandoned/,
+                       and the in-process state of the completed steps is rebuilt and verified
+                       against the checkpoint. The record is the one an uninterrupted run writes. A
+                       resume after the record was written only reports it. Anything else refuses at
+                       step 0 with a "resume refused: <reason>" line. A --phase-log PATH must be new.
 --phase-log PATH       Optional (D-188 TIMERS). A structure-only timing log for the operator: one JSON
                        line per event (run start, step begin, heartbeat, step end, run end) carrying only
                        step ids and integer wall seconds; no label, phase, count, status word or value.
@@ -93,6 +102,7 @@ def main(argv=None):
     parser.add_argument('--custody',type=Path,required=True)
     parser.add_argument('--workers',type=_positive_int,default=None)
     parser.add_argument('--phase-log',type=Path,default=None)
+    parser.add_argument('--resume',action='store_true')
     try:
         args=parser.parse_args(argv)
     except AnalysisRefusal:
@@ -116,9 +126,10 @@ _REPO=Path(__file__).resolve().parents[1]
 
 
 def _run(args):
-    if args.workers is None:
-        return run(args.mode,args.index,args.custody)
-    return run(args.mode,args.index,args.custody,workers=args.workers)
+    options={}
+    if args.workers is not None:options['workers']=args.workers
+    if args.resume:options['resume']=True
+    return run(args.mode,args.index,args.custody,**options)
 
 
 def _positive_int(text):

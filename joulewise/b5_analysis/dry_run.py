@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
+import copy
 from dataclasses import dataclass, field, replace
 import hashlib
 import hmac
@@ -344,8 +345,11 @@ def refusal_classes():
     return json.loads((ROOT/'configs/analysis/b5/dry_run_refusal_classes.json').read_bytes())
 
 
-def custody_preflight(mode, custody, repo_root):
-    """Reject aliases and occupied run directories before invoking any program."""
+def custody_preflight(mode, custody, repo_root, *, resume=False):
+    """Reject aliases and occupied run directories before invoking any program.
+
+    ``resume`` (lane b5-robust) instead requires the mode's run directory to exist.
+    """
     if mode not in ('blind-dry-run', 'release'):
         raise AnalysisRefusal('analysis_mode_invalid')
     root = Path(custody).absolute()
@@ -357,8 +361,10 @@ def custody_preflight(mode, custody, repo_root):
     if root.exists() and (not root.is_dir() or any(p.is_symlink() for p in root.rglob('*'))):
         raise AnalysisRefusal('custody_path_invalid')
     target = root/('dry-run' if mode == 'blind-dry-run' else 'release')
-    if target.exists():
+    if target.exists() and not resume:
         raise AnalysisRefusal('custody_run_directory_exists')
+    if resume and (target.is_symlink() or not target.is_dir()):
+        raise AnalysisRefusal('custody_path_invalid')
     if mode == 'release':
         previous = root/'dry-run/B5-BLIND-DRY-RUN-RECORD.json'
         try:
@@ -1947,7 +1953,34 @@ def _write_vdl_counters(s):
         pass
 
 
-def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=None,_test_repo_root=None,_runner=None,_git=None):
+def _record_exit(record):
+    if not record['completed_without_tooling_refusal']:return 2
+    return 3 if any(row['status']=='outcome_class' for row in record['steps']) else 0
+
+
+def _resumed_record(output, restricted):
+    """A complete record of an interrupted run (crash after its write), else None (moved aside)."""
+    from . import resume as _resume
+    if not output.exists():
+        return None
+    try:
+        # Written by one write() call: a torn record is a prefix, never canonical JSON.
+        raw=output.read_bytes();record=json.loads(raw)
+        if (_canonical(record)!=raw or record.get('schema_version')!=SCHEMA or type(record.get('steps')) is not list
+                or [row.get('step') for row in record['steps']][-1:]!=['11']
+                or type(record.get('completed_without_tooling_refusal')) is not bool):
+            raise ValueError('not a complete record')
+        return record
+    except (OSError,ValueError,TypeError,KeyError,AttributeError):
+        root=restricted/_resume.RESUME_DIR/_resume.ABANDONED
+        number=1
+        while (root/str(number)).exists():number+=1
+        (root/str(number)).mkdir(parents=True)
+        os.replace(output,root/str(number)/output.name)
+        return None
+
+
+def run(mode,index,custody,*,workers=None,resume=False,_test_pack_table=None,_test_seal_pins=None,_test_repo_root=None,_runner=None,_git=None):
     """Run all registered steps. Return 0, 3 (registered outcome), or 2.
 
     The only public outputs are the closed record and two structure streams.
@@ -1955,7 +1988,14 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
     (L9-SPEEDUP-R1) is the number of spawned worker processes for independent
     child programs; None means JOULEWISE_B5_ANALYSIS_WORKERS or
     min(8, cpu_count - 2), and 1 is the serial path. It changes no output.
+
+    ``resume`` (lane b5-robust; joulewise/b5_analysis/resume.py) continues an
+    interrupted mode directory from its last step checkpoint after re-hashing it;
+    the record is the one the uninterrupted run writes. Every run also retries a
+    step serially (at most twice) after a host tooling refusal, and sweeps every
+    kept bundle through steps 1 and 2 after a step-1/2 data refusal.
     """
+    from . import resume as _resume
     from .parallel import resolve_workers
     from joulewise.analysis_verified_store import ENV_VARIABLE as VDL_ENV, resolve_mode
     try:
@@ -1970,10 +2010,11 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
         return 2
     repo_root=Path(_test_repo_root) if _test_repo_root is not None else ROOT
     try:
-        directory=custody_preflight(mode,custody,repo_root)
+        directory=custody_preflight(mode,custody,repo_root,resume=resume)
     except (AnalysisRefusal,OSError,RuntimeError):
         # An invalid root cannot safely receive a record. Its closed refusal is
         # exposed only as the same structure step line; no exception text leaks.
+        if resume:print('resume refused: run_directory_unavailable',file=sys.stderr)
         print('step 0 - tooling_refusal',file=sys.stderr)
         return 2
     checkout_code=None;checkout_failed=False;checkout_exception=None
@@ -1986,14 +2027,43 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
         commit=getattr(exc,'analysis_commit','0'*40)
     except Exception as exc:
         checkout_failed=True;commit='0'*40;checkout_exception=type(exc).__qualname__
+    # Lane b5-robust: what a checkpoint must match before a run resumes from it.
+    binding={'mode':mode,'analysis_commit':commit,'checkout_failed':checkout_failed,'checkout_refusal':checkout_code,
+             'checkout_exception':checkout_exception,'window_index_sha256':_index_digest(index),
+             'vdl_mode':vdl_mode_token(vdl_mode),'synthetic':synthetic}
+    output=directory/('B5-BLIND-DRY-RUN-RECORD.json' if mode=='blind-dry-run' else 'B5-RELEASE-RECORD.json')
+    checkpoint=None
     try:
-        directory.mkdir(parents=True)
-        restricted=directory/'restricted';restricted.mkdir()
-    except OSError:
+        if resume:
+            restricted=directory/'restricted'
+            checkpoint=_resume.load(restricted,binding)
+            complete=_resumed_record(output,restricted)
+            if complete is not None:
+                # Interrupted after the record write: the run is complete.
+                _resume.Checkpoints(restricted,binding).finish()
+                print('resume: run already complete',file=sys.stderr)
+                print(str(output)+' '+_sha(output))
+                return _record_exit(complete)
+            _resume.rollback(restricted,checkpoint,move_live=True)
+        else:
+            directory.mkdir(parents=True)
+            restricted=directory/'restricted';restricted.mkdir()
+    except _resume.ResumeError as exc:
+        print('resume refused: '+exc.reason,file=sys.stderr)
         print('step 0 - tooling_refusal',file=sys.stderr)
         return 2
-    runner=_runner(restricted) if _runner is not None else StepRunner(restricted)
-    s=RunState(mode,index,restricted,commit,pack_table=_test_pack_table,seal_pins=_test_seal_pins,repo_root=repo_root)
+    except OSError:
+        if resume:print('resume refused: checkpoint_unreadable',file=sys.stderr)
+        print('step 0 - tooling_refusal',file=sys.stderr)
+        return 2
+    runner_factory=_runner if _runner is not None else StepRunner
+    runner=runner_factory(restricted)
+
+    def new_state():
+        return RunState(mode,index,restricted,commit,pack_table=_test_pack_table,seal_pins=_test_seal_pins,repo_root=repo_root)
+    s=new_state()
+    checkpoints=_resume.Checkpoints(restricted,binding)
+    rebuilt_from=checkpoint
     stopped=False;difference=None;previous=None
     from joulewise.whole_window import shared_instrument_calibration_physics_cache
     from joulewise.analysis_run_cache import analysis_run_caches
@@ -2016,9 +2086,36 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
         run_caches.deadline=deadline
         run_caches.timing=timer
         _phase_timing.attach_restricted(restricted)
-        s.ignored_backup=ignored
-        s.workers,s.deadline,s.physics_store=workers,deadline,physics_store
-        s.vdl_store,s._runner=run_caches.vdl,runner
+
+        def attach(state):
+            state.ignored_backup=ignored
+            state.workers,state.deadline,state.physics_store=workers,deadline,physics_store
+            state.vdl_store,state._runner=run_caches.vdl,runner
+            return state
+        attach(s)
+
+        def restored(state,document,*,full):
+            """A run state at ``document``'s boundary: its explicit fields on a copy, else a full rebuild.
+
+            A builder step's failed attempt may have changed in-memory state, so
+            its retry always rebuilds; any other step changes only the explicit fields.
+            """
+            counter=runner._counter
+            if not full:
+                candidate=copy.copy(state)
+                try:
+                    _resume.restore(candidate,runner,document)
+                    _resume.verify_state(candidate,document)
+                    return candidate,False
+                except _resume.ResumeError:
+                    runner._counter=counter
+            fresh=attach(new_state());fresh.index=state.index
+            try:
+                _resume.rebuild(fresh,runner,runner_factory,document,deadline=deadline,caches=run_caches)
+            except _resume.ResumeError:
+                runner._counter=counter
+                raise
+            return fresh,True
         if mode=='release':
             from .windows import load_window_index
             try:
@@ -2042,42 +2139,95 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
                     difference={'path':'binding/window_index'}
             except (AnalysisRefusal,OSError,ValueError,TypeError,KeyError):
                 previous=None
-        for step,function in STEPS:
-            if stopped:
-                records=[StepRecord(step,None,'not_run')]
-            elif step=='0' and checkout_failed:
-                runner.last_exception_class=checkout_exception
-                records=[s.record('0',exit_status=2,code=checkout_code)]
-            elif mode=='release' and step=='0' and (previous is None or difference is not None):
-                runner.last_exception_class=None
-                records=[s.record('0',exit_status=2,code='release_digest_differs_from_dry_run' if difference else 'dry_run_record_missing_or_incomplete')]
-            else:
-                before=set(s.outputs)
-                firings=deadline.firings if deadline is not None else None
-                _phase_timing.step_begin(step)
-                runner.last_exception_class=None
+        start=0;ran=[];index_value=s.index
+        if checkpoint is not None:
+            # Resume: rebuild the in-process state of the completed steps and
+            # verify it against the checkpoint (resume.rebuild), serially after a firing.
+            for attempt in range(_resume.MAX_RETRIES+1):
                 try:
-                    s.rehash()
-                    records=function(s,runner)
-                except AnalysisRefusal as exc:
-                    runner.last_exception_class=type(exc).__qualname__
-                    records=[s.record(step,exit_status=2,code=refusal_token(exc.code),
-                        outputs=[s.outputs[k] for k in s.outputs if k not in before])]
-                except Exception as exc:
-                    # Exception diagnostics belong only to restricted custody.
-                    def fail(argv):
-                        traceback.print_exc();return 2
-                    runner.run(fail,[],step=step)
-                    runner.last_exception_class=type(exc).__qualname__
-                    records=[s.record(step,exit_status=2,outputs=[s.outputs[k] for k in s.outputs if k not in before])]
-                if deadline is None or deadline.firings!=firings or run_caches.worker_observer_unavailable:
+                    if deadline is None:raise _resume.ResumeError('deadline_observer_unavailable')
+                    if attempt:
+                        s=attach(new_state());s.index=index_value
+                        _resume.serial(s,run_caches)
+                    _resume.rebuild(s,runner,runner_factory,checkpoint,deadline=deadline,caches=run_caches)
+                    break
+                except _resume.ResumeError as exc:
+                    if exc.reason!='rebuild_deadline_fired' or attempt==_resume.MAX_RETRIES:
+                        print('resume refused: '+exc.reason,file=sys.stderr)
+                        print('step 0 - tooling_refusal',file=sys.stderr)
+                        return 2
+                    _resume.note(restricted,{'event':'rebuild_retry','attempt':attempt+1})
+            s.workers=run_caches.workers=workers
+            checkpoints.last=checkpoint
+            start,stopped,ran=checkpoint['position'],checkpoint['stopped'],list(checkpoint['ran'])
+            for record in s.step_records:
+                if record.step!='11':
+                    print('step '+record.step+' '+(record.window or '-')+' '+record.status,file=sys.stderr)
+            _resume.note(restricted,{'event':'resumed','position':start})
+            _phase_timing.run_resume(STEPS[start][0] if start<len(STEPS) else '-')
+        else:
+            checkpoints.write(s,runner,position=0,stopped=False,ran=ran)
+        runner.state=s
+        for position,(step,function) in enumerate(STEPS):
+            if position<start:continue
+            retries=0
+            while True:
+                if stopped:
+                    records=[StepRecord(step,None,'not_run')]
+                elif step=='0' and checkout_failed:
+                    runner.last_exception_class=checkout_exception
+                    records=[s.record('0',exit_status=2,code=checkout_code)]
+                elif mode=='release' and step=='0' and (previous is None or difference is not None):
                     runner.last_exception_class=None
-                    records=[s.record(step,exit_status=2,
-                        code=OBSERVER_UNAVAILABLE if deadline is None or run_caches.worker_observer_unavailable
-                        else CALIBRATION_WALL_DEADLINE,
-                        outputs=[s.outputs[k] for k in s.outputs if k not in before])]
-                records=_step_boundary(s,runner,step,records,before)
-                _phase_timing.step_end(step)
+                    records=[s.record('0',exit_status=2,code='release_digest_differs_from_dry_run' if difference else 'dry_run_record_missing_or_incomplete')]
+                else:
+                    if step not in ran:ran.append(step)
+                    before=set(s.outputs)
+                    firings=deadline.firings if deadline is not None else None
+                    _phase_timing.step_begin(step)
+                    runner.last_exception_class=None
+                    try:
+                        s.rehash()
+                        records=function(s,runner)
+                    except AnalysisRefusal as exc:
+                        runner.last_exception_class=type(exc).__qualname__
+                        records=[s.record(step,exit_status=2,code=refusal_token(exc.code),
+                            outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+                    except Exception as exc:
+                        # Exception diagnostics belong only to restricted custody.
+                        def fail(argv):
+                            traceback.print_exc();return 2
+                        runner.run(fail,[],step=step)
+                        runner.last_exception_class=type(exc).__qualname__
+                        records=[s.record(step,exit_status=2,outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+                    if deadline is None or deadline.firings!=firings or run_caches.worker_observer_unavailable:
+                        runner.last_exception_class=None
+                        records=[s.record(step,exit_status=2,
+                            code=OBSERVER_UNAVAILABLE if deadline is None or run_caches.worker_observer_unavailable
+                            else CALIBRATION_WALL_DEADLINE,
+                            outputs=[s.outputs[k] for k in s.outputs if k not in before])]
+                    records=_step_boundary(s,runner,step,records,before)
+                    _phase_timing.step_end(step)
+                # Lane b5-robust: a host tooling refusal reruns the step serially from
+                # the checkpoint before it (budgets unchanged; at most MAX_RETRIES).
+                document=checkpoints.last
+                reason=(_resume.retry_reason(s,records,deadline) if retries<_resume.MAX_RETRIES and document is not None
+                        and document['position']==position else None)
+                if reason is None:break
+                try:
+                    _resume.rollback(restricted,document,move_live=False,verify_only=True)
+                    candidate,full=restored(s,document,full=step in _resume.BUILDERS)
+                except _resume.ResumeError:
+                    break
+                moved=_resume.rollback(restricted,document,move_live=False)
+                retries+=1
+                s=candidate;runner.state=s
+                if full:rebuilt_from=document
+                _resume.serial(s,run_caches)
+                _resume.note(restricted,{'event':'step_retry','step':step,'attempt':retries,'reason':reason,
+                                         'moved_files':moved,'rebuilt':full})
+                _phase_timing.step_retry(step,retries)
+            if retries:s.workers=run_caches.workers=workers
             for record in records:
                 s.step_records.append(record)
                 if record.step!='11':
@@ -2085,7 +2235,9 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
             # D-189: step 9b's claim-side-bound non-issuance is the one refusing row that
             # does not stop the steps after it.
             if any(record.status!='ok' and not is_nonstopping_outcome(record) for record in records):stopped=True
+            checkpoints.write(s,runner,position=position+1,stopped=stopped,ran=ran)
         attempts,windows,census=_record_parts(s)
+        census=_resume.merged_census(census,rebuilt_from)
         sealed={key:s.pins.sealed[{'flag_catalog_sha256':'catalog_sha256'}.get(key,key)] for key in SEAL_KEYS}
         record=build_dry_run_record(mode=mode,analysis_commit=commit,window_index_sha256=s.index.sha256 if s.index else _index_digest(index),
             sealed=sealed,attempts=attempts,windows=windows,input_census=census,steps=s.step_records,difference=difference)
@@ -2107,10 +2259,14 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
         validate_dry_run_record(record,index=s.index,kept_units=s.kept)
         output=directory/('B5-BLIND-DRY-RUN-RECORD.json' if mode=='blind-dry-run' else 'B5-RELEASE-RECORD.json')
         with output.open('xb') as out:out.write(_canonical(record))
+        checkpoints.finish()
         _write_vdl_counters(s)
         _phase_timing.run_end()
         last=record['steps'][-1]
         print('step 11 '+(last['window'] or '-')+' '+last['status'],file=sys.stderr)
+        try:
+            _resume.defect_sweep(s,runner_factory,record,deadline=deadline,caches=run_caches,workers=workers)
+        except Exception as exc:  # noqa: BLE001 - the sweep reports; it never changes the run
+            _resume.note(restricted,{'event':'defect_sweep_failed','exception_class':type(exc).__qualname__})
     print(str(output)+' '+_sha(output))
-    if not record['completed_without_tooling_refusal']:return 2
-    return 3 if any(row['status']=='outcome_class' for row in record['steps']) else 0
+    return _record_exit(record)
