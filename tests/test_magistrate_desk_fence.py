@@ -222,6 +222,8 @@ else:
     if (root/'fail-bootout').exists():
         print('fixture bootout denied', file=sys.stderr); sys.exit(5)
     if not (root/'service.loaded').exists():
+        if (root/'bootout-esrch').exists():
+            print('Boot-out failed: 3: No such process', file=sys.stderr); sys.exit(3)
         print('Could not find service', file=sys.stderr); sys.exit(113)
     assert (root/'service.loaded').read_text()==sys.argv[2]
     (root/'bootout-signals.log').write_text((root/'signals.log').read_text() if (root/'signals.log').exists() else '')
@@ -412,6 +414,10 @@ sys.exit(7 if c['case']=='error' else 0)
         self.assertIsNone(launcher.read_fence(self.custody))
         self.assert_resumed()
         self.assertNotIn("bootout failed", self.logs())
+
+    def test_bootout_tolerates_no_such_process(self):
+        (self.root / "bootout-esrch").touch()
+        self.test_bootout_tolerates_service_already_gone()
 
     def test_bootout_failure_reports_error_after_spotlight_cleanup(self):
         (self.root / "fail-bootout").touch()

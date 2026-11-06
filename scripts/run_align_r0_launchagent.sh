@@ -46,7 +46,10 @@ cleanup() {
         :
     else
         bootout_code=$?
-        if [[ "$bootout_code" -ne 113 || "$bootout_output" != *[Cc]ould\ not\ find\ service* ]]; then
+        if [[ "$bootout_code" -eq 113 && "$bootout_output" == *[Cc]ould\ not\ find\ service* ]] ||
+           [[ "$bootout_code" -eq 3 && "$bootout_output" == *[Nn]o\ such\ process* ]]; then
+            : # Already unloaded; repeating cleanup is harmless.
+        else
             echo "LaunchAgent bootout failed for $service_target: $bootout_output" >&2
             code=2
         fi
