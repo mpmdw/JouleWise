@@ -44,6 +44,23 @@ class DeskTests(unittest.TestCase):
         self.assertIn('thermal.state_unobserved', reasons)
         self.assertIn('member.runtime_failure', reasons)
 
+    def test_dead_collector_member_counts_toward_u1_and_supplies_no_coverage(self):
+        # X2 (G0 timeout) plus X4 (collector lost, member failed fast) is two
+        # thermal exclusions, so U1(b) fails, as FINAL-DESIGN counts X1-X4.
+        g0 = member('g0')
+        g0['flags'] = ['thermal.start_gate_timeout']
+        dead = member('dead')
+        dead['flags'] = ['episode_error:ThermalFault:thermal.collector_failed: OSError']
+        dead['coverage'] = [{'sample_fraction': .2, 'gaps_ns': [], 'max_interval_ns': 60*NS}]
+        result = desk.acceptance([member('a'), member('b'), g0, dead])
+        self.assertEqual(result['U1']['thermal_excluded_members'], 2)
+        self.assertEqual(result['U1']['status'], 'fail')
+        # Alone, the dead member is one exclusion; its broken coverage is not
+        # an observed-member check (it is X4, like thermal.state_unobserved).
+        alone = desk.acceptance([member('a'), member('b'), dead])
+        self.assertEqual(alone['U1']['thermal_excluded_members'], 1)
+        self.assertEqual(alone['U1']['status'], 'pass')
+
     def test_u4_requires_both_sentinel_equivalence_and_anchor_moments(self):
         anchors = {str(i): {str(j): 1000+100*j for j in range(4)} for i in range(3)}
         windows = {str(i): [1000] for i in range(3)}

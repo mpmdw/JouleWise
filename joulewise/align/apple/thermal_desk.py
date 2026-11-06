@@ -538,12 +538,26 @@ def monitoring_stability(benign, *, mean_turn_j, mean_30b_turn_j, mean_episode_j
             'corr_residual_clock': _correlation([sum(r['residual_j']) for r in benign], [r.get('mean_clock_mhz') for r in benign])}
 
 
+def collector_lost(member):
+    """The 1 Hz sidecar died (WP8 F2 fail-fast): X4, state unobserved."""
+    return any('thermal.collector_thread_dead' in f or 'thermal.collector_failed' in f
+               or f.startswith('collector_error:') for f in member.get('flags', ()))
+
+
+def state_unobserved(member):
+    return 'thermal.state_unobserved' in member.get('flags', ()) or collector_lost(member)
+
+
 def thermal_exclusions(member):
     """X1–X4 only: value checks omit these; U1(b/d) still count them."""
     reasons = [f for f in member.get('flags', ()) if f.startswith((
         'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal',
         'thermal.start_gate_timeout', 'thermal.gate_timeout:',
         'thermal.hold_timeout:', 'thermal.state_unobserved'))]
+    if collector_lost(member):
+        # A member failed fast on a dead collector is X4 for U1(b), as in
+        # calibration_exclusions.
+        reasons.append('thermal.state_unobserved')
     if member.get('registered_os_nonzero') or any(t.get('os_nominal') is False for t in member.get('turn_observation', ())):
         reasons.append('thermal.os_level_nonzero')
     if any(t.get('pm_nominal') is False for t in member.get('turn_observation', ())):
@@ -557,7 +571,7 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
     if len(model_ids) > 1:
         raise ValueError('acceptance is per model per window')
     gated = [r for r in members if r.get('gated')]
-    observed = [r for r in gated if 'thermal.state_unobserved' not in r.get('flags', [])]
+    observed = [r for r in gated if not state_unobserved(r)]
     included = [r for r in gated if not thermal_exclusions(r)]
     excluded = len(gated) - len(included)
     turns = [t for r in included for t in r['turn_observation']]
@@ -586,7 +600,7 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
                   combine(['inconclusive' if v is None else 'pass' if v else 'fail' for v in release_checks])
                   if release_checks else 'inconclusive'])
     pair_results = [identical_pair(a, b) for a, b in pairs
-                    if 'thermal.state_unobserved' not in a.get('flags', []) and 'thermal.state_unobserved' not in b.get('flags', [])]
+                    if not state_unobserved(a) and not state_unobserved(b)]
     eligible_pairs = [p['status'] for p in pair_results if p['status'] != 'excluded']
     results = {'U1': {'status': combine(checks), 'thermal_excluded_members': excluded,
                       'turn_admissions': admissions, 'g1_h_timeouts': timeouts, 'g0_timeouts': g0_timeouts},
@@ -617,8 +631,7 @@ def calibration_exclusions(member):
         reasons.append('thermal.powermetrics_non_nominal')
     if any(f.startswith(('endpoint_error:', 'episode_error:')) for f in member.get('flags', ())):
         reasons.append('member.runtime_failure')
-    if any('thermal.collector_thread_dead' in f or 'thermal.collector_failed' in f
-           or f.startswith('collector_error:') for f in member.get('flags', ())):
+    if collector_lost(member):
         # Collector loss is the protocol's X4 state-observation exclusion even
         # when the runtime also (correctly) fails the member.
         reasons.append('thermal.state_unobserved')

@@ -29,13 +29,13 @@ class KitBridgeTests(unittest.TestCase):
         self.assertEqual(plan['status'], 'FOR_LEAD_REVIEW')
         self.assertEqual([m['role'] for m in plan['members']], A1_ROLES)
         self.assertEqual({m['ordinal']: m['replay_of'][-3:] for m in plan['members'] if m.get('replay_of')},
-                         {12: 'e10', 13: 'e09', 15: 'e07', 16: 'e06', 18: 'e05'})
+                         {12: 'e10', 13: 'e09', 15: 'e07', 16: 'e06', 17: 'e05'})
         positions = {}
         for m in plan['members']:
             positions.setdefault(m['role'], []).append(m['ordinal'])
         self.assertEqual({k: sum(v) for k, v in positions.items() if k[0] in 'XY'},
                          {'X-G': 22, 'X-S': 22, 'Y-S': 22, 'Y-G': 22})
-        self.assertEqual([m['seed_index'] for m in plan['members'] if m['role'] == 'D'], [1, 1, 1, 1, 93, 1])
+        self.assertEqual([m['seed_index'] for m in plan['members'] if m['role'] == 'D'], [1, 1, 1, 1, 1, 93])
 
     def test_consumer_custody_rebinds_to_synthesized_capture_bytes(self):
         from joulewise.schemas import BenchmarkConfig
@@ -50,13 +50,22 @@ class KitBridgeTests(unittest.TestCase):
                 if 'thermal' in spec:
                     self.assertEqual(spec['thermal']['window_reference']['source_config_sha256'], digest)
 
-    def test_contrast_arms_carry_a_deadman_the_design_does_not_have(self):
-        # WP22 F1: FINAL-DESIGN §1(c)/§2.3 contrast arms stop at the pilot-7
-        # turn count; the kit adds deadman_s=330 measured from G0 entry.
+    def test_contrast_deadman_follows_the_30b_member_law_and_admits_a_g0_timeout(self):
+        # WP22 F1 (resolved on the integrated head): the WP7 330 s deadman,
+        # armed at G0 entry, ended contrast arms before a G0 timeout could
+        # even be reached. The kit now applies FD's T_dead,m to the 30B.
         plan, _, _ = dry.build_kit(dry.SYN_INPUTS)
         dead = {m['spec'].get('deadman_s') for m in plan['members'] if m['role'][:1] in 'XY'}
-        self.assertEqual(dead, {330})
-        self.assertLess(330, 600, 'a G0 timeout (600 s cap) can never be reached by a contrast arm')
+        self.assertEqual(dead, {kit.CONTRAST_DEADMAN_S})
+        self.assertGreater(kit.CONTRAST_DEADMAN_S, 600, 'a G0 timeout (600 s cap) must fit the deadman')
+
+    def test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail(self):
+        r1 = dry.SYN_INPUTS['R1']
+        self.assertEqual(r1['T_dead'], kit.l1_t_dead(r1['I_D'], dry.SYN_R1_SLOTS['max_r1_tail_s']))
+        plan, _, _ = dry.build_kit(dry.SYN_INPUTS)
+        self.assertEqual({m['ac_powermode'] for m in plan['members']}, {0})
+        with self.assertRaisesRegex(ValueError, 'AC powermode'):
+            dry.build_kit(dry.SYN_INPUTS, {**dry.SYN_R1_SLOTS, 'ac_powermode': None})
 
 
 class _Window(unittest.TestCase):
@@ -123,7 +132,7 @@ class InjectedWindowTests(_Window):
         self.assertEqual(self.record['desk_status'], 'ok', self.record.get('desk_error'))
 
     def test_clean_members_succeed(self):
-        for o in (1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 15, 16, 18):
+        for o in (1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 15, 16, 17):
             self.assertEqual(self.member(o)['status'], 'succeeded', o)
 
     def test_os_level_nonzero_is_x1(self):
@@ -138,26 +147,29 @@ class InjectedWindowTests(_Window):
 
     @unittest.expectedFailure
     def test_g0_timeout_flags_and_proceeds_to_a_complete_episode(self):
-        # WP22 F2: the deadman starts at G0 entry, so 600 s of G0 leaves D
-        # ~486 s for an ~900 s episode: X2 becomes X7 (member failure).
+        # WP22 F2, open for council ruling 1's duty bar: the deadman starts at
+        # G0 entry (thermal_gates.md; G0/G1/H consume T_dead), so 600 s of G0
+        # leaves D ~486 s for an ~900 s episode: X2 becomes X7 (member failure).
         self.assertEqual(self.member(8)['status'], 'succeeded')
         self.assertEqual(self.desk_member(8)['calibration_exclusions'], ['thermal.start_gate_timeout'])
 
     @unittest.expectedFailure
     def test_collector_death_is_x4_and_episode_continues(self):
-        # WP22 F3: §2.6 makes >10% failed reads a timed wait plus X4; a dead
-        # collector thread raises instead and the member fails as a fault.
-        self.assertEqual(self.member(17)['status'], 'succeeded')
-        self.assertIn('thermal.state_unobserved', self.desk_member(17)['calibration_exclusions'])
+        # WP22 F3, accepted divergence: §2.6 makes >10% failed reads a timed
+        # wait plus X4; WP8 F2 (8ef3c30f4) deliberately fails the member fast
+        # on a dead collector instead. The desk still counts it as X4 (see
+        # test_d_u1_counts_two_thermal_exclusions_and_fails).
+        self.assertEqual(self.member(18)['status'], 'succeeded')
+        self.assertIn('thermal.state_unobserved', self.desk_member(18)['calibration_exclusions'])
 
     def test_u4_to_u6_inconclusive_in_w1(self):
         for result in self.record['desk']['model_windows'].values():
             for k in (4, 5, 6):
                 self.assertEqual(result[f'U{k}']['status'], 'inconclusive')
 
-    @unittest.expectedFailure
     def test_d_u1_counts_two_thermal_exclusions_and_fails(self):
-        # Design: 8 (X2) + 17 (X4) -> 2 > 1 -> D "thermal protocol not met".
+        # Design: 8 (X2) + 18 (X4) -> 2 > 1 -> D "thermal protocol not met".
+        # The dead-collector member fails fast (WP8 F2) and still counts as X4.
         d = self.desk_model('Qwen3.8')
         self.assertEqual(d['U1']['status'], 'fail')
         self.assertEqual(d['consequence'], 'thermal protocol not met')

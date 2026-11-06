@@ -32,6 +32,10 @@ from tests.align import w1_synthetic as syn  # noqa: E402
 NS = syn.NS
 R0_SHA = hashlib.sha256(b'synthetic-r0-record').hexdigest()
 I_D = 516.575
+# R1 rehearsal record stand-in: frozen series AC powermode (council ruling 7)
+# and the largest post-deadline tail, which binds T_dead by lead ruling L1.
+SYN_R1_SLOTS = {'schema': 'joulewise.align.r1_slots.v1', 'source': 'SYNTHETIC_WP22_DRY_RUN',
+                'ac_powermode': 0, 'max_r1_tail_s': 30.0}
 SYN_INPUTS = {
     'schema_version': 'joulewise.align_v4_inputs.v1',
     'status': 'SYNTHETIC_WP22_DRY_RUN',
@@ -46,7 +50,7 @@ SYN_INPUTS = {
     'WP18': {'X': {'max_turns': 5, 'token_fixture_sha256': hashlib.sha256(b'X').hexdigest()},
              'Y': {'max_turns': 5, 'token_fixture_sha256': hashlib.sha256(b'Y').hexdigest()}},
     'R0': {'reasoning_effort': 'xhigh'},
-    'R1': {'B_D': 6144, 'I_D': I_D, 'T_dead': (1750 - I_D) / 1.13544,
+    'R1': {'B_D': 6144, 'I_D': I_D, 'T_dead': kit.l1_t_dead(I_D, SYN_R1_SLOTS['max_r1_tail_s']),
            'thermal_policy': {'sensors': {'s_fast': syn.FAST, 's_slow': syn.SLOW, 'fan_keys': [syn.FAN],
                                           'r0_sha256': R0_SHA},
                               'delta_fast_c': 1.5, 'delta_slow_c': 1.0, 'turn_cap_s': 120,
@@ -55,14 +59,17 @@ SYN_INPUTS = {
 }
 
 # One of each injected event, on distinct members (ordinal -> event).
-INJECT = {8: 'g0_timeout', 13: 'os_level_nonzero', 11: 'malformed_xml', 14: 'deadman', 17: 'collector_death'}
-PAIR_GROUPS = {5: 'D-5-18', 18: 'D-5-18', 6: 'X-G', 16: 'X-G', 9: 'X-S', 13: 'X-S',
+# Council ruling 1(g) swapped W1 ordinals 17 and 18: the replay of 5 is 17 and
+# development index 93 is 18, so the collector death stays on the development D.
+INJECT = {8: 'g0_timeout', 13: 'os_level_nonzero', 11: 'malformed_xml', 14: 'deadman', 18: 'collector_death'}
+PAIR_GROUPS = {5: 'D-5-17', 17: 'D-5-17', 6: 'X-G', 16: 'X-G', 9: 'X-S', 13: 'X-S',
                7: 'Y-S', 15: 'Y-S', 10: 'Y-G', 12: 'Y-G'}
 
 
-def build_kit(inputs):
-    with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)):
-        kit.require_ready(deepcopy(inputs))
+def build_kit(inputs, r1_slots=SYN_R1_SLOTS):
+    with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)), \
+            patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(r1_slots)):
+        kit.require_ready(deepcopy(inputs), deepcopy(r1_slots))
         files = kit.build_files(kit.ROOT)
     plan = json.loads(files[kit.KIT / 'collection_plan.json'])
     configs = {m['ordinal']: json.loads(files[Path(m['config_path'])]) for m in plan['members']}
@@ -219,7 +226,7 @@ def collect(args, out):
         if args.variant == 'design-deadman':
             # FINAL-DESIGN §1(c)/§2.3: contrast arms stop at the pilot-7 turn
             # count with no deadman. The code requires one for gate cells, so
-            # give them D's T_dead (the design's deadman law) instead of 330 s.
+            # give them D's T_dead instead of the kit's 30B CONTRAST_DEADMAN_S.
             for o, m in members.items():
                 if m['role'] not in ('anchor', 'D'):
                     spec = json.loads(configs[o]['workload_profile']['prompt_text'])
@@ -241,7 +248,7 @@ def collect(args, out):
                 elif event == 'collector_death':
                     inj.collector_death[run_id] = 1
         if args.inject == 'g0-contrast':
-            # Probe: a hot G0 on the first X-G arm (deadman 330 s < G0 cap 600 s).
+            # Probe: a hot G0 on the first X-G arm (G0 cap 600 s inside its deadman).
             inj.g0_hot.add(members[6]['run_id'])
         if args.inject == 'collector-g0':
             # Probe: the collector dies before G0 (outside run_workload's try).
