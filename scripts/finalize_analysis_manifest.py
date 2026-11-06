@@ -122,6 +122,17 @@ def _finalize(args: argparse.Namespace, sidecar_path: Path | None, *,
     )
 
 
+def _sidecar_staging_can_write(source: Path, custody_root: Path) -> bool:
+    """Whether staging may create a new custody object.
+
+    Step 8 has already copied its replay sidecar into finalization custody.  In
+    that case :func:`stage_dominance_replay_sidecar` only authenticates and
+    returns the existing path, so the write-preflight would authenticate every
+    other finalization input twice for no append-only safety benefit.
+    """
+    return not source.absolute().is_relative_to(custody_root.absolute())
+
+
 def _preflight_other_inputs(args: argparse.Namespace, *,
                             block5_inputs: Mapping[str, Any] | None = None) -> None:
     """Reach the required-sidecar checkpoint without writing custody bytes.
@@ -186,7 +197,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             from joulewise.b5_analysis.steps import require_primary_context
             require_primary_context(block5_inputs["archive_contexts"])
         if args.dominance_replay_sidecar is not None:
-            _preflight_other_inputs(args, block5_inputs=block5_inputs)
+            # Preflight is required before an external sidecar can be copied.
+            # An already-custodied sidecar cannot cause a write during staging;
+            # the single finalization pass below still authenticates all inputs.
+            if _sidecar_staging_can_write(args.dominance_replay_sidecar, args.custody_root):
+                _preflight_other_inputs(args, block5_inputs=block5_inputs)
             sidecar_path = stage_dominance_replay_sidecar(
                 args.dominance_replay_sidecar, args.custody_root, args.aggregate_floor_artifact
             )

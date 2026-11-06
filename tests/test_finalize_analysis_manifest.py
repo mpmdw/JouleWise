@@ -303,16 +303,43 @@ class Block5FinalizerContinuationTests(unittest.TestCase):
             manifest = {'manifest_id': 's5', 'lineage': {'prospective_manifest_id': f['prospective']['manifest_id']}}
             missing = script.AnalysisManifestFinalizationError('analysis_finalization_attachment_missing',
                 'dominance-enabled prospective manifest requires a dominance replay sidecar')
+            argv = self.argv(f, sidecar=True, indexed=True)
+            argv[argv.index('--dominance-replay-sidecar') + 1] = str(f['root'].parent / 'external-sidecar.json')
             with mock.patch.object(script, 'block5_claim_gate_inputs', return_value=f['block5_inputs']) as builder, \
                  mock.patch.object(script, '_dominance_floor_identity_enabled', return_value=True), \
                  mock.patch.object(script, 'stage_dominance_replay_sidecar', return_value=f['acceptance_path']), \
                  mock.patch.object(script, 'finalize_prospective_analysis_manifest_v3', side_effect=[missing, manifest]) as finalize, \
                  contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(script.main(self.argv(f, sidecar=True, indexed=True)), 0)
+                self.assertEqual(script.main(argv), 0)
             builder.assert_called_once()
             self.assertEqual(finalize.call_count, 2)
             for call in finalize.call_args_list:
                 self.assertIs(call.kwargs['_block5_inputs'], f['block5_inputs'])
+
+    def test_custodied_sidecar_skips_duplicate_finalization_preflight(self):
+        import contextlib
+        import io
+        from unittest import mock
+        from scripts import finalize_analysis_manifest as script
+        from tests.b5_analysis import fixtures_s5 as fx
+        with fx.finalization_case() as f:
+            manifest = {'manifest_id': 's5', 'lineage': {'prospective_manifest_id': f['prospective']['manifest_id']}}
+            with mock.patch.object(script, 'block5_claim_gate_inputs', return_value=f['block5_inputs']) as builder, \
+                 mock.patch.object(script, 'stage_dominance_replay_sidecar', return_value=f['acceptance_path']) as stage, \
+                 mock.patch.object(script, 'finalize_prospective_analysis_manifest_v3', return_value=manifest) as finalize, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(script.main(self.argv(f, sidecar=True, indexed=True)), 0)
+            builder.assert_called_once()
+            stage.assert_called_once()
+            finalize.assert_called_once()
+            self.assertIs(finalize.call_args.kwargs['_block5_inputs'], f['block5_inputs'])
+
+    def test_sidecar_staging_write_classification(self):
+        from scripts.finalize_analysis_manifest import _sidecar_staging_can_write
+        from tests.b5_analysis import fixtures_s5 as fx
+        with fx.finalization_case() as f:
+            self.assertFalse(_sidecar_staging_can_write(f['acceptance_path'], f['root']))
+            self.assertTrue(_sidecar_staging_can_write(f['root'].parent / 'external.json', f['root']))
 
     def test_library_reuses_authenticated_block5_inputs(self):
         from unittest import mock
