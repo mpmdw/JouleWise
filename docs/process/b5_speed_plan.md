@@ -204,9 +204,15 @@ or creates/opens `restricted/`. Git observations are the documented
 | Step | Before / after (seconds) | Wall reduction | Equality evidence |
 |---|---:|---:|---|
 | 3b — independent pack brackets | 180.781 / 89.707 | 50.4% | All 277 registered files, 5 accumulated records and all archive censuses in the joined prefix match exactly |
+| 10 — isolated issuer/opener packs | 433.000 / 205.929 | 52.4%, **cold restart only** | All 442 registered files, 14 accumulated records and all archive censuses match exactly |
 
 These are single paired synthetic observations under the concurrent job, not
-production forecasts. The private pool transports frozen inputs, authentication
+production forecasts. **Step 10 has no demonstrated warm pipeline gain:** an
+initial warm-prefix pair was 131.653 / 256.824 s, the latter including 16.630 s
+of benchmark-only retention. A warm-member-pool reuse experiment was deferred
+after its serial baseline refused beta custody replay; its cause is unresolved
+and its runtime changes are not included. See the report before interpreting
+the cold-restart timing. The private pool transports frozen inputs, authentication
 rows, archive censuses, deadlines and store deltas; it consumes packs in their
 original order and recomputes failed work at its serial position. Mathematical
 accumulation and registered writers retain their existing order.
@@ -218,6 +224,7 @@ Reproduce each slice with `scripts/benchmark_b5_pack_parallel.py --baseline
 index, and checks actual registered-file digests, complete step records and
 archive censuses. The detailed method, refusal regressions and limitations are
 in the [stage-2 report](../run_reports/2026-11-05-b5-speed-plan-stage2.md);
-the [3b ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-3b.json) preserves
+the [3b ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-3b.json) and
+[step-10 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-10.json) preserve
 the matching commitments and per-file hashes. Full joined production promotion
 still needs the authorized blinded equivalence gate.

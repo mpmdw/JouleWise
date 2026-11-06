@@ -36,6 +36,10 @@ def bracket_fixture_worker(task):
 
 
 class PackTransportTests(unittest.TestCase):
+    def test_opaque_caller_argument_keeps_the_serial_path(self):
+        with arc.analysis_run_caches({}, workers=3):
+            self.assertIsNone(pp.pack_map(read_pack, [((lambda: None,), {}), ((lambda: None,), {})]))
+
     def test_frozen_mapping_transport_is_local_and_preserves_types(self):
         value = MappingProxyType({'frozen': (MappingProxyType({'n': 1}),), 'mutable': [2]})
         restored = pp.loads(pp.dumps(value))

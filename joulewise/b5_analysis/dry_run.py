@@ -1608,21 +1608,28 @@ def _reported_open(s,pack):
     return 0
 
 
-def step_10(s,r):
+def _reported_one(s,r,pack):
     from scripts.issue_reported_energy import main
+    output=s.path('outputs/projection-'+pack+'.json')
+    result,outputs,code,exit_status=s.invoke(r,main,['--window-index',s.index_path,'--pack',pack,'--output',output],
+        step='10',window=pack,outputs=[('projection_'+pack,output)])
+    if exit_status==0:
+        step4=next((record for record in s.step_records if record.step=='4' and record.window==pack),None)
+        require_step10_admission(step4,s.read('projection_'+pack),s.read('extraction_'+pack))
+        before=set(s.outputs)
+        result=r.run(s.guarded(lambda argv:_reported_open(s,pack)),[],step='10',window=pack)
+        exit_status=result.exit_status;code=result.token() if exit_status else None
+        outputs.extend(s.outputs[k] for k in s.outputs if k not in before)
+    return s.record('10',window=pack,exit_status=exit_status,code=code,outputs=outputs)
+
+
+def step_10(s,r):
+    if _parallel(s,r,2):
+        from .reported_parallel import step_10_parallel
+        return step_10_parallel(s,r)
     records=[]
     for pack in ('alpha','beta'):
-        output=s.path('outputs/projection-'+pack+'.json')
-        result,outputs,code,exit_status=s.invoke(r,main,['--window-index',s.index_path,'--pack',pack,'--output',output],
-            step='10',window=pack,outputs=[('projection_'+pack,output)])
-        if exit_status==0:
-            step4=next((record for record in s.step_records if record.step=='4' and record.window==pack),None)
-            require_step10_admission(step4,s.read('projection_'+pack),s.read('extraction_'+pack))
-            before=set(s.outputs)
-            result=r.run(s.guarded(lambda argv:_reported_open(s,pack)),[],step='10',window=pack)
-            exit_status=result.exit_status;code=result.token() if exit_status else None
-            outputs.extend(s.outputs[k] for k in s.outputs if k not in before)
-        records.append(s.record('10',window=pack,exit_status=exit_status,code=code,outputs=outputs))
+        records.append(_reported_one(s,r,pack))
         if records[-1].status!='ok':break
     return records
 
