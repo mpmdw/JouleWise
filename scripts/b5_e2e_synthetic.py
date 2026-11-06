@@ -188,6 +188,9 @@ def main(argv=None):
     parser.add_argument('--label', default='run')
     parser.add_argument('--sample-ms', type=int, default=200)
     parser.add_argument('--keep-custody', action='store_true')
+    parser.add_argument('--sample-stacks', metavar='STEPS',
+                        help='comma-separated step ids: sample the driver main thread\'s Python stack every '
+                             '20 ms during those steps and write OUT/stacks-step<ID>.json (low overhead)')
     parser.add_argument('--stop-after', help='synthetic partial run: every later step refuses with '
                         "'synthetic_stop_after' (so the record still closes); for time-boxed hosts")
     parser.add_argument('--vdl-mode', default='on',
@@ -228,6 +231,9 @@ def main(argv=None):
         def stopped(s, r):
             raise d.AnalysisRefusal('synthetic_stop_after')
         d.STEPS = tuple(item if i <= cut else (item[0], stopped) for i, item in enumerate(d.STEPS))
+
+    if args.sample_stacks:
+        _sample_driver_stacks(out, set(args.sample_stacks.split(',')))
 
     started = time.monotonic()
     print('restoring committed synthetic S10 windows', flush=True)
@@ -282,6 +288,60 @@ def main(argv=None):
     for step, row in (summary['steps'] or {}).items():
         print(f'step {step:>3}: {row["wall_s"]:9.1f} s', flush=True)
     return 0 if result.code == 0 else 1
+
+
+def _sample_driver_stacks(out, steps, interval=0.02, depth=40):
+    """Driver main-thread stack sampler for the named steps (attribution of driver-serial time)."""
+    import collections
+    import threading
+    from joulewise.b5_analysis import phase_timing
+
+    main = threading.main_thread().ident
+    begin, end = phase_timing.step_begin, phase_timing.step_end
+    state = {}
+
+    def key(code):
+        return f'{os.path.basename(code.co_filename)}:{code.co_firstlineno}:{code.co_qualname}'
+
+    def sampler(step, stop):
+        self_counts, inclusive, edges, stacks = (collections.Counter() for _ in range(4))
+        samples = 0
+        while not stop.wait(interval):
+            frame = sys._current_frames().get(main)
+            chain = []
+            while frame is not None and len(chain) < depth:
+                chain.append(key(frame.f_code))
+                frame = frame.f_back
+            if not chain:
+                continue
+            samples += 1
+            self_counts[chain[0]] += 1
+            for name in set(chain):
+                inclusive[name] += 1
+            for callee, caller in zip(chain, chain[1:]):
+                edges[caller + ' -> ' + callee] += 1
+            stacks[' <- '.join(chain[:8])] += 1
+        document = dict(step=step, interval_s=interval, samples=samples,
+                        self=self_counts.most_common(80), inclusive=inclusive.most_common(150),
+                        edges=edges.most_common(250), stacks=stacks.most_common(60))
+        (out / f'stacks-step{step}.json').write_text(json.dumps(document, indent=1) + '\n')
+
+    def step_begin(step):
+        begin(step)
+        if step in steps:
+            stop = threading.Event()
+            thread = threading.Thread(target=sampler, args=(step, stop), daemon=True, name='e2e-stack-sampler')
+            thread.start()
+            state[step] = (stop, thread)
+
+    def step_end(step):
+        if step in state:
+            stop, thread = state.pop(step)
+            stop.set()
+            thread.join()
+        end(step)
+
+    phase_timing.step_begin, phase_timing.step_end = step_begin, step_end
 
 
 PROFILE_ENV = 'JW_B5_E2E_CPROFILE'
