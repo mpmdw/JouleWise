@@ -1040,6 +1040,38 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+176. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 06:40 PST: the ALIGN v4 kit is merged and R0 may run headless today.** Ed, after pilot 10: "how close are we to running pilot v4 on the measurement mac? it just finished the pilot and is ready for v4". This is the follow-up item 174 (3) and item 175 (1)-(2) wait for.
+- **v4 integration PR #682 is merged into `lane/2026-11-05-align-pilot10-benign` at `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91`.** It contains WP2-WP5, WP14-WP17 and WP21, the pilot-10 pin 640 (WP9), the WP7 R0 fix `ba30b2172`, the WP11 config and D pins `adb2da0b4`, and both review records. Reviews:
+  - Opus WP7 executing review (`docs/align/reviews/2026-11-06-wp7-executing-review-pr682.md`): ADMIT_WITH_FIXES; R0 and the merge admitted. The end_state order stays as coded: fault outranks thermal.
+  - Fable WP8 cold pass (`docs/align/reviews/2026-11-06-wp8-fable-cold-pass-pr682.md`): no BLOCKER or HIGH.
+  - Local ALIGN suite on the merged head: 1329 tests, 0 failures, 33 skipped (env-gated native/hardware), 1 error: `test_r0_checks` errors only when run in one process after `test_r0_mlx` (known test-isolation contamination) and passes alone. The merge tree is byte-identical to head `fc83cfe1d`, whose CI run 42193220561 is green on all jobs.
+- **Still open, all R1-only:** WP7's HIGH (the kit's window_reference readiness check fails closed) and its MEDIUMs (gate-cell deadman, the R1 High Power restore trap), plus WP8 F1-F8. Cloud Sol is fixing them on follow-up lanes. **R1 is NOT armable** until a later laptop-lead item says so.
+- **Main:** #681 (desk fence and one-shot R0 LaunchAgent, `docs/process/R0_HEADLESS_LAUNCH.md`) and #656 (council design plus Amendment 2: R0 step profile 300/900/600 s, frozen desk `cda28a5ef`, Mac15,9 keys provisional until R0) are both merged.
+
+**Next activation (written 2026-11-06 by the laptop lead, interactive session 359dce51; item 176; replaces item 175 (1)-(2); item 175 (3) and item 174 (4) hold):**
+(1) **Run ALIGN v4 R0 headless, once, today 11-06.** Launch between 08:00 and 13:00 PST, with nothing armed and no night agent loaded. R0 is selection data, not a measurement window; it does not count as a pilot. Steps, in order. If a check fails, stop and mail Ed with what failed; do not work around it.
+  a. **Canonical repo (watchdog).** Fast-forward canonical main (clean tree, nothing armed). Confirm it contains `446e9065e` (#681). Run `"$WATCHDOG_PYTHON" -B -m unittest tests.test_magistrate_desk_fence` there; it must pass.
+  b. **Measurement checkout** `M=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2`: fast-forward only to `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91` (clean tree first). Confirm `sysctl -n hw.model` prints `Mac15,9` (it is the config's `measurement_hw_model`; on any other value stop and mail), physical RAM is at least 128 GiB, and the venv is the pinned one: `$M/.venv/bin/python -c "import mlx.core, mlx_lm, transformers; print(mlx.core.__version__, mlx_lm.__version__, transformers.__version__)"` must print `0.31.2 0.31.3 5.12.1`.
+  c. **Spotlight signalling check, on the Mac, before launch** (the R0_HEADLESS_LAUNCH.md live-use requirement). For each of `pgrep -U "$(id -u)" -x corespotlightd` and `... -x spotlightknowledged`: `kill -STOP <pid>`, then `ps -o stat= -p <pid>` must show `T`; `kill -CONT <pid>`, and it must not show `T`. Record the pids and results.
+  d. **Preflight:** `"$WATCHDOG_PYTHON" "$WATCHDOG_REPO/scripts/launch_align_r0.py" preflight --disk-path /Users/edr` must report AC power and readable free space. Do not offload anything.
+  e. **Launch,** as your last work, exactly as `docs/process/R0_HEADLESS_LAUNCH.md` says, with:
+     - `--repo $M`
+     - `--python-bin $M/.venv/bin/python`
+     - `--config $M/configs/align/v4/r0_desk.json`
+     - `--output /Users/edr/night-align/r0-v4-<UTC yyyymmddThhmmZ>` (new, must not exist)
+     - `--disk-path /Users/edr`
+     - `--deadline` = launch time + 36,000 s (10 h: WP4b plans 3-4 h all-pass, 7.3 h worst-case decode budget plus setup; the launcher caps it at 12 h)
+     - `--magistrate-pid` = your watchdog-lock pid, and the installed watchdog custody root.
+     Then end the session at once, with no children left.
+  f. **While the fence is live,** the watchdog does not relaunch you. Nothing else may run on the Mac.
+(2) **After R0 exits** (fence cleared, or a stale-fence notice):
+  - Read `<record>/report.json` and `report.md`. Run `$M/.venv/bin/python -B $M/scripts/align_v4_verify_d_pins.py <record>/report.json`; it must print PASS.
+  - Check Spotlight resumed (no `T` state; a `spotlight-stopped` record left behind means recover per the doc).
+  - Commit `report.json`, `report.md` and the SMC journal sha256 to `docs/align/r0/2026-11-06/` on a new branch from `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91`, then push it.
+  - Email Ed one summary on thread `1a1afcc20a03040b`: overall status; per check pass/fail/inconclusive; the SMC classifier's die-class and heatsink-class keys; D pin verification; the selected reasoning-effort rung; the B7 checkpoint verdict; peak memory; total wall time.
+  - Do not re-run R0 on any failure or inconclusive; the laptop lead decides. Do not arm R1 or any window.
+(3) **Otherwise exit quietly.** Before R0's launch window, and after the record and email, a relaunch with no mail from Ed exits quietly with no record and no commit. Pilots 8-10 stay on disk (item 175 (3)).
+
 175. **Magistrate activation 3efb8793 (Opus 5.5, headless, 2026-11-05 from 21:53 PST).** Record: `docs/process_traces/2026-11-05-magistrate-3efb8793/RECORD.md`. No pending notices and no mail from Ed.
 - **ALIGN pilot 10 done** (chain GO, 15:18-21:49). Desk `instrument_incomplete`: 24/28 eligible; every check that does not depend on exclusions passed. Excluded by the registered physics rules: spam ordinals 8-10 (a macOS battery top-up at 21-31 W from 17:52, after the pack sagged to about 95 %; ordinal 9 is a replay anchor) and bank ordinal 17 (thermal level 1).
 - Held-out pooled thresholds (pilots 8-10, seeds 17-46): m 28 per pair, still the sample maximum. Sequence design: bank 2.53, spam 7.13, unchanged; **spam still rests on one trajectory** (next 2.99). All six untampered sabotage scores from pilots 8-10 below; all detected at the smallest tamper. K = 7 anchors: pilot 10 offset +2.34 J, sigma_w 4.67 J, residual SD 1.93 J. Clock correlation bank +0.79 (fifth positive session; print-only).
