@@ -90,6 +90,14 @@ def table(headers, rows):
                       *("| " + " | ".join(cell(c) for c in row) + " |" for row in rows)])
 
 
+def ple_resident_gb(stats):
+    """mmap tables report mincore residency; pread (F_NOCACHE) tables have none."""
+    values = [t["resident_bytes"] for t in stats.values() if "resident_bytes" in t]
+    if not values and stats:
+        return "n/a (pread)"
+    return round(sum(values) / 1e9, 3)
+
+
 def render(template, reports, run_id):
     def worker(name):
         return reports.get(name, {}).get("results", {})
@@ -100,7 +108,7 @@ def render(template, reports, run_id):
         peak = r["metal"]["peak_bytes"]
         ple_pages = max((t.get("resident_bytes", 0) for t in r.get("ple_after", {}).values()), default=0) // 16384
         memory.append([r["context"], r["prompt_tokens"], round(r["metal"]["peak_bytes"] / 1e9, 3),
-                       round(sum(t["resident_bytes"] for t in r["ple_after"].values()) / 1e9, 3),
+                       ple_resident_gb(r["ple_after"]),
                        r.get("prediction", {}).get("relative_error", "n/a")])
         memory_steps.append([r["context"], round(peak/1e9, 3), round(cap/1e9, 3),
                              round((cap-peak)/1e9, 3), round(100*(cap-peak)/cap, 2), ple_pages])

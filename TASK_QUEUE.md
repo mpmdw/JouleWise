@@ -1360,3 +1360,10 @@ reviewed Saturday head `97d780d59`. The only remaining gate is the native MLX
 test sequence recorded in
 `docs/run_reports/2026-11-06-qwen4exp-resumable-conversion.md`; this note does
 not alter the generated project work-selection ordering below.
+
+## 2026-11-06 Direct Brief — MISSING-8
+
+- **IMPLEMENTED (native gate pending):** PLE `pread` artifact derivation without
+  reconversion and corresponding Saturday live-runner I/O/telemetry selection.
+  Fixture tests pass without MLX; the lead must run the skipped native tests on
+  the M3 Max before the 2026-11-07 live kit.
