@@ -1951,7 +1951,14 @@ class ValidationRound1Test(unittest.TestCase):
                 yield from iterator
             with mock.patch.object(conv, "tensor_chunks", side_effect=interrupted_chunks), self.assertRaises(KeyboardInterrupt):
                 conv.convert(fx.reference.ckpt, out, **options)
-            conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+            progress = root / "resume-mid-ple.progress.jsonl"
+            conv.convert(fx.reference.ckpt, out, resume_from=out, progress_path=progress, **options)
+            rows = [json.loads(line) for line in progress.read_text().splitlines()]
+            self.assertEqual(rows[-1]["tensors_done"], rows[-1]["tensors_total"])
+            # Verified carried-over output is reported separately so the
+            # monitor's ETA uses only bytes this process wrote.
+            self.assertGreater(rows[-1]["bytes_resumed"], 0)
+            self.assertLess(rows[-1]["bytes_resumed"], rows[-1]["bytes_written"])
             self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
             self.assertEqual({p.name: conv.sha256(p) for p in out.iterdir() if p.is_file()}, expected)
 

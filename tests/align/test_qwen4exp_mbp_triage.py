@@ -153,7 +153,14 @@ class TriageClassesTest(unittest.TestCase):
         self.assertEqual(set(triage.CLASSES), set(triage.ACTIONS))
 
     def test_script_does_not_import_mlx(self):
-        self.assertNotIn("mlx", sys.modules)
+        # Fresh interpreter: in a shared test process another module may
+        # already have imported MLX, which says nothing about this script.
+        code = ("import importlib.util, sys; "
+                f"spec = importlib.util.spec_from_file_location('t', {str(SCRIPT)!r}); "
+                "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+                "print(any(k == 'mlx' or k.startswith('mlx.') for k in sys.modules))")
+        out = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout.strip(), "False")
 
 
 if __name__ == "__main__":

@@ -318,6 +318,25 @@ class SourceTests(unittest.TestCase):
             self.assertAlmostEqual(row["eta_seconds"], 3600)
             self.assertFalse(row["eta_past_cutoff"])
 
+    def test_resumed_conversion_eta_uses_only_freshly_written_bytes(self):
+        import datetime as dt
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp); hub = base / "hub"; run = base / "run"
+            (hub / "models--Qwen--Qwen3.8-Flash-Next" / "blobs").mkdir(parents=True); run.mkdir()
+            # 60 of 100 bytes done, 40 carried over from the interrupted
+            # attempt: 20 bytes in 600 s leaves 40 bytes = 1200 s.
+            (run / "convert.progress.jsonl").write_text(json.dumps(
+                {"monotonic_elapsed": 600, "bytes_written": 60, "bytes_resumed": 40,
+                 "bytes_total_expected": 100}) + "\n")
+            plan = base / "plan.json"; plan.write_text(json.dumps({"total_bytes": 0, "metadata": {}}))
+            args = live.parse_args(["progress", "--metadata", str(plan), "--run-dir", str(run),
+                                    "--volume", str(base), "--once"])
+            with patch.dict(os.environ, {"HF_HUB_CACHE": str(hub)}), \
+                 patch.object(live, "utc_now", return_value=dt.datetime(2026, 11, 7, tzinfo=dt.timezone.utc)), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                row = live.progress(args)
+            self.assertAlmostEqual(row["eta_seconds"], 1200)
+
     def test_download_receipt_gets_timing_without_an_artifact_key(self):
         info = types.SimpleNamespace(sha=live.REVISION, siblings=[
             types.SimpleNamespace(rfilename="config.json", size=2, blob_id="b", lfs=None)])
