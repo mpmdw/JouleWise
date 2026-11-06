@@ -1,7 +1,12 @@
 # ALIGN protocol v4 — Qwen3.8-27B pilot series
 
 **DRAFT SKELETON — PROVISIONAL; not registered or authorized to arm.**
-WP20, 2026-11-05. This document follows the configuration, roster, seed,
+WP20, 2026-11-05. Landed on the v4 R1 code line in round 4 (2026-11-06,
+`lane/2026-11-06-v4-r1-round4-fixes`) under chair ruling 22 and reconciled
+with that code: the W1 roster, T_dead (lead ruling L1), the G0-timeout rule,
+the power-mode and external-volume arm rules and the round-4 lead decisions on
+tool-call flags are stated as the code implements them, and the ruling table
+below marks what the code installs. This document follows the configuration, roster, seed,
 instrument, analysis and sizing order of [protocol v3](pilot_protocol_v3.md).
 It carries the council design through Amendments 1 and 2 and the later
 execution-plan rulings. The 2026-11-06 v4 design-council rulings are **not yet
@@ -40,6 +45,7 @@ present in this checkout. Source paths describing external data are text only.
 | B | `c8ef6b2f6`, `docs/align/token_admission_budget.md` |
 | H | `c8ef6b2f6`, `docs/align/hybrid_cache_checkpoints.md` |
 | W | `a17ed96c8`, `docs/align/council-2026-11-05/WP14-RULINGS.md`, §§(a)–(c) and Supersession summary |
+| L | `3b3b2a971`, `docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-1.md` (lead rulings L1-L3 on the chair ruling) |
 
 The following are specifications and unfilled slots, not observations from R0
 or R1. The earlier Window-1 survey (`40c569cfd`,
@@ -108,8 +114,14 @@ The following 18-member order is Amendment A1's order, before its fit rule.
 | 14 | D bank/sabotage s1 | G0 + G1 + holds |
 | 15 | Y-S | G0 |
 | 16 | X-G | G0 + G1 |
-| 17 | D bank/benign s93 | development; first member dropped if needed |
-| 18 | D spam/benign s1 replay of 5 | late identical-work pair |
+| 17 | D spam/benign s1 replay of 5 | late identical-work pair |
+| 18 | D bank/benign s93 | development; first member dropped if needed |
+
+Chair ruling 1(g) swapped ordinals 17 and 18 (A1 had the replay at 18): the
+replay now follows X-G 16 (30B), as its original 5 follows a 30B anchor, and
+the fit rule's first drop is the last ordinal. The kit roster
+(`scripts/align_v4_kit.py`), its tags and `replay_of` follow this table.
+`C:39`
 
 All D rows carry G0 + G1 + holds, including 5, 17 and 18. Contrast rows have
 no holds. X is b-e25 spam/sabotage, index 16, expected seed
@@ -121,7 +133,7 @@ No turn count is guessed here. `F:53,297–308; A:38,49–62,129–135; P:238–
 
 The midpoint reference follows ordinal 9. X-G positions 6+16 and X-S 9+13
 both sum to 22; Y-S 7+15 and Y-G 10+12 do too. Each arm/template has one D
-and one 30B predecessor. The D 5↔18 pair supplies W1's in-window D replay.
+and one 30B predecessor. The D 5↔17 pair supplies W1's in-window D replay.
 `A:64–75`
 
 Later D windows contain four anchors, early/late seed-1 sentinels of W1's
@@ -160,8 +172,11 @@ most 20% cap-ended unclosed-reasoning turns and median reasoning tokens
 B_D is the largest multiple of 1,024 whose R1 planning member fits 1,800 s,
 with floor 6,144 and context ceiling 40,960. Admission requires cumulative
 decode < B_D; an admitted turn retains its full cap and can overshoot B_D.
-`episode.decode_budget:<k>` is a normal stop. Deadman T_dead is
-(1,750 − I_D) / 1.13544 seconds, with I_D measured by R1; deadmen retain
+`episode.decode_budget:<k>` is a normal stop. Deadman T_dead follows lead
+ruling L1: T_dead = min((1,750 − I_D)/1.13544, (1,800 − I_D − max_R1_tail −
+10)/1.13544) seconds, with I_D and the largest post-deadline tail measured by
+R1; the kit asserts it and the member fit I_D + 1.13544·T_dead + tail + 10 ≤
+1,800, and R1 evaluates the same L1 on its own record. `L:7–19`. Deadmen retain
 partial custody and are incomplete/excluded. No transferred example value
 fills a slot. Thermal wiring must retain the implemented conservative
 G0-entry wall-time bound, so waiting before episode start cannot add another
@@ -340,8 +355,12 @@ Under the three WP14 rulings above, retain these council rules:
   disclose the implied energy band.
 - G0 follows neutral benign warmup, before the episode stamp. Ten consecutive
   samples must meet R+δ, slow slope within ±0.2 °C/min over 60 s, OS level 0
-  and Nominal powermetrics observed within 2 s. Cap 600 s; timeout flags and
-  proceeds (X2).
+  and Nominal powermetrics observed within 2 s. Cap 600 s; timeout flags X2.
+  **Round-4 lead decision:** a G0 that did not release (timeout X2,
+  unobserved X4, deadman X7) leaves no episode reference, so the member ends
+  before its first turn (`episode.g0_unreleased:0`, stop
+  `episode.g0_unreleased`) instead of spending T_dead on blind G1 waits. The
+  member is excluded either way; admitted members are unaffected.
 - G1 precedes turns k≥1. Five consecutive samples must meet bands relative
   to that episode's G0 release E, never the previous turn. G_turn is
   min(300 s, 3×R1 p95 recovery). Timeout stops the episode (X2).
@@ -405,10 +424,23 @@ not newly settled council rulings. Freeze their exact unit, formula, interval
 and missing-data treatment against the full desk before registration; do not
 silently promote library defaults into scientific authority. `G:172–194`
 
+**Tool-call flags (round-4 lead decisions).** (a) On the 30B JSON path
+(anchors and contrast) a malformed call is recorded as
+`episode.malformed_tool_call.json:<turn>` and tabulated by the desk; it is not
+an exclusion and not a stop, which keeps anchors and the contrast comparable
+with pilots 4-10. (b) On D's XML path a refused call
+(`unsupported_tool_call_format`) sets `episode.unsupported_tool_call_format:<turn>`
+and is tabulated, not excluded: chair ruling 2(d) requires that a refused XML
+call no longer be invisible to the desk, not that it exclude (`C:54`). A
+malformed XML call stays the WP8 F1 exclusion `episode.malformed_tool_call:<turn>`.
+The desk's `tool_call_flags` table prints all three per member.
+
 Retain X1–X8: registered-span OS nonzero (episode-scope alternative printed),
 thermal gate/hold timeout, in-turn non-Nominal PM, unobserved state, divergent
 identity, OOM/Metal failure, deadman, and no replacements/top-ups. Print every
-refusal/incomplete member by arm. X2 remains capability-only; X4 enters neither
+refusal/incomplete member by arm. X2 remains capability-only (since round 4 a
+G0-timeout X2 member ends before its first turn and so carries no capability
+score; a G1/H-timeout X2 keeps its partial transcript); X4 enters neither
 calibration nor U checks; X7 remains incomplete/excluded. Bind X1 to the actual
 registered sampler-stream span, not an entire shared journal. `F:411–419;
 G:110–113,152–155`
@@ -521,13 +553,23 @@ originally omitted:
 
 - **Deadman bound.** FINAL-DESIGN sets T_dead = (1,750 − I_D)/1.13544 s, but
   `workload.py:153–159` checks only `deadman_s < 1800/1.13544`, never against
-  I_D. `F:269–271; C:25`
+  I_D. `F:269–271; C:25` **Status on the R1 round-4 head:** the kit asserts
+  lead ruling L1's T_dead and the member fit (`require_ready`), and the R1
+  driver evaluates L1 on its record and judges the duty bar against
+  min(armed, L1).
 - **Power-mode pin.** `configs/gates/physics_rows.json:2133` finds
   `lowpowermode 0` anywhere in `pmset -g custom`, so it does not pin the AC
-  `powermode` value. `C:109`
+  `powermode` value. `C:109` **Status on the R1 round-4 head:** `run_night`
+  refuses every plan unless the AC-profile `powermode` equals the plan's
+  declared value (default 0), restoring Automatic first when the R1 High Power
+  marker is present; the v4 arm does the same against the frozen series value
+  and records the pmset text; bundles record it and the desk sets
+  `instrument_ok` false on a member mismatch.
 - **Refused XML tool call (WP8 F1).** A refused XML call is invisible to the
   desk. The fix (`6d288fc3f`, malformed_tool_call stop + exclusion) is on
-  unreviewed lanes, not on `fc83cfe1d`. `C:54`
+  unreviewed lanes, not on `fc83cfe1d`. `C:54` **Status on the R1 round-4
+  head:** malformed XML calls are excluded; refused (unsupported-format) XML
+  calls are flagged and tabulated (round-4 lead decision (b)).
 
 Pending slots, unfilled hashes, unexecuted native qualifications and proposed
 analysis conventions are missing evidence or unfinished work, not
@@ -535,26 +577,28 @@ contradictions between implemented behavior and the design.
 
 ## Council 2026-11-06 rulings not yet reflected
 
-The v4 design-council chair ruling (`C`) postdates this draft. None of its 28
-rulings is installed in the sections above; this list records what each one
-still requires of this document. "v4" marks the rulings that chair ruling 22
+The v4 design-council chair ruling (`C`) postdates this draft. This list
+records what each of its 28 rulings still requires of this document. Rows that
+begin **Code (round 4):** state what the R1 code line already implements; the
+row stays until the named section is rewritten and the registration cold gate
+checks it. "v4" marks the rulings that chair ruling 22
 says must be in protocol v4 (2-6, 9-15 and 17); the others change R1, the kit,
 the desk or the paper and are listed so that the registration cold gate can
-check them. Installing a ruling means editing the named section and removing
+check them. Installing a ruling means editing the named section and marking
 its row. Print-only operating characteristics for rulings 3, 6, 9 and 12 are
 in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
 `lane/2026-11-06-sol-v4-council-oc`.
 
 | # | v4 | Blocks | What this document still lacks (section) |
 |---:|:---:|---|---|
-| 1 | | R1 | D wall-time budget: R1 prints deadman use by phase and predicted turns; a third gated **bank/benign** D run in R1; extended post-D cooldown; the pre-declared duty bar (no X7, ≥ 3 admitted turns, G0 + G1 + H ≤ 40 % of T_dead) and the named fallback order (S6 joint tuning with δ_slow ≤ 2.0 °C, idle 450 s after D, 4-bit, screen-only); the kit assertion I_D + 1.13544·T_dead + tail + 60 s ≤ 1,800; and **W1 ordinals 17 and 18 swapped** (roster table, balance text and fit rule's "drop ordinal 17", which becomes the last ordinal). (Sizing; W1 roster; R1) `C:16–40` |
+| 1 | | R1 | **Code (round 4):** (a)-(e) in the R1 driver, (f) as restated by L1 in the kit and on the R1 record, (g) in the roster above. Still lacks: D wall-time budget text: R1 prints deadman use by phase and predicted turns; a third gated **bank/benign** D run in R1; extended post-D cooldown; the pre-declared duty bar (no X7, ≥ 3 admitted turns, G0 + G1 + H ≤ 40 % of T_dead) and the named fallback order (S6 joint tuning with δ_slow ≤ 2.0 °C, idle 450 s after D, 4-bit, screen-only); the kit assertion I_D + 1.13544·T_dead + tail + 60 s ≤ 1,800; and **W1 ordinals 17 and 18 swapped** (roster table, balance text and fit rule's "drop ordinal 17", which becomes the last ordinal). (Sizing; W1 roster; R1) `C:16–40` |
 | 2 | v4 | paper; before W1 registration | Registered sub-turn H\* estimand (Sol's grid promoted from print-only), benign-carrier detection curve (H50/H90 with window-cluster bootstrap), preserve_thinking estimand statement plus a print-only full-omission variant, WP8 F1 resolved before D1, residual-vs-hold-count print; the D positive-control cell as a paper gate. (Known-H tamper) `C:42–56` |
 | 3 | v4 | D-series | Count-only extension rule: run D_k until each pair has ≥ 21 eligible benign and ≥ 3 sabotage, capped at D5 (D6 under registration grade), triggered only by eligibility counts and U1-U3 status; a U3 failure means a replacement window. Replaces "D1-D3". (W1 roster and later windows) `C:58–67` |
 | 4 | v4 | W1; D-series | Battery: arm W1 only within ~30 min after a completed top-up (≥ 99 %, not charging, OBC off, ioreg block in the arm record); R1 drain rate; battery charging as a named exclusion with a window-level bar beside U1(b); desk prints SoC and charger W per member; Ed's D-series charge hold. Replaces "battery ≥ 95 %". (Physical checklist; exclusions) `C:69–81` |
 | 5 | v4 | W1 | U3 bar re-derived from separated-ordinal within-session replay differences (pilots 4-10) with its published false-fail rate; a U3 failure ties to ruling 3. (U table) `C:83–88` |
 | 6 | v4 | R1 (U5); W1 | U6 margins ±0.5·s_r with trajectory-clustered SEs and "calibration unresolved: imprecise"; D's turn-index slope replaced by per-turn-position residual means; U5 R1 step from 3 designed start states and bar \|β_T\|₉₀ × δ_slow ≤ c·σ_pair with c fixed before R1; U4 with W1 counted (W = 4 at D3) and E_ref = mean of R1 pair + W1 5 and 18; the 30B σ_w ≤ 6 J demoted to a print; U1(a) and U2(b) relabelled implementation checks; the OC table published before W1 registration. The OC table shows the ±0.5·s_r U6 still passes only ~4 % at m = 21 per pair, which needs a further ruling. (U table; acceptance consequences) `C:90–104` |
-| 7 | | R1; W1 | Opus executing review of the WP7 lane; r1_slots freezes the AC powermode; every arm and bundle records it, arm refuses on mismatch, desk sets `instrument_ok` false; POWERMODE-PREFLIGHT-RECORD-01 promoted. (R1; instrument checks) `C:106–116` |
-| 8 | | R1 | Soak and step tests outside 11:45-13:15 local; per-second CPU load journal; redo a segment above 0.5 core for 60 s; soak SD on the detrended last 20 min after \|slope\| ≤ 0.2 °C/min. (R1; bands) `C:118–125` |
+| 7 | | R1; W1 | **Code (round 4):** r1_slots freezes the AC powermode; run_night admission and the v4 arm refuse a mismatch (with the R1 marker restore) and the arm records the value and pmset text; bundles record it; the desk sets `instrument_ok` false. Still lacks: Opus executing review of the WP7 lane; r1_slots freezes the AC powermode; every arm and bundle records it, arm refuses on mismatch, desk sets `instrument_ok` false; POWERMODE-PREFLIGHT-RECORD-01 promoted. (R1; instrument checks) `C:106–116` |
+| 8 | | R1 | **Code (round 4):** all four in the R1 driver, plus journal completeness (≥ 0.9 samples per wall second, no gap > 5 s) and a DST-safe Pacific window. Text: Soak and step tests outside 11:45-13:15 local; per-second CPU load journal; redo a segment above 0.5 core for 60 s; soak SD on the detrended last 20 min after \|slope\| ≤ 0.2 °C/min. (R1; bands) `C:118–125` |
 | 9 | v4 | W1 | Contrast: delivery condition (mean ΔS_slow ≥ δ_slow/2 or arm-G G1 wait on ≥ 50 % of turns, else "treatment not delivered"); stage indicator (3 df) or a re-ordered Y; T CONFIRMED requires d > 0 (the rule above still says "same sign"); WP19 renders Y's prompt bytes and token ids; the required paper sentence on the contrast's scope. (Deciding contrast) `C:127–140` |
 | 10 | v4 | D-series | Frozen-commit record fixes `max_episode_decode_tokens`, `deadman_s`, `max_tokens`, `max_turns` for D1-Dn; desk asserts one configuration key across held-out D members; any slot change starts a new cohort. (Residual analysis; seeds) `C:142–146` |
 | 11 | v4 | W1 | Checkpoints "off" is recorded above; still missing: R0 reports rewrites on all transitions (closed vs capped/unclosed) with the A3.6 5 % trigger on all transitions; confirmation that re-fed tokens after `cache.rebuilt_untrimmable` enter P/C; desk rebuild counts beside residuals and a print-only no-rebuild sensitivity. (Configuration) `C:147–155` |
@@ -562,19 +606,19 @@ in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
 | 13 | v4 | paper | Pre-registered, labelled clock-conditioned sensitivity; pre/post-gate correlation side by side. (Residual analysis) `C:167–171` |
 | 14 | v4 | D-series | Direction-conditional escalation ladder: timeout-driven failures loosen δ_slow in 0.5 °C steps to the 2.0 °C cap, spread-driven failures tighten; drop "holds on" for heavy cells. (Acceptance consequences) `C:173–176` |
 | 15 | v4 | W1 | Sentinel admissibility (completed, no X flag, ≥ 3 turns), pre-named alternate seed 93 bank/benign, multi-run E_ref, disclosed predecessor asymmetry. (Later windows; U4) `C:178–184` |
-| 16 | | R1 | High Power A-B-A: legs start after a G0-style release; adopt only if t_decline(B) ≥ 1.25 × max(A1, A2), with the ∞ and > 25 %-disagreement cases; if adopted, the contrast attribution is conditional on the v4 setup. (R1) `C:186–192` |
+| 16 | | R1 | **Code (round 4):** in the R1 driver. Text: High Power A-B-A: legs start after a G0-style release; adopt only if t_decline(B) ≥ 1.25 × max(A1, A2), with the ∞ and > 25 %-disagreement cases; if adopted, the contrast attribution is conditional on the v4 setup. (R1) `C:186–192` |
 | 17 | v4 | W1 | W1 is a second slot-filling pass that may revise δ_slow, G_turn, N_chunk, B_D, T_dead; sensor keys and heavy class stay fixed from R1; all slots frozen before D1; W1 D members enter no pool. (Gate semantics; PENDING-FILL) `C:194–196` |
 | 18 | | W1 | Desk prints R − R1 soak per sensor, `thermal.reference_warm` and a G0/G1 wait-against-ordinal table. (WP14(b); desk prints) `C:198–201` |
 | 19 | | D-series | Print-only ambient proxy (chassis key, τ > 300 s); Ed's thermostat hold and logger. (Physical checklist) `C:203–205` |
-| 20 | | W1 | Arm rules: no external volume mounted from t0 to the terminal record (`diskutil list external` in the census); offloads and SSD work only by day between windows. (Arm handoff) `C:207–211` |
+| 20 | | W1 | **Code (round 4):** R1 and the v4 (W1/D) arm refuse any mounted external volume and record the census (`external_volume.py`, status pinned `off`). Still lacks: the arm-handoff text for: no external volume mounted from t0 to the terminal record (`diskutil list external` in the census); offloads and SSD work only by day between windows. (Arm handoff) `C:207–211` |
 | 21 | | R1 | R0 dispositions print the capability proxy and capped-turn fraction with an exact binomial CI; the proxy changes the rung only if declared before reading the ladder. (R0 ladder) `C:213–215` |
-| 22 | | W1 | This draft exists with PENDING sections; the blind cold gate before W1 arm is still owed. (Status) `C:217–220` |
+| 22 | | W1 | **Landed on the R1 code line in round 4.** The blind cold gate before W1 arm is still owed. (Status) `C:217–220` |
 | 23 | | none | Amendment 2 §2's pilot-7 addendum citation; no change here (this document cites A2 only for the desk-commit fact). `C:222–225` |
 | 24 | | none | A1/FD label "16 × 1,800" should read 18 × 1,800; this document quotes only the correct 58,260 s. `C:227–229` |
 | 25 | | D-series | Frozen-commit seed table (window, ordinal, pair, condition, index, expected_episode_seed) for D1-D5 including extension windows; seed-law tag carries the quantization (e.g. `qwen3.8-27b-8bit`, replacing `qwen3.8-27b` above); drop the "common random numbers" pairing claim. (Seeds) `C:231–236` |
 | 26 | | D-series | W1 desk compares R1's D spam/benign s1 tokens with W1 ordinals 5 and 18 before any held-out seed is spent. (Instrument checks) `C:238–240` |
 | 27 | | D-series | Spotlight daemons paused by name with pids recorded; runs root on Spotlight's Privacy list; auto-install of updates off and the /tmp rule as arm preconditions. (Arm handoff) `C:242–244` |
-| 28 | | none | R1 slot record prints the recomputed projected MDE from measured e_D, E_D and the R1 replay pair. (PENDING-FILL) `C:246–248` |
+| 28 | | none | **Code (round 4):** in the R1 driver (print-only). R1 slot record prints the recomputed projected MDE from measured e_D, E_D and the R1 replay pair. (PENDING-FILL) `C:246–248` |
 
 The chair's questions for Ed (`C:258–266`: extension-window reservation,
 registration grade, D-series charge hold, ambient, E1 disk order, the named
@@ -592,9 +636,10 @@ is 37.4 GB for W1 and 52.9 GB for a default D window. Include every scaffold
 and custody/archive byte, not just the claim-root subset. These are reservations,
 not physical worst-case guarantees. `A:43–88,115–125; V:183–192`
 
-If R1 sizing exceeds 26,940 s, drop ordinal 17 first, then lower B_D in 1,024
-steps to 6,144. If it still does not fit, return to the lead. Never cut the
-anchors, contrast or 5/18 D pair. `A:83–88; P:218–223`
+If R1 sizing exceeds 26,940 s, drop the last ordinal (18, the development
+member, after ruling 1(g)) first, then lower B_D in 1,024 steps to 6,144. If it
+still does not fit, return to the lead. Never cut the anchors, contrast or
+5/17 D pair. `A:83–88; P:218–223; C:39`
 
 R0 is a guarded headless engineering check by day, after pilot-10 DESK_DONE,
 with no window armed. It uses the watchdog desk fence and one-shot LaunchAgent,
@@ -608,7 +653,8 @@ native test; that does not change checkpoint-off policy. `P:23–26,164–192,31
 R1 is an armed `run_night` rehearsal with calibration brackets and harvest:
 30-min idle soak; 30B and D planning turns (10k fed prefill + 4,096 seeded
 decode, 10-min cooldown each); one X-G identity run; two gated/held D s1
-spam/benign runs; optional qualified 4-bit run. Ed's appended ruling now
+spam/benign runs plus one gated/held bank/benign run (ruling 1(b)); optional
+qualified 4-bit run. Ed's appended ruling now
 **includes High Power A-B-A in R1**, superseding the earlier skip default.
 Ed installs `/etc/sudoers.d/joulewise-powermode`, a narrow sudoers rule
 limited to exactly `pmset -c powermode 0` and `pmset -c powermode 2`.

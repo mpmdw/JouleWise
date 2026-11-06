@@ -300,3 +300,245 @@ Open items that are not R1-blocking but are W1 items:
 Process note: `3ec30af47`, `5d4da342b`, `c5cef0066` and `2f7617629` carry author/committer `Edr`, not `mpmdw`. They are already on
 origin and are not rewritten (no force push). Every commit from `0bae940dd`
 on is mpmdw/mpmdw.
+
+## Round 4 (lane/2026-11-06-v4-r1-round4-fixes, from `a2193446d`)
+
+This round fixes the open findings of the executing review
+(`docs/align/reviews/2026-11-06-r1-integration-executing-review.md`) and the
+Fable cold pass (`docs/align/reviews/2026-11-06-r1-integration-fable-cold-pass.md`)
+that the lead assigned, lands protocol v4 (chair ruling 22) and records two lead
+decisions. It authorizes no measurement, opens no weights and changes no v3 kit
+bytes. Every behaviour fix has a test that fails without it (table below).
+
+### Merges
+
+| Commit | What |
+|---|---|
+| merge `lane/2026-11-06-sol-v4-wp20-protocol@fb36bfaa4` | `docs/align/pilot_protocol_v4.md` (WP20 draft plus its Opus review) and `tests/align/test_protocol_v4_doc.py`. The cloud task's stray root `answer.md` was dropped from the merge. |
+| merge `lane/2026-11-06-ssd-always-attached@44b99b37d` | `joulewise/align/apple/external_volume.py`, `scripts/align_external_volume.py`, the SSD study, draft amendment and qualification tooling. `configs/align/v4/external_log_volume.json` stays `status: off`. R1 and the v4 arm pin the configuration to `off` in code (`validate_config(None)`), so adopting the SSD amendment needs a code change, not a config edit. |
+
+### Fixes
+
+**HIGH-3 (executing review) / cold pass HIGH-1: host-level power-mode admission.**
+- `scripts/run_night.py::_admit_ac_powermode` runs for **every receipt class**,
+  right after the initial census and before any class branch (so the
+  HAZARD_PACK branch is covered too). It reads the AC-profile `powermode` from
+  `pmset -g custom` (exact key in the `AC Power:` block, through the probe
+  seam), retried once on a failed read, and refuses with the new driver code
+  `night_refused_ac_powermode` unless it equals the plan's declared value.
+- Night plans gain an optional `ac_powermode` key (0 or 2; absent means 0) in
+  every class (`joulewise/night_gate.py`, `night_plan_writer.py` omits it when
+  unset). The code is registered in `NIGHT_DRIVER_REASON_CODES`, the
+  arm-retry table (cold-gate disposition, never an auto-retry) and the two
+  policy blocks in `NIGHT_HANDBACK.md` and the derivation runbook.
+- If `$MEASUREMENT_ROOT/.align-r1-high-power` exists, admission first runs the
+  narrow `sudo -n /usr/bin/pmset -c powermode 0`, removes the marker only after
+  that succeeds, and reads the mode again. A failed restore refuses and keeps
+  the marker.
+- The v4 session `install` (W1/D arm) applies the same admission
+  (`joulewise/align/apple/powermode.py::admit_ac_powermode`) against the kit's
+  frozen series value.
+- `joulewise/environment.py::_parse_pmset` now exposes `powermode` (int or
+  None) in the snapshot, beside `low_power_mode`, so High Power is visible to
+  every consumer. `pmset -g` prints the active profile, which is the AC profile
+  on AC power; the admission gate itself reads the AC profile from
+  `pmset -g custom`, the exact key ruling 7 names. The generic environment
+  policy (`evaluate_environment_policy`) is unchanged, so no existing
+  campaign's findings digest moves.
+- **Lead attention:** the b5 hazard doctrine (`joulewise/hazards/arm.py`)
+  records `pmset -g custom` as a diagnostic and says power mode is not one of
+  the six hazards. run_night now refuses a HAZARD_PACK night whose host is not
+  at powermode 0 before the hazard branch starts. A host in High Power changes
+  the energy numbers, so this protects every campaign, which is the point of
+  HIGH-3.
+
+**MEDIUM-1 (ruling 8 load-journal completeness).** Quiet segments must return
+`cpu_busy_t_s` (one sample time per `cpu_busy_cores` value; `LoadJournal`
+records it). The driver refuses R1 unless the journal has at least
+0.9·W − 5 samples over the W wall seconds it measured around the invocation
+and no gap over 5 s. Probe P2's one-sample soak now refuses.
+
+**MEDIUM-2 (L1 on the R1 record).** The driver computes lead ruling L1's T_dead
+from the step-d I_D and the largest gated-run tail, prints it (`R1 L1: {...}`),
+stores it as `l1` in r1_slots (armed, L1 and effective T_dead, member fit for
+armed and effective) and judges the duty bar's 40 % share against
+min(armed, L1). Probe P3 (700 s tail): L1 = 870.6 s, the armed 1,451 s no
+longer fits (2,459 s), and the duty bar now fails (360 s > 348 s).
+
+**MEDIUM-3 (kit binds r1_slots to R1 evidence).** `require_ready` calls
+`check_r1_evidence`: schema `joulewise.align.r1_slots.v1`; source
+`R1 hardware rehearsal` (the driver's `R1 synthetic rehearsal` only when the
+WP22/test harness passes `synthetic=True`; no production caller does);
+`inputs.R1.I_D == r1_slots.slots.I_D`; `ac_powermode` follows the A-B-A verdict
+(2 only on `adopt`); U5 present with c = 1.0; `max_r1_tail_s` equals the largest
+`deadman_budget` tail; every ruling 20 census passed; and the duty bar passed
+or carries `duty_bar.lead_fallback = {step: 1-4, authority}` (ruling 1(e)).
+The WP22 stand-in is now R1-shaped.
+
+**Cold pass MEDIUM-2 (G1 blind waits after an unreleased G0).** When G0 does
+not release (timeout X2, unobserved X4, deadman X7), the member ends before its
+first turn with `episode.g0_unreleased:0` (stop `episode.g0_unreleased`), after
+two sampler periods of zero-generation observation. It stays excluded exactly
+as before; admitted members are unaffected. One disclosed cost: protocol v4
+keeps X2 members "capability-only", and a G0-timeout X2 member now has no
+turns, so it carries no capability score (a G1/H-timeout X2 keeps its partial
+transcript). The lead's ruling accepts that; the protocol text says so.
+WP22 F2 ("X2 becomes X7") now
+passes as an ordinary test: the injected G0 timeout is a succeeded X2 member.
+`JW_WP22_FULL=1` run: **Ran 18 tests, OK (expected failures=1)** (only F3).
+
+**Cold pass MEDIUM-5 (ruling 7 arm record).** Every v4 arm writes
+`<session>/staging/v4-arm-NNN.json` (create-once) before the shared installer
+runs, admitted or not: the admission record with the observed value, every
+read, the exact `pmset -g custom` text and any marker restore, plus the
+ruling 20 volume census. `session.json` lists the records.
+
+**Ruling 20 (external volumes).** R1 takes a census at t0 (before any
+powermode or runtime work), before every runtime invocation and before it
+writes r1_slots, and refuses if any external volume is mounted; a final
+census is recorded in the terminal record. The v4 arm refuses the same way.
+All censuses are recorded (`external_volumes`).
+
+**LOWs.**
+- `validate_powermode_members` and `arm_powermode_check` refuse an unfrozen
+  series value (None == None no longer matches).
+- `output.mkdir` sits inside the driver's `try`: a rerun into an existing
+  `align-r1` is a recorded refusal (rc 3), and an earlier `r1_result.json` is
+  never overwritten.
+- The pmset read is retried once, at the episode-start bundle read and at
+  admission.
+- A custody-invalid member's energy carries
+  `turn_owned_basis: reattributed_without_thermal_intervals`, and the desk
+  markdown labels it.
+- The stale kit comment on ordinals 17/18 is corrected (the kit is regenerated
+  because `plan_tree.json` pins the builder's own SHA-256; `--check` reports
+  no drift and still fails closed on the 13 placeholders).
+- The ruling 8 batch window uses `zoneinfo` `America/Los_Angeles` and compares
+  absolute times; a DST-transition test fails on the fixed-offset code.
+
+### Lead decisions (recorded here and in protocol v4)
+
+**(a) JSON path.** `episode.malformed_tool_call` on the 30B JSON path (anchors
+and contrast) is recorded and tabulated but is **not** an exclusion. The
+workload now writes `episode.malformed_tool_call.json:<turn>` on that path; the
+exclusion code (`calibration_exclusions`, `episode_ineligibility_reasons`) and
+the stop classifier match only `episode.malformed_tool_call:`, so the JSON
+flag neither excludes nor stops. This keeps anchors and the contrast comparable
+with pilots 4-10. On D's XML path a malformed call stays the WP8 F1 exclusion.
+
+**(b) XML path.** Chair ruling 2(d) reads, verbatim:
+
+> (d) Resolve WP8 F1, "a refused XML call is invisible to the desk" (`docs/run_reports/2026-11-06-align-v4-merge-gate.md:18`), before D1.
+
+It requires that a refused XML call be visible to the desk; it does not require
+an exclusion (the exclusion was F1's own suggested fix, not the ruling's text).
+So `unsupported_tool_call_format` on D's XML path sets
+`episode.unsupported_tool_call_format:<turn>`, which is tabulated and not
+excluded. The desk report gains `tool_call_flags` (per member: JSON malformed
+turns, XML refused turns, XML malformed turns; totals; which kinds exclude), and
+the markdown prints it.
+
+### Protocol v4 reconciled with the code
+
+`docs/align/pilot_protocol_v4.md` now states: the W1 roster after ruling 1(g)
+(replay 17, development 93 at 18; balance text 5↔17; fit rule drops the last
+ordinal); T_dead by L1 with the kit's member-fit assertion; the round-4 G0 rule;
+the two tool-call decisions; the round-4 status of the three chair-verified
+gaps (deadman bound, power-mode pin, refused XML call); and, in the ruling
+table, **Code (round 4)** marks for rulings 1, 7, 8, 16, 20, 22 and 28. The
+LEAD-RULINGS-1 pin (`3b3b2a971`) is added. Two new doc tests bind the roster
+table to `kit.ROSTER` and the round-4 rules to the text. The blind cold gate
+before W1 arm is still owed.
+
+### Still open after round 4
+
+- Cold pass MEDIUM-1: the driver still SIGKILLs the WP15 runtime on the first
+  signal (no TERM grace), and the contract says nothing about the runtime's
+  TERM obligations. Before W1.
+- Executing review MEDIUM-4: no contract field for ruling 4(b)'s battery drain
+  rate and charge-resume SoC.
+- Executing review LOWs 1-3 (A-B-A leg wait bound, `t_decline_s: true`,
+  "A legs ∞, B finite" reported inconclusive) and cold pass LOW 3 (runtime argv
+  is one executable).
+- The open W1 items listed above (ruling 9 in `deciding_experiment`, the
+  count-level full-omission variant).
+
+### Fail-without-fix (round 4)
+
+Each fix was neutralized on its own in a scratch worktree at the code head
+(a one-hunk edit, then restored), and its tests run with and without it.
+
+| Neutralized fix | Tests | Without fix | With fix |
+|---|---|---|---|
+| HIGH-3: run_night admission stubbed to admitted | 4 run_night admission tests | 4 failures | OK |
+| HIGH-3: pmset read retry off (`READ_RETRIES = 0`) | `test_one_failed_pmset_read_is_retried_and_two_refuse` | fails | OK |
+| HIGH-3: plan `ac_powermode` validation off | `test_plan_declared_powermode_must_be_zero_or_two` | 4 subtest failures | OK |
+| HIGH-3: snapshot `powermode` not set | `test_powermode_value_is_exposed_for_the_admission_gate` | error | OK |
+| MEDIUM-1: gap and sample-count checks off | journal unit test, journal-gap R1 run | 2 failures | OK |
+| MEDIUM-2: duty bar on the armed T_dead | `test_l1_is_evaluated_on_the_r1_record_and_bounds_the_duty_share` | fails | OK |
+| Ruling 20 (R1): volume verdict ignored | t0 and mid-R1 volume tests | 2 failures | OK |
+| LOW 2: `mkdir(exist_ok=True)` outside the guard | `test_rerun_into_an_existing_output_is_a_refusal_not_a_traceback` | fails | OK |
+| LOW 8: window boundaries in the moment's own (fixed) offset | `test_batch_window_is_pacific_wall_time_across_a_dst_change` | fails (the `a2193446d` driver waits 0.0 s and starts at 23:00 PST) | OK |
+| MEDIUM-3: `check_r1_evidence` not called | `R1EvidenceBindingTests` (8 tests) | 13 (sub)test failures | OK |
+| LOW 1: `observed != expected` only | `test_powermode_members_refuse_an_unfrozen_series_value` | fails | OK |
+| MEDIUM-5 / arm: `arm_checks` replaced by a bare read | 3 v4 arm tests (record, volume, marker) | 1 failure, 2 errors | OK |
+| Cold MEDIUM-2: `g0_unreleased = False` | 2 G0-timeout workload tests | 2 failures | OK |
+| Decision (a): JSON path writes `episode.malformed_tool_call:` | `test_json_path_malformed_call_is_recorded_not_excluded` | fails | OK |
+| Decision (b): no XML refused-call flag | `test_xml_path_refused_call_is_flagged_and_tabulated_not_excluded` | fails | OK |
+| LOW 4: one episode read only | `test_one_transient_read_failure_is_retried` | fails | OK |
+| LOW 5: label always `attributed` | `test_desk_excludes_invalid_custody_without_aborting` | fails | OK |
+| Ruling 22: protocol roster in A1's order | `test_w1_roster_matches_the_kit_after_ruling_1g` | fails | OK |
+
+The first DST test used the fall-back transition and passed on the old code,
+because the wait loop re-evaluates after its first sleep. It was replaced by
+the spring-forward case, which the `a2193446d` driver gets wrong.
+
+### Suite tail (round 4)
+
+Every run used `/private/tmp/jwsol/venv-both/bin/python` under
+`nice -n 19 taskpolicy -b`, `TMPDIR=/private/tmp/jwr4-tmp`, one module per
+process, targeted modules only, on a laptop also running a blinded analysis
+and a GPU job.
+
+All rc=0, OK:
+- align: `test_r1_rehearsal` (41), `test_r1_runtime_contract` (8),
+  `test_v4_kit` (49), `test_v4_powermode_record` (9), `test_v4_w1_plan` (10),
+  `test_thermal_gate` (40), `test_thermal_desk` (24), `test_attribution_holds`
+  (6), `test_stop_precedence` (4), `test_xml_tool_calls` (25),
+  `test_apple_endpoint` (9), `test_apple_campaign` (12), `test_endpoints` (15),
+  `test_endpoints_fixround` (15), `test_cache_checkpoint` (16),
+  `test_r0_integration` (3), `test_r0_checks`, `test_thermal_sidecar` (9),
+  `test_history_rendering` (11, 2 skipped), `test_pilot4` (18, 1 skipped),
+  `test_v4_estimands` (14), `test_window_reference_custody` (4),
+  `test_r0_dispositions` (3), `test_external_volume` (22),
+  `test_ssd_qualification` (19), `test_protocol_v4_doc` (5);
+  `tests.test_align_pilot_session` (16).
+- `JW_WP22_FULL=1 tests.align.test_v4_w1_synthetic`: **Ran 18 tests in
+  118.2 s, OK (expected failures=1)**; only F3 remains an expected failure.
+- night and host: `test_night_gate` (112), `test_arm_retry` (36),
+  `test_night_plan_writer` (10), `test_network_time_off` (15), `test_b5_driver`,
+  `test_b5_driver_p2` (46), `test_launch_window` (39), `test_environment` (34),
+  `test_doctor` (9), `test_controller_hazard_flags` (58), `test_experiment`
+  (39), `test_reduce` (134), `test_p2_ctl_guard_probe` (8),
+  `test_window_lineage` (52), `test_collector_analysis_manifest_id`,
+  `test_hazard_whole_window_verdict` (21), `tests.hazards.test_refusal_allowlist`
+  (23, 1 skipped; the new sites are listed), `tests.hazards.test_import_graph`
+  (6), `test_docs_freshness` (31), `test_window_env_allowlist` (4).
+
+`tests.test_run_night`: head **Ran 301 tests, failures=14**; the base
+`a2193446d` in the same environment, same hour: **Ran 294 tests,
+failures=15**. Twelve failures are common to both: eight installer tests ("test
+interpreter must load the battery fixture in child Pythons") and four
+bind-supervision timing tests. The rest differ run to run: on the head
+`test_signalled_child_cannot_hold_cleanup_past_budget` and
+`test_pre_send_local_timeout_and_late_global_expiry`; on the base three other
+supervision timing tests. Rerun alone, alternating head and base,
+`test_signalled_child...` failed on both (its bound is 1.05 s; observed 1.05-1.08 s
+on both) and `test_pre_send...` passed 2/2 on both. None of them reaches the new
+admission code: the bind bench calls `bind_until_quiet` directly. The seven new
+admission tests pass.
+
+Kit: `scripts/align_v4_kit.py --check` reports no drift and exits 1 on the same
+13 placeholders; `validate_align_v4_w1_plan.py` on the committed template still
+refuses its PENDING_R1 placeholders; `git diff a2193446d HEAD --
+configs/campaigns/align_pilot_v3` is empty.

@@ -36,6 +36,21 @@ class ProtocolV4DocTests(unittest.TestCase):
         for gap in ("Deadman bound", "Power-mode pin", "Refused XML tool call"):
             self.assertIn(gap, section)
 
+    def test_w1_roster_matches_the_kit_after_ruling_1g(self):
+        # Round 4: the doc carried A1's order; ruling 1(g) swapped 17 and 18.
+        from scripts import align_v4_kit as kit
+        section = self._section("## W1 roster and later windows")
+        self.assertRegex(section, r"\| 17 \| D spam/benign s1 replay of 5 \|")
+        self.assertRegex(section, r"\| 18 \| D bank/benign s93 \|")
+        self.assertEqual(kit.ROSTER[16], ("D", "spam_filter_update", "benign", 1))
+        self.assertEqual(kit.ROSTER[17], ("D", "bank_transfer_2", "benign", 93))
+        self.assertNotIn("5↔18", self.text)
+
+    def test_round4_code_rules_are_stated(self):
+        for text in ("episode.malformed_tool_call.json", "episode.unsupported_tool_call_format",
+                     "episode.g0_unreleased", "lead\nruling L1", "external volume"):
+            self.assertIn(text, self.text)
+
 
 if __name__ == "__main__":
     unittest.main()
