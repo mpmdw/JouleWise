@@ -1,0 +1,185 @@
+{
+  "align_v4": {
+    "B_D": "PENDING_R1",
+    "I_D": "PENDING_R1",
+    "T_dead": "PENDING_R1",
+    "arithmetic": {
+      "align_s": "PENDING_R1",
+      "pause_limit_s": 7200,
+      "programmed_span_s": "PENDING_R1",
+      "scaffold_s": 4995,
+      "session_wait_budget_s": 7200,
+      "span_cap_s": 26940,
+      "t0_stage_cap_s": 3300,
+      "window_cap_s": 44640
+    },
+    "config_root": "configs/campaigns/align_v4",
+    "effort": "PENDING_R1",
+    "members": [
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e01.json",
+        "config_sha256": "6d2c4ecda2022b25ccb68bc455bf783851f5d77b7b09c89737cdd0a50df4bb58",
+        "member_s": "PENDING_R1",
+        "ordinal": 1,
+        "role": "anchor",
+        "run_id": "align-pilot-v3-episodes-a-e01"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e02.json",
+        "config_sha256": "6a5c0daaa019e66440e8860ef82163312dea84fd9aaaa28f6fd0f3b6464712a8",
+        "member_s": "PENDING_R1",
+        "ordinal": 2,
+        "role": "anchor",
+        "run_id": "align-pilot-v3-episodes-a-e02"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e03.json",
+        "config_sha256": "56105368782182d14e5dbd125854de1dff888cad4c1c25d21aa6820fcf2062d2",
+        "member_s": "PENDING_R1",
+        "ordinal": 3,
+        "role": "anchor",
+        "run_id": "align-pilot-v3-episodes-a-e03"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e04.json",
+        "config_sha256": "5b893b05211f36450bb60c7c01b39ec1721415022c65797d0c2fb3831d1a7bfa",
+        "member_s": "PENDING_R1",
+        "ordinal": 4,
+        "role": "anchor",
+        "run_id": "align-pilot-v3-episodes-a-e04"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json",
+        "config_sha256": "96a7097c7c1fbea3591f197b84a5609edd178b009bc9f6768087c12c67e688f4",
+        "member_s": "PENDING_R1",
+        "ordinal": 5,
+        "role": "D",
+        "run_id": "align-v4-episodes-a-e05"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json",
+        "config_sha256": "cbb7fb072cb1c3e8884da203efa11a25928cfa8b6f3869b4eef6691929badde4",
+        "member_s": "PENDING_R1",
+        "ordinal": 6,
+        "role": "X-G",
+        "run_id": "align-v4-episodes-a-e06"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e07.json",
+        "config_sha256": "ac03c159f22544fe7d4d8b2ef951fd233ccdf6d47b77c4b96d44f6274c12a49f",
+        "member_s": "PENDING_R1",
+        "ordinal": 7,
+        "role": "Y-S",
+        "run_id": "align-v4-episodes-a-e07"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e08.json",
+        "config_sha256": "0f030e763f4ed96a6439b727d083bfe880d7bfb7335b33fcd4193c2d4da66030",
+        "member_s": "PENDING_R1",
+        "ordinal": 8,
+        "role": "D",
+        "run_id": "align-v4-episodes-a-e08"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e09.json",
+        "config_sha256": "fa0e290c44ea52ce620d2299368e79738ec43dc0e9d49b5202388d5b519b4f4c",
+        "member_s": "PENDING_R1",
+        "ordinal": 9,
+        "role": "X-S",
+        "run_id": "align-v4-episodes-a-e09"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e10.json",
+        "config_sha256": "d9490cfad0783ad84c5076d88ae98f55328dba1c47619a1dec3f5b065dcb2d42",
+        "member_s": "PENDING_R1",
+        "ordinal": 10,
+        "role": "Y-G",
+        "run_id": "align-v4-episodes-b-e10"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e11.json",
+        "config_sha256": "6269cf236e15621bad16a7b3ea1f670a648a6f89baac0419f6e03af12595e70f",
+        "member_s": "PENDING_R1",
+        "ordinal": 11,
+        "role": "D",
+        "run_id": "align-v4-episodes-b-e11"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e12.json",
+        "config_sha256": "f54106352076453ddd63ba789bdfaf88bea496a8b885ffee4b5e622a67d6cbd6",
+        "member_s": "PENDING_R1",
+        "ordinal": 12,
+        "role": "Y-G",
+        "run_id": "align-v4-episodes-b-e12"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e13.json",
+        "config_sha256": "d705b4860ad013f17102e1922688d8137f13cb24e7a7dccd507079a38fc27f90",
+        "member_s": "PENDING_R1",
+        "ordinal": 13,
+        "role": "X-S",
+        "run_id": "align-v4-episodes-b-e13"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e14.json",
+        "config_sha256": "995b2ee72bb82f3e37be69136762bff2230e687e1b1dac2ec40a7d397a569b44",
+        "member_s": "PENDING_R1",
+        "ordinal": 14,
+        "role": "D",
+        "run_id": "align-v4-episodes-b-e14"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e15.json",
+        "config_sha256": "939b54308382c812b9177d9bf439eb77f648f5305cb4de34058a4e80d6381fbd",
+        "member_s": "PENDING_R1",
+        "ordinal": 15,
+        "role": "Y-S",
+        "run_id": "align-v4-episodes-b-e15"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e16.json",
+        "config_sha256": "4b4a95af4d3e29666162403efc535fc46625c52c48865c5655538ca043169f5a",
+        "member_s": "PENDING_R1",
+        "ordinal": 16,
+        "role": "X-G",
+        "run_id": "align-v4-episodes-b-e16"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e17.json",
+        "config_sha256": "6d47bbf88f7f0a87d8cdf7b8464c654233361cd35119d74fc8a6ee8d115b82b9",
+        "member_s": "PENDING_R1",
+        "ordinal": 17,
+        "role": "D",
+        "run_id": "align-v4-episodes-b-e17"
+      },
+      {
+        "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e18.json",
+        "config_sha256": "e30db529bf8a97ed32c15403b6afc9f3b52b3417005f21facd6273c2c9ff46ae",
+        "member_s": "PENDING_R1",
+        "ordinal": 18,
+        "role": "D",
+        "run_id": "align-v4-episodes-b-e18"
+      }
+    ],
+    "status": "PENDING_R1",
+    "thermal_policy": {
+      "chunk_tokens": "PENDING_R1",
+      "delta_fast_c": "PENDING_R1",
+      "delta_slow_c": "PENDING_R1",
+      "sensors": {
+        "fan_keys": "PENDING_R1",
+        "r0_sha256": "PENDING_R1",
+        "s_fast": "PENDING_R1",
+        "s_slow": "PENDING_R1"
+      },
+      "turn_cap_s": "PENDING_R1"
+    },
+    "window": 1
+  },
+  "night_plan_schema": "joulewise.night_plan.v5",
+  "night_plan_schema_version": 5,
+  "plan_id": "align-v4-w1-PENDING_R1",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.align_v4.w1_plan_template.v1",
+  "window_max_s": "PENDING_R1"
+}
