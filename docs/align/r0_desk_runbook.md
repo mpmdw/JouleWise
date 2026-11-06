@@ -162,9 +162,11 @@ on the mean and 1e-2 per bin; a different revision, fixture or stack is `not_com
 and fails. Without a pin the tier reports `not_pinned`, which is not a fail.
 (2) **Generation.** Greedy decode (no sampler; `enable_thinking=True`) of the real SHADE
 system+tools prompt plus a one-line user turn asking for one call to the listed tool with
-the fewest required parameters, capped at 4,096 tokens. `load` runs before the ladder
-selects D's effort, so this turn uses the template default, which renders like xhigh, the
-highest-effort (worst-case length) setting. Pass iff reasoning closes, the cap is not hit,
+the fewest required parameters, capped at 4,096 tokens, at effort `low` (lead ruling
+2026-11-06: the check tests tool-call validity, not reasoning length). If that greedy turn
+hits the cap or leaves reasoning unclosed, it is retried exactly once on the production
+sampler at seed 96 and the retry decides; other failures are not retried; both turns are
+recorded under `generation.attempts`. Pass iff reasoning closes, the cap is not hit,
 and the reply holds exactly one well-formed envelope calling **the requested tool** with
 schema-valid arguments (another listed tool, e.g. `end_task`, fails as `wrong_tool`). Tokens, seconds and the call are recorded under
 `generation`. Either part failing fails `load` (`reasons` lists which).

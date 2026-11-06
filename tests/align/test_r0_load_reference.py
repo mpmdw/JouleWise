@@ -8,15 +8,17 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from joulewise.align import r0
+from joulewise.align import r0, r0_runner
 from joulewise.align.apple.endpoint import parse_completion
 from joulewise.align.interfaces import ChatResult
-from tests.align.test_r0_checks import FakeBackend, FakeTask, fake_references
+from tests.align.test_r0_checks import (
+    FakeBackend, FakeGuard, FakeTask, config_at, fake_references, patch_references)
 
 D_FIXTURE = "792beb565106c53ed77695c7ccbb998b11300b3ba25e485c8c0069dcb710ac42"
 # mlx_lm on the D tensors, same fixture (d-nll-diagnosis results, variant mlxD).
@@ -309,11 +311,19 @@ CANNED = {
 
 
 class CannedBackend(FakeBackend):
-    """FakeBackend whose greedy turn runs the production completion parser."""
+    """FakeBackend whose generation turns run the production completion parser.
 
-    def __init__(self, raw, *, family="qwen3_5", hit_cap=False, tools=SHADE_LIKE_TOOLS):
+    The greedy turn emits ``raw``; the one sampled retry (lowest-effort production-sampler
+    session, fixed seed) emits ``retry_raw`` (default: the same text).
+    """
+
+    def __init__(self, raw, *, family="qwen3_5", hit_cap=False, tools=SHADE_LIKE_TOOLS,
+                 retry_raw=None, retry_hit_cap=None):
         super().__init__()
         self.raw, self.family, self.hit_cap, self.tools = raw, family, hit_cap, tools
+        self.retry_raw = raw if retry_raw is None else retry_raw
+        self.retry_hit_cap = hit_cap if retry_hit_cap is None else retry_hit_cap
+        self.retry_seeds = []
 
     def task(self, pair, seed):
         task = FakeTask()
@@ -321,17 +331,24 @@ class CannedBackend(FakeBackend):
         return task
 
     def chat(self, messages, tools, max_tokens, seed, *, greedy=False):
-        if not greedy:
-            return super().chat(messages, tools, max_tokens, seed, greedy=greedy)
-        assert self.greedy_session and seed is None
-        self.greedy_messages = messages
+        if greedy:
+            assert self.greedy_session and seed is None
+            self.greedy_messages = messages
+            return self._canned(self.raw, self.hit_cap, messages, tools, max_tokens)
+        if self.sessions[-1] == r0.GENERATION_EFFORT:  # the generation retry
+            self.retry_seeds.append(seed)
+            self.retry_messages = messages
+            return self._canned(self.retry_raw, self.retry_hit_cap, messages, tools, max_tokens)
+        return super().chat(messages, tools, max_tokens, seed, greedy=greedy)
+
+    def _canned(self, raw, hit_cap, messages, tools, max_tokens):
         visible, reasoning, calls, flags = parse_completion(
-            self.raw, reasoning_open=True, reasoning_tokens=1, model_family=self.family, tools=tools)
-        flags = list(flags) + ([f"turn_token_budget_reached:{max_tokens}"] if self.hit_cap else [])
-        output = self.encode(self.raw + "!")
+            raw, reasoning_open=True, reasoning_tokens=1, model_family=self.family, tools=tools)
+        flags = list(flags) + ([f"turn_token_budget_reached:{max_tokens}"] if hit_cap else [])
+        output = self.encode(raw + "!")
         self.generation = {"prompt_token_ids": self.render(messages, tools), "output_token_ids": output}
         return ChatResult(visible, reasoning, calls, len(self.generation["prompt_token_ids"]), 0, len(output),
-                          1, 0, 1, 2_000_000_000, {"raw_text": self.raw, "joulewise": {"flags": flags}})
+                          1, 0, 1, 2_000_000_000, {"raw_text": raw, "joulewise": {"flags": flags}})
 
 
 # Cases whose call names search_emails are judged where search_emails is the requested tool.
@@ -347,8 +364,10 @@ class GenerationCheckTest(unittest.TestCase):
                 self.assertEqual(result["status"], status, result["problems"])
                 for problem in problems:
                     self.assertIn(problem, result["problems"])
-                self.assertEqual(result["decode"], "greedy")
-                self.assertEqual(result["seconds"], 2.0)
+                self.assertEqual(result["attempts"][0]["decode"], "greedy")
+                # Only an unclosed/capped greedy turn is retried, once.
+                self.assertEqual(result["retried"], name == "unclosed_reasoning")
+                self.assertEqual(result["seconds"], 2.0 * len(result["attempts"]))
                 self.assertGreater(result["tokens"], 0)
         ok = r0.generation_check(CannedBackend(CANNED["well_formed"][0], tools=SEARCH_TARGET_TOOLS))
         self.assertEqual(ok["calls"], [{"name": "search_emails", "arguments_json": '{"query":"spam"}'}])
@@ -401,11 +420,21 @@ class GenerationCheckTest(unittest.TestCase):
         self.assertEqual(result["requested_tool"], "get_received_emails")  # fewest required parameters
         self.assertIn("get_received_emails", backend.greedy_messages[1].content)
         self.assertEqual(result["tool_names"], ["get_received_emails", "search_emails"])
-        self.assertEqual(backend.sessions[-1], None)  # template default effort (renders as xhigh)
-        self.assertEqual(result["effort"], "template_default")
-        self.assertIn("xhigh", result["effort_basis"])
+        self.assertEqual(backend.sessions[-1], "low")  # lead ruling: lowest effort
+        self.assertEqual(result["effort"], "low")
+        self.assertEqual(result["effort_basis"], "generation check tests tool-call validity on the full "
+                         "SHADE prompt, not reasoning length; lowest effort minimizes spurious cap hits")
         self.assertFalse(result["called_requested_tool"])
         self.assertIn("wrong_tool:search_emails", result["problems"])
+
+    def test_dangling_schema_ref_is_a_clean_fail(self):
+        tools = [{"type": "function", "function": {"name": "lookup", "description": "Look up",
+                  "parameters": {"type": "object", "properties": {"q": {"$ref": "#/definitions/missing"}},
+                                 "required": ["q"]}}}]
+        raw = 'x\n</think>\n\n<tool_call>\n{"name": "lookup", "arguments": {"q": "x"}}\n</tool_call>'
+        result = r0.generation_check(CannedBackend(raw, family="qwen3_moe", tools=tools))
+        self.assertEqual(result["status"], "fail", result)
+        self.assertEqual(result["problems"], ["schema_ref_unresolved:lookup"])
 
     def test_generation_failure_fails_the_load_check(self):
         backend = CannedBackend(CANNED["no_call"][0], tools=r0.ECHO_TOOLS)
@@ -418,6 +447,138 @@ class GenerationCheckTest(unittest.TestCase):
         self.assertEqual(result["status"], "pass", result["reasons"])
         self.assertEqual(result["generation_summary"]["calls"][0]["name"], "r0_echo")
         json.dumps(result)  # report-serializable
+
+
+class GenerationRetryTest(unittest.TestCase):
+    """Lead ruling 2026-11-06: one sampled retry, only after a capped/unclosed greedy turn."""
+
+    def test_pass_first_try_does_not_retry(self):
+        backend = CannedBackend(CANNED["well_formed"][0], tools=SEARCH_TARGET_TOOLS)
+        result = r0.generation_check(backend)
+        self.assertEqual((result["status"], result["retried"], result["retry_trigger"]), ("pass", False, None))
+        self.assertEqual(len(result["attempts"]), 1)
+        self.assertEqual((result["decode"], result["deciding_attempt"]), ("greedy", 1))
+        self.assertEqual(backend.retry_seeds, [])
+        self.assertEqual(backend.sessions, ["low"])
+
+    def test_cap_then_pass_on_retry(self):
+        backend = CannedBackend(CANNED["well_formed"][0], tools=SEARCH_TARGET_TOOLS,
+                                hit_cap=True, retry_hit_cap=False)
+        result = r0.generation_check(backend)
+        self.assertEqual(result["status"], "pass", result["problems"])
+        self.assertTrue(result["retried"])
+        self.assertEqual(result["retry_trigger"], ["hit_cap"])
+        first, second = result["attempts"]
+        self.assertEqual((first["status"], first["decode"], first["seed"]), ("fail", "greedy", None))
+        self.assertIn("hit_cap", first["problems"])
+        self.assertEqual((second["status"], second["decode"], second["seed"]),
+                         ("pass", "production_sampler", r0.GENERATION_RETRY_SEED))
+        self.assertEqual((result["decode"], result["deciding_attempt"]), ("production_sampler", 2))
+        self.assertEqual(backend.retry_seeds, [r0.GENERATION_RETRY_SEED])
+        self.assertEqual(backend.sessions, ["low", "low"])  # same lowest effort, sampled session
+        self.assertEqual(backend.retry_messages, backend.greedy_messages)
+        self.assertEqual(result["seconds"], 4.0)
+        # Both turns are recorded and the tool-envelope census sees both.
+        self.assertEqual(r0.tool_envelopes([{"generation": result}])["parsed_calls"], 2)
+        json.dumps(result, allow_nan=False)
+
+    def test_unclosed_reasoning_then_pass_on_retry(self):
+        backend = CannedBackend(CANNED["unclosed_reasoning"][0], tools=SEARCH_TARGET_TOOLS,
+                                retry_raw=CANNED["well_formed"][0])
+        result = r0.generation_check(backend)
+        self.assertEqual((result["status"], result["retry_trigger"]), ("pass", ["unclosed_reasoning"]))
+
+    def test_cap_twice_fails(self):
+        backend = CannedBackend(CANNED["well_formed"][0], tools=SEARCH_TARGET_TOOLS, hit_cap=True)
+        result = r0.generation_check(backend)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("hit_cap", result["problems"])
+        self.assertEqual(len(result["attempts"]), 2)
+        self.assertEqual(backend.retry_seeds, [r0.GENERATION_RETRY_SEED])  # exactly one retry
+
+    def test_wrong_tool_malformed_and_schema_failures_do_not_retry(self):
+        # Under SHADE_LIKE_TOOLS the requested tool is get_received_emails.
+        cases = {"wrong_tool": (CANNED["well_formed"][0], SHADE_LIKE_TOOLS, "wrong_tool:search_emails"),
+                 "malformed": (CANNED["malformed"][0], SEARCH_TARGET_TOOLS, "malformed_tool_call"),
+                 "schema": ('x\n</think>\n\n<tool_call>\n{"name": "search_emails", "arguments": {"query": 7}}'
+                            '\n</tool_call>', SEARCH_TARGET_TOOLS, "arguments_schema_invalid:search_emails")}
+        for name, (raw, tools, problem) in cases.items():
+            with self.subTest(name):
+                retry = "ok\n</think>\n\n<tool_call>\n<function=get_received_emails>\n</function>\n</tool_call>"
+                backend = CannedBackend(raw, tools=tools, family="qwen3_moe" if name == "schema" else "qwen3_5",
+                                        retry_raw=retry)
+                result = r0.generation_check(backend)
+                self.assertEqual(result["status"], "fail")
+                self.assertIn(problem, result["problems"])
+                self.assertFalse(result["retried"])
+                self.assertEqual(len(result["attempts"]), 1)
+                self.assertEqual(backend.retry_seeds, [])
+
+
+class RunnerReportTest(unittest.TestCase):
+    """Fable cold pass HIGH: a non-finite NLL must reach report.json as a load fail."""
+
+    def setUp(self):
+        gate = patch("joulewise.align.r0_runner.host_identity", return_value={"status": "pass", "fake": True})
+        gate.start()
+        self.addCleanup(gate.stop)
+        patch_references(self)
+
+    def run_load(self, root):
+        report = r0_runner.execute(config_at(root), root, ["load"], ["D"], guard=FakeGuard(),
+                                   backend_factory=FakeBackend)
+        on_disk = json.loads((root / "report.json").read_text())
+        self.assertTrue((root / "report.md").exists())
+        return report, on_disk, next(row for row in on_disk["checks"] if row["check"] == "load")
+
+    def test_nonfinite_nll_records_load_fail_not_a_traceback(self):
+        for name, losses, count in (("nan", [float("nan")] * 2048, 2048), ("inf", [float("inf")] * 2048, 2048),
+                                    ("one nan", [2.99] * 2047 + [float("nan")], 1)):
+            with self.subTest(name), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(FakeBackend, "nll_losses", return_value=losses):
+                root = Path(tmp)
+                report, on_disk, load = self.run_load(root)
+                self.assertEqual(report["status"], "fail")
+                self.assertEqual(on_disk["status"], "fail")
+                self.assertNotIn("error", on_disk)
+                self.assertEqual(on_disk["stopped_after"], {"check": "load", "model": "D", "outcome": "fail"})
+                self.assertEqual(load["status"], "fail")
+                self.assertEqual(load["reasons"], ["nll:nll_not_finite"])
+                self.assertEqual(load["nll_verdict"]["reason"], "nll_not_finite")
+                self.assertIsNone(load["nll_losses"])
+                self.assertEqual(load["nll_nonfinite_count"], count)
+                self.assertEqual(load["nll_targets"], 2048)
+                self.assertNotIn("nll_losses", (root / "report.md").read_text())
+
+    def test_finite_losses_are_stored_and_kept_out_of_the_markdown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report, on_disk, load = self.run_load(root)
+            self.assertEqual((on_disk["status"], load["status"]), ("pass", "pass"))
+            self.assertEqual((len(load["nll_losses"]), load["nll_nonfinite_count"]), (2048, 0))
+            md = (root / "report.md").read_text()
+            self.assertNotIn("nll_losses", md)
+            self.assertEqual(md.count('"losses_sha256"'), 1)  # one profile block, not two
+
+    def test_unserializable_row_is_recorded_as_a_fail(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(r0, "load_coherence", return_value={"status": "pass", "x": float("nan")}):
+            root = Path(tmp)
+            report, on_disk, load = self.run_load(root)
+            self.assertEqual(on_disk["status"], "fail")
+            self.assertEqual((load["status"], load["reason"]), ("fail", "report_serialization_error"))
+            self.assertIn("Out of range float", load["error"])
+            self.assertNotIn("x", load)
+
+    def test_authority_names_the_load_reference_note_and_ruling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, on_disk, _ = self.run_load(Path(tmp))
+        note = r0_runner.REPO / "docs/align/v4/R0-LOAD-REFERENCE-NOTE.md"
+        self.assertEqual(on_disk["authority_load_reference"], "docs/align/v4/R0-LOAD-REFERENCE-NOTE.md")
+        blob = subprocess.run(["git", "hash-object", str(note)], capture_output=True, text=True, check=True)
+        self.assertEqual(on_disk["authority_load_reference_blob"], blob.stdout.strip())
+        self.assertIn("RUN_STATE items 181/183", on_disk["authority_load_reference_basis"])
+        self.assertIn("authority_load_reference", on_disk["authority"])
 
 
 if __name__ == "__main__":
