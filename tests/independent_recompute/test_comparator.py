@@ -362,6 +362,10 @@ def l9_files():
                      attained_by="E_clock_anchor_shift_bound_j", minimum_j=1.0),
                 item("cross_window", True, "GAMMA's and the floor window's estimates agree", pack=pack, cell_id=cid,
                      **CROSS_WINDOW)]
+            if pack == "alpha" and phase == "decode":
+                cells_lines.append(item("load_correlated_cell", True, "alpha decode: load-correlated sensitivity",
+                    pack=pack, cell_id=cid, restored_counts={"repeat": 1, "quad": 0}, families=["PHYSICS_IN_SPAN"],
+                    values=dict(CELL_VALUES)))
             kept_cells.append(item("kept_units", False, f"{pack} {cid}: kept units", pack=pack, cell_id=cid, n_r=9, n_b=9))
         files[f"outputs/{SHA}-projection-{pack}.json"] = {"cells": computed, "refused_cells": refused}
     reported, floor_rows, contrast_rows = sensitivity_rows()
@@ -406,6 +410,10 @@ def l9_files():
                            contrast_id=cid, rows=[])]
     contrasts += [item("kept_units", False, f"gamma {cid}: kept quads 9", pack="gamma", cell_id=cid, n_r=0, n_b=9)
                   for cid in (DECODE, PREFILL)]
+    contrasts.append(item("load_correlated_contrast", True, DECODE + ": load-correlated sensitivity",
+        contrast_id=DECODE, restored_count=1, families=["PHYSICS_IN_SPAN"],
+        values={"status": "computed", "n": 9, "mean_j": -1.25, "s_d": 16.0, "se": 5.25,
+                "t_star": 2.306, "lower_j": -13.5, "upper_j": 11.0}))
     block_lines = [item("sensitivity_bmax", True, "sensitivity: B_max", **sensitivity["b_max"])]
     block_lines += [item("sensitivity_window", True, "sensitivity: " + p, pack=p, **sensitivity["windows"][p])
                     for p in ("alpha", "beta", "gamma")]
@@ -483,6 +491,14 @@ def recompute_output():
                 "contrasts": {cid: {"floor_gate_j": 103.5, "D_j": 3.0, "outcome": "not_resolvable",
                                     "outcome_equals_primary": True} for cid in (DECODE, PREFILL)}},
                 "battery_assist": assist,
+                "load_sensitivity": {
+                    reported_cells("alpha")["decode"][1]: {"status": "computed", "mean_j": 50.0,
+                        "lower_j": 47.0, "upper_j": 53.0, "n_r": 9, "n_b": 9,
+                        "interval": {"h_j": 2.0, "B_j": 1.0},
+                        "restored_by_stratum": {"repeat": 1, "quad": 0}, "restored_count": 1},
+                    DECODE: {"status": "computed", "n": 9, "dbar_j": -1.25, "s_d_j": 16.0,
+                        "se_j": 5.25, "t_star": 2.306, "metrology_interval_j": [-13.5, 11.0],
+                        "restored_by_stratum": {"quad": 1}, "restored_count": 1}},
                 "cross_window": {f"{model}/{phase}": dict(CROSS_WINDOW) for _, model in PACK_MODELS.values()
                                  for phase in ("decode", "prefill")}},
             "p42": {"df-ph-prefill-p42-qwen3-1p7b": {"status": "expected_unresolvable"},
@@ -564,6 +580,17 @@ class ComparatorTests(unittest.TestCase):
                                     if f not in ("reported_cell_j", "battery_term")), result["counts"])
                 # This fixture has no meter stream; the meter line is in test_comparator_meter.
                 self.assertFalse(set(cmp.METER) & set(result["counts"]))
+
+    def test_load_correlated_sensitivity_values_are_compared(self):
+        disclosure = self.files[f"disclosures/{SHA}.json"]
+        cell = next(row for row in disclosure["cells"] if row["line"] == "load_correlated_cell")
+        cell["values"]["mean_j"] += 10.0
+        contrast = next(row for row in disclosure["contrasts"] if row["line"] == "load_correlated_contrast")
+        contrast["values"]["se"] += 10.0
+        result = self.run_compare()
+        failed = {(row["family"], row["key"]) for row in result["comparisons"] if row["verdict"] == "DISAGREE"}
+        self.assertIn(("reported_cell_j", "disclosure/alpha/df-ph-decode-qwen3-1p7b/load_correlated_cell/mean_j"), failed)
+        self.assertIn(("contrast_j", f"disclosure/{DECODE}/load_correlated_contrast/se"), failed)
 
     def planted(self, family, edit, check, rows=1):
         """The fault fails its family; with the check disabled it passes (counterfactual)."""

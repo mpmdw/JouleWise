@@ -2769,6 +2769,7 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
                 phase = "decode" if "decode" in cid else "prefill"
                 stats, _, _, _ = contrast_inputs(window, restored["quad"], phase)
                 disclosure = {k: stats[k] for k in ("n", "dbar_j", "s_d_j", "se_j", "t_star", "metrology_interval_j")}
+                disclosure["status"] = "computed" if stats["n"] >= 2 else "not_computable"
             else:
                 disclosure = make_reported(window, cid, restored["repeat"], restored["quad"], None)
             restored_counts = {s: len(restored[s]) - len(selected[s]) for s in selected}

@@ -410,9 +410,8 @@ class ExemptionTests(GateCase):
                 self.assertNotIn(".*", rule[0], rule)
         broad = [rule[0] for rule in cmp.COVERAGE if len(rule) == 2
                  and rule[1].startswith((cmp.NAMED, cmp.NULL_NAMED)) and ".*" in rule[0]]
-        # The one numeric subtree no review named (load-correlated values) stays for the full-size census
-        # (report, open issues); RC-CMP-7 F2 enumerated the hazard measurements (HAZARD).
-        self.assertEqual(len(broad), 1, broad)
+        # The load-correlated values are now compared explicitly; named numeric exemptions must enumerate leaves.
+        self.assertEqual(broad, [])
 
     def test_attempt_anywhere_refuses_q5a(self):
         self.files[FILL]["gamma"]["contrasts"][0]["floor_attempt"] = {"attempt": 87.25}

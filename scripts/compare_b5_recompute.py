@@ -1051,6 +1051,11 @@ def expected_checks(registry):
                 ("kept_units", (("n_r",), ("n_b",)), (("reported_cells", family), (("n_r",), ("n_b",))))):
             add("cell_line", f"disclosure/cells/{word}/{pack}/{cid}",
                 [("disclosure", ("cells", dict(cell, line=word)), keys)], [recompute], condition)
+        add("cell_line", f"disclosure/cells/load_correlated_cell/{pack}/{cid}",
+            [("disclosure", ("cells", dict(cell, line="load_correlated_cell")),
+              (("restored_counts",), ("values",)))],
+            [(("disclosures", "load_sensitivity", family), ())],
+            ("load_sensitivity", "cell", pack, cid, family))
         model, phase = entry["model"], entry["phase"]
         add("cell_line", f"disclosure/cells/cross_window/{pack}/{cid}",
             [("disclosure", ("cells", dict(cell, line="cross_window")),
@@ -1172,6 +1177,8 @@ def expected_checks(registry):
                  + tuple(("decision_interval",) + s for s in INTERVAL), own, None),
                 ("battery_assist_contrast", (("status",), ("n",), ("assist_quads",), ("assist_members",)),
                  (("disclosures", "battery_assist", cid), (("n",), ("assist_quads",))), None),
+                ("load_correlated_contrast", (("restored_count",), ("values",)),
+                 (("disclosures", "load_sensitivity", cid), ()), ("load_sensitivity", "contrast", cid)),
                 ("magnitude_ratio", (), (("descriptive", cid), ()), None),
                 ("magnitude_ratio", (("log_mean",), ("log_sd",), ("ratio",), ("lower",), ("upper",)),
                  (("descriptive", cid), (("ratio",), ("ratio_interval",))), ("ratio_computable", cid)),
@@ -1215,8 +1222,8 @@ CONTAINERS = ("fill_document", "verdicts_document", "disclosure_document", "disc
               "kept_units_record", "bracket")
 # Every item of these lists must be claimed by an entry (an output item outside the table can only DISAGREE;
 # it never creates a check): (document, path with * for each list item or window, the line words concerned).
-CELL_WORDS = ("reported_cell", "battery_assist_cell", "attribution_floor", "kept_units", "cross_window")
-CONTRAST_WORDS = ("primary_contrast", "battery_assist_contrast", "magnitude_ratio", "magnitude_per_token",
+CELL_WORDS = ("reported_cell", "battery_assist_cell", "load_correlated_cell", "attribution_floor", "kept_units", "cross_window")
+CONTRAST_WORDS = ("primary_contrast", "battery_assist_contrast", "load_correlated_contrast", "magnitude_ratio", "magnitude_per_token",
                   "contrast_interval", "decision_floor", "loo_counts", "loo_magnitude", "kept_units")
 BLOCK_WORDS = ("sensitivity_bmax", "sensitivity_window", "sensitivity_reported", "sensitivity_floor",
                "sensitivity_contrast", "sensitivity_boundary", "dominance_ratio", "dominance_branch", "harvest_once",
@@ -1386,6 +1393,20 @@ def condition_holds(condition, docs, ours, registry):
         line = next((r for r in listed(get(docs["disclosure"], "contrasts")) if isinstance(r, dict)
                      and r.get("line") == "magnitude_ratio" and r.get("contrast_id") == condition[1]), {})
         return "ratio" in line or finite(get(ours, "descriptive", condition[1], "ratio"))
+    if kind == "load_sensitivity":
+        _, scope, *identity = condition
+        lines = listed(get(docs["disclosure"], "cells" if scope == "cell" else "contrasts"))
+        word = "load_correlated_" + scope
+        if scope == "cell":
+            pack, cid, family = identity
+            printed = any(isinstance(line, dict) and line.get("line") == word and line.get("pack") == pack
+                          and line.get("cell_id") == cid for line in lines)
+            return condition_holds(("reported_computed", pack, cid, family), docs, ours, registry) and (
+                printed or isinstance(get(ours, "disclosures", "load_sensitivity", family), dict))
+        cid, = identity
+        printed = any(isinstance(line, dict) and line.get("line") == word and line.get("contrast_id") == cid
+                      for line in lines)
+        return printed or isinstance(get(ours, "disclosures", "load_sensitivity", cid), dict)
     raise ValueError(kind)
 
 
@@ -3035,7 +3056,7 @@ def pack_of_model(model):
     return next((p for p, m in MODELS.items() if m == model), None)
 
 
-CELL_LINES, CONTRAST_LINES = ("cross_window", "battery_assist_cell", "reported_cell"), ("battery_assist_contrast", "magnitude_ratio",
+CELL_LINES, CONTRAST_LINES = ("cross_window", "battery_assist_cell", "load_correlated_cell", "reported_cell"), ("battery_assist_contrast", "load_correlated_contrast", "magnitude_ratio",
                                                                        "magnitude_per_token", "loo_counts", "loo_magnitude")
 
 
@@ -3046,6 +3067,9 @@ def our_cell_lines(disclosures, registry, reported=None):
              for model, _, phase in [key.partition("/")] for pack in [pack_of_model(model)] if pack}
     lines.update({("battery_assist_cell", pack, cid): item for cid, item in (disclosures.get("battery_assist") or {}).items()
                   for pack in ("alpha", "beta") if cid in registry.families(pack, False)})
+    lines.update({("load_correlated_cell", pack, cid): item for cid, item in (disclosures.get("load_sensitivity") or {}).items()
+                  for pack in ("alpha", "beta") if cid in registry.families(pack, False)
+                  and get(reported, cid, "status", default="computed") == "computed"})
     # F2 (RC-CMP-8): L9 prints a reported_cell line for each computed projection cell (disclosures.py).
     lines.update({("reported_cell", pack, cid): item for pack in ("alpha", "beta")
                   for cid, item in items(reported, lambda key, _: key in registry.families(pack, False)).items()})
@@ -3055,6 +3079,8 @@ def our_cell_lines(disclosures, registry, reported=None):
 def our_contrast_lines(ours):
     lines = {(cid, "battery_assist_contrast"): item for cid, item in
              items(get(ours, "disclosures", "battery_assist"), lambda key, _: key.startswith("ctr-")).items()}
+    lines.update({(cid, "load_correlated_contrast"): item for cid, item in
+                  items(get(ours, "disclosures", "load_sensitivity"), lambda key, _: key.startswith("ctr-")).items()})
     for cid, item in items(ours.get("descriptive")).items():
         lines[(cid, "magnitude_ratio")] = lines[(cid, "magnitude_per_token")] = item
     for cid, item in items(ours.get("contrasts")).items():
@@ -3155,7 +3181,7 @@ def compare_disclosures(c, custody, ours):
             c.word("outcome_word", key + "/agree", row.get("agree"), mine.get("agree"),
                    [c.atom("agree", "reported_cell_j", key + "/delta_j", agree_margin(row), agree_margin(mine), 0.0, LE)],
                    lambda t: t["agree"])
-        else:
+        elif kind == "battery_assist_cell":
             mine = get(disclosures, "battery_assist", cid, default={}) or {}
             without = row.get("without") or {}
             # F2: the with-assist side is the primary cell, whose word is always computed (disclosures._cell_values).
@@ -3169,6 +3195,18 @@ def compare_disclosures(c, custody, ours):
             for stratum, a, b in c.pairs(key + "/assist_members/", strata(row.get("assist_members")),
                                          strata(mine.get("assist_members_by_stratum"))):
                 c.numeric("count", key + "/assist_members/" + stratum, a, b)
+        else:
+            mine = get(disclosures, "load_sensitivity", cid, default={}) or {}
+            values = row.get("values") or {}
+            if "status" in values or "status" in mine:
+                c.exact("outcome_word", key + "/status", values.get("status"), mine.get("status"))
+            for field in ("mean_j", "lower_j", "upper_j"):
+                c.numeric("reported_cell_j", key + "/" + field, values.get(field), mine.get(field))
+            for field in ("h_j", "B_j"):
+                c.numeric("reported_cell_j", key + "/" + field, values.get(field), get(mine, "interval", field))
+            for stratum, a, b in c.pairs(key + "/restored_counts/", strata(row.get("restored_counts")),
+                                         strata(mine.get("restored_by_stratum"))):
+                c.numeric("count", key + "/restored_counts/" + stratum, a, b)
     contrasts = keyed(record.get("contrasts", []), lambda row: (row.get("contrast_id"), row.get("line")),
                       "disclosure_contrast_line", lambda row: row.get("line") in CONTRAST_LINES)
     for (cid, kind), row, _ in c.pairs("disclosure/contrasts/", contrasts, our_contrast_lines(ours)):
@@ -3194,6 +3232,18 @@ def compare_disclosures(c, custody, ours):
             for stratum, a, b in c.pairs(key + "/assist_members/", strata(row.get("assist_members")),
                                          strata(mine.get("assist_members_by_stratum"))):
                 c.numeric("count", key + "/assist_members/" + stratum, a, b)
+        elif kind == "load_correlated_contrast":
+            mine = get(disclosures, "load_sensitivity", cid, default={}) or {}
+            values = row.get("values") or {}
+            ivl = interval(mine.get("metrology_interval_j"))
+            if "status" in values or "status" in mine:
+                c.exact("outcome_word", key + "/status", values.get("status"), mine.get("status"))
+            for field, value in (("mean_j", mine.get("dbar_j")), ("lower_j", ivl[0]), ("upper_j", ivl[1]),
+                                 ("s_d", mine.get("s_d_j")), ("se", mine.get("se_j"))):
+                c.numeric("contrast_j", key + "/" + field, values.get(field), value)
+            c.numeric("contrast_p", key + "/t_star", values.get("t_star"), mine.get("t_star"))
+            c.numeric("count", key + "/n", values.get("n"), mine.get("n"))
+            c.numeric("count", key + "/restored_count", row.get("restored_count"), mine.get("restored_count"))
         elif kind == "magnitude_ratio":
             mine = get(ours, "descriptive", cid, default={}) or {}
             if not holds(custody, ours, ("ratio_computable", cid)):
@@ -3516,8 +3566,6 @@ HAZARD = (r"(current_ma|instant_amperage_ma|amperage_ma|temperature_centi_c|temp
 NEG8_INTERNALS = (NAMED + "NEG-8 bracket internals (admissible sets, standard errors, idle-subtracted companion, "
                   "drift-bound artifact) that only L9 computes; the seven registered bound terms are compared")
 CONSTANT = NAMED + "registered constant (token denominator, planned reference counts, plan size)"
-LOAD_LINE = (NAMED + "load-correlated sensitivity line (PLAN 8.1): never replaces a primary value and gates nothing; "
-             "not compared here")
 ESTIMATOR_INTERNALS = (NAMED + "registered estimator internals beside SE_total and the metrology-aware interval "
                        "(compared): SE_repeat, SE_metrology, repeat-point interval, variance contributions, exact t")
 FLOOR_DIAGNOSTICS = NAMED + "attribution-floor diagnostics carried beside the resolved floor; the floor values are compared"
@@ -3621,7 +3669,10 @@ COVERAGE = (
     (D + r"cells/cross_window/(?P<field>F_j|G_j|delta_j|h_F_j|h_G_j)", "reported_cell_j", "disclosure/{pack}/{rcid}/cross_window/{field}"),
     (D + r"cells/cross_window/agree", "outcome_word", "disclosure/{pack}/{rcid}/cross_window/agree"),
     (D + r"cells/kept_units/(?P<field>n_r|n_b)", "count", "{pack}/{rcid}/{field}"),
-    (D + r"(cells|contrasts)/load_correlated_(cell|contrast)/(values/.*|restored_counts/[a-z]+|restored_count)", LOAD_LINE),
+    (D + r"cells/load_correlated_cell/values/(?P<field>mean_j|lower_j|upper_j|h_j|B_j)", "reported_cell_j",
+     "disclosure/{pack}/{rcid}/load_correlated_cell/{field}"),
+    (D + r"cells/load_correlated_cell/restored_counts/(?P<stratum>repeat|quad)", "count",
+     "disclosure/{pack}/{rcid}/load_correlated_cell/restored_counts/{stratum}"),
     # The floor-composition lines, bound by the extraction cell (model, phase, form).
     (D + r"floors/floor_composition/guarded_j", "floor_j", "{floor_cell}/guarded_floor_j"),
     (D + r"floors/floor_composition/allowance_j", "floor_j", "{floor_cell}/whole_window_drift_allowance_j"),
@@ -3652,6 +3703,14 @@ COVERAGE = (
     (D + r"contrasts/battery_assist_contrast/t_star", "contrast_p", "disclosure/{cid}/battery_assist_contrast/t_star"),
     (D + r"contrasts/battery_assist_contrast/(?P<field>n|assist_quads|assist_members/[a-z]+)", "count",
      "disclosure/{cid}/battery_assist_contrast/{field}"),
+    (D + r"contrasts/load_correlated_contrast/values/(?P<field>mean_j|lower_j|upper_j|s_d|se)", "contrast_j",
+     "disclosure/{cid}/load_correlated_contrast/{field}"),
+    (D + r"contrasts/load_correlated_contrast/values/t_star", "contrast_p",
+     "disclosure/{cid}/load_correlated_contrast/t_star"),
+    (D + r"contrasts/load_correlated_contrast/values/n", "count",
+     "disclosure/{cid}/load_correlated_contrast/n"),
+    (D + r"contrasts/load_correlated_contrast/restored_count", "count",
+     "disclosure/{cid}/load_correlated_contrast/restored_count"),
     (D + r"contrasts/magnitude_ratio/(?P<field>ratio|lower|upper)", "descriptive_ratio", "disclosure/{cid}/magnitude_ratio/{field}"),
     (D + r"contrasts/magnitude_ratio/(log_mean|log_sd)",
      NAMED + "log-scale internals of the descriptive ratio; ratio and interval compared"),
@@ -3677,9 +3736,12 @@ COVERAGE = (
     (D + r"cells/battery_assist_cell/primary/status", "outcome_word", "disclosure/{pack}/{rcid}/battery_assist_cell/primary/status"),
     (D + r"contrasts/battery_assist_contrast/status", "outcome_word", "disclosure/{cid}/battery_assist_contrast/status"),
     (D + r"cells/battery_assist_cell/without/status", DESCRIPTIVE_STATUS),
-    (D + r"(cells/load_correlated_cell|contrasts/load_correlated_contrast)/values/(status|code)",
-     UNCOVERED + "load-correlated sensitivity line's status and refusal code (PLAN 8.1): the line never replaces a "
-     "primary value and gates nothing, and the recompute's load-sensitivity block is not compared here"),
+    (D + r"cells/load_correlated_cell/values/status", "outcome_word",
+     "disclosure/{pack}/{rcid}/load_correlated_cell/status"),
+    (D + r"contrasts/load_correlated_contrast/values/status", "outcome_word",
+     "disclosure/{cid}/load_correlated_contrast/status"),
+    (D + r"(cells/load_correlated_cell|contrasts/load_correlated_contrast)/values/code",
+     UNCOVERED + "producer refusal code for a descriptive sensitivity line; the recompute reports structural flags instead"),
     # Window lines: the NEG-8 terms, b_op, reference and corpus counts and the whole-machine line.
     (W + r"neg8_allowance/values_j/bracket\.claim_families\.gross_energy\.(?P<field>bound_envelope_j|bound_prediction_j|"
      r"start\.mean_j|midpoint\.mean_j|end\.mean_j|trajectory_excursion_max_j|drift_allowance_j)",
