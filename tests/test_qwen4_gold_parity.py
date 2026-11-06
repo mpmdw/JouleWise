@@ -98,6 +98,172 @@ class MetricTests(unittest.TestCase):
         self.assertTrue(compare_arrays([0], [0], "fp32")["pass"])
 
 
+def f32_norm(x, scale, group, eps=1e-6, axis_group=None):
+    """Float32 RMSNorm as a kernel would compute it; scale is the effective (1+w)."""
+    import numpy as np
+    x = np.asarray(x, np.float32)
+    group = axis_group or group
+    g = x.reshape(*x.shape[:-1], -1, group)
+    r = np.sqrt((g*g).mean(-1, keepdims=True, dtype=np.float32) + np.float32(eps)).astype(np.float32)
+    return ((g / r).reshape(x.shape) * np.asarray(scale, np.float32)).astype(np.float32)
+
+
+@unittest.skipUnless(HAS_ARRAYS, "optional NumPy")
+class NormGateTests(unittest.TestCase):
+    """Gate amendment A1: the outlier-gain case passes; real norm bugs fail."""
+    H, C = 64, 4
+
+    def setUp(self):
+        import numpy as np
+        rng = np.random.default_rng(7)
+        self.rng = rng
+        self.spec = {"kind": "offset", "group": self.H, "eps": 1e-6, "input": "n.input"}
+        width = self.H * self.C
+        # Effective gains around 163 with one ~906 outlier channel, as observed
+        # at layer 0 mlp_hyper_connection.hc_norm (raw stored w = gain - 1).
+        scale = rng.normal(163, 30, width).astype(np.float32)
+        self.outlier = 3*self.H + 20
+        scale[self.outlier] = 906.5
+        self.weight = (scale - 1).astype(np.float32)
+        self.x = rng.normal(0, 1, (1, 8, width)).astype(np.float32)
+        self.x[0, 0, self.outlier] = -4.773969e-4
+
+    def norm(self, x):
+        return f32_norm(x, 1 + self.weight, self.H)
+
+    def compare(self, y_ref, y_mlx, x_ref, x_mlx, dtype="fp32", spec=None):
+        from joulewise.align.qwen4_gold.core import compare_norm
+        return compare_norm(y_ref, y_mlx, x_ref, x_mlx, self.weight, spec or self.spec, dtype)
+
+    def observed_inputs(self):
+        """Upstream fp32 rounding noise (max 6e-7) and the observed -1.86e-7 element."""
+        import numpy as np
+        noise = self.rng.uniform(-6e-7, 6e-7, self.x.shape).astype(np.float32)
+        x_mlx = (self.x + noise).astype(np.float32)
+        x_mlx[0, 0, self.outlier] = np.float32(-4.775831e-4)
+        return x_mlx
+
+    def test_observed_outlier_gain_amplifying_input_noise_passes(self):
+        x_mlx = self.observed_inputs()
+        y_ref, y_mlx = self.norm(self.x), self.norm(x_mlx)
+        # Precondition: this is exactly the failure the unamended gate reports.
+        plain = compare_arrays(y_ref, y_mlx, "fp32")
+        self.assertFalse(plain["pass"])
+        self.assertGreater(abs(y_ref[0, 0, self.outlier] - y_mlx[0, 0, self.outlier]), 1.43e-4)
+        self.assertTrue(compare_arrays(self.x, x_mlx, "fp32")["pass"])
+        result = self.compare(y_ref, y_mlx, self.x, x_mlx)
+        self.assertTrue(result["pass"], result)
+        self.assertFalse(result["unpropagated_pass"])
+        self.assertTrue(result["mlx_op"]["pass"] and result["reference_op"]["pass"])
+        self.assertLess(result["mlx_op"]["max_relative"], 1e-6)
+
+    def test_wrong_weight_on_one_channel_fails(self):
+        x_mlx = self.observed_inputs()
+        scale = (1 + self.weight).copy()
+        scale[5] *= 1.001
+        result = self.compare(self.norm(self.x), f32_norm(x_mlx, scale, self.H), self.x, x_mlx)
+        self.assertFalse(result["pass"])
+        self.assertFalse(result["mlx_op"]["pass"])
+        self.assertTrue(result["reference_op"]["pass"])
+        # Stored-convention bug (w instead of 1+w) on every channel also fails.
+        self.assertFalse(self.compare(self.norm(self.x), f32_norm(x_mlx, self.weight, self.H),
+                                      self.x, x_mlx)["mlx_op"]["pass"])
+
+    def test_wrong_eps_fails(self):
+        x = (self.x * 0.03).astype("float32")  # row RMS 0.03: eps 1e-5 vs 1e-6 shifts y by ~0.45%
+        y_mlx = f32_norm(x, 1 + self.weight, self.H, eps=1e-5)
+        result = self.compare(self.norm(x), y_mlx, x, x)
+        self.assertFalse(result["pass"])
+        self.assertFalse(result["mlx_op"]["pass"])
+
+    def test_wrong_axis_or_stream_grouping_fails(self):
+        import numpy as np
+        x = self.x.copy()
+        for stream in range(self.C):  # Streams with distinct scales expose grouping.
+            x[..., stream*self.H:(stream+1)*self.H] *= 2.0 ** stream
+        whole = f32_norm(x, 1 + self.weight, self.H, axis_group=self.H*self.C)
+        result = self.compare(self.norm(x), whole, x, x)
+        self.assertFalse(result["pass"])
+        self.assertFalse(result["mlx_op"]["pass"])
+        # Normalizing over the sequence axis instead of channels also fails.
+        seq = x / np.sqrt((x*x).mean(1, keepdims=True) + 1e-6) * (1 + self.weight)
+        self.assertFalse(self.compare(self.norm(x), seq.astype(np.float32), x, x)["mlx_op"]["pass"])
+
+    def test_large_chained_difference_fails_even_when_both_ops_are_consistent(self):
+        import numpy as np
+        broad = (self.x + self.rng.normal(0, 0.05, self.x.shape)).astype(np.float32)
+        result = self.compare(self.norm(self.x), self.norm(broad), self.x, broad)
+        self.assertTrue(result["mlx_op"]["pass"] and result["reference_op"]["pass"])
+        self.assertFalse(result["pass"])
+        self.assertFalse(result["chained_pass"])  # cosine floor still binds
+        self.assertLess(result["cosine"], 0.999999)
+        local = self.x.copy()
+        local[0, 3, 7] += 0.5  # One large upstream error cannot buy a loose allowance.
+        result = self.compare(self.norm(self.x), self.norm(local), self.x, local)
+        self.assertTrue(result["mlx_op"]["pass"] and result["reference_op"]["pass"])
+        self.assertFalse(result["input"]["pass"])
+        self.assertFalse(result["pass"])
+
+    def test_reference_self_consistency_is_gated(self):
+        y_ref = self.norm(self.x)
+        y_ref[0, 1, 2] += 1e-2
+        result = self.compare(y_ref, self.norm(self.x), self.x, self.x)
+        self.assertFalse(result["reference_op"]["pass"])
+        self.assertFalse(result["pass"])
+
+    def test_bf16_rounded_outputs_pass(self):
+        from joulewise.align.qwen4_gold.core import round_bf16
+        x = round_bf16(self.x)
+        y = round_bf16(self.norm(x))
+        self.assertTrue(self.compare(y, y, x, x, "bf16")["pass"])
+
+    def test_gated_norm_activation_weight_and_gate(self):
+        import numpy as np
+        from joulewise.align.qwen4_gold.core import compare_norm
+        dv = 32
+        spec = {"kind": "gated", "group": dv, "eps": 1e-6, "activation": "sigmoid"}
+        w = self.rng.normal(1, 0.2, dv).astype(np.float32)
+        x = self.rng.normal(0, 0.3, (16, dv)).astype(np.float32)
+        z = self.rng.normal(0, 2, (16, dv)).astype(np.float32)
+        def gated(x, z, w, act="sigmoid", eps=1e-6):
+            n = x / np.sqrt((x*x).mean(-1, keepdims=True) + np.float32(eps))
+            sig = 1 / (1 + np.exp(-z))
+            return (w * n * (sig if act == "sigmoid" else z*sig)).astype(np.float32)
+        z_mlx = (z + self.rng.uniform(-2e-7, 2e-7, z.shape)).astype(np.float32)
+        ok = compare_norm(gated(x, z, w), gated(x, z_mlx, w), x, x, w, spec, "fp32", z, z_mlx)
+        self.assertTrue(ok["pass"], ok)
+        bad = compare_norm(gated(x, z, w), gated(x, z, w, "silu"), x, x, w, spec, "fp32", z, z)
+        self.assertFalse(bad["mlx_op"]["pass"])
+        offset = compare_norm(gated(x, z, w), gated(x, z, 1 + w), x, x, w, spec, "fp32", z, z)
+        self.assertFalse(offset["mlx_op"]["pass"])  # (1+w) convention is wrong for the gated norm
+        self.assertEqual(compare_norm(gated(x, z, w), gated(x, z, w), x, x, w, spec, "fp32")["reason"],
+                         "missing_gate_input")
+
+    def test_shape_and_nonfinite_fail_closed(self):
+        import numpy as np
+        y = self.norm(self.x)
+        self.assertEqual(self.compare(y, y, self.x, self.x[..., :-1])["reason"], "shape_mismatch")
+        bad = y.copy(); bad[0, 0, 0] = np.nan
+        self.assertFalse(self.compare(y, bad, self.x, self.x)["pass"])
+
+    def test_norm_trace_inventory(self):
+        from joulewise.align.qwen4_gold.core import norm_specs
+        c = {"layer_types": ["linear_attention", "full_attention"], "ple_layer_ids": [2], "hidden_size": 8,
+             "hc_count": 2, "head_dim": 4, "linear_value_head_dim": 4, "output_gate_type": "sigmoid"}
+        self.assertEqual(set(norm_specs(c, "0")), {"attn.norm", "mlp.norm", "attention.gated_norm"})
+        self.assertEqual(set(norm_specs(c, "1")), {"attn.norm", "mlp.norm", "attention.q_norm", "attention.k_norm",
+                                                   "ple.norm_key", "ple.norm_query", "ple.norm_conv"})
+        self.assertEqual(set(norm_specs(c, "final")), {"final.norm"})
+        self.assertEqual(norm_specs(c, "embed"), {})
+        self.assertEqual(norm_specs(c, "0")["attention.gated_norm"]["activation"], "sigmoid")
+        self.assertEqual(norm_specs(c, "1")["mlp.norm"]["weight"], "layers.1.mlp_hyper_connection.hc_norm.weight")
+        self.assertTrue({"attention.gated_norm.input", "attention.gated_norm.gate", "mlp.norm.input"}
+                        <= required_traces(c, "0"))
+        self.assertIn("final.norm.input", required_traces(c, "final"))
+        c.pop("output_gate_type")
+        self.assertEqual(norm_specs(c, "0")["attention.gated_norm"]["activation"], "silu")
+
+
 @unittest.skipUnless(HAS_ARRAYS and HAS_SAFE, "optional NumPy and safetensors")
 class SliceTests(unittest.TestCase):
     def setUp(self):
@@ -262,6 +428,58 @@ class VerdictTests(unittest.TestCase):
                 harness.case("embed", "fp32", prompt, "other", None)
             self.assertEqual(harness.rows["embed"][1]["status"], "FAIL")
             self.assertEqual(harness.rows["embed"][1]["missing_traces"], ["embedding"])
+
+    def test_norm_gate_wiring_uses_checkpoint_weight_and_returns_reference_chain(self):
+        import argparse
+        import numpy as np
+        import types
+        from joulewise.align.qwen4_gold.runner import failure_summary
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            H, C = 4, 2
+            w = np.linspace(-0.5, 5, H*C).astype(np.float32)
+            c = {"hidden_size": H, "hc_count": C}
+            args = argparse.Namespace(output=str(root / "out"), dtypes="fp32", input_modes="real", seed=1,
+                random_scale=1., mlx_module=str(Path(__file__).resolve()), adapter_dependency=[],
+                ref_python="unused", mlx_python="unused", max_gb=12, timeout=1, resume=False)
+            reads = []
+            def read(name, selection=None, framework="numpy", dtype="fp32"):
+                reads.append(name)
+                return w
+            cp = types.SimpleNamespace(config=c, root=root, weight_map={}, prefix="model.", read=read)
+            harness = Harness(args, cp, {}, [], {})
+            x = np.random.default_rng(3).normal(0, 1, (1, 3, H*C)).astype(np.float32)
+            hidden = root / "hidden.npy"
+            np.save(hidden, x)
+            def runner(scale):
+                def fake(python, request, directory, *a):
+                    directory.mkdir(parents=True, exist_ok=True)
+                    mlx = request["backend"] == "mlx"
+                    traces = {"final.norm": f32_norm(x, (1 + w) * (scale if mlx else 1), H),
+                              "final.norm.input": x, "output": np.full((1, 3, H), 2. if mlx else 1., np.float32)}
+                    for name, value in traces.items():
+                        np.save(directory / (name + ".npy"), value)
+                    return {"traces": {n: n + ".npy" for n in traces}, "metadata": {"adapter_kind": "mlx"}}
+                return fake
+            prompt = {"name": "p", "input_ids": [1, 2, 3]}
+            with patch("joulewise.align.qwen4_gold.runner.execute", runner(1.0)):
+                out = harness.case("final", "fp32", prompt, "real", hidden)
+            row = harness.rows["final"][0]
+            self.assertEqual(reads, ["model.hyper_connection_mixer.hc_norm.weight"])
+            self.assertTrue(row["metrics"]["final.norm"]["pass"])
+            self.assertEqual(row["metrics"]["final.norm"]["gate"], "A1-input-conditioned")
+            self.assertTrue(row["metrics"]["final.norm.input"]["pass"])
+            # The MLX output disagrees, so the case FAILs, yet the returned
+            # chain input is the official reference output.
+            self.assertEqual(row["status"], "FAIL")
+            self.assertEqual(out, (root / "out/final/p-fp32-real/reference/output.npy").resolve())
+            np.testing.assert_array_equal(np.load(out), np.ones((1, 3, H)))
+            with patch("joulewise.align.qwen4_gold.runner.execute", runner(1.001)):
+                harness.case("final", "fp32", prompt, "other", hidden)
+            row = harness.rows["final"][1]
+            self.assertFalse(row["metrics"]["final.norm"]["mlx_op"]["pass"])
+            summary = failure_summary({"cases": harness.rows["final"]})
+            self.assertEqual(summary[1]["failing_traces"], ["final.norm", "output"])
 
 
 if __name__ == "__main__":

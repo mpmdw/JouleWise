@@ -225,6 +225,69 @@ class LifecycleTests(unittest.TestCase):
         final.run()
         self.assertEqual(final_source.downloads, [])
 
+    def test_keep_going_records_failures_and_continues(self):
+        def failing(driver):
+            def run(unit):
+                row = fake_unit(driver, unit)
+                if unit == "0":
+                    row.update(status="FAIL", failures=[{"case": "tokens-a-fp32-real", "status": "FAIL",
+                                                         "failing_traces": ["mlp.norm"], "missing_traces": [],
+                                                         "reason": None}])
+                return row
+            return run
+        driver, _ = self.driver()
+        driver.run_unit = failing(driver)
+        with self.assertRaisesRegex(RuntimeError, "parity did not pass at 0"):
+            driver.run()
+        self.assertNotIn("0", driver.state["units"])  # Default: stop, record nothing for the unit.
+        args = options(self.work, resume=True)
+        args.keep_going = True
+        resumed = StreamDriver(args, LocalSource(self.fixture, self.work), RUNTIMES)
+        resumed.run_unit = failing(resumed)
+        summary = resumed.run()
+        self.assertEqual(summary["status"], "FAIL")
+        self.assertFalse(summary["coverage"]["full_48_layer_gold"])
+        self.assertEqual([f["unit"] for f in summary["failures"]], ["0"])
+        self.assertEqual(summary["failures"][0]["cases"][0]["failing_traces"], ["mlp.norm"])
+        self.assertEqual(list(resumed.state["units"]), ["embed", "0", "1", "final", "head"])
+        import numpy as np
+        self.assertEqual(float(np.load(resumed.state["chain"]["head"]["fp32:tokens-a"])[0]), 5.)
+        # A recorded FAIL is integrity-checked and kept, never silently rerun.
+        again, _ = self.driver(True)
+        again.run_unit = lambda u: self.fail("recorded unit reran")
+        self.assertEqual(again.run()["status"], "FAIL")
+        self.assertEqual(json.loads((self.work / "summary.json").read_text())["status"], "FAIL")
+
+    def test_keep_going_real_inputs_are_reference_outputs_of_a_failed_unit(self):
+        import numpy as np
+        args = options(self.work)
+        args.keep_going = True
+        driver = StreamDriver(args, LocalSource(self.fixture, self.work), RUNTIMES)
+        seen = []
+        def case(unit, dtype, prompt, mode, hidden, compare=True, scale=None):
+            seen.append((unit, mode, str(hidden) if hidden else None))
+            name = f"layer-{int(unit):03d}" if unit.isdigit() else unit
+            out = driver.harness.out / name / f"{prompt['name']}-{dtype}-{mode}" / "reference" / "output.npy"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            np.save(out, np.ones((1, len(prompt["input_ids"]), 4), np.float32))
+            return out
+        def publish(unit, finished=False):
+            name = f"layer-{int(unit):03d}" if unit.isdigit() else unit
+            cases = [{"case": "tokens-a-fp32-real", "status": "FAIL", "missing_traces": [],
+                      "metrics": {"mlp.norm": {"pass": False}, "output": {"pass": True}}}] if unit == "0" else []
+            report = {"status": "INCOMPLETE_OR_FAILED" if cases else "PASS", "cases": cases}
+            write_json(driver.harness.out / (name + ".json"), report)
+            return report
+        driver.harness.case, driver.harness.publish = case, publish
+        summary = driver.run()
+        self.assertEqual(summary["status"], "FAIL")
+        self.assertEqual(summary["failures"][0]["unit"], "0")
+        self.assertEqual(summary["failures"][0]["cases"][0]["failing_traces"], ["mlp.norm"])
+        expected = {str(driver.harness.out / "layer-000" / f"{p}-{d}-real" / "reference/output.npy")
+                    for p in ("tokens-a", "tokens-b") for d in ("fp32", "bf16")}
+        self.assertEqual({h for u, m, h in seen if u == "1" and m == "real"}, expected)
+        self.assertEqual(set(driver.state["chain"]["0"].values()), expected)
+
     def test_sha256_mismatch_refuses(self):
         driver, source = self.driver()
         original = source.download

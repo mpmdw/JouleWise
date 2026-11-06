@@ -149,6 +149,15 @@ def run_gold(request, checkpoint):
     def observe(owner, attr, name, transform=lambda x: x):
         setattr(owner, attr, Observe(getattr(owner, attr), lambda a, o: capture(name, transform(o))))
 
+    def observe_norm(owner, attr, name, transform=lambda x: x):
+        # Gate amendment A1: also export the exact input (and gate) consumed.
+        def callback(a, o):
+            capture(name + ".input", transform(a[0]))
+            if len(a) > 1:
+                capture(name + ".gate", transform(a[1]))
+            capture(name, transform(o))
+        setattr(owner, attr, Observe(getattr(owner, attr), callback))
+
     unit = request["unit"]
     ids = np.asarray(request["input_ids"], dtype=np.int64)
     B, S = ids.shape
@@ -244,7 +253,7 @@ def run_gold(request, checkpoint):
     elif unit == "final":
         module = rules.GatedResidual(args, use_combine=False)
         load_dense(module, unit_inventory(checkpoint, converter, rules, unit))
-        observe(module, "hc_norm", "final.norm")
+        observe_norm(module, "hc_norm", "final.norm")
         out = module(hidden)
     else:
         layer = int(unit)
@@ -268,12 +277,12 @@ def run_gold(request, checkpoint):
             capture("ple.embedding", emb)
             ctx.ngram_emb[layer] = emb
             for stem in ("norm_key", "norm_query", "norm_conv"):
-                observe(module.ple, stem, "ple." + stem)
+                observe_norm(module.ple, stem, "ple." + stem)
             observe(module, "ple", "ple")
         for stem in ("attn", "mlp"):
             attr = stem + "_hyper_connection"
             hc = getattr(module, attr)
-            observe(hc, "hc_norm", stem + ".norm")
+            observe_norm(hc, "hc_norm", stem + ".norm")
             def hyper_trace(a, o, stem=stem):
                 for suffix, value in zip(("mix", "residual", "inject"), o):
                     capture(stem + "." + suffix, value)
@@ -282,10 +291,10 @@ def run_gold(request, checkpoint):
             setattr(module, attr, Observe(hc, hyper_trace))
         attention = module.linear_attn if module.is_linear else module.self_attn
         if module.is_linear:
-            observe(attention, "norm", "attention.gated_norm", lambda o: o.reshape(-1, args.linear_value_head_dim))
+            observe_norm(attention, "norm", "attention.gated_norm", lambda o: o.reshape(-1, args.linear_value_head_dim))
         else:
-            observe(attention, "q_norm", "attention.q_norm")
-            observe(attention, "k_norm", "attention.k_norm")
+            observe_norm(attention, "q_norm", "attention.q_norm")
+            observe_norm(attention, "k_norm", "attention.k_norm")
             def selection_trace(a, selection):
                 mask = selection.mask
                 if selection.kind == "dense":

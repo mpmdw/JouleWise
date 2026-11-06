@@ -31,6 +31,15 @@ def run_reference(request, checkpoint):
     def capture(name, value):
         traces[name] = value.detach().float().cpu().numpy().copy() if value.is_floating_point() else value.detach().cpu().numpy().copy()
 
+    def observe_norm(norm, name, transform=lambda x: x):
+        # Gate amendment A1: the exact tensor(s) the official norm consumed.
+        def inputs(m, a):
+            capture(name + ".input", transform(a[0]))
+            if len(a) > 1:
+                capture(name + ".gate", transform(a[1]))
+        norm.register_forward_pre_hook(inputs)
+        norm.register_forward_hook(lambda m, a, o: capture(name, transform(o)))
+
     class ExpertSlice:
         # Only the storage changes: Qwen4ExpTextExperts.forward remains official.
         def __init__(self, name):
@@ -103,7 +112,7 @@ def run_reference(request, checkpoint):
             with torch.device("meta"):
                 module = ref.Qwen4ExpTextGatedResidual(config, use_combine=False)
             module = load(module, checkpoint.prefix + "hyper_connection_mixer.")
-            module.hc_norm.register_forward_hook(lambda m, a, o: capture("final.norm", o))
+            observe_norm(module.hc_norm, "final.norm")
             out = module(hidden)
         else:
             layer_idx = int(unit)
@@ -111,7 +120,7 @@ def run_reference(request, checkpoint):
                 module = ref.Qwen4ExpTextDecoderLayer(config, layer_idx)
             module = load(module, checkpoint.prefix + f"layers.{layer_idx}.")
             for stem, hc in [("attn", module.attn_hyper_connection), ("mlp", module.mlp_hyper_connection)]:
-                hc.hc_norm.register_forward_hook(lambda m, a, o, s=stem: capture(s + ".norm", o))
+                observe_norm(hc.hc_norm, stem + ".norm")
                 def hyper_hook(m, a, o, s=stem):
                     capture(s+".mix", o[0]); capture(s+".residual", o[1]); capture(s+".inject", o[2])
                 hc.register_forward_hook(hyper_hook)
@@ -119,10 +128,10 @@ def run_reference(request, checkpoint):
             attention = module.linear_attn if module.layer_type == "linear_attention" else module.self_attn
             attention.register_forward_hook(lambda m, a, o: capture("attention", o[0] if isinstance(o, tuple) else o))
             if module.layer_type == "linear_attention":
-                attention.norm.register_forward_hook(lambda m, a, o: capture("attention.gated_norm", o))
+                observe_norm(attention.norm, "attention.gated_norm")
             else:
-                attention.q_norm.register_forward_hook(lambda m, a, o: capture("attention.q_norm", o))
-                attention.k_norm.register_forward_hook(lambda m, a, o: capture("attention.k_norm", o))
+                observe_norm(attention.q_norm, "attention.q_norm")
+                observe_norm(attention.k_norm, "attention.k_norm")
                 deterministic_qsa_ties(attention.indexer, torch, qsa_ties)
                 attention.indexer.register_forward_hook(lambda m, a, o: capture("qsa.mask", o == 0 if o.is_floating_point() else o))
             def router_hook(m, a, o):
@@ -133,7 +142,7 @@ def run_reference(request, checkpoint):
                 module.ple.register_forward_hook(lambda m, a, o: capture("ple", o))
                 module.ple.ple_embedding.register_forward_hook(lambda m, a, o: capture("ple.embedding", o))
                 for stem in ["norm_key", "norm_query", "norm_conv"]:
-                    getattr(module.ple, stem).register_forward_hook(lambda m, a, o, s=stem: capture("ple."+s, o))
+                    observe_norm(getattr(module.ple, stem), "ple." + stem)
             positions = torch.arange(ids.shape[1]).view(1, 1, -1).expand(3, ids.shape[0], -1)
             rotary = ref.Qwen4ExpTextRotaryEmbedding(config)
             position_embeddings = rotary(hidden, positions)

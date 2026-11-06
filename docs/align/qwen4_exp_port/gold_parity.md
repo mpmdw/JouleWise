@@ -247,6 +247,8 @@ Return a dictionary of NumPy arrays with these exact names/layouts (`B` batch,
 | `ple.embedding` | `[B,S,ple_embed_dim]`, concatenated selected embeddings |
 | `ple`, `ple.norm_key`, `ple.norm_query`, `ple.norm_conv` | `[B,S,C*H]` |
 | `final.norm` | `[B,S,C*H]` (final unit only) |
+| `<norm>.input` | For every norm trace listed in gate amendment A1: the exact tensor that norm consumed, same layout as its output |
+| `attention.gated_norm.gate` | DeltaNet only: the gate tensor `z` the gated norm consumed, `[B*S*linear_value_heads,linear_value_dim]` |
 
 Flatten streams in `(stream,hidden)` order. Floating traces are evaluated and
 exported as fp32; preserve integer/bool ids/masks. The required trace set is
@@ -278,6 +280,140 @@ the combined `atol+rtol*abs(a)` allowance is eight such steps at `abs(a)=1`
 cosine also constraining aggregate error. It is not a theorem about deep-model quality
 and is never automatically widened. Inspect failures against fp32 and the
 individual trace; do not fit a bound to a failing port.
+
+### Gate amendment A1: input-conditioned normalization outputs (2026-11-05)
+
+**What.** These traces are the outputs of RMSNorm-like operations; this is the
+complete list of traced normalization outputs:
+
+| Trace | Official module | Formula | Weight (relative to text prefix) | Group |
+|---|---|---|---|---|
+| `attn.norm` | `attn_hyper_connection.hc_norm` (`Qwen4ExpTextRMSNorm`) | offset | `layers.N.attn_hyper_connection.hc_norm.weight` | `hidden_size` |
+| `mlp.norm` | `mlp_hyper_connection.hc_norm` | offset | `layers.N.mlp_hyper_connection.hc_norm.weight` | `hidden_size` |
+| `final.norm` | `hyper_connection_mixer.hc_norm` (the only final norm) | offset | `hyper_connection_mixer.hc_norm.weight` | `hidden_size` |
+| `attention.q_norm`, `attention.k_norm` | QSA `self_attn.q_norm`/`k_norm` | offset | `layers.N.self_attn.{q,k}_norm.weight` | `head_dim` |
+| `attention.gated_norm` | DeltaNet `linear_attn.norm` (`Qwen4ExpTextRMSNormGated`) | gated | `layers.N.linear_attn.norm.weight` | `linear_value_head_dim` |
+| `ple.norm_key`, `ple.norm_query`, `ple.norm_conv` | PLE `ple.norm_*` | offset | `layers.N.ple.norm_*.weight` | `hidden_size` |
+
+offset: `y = x / sqrt(mean_G(x^2) + eps) * (1 + w)`, mean over contiguous groups
+of `G` channels of the last axis. gated: `y = w * x / sqrt(mean(x^2) + eps) *
+act(z)`, `act = output_gate_type or hidden_act` (sigmoid for the real
+checkpoint; silu default). `eps = rms_norm_eps`. Untraced norms (QSA indexer
+`q_layernorm`/`k_layernorm`, DeltaNet's in-kernel q/k l2norm) are not
+separately gated; they remain covered only through downstream traces.
+
+Both workers additionally export `<norm>.input` (and `attention.gated_norm.gate`),
+captured at the norm call itself (reference: a forward pre-hook; MLX: the
+wrapper's call arguments). They are required traces. For each norm trace the
+coordinator reads `w` from the checkpoint (never from a worker; rounded to bf16
+for bf16 cases, as the official module holds bf16 parameters) and recomputes
+`f` in float64 for each side from **its own** input. The trace passes only if
+all of the following hold, each under the **unchanged** dtype tolerance above:
+
+1. `mlx_op`: `|y_mlx - f(x_mlx)| <= atol + rtol*|f(x_mlx)|` everywhere, and cosine floor.
+2. `reference_op`: the same for `y_ref` against `f(x_ref)`. This is reference
+   self-consistency and also validates the harness's transcription of `f`.
+3. `input` (and `gate_input`): the two sides' norm inputs pass the plain gate.
+   The auxiliary traces also appear as their own gated metrics.
+4. chained `y_ref` vs `y_mlx`: cosine floor unchanged, and elementwise
+   `|y_ref - y_mlx| <= atol + rtol*|y_ref| + P`, with the propagated bound `P` below.
+
+The plain chained elementwise result is still reported (`unpropagated_pass`,
+`fraction_within_unpropagated`) but is informative; the top-level `max_abs`,
+`max_relative`, `relative_l2` and `cosine` are the chained ones. Metric entries
+carry `gate: "A1-input-conditioned"`; reports carry `gate_amendments`.
+
+**Derivation of `P`.** For one group, `r = sqrt(mean(x^2) + eps)` and
+`y_c = s_c x_c / r` (`s = 1 + w`). Since `dr/dx_j = x_j / (G r)`,
+`dy_c/dx_j = s_c (delta_cj / r - x_c x_j / (G r^3))`. With an input
+perturbation bounded by `e_x = max |x_ref - x_mlx|` (the input trace's measured
+max abs diff over the whole trace), to first order
+
+`|dy_c| <= |s_c| / r * (|dx_c| + |x_c| * sum_j |x_j||dx_j| / (G r^2))
+       <= |s_c| / r * e_x * (1 + |x_c| * mean|x| / r^2) = P_c`.
+
+`|s_c| / r` is the per-element gain; the bracket is the correlated RMS term
+(at most `1 + |x_c|/r`). For the gated norm the gate input adds
+`|w_c| |n_c| L e_z` with `n_c = x_c / r`, `e_z` the gate's measured max abs
+diff and `L` the activation's Lipschitz constant (sigmoid 1/4, silu 1.1), and
+`s_c` becomes `w_c * act(z_c)`. `r`, `mean|x|`, `x_c`, `z_c` are taken from the
+reference input in float64. Second-order terms are `O(e_x^2 / r^2)`; criteria
+1-3 bound everything else independently.
+
+**Why the chained comparison alone is wrong for norm outputs.** Every trace is
+compared against a reference computed from the reference's own upstream
+values. An RMSNorm multiplies its input error by `|s_c|/r`, which for a
+small-RMS row and a large `|1 + w_c|` reaches about 10^3, far more than any
+non-normalizing op in the layer. A fixed absolute tolerance then fails on
+legitimate upstream fp32 rounding that passed its own gate one trace earlier,
+while saying nothing about whether the norm itself is right. Conditioning on
+each side's own input isolates the norm op exactly; the propagated bound keeps
+a declared, derivable limit on the chained difference.
+
+**What still fails** (unit tests in `NormGateTests`): a wrong weight on one
+channel (a 0.1% change) or the wrong `w` vs `1 + w` convention; a different
+eps (1e-5 vs 1e-6 at row RMS 0.03); normalization over the wrong axis or stream
+grouping (whole `C*H` instead of per-stream `H`, or over the sequence); a wrong
+gate activation; a corrupted reference output; and inputs that differ
+genuinely (both sides self-consistent but the chained cosine falls below the
+floor, or one large localized input error, which fails the input gate instead
+of buying a loose allowance). The observed outlier-gain case passes.
+
+**Triggering evidence.** The first real-weight streamed run (work
+`/private/tmp/jwgold-run/work`, pinned revision above) stopped at layer 0. Of
+8 cases only `tokens-b-fp32-real` failed, on one trace, `mlp.norm`: exactly 1
+of 81,920 elements outside the elementwise gate, index `(0,0,3820)`,
+reference -0.43276, MLX -0.43293, diff 1.70e-4 against an allowance of
+1.43e-4; cosine 1-3.3e-12, relative L2 2.57e-6. Its input `attn.streams`
+passed its own gate (max abs 6.0e-7); at that element the inputs were
+-4.773969e-4 vs -4.775831e-4 (diff 1.86e-7). The per-element gain
+`|1+w_c|/r` there is 906.5 (`1+w_c = 2.60`, about 4.7x the median `|1+w|` of
+0.55; row RMS `r = 2.87e-3`), against a median gain of 163. The exact
+float64 propagation `|f(x_ref) - f(x_mlx)|` at that element is 1.6967e-4,
+equal to the observed difference to four digits; the op errors are 2.6e-9
+(reference) and 8.5e-9 (MLX). The difference is upstream fp32 rounding
+amplified by the norm gain, not a port error.
+
+**Offline re-evaluation of the saved layer-0 artifacts** with
+`scripts/qwen4_gold_regate_legacy.py` (no worker, no download; norm weights
+from the hash-verified restaged view `work/staging/views/0`). The legacy cases
+lack `*.input` traces; `attn.norm`'s input is the case `input.npy` cast to the
+compute dtype (both workers read it), `mlp.norm`'s is each side's own
+`attn.streams`. `attention.gated_norm` consumed untraced tensors and keeps its
+stored plain-gate PASS (A1 applies on rerun). All 8 cases PASS under A1:
+
+| Case | Stored | A1 | `mlp.norm` chained max abs | max `P` | input max abs | op max rel (mlx / ref) |
+|---|---|---|---:|---:|---:|---:|
+| tokens-a-fp32-real | PASS | PASS | 7.46e-5 | 1.91e-3 | 7.45e-7 | 1.86e-7 / 1.81e-7 |
+| tokens-a-fp32-random | PASS | PASS | 3.53e-5 | 6.23e-4 | 1.34e-6 | 1.85e-7 / 2.16e-7 |
+| tokens-b-fp32-real | **FAIL** | PASS | 1.70e-4 | 1.47e-3 | 5.96e-7 | 1.80e-7 / 2.23e-7 |
+| tokens-b-fp32-random | PASS | PASS | 6.01e-5 | 1.06e-3 | 8.49e-7 | 1.93e-7 / 2.36e-7 |
+| tokens-a-bf16-real | PASS | PASS | 0.0625 | 0.626 | 2.44e-4 | 3.89e-3 / 3.89e-3 |
+| tokens-a-bf16-random | PASS | PASS | 0.0625 | 0.903 | 1.95e-3 | 3.89e-3 / 3.89e-3 |
+| tokens-b-bf16-real | PASS | PASS | 0.0625 | 1.20 | 4.88e-4 | 3.89e-3 / 3.89e-3 |
+| tokens-b-bf16-random | PASS | PASS | 0.0625 | 0.608 | 4.88e-4 | 3.89e-3 / 3.89e-3 |
+
+`attn.norm` in every case: input identical (`P = 0`), chained max abs
+<= 2.9e-6 (fp32) / 0 (bf16), op max rel <= 2.2e-7 (fp32) / 3.9e-3 (bf16, one
+bf16 rounding). At the failing element the bound is 1.43e-4 + `P` 6.03e-4 =
+7.46e-4; the largest diff/bound ratio over the trace is 0.23.
+
+**Adopted after seeing a failure; why this is not result-fitting.** This
+amendment was written after, and because of, the layer-0 failure above. It is
+nevertheless not fitted to that result: (a) no tolerance constant changed:
+`atol`, `rtol` and the cosine floors are those fixed before any comparison;
+(b) the added allowance `P` is a closed-form first-order derivation from the
+official formula, the checkpoint weight and the measured input error, with no
+free parameter, and is applied to every norm trace in every unit, not to one
+element or one layer; (c) it adds gates rather than removing them: each norm
+op is now checked against its own input on both sides (which the old chained
+gate could not do at all), the reference's self-consistency is checked, and
+the new auxiliary input traces are gated; (d) the plain chained result is still
+reported for every norm trace, so any reader can see where A1 changed a verdict;
+(e) its sensitivity to real defects is fixed by the unit tests above, written
+with the amendment. The non-norm traces and their gates are untouched. Results
+computed before A1 are not comparable verbatim: the harness fingerprint
+changes, and the streamed run must be repeated in a fresh work directory.
 
 `layer-NNN.json` and `.md` aggregate all cases for each layer; `embed`, `final`,
 and `head` have equivalent reports. Per-case directories hold requests, worker
@@ -405,8 +541,21 @@ env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE \
   --adapter-dependency "$GOLD_CANONICAL/qwen4_exp.py" \
   --adapter-dependency "$GOLD_CANONICAL/canonical_converter.py" \
   --shared-shards restage --min-free-gb 25 --max-staging-gb 12 \
-  --max-gb 12 --timeout 3600 --resume
+  --max-gb 12 --timeout 3600 --resume --keep-going
 ```
+
+`--keep-going` records a unit whose parity does not PASS (`status: FAIL` in
+`manifest.json`, with its failing cases and traces) and continues. This is valid
+because every unit's real input is the predecessor's **official reference**
+`output.npy` (`Harness.case` returns `reference/output.npy`), never an MLX
+output, so a candidate failure cannot contaminate later inputs. A reference
+error, a broken reference chain, or a guard failure still stops the driver.
+Failed units are not converted with `--convert-out`. `summary.json` then has
+`status: FAIL`, a `failures` list (unit, case, failing and missing traces),
+`full_48_layer_gold: false`, and the CLI exits 2; the same list is printed at
+the end. A recorded FAIL unit is integrity-checked on resume and never silently
+rerun. `--keep-going` does not enter the invocation fingerprint, since it does
+not change any comparison.
 
 Add `--plan-only` to that same command first to save exact pinned file sizes and
 download estimates without downloading weight shards. Remove only `--plan-only`

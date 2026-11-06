@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core import (IndexedCheckpoint, REFERENCE_VERSION, TraceFile, digest,
                    file_stamp, sha256, write_json)
-from .runner import Harness, execute, load_prompts, runtime_identity
+from .runner import Harness, execute, failure_summary, load_prompts, runtime_identity
 from .stream_ple import BUFFER_SUFFIXES, copy_tensors, extract_part, header, is_table, valid_entry
 
 REPO_ID = "Qwen/Qwen3.8-Flash-Next"
@@ -396,18 +396,24 @@ class StreamDriver:
                     path = self.work / "parity/inputs" / f"{unit}-{dtype}-{prompt['name']}.npy"
                     atomic_npy(path, values)
                     self.harness.case(unit, dtype, prompt, "random", path, scale=scale)
+        # chain holds only the official reference outputs (Harness.case returns
+        # reference/output.npy), so the next unit's real input never depends on
+        # this unit's MLX verdict. --keep-going relies on this.
         report = self.harness.publish(unit, finished=True)
-        if report["status"] != "PASS":
-            raise RuntimeError(f"parity did not pass at {unit}; see {self.harness.out}")
         name = f"layer-{int(unit):03d}" if unit.isdigit() else unit
         result = self.harness.out / (name + ".json")
-        return {"state": "done", "status": "PASS", "result": str(result), "result_sha256": sha256(result),
-                "artifacts": {str(p.relative_to(self.work)): sha256(p) for p in (self.harness.out / name).rglob("*.npy")},
-                "chain": chain}
+        row = {"state": "done", "status": "PASS" if report["status"] == "PASS" else "FAIL",
+               "result": str(result), "result_sha256": sha256(result),
+               "artifacts": {str(p.relative_to(self.work)): sha256(p) for p in (self.harness.out / name).rglob("*.npy")},
+               "chain": chain}
+        if row["status"] != "PASS":
+            row["failures"] = failure_summary(report)
+        return row
 
     def validate_done(self):
         for unit, row in self.state["units"].items():
-            if row["status"] != "PASS" or sha256(row["result"]) != row["result_sha256"]:
+            # FAIL rows exist only from --keep-going: recorded, never retried.
+            if row["status"] not in ("PASS", "FAIL") or sha256(row["result"]) != row["result_sha256"]:
                 raise ValueError(f"completed unit result changed: {unit}")
             for name, checksum in row["artifacts"].items():
                 if sha256(self.work / name) != checksum:
@@ -457,8 +463,13 @@ class StreamDriver:
             self.state["current_unit"] = {"unit": unit, "state": "running"}
             self.save()
             row = self.run_unit(unit)
-            if self.args.convert_out:
-                row["conversion"] = self.convert_unit(unit)
+            if row["status"] != "PASS":
+                if not getattr(self.args, "keep_going", False):
+                    raise RuntimeError(f"parity did not pass at {unit}; see {self.harness.out}")
+                print(f"Unit {unit} FAIL (recorded; --keep-going continues on the reference chain): "
+                      + json.dumps(row["failures"]), flush=True)
+            elif self.args.convert_out:
+                row["conversion"] = self.convert_unit(unit)  # Only parity-passing units are exported.
             self.state["chain"][unit] = row.pop("chain")
             self.state["units"][unit] = row
             self.state.pop("current_unit", None)
@@ -468,12 +479,22 @@ class StreamDriver:
             self.release()
             if self.args.shared_shards == "restage":
                 shutil.rmtree(active.root)
-        summary = {"schema": STREAM_SCHEMA, "status": "PASS", "fingerprint": self.state["fingerprint"],
+        failures = [{"unit": unit, "result": row["result"], "cases": row["failures"]}
+                    for unit, row in self.state["units"].items() if row["status"] != "PASS"]
+        summary = {"schema": STREAM_SCHEMA, "status": "FAIL" if failures else "PASS",
+                   "fingerprint": self.state["fingerprint"],
                    "coverage": {"layers": list(range(self.checkpoint.text["num_hidden_layers"])),
                                 "dtypes": ["fp32", "bf16"], "input_modes": ["random", "real"], "endpoints": True,
-                                "full_48_layer_gold": self.checkpoint.text["num_hidden_layers"] == 48},
-                   "units": self.state["units"], "skipped_keys": self.plan["skipped_keys"]}
+                                "full_48_layer_gold": not failures and self.checkpoint.text["num_hidden_layers"] == 48},
+                   "failures": failures, "units": self.state["units"], "skipped_keys": self.plan["skipped_keys"]}
         write_json(self.work / "summary.json", summary)
+        if failures:
+            print(f"Stream FAIL: {len(failures)} unit(s) failed", flush=True)
+            for failure in failures:
+                for case in failure["cases"]:
+                    print(f"  unit {failure['unit']} {case['case']}: {case['status']} "
+                          f"failing={case['failing_traces']} missing={case['missing_traces']}"
+                          + (f" reason={case['reason']}" if case.get("reason") else ""), flush=True)
         return summary
 
     def convert_unit(self, unit):
@@ -495,6 +516,9 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=900)
     parser.add_argument("--seed", type=int, default=20261105)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--keep-going", action="store_true",
+                        help="record a unit's parity FAIL and continue on the official reference chain; "
+                             "final status stays FAIL (reference/worker-chain errors still stop)")
     parser.add_argument("--plan-only", action="store_true", help="save pinned metadata and disk estimates; download no weight shards")
     parser.add_argument("--shared-shards", choices=("retain", "restage"), default="retain",
                         help="retain: original shards through last user; restage: opt-in byte-exact unit subsets and repeat downloads")
@@ -528,4 +552,4 @@ def main(argv=None):
             print(f"Stream stopped: {error}", file=sys.stderr)
             return 2
     print(json.dumps({"status": result["status"], "summary": str(work / "summary.json")}))
-    return 0
+    return 0 if result["status"] == "PASS" else 2

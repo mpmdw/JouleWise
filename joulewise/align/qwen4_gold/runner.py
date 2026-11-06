@@ -12,8 +12,9 @@ import sys
 import time
 from pathlib import Path
 
-from .core import (IndexedCheckpoint, SCHEMA, TOLERANCES, compare_arrays, compare_exact, TraceFile, digest, file_stamp,
-                   required_traces, sha256, text_config, write_json)
+from .core import (GATE_AMENDMENTS, IndexedCheckpoint, SCHEMA, TOLERANCES, compare_arrays, compare_exact,
+                   compare_norm, TraceFile, digest, file_stamp, norm_specs, required_traces, sha256, text_config,
+                   write_json)
 
 REPO = Path(__file__).resolve().parents[3]
 PACKAGE = Path(__file__).resolve().parent
@@ -210,6 +211,18 @@ def reusable(path, fingerprint):
     return bool(expected) and all((path.parent / name).is_file() and sha256(path.parent / name) == h for name, h in expected.items())
 
 
+def failure_summary(report):
+    """Every non-PASS case of a unit report with its failing/missing traces."""
+    failures = []
+    for row in report["cases"]:
+        if row["status"] == "PASS":
+            continue
+        failures.append({"case": row["case"], "status": row["status"],
+                         "failing_traces": sorted(n for n, m in row.get("metrics", {}).items() if not m.get("pass")),
+                         "missing_traces": row.get("missing_traces", []), "reason": row.get("reason")})
+    return failures
+
+
 def markdown_report(report):
     lines = [f"# Qwen4 gold: {report['unit']}", "", f"Status: **{report['status']}**. Scope: prefill, no cache.", "",
              f"Completed cases: {len(report['cases'])}/{report.get('expected_cases', len(report['cases']))}.", "",
@@ -226,6 +239,9 @@ def markdown_report(report):
               "fp32: 1e-4 absolute/relative permits differing reduction order. bf16: 0.03125 absolute/relative",
               "allows eight bf16 representable steps at |reference|=1 (atol+rtol); cosine >= 0.999 constrains aggregate drift.",
               "These provisional engineering bounds are fixed before comparison and are never fitted to results.",
+              "Gate amendment A1: normalization outputs are gated input-conditioned (each side's norm against the",
+              "official float64 formula on its own input) plus a chained check whose atol adds the first-order",
+              "propagated input error; see gold_parity.md. The plain chained result is reported, not gated.",
               "Router expert sets, PLE hash ids and QSA masks must agree exactly. See case JSON for metrics, missing traces and failures.", ""]
     return "\n".join(lines)
 
@@ -255,6 +271,7 @@ class Harness:
                     previous.replace(archived)
         write_json(self.out / "provenance.json", {"schema": SCHEMA, "fingerprint": self.fingerprint,
                    "checkpoint": identity, "prompts": prompts, "tolerances": TOLERANCES,
+                   "gate_amendments": GATE_AMENDMENTS,
                    "adapter": str(args.mlx_module), "adapter_dependencies": self.adapter_dependencies,
                    "runtimes": runtimes, "scope": "prefill only"})
 
@@ -295,6 +312,7 @@ class Harness:
             report = {"schema": SCHEMA, "fingerprint": fp, "unit": unit, "case": case,
                       "reference": reference, "reference_valid": "error" not in reference,
                       "input_mode": mode, "random_scale": scale, "tolerances": TOLERANCES[dtype],
+                      "gate_amendments": GATE_AMENDMENTS,
                       "input_sha256": sha256(case_input) if case_input else None,
                       "status": "REFERENCE_ERROR", "metrics": {}}
             if "error" not in reference:
@@ -312,10 +330,14 @@ class Harness:
                         required = required_traces(self.checkpoint.config, unit)
                         missing = required - candidate["traces"].keys()
                         report["missing_traces"] = sorted(missing)
+                        norms = norm_specs(self.checkpoint.config, unit)
                         for name in sorted(required & candidate["traces"].keys()):
                             a = TraceFile(directory / "reference" / reference["traces"][name])
                             b = TraceFile(directory / "mlx" / candidate["traces"][name])
-                            if name in {"ple.ngram_ids", "qsa.mask"}:
+                            if name in norms:
+                                report["metrics"][name] = self.compare_norm(name, norms[name], directory,
+                                                                            reference, candidate, dtype)
+                            elif name in {"ple.ngram_ids", "qsa.mask"}:
                                 report["metrics"][name] = {"pass": compare_exact(a,b), "exact_agreement": compare_exact(a,b)}
                             else:
                                 if name == "router.weights":
@@ -345,6 +367,25 @@ class Harness:
         if report["reference_valid"]:
             return directory / "reference" / "output.npy"
         return None
+
+    def compare_norm(self, name, spec, directory, reference, candidate, dtype):
+        """Gate amendment A1; the weight comes from the checkpoint, never a worker."""
+        traces = {}
+        for side, result in (("reference", reference), ("mlx", candidate)):
+            for key in ("input", "gate"):
+                if key in spec:
+                    trace = result["traces"].get(spec[key])
+                    if trace is None:
+                        return {"pass": False, "reason": f"missing_{side}_{key}", "gate": "A1-input-conditioned"}
+                    traces[side, key] = TraceFile(directory / side / trace)
+        try:
+            weight = self.checkpoint.read(self.checkpoint.prefix + spec["weight"], framework="numpy", dtype="fp32")
+        except (KeyError, OSError, ValueError) as error:
+            return {"pass": False, "reason": f"norm_weight_unavailable: {error}", "gate": "A1-input-conditioned"}
+        return compare_norm(TraceFile(directory / "reference" / reference["traces"][name]),
+                            TraceFile(directory / "mlx" / candidate["traces"][name]),
+                            traces["reference", "input"], traces["mlx", "input"], weight, spec, dtype,
+                            traces.get(("reference", "gate")), traces.get(("mlx", "gate")))
 
     def blocked(self, unit, dtype, prompt, reason):
         self.rows.setdefault(unit, []).append({"unit": unit, "case": f"{prompt['name']}-{dtype}-real",
