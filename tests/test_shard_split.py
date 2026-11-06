@@ -190,19 +190,19 @@ class SplitDeclarationLoadingTests(unittest.TestCase):
         declaration carrying ``awaiting_lane`` (the lane that adds it, so the
         timing map can be ready before that lane merges); anything else naming
         an absent module is a typo or a stale entry and fails.  Once the module
-        is discovered its declaration is verified in full, awaiting_lane or not.
+        is discovered its declaration is verified in full, and the marker must
+        be gone: awaiting_lane expires when the module arrives.
         """
 
         splits = shard_tests.load_split_declarations()
         discovered_modules = set(shard_tests.discover_test_modules())
+        self.assertEqual(
+            shard_tests.forward_declaration_problems(splits, discovered_modules),
+            [],
+        )
         for module, declaration in splits.items():
             with self.subTest(module=module):
                 if module not in discovered_modules:
-                    self.assertTrue(
-                        declaration["awaiting_lane"],
-                        f"{module} is not discovered and its split declaration "
-                        "names no awaiting_lane",
-                    )
                     continue
                 self.assertEqual(declaration["granularity"], "test")
                 self.assertIsNone(
@@ -274,6 +274,28 @@ class SplitDeclarationLoadingTests(unittest.TestCase):
             path = _write_timings(directory, split_modules=block)
             loaded = shard_tests.load_split_declarations(path)
         self.assertEqual(loaded[ALPHA]["awaiting_lane"], "lane/example-adds-alpha")
+
+    def test_awaiting_lane_expires_once_the_module_is_discovered(self):
+        """A forward marker on a module that has arrived is stale and fails."""
+
+        waiting = {ALPHA: {"awaiting_lane": "lane/example-adds-alpha"}}
+        settled = {ALPHA: {"awaiting_lane": None}}
+        problems = shard_tests.forward_declaration_problems(waiting, {ALPHA, BETA})
+        self.assertEqual(len(problems), 1)
+        self.assertIn(ALPHA, problems[0])
+        self.assertIn("awaiting_lane", problems[0])
+        self.assertIn("lane/example-adds-alpha", problems[0])
+        self.assertEqual(
+            shard_tests.forward_declaration_problems(settled, {ALPHA, BETA}), []
+        )
+
+    def test_absent_module_needs_awaiting_lane(self):
+        waiting = {ALPHA: {"awaiting_lane": "lane/example-adds-alpha"}}
+        unmarked = {ALPHA: {"awaiting_lane": None}}
+        self.assertEqual(shard_tests.forward_declaration_problems(waiting, {BETA}), [])
+        problems = shard_tests.forward_declaration_problems(unmarked, {BETA})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("names no awaiting_lane", problems[0])
 
     def test_remainder_weight_is_optional(self):
         with tempfile.TemporaryDirectory() as directory:
