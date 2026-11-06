@@ -362,7 +362,9 @@ def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str
     # The fit weights block means equally, which is valid while their
     # segment-noise shares are similar. Fail closed (INCONCLUSIVE) when a block
     # kept fewer than half the quiet segments of the fullest block.
-    counts = {block: len(members) for block, members in grouped.items()}
+    # A block with no usable quiet segment counts as 0 (it must not just vanish).
+    counts = {block: len(grouped.get(block, ())) for block in
+              {row["block"] for row in rows if row.get("load") == load} | set(grouped)}
     if 2 * min(counts.values()) < max(counts.values()):
         return None
     block_rows = [(block, statistics.fmean(t for t, _a, _v in members), members[0][1],

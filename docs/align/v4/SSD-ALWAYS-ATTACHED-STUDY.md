@@ -398,7 +398,7 @@ Each criterion is PASS, FAIL or INCONCLUSIVE:
 A FAIL or INCONCLUSIVE in Q2 or Q3 does not block B, because B writes nothing in windows.
 
 Q1 returns INCONCLUSIVE (fail closed) when fewer than four blocks have usable quiet decode segments, when any block
-kept fewer than half the quiet segments of the fullest block (the equal-weight block-mean fit is then not valid), or
+kept fewer than half the quiet segments of the fullest block, a block with none counting as 0 (the equal-weight block-mean fit is then not valid), or
 when the residual df is 0. All rows use one time basis: epoch stamps if every row has one, else the planned ordinal
 clock. A missing S_slow reading in any quiet idle segment fails Q5.
 

@@ -176,6 +176,11 @@ class EvaluateTests(unittest.TestCase):
                     continue
             mild.append(row)
         self.assertEqual(q.presence_offset(mild, load="decode")["quiet_segments_per_block"]["2-detached"], 3)
+        emptied = [r for r in world() if not (r["block"] == "2-detached" and r["load"] == "decode"
+                                              and r["condition"] == "quiet")]
+        emptied += [{**r, "extract_flags": ["segment.coverage_below_95pct"]} for r in world()
+                    if r["block"] == "2-detached" and r["load"] == "decode" and r["condition"] == "quiet"]
+        self.assertIsNone(q.presence_offset(emptied, load="decode"))  # an all-flagged block is 0, not absent
 
     def test_time_basis_is_never_mixed(self):
         rows = [{**row, "start_epoch_s": 1.8e9 + row["ordinal"] * 180} for row in world()]
@@ -185,6 +190,17 @@ class EvaluateTests(unittest.TestCase):
         mixed = q.presence_offset(rows, load="decode")
         self.assertEqual(mixed["time_basis"], "ordinal")
         self.assertAlmostEqual(mixed["mean"], q.presence_offset(world(), load="decode")["mean"], places=9)
+        # An irregular real clock must be the one fitted when every row has it: drift is linear in
+        # epoch time but not in the ordinal, so an ordinal fit would bias the presence estimate.
+        rng, clock, timed = random.Random(3), 1.8e9, []
+        for row in world(drift_w_per_h=0.0, decode_sd=0.0):
+            clock += 180 * (1 + 3 * rng.random())
+            timed.append({**row, "start_epoch_s": clock,
+                          "power_w": {**row["power_w"], "gpu": row["power_w"]["gpu"] + 0.5 * (clock - 1.8e9) / 3600}})
+        fit = q.presence_offset(timed, load="decode")
+        self.assertEqual(fit["time_basis"], "epoch")
+        self.assertAlmostEqual(fit["mean"], 0.0, places=6)
+        self.assertAlmostEqual(fit["drift_w_per_h"], 0.5, places=6)
 
     def test_cli_evaluate_serializes_an_inconclusive_q1(self):
         from contextlib import redirect_stdout
@@ -275,10 +291,14 @@ class OpsTests(unittest.TestCase):
         ops = q.summarize_ops(journal)
         self.assertIsNone(ops["s_slow_presence_offset_c"])
         self.assertEqual(q.operational(ops)["verdict"], q.FAIL)
-        hot = {**seg, "presence": "attached", "smc_means": {"B0AC": -20.0}}  # S_slow reading missing
-        ops = q.summarize_ops(journal[:-1] + [hot, journal[-1]], s_slow_key="TS0P")
-        self.assertIsNone(ops["s_slow_presence_offset_c"])
-        self.assertEqual(q.operational(ops)["verdict"], q.FAIL)
+        for presence, value in (("attached", None), ("detached", None), ("attached", float("nan")),
+                                ("detached", float("inf"))):
+            with self.subTest(presence=presence, value=value):
+                means = {"B0AC": -20.0} if value is None else {"B0AC": -20.0, "TS0P": value}
+                bad = {**seg, "presence": presence, "smc_means": means}  # S_slow missing or non-finite
+                ops = q.summarize_ops(journal[:-1] + [bad, journal[-1]], s_slow_key="TS0P")
+                self.assertIsNone(ops["s_slow_presence_offset_c"])
+                self.assertEqual(q.operational(ops)["verdict"], q.FAIL)
 
 
 class RunSessionTests(unittest.TestCase):
