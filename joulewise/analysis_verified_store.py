@@ -827,7 +827,8 @@ def _audit(event: str, args: tuple) -> None:
         elif event in _PROCESS_EVENTS or event.startswith("os.exec") or event.startswith("os.spawn"):
             _mark(fills, "subprocess")
         elif event in _THREAD_EVENTS:
-            _mark(fills, "thread")
+            if not _custody_probe_thread(args):
+                _mark(fills, "thread")
         elif event in _DIRECTORY_EVENTS:
             _mark(fills, "chdir")
         elif event.startswith("socket."):
@@ -836,6 +837,31 @@ def _audit(event: str, args: tuple) -> None:
         _mark(fills, "recorder_error")
     finally:
         _IN_HOOK.active = False
+
+
+def _custody_probe_thread(args: tuple) -> bool:
+    """A thread start that is calibration_ledger.probe_custody's locator probe.
+
+    That daemon runs only ``Path.exists``/``Path.is_dir`` on the locator
+    (tests/b5_analysis/test_l4_custody_probe.py pins its code); probe_custody
+    marks the fill unstorable itself unless the probe selected the single
+    locator as an existing directory. Exactly that code object, with exactly
+    that thread name, is exempt; any other thread still makes a fill unstorable.
+    """
+
+    bootstrap = args[0] if args else None
+    thread = getattr(bootstrap, "__self__", None)
+    if not isinstance(thread, threading.Thread):
+        return False
+    ledger = sys.modules.get("joulewise.calibration_ledger")
+    if ledger is None or not hasattr(ledger, "custody_probe_code"):
+        return False
+    target = getattr(thread, "_target", None)
+    try:
+        return (thread.name == ledger.CUSTODY_PROBE_THREAD_NAME
+                and getattr(target, "__code__", None) is ledger.custody_probe_code())
+    except Exception:  # noqa: BLE001 - unknown: not exempt
+        return False
 
 
 def _install_hook() -> None:
@@ -2087,6 +2113,8 @@ class VerifiedStore:
             storable = False
         if not storable:
             self._count(f"{leaf_id}:unstorable")
+            for reason in sorted(fill.unstorable) or ["run_state"]:
+                self._count(f"{leaf_id}:unstorable:{reason.split(':', 1)[0]}")
             return value
         try:
             entry = self._entry(prepared, fill, value, views, before, session, snapshot, recorded,
@@ -2097,6 +2125,9 @@ class VerifiedStore:
             entry = None
         if entry is None:
             self._count(f"{leaf_id}:unstorable")
+            reason = ("clock" if fill.clock else sorted(fill.unstorable)[0].split(":", 1)[0] if fill.unstorable
+                      else "entry")
+            self._count(f"{leaf_id}:unstorable:{reason}")
             return value
         if outcome is not None:
             outcome["comparable"] = True
