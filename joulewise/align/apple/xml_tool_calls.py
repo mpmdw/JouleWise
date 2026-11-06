@@ -156,6 +156,10 @@ def _decode(raw, schema, root):
         # A declared string still retains literal quotes from the wire.
         untyped = not any(key in schema for key in
                           ("type", "$ref", "anyOf", "oneOf", "allOf", "enum", "const"))
+        if untyped and isinstance(decoded, (str, dict, list)) and _accepts(decoded, schema, root):
+            # History templates otherwise strip string quotes and reformat
+            # containers. Retain the exact emitted value as an opaque string.
+            return raw
         if (untyped or not isinstance(decoded, str)) and _accepts(decoded, schema, root):
             return decoded
     if _accepts(raw, schema, root):

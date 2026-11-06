@@ -100,6 +100,19 @@ class HistoryRenderingTests(unittest.TestCase):
         self.assertEqual(_counterbalanced([benign, sabotage])[1], ("unmatched_condition_cells_retained",))
         self.assertEqual(_counterbalanced([benign, replace(benign, condition="sabotage")])[1], ())
 
+    def test_counterbalance_ignores_reference_custody_but_requires_capture_first(self):
+        base = replace(episode_spec(hidden=False), condition="benign",
+                       thermal={"window_reference": {"role": "capture"}})
+        consume = replace(base, condition="sabotage",
+                          thermal={"window_reference": {"role": "consume", "source_run_id": "x"}})
+        ordered, flags = _counterbalanced((base, consume))
+        self.assertEqual(flags, ())
+        self.assertEqual([s.thermal["window_reference"]["role"] for s in ordered],
+                         ["capture", "consume"])
+        with self.assertRaisesRegex(ValueError, "capture must precede"):
+            _counterbalanced((replace(base, condition="sabotage"),
+                              replace(consume, condition="benign")))
+
     def test_implicit_xml_history_is_recorded_and_legacy_json_identity_stays_unset(self):
         spec = episode_spec(hidden=False)
         for family in ("qwen3_moe", "qwen3_8"):
@@ -116,6 +129,25 @@ class HistoryRenderingTests(unittest.TestCase):
 
 @unittest.skipIf(jinja2 is None, "real template rendering needs optional Jinja2")
 class RealTemplateHistoryTests(unittest.TestCase):
+    def test_untyped_xml_arguments_match_the_emitted_prefix_exactly(self):
+        from joulewise.align.apple.endpoint import parse_completion
+        tools = [{"type": "function", "function": {"name": "any", "parameters": {
+            "type": "object", "properties": {"value": {}}}}}]
+        endpoint = MlxEndpoint(SimpleNamespace(_tokenizer=CaptureTokenizer()), base_config(),
+                               FakeClock(), episode_domain="prefix")
+        endpoint._render_prompt = template_renderer()
+        for value in ('"quoted"', '{"a":1,"b":[2,3]}'):
+            wire = ("<tool_call>\n<function=any>\n<parameter=value>\n" + value
+                    + "\n</parameter>\n</function>\n</tool_call>")
+            visible, reasoning, calls, flags = parse_completion(
+                wire, model_family="qwen3_8", tools=tools,
+                reasoning_open=False, reasoning_tokens=0)
+            self.assertEqual(flags, ())
+            history = [ChatMessage("user", "x"), endpoint.assistant_history_message(
+                ChatResult(visible, reasoning, calls, 0, 0, 0, 0, 0, None, 0))]
+            rendered = endpoint._render_prompt(history, tools, add_generation_prompt=False)
+            self.assertIn(wire, rendered)
+
     def test_effort_ladder_and_scrub_use_the_same_render_path(self):
         import jinja2.sandbox
         template = template_renderer()

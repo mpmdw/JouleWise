@@ -510,6 +510,10 @@ class EpisodeRuntimeAdapter:
                         transcript, tools=tools, max_tokens=spec.max_tokens,
                         temperature=spec.temperature, seed=measured_seed,
                     )
+                    turn_endpoint_flags = endpoint.turn_provenance[-1].get("flags", ())
+                    if any(flag.startswith(("malformed_tool_call:", "unsupported_tool_call_format"))
+                           for flag in turn_endpoint_flags):
+                        flags.append(f"episode.malformed_tool_call:{index}")
                     # Integer token counts establish that a model call returned work.
                     decode_tokens_used += result.completion_tokens
                     model_returned_tokens |= result.completion_tokens > 0
@@ -616,7 +620,8 @@ class EpisodeRuntimeAdapter:
         end = self.clock.stamp()
         main_score = None
         side_success = None
-        incomplete = any(f.startswith(('episode.deadman:', 'thermal.gate_timeout:', 'thermal.hold_timeout:')) for f in flags)
+        incomplete = any(f.startswith(('episode.deadman:', 'episode.malformed_tool_call:',
+                                       'thermal.gate_timeout:', 'thermal.hold_timeout:')) for f in flags)
         if self.thermal is not None:
             incomplete |= any(r['kind'] != 'G0' and r['outcome'] in ('timeout', 'deadman') for r in self.thermal.intervals)
         if task is not None and not any(f.startswith('episode.deadman:') for f in flags):

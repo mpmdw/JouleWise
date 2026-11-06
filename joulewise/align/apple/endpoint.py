@@ -267,7 +267,8 @@ class _StreamObservation:
             # intact for accounting; only the native stream sees the tail.
             if prefill_prompt is not None:
                 # The pinned core passes model, tokenizer, prompt positionally.
-                args = (*args[:2], prefill_prompt(args[2]), *args[3:])
+                with deadman.guard() if deadman is not None else nullcontext():
+                    args = (*args[:2], prefill_prompt(args[2]), *args[3:])
             stream = iter(native.stream_generate(*args, **kwargs))
             if deadman is None and max_tokens is None and thermal is None:
                 for response in stream:
@@ -653,6 +654,10 @@ class MlxEndpoint:
                         return unguarded_prepare()
 
                 def reconcile_prompt(ids):
+                    with self.deadman.guard() if self.deadman is not None else nullcontext():
+                        return unguarded_reconcile_prompt(ids)
+
+                def unguarded_reconcile_prompt(ids):
                     from joulewise.align.apple.prompt_cache import EpisodePromptCache
                     if self._episode_cache is None:
                         self._episode_cache = EpisodePromptCache(

@@ -23,7 +23,7 @@ def primary_stop(
     """Select one stop while preserving all concurrent causes in ``flags``.
 
     Governed deadman aborts outrank faults.  Runtime faults then outrank
-    thermal censoring, which outranks decode-budget and ordinary stops.
+    malformed tool calls, thermal censoring, decode-budget, and ordinary stops.
     Unobserved G1/H intervals are valid flagged episodes, not incomplete ones.
     """
     deadman = next((f for f in flags if f.startswith("episode.deadman:")), None)
@@ -31,6 +31,8 @@ def primary_stop(
         return "episode.deadman"
     if has_fault(flags):
         return "runner.error"
+    if any(f.startswith("episode.malformed_tool_call:") for f in flags):
+        return "episode.malformed_tool_call"
     thermal = next((f for f in flags if f.startswith(("thermal.gate_timeout:", "thermal.hold_timeout:"))), None)
     if thermal or any(
         row.get("kind") != "G0" and row.get("outcome") in ("timeout", "deadman")

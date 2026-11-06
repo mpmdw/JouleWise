@@ -12,7 +12,7 @@ from unittest.mock import patch
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.adapters.mock_runtime import MockRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion
-from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES
+from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES, parse_xml_calls
 from joulewise.align.endpoints import AssistantMessage
 from joulewise.align.interfaces import ChatMessage, ChatResult, ToolCallRequest
 from joulewise.clock import FakeClock
@@ -162,6 +162,15 @@ def synthetic_endpoint_cache_probe(template, *, compact=False, multiple_paramete
 
 
 class XmlToolCallTests(unittest.TestCase):
+    def test_untyped_values_retain_wire_spelling(self):
+        tools = [{"function": {"name": "any", "parameters": {
+            "type": "object", "properties": {"value": {}}}}}]
+        for wire_value in ('"quoted"', '{"a":1,"b":[2,3]}'):
+            with self.subTest(wire_value=wire_value):
+                calls, flags = parse_xml_calls(
+                    xml(f"<parameter=value>{wire_value}</parameter>", "any"), tools)
+                self.assertEqual(flags, ())
+                self.assertEqual(json.loads(calls[0].arguments_json)["value"], wire_value)
     def test_schema_types_literal_strings_and_multiple_calls(self):
         wire = "Before. " + xml(
             '<parameter=text>\n  é & <tag> \\"quoted\\"\nline\n\n</parameter>'
@@ -245,7 +254,7 @@ class XmlToolCallTests(unittest.TestCase):
 
     def test_any_and_string_unions_prefer_valid_json_values(self):
         for schema, raw, expected in (
-            ({}, "5", 5), ({}, "[1, 2]", [1, 2]), ({}, '"hello"', "hello"),
+            ({}, "5", 5), ({}, "[1, 2]", "[1, 2]"), ({}, '"hello"', '"hello"'),
             ({"title": "Any value"}, "true", True),
             ({"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
              '["a@x.com"]', ["a@x.com"]),

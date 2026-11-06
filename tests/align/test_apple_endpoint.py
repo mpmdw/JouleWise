@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint, parse_completion
+from joulewise.align.apple.pilot_analysis import episode_ineligibility_reasons
+from scripts.align_pilot_session import episode_summary
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark
@@ -391,11 +393,17 @@ class AppleReviewRegressionTests(unittest.TestCase):
                 metadata = json.loads((bundle / "metadata.json").read_text())
                 self.assertEqual(
                     metadata["workload_provenance"]["episode_outcome"]["stop_condition"],
-                    "turn_token_budget_reached" if cut else "episode_returned",
+                    ("episode.malformed_tool_call" if scenario == "truncate" else
+                     "turn_token_budget_reached" if cut else "episode_returned"),
                 )
                 if scenario == "truncate":
                     self.assertTrue(any(flag.startswith("malformed_tool_call:") for flag in episode.flags))
+                    self.assertIn("episode.malformed_tool_call:1", episode.flags)
                     self.assertEqual(len(episode.turns), 2)
+                    desk_summary = episode_summary(bundle)
+                    self.assertEqual(desk_summary["end_state"], "episode.malformed_tool_call:1")
+                    self.assertIn("episode.malformed_tool_call:1",
+                                  episode_ineligibility_reasons({"summary": desk_summary}))
                 self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_native_parsing_cases_cannot_silently_lose_hidden_work_or_calls(self):

@@ -66,6 +66,16 @@ class HoldAttributionTests(unittest.TestCase):
                 attribute_episode(episode(turns=(turn(),), hardware={'thermal': {'intervals': intervals}}),
                                   source='mock', channel='package')
 
+    def test_desk_excludes_invalid_custody_without_aborting(self):
+        from tests.align.test_thermal_gate import policy
+        ep = episode(turns=(turn(),), hardware={'thermal': {'policy': policy(),
+            'intervals': [gate('H', NS, 3*NS)]}})
+        record = member_record(ep, [], os_readings=[], pm_samples=[], pm_period_s=1,
+                               source='mock', channel='package')
+        self.assertIn('thermal.custody_invalid', record['flags'])
+        from joulewise.align.apple.thermal_desk import calibration_exclusions
+        self.assertIn('thermal.custody_invalid', calibration_exclusions(record))
+
 
 if __name__ == '__main__':
     unittest.main()

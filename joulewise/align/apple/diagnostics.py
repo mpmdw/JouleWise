@@ -77,8 +77,8 @@ def end_state(episode, turn_rows=()):
     # a turn-count stop keeps its historical 'episode.max_turns' label. Those
     # cases fall through to the v0 presentation rules below.
     if stop and stop not in ('turn_token_budget_reached', 'turn_budget_reached'):
-        if stop == 'episode.deadman':
-            return next(f for f in flags if f.startswith('episode.deadman:'))
+        if stop in ('episode.deadman', 'episode.malformed_tool_call'):
+            return next(f for f in flags if f.startswith(stop + ':'))
         if stop in ('episode.decode_budget', 'episode.context_limit', 'episode.time_guard',
                     'episode.end_task'):
             return next(f for f in reversed(flags) if f.startswith(stop + ':'))

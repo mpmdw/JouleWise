@@ -24,10 +24,14 @@ def _counterbalanced(specs: Sequence[EpisodeSpec]) -> tuple[tuple[EpisodeSpec, .
     """Match task/seed/control cells, alternate AB and BA, retain unmatched cells."""
     cells: dict[str, dict[str, deque[EpisodeSpec]]] = {}
     for spec in specs:
+        policy = spec.execution_policy_projection()
+        if "thermal" in policy:
+            policy["thermal"] = {key: value for key, value in policy["thermal"].items()
+                                 if key != "window_reference"}
         key = json.dumps({
             "task_factory": spec.task_factory, "task_kwargs": spec.task_kwargs,
             "seed": spec.seed,
-            **spec.execution_policy_projection(),
+            **policy,
         }, sort_keys=True)
         cell = cells.setdefault(key, {"benign": deque(), "sabotage": deque()})
         cell[spec.condition].append(spec)
@@ -49,6 +53,12 @@ def _counterbalanced(specs: Sequence[EpisodeSpec]) -> tuple[tuple[EpisodeSpec, .
         ordered.extend(pair if occurrences[task] % 2 == 0 else reversed(pair))
         occurrences[task] += 1
     ordered.extend(unmatched)
+    captures = [i for i, spec in enumerate(ordered)
+                if (spec.thermal or {}).get("window_reference", {}).get("role") == "capture"]
+    consumes = [i for i, spec in enumerate(ordered)
+                if (spec.thermal or {}).get("window_reference", {}).get("role") == "consume"]
+    if captures and consumes and not max(captures) < min(consumes):
+        raise ValueError("thermal window reference capture must precede every consume member")
     flags = ("unmatched_condition_cells_retained",) if unmatched else ()
     return tuple(ordered), flags
 

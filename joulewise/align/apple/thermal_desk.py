@@ -174,7 +174,16 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
                       if nearest is not None and abs(nearest['monotonic_ns']-gate['exit_sample_ns']) <= 2*NS else None)
         releases.append({'kind': gate['kind'], 'journal_verified': same, 'release': release,
                          'temperature_crosscheck': crosscheck})
-    attributed = attribute_episode(episode, source=source, channel=channel)
+    custody_invalid = False
+    try:
+        attributed = attribute_episode(episode, source=source, channel=channel)
+    except ValueError:
+        # A corrupt custody interval excludes this member, not the whole desk.
+        from dataclasses import replace
+        custody_invalid = True
+        attributed = attribute_episode(replace(
+            episode, hardware={**episode.hardware, 'thermal': {**thermal, 'intervals': []}}
+        ), source=source, channel=channel)
     owned = sum(s.energy.joules for s in attributed.segments if s.turn is not None)
     owned_half = sum(s.energy.half_width_j for s in attributed.segments if s.turn is not None)
     gross_half = attributed.total.half_width_j
@@ -238,7 +247,8 @@ def member_record(episode, journal, *, os_readings, pm_samples, pm_period_s,
                          'slow_c': prior[-1]['sensors'].get(policy['sensors']['s_slow']) if prior and gated else None})
     return {'id': episode.episode_id, 'gated': gated, 'model': episode.agent_model,
             'pair': episode.task_pair, 'condition': episode.condition, 'start_ns': episode.start_ns,
-            'flags': list(dict.fromkeys([*episode.flags, *thermal.get('flags', [])])),
+            'flags': list(dict.fromkeys([*episode.flags, *thermal.get('flags', []),
+                                        *(['thermal.custody_invalid'] if custody_invalid else [])])),
             'registered_os_nonzero': any(type(v) is int and v > 0 for _, v in (registered_os_readings or ())),
             'registered_os_observed': registered_os_readings is not None and any(type(v) is int and v >= 0 for _, v in registered_os_readings),
             'coverage': coverage, 'turn_observation': turn_observation, 'pm_period_s': pm_period_s,
@@ -599,7 +609,8 @@ def acceptance(members, *, pairs=(), u4=None, u5=None, u6=None):
 def calibration_exclusions(member):
     reasons = [f for f in member.get('flags', ()) if f.startswith((
         'thermal.start_gate_timeout', 'thermal.gate_timeout:', 'thermal.hold_timeout:',
-        'thermal.state_unobserved', 'episode.deadman:'))]
+        'thermal.state_unobserved', 'thermal.custody_invalid', 'episode.deadman:',
+        'episode.malformed_tool_call:'))]
     if member.get('registered_os_nonzero'):
         reasons.append('thermal.os_level_nonzero')
     if any(t.get('pm_nominal') is False for t in member.get('turn_observation', ())):
