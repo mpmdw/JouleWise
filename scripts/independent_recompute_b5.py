@@ -17,6 +17,7 @@ only the relative bar. These are agreement checks, never acceptance gates.
 """
 import argparse
 import bisect
+import concurrent.futures
 import csv
 import datetime
 import functools
@@ -32,6 +33,7 @@ import statistics
 import struct
 import sys
 from xml.parsers.expat import ExpatError
+from xml.parsers import expat
 
 SCHEMA = "joulewise.independent_recompute_b5.v1"
 POSITIONS = ("a1", "b1", "b2", "a2")
@@ -345,26 +347,74 @@ def csv_records(data):
     return records
 
 
+def _plist_measurement(frame):
+    """Extract only the four fields used below from one XML plist frame."""
+    wanted = {("elapsed_ns",), ("timestamp",), ("processor", "cpu_power"),
+              ("processor", "gpu_power"), ("processor", "ane_power")}
+    values, paths, keys, text = {}, [], [], []
+    parser = expat.ParserCreate()
+
+    def start(name, _attrs):
+        text.clear()
+        if name == "dict":
+            key = keys[-1] if keys else None
+            paths.append(paths[-1] + (key,) if paths and key else (() if not paths else paths[-1]))
+            keys.append(None)
+
+    def chars(value):
+        text.append(value)
+
+    def end(name):
+        value = "".join(text).strip()
+        if name == "key":
+            keys[-1] = value
+        elif name in ("integer", "real", "date") and keys:
+            path = paths[-1] + (keys[-1],)
+            if path in wanted:
+                if name == "integer":
+                    values[path] = int(value)
+                elif name == "real":
+                    values[path] = float(value)
+                else:
+                    values[path] = datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+            keys[-1] = None
+        elif name == "dict":
+            paths.pop()
+            keys.pop()
+        text.clear()
+
+    parser.StartElementHandler, parser.CharacterDataHandler, parser.EndElementHandler = start, chars, end
+    parser.Parse(frame, True)
+    return (values[("elapsed_ns",)], values[("timestamp",)],
+            values[("processor", "cpu_power")], values[("processor", "gpu_power")],
+            values[("processor", "ane_power")])
+
+
 def plist_records(data, anchor, reader=None, scope=""):
     records, cumulative = [], 0.0
     for frame in data.split(b"\x00"):
         if not frame.strip():
             continue
-        doc = plistlib.loads(frame.strip())
-        if not isinstance(doc, dict) or not positive_int(doc.get("elapsed_ns")):
+        raw_frame = frame.strip()
+        if raw_frame.startswith(b"bplist"):
+            doc = plistlib.loads(raw_frame)
+            elapsed, timestamp = doc.get("elapsed_ns"), doc.get("timestamp")
+            processor = doc.get("processor", {})
+            cpu, gpu, ane = (processor.get(k) for k in ("cpu_power", "gpu_power", "ane_power"))
+        else:
+            elapsed, timestamp, cpu, gpu, ane = _plist_measurement(raw_frame)
+        if not positive_int(elapsed):
             raise ValueError("positive integer elapsed_ns required")
-        length = doc["elapsed_ns"] / 1_000_000_000.0
+        length = elapsed / 1_000_000_000.0
         if records:
             cumulative += length
         end = anchor + cumulative
         start = end - length
-        processor = doc["processor"]
-        power = (processor["cpu_power"] / 1000.0 + processor["gpu_power"] / 1000.0
-                 + processor["ane_power"] / 1000.0)
+        power = (cpu / 1000.0 + gpu / 1000.0 + ane / 1000.0)
         if not all(finite(x) for x in (start, end, power, length)) or end <= start or power < 0:
             raise ValueError("invalid plist record")
         records.append((start, end, power))
-        label = doc["timestamp"].replace(tzinfo=datetime.timezone.utc).timestamp()
+        label = timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
         # D-078 label sanity: 250 us affine residual + 50 ppm elapsed drift
         # + 1 us numeric padding (four epoch double ulps <954 ns). Whole-second
         # plist labels span [end-1, end]; this is not an agreement bar.
@@ -516,6 +566,70 @@ class Member:
                 "stored_max_abs_delta_j": stored_a,
                 "r_j": {k: v["max_abs_delta_j"] for k, v in self.residual.items()},
                 "m_s": self.m, "s_s": self.s, "tokens": self.tokens}
+
+
+def _load_member_job(job):
+    pack, path, run_id, bop, member_role = job
+    flags = []
+    reader = Reader(pack, flags)
+    member = Member(Path(path), run_id, reader, bop, member_role)
+    return member, flags, reader.files
+
+
+def preload_members(windows, workers):
+    """Load independent member bundles concurrently, merging in stable job order."""
+    jobs, owners = [], []
+    for window in windows.values():
+        roles = {}
+        for cell in window.exclusion_cells.values():
+            for stratum, unit_ids in mapping(cell.get("kept_units")).items():
+                for unit_id in unit_ids if isinstance(unit_ids, list) else ():
+                    for run_id in window.units.get((cell.get("cell_id"), stratum, unit_id), ()):
+                        roles[run_id] = "science"
+        clean = window.reader.json(window.archive / "derived/neg8-clean-corpus.json",
+                                   "derived/neg8-clean-corpus.json", False)
+        for row in objects(clean.get("members")):
+            run_id = row.get("bundle_id")
+            if isinstance(run_id, str):
+                roles[run_id] = "corpus"
+        screen = window.reader.json(window.archive / "derived/neg8-screen.json", "derived/neg8-screen.json")
+        survivors = mapping(get(screen, "rescreen", "survivors"))
+        losses = {m["bundle_id"] for m in objects(get(survivors, "reference_losses"))
+                  if isinstance(m.get("bundle_id"), str)}
+        losses.update(mapping(screen.get("harvest_reference_losses")))
+        basis = {m["bundle_id"] for m in objects(get(window.verdict, "evaluation_basis", "member_occurrences"))
+                 if isinstance(m.get("bundle_id"), str)}
+        for run_id in sorted(set(window.reference_slots) & basis - losses):
+            roles[run_id] = window.reference_slots[run_id]
+        for run_id, member_role in sorted(roles.items()):
+            root = window.bound_root if member_role == "corpus" else window.claim_root
+            jobs.append((window.pack, str(root / run_id), run_id, window.b["b_op_s"], member_role))
+            owners.append(window)
+    if not jobs:
+        return
+    if workers == 1:
+        results = map(_load_member_job, jobs)
+        for_result = results
+    else:
+        executor = concurrent.futures.ProcessPoolExecutor(max_workers=workers)
+        for_result = executor.map(_load_member_job, jobs)
+    try:
+        for window, (member, flags, files) in zip(owners, for_result):
+            member.reader = window.reader
+            window.members[member.run_id] = member
+            window.reader.files.update(files)
+            for flag in flags:
+                window.reader.flag(flag["code"], flag["scope"], flag["detail"])
+            pre = window.b["b_pre_s"]
+            if member.role == "science" and not finite(member.bpre):
+                window.reader.flag("member_pre_bound_missing", member.run_id,
+                                   {"window_s": pre, "member_s": member.bpre})
+            elif member.role == "science" and finite(pre) and member.bpre != pre:
+                window.reader.flag("member_pre_bound_mismatch", member.run_id,
+                                   {"window_s": pre, "member_s": member.bpre})
+    finally:
+        if workers != 1:
+            executor.shutdown()
 
 
 def catalog_effect(catalog, code):
@@ -678,7 +792,8 @@ def drift_allowance(start, midpoint, end, bound):
 
 
 class Window:
-    def __init__(self, pack, archive, flags, exclusions=None, claim_root=None, bound_root=None, diagnostic=False):
+    def __init__(self, pack, archive, flags, exclusions=None, claim_root=None, bound_root=None, diagnostic=False,
+                 defer_members=False):
         self.pack, self.archive, self.diagnostic = pack, Path(archive), diagnostic
         self.reader = Reader(pack, flags)
         self.claim_root = Path(claim_root) if claim_root else self.archive / "sources/claim-runs"
@@ -729,6 +844,10 @@ class Window:
                 key = (u["cell_id"], u["stratum"], u["unit_id"])
                 self.units.setdefault(key, []).append(m["run_id"])
         self.b = self.calibration()
+        if not defer_members:
+            self.finish_member_work()
+
+    def finish_member_work(self):
         self.neg8 = self.compute_neg8()
         self.exclusion_check = self.check_exclusions()
 
@@ -2847,10 +2966,14 @@ def main(argv=None) -> int:
     parser.add_argument("--member-detail", action="store_true")
     parser.add_argument("--diagnostic-ignore-exclusions", action="store_true")
     parser.add_argument("--meter-dir", help="override the archive's raw meter-stream directory")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="member plist parse worker processes (default: 1)")
     parser.add_argument("--extra-beta", action="append", nargs="+", default=[],
                         metavar="PATH", help="extra BETA ARCHIVE [CLAIM_ROOT [BOUND_ROOT]]; '-' means archive default")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
+    if args.workers < 1:
+        parser.error("--workers must be a positive integer")
     flags, windows = [], {}
     for pack in ("alpha", "beta", "gamma"):
         archive = getattr(args, pack)
@@ -2867,7 +2990,10 @@ def main(argv=None) -> int:
             parser.error("unreadable archive root: " + archive)
         windows[pack.upper()] = Window(pack.upper(), archive, flags, getattr(args, pack + "_exclusions"),
                                         getattr(args, "claim_runs_" + pack), getattr(args, "bound_runs_" + pack),
-                                        args.diagnostic_ignore_exclusions)
+                                        args.diagnostic_ignore_exclusions, defer_members=True)
+    preload_members(windows, args.workers)
+    for window in windows.values():
+        window.finish_member_work()
     output = recompute(windows, flags, args.member_detail, args.diagnostic_ignore_exclusions, args.meter_dir)
     if args.extra_beta:
         extras = []
