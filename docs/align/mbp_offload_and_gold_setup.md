@@ -120,6 +120,10 @@ review. `JW_RECORDS` is the current records checkout, not the old pinned
 measurement clone. Set `JW_P9_PIN` and `JW_P9_PILOT` to the exact handoff
 products supplied by the magistrate; their existence is checked without
 opening measurement content. Choose one fixed operation path, once.
+`JW_OFFLOAD_CODE_COMMIT` only has to be **fetched** into `JW_CANON`
+(`git -C /Users/edr/code/JouleWise fetch origin <this lane>`); its working
+tree stays on main. Every helper, including the pause check's census, runs
+from that commit's blobs or from the hashed pins in `$JW_OP`.
 
 ```zsh
 setopt interactivecomments errexit nounset pipefail extendedglob noclobber
@@ -132,7 +136,9 @@ export JW_MEAS=/Users/edr/night-custody/measurement/JouleWise-measurement-202611
 : "${JW_P10_PILOT:?Set exact saved p10-PILOT.json path}"
 : "${JW_OP:?Set one fixed NEW operation directory under night-archive}"
 : "${JW_OFFLOAD_CODE_COMMIT:?Set reviewed full tooling commit}"
-export JW_RECORDS JW_P9_PIN JW_P9_PILOT JW_P10_PIN JW_P10_PILOT JW_OP
+[[ "$JW_OFFLOAD_CODE_COMMIT" == [0-9a-f]## && ${#JW_OFFLOAD_CODE_COMMIT} == 40 ]]
+git -C "$JW_CANON" cat-file -e "${JW_OFFLOAD_CODE_COMMIT}^{commit}"  # fetched, not checked out
+export JW_RECORDS JW_P9_PIN JW_P9_PILOT JW_P10_PIN JW_P10_PILOT JW_OP JW_OFFLOAD_CODE_COMMIT
 # No STOP creation, bootout or uninstall before this function passes.
 jw_pause_check() {
   python3.13 -I -B - <<'PY'
@@ -163,16 +169,26 @@ if lock.exists():
     else:
         raise SystemExit('STOP: lock owner PID still exists; wait for exit')
 # Inspect argv locally for Python-launched writers; export only matched PIDs.
-subprocess.run(['python3.13', '-I', '-B',
-                str(Path(os.environ['JW_CANON']) / 'scripts/align_offload_delete_root.py'),
-                'census'], check=True)
+# Census program: this operation's hashed pin once step 2 wrote it, otherwise
+# the reviewed commit's blob. Never JW_CANON's working tree (it tracks main).
+op = Path(os.environ['JW_OP'])
+if (op / 'manifest-helper.sha256').is_file():
+    subprocess.run(['shasum', '-a', '256', '-c', str(op / 'manifest-helper.sha256')],
+                   check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(['python3.13', '-I', '-B', str(op / 'delete_root.py'), 'census'], check=True)
+else:
+    commit = os.environ['JW_OFFLOAD_CODE_COMMIT']
+    assert re.fullmatch('[0-9a-f]{40}', commit), 'STOP: tooling commit'
+    code = subprocess.run(['git', '-C', os.environ['JW_CANON'], 'show',
+                           commit + ':scripts/align_offload_delete_root.py'],
+                          check=True, capture_output=True).stdout
+    subprocess.run(['python3.13', '-I', '-B', '-', 'census'], input=code, check=True)
 print('STOP-2 pre-pause prerequisites PASS; no argv recorded')
 PY
 }
 jw_pause_check
 # Ed confirms no collection.active, armed plan or scheduled t0; all products sealed.
 mkdir -m 700 "$JW_OP"
-[[ "$JW_OFFLOAD_CODE_COMMIT" == [0-9a-f]## && ${#JW_OFFLOAD_CODE_COMMIT} == 40 ]]
 # Pin every operational script once (N11); later steps run only these copies.
 for jw_pin in align_offload_delete_root.py:delete_root.py \
     align_offload_disk_guard.py:disk_guard.py \
@@ -185,7 +201,8 @@ shasum -a 256 "$JW_OP/delete_root.py" "$JW_OP/disk_guard.py" \
   > "$JW_OP/manifest-helper.sha256"
 {
   print -r -- 'setopt interactivecomments errexit nounset pipefail extendedglob noclobber'
-  for name in JW_CANON JW_MEAS JW_RECORDS JW_OP JW_P9_PIN JW_P9_PILOT JW_P10_PIN JW_P10_PILOT; do
+  for name in JW_CANON JW_MEAS JW_RECORDS JW_OP JW_P9_PIN JW_P9_PILOT JW_P10_PIN JW_P10_PILOT \
+      JW_OFFLOAD_CODE_COMMIT; do
     printf 'export %s=%q\n' "$name" "${(P)name}"
   done
   functions jw_pause_check
@@ -247,6 +264,8 @@ else
   print -u2 -- 'STOP: crontab -l failed for another reason'; exit 1
 fi
 atq > "$JW_OP/atq-local.txt"
+# Last line: a step 2 interrupted earlier has env.zsh but no step2.done (resume refuses at mkdir).
+print -r -- "step2 complete $(date -u +%FT%TZ)" > "$JW_OP/step2.done"
 ```
 
 `crontab -l` exits nonzero if no crontab exists; the script records that exact
@@ -1756,7 +1775,8 @@ export JW_OP=/Users/edr/night-archive/mbp-offload-20261107
 : "${JW_STEPS:?Set exact directory of reviewed step files}"
 zsh -f -euo pipefail "$JW_STEPS/step1.zsh"
 # STOP 1 review. Step 2 needs the terminal pilot-10 handoff, dead lock, clear census.
-[[ -e "$JW_OP/env.zsh" ]] || zsh -f -euo pipefail "$JW_STEPS/step2.zsh"
+# Skip step 2 only if it COMPLETED; a partial one re-runs and refuses at mkdir (review).
+[[ -e "$JW_OP/step2.done" ]] || zsh -f -euo pipefail "$JW_STEPS/step2.zsh"
 zsh -f -euo pipefail "$JW_STEPS/step2-pause.zsh"
 zsh -f -euo pipefail "$JW_STEPS/step2b-bus-baseline.zsh"
 print -r -- 'A1 done. Only NOW plug in the SSD; then run saturday-A2.zsh.'

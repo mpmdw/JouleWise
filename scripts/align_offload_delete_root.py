@@ -241,7 +241,8 @@ def check_uploaded(p):
 AGENT_NAMES = frozenset({'claude', 'claude-code', 'codex'})
 SCRIPT_STEMS = frozenset({'offload', 'align_pilot_session', 'magistrate_watchdog',
                           'advance_b5_ledger_pin', 'align_r0_checks', 'run_night',
-                          'run_b5_analysis', 'align_offload_disk_guard', 'mlx_lm'})
+                          'run_b5_analysis', 'align_offload_disk_guard', 'disk_guard',
+                          'mlx_lm'})  # disk_guard: step 2's pinned name (N11)
 WRITER_NAMES = frozenset({'tar', 'gtar', 'bsdtar', 'zstd', 'pzstd', 'unzstd', 'zstdmt',
                           'zstdcat', 'rsync', 'cp', 'ditto', 'dd'})
 SCRIPT_SUFFIXES = ('.py', '.sh', '.zsh', '.js', '.mjs', '.cjs')

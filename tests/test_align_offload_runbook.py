@@ -49,6 +49,27 @@ class RunbookTests(unittest.TestCase):
         self.assertIn('already absent', pause)
         self.assertIn('cmp "$JW_OP/our-STOP.txt" "$jw_stop"', pause)
 
+    def test_pause_check_census_never_runs_canon_working_tree(self):
+        # JW_CANON tracks main; this lane's helper need not exist in its tree.
+        step2 = TEXT.split('## 2.', 1)[1].split('## 3.', 1)[0]
+        bootstrap = re.findall(r'```zsh\n(.*?)```', step2, re.S)[0]
+        self.assertNotIn("'scripts/align_offload_delete_root.py'),", bootstrap)
+        self.assertNotIn("os.environ['JW_CANON']) / 'scripts", bootstrap)
+        self.assertIn("commit + ':scripts/align_offload_delete_root.py'", bootstrap)
+        self.assertIn("str(op / 'delete_root.py'), 'census'", bootstrap)
+        self.assertIn('manifest-helper.sha256', bootstrap.split('jw_pause_check() {', 1)[1])
+        # The commit is validated and exported before the first pause check.
+        check = bootstrap.index('\njw_pause_check\n')
+        self.assertLess(bootstrap.index('${#JW_OFFLOAD_CODE_COMMIT} == 40'), check)
+        self.assertLess(bootstrap.index('cat-file -e'), check)
+        self.assertRegex(bootstrap.split('jw_pause_check() {', 1)[0],
+                         r'export [^\n]*JW_OFFLOAD_CODE_COMMIT')
+        # A partial step 2 is never skipped on resume.
+        self.assertTrue(bootstrap.rstrip().endswith('> "$JW_OP/step2.done"'))
+        sat = TEXT.split('## 15.', 1)[1]
+        self.assertIn('[[ -e "$JW_OP/step2.done" ]] || zsh -f -euo pipefail "$JW_STEPS/step2.zsh"', sat)
+        self.assertNotIn('[[ -e "$JW_OP/env.zsh" ]] ||', sat)
+
     def test_saturday_run_a_is_copy_only_and_ordered(self):
         sat = TEXT.split('## 15.', 1)[1]
         drivers = re.findall(r'```zsh\n(.*?)```', sat, re.S)

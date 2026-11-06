@@ -762,6 +762,10 @@ class HelperTests(unittest.TestCase):
             'harvest module': (py, 'python3.13 -m joulewise.align.harvest_b5 --root r'),
             'mlx module': (py, 'python -m mlx_lm.generate --model m'),
             'run_night': (py, 'python3.13 scripts/run_night.py --plan p'),
+            'pinned guard': (py, 'python3.13 -I -B /Users/edr/night-archive/op/disk_guard.py '
+                             '--path /System/Volumes/Data -- /bin/zsh -f step6-ssd.zsh'),
+            'pinned guard wrapper': (py, py + ' -I -B /Users/edr/night-archive/op/disk_guard.py '
+                                     '--writer-wrapper 3 -- /bin/zsh -f step6-ssd.zsh'),
             'rsync': ('/usr/bin/rsync', 'rsync -a a b'),
             'cp': ('/bin/cp', 'cp -p a b'),
             'ditto': ('/usr/bin/ditto', 'ditto a b'),

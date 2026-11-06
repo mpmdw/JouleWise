@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import unittest
 
+from tests.git_fixture import init_git_fixture
+
 SPEC = importlib.util.spec_from_file_location('keep', Path(__file__).resolve().parents[1] / 'scripts/align_offload_model_keep.py')
 k = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(k)
@@ -26,7 +28,7 @@ class ModelKeepTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
-        self.git('init', '-q')
+        init_git_fixture(self.root, '-q')
         self.git('config', 'user.email', 'synthetic@example.invalid')
         self.git('config', 'user.name', 'Synthetic')
         self.refs = {}
