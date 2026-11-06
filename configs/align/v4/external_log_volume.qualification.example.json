@@ -1,0 +1,10 @@
+{
+  "schema": "joulewise.align_external_volume.v1",
+  "status": "qualification",
+  "amendment": "DRAFT-AMENDMENT-external-log-volume (not adopted)",
+  "allowlist": ["00000000-0000-0000-0000-000000000000"],
+  "mount_point": "/Volumes/JW-EXT",
+  "log_mode": "internal",
+  "subdir": "JouleWise",
+  "expected_presence": "attached"
+}

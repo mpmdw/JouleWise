@@ -1,0 +1,10 @@
+{
+  "schema": "joulewise.align_external_volume.v1",
+  "status": "off",
+  "amendment": null,
+  "allowlist": [],
+  "mount_point": null,
+  "log_mode": "internal",
+  "subdir": "JouleWise",
+  "expected_presence": "attached"
+}
