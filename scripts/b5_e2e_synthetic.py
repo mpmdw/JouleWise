@@ -191,6 +191,8 @@ def main(argv=None):
     parser.add_argument('--label', default='run')
     parser.add_argument('--sample-ms', type=int, default=200)
     parser.add_argument('--keep-custody', action='store_true')
+    parser.add_argument('--cprofile-steps', metavar='STEPS',
+                        help='with --cprofile: profile only these comma-separated steps (others run unprofiled)')
     parser.add_argument('--sample-stacks', metavar='STEPS',
                         help='comma-separated step ids: sample the driver main thread\'s Python stack every '
                              '20 ms during those steps and write OUT/stacks-step<ID>.json (low overhead)')
@@ -228,6 +230,8 @@ def main(argv=None):
         _forbid(args.cprofile.absolute())
         args.cprofile.mkdir(parents=True, exist_ok=True)
         os.environ[PROFILE_ENV] = str(args.cprofile.absolute())
+        if args.cprofile_steps:
+            os.environ[PROFILE_STEPS_ENV] = args.cprofile_steps
         _profile_driver_steps(args.cprofile.absolute())
 
     from tests.b5_analysis import fixtures_s10, joined_s10
@@ -542,6 +546,12 @@ def _sample_driver_stacks(out, steps, interval=0.02, depth=40):
 
 
 PROFILE_ENV = 'JW_B5_E2E_CPROFILE'
+PROFILE_STEPS_ENV = 'JW_B5_E2E_CPROFILE_STEPS'
+
+
+def _profiled_step(step):
+    wanted = os.environ.get(PROFILE_STEPS_ENV)
+    return not wanted or step in wanted.split(',')
 _PROFILES = {}
 _ACTIVE = []
 
@@ -574,6 +584,8 @@ def _profile_driver_steps(directory):
         tmp.write_text(step)
         os.replace(tmp, directory / 'current-step')
         begin(step)
+        if not _profiled_step(step):
+            return
         profile = _PROFILES.setdefault(step, cProfile.Profile())
         try:
             profile.enable()
@@ -598,9 +610,10 @@ def _profiled_task(original, directory):
 
     @functools.wraps(original)
     def run(*args, **kwargs):
-        if _ACTIVE:
+        step = _current_step(directory)
+        if _ACTIVE or not _profiled_step(step):
             return original(*args, **kwargs)
-        profile = _PROFILES.setdefault(_current_step(directory), cProfile.Profile())
+        profile = _PROFILES.setdefault(step, cProfile.Profile())
         try:
             profile.enable()
         except ValueError:
