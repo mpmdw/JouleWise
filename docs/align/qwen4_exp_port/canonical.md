@@ -280,7 +280,7 @@ Four seats validated the PR head `ce911c6e7` (module sha256 `55aecaea…b11a37f`
 
 ## Pin
 
-`joulewise/align/models/qwen4_exp.py` sha256 `af26a5a5bf15a6c475f21637989c5f03c6f8bd3a3e0b8824ac99765a99f7f95f` after MISSING-11 (it was `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 and `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
+`joulewise/align/models/qwen4_exp.py` sha256 `027dc03a36cff5455a436bc609537e72643b727f04b1eff93198721f36849564` after the MISSING-11 review fixes (it was `af26a5a5bf15a6c475f21637989c5f03c6f8bd3a3e0b8824ac99765a99f7f95f` at the unreviewed MISSING-11 head `0715fdf74`, `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 and `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
 - `MODULE_SHA256` in `scripts/align_convert_qwen4_exp.py`, the module `load_verified_model` runs by default. The suite checks it against the file (`test_r1_load_verified_model_requires_both_pins` fails if it is stale).
 - this section, which is a record and is not checked.
 
@@ -288,12 +288,31 @@ The converter copies the module into every artifact and records `module_sha256` 
 
 ### MISSING-11 compiled decode boundary
 
-Batch-one, single-token calls after the initial token compile each decoder
-layer with `mx.compile(..., shapeless=False)`. The input and output tuple
-carries every mutable cache array; position-dependent RoPE, the SSM mask and
-the PLE lookup are also array arguments rather than captured trace values.
+Batch-one, single-token calls after the initial token compile with
+`mx.compile(..., shapeless=False)`, one trace per layer and input shape:
+
+- linear-attention layers (with their PLE) compile whole. The conv,
+  recurrent, PLE-conv and n-gram-context cache arrays cross the boundary as
+  explicit inputs and outputs; the SSM mask and the PLE rows are array
+  arguments. The trace binds them on a private copy of the forward's context
+  (binding the tracers into the shared context handed placeholders to later
+  layers: `[eval] Attempting to eval an array without a primitive` at the
+  first compiled step of `0715fdf74`).
+- QSA layers compile the hyper-connections and the MoE (`_qsa_pre`,
+  `_qsa_post`); attention stays eager. Its cache protocol slices, selects and
+  builds masks on the host offset, so a compiled attention retraces at every
+  token (`0715fdf74` did: 64 traces per QSA layer in 64 steps), which is
+  slower than eager and keeps every trace, with its offset-sized constants,
+  in mlx's compile cache for the life of the model.
+- fp32 scalars that are not exact in 7 significant digits (`Dk ** -0.5` in
+  the l2norm, `sqrt(hidden)` in the PLE gate) are compile inputs
+  (`EXACT_F32`, `inputs=EXACT_F32`). mlx 0.31.2 inlines a scalar constant into
+  fused kernel source with 7 significant digits, a different fp32 value: one
+  ulp on most outputs, 1e-6 on the logits.
+
 Multi-token prefill, batched calls and the first token remain uncompiled.
-`compile_decode: false` in `config.json` is the bitwise-reference switch.
+`compile_decode: false` in `config.json` (or the `model_config` override) is
+the bitwise-reference switch.
 
 Because `qwen4_exp.py` is part of each artifact, existing artifacts do **not**
 acquire this change. In the live kit's step-8 clone, make a new artifact by
@@ -314,7 +333,10 @@ python -m unittest -v tests.align.test_qwen4_exp_canonical
 The canonical module includes the 64-step compiled/uncompiled identity test:
 it compares logits and every cache array for linear, PLE and QSA layers,
 prefills QSA past 2051 tokens, and restores a midpoint snapshot to exercise a
-QSA trim. These are native MLX/Metal checks and intentionally skip where MLX
+QSA trim, on both the masked-SDPA and the gather (past
+`qsa_sparse_decode_min_kv`) QSA decode paths, and checks one trace per layer
+piece. A second test covers a left-padded single row and a prefill shorter
+than one QSA block. These are native MLX/Metal checks and intentionally skip where MLX
 is unavailable.
 
 ## Reproduce

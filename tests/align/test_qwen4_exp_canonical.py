@@ -852,21 +852,29 @@ class CanonicalParityTest(unittest.TestCase):
                 self.assertLessEqual(d["max_abs"], FP32_TOL, f"{name}: {d}")
                 self.assertEqual(d.get("top1", 1.0), 1.0)
 
-    def test_compiled_decode_is_bitwise_identical_for_64_steps_past_qsa_2051_and_trim(self):
-        """MISSING-11: every layer kind crosses the compiled boundary, with
-        QSA already beyond 2051 tokens; restoring the midpoint snapshot trims
-        the QSA buffers before both paths continue."""
+    def _compiled_decode_model(self, **overrides):
+        """A model of its own (the override keys a separate fixture entry), so
+        the compiled traces counted here start from nothing."""
+        model = self.fx.model("fp32", compile_decode=True, **overrides)
+        traces = {}
+        for i, layer in enumerate(model.layers):
+            self.assertIsNone(layer._compiled_decode, "fresh model expected")
+            for name in ("_decode_arrays",) if layer.is_linear else ("_qsa_pre", "_qsa_post"):
+                def counted(*a, _f=getattr(layer, name), _k=(i, name)):
+                    traces[_k] = traces.get(_k, 0) + 1
+                    return _f(*a)
+                setattr(layer, name, counted)  # runs only while mx.compile traces
+        return model, traces
+
+    def _compiled_vs_eager(self, model, prefix, steps, left_padding=None, trim=None):
         import mlx.core as mx
         import numpy as np
 
-        model = self.fx.model("fp32")
-        prefix = (self.fx.seqs["seq_a"] * ((2052 + LEN_A - 1) // LEN_A))[:2052]
-        plain, compiled = model.make_cache(), model.make_cache()
-
+        plain, compiled = model.make_cache(left_padding), model.make_cache(left_padding)
         model.language_model.compile_decode = False
-        run(model, [prefix], plain)
+        run(model, prefix, plain)
         model.language_model.compile_decode = True
-        run(model, [prefix], compiled)
+        run(model, prefix, compiled)
 
         def arrays(c):
             return [a for a in c.state if a is not None]
@@ -881,20 +889,53 @@ class CanonicalParityTest(unittest.TestCase):
                                     (step, layer_idx, slot, type(a).__name__))
 
         midpoint = None
-        for step in range(64):
-            token = [[prefix[(step * 17 + 3) % len(prefix)]]]
-            model.language_model.compile_decode = False
-            a = run(model, token, plain)
+        try:
+            for step in range(steps):
+                token = [[prefix[0][(step * 17 + 3) % len(prefix[0])]]]
+                model.language_model.compile_decode = False
+                a = run(model, token, plain)
+                model.language_model.compile_decode = True
+                b = run(model, token, compiled)
+                self.assertTrue(np.array_equal(a, b), (step, "logits"))
+                equal_caches(step)
+                if trim and step == trim[0]:
+                    midpoint = (model.snapshot_cache(plain), model.snapshot_cache(compiled))
+                if trim and step == trim[1]:
+                    model.restore_cache(plain, midpoint[0])
+                    model.restore_cache(compiled, midpoint[1])
+                    equal_caches("after trim")
+        finally:
             model.language_model.compile_decode = True
-            b = run(model, token, compiled)
-            self.assertTrue(np.array_equal(a, b), (step, "logits"))
-            equal_caches(step)
-            if step == 31:
-                midpoint = (model.snapshot_cache(plain), model.snapshot_cache(compiled))
-            if step == 47:
-                model.restore_cache(plain, midpoint[0])
-                model.restore_cache(compiled, midpoint[1])
-                equal_caches("after trim")
+
+    def test_compiled_decode_is_bitwise_identical_for_64_steps_past_qsa_2051_and_trim(self):
+        """MISSING-11: every layer kind crosses the compiled boundary, with
+        QSA already beyond 2051 tokens; restoring the midpoint snapshot trims
+        the QSA buffers before both paths continue. Run twice: QSA decode on
+        the masked-SDPA path (below qsa_sparse_decode_min_kv) and on the
+        gather path the released config takes past 8192 tokens. Each layer
+        traces once per input shape (a per-token retrace would be slower than
+        eager and keep every trace in mlx's compile cache)."""
+        prefix = (self.fx.seqs["seq_a"] * ((2052 + LEN_A - 1) // LEN_A))[:2052]
+        for overrides, path in (({}, "mask"), ({"qsa_sparse_decode_min_kv": 0}, "gather")):
+            with self.subTest(path=path):
+                model, traces = self._compiled_decode_model(**overrides)
+                QSAAttention = g(model, "QSAAttention")  # each load has its own module globals
+                before = getattr(QSAAttention.paths, path)
+                self._compiled_vs_eager(model, [prefix], 64, trim=(31, 47))
+                # 64 steps on each of the two caches, every QSA layer (the
+                # prefills add masked calls of their own):
+                self.assertGreaterEqual(getattr(QSAAttention.paths, path) - before, 2 * 64 * len(QSA_LAYERS))
+                want = {(i, n): 1 for i in range(N_LAYERS)
+                        for n in (("_decode_arrays",) if i not in QSA_LAYERS else ("_qsa_pre", "_qsa_post"))}
+                self.assertEqual(traces, want)
+
+    def test_compiled_decode_padded_row_and_short_prefill(self):
+        """A left-padded single row (SSM mask is an array input) whose prefill
+        completes no QSA block yet (block keys absent at the first steps)."""
+        model, traces = self._compiled_decode_model(qsa_sparse_decode_min_kv=1)
+        self._compiled_vs_eager(model, [[EOS, EOS, EOS] + self.fx.seqs["seq_a"][:3]], 24, left_padding=[3])
+        self._compiled_vs_eager(model, [self.fx.seqs["seq_a"][:2]], 24)
+        self.assertTrue(traces)
 
     def test_greedy_32_tokens_identical_to_fp32_reference(self):
         fx = self.fx

@@ -73,6 +73,28 @@ _F32 = mx.float32
 QSA_SPARSE_PREFILL_MIN_KV = 6144
 QSA_SPARSE_DECODE_MIN_KV = 8192
 
+# fp32 scalars that a compiled decode trace must not inline. mlx 0.31.2's
+# fused-kernel codegen prints an inlined scalar constant with 7 significant
+# digits (digits10 + 1, not max_digits10 = 9), so ``x * 32 ** -0.5`` compiles
+# to a different fp32 multiplier than the eager kernel uses (59 of 64 fp32
+# outputs differ by one ulp). Every such constant on the decode path is
+# registered here when its module is built and read through ``exact_f32``;
+# ``DecoderLayer`` compiles with ``inputs=EXACT_F32``, so inside a trace these
+# are tracer inputs carrying the exact fp32 bits, never inlined literals.
+# Eager arithmetic is unchanged: an fp32 array times a 0-d fp32 array equal
+# to ``float32(c)`` is the same op as the array times the Python float ``c``.
+EXACT_F32: Dict[float, mx.array] = {}
+
+
+def exact_f32(value: float) -> mx.array:
+    """0-d fp32 array for ``value``; register at module construction (a first
+    use inside a compiled trace would be an inlined constant again)."""
+    value = float(value)
+    arr = EXACT_F32.get(value)
+    if arr is None:
+        arr = EXACT_F32[value] = mx.array(value, dtype=mx.float32)
+    return arr
+
 # --------------------------------------------------------------------------
 # Configuration  (T:65-217)
 # --------------------------------------------------------------------------
@@ -1035,8 +1057,8 @@ def gated_delta(q, k, v, a, b, A_log, dt_bias, state, mask=None, use_kernel=True
     """
     B, T, Hk, Dk = q.shape
     Hv, Dv = v.shape[-2:]
-    qn = mx.fast.rms_norm(q.astype(_F32), None, GDN_L2NORM_EPS / Dk) * (1.0 / Dk)
-    kn = mx.fast.rms_norm(k.astype(_F32), None, GDN_L2NORM_EPS / Dk) * (Dk ** -0.5)
+    qn = mx.fast.rms_norm(q.astype(_F32), None, GDN_L2NORM_EPS / Dk) * exact_f32(1.0 / Dk)
+    kn = mx.fast.rms_norm(k.astype(_F32), None, GDN_L2NORM_EPS / Dk) * exact_f32(Dk ** -0.5)
     beta = sigmoid_once(b)
     decay = mx.exp(-mx.exp(A_log.astype(_F32)) * nn.softplus(a.astype(_F32) + dt_bias.astype(_F32)))
     if state is None:
@@ -1281,6 +1303,7 @@ class GatedDeltaNet(nn.Module):
         self.A_log = mx.zeros((self.hv,))
         self.norm = GatedRMSNorm(self.dv, args.rms_norm_eps, args.output_gate_type or args.hidden_act)
         self.out_proj = nn.Linear(self.value_dim, self.hidden, bias=False)
+        exact_f32(1.0 / self.dk), exact_f32(self.dk ** -0.5)  # gated_delta's l2norm scales
 
     def __call__(self, x: mx.array, ctx: _Context, cache: Qwen4ExpLinearCache) -> mx.array:
         B, S, _ = x.shape
@@ -1672,6 +1695,7 @@ class PLELayer(nn.Module):
         self.history = (args.ple_conv_kernel_size - 1) * args.ngram_size
         self.conv1d = nn.Conv1d(width, width, args.ple_conv_kernel_size, groups=width,
                                 dilation=args.ngram_size, bias=False)
+        exact_f32(math.sqrt(self.hidden))  # the D8 gate divisor
 
     def __call__(self, h: mx.array, emb: mx.array, ctx: _Context, cache: Qwen4ExpLinearCache) -> mx.array:
         B, S, _ = h.shape
@@ -1681,7 +1705,7 @@ class PLELayer(nn.Module):
         value = self.value_proj(emb)
         query = self.norm_query(h).reshape(shape)
         gate = (key * query).astype(_F32).sum(axis=-1, keepdims=True).astype(dt)
-        gate = (gate.astype(_F32) / math.sqrt(self.hidden)).astype(dt)
+        gate = (gate.astype(_F32) / exact_f32(math.sqrt(self.hidden))).astype(dt)
         gate = mx.sqrt(mx.maximum(mx.abs(gate), 1e-6)) * mx.sign(gate)
         gated = sigmoid_once(gate) * value[:, :, None, :]
         gated_normed = self.norm_conv(gated.reshape(B, S, -1))
@@ -1718,44 +1742,45 @@ class DecoderLayer(nn.Module):
         self.mlp_hyper_connection = GatedResidual(args)
         # Decode compilation is deliberately local to a layer.  Compiling the
         # model loop would capture the Python cache objects and make their
-        # mutations invisible after the first trace.  This callable instead
-        # receives and returns every device-resident cache array explicitly.
-        # It is lazy so mx.compile sees the final (possibly quantized) module.
+        # mutations invisible after the first trace.  It is lazy so mx.compile
+        # sees the final (possibly quantized) module.
         self._decode_ctx = None
         self._compiled_decode = None
 
-    def _decode_arrays(self, h: mx.array, cos: mx.array, sin: mx.array,
-                       ssm_mask: mx.array, ngram_emb: mx.array,
-                       offset_shape: mx.array, *state):
-        """Pure-ish compiled boundary for one batch-1, one-token layer.
+    def _decode_arrays(self, h: mx.array, ssm_mask: mx.array, ngram_emb: mx.array, *state):
+        """Compiled boundary of one batch-1, one-token linear-attention layer.
 
         ``mx.compile`` may only track array data.  A short-lived cache view
-        supplies the existing layer implementation with its Python protocol;
-        all mutable device state crosses this boundary in ``state`` and in the
-        returned tuple.  Host metadata (offset/padding and dispatch policy) is
-        read from the current context/cache view while tracing a shape.
+        supplies the layer implementation with its Python protocol; all
+        mutable device state crosses this boundary in ``state`` and in the
+        returned tuple.  The linear body reads no host metadata that changes
+        between tokens, so one trace per input shape serves every step.
         """
-        ctx, original = self._decode_ctx
-        del offset_shape  # shape-specialises QSA's host-indexed cache slices
-        # These values change at every token and therefore must not be closed
-        # over by the trace.  The empty sentinels represent the two optional
-        # arrays without creating a second Python cache protocol.
-        ctx.cos, ctx.sin = cos, sin
+        shared, original = self._decode_ctx
+        # The trace works on a private copy of the context: binding its tracer
+        # placeholders into the forward's shared context would hand them to
+        # every later layer as real inputs ("eval an array without a
+        # primitive" at the first compiled step; review of 0715fdf74).  The
+        # empty sentinels stand for the two optional arrays.
+        ctx = SimpleNamespace(**vars(shared))
+        ctx.ngram_emb = dict(shared.ngram_emb)
         ctx.ssm_mask = None if ssm_mask.size == 0 else ssm_mask
         if self.has_ple:
             ctx.ngram_emb[self.layer_idx] = ngram_emb
-        if self.is_linear:
-            view = Qwen4ExpLinearCache(len(state))
-            view.padding, view.offset = original.padding, original.offset
-            view.cache = list(state)
-            out = self._body(h, ctx, view)
-            return (out, *view.cache)
-
-        view = Qwen4ExpQSACache(original.padding)
-        view._ratio, view.offset = original._ratio, original.offset
-        view.keys, view.values, view.raw_keys, view.block_keys = state
+        view = Qwen4ExpLinearCache(len(state))
+        view.padding, view.offset = original.padding, original.offset
+        view.cache = list(state)
         out = self._body(h, ctx, view)
-        return out, view.keys, view.values, view.raw_keys, view.block_keys
+        return (out, *view.cache)
+
+    def _qsa_pre(self, h: mx.array):
+        x, _, inject = self.attn_hyper_connection(h)
+        return x, inject
+
+    def _qsa_post(self, h: mx.array, attn: mx.array, inject: mx.array) -> mx.array:
+        h = _inject(h, attn, inject)
+        x, hyper, inject = self.mlp_hyper_connection(h)
+        return _inject(hyper, self.mlp(x), inject)
 
     def _body(self, h: mx.array, ctx: _Context, cache) -> mx.array:
         """The common layer body; prefill always calls this directly."""
@@ -1771,28 +1796,32 @@ class DecoderLayer(nn.Module):
         # Prefill (and every batched/multi-token call) remains uncompiled.
         if not compile_decode or ctx.B != 1 or ctx.S != 1 or cache.offset == 0:
             return self._body(h, ctx, cache)
+        if not self.is_linear:
+            # QSA: the hyper-connections and the MoE are compiled; attention
+            # stays eager.  Its cache protocol slices and selects on the host
+            # offset (and builds offset-sized masks on the host), so a compiled
+            # attention must retrace at every token: slower than eager, and
+            # every trace with its offset-sized constants stays in mlx's
+            # compile cache for the life of the model (review of 0715fdf74).
+            if self._compiled_decode is None:
+                self._compiled_decode = (mx.compile(self._qsa_pre, inputs=EXACT_F32, shapeless=False),
+                                         mx.compile(self._qsa_post, inputs=EXACT_F32, shapeless=False))
+            pre, post = self._compiled_decode
+            x, inject = pre(h)
+            return post(h, self.self_attn(x, ctx, cache), inject)
         if self._compiled_decode is None:
-            self._compiled_decode = mx.compile(self._decode_arrays, shapeless=False)
-        self._decode_ctx = (ctx, cache)
+            self._compiled_decode = mx.compile(self._decode_arrays, inputs=EXACT_F32, shapeless=False)
         empty = mx.zeros((0,), dtype=h.dtype)
-        # QSA's cache protocol uses the host offset for slices and selection.
-        # A shape-only argument makes shapeless=False retrace that layer at a
-        # new offset rather than reusing host constants.  Linear layers get a
-        # stable empty shape and keep the hot compiled graph across steps.
-        offset_shape = mx.zeros((cache.offset,), dtype=mx.uint8) if not self.is_linear else empty
-        dynamic = (ctx.cos, ctx.sin, ctx.ssm_mask if ctx.ssm_mask is not None else empty,
-                   ctx.ngram_emb[self.layer_idx] if self.has_ple else empty, offset_shape)
-        if self.is_linear:
-            result = self._compiled_decode(h, *dynamic, *cache.cache)
-            cache.cache = list(result[1:])
-            # _body advanced only the view; the owning cache carries host state.
-            cache.advance(1)
-        else:
-            state = (cache.keys, cache.values, cache.raw_keys, cache.block_keys)
-            result = self._compiled_decode(h, *dynamic, *state)
-            cache.keys, cache.values, cache.raw_keys, cache.block_keys = result[1:]
-            cache.offset += 1
-        self._decode_ctx = None
+        self._decode_ctx = (ctx, cache)
+        try:
+            result = self._compiled_decode(h, ctx.ssm_mask if ctx.ssm_mask is not None else empty,
+                                           ctx.ngram_emb[self.layer_idx] if self.has_ple else empty,
+                                           *cache.cache)
+        finally:
+            self._decode_ctx = None
+        cache.cache = list(result[1:])
+        # _body advanced only the view; the owning cache carries host state.
+        cache.advance(1)
         return result[0]
 
 
