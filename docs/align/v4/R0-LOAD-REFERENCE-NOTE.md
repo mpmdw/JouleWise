@@ -59,8 +59,10 @@ Fail-closed rules:
   The check never falls back to an absolute limit.
 - A missing, unreadable or malformed table gives `fail`, reason `invalid_reference_config`.
   Malformed includes a missing or unknown mode, a missing fixture key, a null fixture in
-  reference mode, no provenance, a bad tolerance, bins that do not average to the mean, or a
-  duplicate key.
+  reference mode, no provenance, a bad tolerance, bins that do not average to the mean, a
+  duplicate key, or a null-fixture entry that shares its revision with another entry (it would
+  otherwise be an absolute fallback for that revision's unlisted fixtures; added in the
+  executing review, `docs/align/reviews/2026-11-06-r0-load-reference-executing-review.md`).
 - Non-finite losses give `nll_not_finite`. A target count other than 2,048 gives
   `target_count_mismatch`.
 

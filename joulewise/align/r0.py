@@ -170,6 +170,11 @@ def validate_references(config):
         if (not isinstance(tolerance, dict) or not _finite(tolerance.get("mean_nats_per_token"), positive=True)
                 or not _finite(tolerance.get("bin_nats_per_token"), positive=True)):
             raise ValueError(f"model {label}: tolerance needs positive mean_nats_per_token and bin_nats_per_token")
+    # A null-fixture (any-fixture) entry must be its revision's only entry; otherwise it
+    # would be an absolute fallback for every unlisted fixture of that revision.
+    revisions = [revision for revision, _ in seen]
+    if any(fixture is None and revisions.count(revision) > 1 for revision, fixture in seen):
+        raise ValueError("a null-fixture entry must be the only entry for its revision")
     return config
 
 
