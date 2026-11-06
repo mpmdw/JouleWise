@@ -66,10 +66,17 @@ DEFAULT_S_R_MIN_J = 19.0  # smallest per-pair s_r in the series: Qwen3-30B spam,
 DEFAULT_T_EPISODE_S = 234.5  # 30B planning episode upper bound (sizing_b5.json episode_upper_s)
 PRESENCE_FRACTION = 0.0025  # U4 point bar: 0.25 % of the decode energy
 WRITE_IDLE_FRACTION = 0.05  # bias bar: 0.05 s_r per episode
-WRITE_DECODE_FRACTION = 0.30  # MDE inflation bar: added SD <= 0.3 s_r gives <= 4.4 % MDE growth
+WRITE_DECODE_FRACTION = 0.30  # mean write-effect bar (Q3 tests the mean, not added variance; A/A-lite only)
 
 
 # ---------------------------------------------------------------- plan
+
+
+# Five physical blocks: Q1 fits block means with intercept, drift and presence,
+# so it needs at least four blocks for one residual df; five give two. The
+# CLI (scripts/align_ssd_qualification.py) takes its defaults from here.
+DEFAULT_BLOCKS = ("attached", "detached", "attached", "detached", "attached")
+DEFAULT_IDLE_PAIRS = 6
 
 
 def _abba(n_pairs: int) -> list[tuple[str, str]]:
@@ -79,7 +86,7 @@ def _abba(n_pairs: int) -> list[tuple[str, str]]:
     return order
 
 
-def plan(*, blocks: Sequence[str] = ("attached", "detached", "attached", "detached", "attached"), idle_pairs: int = 6,
+def plan(*, blocks: Sequence[str] = DEFAULT_BLOCKS, idle_pairs: int = DEFAULT_IDLE_PAIRS,
          decode_pairs: int = 6, segment_s: float = 120.0, gap_s: float = 60.0,
          settle_s: float = 600.0) -> dict[str, Any]:
     """The schedule. Every block repeats the same idle-then-decode shape."""

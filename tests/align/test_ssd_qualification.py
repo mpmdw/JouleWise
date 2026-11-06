@@ -70,6 +70,27 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(schedule["blocks"],
                          ["attached", "detached", "attached", "detached", "attached"])
 
+    def test_cli_plan_without_flags_is_the_five_block_default(self):
+        """`plan --out` with no other flags is what the operator runs; it must
+        not fall back to the old A-D-A, 8-idle-pair, 87-segment schedule."""
+        from contextlib import redirect_stdout
+        import io
+        from scripts import align_ssd_qualification as cli
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "plan.json"
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(["plan", "--out", str(out)]), 0)
+            schedule = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(schedule["blocks"], ["attached", "detached", "attached", "detached", "attached"])
+        self.assertEqual(len(schedule["segments"]), 125)
+        self.assertEqual(schedule, q.plan())
+        analyzed = [s for s in schedule["segments"] if s["analyzed"]]
+        for block in {s["block"] for s in analyzed}:
+            for load in ("idle", "decode"):
+                pairs = {s["pair"] for s in analyzed if s["block"] == block and s["load"] == load}
+                self.assertEqual(len(pairs), 6, (block, load))
+        self.assertAlmostEqual(schedule["planned_total_s"] / 3600, 6.83, places=2)
+
 
 class PatternTests(unittest.TestCase):
     def test_fixed_cadence_bytes_and_fsyncs(self):

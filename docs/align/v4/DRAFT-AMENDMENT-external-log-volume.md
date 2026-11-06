@@ -109,7 +109,7 @@ power.
 
 ## A8. Qualification gate
 
-Q1-Q5 are as in the study, §6. The mechanical option mapping (`ssd_qualification.evaluate`):
+Q1-Q3 and Q5 are as in the study, §6 (there is no Q4). The mechanical option mapping (`ssd_qualification.evaluate`):
 - **B** requires Q1 PASS and Q5 PASS.
 - **A-lite** requires Q1, Q2, Q3 and Q5 PASS.
 - **A** is not adopted.

@@ -327,7 +327,7 @@ Risks:
 ## 6. Hardware qualification protocol (Saturday 11-07, by day, nothing armed, non-claim)
 
 **Who and when.**
-- Ed plugs and unplugs twice. The magistrate or lead runs everything else.
+- Ed unplugs twice and replugs twice (A-D-A-D-A). The magistrate or lead runs everything else.
 - Run it after the volume is prepared (`scripts/align_external_volume.py prepare-plan --device diskN`, shown to Ed
   before any erase) and before R1.
 - R1 must then run in the configuration the verdict adopts, because R1's idle soak and step tests fill slots S1-S9
@@ -336,6 +336,12 @@ Risks:
   binding cell (smallest s_r).
 
 **Design (corrected default plan, 125 segments, about 6.8 h).**
+- **Lead design decision (laptop lead, 2026-11-06):** adopt A-D-A-D-A with 6 idle and 6 decode pairs per block
+  (125 segments, about 6.8 h, up from 87 segments and about 4.7 h). The lead verified Sol's pseudoreplication
+  finding independently. In a 400-seed Monte Carlo (decode block shock SD 50 mW, segment SD 20 mW), the old
+  segment-level fit on A-D-A gave a 90 % interval covering the truth 39-41 % of the time and PASSed a true 0.10 W
+  presence effect (margin ±63 mW) 14.75 % of the time; the block-mean fit on A-D-A-D-A covered about 90 % and PASSed it
+  1.0 % of the time. The CLI and `plan()` share the same defaults (`DEFAULT_BLOCKS`, `DEFAULT_IDLE_PAIRS`).
 - `python3 scripts/align_ssd_qualification.py plan --out plan.json` gives five physical blocks:
   **attached → detached → attached → detached → attached**. The former three-block default was invalid
   for an uncertainty interval: after fitting intercept, linear drift, and presence to three block means it had zero
@@ -373,7 +379,7 @@ Risks:
 |---|---|---|---|
 | **Q1 presence (decode)** | attached − detached quiet decode GPU power; OLS on physical-block means with linear drift; df = blocks − 3 (2 by default) | ±0.25 % of decode power (≈ ±63 mW at 25 W) | the U4 point bar: presence must not move the cross-window frame. A constant offset within the series is absorbed anyway |
 | **Q2 write effect (idle)** | paired write − quiet, attached blocks, idle | ±0.05·s_r,min/T_ep = **±4.1 mW** (D: ±5.1 mW) | per-episode bias ≤ 0.05 s_r shifts scores by ≤ 0.05 against thresholds of 2.5-7.1 s_r; the 30B MDE moves ≤ 1.5 tokens |
-| **Q3 write effect (decode)** | same, under decode | ±0.30·s_r,min/T_ep = **±24 mW** (D: ±30 mW) | the whole in-episode write effect, taken as variance, raises s_r and the MDE by ≤ 4.4 % (√1.09). Conservative: the arm-correlated part is a fraction of it |
+| **Q3 write effect (decode)** | same, under decode | ±0.30·s_r,min/T_ep = **±24 mW** (D: ±30 mW) | a bar on the **mean** in-episode write effect only. Q3 is a t interval on the mean of paired write − quiet differences, so it does not bound added variance and does not by itself bound s_r or MDE inflation; a variability criterion is needed before A/A-lite can be licensed. Matters only for A/A-lite: B does no in-window writes |
 | **Q5 operational** | journal | all of: arm check PASS at start and end; 0 volume losses; 0 attached segments with metadata-daemon CPU > 0.05 CPU-s/s; 0 idle segments with \|B0AC\| > 200 mA; \|S_slow presence offset\| ≤ 0.5 °C (half the δ band) | missing evidence fails |
 
 Each criterion is PASS, FAIL or INCONCLUSIVE:
@@ -395,6 +401,10 @@ An INCONCLUSIVE Q3 does not block B, because B writes nothing in windows. It doe
   attached-block pairs, so a nominal independent-pair half-width of about ±12 mW against 24 mW.
 - Presence precision comes from five physical block means (df 2), not from the number of segments. It cannot be
   forecast from the segment pair SD without an assumption about block shocks.
+- Planning simulation (lead, 400 seeds, no true presence effect, segment SD 20 mW): Q1 PASSes about 99 % of the
+  time with block-to-block decode shocks of 5 mW SD, 88 % at 10 mW, 51 % at 20 mW, 25 % at 30 mW and 7.5 % at
+  50 mW. A Q1 PASS therefore needs block-level decode power to repeat within roughly 10-20 mW (0.04-0.08 % of
+  25 W); larger block scatter gives INCONCLUSIVE, which leaves Option C.
 - If decode comes out INCONCLUSIVE, the extended plan or more decode pairs are the remedy; never a looser margin.
 
 **Also recorded, print only.**
