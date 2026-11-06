@@ -13,6 +13,24 @@ from joulewise.align.r0 import PINS
 from joulewise.align.r0_host import swap_bytes
 
 
+def backend_config(tag, source):
+    """The production R0 BenchmarkConfig; shared with off-Mac prequalification."""
+    from joulewise.schemas import BenchmarkConfig
+    pin = PINS[tag]
+    return BenchmarkConfig.from_mapping({
+        "schema_version": "0.1", "run_id": "align-r0-" + tag,
+        "model": {"name": pin["name"], "family": pin["family"], "source": str(source),
+                  "revision": pin["revision"], "weight_format": "mlx", "context_window": 40960},
+        "quantization": {"name": f"int{pin['bits']}", "bits": pin["bits"], "group_size": 64},
+        "hardware_target": {"id": "macbook_m3_max", "transport": "local", "runtime_backend": "mlx",
+                            "telemetry_backend": "powermetrics", "device_kind": "apple_silicon_unified_memory"},
+        "workload_profile": {"name": "align_r0", "prompt_tokens": 2048, "output_tokens": 4096,
+                             "repetitions": 1, "warmup_runs": 1},
+        "sampling": {"power_hz": 1, "idle_seconds": 0, "warmup_seconds": 0},
+        "run_metadata": {"project": "joulewise", "tags": ["align-r0-selection", "align-model=" + pin["tag"]]},
+    })
+
+
 class ObservedNative:
     def __init__(self, native, guard):
         self.native, self.guard = native, guard
@@ -34,7 +52,6 @@ class MlxBackend:
         from joulewise.align.apple.endpoint import MlxEndpoint
         from joulewise.align.shade.upstream import PinnedUpstream
         from joulewise.clock import SystemClock
-        from joulewise.schemas import BenchmarkConfig
         from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 
         # B1/B2 belong to Stage 1. Fail explicitly instead of shadowing them in
@@ -49,21 +66,9 @@ class MlxBackend:
         if not source.is_absolute() or not source.is_dir():
             raise ValueError("model.source must be an existing absolute local directory; no downloads")
         self.tag, self.guard = tag, guard
-        pin = PINS[tag]
         self.clock = SystemClock()
         self.upstream = PinnedUpstream(cache_dir=shade_cache, allow_fetch=False)
-        self.config = BenchmarkConfig.from_mapping({
-            "schema_version": "0.1", "run_id": "align-r0-" + tag,
-            "model": {"name": pin["name"], "family": pin["family"], "source": str(source),
-                      "revision": pin["revision"], "weight_format": "mlx", "context_window": 40960},
-            "quantization": {"name": f"int{pin['bits']}", "bits": pin["bits"], "group_size": 64},
-            "hardware_target": {"id": "macbook_m3_max", "transport": "local", "runtime_backend": "mlx",
-                                "telemetry_backend": "powermetrics", "device_kind": "apple_silicon_unified_memory"},
-            "workload_profile": {"name": "align_r0", "prompt_tokens": 2048, "output_tokens": 4096,
-                                 "repetitions": 1, "warmup_runs": 1},
-            "sampling": {"power_hz": 1, "idle_seconds": 0, "warmup_seconds": 0},
-            "run_metadata": {"project": "joulewise", "tags": ["align-r0-selection", "align-model=" + pin["tag"]]},
-        })
+        self.config = backend_config(tag, source)
         guard.check(force=True)
         self.runtime = MlxRuntimeAdapter(self.clock)
         prepared = self.runtime.prepare(self.config)
