@@ -21,6 +21,7 @@ import align_convert_qwen4_exp as converter
 COPY_FILES = ("tokenizer.json", "tokenizer_config.json", "special_tokens_map.json",
               "generation_config.json", "chat_template.jinja", "vocab.json", "merges.txt")
 BLOCK_BYTES = 32 * 2**20
+FREE_HEADROOM_BYTES = 2 * 10**9
 
 
 def _bf16(values):
@@ -83,13 +84,17 @@ def artifact_plan(config, profile, group_size=64, shard_bytes=converter.SHARD_BY
     return rules, text, args, plan, shards, storage, specs
 
 
-def predicted_bytes(config, profile, shard_bytes=converter.SHARD_BYTES):
-    """Exact payload bytes (headers excluded), useful before allocating disk."""
-    rules, _, _, plan, _, storage, specs = artifact_plan(config, profile, shard_bytes=shard_bytes)
+def _payload_bytes(rules, plan, storage, specs):
     weights = sum(item[4] for item in plan)
     ngrams = sum(s.padded_vocab_size * rules.ngram_record_layout(storage, s.head_dim, 32)["record_bytes"]
                  for s in specs.values())
     return weights + ngrams
+
+
+def predicted_bytes(config, profile, shard_bytes=converter.SHARD_BYTES):
+    """Exact payload bytes (headers excluded), useful before allocating disk."""
+    rules, _, _, plan, _, storage, specs = artifact_plan(config, profile, shard_bytes=shard_bytes)
+    return _payload_bytes(rules, plan, storage, specs)
 
 
 def _write_random(writer, name, shape, dtype, rng):
@@ -110,6 +115,8 @@ def build(config_path, small_files, output, profile="maxfit", seed=0,
           shard_bytes=converter.SHARD_BYTES):
     import numpy as np
     config_path, small_files, output = map(Path, (config_path, small_files, output))
+    if "restricted" in output.parts or "restricted" in output.resolve().parts:
+        raise ValueError("restricted paths are not synthetic artifact outputs")
     if output.exists():
         raise ValueError("output directory must not exist")
     config = json.loads(config_path.read_text())
@@ -118,6 +125,16 @@ def build(config_path, small_files, output, profile="maxfit", seed=0,
     # Exercise/validate the hash contract even though canonical artifacts do
     # not carry source-only buffers.
     hash_buffers(rules, args)
+    # Refuse before writing: the full-shape payload is ~211 GB and filling the
+    # wrong (e.g. internal) volume would ENOSPC every concurrent job.
+    need = int(_payload_bytes(rules, plan, storage, specs) * 1.05) + FREE_HEADROOM_BYTES
+    anchor = output.parent
+    while not anchor.exists():
+        anchor = anchor.parent
+    free = shutil.disk_usage(anchor).free
+    if free < need:
+        raise ValueError(f"need >={need / 1e9:.1f} GB free at {anchor} for the synthetic artifact; "
+                         f"{free / 1e9:.1f} GB free")
     output.mkdir(parents=True)
     rng = np.random.default_rng(seed)
     weight_map, quant_cfg = {}, {}
@@ -138,12 +155,16 @@ def build(config_path, small_files, output, profile="maxfit", seed=0,
         layout = rules.ngram_record_layout(storage, spec.head_dim, 32)
         name = f"ngram-L{layer:03d}.{storage}.bin"
         total = spec.padded_vocab_size * layout["record_bytes"]
+        # Finite rows through the canonical encoder: raw random bytes would
+        # make ~1/256 bf16 values NaN/Inf and poison every hidden state.
+        rows_per = max(1, BLOCK_BYTES // layout["record_bytes"])
         with (output / name).open("xb") as stream:
-            remaining = total
-            while remaining:
-                n = min(BLOCK_BYTES, remaining)
-                stream.write(rng.integers(0, 256, n, dtype=np.uint8).tobytes())
-                remaining -= n
+            for start in range(0, spec.padded_vocab_size, rows_per):
+                n = min(rows_per, spec.padded_vocab_size - start)
+                rows = rng.standard_normal((n, spec.head_dim), dtype=np.float32) * np.float32(0.02)
+                stream.write(rules.encode_ngram_rows(rows, storage, 32).tobytes())
+            if stream.tell() != total:
+                raise ValueError(f"incomplete synthetic n-gram table layer {layer}")
         descriptor = dict(file=name, rows=spec.padded_vocab_size, dim=spec.head_dim,
                           format=storage, group_size=32)
         ngram_layers[str(layer)] = descriptor

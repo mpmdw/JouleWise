@@ -76,6 +76,42 @@ class SyntheticArtifactTests(unittest.TestCase):
             self.assertTrue(verified["synthetic"])
             self.assertEqual(json.loads((made / "config.json").read_text())["ngram_tables"]["io"], "mmap")
 
+    def test_build_refuses_insufficient_free_space_before_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.json"
+            config.write_text(json.dumps({"text_config": self.canonical.TEXT}))
+            made = Path(tmp) / "nested" / "synthetic"
+            payload = synthetic.predicted_bytes(json.loads(config.read_text()), "maxfit")
+            usage = mock.Mock(free=payload)  # payload alone, without margin
+            with mock.patch.object(synthetic.shutil, "disk_usage", return_value=usage) as du, \
+                    self.assertRaisesRegex(ValueError, "GB free"):
+                synthetic.build(config, tmp, made, "maxfit", 0)
+            du.assert_called_once_with(Path(tmp))
+            self.assertFalse(made.parent.exists())
+
+    def test_every_payload_value_is_finite(self):
+        # Raw random bytes as bf16 n-gram rows put a NaN/Inf in ~1/256 values,
+        # poisoning every hidden state (and MoE routing) of a perf/paging run.
+        import numpy as np
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                self.canonical, "WORK_ROOT", Path(tmp) / "canonical"):
+            fixture = self.canonical.Fixture()
+            fixture.reference.build_checkpoint()
+            source = fixture.reference.ckpt
+            made = Path(tmp) / "synthetic"
+            manifest = synthetic.build(source / "config.json", source, made, "maxfit", 0)
+            self.assertTrue(manifest["ngram_tables"])
+            for descriptor in manifest["ngram_tables"].values():
+                self.assertEqual(descriptor["format"], "bf16")
+                bits = np.fromfile(made / descriptor["file"], dtype="<u2").astype("<u4") << 16
+                self.assertTrue(np.isfinite(bits.view("<f4")).all(), descriptor["file"])
+            for path in made.glob("*.safetensors"):
+                header, _ = converter.tensor_header(path)
+                for name, spec in header.items():
+                    if name != "__metadata__" and spec["dtype"] == "BF16":
+                        bits = np.asarray(converter.tensor_array(path, name)[0]).astype("<u4") << 16
+                        self.assertTrue(np.isfinite(bits.view("<f4")).all(), name)
+
     def test_official_config_prediction_is_within_half_percent_of_size_model(self):
         path = os.environ.get("JW_QWEN4EXP_OFFICIAL_CONFIG")
         if not path:
@@ -104,6 +140,7 @@ class SyntheticArtifactTests(unittest.TestCase):
             logits = model(mx.array([[1, 2, 3]]))
             mx.eval(logits)
             self.assertEqual(logits.shape[:2], (1, 3))
+            self.assertTrue(mx.all(mx.isfinite(logits)).item())
 
 
 if __name__ == "__main__":
