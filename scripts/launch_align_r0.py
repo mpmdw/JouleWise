@@ -277,9 +277,14 @@ def main(argv=None) -> int:
     run.add_argument("--deadline", type=float, required=True)
     run.add_argument("--runner-spec", type=Path, required=True)
     args = parser.parse_args(argv)
-    for name in ("repo", "config", "output", "python_bin", "disk_path", "custody_root"):
+    for name in ("repo", "config", "output", "disk_path", "custody_root"):
         if hasattr(args, name):
             setattr(args, name, getattr(args, name).expanduser().resolve())
+    # Absolute but NOT symlink-resolved: a venv interpreter is a symlink to its
+    # base Python, and Python finds the venv (pyvenv.cfg) from the invoked path.
+    # Resolving it ran R0 on 2026-11-06 under bare Homebrew 3.13 (no mlx).
+    if hasattr(args, "python_bin"):
+        args.python_bin = Path(os.path.abspath(args.python_bin.expanduser()))
     try:
         if args.command == "launch":
             launch(args)
