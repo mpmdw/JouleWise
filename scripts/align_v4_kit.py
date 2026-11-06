@@ -125,9 +125,14 @@ def require_ready(inputs, r1_slots=None):
     validate_budget(slots['B_D'])
     if not finite(slots['I_D']) or not 0 <= slots['I_D'] < 1750:
         raise ValueError('R1.I_D must be finite and in [0, 1750)')
-    if not finite(slots['T_dead']) or not math.isclose(
-            slots['T_dead'], (1750 - slots['I_D']) / 1.13544, rel_tol=1e-9):
-        raise ValueError('R1.T_dead must equal (1750 - I_D) / 1.13544')
+    tail = r1_slots.get('max_r1_tail_s')
+    if not finite(tail) or tail < 0:
+        raise ValueError('R1 r1_slots must record a finite, non-negative max_r1_tail_s')
+    expected = l1_t_dead(slots['I_D'], tail)
+    if not finite(slots['T_dead']) or not math.isclose(slots['T_dead'], expected, rel_tol=1e-9):
+        raise ValueError('R1.T_dead must equal min((1750 - I_D) / 1.13544, '
+                         '(1800 - I_D - max_r1_tail_s - 10) / 1.13544) (lead ruling L1)')
+    check_l1_member_fit(slots['I_D'], slots['T_dead'], tail)
     from joulewise.align.apple.thermal_gates import validate_gate_policy
     policy_input = deepcopy(slots['thermal_policy'])
     # R1 supplies the numeric/sensor template.  Custody roles and the source
@@ -140,6 +145,28 @@ def require_ready(inputs, r1_slots=None):
     if (unit.get('model_source') != D_SOURCE or unit.get('model_revision') != D_REVISION
             or not valid_digest(unit.get('model_artifact_sha256'))):
         raise ValueError('WP11 D identity must bind the pinned 8-bit artifact')
+
+
+# Lead ruling L1 (LEAD-RULINGS-1, restating council ruling 1(f)): a worst-case
+# D member fits under the 1,800 s member cap with the largest R1 tail.
+DEADMAN_FACTOR = 1.13544
+MEMBER_CAP_S = 1800
+L1_MARGIN_S = 10
+
+
+def l1_t_dead(i_d, max_r1_tail_s):
+    """T_dead = min((1750 - I_D)/1.13544, (1800 - I_D - max_R1_tail - 10)/1.13544)."""
+    return min((1750 - i_d) / DEADMAN_FACTOR,
+               (MEMBER_CAP_S - i_d - max_r1_tail_s - L1_MARGIN_S) / DEADMAN_FACTOR)
+
+
+def check_l1_member_fit(i_d, t_dead, max_r1_tail_s):
+    """Kit assertion: I_D + 1.13544 T_dead + max_R1_tail + 10 <= 1800."""
+    worst = i_d + DEADMAN_FACTOR * t_dead + max_r1_tail_s + L1_MARGIN_S
+    if t_dead <= 0 or worst > MEMBER_CAP_S + 1e-6:
+        raise ValueError(f'L1: I_D + 1.13544*T_dead + max_r1_tail_s + 10 = {worst:.3f} s '
+                         f'exceeds the {MEMBER_CAP_S} s member cap (or T_dead <= 0)')
+    return worst
 
 
 def valid_digest(value):
@@ -442,6 +469,9 @@ WP11 must provide D file identities/inventory/verification; WP18 must provide
 X=b-e25/index16 and Y=b-e18/index14 historical max_turns and fixture digests.
 No configured 12-turn fallback is used for the contrast. R0 must select effort;
 R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
+T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
+- 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
+I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.
 Missing numeric controls are null and invalid as executable EpisodeSpecs.
 The existing qwen3_5 endpoint selects XML tools from the model family.
 Presence penalty remains the endpoint's fixed zero; sampler is 1/.95/20/0.

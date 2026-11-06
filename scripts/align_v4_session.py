@@ -20,13 +20,35 @@ def prepare(measurement_root, session_root, **kwargs):
 
 def observe_ac_powermode(runner=None):
     """Read the host's AC-profile powermode (read-only ``pmset -g custom``)."""
-    import subprocess
-    from scripts.align_r1_rehearsal import parse_ac_powermode
-    runner = runner or (lambda argv: subprocess.run(argv, text=True, capture_output=True, check=False))
-    result = runner(('/usr/bin/pmset', '-g', 'custom'))
-    if result.returncode:
-        raise ValueError(f'pmset -g custom failed: exit {result.returncode}')
-    return parse_ac_powermode(result.stdout)
+    from joulewise.align.apple.powermode import observe_ac_powermode as observe
+    return observe(runner)
+
+
+def bundle_ac_powermode(bundle):
+    """The AC powermode a member bundle recorded at episode start, or None."""
+    from joulewise.desk_compress import read_bytes
+    try:
+        episode = json.loads(read_bytes(Path(bundle) / 'outputs/align_episode.json'))
+    except (OSError, ValueError):
+        return None
+    record = (episode.get('hardware') or {}).get('ac_powermode')
+    return record.get('value') if isinstance(record, dict) else None
+
+
+def powermode_desk_check(*, state, members, runs_root, kit_path):
+    """Council ruling 7: any member whose bundle-recorded AC powermode differs
+    from the frozen series value sets ``instrument_ok`` false."""
+    plan = {'members': pilot._member_rows(state, kit=kit_path)}
+    observed = {m['run_id']: bundle_ac_powermode(Path(runs_root) / m['run_id']) for m in plan['members']}
+    verdict = kit.validate_powermode_members(plan, observed)
+    return {'ac_powermode_members': verdict['instrument_ok']}, verdict
+
+
+def desk(session_root, **kwargs):
+    kwargs.setdefault('kit', kit.KIT)
+    kwargs.setdefault('desk_schema', kit.DESK_SCHEMA)
+    kwargs.setdefault('extra_checks', powermode_desk_check)
+    return pilot.desk(session_root, **kwargs)
 
 
 def install(session_root, *, observe_powermode=observe_ac_powermode, **kwargs):
@@ -42,7 +64,8 @@ def install(session_root, *, observe_powermode=observe_ac_powermode, **kwargs):
 
 def main(argv=None):
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
-                      session_prefix='align-v4-', prepare_fn=prepare, install_fn=install)
+                      session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
+                      desk_extra_checks=powermode_desk_check)
 
 
 if __name__ == '__main__':

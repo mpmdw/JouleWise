@@ -19,5 +19,6 @@
     "class"
   ],
   "slots": null,
-  "ac_powermode": null
+  "ac_powermode": null,
+  "max_r1_tail_s": null
 }

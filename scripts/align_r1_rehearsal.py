@@ -4,7 +4,9 @@
 This is a non-claim qualification program intended to be the chain executed by
 ``run_night``.  The runtime command is deliberately an argv seam: WP15 owns
 the production runtime/custody implementation and replaces that seam without
-putting model logic in this driver.
+putting model logic in this driver.  The fields each runtime kind returns are
+declared in ``joulewise/align/apple/r1_runtime_contract.py`` and
+``docs/align/r1_runtime_contract.md`` and checked at the seam.
 """
 from __future__ import annotations
 
@@ -15,11 +17,17 @@ import json
 import math
 import os
 from pathlib import Path
-import re
 import signal
 import subprocess
+import sys
 import time
 from typing import Callable, Sequence
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from joulewise.align.apple import r1_runtime_contract as contract  # noqa: E402
+from joulewise.align.apple.powermode import parse_ac_powermode  # noqa: E402,F401  (re-exported)
 
 SCHEMA = "joulewise.align.r1_slots.v1"
 SLOT_NAMES = tuple(f"S{i}" for i in range(1, 10)) + (
@@ -58,6 +66,14 @@ T_95_DF1 = 12.706204736432095
 # Ruling 16: High Power adoption.
 HIGH_POWER_GAIN = 1.25
 HIGH_POWER_A_LEG_SPREAD = 0.25
+# A G0-style release against the soak precedes every A-B-A leg (ruling 16)
+# and every redo of a heavy quiet segment (ruling 8); FD:489 caps G0 at 600 s.
+G0_RELEASE_BOUND_S = 600
+SOAK_REFERENCE_SCHEMA = "joulewise.align.r1_soak_reference.v1"
+# Lead ruling L2 (LEAD-RULINGS-1): U5 is |beta_T|_90 x delta_slow <= c x sigma_pair
+# with c = 1.0; sigma_pair = max(observed R1 replay-pair difference, 2.97 J).
+U5_C = 1.0
+U5_SIGMA_PAIR_FLOOR_J = 2.97
 
 
 class Refusal(RuntimeError):
@@ -164,17 +180,29 @@ def phase_plan(include_4bit=False):
     return phases
 
 
-def _invoke(runtime, kind, output, duration=None):
+def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False, contract_key=None):
     argv = list(runtime) + ["--r1-kind", kind, "--output", str(output)]
     if duration is not None:
         argv += ["--duration-s", str(duration)]
+    # Every segment after the accepted soak is handed its reference R; the
+    # releases, the post-D cooldown, designed start states and A-B-A legs need it.
+    if soak_reference is not None:
+        argv += ["--soak-reference", str(soak_reference)]
+    elif (contract_key or kind) in contract.NEEDS_SOAK_REFERENCE:
+        raise Refusal(f"runtime.{kind}: no soak reference exists yet")
     result = _run(argv)
     if result.returncode:
         raise Refusal(f"runtime.{kind}: exit {result.returncode}: {result.stderr.strip()}")
     try:
-        return json.loads(result.stdout)
+        value = json.loads(result.stdout)
     except (ValueError, TypeError) as error:
         raise Refusal(f"runtime.{kind}.invalid_json: {error}") from error
+    if not isinstance(value, dict):
+        raise Refusal(f"runtime.{kind}: result is not a JSON object")
+    missing = contract.missing_fields(kind, value, quiet=quiet, contract_key=contract_key)
+    if missing:
+        raise Refusal(f"runtime.{kind}: contract fields missing: " + ", ".join(missing))
+    return value
 
 
 def derive_slots(observations):
@@ -192,24 +220,6 @@ def derive_slots(observations):
     if slots["class"] not in ("heavy", "light"):
         raise Refusal("slot class must be heavy or light")
     return slots
-
-
-def parse_ac_powermode(stdout):
-    """Return the AC-profile ``powermode`` value from ``pmset -g custom``.
-
-    Only the ``AC Power:`` block is read, and only an exact ``powermode`` key;
-    ``lowpowermode`` and the battery profile never match (council ruling 7).
-    """
-    in_ac = False
-    for line in (stdout or "").splitlines():
-        if re.match(r"^\S.*:\s*$", line):
-            in_ac = line.strip().rstrip(":").strip() == "AC Power"
-            continue
-        if in_ac:
-            match = re.match(r"^\s*powermode\s+([0-9]+)\s*$", line)
-            if match:
-                return int(match.group(1))
-    return None
 
 
 def high_power_adoption(t_a1, t_b, t_a2):
@@ -233,28 +243,45 @@ def high_power_adoption(t_a1, t_b, t_a2):
 
 
 def planning_temperature_summary(results):
-    """Print-only R1 secondary path; it does not alter frozen analysis code."""
+    """Print-only R1 secondary path; it does not alter frozen analysis code.
+
+    Each designed start state is a G0 release at R + offset. The runtime
+    reports the S_slow it measured at release (``g0_release_c``) and the gate
+    band ``delta_slow_c`` it released within; a release outside
+    R + offset +/- delta_slow is not the designed state and is refused.
+    beta_T is fitted on the measured release temperatures, not the design.
+    """
     if len(results) != 3:
         raise Refusal("planning-turn requires exactly three designed start states")
     points = []
-    reference = None
+    reference = delta = None
     for offset, result in zip(PLANNING_START_OFFSETS_C, results, strict=True):
         try:
             r = float(result["reference_c"])
             release = float(result["g0_release_c"])
+            band = float(result["delta_slow_c"])
             energy = float(result["energy_j"])
         except (KeyError, TypeError, ValueError) as error:
             raise Refusal(f"planning-turn invalid temperature evidence: {error}") from error
-        if not all(math.isfinite(v) for v in (r, release, energy)):
-            raise Refusal("planning-turn temperature evidence must be finite")
+        if not all(math.isfinite(v) for v in (r, release, band, energy)) or band <= 0:
+            raise Refusal("planning-turn temperature evidence must be finite (delta_slow_c > 0)")
         reference = r if reference is None else reference
-        if not math.isclose(r, reference, abs_tol=1e-9) or not math.isclose(release, r + offset, abs_tol=1e-9):
-            raise Refusal("planning-turn G0 release does not equal R + designed offset")
-        points.append({"offset_c": offset, "reference_c": r, "g0_release_c": release, "energy_j": energy})
+        delta = band if delta is None else delta
+        if not math.isclose(r, reference, abs_tol=1e-9):
+            raise Refusal("planning-turn start states do not share one soak reference R")
+        if not math.isclose(band, delta, abs_tol=1e-9):
+            raise Refusal("planning-turn start states do not share one gate band delta_slow")
+        if abs(release - (r + offset)) > band:
+            raise Refusal(f"planning-turn G0 release {release} C is outside R + designed offset "
+                          f"{r + offset} C +/- delta_slow {band} C")
+        points.append({"offset_c": offset, "reference_c": r, "g0_release_c": release,
+                       "release_error_c": release - (r + offset), "energy_j": energy})
     xs = [p["g0_release_c"] for p in points]
     ys = [p["energy_j"] for p in points]
     xbar, ybar = math.fsum(xs) / 3, math.fsum(ys) / 3
     sxx = math.fsum((x - xbar) ** 2 for x in xs)
+    if sxx <= 0:
+        raise Refusal("planning-turn measured release temperatures give beta_T no leverage")
     beta = math.fsum((x - xbar) * (y - ybar) for x, y in zip(xs, ys)) / sxx
     intercept = ybar - beta * xbar
     residual = math.fsum((y - (intercept + beta * x)) ** 2 for x, y in zip(xs, ys))
@@ -262,12 +289,39 @@ def planning_temperature_summary(results):
     ci90 = [beta - T_90_DF1 * se, beta + T_90_DF1 * se]
     return {"label": "PRINT_ONLY_R1_PLANNING_TEMPERATURE_SECONDARY", "points": points,
             "designed_release_range_c": [reference, reference + PLANNING_START_OFFSETS_C[-1]],
+            "measured_release_range_c": [min(xs), max(xs)], "delta_slow_c": delta,
             "beta_T_j_per_c": beta, "beta_T_se_j_per_c": se,
             "beta_T_ci90_j_per_c": ci90,
             "beta_T_ci95_j_per_c": [beta - T_95_DF1 * se, beta + T_95_DF1 * se],
             # Ruling 6: the U5 bar is |beta_T|_90 x delta_slow <= c x sigma_pair.
             "abs_beta_T_90_j_per_c": max(abs(ci90[0]), abs(ci90[1])),
-            "u5_bar_form": "|beta_T|_90 * delta_slow <= c * sigma_pair (c fixed by lead before R1)"}
+            "u5_bar_form": "|beta_T|_90 * delta_slow <= c * sigma_pair, c = 1.0 (lead ruling L2)"}
+
+
+def u5_verdict(temperature, gated):
+    """Ruling 6 U5 with lead ruling L2 (c = 1.0), evaluated on R1.
+
+    sigma_pair is the identical-work pair-difference SD: the R1 replay pair
+    gives one difference |E_a - E_b| (its RMS, n = 1), combined with the
+    pilots 4-5 value as max(observed, 2.97 J). The verdict is PASS when the
+    90 % bound clears the bar, FAIL when the point estimate exceeds it, and
+    INCONCLUSIVE when only the bound exceeds it.
+    """
+    energies = [_finite_number(gated[name].get("energy_j"), f"{name}.energy_j") for name in REPLAY_PAIR]
+    observed = abs(energies[0] - energies[1])
+    sigma = max(observed, U5_SIGMA_PAIR_FLOOR_J)
+    delta = _finite_number(temperature["delta_slow_c"], "planning.delta_slow_c")
+    point = abs(temperature["beta_T_j_per_c"]) * delta
+    bound = temperature["abs_beta_T_90_j_per_c"] * delta
+    bar = U5_C * sigma
+    verdict = "pass" if bound <= bar else "fail" if point > bar else "inconclusive"
+    return {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2",
+            "sigma_pair_observed_j": observed, "sigma_pair_floor_j": U5_SIGMA_PAIR_FLOOR_J,
+            "sigma_pair_j": sigma, "delta_slow_c": delta,
+            "beta_T_j_per_c": temperature["beta_T_j_per_c"],
+            "beta_T_ci90_j_per_c": temperature["beta_T_ci90_j_per_c"],
+            "state_shift_point_j": point, "state_shift_bound90_j": bound, "bar_j": bar,
+            "verdict": verdict}
 
 
 def _finite_number(value, label):
@@ -339,7 +393,7 @@ def soak_detrended(series_by_key):
         sxx = math.fsum((i - xbar) ** 2 for i in range(n))
         slope = math.fsum((i - xbar) * (y - ybar) for i, y in enumerate(ys)) / sxx
         resid = [y - (ybar + slope * (i - xbar)) for i, y in enumerate(ys)]
-        out[key] = {"slope_c_per_min": slope * 60.0,
+        out[key] = {"slope_c_per_min": slope * 60.0, "mean_c": ybar,
                     "settled": abs(slope * 60.0) <= SOAK_MAX_SLOPE_C_PER_MIN,
                     "detrended_sd_c": math.sqrt(math.fsum(r * r for r in resid) / (n - 2))}
     return out
@@ -392,22 +446,59 @@ def projected_mde(e_d, gated):
             "replay_pair_floor_tokens": pair_diff / e_d, "energy_scaled_misfit": scenarios}
 
 
-def _segment(args, output, name, kind, duration, workload_class, record, *, quiet):
-    """Invoke one runtime segment; quiet segments obey ruling 8 and are redone on load."""
+def write_soak_reference(output, soak_row):
+    """The accepted soak's detrended last-20-min means: the reference R handed
+    to every later runtime release, cooldown and designed start state."""
+    path = output / "soak_reference.json"
+    detrended = soak_row["soak_detrended"]
+    value = {"schema": SOAK_REFERENCE_SCHEMA, "source_segment": soak_row["name"],
+             "source_output": soak_row["output_dir"], "attempt": soak_row["attempt"],
+             "window_s": SOAK_TAIL_S, "sensors_c": {k: v["mean_c"] for k, v in detrended.items()},
+             "detrended": detrended}
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    return path
+
+
+def _release_against_soak(args, output, label, soak_reference):
+    """A G0-style release against the soak before a leg or a heavy redo."""
+    release = _invoke(args.runtime, "g0-release-soak", output / label, soak_reference=soak_reference)
+    if not isinstance(release.get("released"), bool):
+        raise Refusal(f"{label}: G0 release status missing")
+    return release
+
+
+def _segment(args, output, name, kind, duration, workload_class, record, *, quiet,
+             soak_reference=None, release_first=False, contract_key=None, extra=None):
+    """Invoke one runtime segment; quiet segments obey ruling 8 and are redone on load.
+
+    Every attempt runs in the canonical ``output/name``; a rejected attempt is
+    moved to ``output/name.rejectedN`` before the next one starts, so the
+    accepted attempt always owns the canonical directory. A redo of a heavy
+    segment (and every attempt when ``release_first``) starts only after a
+    G0-style release against the soak, never immediately after the load.
+    """
     attempts = []
+    target = output / name
     for attempt in range(MAX_SEGMENT_REDOS + 1):
-        waited = wait_outside_os_batch(duration or QUIET_SEGMENT_BOUND_S) if quiet else 0.0
+        release_now = release_first or (attempt > 0 and workload_class == "heavy")
+        bound = (duration or QUIET_SEGMENT_BOUND_S) + (G0_RELEASE_BOUND_S if release_now else 0)
+        waited = wait_outside_os_batch(bound) if quiet else 0.0
+        release = (_release_against_soak(args, output, f"{name}.g0_release{attempt}", soak_reference)
+                   if release_now else None)
         started = time.time_ns()
-        target = output / name if attempt == 0 else output / f"{name}.redo{attempt}"
-        result = _invoke(args.runtime, kind, target, duration)
+        result = _invoke(args.runtime, kind, target, duration, soak_reference=soak_reference,
+                         quiet=quiet, contract_key=contract_key)
         row = {"name": name, "class": workload_class, "started_ns": started, "ended_ns": time.time_ns(),
-               "attempt": attempt, "os_batch_wait_s": waited, "result": result}
+               "attempt": attempt, "os_batch_wait_s": waited, "output_dir": str(target), "result": result,
+               **(extra or {})}
+        if release is not None:
+            row["g0_release"] = release
         if not quiet:
             record["phases"].append(row)
-            return result
+            return result, row
         verdict = os_load_verdict(name, result)
         redo_reason = "cpu_load" if verdict["redo"] else None
-        if not redo_reason and kind == "idle":
+        if not redo_reason and contract_key == "idle_soak":
             row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"))
             if not all(v["settled"] for v in row["soak_detrended"].values()):
                 redo_reason = "soak_slope"
@@ -416,7 +507,11 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
         if not redo_reason:
             row["superseded_attempts"] = attempts[:-1]
             record["phases"].append(row)
-            return result
+            return result, row
+        rejected = output / f"{name}.rejected{attempt + 1}"
+        if target.exists():
+            target.rename(rejected)
+        row["output_dir"] = str(rejected)
     raise Refusal(f"{name}: segment still contaminated after {MAX_SEGMENT_REDOS} redos")
 
 
@@ -443,35 +538,45 @@ def run(args):
         old_handlers[sig] = signal.signal(sig, stop)
     try:
         with guard:
+            soak_reference = None
             for name, kind, duration, workload_class in phase_plan(args.include_4bit):
                 quiet = kind in QUIET_KINDS and not (kind == "idle" and name != "idle_soak")
-                results[name] = _segment(args, output, name, kind, duration, workload_class, record, quiet=quiet)
+                results[name], row = _segment(
+                    args, output, name, kind, duration, workload_class, record, quiet=quiet,
+                    soak_reference=soak_reference,
+                    contract_key="idle_soak" if name == "idle_soak" else None)
+                if name == "idle_soak":
+                    soak_reference = write_soak_reference(output, row)
                 if kind == "idle-until-soak":
                     curve = results[name].get("recovery_curve")
                     if not isinstance(curve, list) or not curve:
                         raise Refusal(f"{name}: runtime omitted the recovery curve (ruling 1(c))")
 
             # Ed ruling: A-B-A, Automatic / High Power / Automatic.  Ruling 16:
-            # each leg starts only after a G0-style release against the soak.
-            legs = {}
+            # each leg starts only after a G0-style release against the soak;
+            # ruling 8: each leg avoids the OS batch window, journals load and
+            # is redone (after another release) on sustained background load.
+            legs, releases = {}, {}
             for mode, label in ((0, "A1"), (2, "B"), (0, "A2")):
                 guard.automatic(f"{label}.after_set") if mode == 0 else guard.high()
                 observed = parse_ac_powermode(guard.records[-1].get("stdout"))
                 if observed != mode:
                     raise Refusal(f"high_power.{label}: AC powermode reads {observed}, expected {mode}")
-                release = _invoke(args.runtime, "g0-release-soak", output / ("high_power_" + label + "_g0"))
-                if not isinstance(release.get("released"), bool):
-                    raise Refusal(f"high_power.{label}: G0 release status missing")
-                result = _invoke(args.runtime, "high-power-aba-" + label.lower(), output / ("high_power_" + label))
-                if "t_decline_s" not in result:
-                    raise Refusal(f"high_power.{label}: runtime omitted t_decline_s")
+                result, row = _segment(args, output, "high_power_" + label, "high-power-aba-" + label.lower(),
+                                       None, "heavy", record, quiet=True, soak_reference=soak_reference,
+                                       release_first=True, extra={"powermode": mode})
                 legs[label] = result["t_decline_s"]
-                record["phases"].append({"name": "high_power_" + label, "class": "heavy",
-                                         "powermode": mode, "g0_release": release, "result": result})
+                releases[label] = row["g0_release"]["released"]
             adoption = high_power_adoption(legs["A1"], legs["B"], legs["A2"])
+            unreleased = sorted(label for label, ok in releases.items() if not ok)
+            if unreleased:
+                adoption = {"verdict": "inconclusive",
+                            "reason": "leg(s) " + ", ".join(unreleased) + " started without a G0 release "
+                                      "against the soak (timeout); setting stays Automatic",
+                            "rule_outcome": adoption}
             # Same thin runtime seam owns the pilot-style authenticated harvest;
             # the driver records but never re-implements calibration custody.
-            harvested = _invoke(args.runtime, "harvest", output / "harvest")
+            harvested = _invoke(args.runtime, "harvest", output / "harvest", soak_reference=soak_reference)
             record["phases"].append({"name": "harvest", "class": "light", "result": harvested})
         slots = derive_slots(results.get("step_D_prefill_10k_decode_4096") or {})
         temperature_summary = planning_temperature_summary(
@@ -481,12 +586,13 @@ def run(args):
         duty = {"declared": DUTY_BAR, "pass": all(row["duty_bar"]["pass"] for row in deadman),
                 "fallback_order": list(DUTY_FALLBACK_ORDER)}
         mde = projected_mde(results["step_D_prefill_10k_decode_4096"].get("e_D_j_per_token"), gated)
+        u5 = u5_verdict(temperature_summary, gated)
         # Ruling 7 + 16: the frozen series AC powermode is the A-B-A outcome.
         ac_powermode = 2 if adoption["verdict"] == "adopt" else 0
         registration = {"schema": SCHEMA, "source": "R1 synthetic rehearsal" if args.synthetic else "R1 hardware rehearsal",
                         "slots": slots, "slot_names": list(SLOT_NAMES),
-                        "planning_temperature": temperature_summary, "ac_powermode": ac_powermode,
-                        "high_power": {"t_decline_s": legs, **adoption},
+                        "planning_temperature": temperature_summary, "u5": u5, "ac_powermode": ac_powermode,
+                        "high_power": {"t_decline_s": legs, "g0_released": releases, **adoption},
                         "deadman_budget": deadman, "duty_bar": duty,
                         "max_r1_tail_s": max(row["phases_s"]["tail"] for row in deadman),
                         "projected_mde": mde}
@@ -517,7 +623,8 @@ def main(argv=None):
     parser.add_argument("--power-marker", type=Path,
                         help="persistent SIGKILL recovery marker (default: beside output)")
     parser.add_argument("--runtime", nargs="+", required=True,
-                        help="WP15 runtime argv; receives --r1-kind/--output")
+                        help="WP15 runtime argv; receives --r1-kind/--output[/--duration-s]"
+                             "[/--soak-reference] (docs/align/r1_runtime_contract.md)")
     parser.add_argument("--include-4bit", action="store_true")
     parser.add_argument("--synthetic", action="store_true")
     args = parser.parse_args(argv)

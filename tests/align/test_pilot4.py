@@ -407,6 +407,22 @@ class AnalysisTests(unittest.TestCase):
                                      {1, *range(37, 47)})
                 curve = scope['counts_logged_headline']['tamper_detection_curve']
                 self.assertEqual({r['run_id'] for r in curve}, sabotage)
+            # A pack-specific check (v4 ruling 7 powermode) gates instrument_ok;
+            # without one, the v3 report carries no extra block.
+            self.assertNotIn('extra_checks', report)
+            seen = {}
+
+            def mismatch(**kwargs):
+                seen.update(kwargs)
+                return {'ac_powermode_members': False}, {'powermode_mismatches': [{'run_id': 'x'}]}
+            with redirect_stdout(io.StringIO()):
+                flagged = desk.desk(session, harvest=False, extra_checks=mismatch)
+            flagged_report = h.read(Path(flagged['pilot']))
+            self.assertEqual(flagged['pilot_status'], 'instrument_incomplete')
+            self.assertFalse(flagged_report['checks']['ac_powermode_members'])
+            self.assertEqual(flagged_report['extra_checks'], {'powermode_mismatches': [{'run_id': 'x'}]})
+            self.assertEqual(Path(seen['runs_root']), runs)
+            self.assertEqual(len(seen['members']), 28)
             # Change exactly one recorded per-turn seed bit in a fresh benign
             # bundle, leaving the registered table and bundle seed unchanged.
             victim = next(m for m in collection['members'] if m['seed_index'] == 37)

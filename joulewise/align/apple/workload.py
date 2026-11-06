@@ -199,6 +199,11 @@ class EpisodeRuntimeAdapter:
         self.thermal_sidecar = None
         self.thermal_factory = thermal_factory
         self.thermal_status_reader = None
+        # Council ruling 7: every real bundle records the observed AC powermode.
+        # A bound reader (WP15 seam, or a test) is used; a real SystemClock run
+        # without one reads ``pmset -g custom`` read-only. Fake clocks record
+        # nothing unless a reader is bound.
+        self.powermode_reader = None
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None,
@@ -425,6 +430,7 @@ class EpisodeRuntimeAdapter:
                         if self.thermal is not None and self.spec.deadman_s is not None else None)
         if self.thermal is not None:
             self.thermal.wait('G0', deadman=gate_deadman)
+        powermode = self._observe_ac_powermode()
         start = self.clock.stamp()
         episode_id = context.run_id if context is not None else config.run_id or "align_episode"
         domain = f"joulewise.monotonic:{episode_id}"
@@ -684,6 +690,7 @@ class EpisodeRuntimeAdapter:
                 "task_diagnostics": diagnostics,
                 **token_details,
                 **({'thermal': self.thermal.record()} if self.thermal is not None else {}),
+                **({'ac_powermode': powermode} if powermode is not None else {}),
             },
             flags=tuple(dict.fromkeys(flags)),
         )
@@ -794,6 +801,23 @@ class EpisodeRuntimeAdapter:
                 "episode_outcome": failed.workload_provenance["episode_outcome"],
             })
         return result
+
+    def _observe_ac_powermode(self):
+        """Episode-start AC powermode record, or None when nothing is bound."""
+        reader = self.powermode_reader
+        if reader is None:
+            if not isinstance(self.clock, SystemClock):
+                return None
+            from joulewise.align.apple.powermode import observe_ac_powermode as reader
+        from joulewise.align.apple.powermode import SOURCE
+        try:
+            value = reader()
+        except Exception as exc:  # The desk treats an unobserved value as a mismatch.
+            return {'value': None, 'source': SOURCE, 'observed_at': 'episode_start',
+                    'error': f'{type(exc).__name__}: {exc}'}
+        if isinstance(value, bool) or not isinstance(value, int):
+            value = None
+        return {'value': value, 'source': SOURCE, 'observed_at': 'episode_start'}
 
     def _close_thermal(self):
         try:

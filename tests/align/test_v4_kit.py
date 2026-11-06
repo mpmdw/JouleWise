@@ -357,6 +357,58 @@ class FitRuleTests(unittest.TestCase):
                 kit.fit_roster(6144, lambda i, b: value)
 
 
+def ready_inputs(i_d=300.0, tail=20.0):
+    """Synthetic, fully supplied inputs (no model, no study data)."""
+    t_dead = kit.l1_t_dead(i_d, tail)
+    policy = {'sensors': {'s_fast': 'TC0P', 's_slow': 'TG0P', 'fan_keys': [], 'r0_sha256': 'a' * 64},
+              'delta_fast_c': 8.0, 'delta_slow_c': 1.5, 'turn_cap_s': 120, 'chunk_tokens': 512,
+              'heavy': True, 'per_turn': True}
+    inputs = {
+        'WP11': {'identity_unit': {'model_source': kit.D_SOURCE, 'model_revision': kit.D_REVISION,
+                                   'model_artifact_sha256': 'b' * 64},
+                 'artifact_inventory': {'files': ['x']}, 'local_file_verification': {'ok': True}},
+        'WP18': {'X': {'max_turns': 12, 'token_fixture_sha256': 'c' * 64},
+                 'Y': {'max_turns': 10, 'token_fixture_sha256': 'd' * 64}},
+        'R0': {'reasoning_effort': 'xhigh'},
+        'R1': {'B_D': 8192, 'I_D': i_d, 'T_dead': t_dead, 'thermal_policy': policy},
+        'WP15': {'runtime_entrypoint': 'scripts/align_v4_launch.py'},
+    }
+    return inputs, {'ac_powermode': 0, 'max_r1_tail_s': tail}
+
+
+class L1Tests(unittest.TestCase):
+    """Lead ruling L1: restated council ruling 1(f)."""
+
+    def test_small_tail_keeps_the_original_t_dead(self):
+        inputs, slots = ready_inputs(300.0, 20.0)
+        self.assertAlmostEqual(inputs['R1']['T_dead'], (1750 - 300) / 1.13544)
+        kit.require_ready(inputs, slots)
+
+    def test_large_tail_lowers_t_dead_and_the_member_fits(self):
+        inputs, slots = ready_inputs(300.0, 75.0)
+        self.assertAlmostEqual(inputs['R1']['T_dead'], (1800 - 300 - 75 - 10) / 1.13544)
+        kit.require_ready(inputs, slots)
+        self.assertLessEqual(kit.check_l1_member_fit(300.0, inputs['R1']['T_dead'], 75.0), 1800 + 1e-6)
+        # The pre-L1 rule (T_dead = (1750 - I_D)/1.13544) no longer passes with this tail.
+        inputs['R1']['T_dead'] = (1750 - 300) / 1.13544
+        with self.assertRaisesRegex(ValueError, 'lead ruling L1'):
+            kit.require_ready(inputs, slots)
+        with self.assertRaisesRegex(ValueError, 'exceeds the 1800 s member cap'):
+            kit.check_l1_member_fit(300.0, (1750 - 300) / 1.13544, 75.0)
+
+    def test_missing_or_invalid_r1_tail_is_refused(self):
+        inputs, slots = ready_inputs()
+        for tail in (None, -1.0, float('nan'), 'x'):
+            with self.subTest(tail=tail), self.assertRaisesRegex(ValueError, 'max_r1_tail_s'):
+                kit.require_ready(inputs, dict(slots, max_r1_tail_s=tail))
+
+    def test_thermal_policy_must_carry_heavy_per_turn(self):
+        inputs, slots = ready_inputs()
+        del inputs['R1']['thermal_policy']['heavy']
+        with self.assertRaisesRegex(ValueError, 'missing or unknown fields'):
+            kit.require_ready(inputs, slots)
+
+
 class SessionParameterTests(unittest.TestCase):
     def test_v3_defaults_and_v4_prepare_parameters(self):
         with patch.object(pilot.h, 'prepare', return_value='prepared') as prepare:

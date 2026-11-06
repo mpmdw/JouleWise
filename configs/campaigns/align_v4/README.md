@@ -15,6 +15,9 @@ WP11 must provide D file identities/inventory/verification; WP18 must provide
 X=b-e25/index16 and Y=b-e18/index14 historical max_turns and fixture digests.
 No configured 12-turn fallback is used for the contrast. R0 must select effort;
 R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
+T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
+- 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
+I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.
 Missing numeric controls are null and invalid as executable EpisodeSpecs.
 The existing qwen3_5 endpoint selects XML tools from the model family.
 Presence penalty remains the endpoint's fixed zero; sampler is 1/.95/20/0.

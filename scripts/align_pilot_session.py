@@ -267,7 +267,7 @@ def cross_pilot_identity(members, compare_session):
 
 
 def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None,
-         kit=KIT, desk_schema=SCHEMA):
+         kit=KIT, desk_schema=SCHEMA, extra_checks=None):
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
@@ -363,6 +363,11 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         checks['I4_' + field] = (False if 'fail' in values else True if values and all(v == 'pass' for v in values) else 'not_evaluated')
     checks['chain_eligibility'] = checks['chain_eligibility'] and not excluded
     checks['harvest_exclusions_recorded'] = exclusions is not None
+    # Pack-specific instrument checks (v4: ruling 7 powermode); v3 passes none.
+    extra_report = None
+    if extra_checks is not None:
+        added, extra_report = extra_checks(state=state, members=members, runs_root=runs_root, kit_path=kit)
+        checks.update(added)
     pilot = {'schema_version': desk_schema, 'non_claim': True, 'session_id': state['session_id'],
              'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,
              'checks': checks, 'repeat_token_identity': deterministic, 'repeat_energy_spread': spreads,
@@ -375,6 +380,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'cross_pilot_token_identity': comparison,
              'session_harvest_flags': harvest_flags.get(None, []),
              'harvest_flags_status': 'recorded' if flag_path.is_file() else 'not_recorded',
+             **({'extra_checks': extra_report} if extra_checks is not None else {}),
              'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
     from joulewise.align.apple.pilot_analysis import finite_json
     pilot = finite_json(pilot)
@@ -430,7 +436,8 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
 
 
 def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
-         prepare_fn=prepare, install_fn=install, session_prefix='align-pilot-'):
+         prepare_fn=prepare, install_fn=install, session_prefix='align-pilot-',
+         desk_extra_checks=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('prepare')
@@ -449,7 +456,8 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
             install_fn(args.session_root)
         else:
             status = desk(args.session_root, harvest=not args.no_harvest, compare_session=args.compare_session,
-                          kit=kit, desk_schema=desk_schema)
+                          kit=kit, desk_schema=desk_schema,
+                          **({'extra_checks': desk_extra_checks} if desk_extra_checks is not None else {}))
             return 0 if status['harvest_status'] in ('ok', 'not_run') and status['pilot_status'] == 'instrument_ok' else 2
         return 0
     except (OSError, ValueError, RuntimeError, KeyError) as exc:

@@ -616,7 +616,8 @@ class ThermalRegistry:
     every other adapter method unchanged. The v4 launcher must select this
     registry; the legacy runner and anchors keep their default registry.
     """
-    def __init__(self, delegate=None, *, thermal_factory=None, status_factory=None):
+    def __init__(self, delegate=None, *, thermal_factory=None, status_factory=None,
+                 powermode_reader=None):
         if delegate is None:
             from joulewise import adapters
             delegate = adapters
@@ -624,6 +625,9 @@ class ThermalRegistry:
         self.runtime = self.telemetry = None
         self.thermal_factory = thermal_factory
         self.status_factory = status_factory or PowermetricsStatus
+        # Council ruling 7: the episode bundle records the observed AC
+        # powermode; None keeps the adapter's read-only pmset default.
+        self.powermode_reader = powermode_reader
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -635,6 +639,8 @@ class ThermalRegistry:
         if isinstance(self.runtime, EpisodeRuntimeAdapter):
             self.runtime.thermal_factory = self.thermal_factory
             self.runtime.thermal_status_reader = self.status_factory(self.telemetry, self.runtime.clock)
+            if self.powermode_reader is not None:
+                self.runtime.powermode_reader = self.powermode_reader
 
     def resolve_runtime(self, config, clock):
         self.runtime, failure = self.delegate.resolve_runtime(config, clock)

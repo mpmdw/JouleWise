@@ -32,8 +32,12 @@ PMSET_TEMPLATE = (
 
 class FakeWorld:
     def __init__(self, fail_kind=None, fail_restore=False, interrupt_kind=None,
-                 t_decline=None, busy_once=(), sudo_listing=None, unsettled_soak_once=False):
+                 t_decline=None, busy_once=(), sudo_listing=None, unsettled_soak_once=False,
+                 release_c=None, released=True):
         self.mode = 0
+        self.attempts = {}
+        self.release_c = release_c or {}
+        self.released = released
         self.calls = []
         self.fail_kind = fail_kind
         self.fail_restore = fail_restore
@@ -59,6 +63,11 @@ class FakeWorld:
             self.mode = mode
             return completed(argv)
         kind = argv[argv.index("--r1-kind") + 1]
+        # Like a real runtime, write into --output so directory custody is testable.
+        out = Path(argv[argv.index("--output") + 1])
+        out.mkdir(parents=True, exist_ok=False)
+        self.attempts[kind] = self.attempts.get(kind, 0) + 1
+        (out / "attempt.txt").write_text(f"{kind} {self.attempts[kind]}\n")
         if kind == self.interrupt_kind:
             raise KeyboardInterrupt("synthetic signal path")
         if kind == self.fail_kind:
@@ -70,7 +79,8 @@ class FakeWorld:
         busy = kind in self.busy_once
         self.busy_once.discard(kind)
         payload = {"kind": kind, "fake_smc_journal": True,
-                   "reference_c": 40.0, "g0_release_c": 40.0 + offset,
+                   "reference_c": 40.0, "g0_release_c": self.release_c.get(offset, 40.0 + offset),
+                   "delta_slow_c": 0.5,
                    "energy_j": 100.0 + 3.0 * offset,
                    "cpu_busy_cores": [0.9] * 61 if busy else [0.1] * 61,
                    "census": [{"pid": 1, "name": "launchd"}],
@@ -92,7 +102,7 @@ class FakeWorld:
                                "G0": 120.0, "G1": 150.0, "H": 90.0, "decode": 700.0,
                                "prefill": 120.0, "tool": 6.0, "tail": 20.0}})
         if kind == "g0-release-soak":
-            payload["released"] = True
+            payload["released"] = self.released
         if kind.startswith("high-power-aba-"):
             payload["t_decline_s"] = self.t_decline[kind.rsplit("-", 1)[-1]]
         return completed(argv, out=json.dumps(payload))
@@ -289,9 +299,163 @@ class R1Tests(unittest.TestCase):
             r1.derive_slots({"slots": values})
 
     def test_planning_temperature_refuses_wrong_g0_release(self):
-        rows = [{"reference_c": 40, "g0_release_c": 40 + o, "energy_j": 10 + o} for o in (0, 2, 5)]
+        rows = [{"reference_c": 40, "g0_release_c": 40 + o, "delta_slow_c": 0.5, "energy_j": 10 + o}
+                for o in (0, 2, 5)]
         with self.assertRaisesRegex(r1.Refusal, "designed offset"):
             r1.planning_temperature_summary(rows)
+
+    def test_planning_release_is_checked_against_the_gate_band_not_1e9(self):
+        # A measured S_slow 0.4 C off R + offset is a valid G0 release within
+        # delta_slow = 0.5 C; 0.6 C off is not the designed state.
+        rows = [{"reference_c": 40.0, "g0_release_c": 40.0 + o + e, "delta_slow_c": 0.5, "energy_j": 100 + 3 * o}
+                for o, e in ((0, 0.0), (2, 0.4), (4, -0.3))]
+        summary = r1.planning_temperature_summary(rows)
+        self.assertEqual(summary["measured_release_range_c"], [40.0, 43.7])
+        self.assertAlmostEqual(summary["points"][1]["release_error_c"], 0.4)
+        # beta_T is fitted on the measured release temperatures.
+        xs, ys = [40.0, 42.4, 43.7], [100.0, 106.0, 112.0]
+        xbar, ybar = sum(xs) / 3, sum(ys) / 3
+        beta = sum((x - xbar) * (y - ybar) for x, y in zip(xs, ys)) / sum((x - xbar) ** 2 for x in xs)
+        self.assertAlmostEqual(summary["beta_T_j_per_c"], beta)
+        rows[1]["g0_release_c"] = 42.6
+        with self.assertRaisesRegex(r1.Refusal, "outside R \\+ designed offset"):
+            r1.planning_temperature_summary(rows)
+        rows[1]["g0_release_c"] = 42.0
+        rows[2]["delta_slow_c"] = 1.0
+        with self.assertRaisesRegex(r1.Refusal, "one gate band"):
+            r1.planning_temperature_summary(rows)
+
+    def test_planning_release_band_end_to_end(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(release_c={2: 42.4})
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            registration = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+            self.assertEqual(registration["planning_temperature"]["points"][1]["g0_release_c"], 42.4)
+
+    def test_u5_is_declared_with_c_equal_one_and_evaluated(self):
+        self.assertEqual(r1.U5_C, 1.0)
+        temperature = {"delta_slow_c": 2.0, "beta_T_j_per_c": 1.0, "beta_T_ci90_j_per_c": [-0.5, 2.5],
+                       "abs_beta_T_90_j_per_c": 2.5}
+        gated = {r1.REPLAY_PAIR[0]: {"energy_j": 1000.0}, r1.REPLAY_PAIR[1]: {"energy_j": 1006.0}}
+        u5 = r1.u5_verdict(temperature, gated)
+        # sigma_pair = max(|1000 - 1006|, 2.97) = 6; bar = 1.0 x 6.
+        self.assertEqual((u5["c"], u5["sigma_pair_j"], u5["bar_j"]), (1.0, 6.0, 6.0))
+        self.assertEqual(u5["state_shift_bound90_j"], 5.0)
+        self.assertEqual(u5["verdict"], "pass")
+        gated[r1.REPLAY_PAIR[1]]["energy_j"] = 1001.0  # floor 2.97 J governs
+        u5 = r1.u5_verdict(temperature, gated)
+        self.assertEqual((u5["sigma_pair_j"], u5["verdict"]), (2.97, "inconclusive"))
+        temperature.update(beta_T_j_per_c=2.0, abs_beta_T_90_j_per_c=3.5)
+        self.assertEqual(r1.u5_verdict(temperature, gated)["verdict"], "fail")
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(r1, "_run", FakeWorld()):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            registration = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+            self.assertEqual(registration["u5"]["c"], 1.0)
+            self.assertEqual(registration["u5"]["sigma_pair_j"], 36.0)
+            self.assertIn(registration["u5"]["verdict"], ("pass", "fail", "inconclusive"))
+
+    def test_heavy_redo_waits_for_a_g0_release_against_the_soak(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(busy_once={"step-d"})
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            kinds = [c[c.index("--r1-kind") + 1] for c in world.calls if "--r1-kind" in c]
+            first = kinds.index("step-d")
+            # The contaminated attempt is followed by a release, never directly by the redo.
+            self.assertEqual(kinds[first:first + 3], ["step-d", "g0-release-soak", "step-d"])
+            release = [c for c in world.calls if "--r1-kind" in c and "g0-release-soak" in c][0]
+            soak_ref = Path(td) / "run/soak_reference.json"
+            self.assertEqual(release[release.index("--soak-reference") + 1], str(soak_ref.resolve()))
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            step = [p for p in result["phases"] if p["name"] == "step_D_prefill_10k_decode_4096"][0]
+            self.assertTrue(step["g0_release"]["released"])
+            # The soak redo (light) needs no release; the first heavy attempt neither.
+            self.assertNotIn("g0_release", step["superseded_attempts"][0])
+
+    def test_accepted_attempt_owns_the_canonical_directory(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(busy_once={"step-d"}, unsettled_soak_once=True)
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            run_dir = Path(td) / "run"
+            self.assertEqual((run_dir / "step_D_prefill_10k_decode_4096/attempt.txt").read_text(), "step-d 2\n")
+            self.assertEqual((run_dir / "step_D_prefill_10k_decode_4096.rejected1/attempt.txt").read_text(),
+                             "step-d 1\n")
+            self.assertEqual((run_dir / "idle_soak/attempt.txt").read_text(), "idle 2\n")
+            self.assertTrue((run_dir / "idle_soak.rejected1").is_dir())
+            self.assertFalse(list(run_dir.glob("*.redo*")))
+            result = json.loads((run_dir / "r1_result.json").read_text())
+            step = [p for p in result["phases"] if p["name"] == "step_D_prefill_10k_decode_4096"][0]
+            self.assertEqual(step["output_dir"], str((run_dir / "step_D_prefill_10k_decode_4096").resolve()))
+            self.assertEqual(step["superseded_attempts"][0]["output_dir"],
+                             str((run_dir / "step_D_prefill_10k_decode_4096.rejected1").resolve()))
+
+    def test_every_post_soak_runtime_call_gets_the_soak_reference(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            reference = json.loads((Path(td) / "run/soak_reference.json").read_text())
+            self.assertEqual(reference["schema"], r1.SOAK_REFERENCE_SCHEMA)
+            self.assertAlmostEqual(reference["sensors_c"]["s_slow"], 40.0, places=6)
+            runtime = [c for c in world.calls if "--r1-kind" in c]
+            kinds = [c[c.index("--r1-kind") + 1] for c in runtime]
+            soak = kinds.index("idle")
+            self.assertTrue(all("--soak-reference" not in c for c in runtime[:soak + 1]))
+            self.assertTrue(all("--soak-reference" in c for c in runtime[soak + 1:]))
+
+    def test_aba_legs_avoid_the_os_batch_window_and_are_redone_on_load(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(busy_once={"high-power-aba-b"})
+
+            def wait(expected_s, **_):
+                world.calls.append(("WAIT", expected_s))
+                return 0.0
+            with patch.object(r1, "_run", world), patch.object(r1, "wait_outside_os_batch", wait):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            for leg in ("high-power-aba-a1", "high-power-aba-b", "high-power-aba-a2"):
+                index = next(i for i, c in enumerate(world.calls) if "--r1-kind" in c and leg in c)
+                window = world.calls[index - 2:index]
+                self.assertEqual(window[0][0], "WAIT", leg)
+                self.assertIn("g0-release-soak", window[1], leg)
+                self.assertEqual(window[0][1], r1.QUIET_SEGMENT_BOUND_S + r1.G0_RELEASE_BOUND_S)
+            b_calls = [c for c in world.calls if "--r1-kind" in c and "high-power-aba-b" in c]
+            self.assertEqual(len(b_calls), 2)
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            b = [p for p in result["phases"] if p["name"] == "high_power_B"]
+            self.assertEqual(len(b), 1)
+            self.assertEqual(b[0]["superseded_attempts"][0]["redo_reason"], "cpu_load")
+            self.assertEqual(b[0]["powermode"], 2)
+            self.assertIn("os_load", b[0])
+
+    def test_aba_leg_without_g0_release_makes_adoption_inconclusive(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(t_decline={"a1": 20.0, "b": 30.0, "a2": 21.0}, released=False)
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            registration = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+            self.assertEqual(registration["high_power"]["verdict"], "inconclusive")
+            self.assertEqual(registration["high_power"]["rule_outcome"]["verdict"], "adopt")
+            self.assertEqual(registration["ac_powermode"], 0)
+
+    def test_runtime_contract_fields_are_enforced_at_the_seam(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            original = world.__call__
+
+            def drop_recovery(argv):
+                result = original(argv)
+                if "idle-until-soak" in argv:
+                    payload = json.loads(result.stdout)
+                    del payload["recovery_curve"]
+                    result = completed(argv, out=json.dumps(payload))
+                return result
+            with patch.object(r1, "_run", drop_recovery):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertIn("contract fields missing: recovery_curve", result["error"])
 
     def test_plan_pins_durations_and_gated_held_members(self):
         rows = r1.phase_plan(False)
