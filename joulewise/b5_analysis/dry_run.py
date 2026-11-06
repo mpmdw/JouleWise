@@ -1710,7 +1710,8 @@ def _step_results(s):
 
 
 def _sensitivity(s,argv):
-    from .sensitivity import sensitivity_pass
+    from . import pack_parallel as pp
+    from .sensitivity_parallel import sensitivity_pass_pack
     from .bracket import BMax
     from joulewise.cli import validate_bundle
     kwargs={'extraction_specs':s.specs,'primary_projections':{p:s.read('projection_'+p) for p in ('alpha','beta')},
@@ -1722,8 +1723,16 @@ def _sensitivity(s,argv):
     # wider contexts internally. Our separated seam hands it primary copies;
     # no sensitivity copy is ever handed to a registered writer.
     contexts=sensitivity_contexts(s.contexts,{pack:None for pack in PACKS})
-    sensitivity_pass(s.windows,s.kept,contexts,s.brackets,BMax(0.0,None,s.b_max.T),**kwargs)
-    record=sensitivity_pass(s.windows,s.kept,contexts,s.brackets,s.b_max,**kwargs)
+    calls=[((s.windows,s.kept,contexts,s.brackets,maximum),kwargs)
+           for maximum in (BMax(0.0,None,s.b_max.T),s.b_max)]
+    outcomes=pp.pack_map(sensitivity_pass_pack,calls)
+    # The equality pass must finish before the widened pass can contribute
+    # any caller-visible effects. Only the second record is published.
+    for (args,options),outcome in zip(calls,outcomes or [None,None]):
+        record,censuses,gamma_census=pp.consume(outcome,lambda:sensitivity_pass_pack(*args,**options))
+        for pack,census in censuses.items():
+            pp.merge_census(contexts[pack].sources_replay.archive,census)
+        pp.merge_census(s.archives['gamma'],gamma_census)
     s.write('sensitivity','outputs/sensitivity.json',record,addressed=True)
     s.write('step_results','outputs/step-results.json',_step_results(s),addressed=True)
     return 0
