@@ -139,7 +139,16 @@ class KitTests(unittest.TestCase):
                          if k not in ('thermal', 'warmup_condition', 'max_turns', 'deadman_s')}
             self.assertEqual(preserved, {k: v for k, v in old_spec.items() if k not in ('max_turns', 'max_episode_seconds')})
             self.assertNotIn('max_episode_decode_tokens', m['spec'])
-            self.assertEqual(m['spec']['deadman_s'], 330)
+            self.assertEqual(m['spec']['deadman_s'], kit.CONTRAST_DEADMAN_S)
+            # FD T_dead,m with the pilot-3 30B intercept: the member stays under
+            # the runner's 1,800 s kill, and the deadman covers the planned
+            # episode of its arm (S 850 s, G 1,150 s planning member_s).
+            law = json.loads((ROOT / 'configs/campaigns/align_pilot_v3/registration/sizing_b5.json')
+                             .read_text())['packs']['align-pilot-v3']['member_law']
+            self.assertEqual(kit.CONTRAST_MEMBER_INTERCEPT_S, law['intercept_s'])
+            self.assertLessEqual(law['intercept_s'] + 1.13544 * m['spec']['deadman_s'], 1750 + 1e-9)
+            planned = {'S': 850, 'G': 1150}[m['role'][-1]]
+            self.assertGreaterEqual(m['spec']['deadman_s'], (planned - law['intercept_s']) / 1.13544)
             self.assertIsNone(m['spec']['max_turns'])  # WP18; never the configured 12-turn fallback.
             policy = m['spec']['thermal']
             self.assertIs(policy['heavy'], False)

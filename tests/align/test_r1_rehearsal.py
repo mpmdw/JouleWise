@@ -198,6 +198,15 @@ class R1Tests(unittest.TestCase):
         self.assertIn("sudo -n -l", chain)
         self.assertIn("'/usr/bin/pmset -c powermode 2'", chain)
 
+    def test_zsh_power_marker_survives_into_the_next_night(self):
+        # NIGHT_DIR is new every night, so a marker there is never seen by the
+        # next night's startup after a SIGKILL; run_night's MEASUREMENT_ROOT is
+        # stable and required.
+        chain = (Path(__file__).resolve().parents[2] / "scripts/night_chains/align_r1_rehearsal.zsh").read_text()
+        self.assertIn(': "${MEASUREMENT_ROOT:?', chain)
+        self.assertIn('POWER_MARKER="$MEASUREMENT_ROOT/.align-r1-high-power"', chain)
+        self.assertNotIn('POWER_MARKER="$NIGHT_DIR', chain)
+
     def test_ac_powermode_reads_only_the_ac_powermode_key(self):
         self.assertEqual(r1.parse_ac_powermode(PMSET_TEMPLATE.format(mode=2)), 2)
         # lowpowermode precedes powermode in the AC block and must not match.
@@ -287,6 +296,20 @@ class R1Tests(unittest.TestCase):
                 self.assertTrue(marker.exists())
             self.assertFalse(marker.exists())
             self.assertEqual(world.mode, 0)
+
+    def test_marker_is_written_before_high_power_command(self):
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td)/'host.marker'
+            observed = []
+            world = FakeWorld()
+            def runner(argv):
+                if tuple(argv) == r1.PowerModeGuard.HIGH:
+                    observed.append(marker.exists())
+                return world(argv)
+            guard = r1.PowerModeGuard(runner, marker)
+            with guard:
+                guard.high()
+            self.assertEqual(observed, [True])
 
     def test_refuses_missing_or_nonfinite_slots(self):
         values = {name: 1.0 for name in r1.SLOT_NAMES[:-1]}

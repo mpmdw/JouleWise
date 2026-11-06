@@ -153,6 +153,17 @@ DEADMAN_FACTOR = 1.13544
 MEMBER_CAP_S = 1800
 L1_MARGIN_S = 10
 
+# Contrast (30B) deadman: FD's T_dead,m = (1750 - I_m) / 1.13544 with the
+# 30B member intercept I_m measured in pilot 3 (align_pilot_v3
+# registration/sizing_b5.json member_law.intercept_s; it already contains the
+# 300 s idle, load, warmup and teardown). The deadman is armed at G0 entry and
+# covers G0, any G1 waits and the pilot-7-count episode, so the member stays
+# under the runner's 1,800 s kill (HAZARD_MEMBER_CAP_S) and keeps its bundle.
+# Neither 330 s (shorter than the planned X-G episode alone) nor 1800/1.13544
+# (which ignores the intercept: 516.6 + 1800 > 1800) satisfies that.
+CONTRAST_MEMBER_INTERCEPT_S = 516.5751274713251
+CONTRAST_DEADMAN_S = (1750 - CONTRAST_MEMBER_INTERCEPT_S) / DEADMAN_FACTOR
+
 
 def l1_t_dead(i_d, max_r1_tail_s):
     """T_dead = min((1750 - I_D)/1.13544, (1800 - I_D - max_R1_tail - 10)/1.13544)."""
@@ -292,9 +303,7 @@ def build_files(root=ROOT):
                 reference = {'role': 'consume', 'source_run_id': capture_run_id,
                              'source_config_sha256': capture_config_sha256}
                 spec.update(max_turns=inputs['WP18'][name[0]]['max_turns'],
-                            # The gate cap is 300 s; 30 s permits cleanup and
-                            # propagation while bounding a dead collector.
-                            deadman_s=330,
+                            deadman_s=CONTRAST_DEADMAN_S,
                             thermal=thermal_policy(inputs, heavy=False, per_turn=name.endswith('G'),
                                                    window_reference=reference))
             config['workload_profile']['prompt_text'] = json.dumps(spec, sort_keys=True, separators=(',', ':'), allow_nan=False)

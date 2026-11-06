@@ -26,7 +26,8 @@ restore_automatic
 REPO="${0:A:h:h:h}"
 PY="${PY:-$REPO/.venv/bin/python}"
 REGISTRATION="${ALIGN_R1_REGISTRATION:-$NIGHT_DIR/align-r1/r1_slots.json}"
-POWER_MARKER="$NIGHT_DIR/.align-r1-high-power"
+: "${MEASUREMENT_ROOT:?run_night must supply stable MEASUREMENT_ROOT}"
+POWER_MARKER="$MEASUREMENT_ROOT/.align-r1-high-power"
 
 # A prior SIGKILL cannot run traps.  The persistent marker makes startup
 # perform another restore before any runtime work and is cleared by the driver.

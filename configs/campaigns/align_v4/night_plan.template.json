@@ -59,7 +59,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json",
-        "config_sha256": "6d6534fb1bf0a5ddf83aca2ad9d41ab8f4b66982f0eecd017d56a12faecdd2f5",
+        "config_sha256": "53f1efda5df3a1fc45e014a23de9e56c7c2e34850b7ae9fb4a8b9928775e5d37",
         "member_s": "PENDING_R1",
         "ordinal": 6,
         "role": "X-G",
@@ -67,7 +67,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e07.json",
-        "config_sha256": "bc0a83910be9a2735370e7e14c2603e9df2eae641d46e5134f0058cf3c44caac",
+        "config_sha256": "19a09238362587c48442d7fffafa5634a51817c6fef9004cf00d21458841cff0",
         "member_s": "PENDING_R1",
         "ordinal": 7,
         "role": "Y-S",
@@ -83,7 +83,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e09.json",
-        "config_sha256": "7dce41196c270cfcbea8305264be71036293958a0495ac77995e3b20aad61494",
+        "config_sha256": "f04417f4c9c59d021504125fcb12357ff03f3cb0b35843108b9eb43b1f6b374a",
         "member_s": "PENDING_R1",
         "ordinal": 9,
         "role": "X-S",
@@ -91,7 +91,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e10.json",
-        "config_sha256": "229c6a32e2b92f9f6b2662aeeaa42d14e497fff1ba575305b70ce7b8e620c70a",
+        "config_sha256": "8b3b504f8030c45049e28fc766e10239c5076f4f48ce77b9729788b4af13a947",
         "member_s": "PENDING_R1",
         "ordinal": 10,
         "role": "Y-G",
@@ -107,7 +107,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e12.json",
-        "config_sha256": "30a7d028488eabb01dce2612a9d00b81071d0f4e286925ec50dcc379bac36c70",
+        "config_sha256": "5b713deaafcf527caab803099f470e09bcfa23f5634c4b51d7e678ed01154add",
         "member_s": "PENDING_R1",
         "ordinal": 12,
         "role": "Y-G",
@@ -115,7 +115,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e13.json",
-        "config_sha256": "9d5c15fdf68b2fc32e71c6079e114f7901fc54de32f6006870cc1c0326ff9c05",
+        "config_sha256": "2040a5c9865df9c1d23cb837770cc6bf4c878e3206e176e7c3a19afa66f531c0",
         "member_s": "PENDING_R1",
         "ordinal": 13,
         "role": "X-S",
@@ -131,7 +131,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e15.json",
-        "config_sha256": "704127d3754b80512d163a0efc0d3ef6b85e99b13f496d50538792bf425eb2c2",
+        "config_sha256": "d820c1f9487cb77666da5be775e687428dd6e48cd6d19f8bbc730acc6c10b95a",
         "member_s": "PENDING_R1",
         "ordinal": 15,
         "role": "Y-S",
@@ -139,7 +139,7 @@
       },
       {
         "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e16.json",
-        "config_sha256": "71f89d2534f7317d418869112fedd290e4525485d4925e81410a0d88359c7596",
+        "config_sha256": "1822d4ceefa254d3a64f8f8371448440c5d513cc155c0a8a7ab0ace6ee266f33",
         "member_s": "PENDING_R1",
         "ordinal": 16,
         "role": "X-G",

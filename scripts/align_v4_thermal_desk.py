@@ -33,16 +33,32 @@ def main(argv=None):
         kwargs = {k: journal(item[k]) for k in ('os_journal', 'temperature_journal') if k in item}
         if 'registered_span_ns' in item:
             kwargs['registered_span_ns'] = item['registered_span_ns']
-        record = read_bundle_record(root/item['bundle'], **kwargs)
+        try:
+            record = read_bundle_record(root/item['bundle'], **kwargs)
+        except FileNotFoundError as exc:
+            # A refused/failed member may legally have no episode artifact.
+            # Keep the registered roster row visible instead of losing the
+            # entire window desk.
+            record = {'id': item.get('id', Path(item['bundle']).name),
+                      'model': item.get('model'), 'gated': item.get('gated', False),
+                      'flags': ['member.artifact_missing', f'member.runtime_failure:{exc.filename}'],
+                      'calibration_exclusions': ['member.runtime_failure'],
+                      'intervals': [], 'tokens': None}
         # Scientific measurements and verdicts cannot be overridden by roster tags.
         record.update({k: item[k] for k in ('window', 'identical_work_group', 'compare_reference_id', 'template', 'arm') if k in item})
         members.append(record)
     by_id = {m['id']: m for m in members}
     for item, record in zip(manifest['members'], members):
-        reference = by_id.get(item.get('pilot7_reference_id'))
+        reference_id = item.get('pilot7_reference_id')
+        reference = by_id.get(reference_id)
+        if reference_id and reference is None:
+            raise ValueError(f'unresolved pilot7_reference_id: {reference_id}')
         if reference is not None:
             record['pilot7_token_identical'] = record.get('tokens') is not None and record['tokens'] == reference.get('tokens')
         record['excluded'] = bool(record['calibration_exclusions'])
+        compare_id = item.get('compare_reference_id')
+        if compare_id and compare_id not in by_id:
+            raise ValueError(f'unresolved compare_reference_id: {compare_id}')
     compared = session_desk_evidence(args.compare_session) if args.compare_session else None
     inputs = compared if compared and compared.get('status') == 'pass' else {}
     result = window_report(members, cross_windows=inputs.get('cross_windows'),

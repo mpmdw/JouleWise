@@ -523,8 +523,10 @@ class EpisodeRuntimeAdapter:
                         temperature=spec.temperature, seed=measured_seed,
                     )
                     turn_endpoint_flags = endpoint.turn_provenance[-1].get("flags", ())
-                    if any(flag.startswith(("malformed_tool_call:", "unsupported_tool_call_format"))
-                           for flag in turn_endpoint_flags):
+                    malformed = any(flag.startswith("malformed_tool_call:")
+                                    for flag in turn_endpoint_flags)
+                    budget_cut = f"turn_token_budget_reached:{index}" in turn_endpoint_flags
+                    if malformed and not budget_cut:
                         flags.append(f"episode.malformed_tool_call:{index}")
                     # Integer token counts establish that a model call returned work.
                     decode_tokens_used += result.completion_tokens

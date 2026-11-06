@@ -29,9 +29,13 @@ class StopPrecedenceTests(unittest.TestCase):
         self.assertEqual(primary_stop(causes[:2]), "thermal.incomplete")
         self.assertEqual(primary_stop(causes[:1]), "episode.decode_budget")
 
-    def test_malformed_call_is_between_runner_error_and_decode_budget(self):
+    def test_malformed_call_is_below_budget_and_thermal_censoring(self):
         flags = ("episode.decode_budget:1", "episode.malformed_tool_call:0")
-        self.assertEqual(primary_stop(flags), "episode.malformed_tool_call")
+        self.assertEqual(primary_stop(flags), "episode.decode_budget")
+        self.assertEqual(primary_stop(("turn_token_budget_reached:1", flags[1])),
+                         "turn_token_budget_reached")
+        self.assertEqual(primary_stop(("thermal.hold_timeout:1", flags[1])),
+                         "thermal.incomplete")
         self.assertEqual(primary_stop((*flags, "endpoint_error:RuntimeError:x")), "runner.error")
 
     def test_unobserved_g1_and_h_remain_valid_but_flagged_in_diagnostics(self):

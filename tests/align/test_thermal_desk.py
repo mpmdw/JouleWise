@@ -36,6 +36,14 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def test_dead_collector_counts_as_x4_even_with_runtime_failure(self):
+        reasons = desk.calibration_exclusions({
+            'flags': ['episode_error:RuntimeError:thermal.collector_thread_dead'],
+            'turn_observation': [],
+        })
+        self.assertIn('thermal.state_unobserved', reasons)
+        self.assertIn('member.runtime_failure', reasons)
+
     def test_u4_requires_both_sentinel_equivalence_and_anchor_moments(self):
         anchors = {str(i): {str(j): 1000+100*j for j in range(4)} for i in range(3)}
         windows = {str(i): [1000] for i in range(3)}
@@ -315,6 +323,29 @@ class DeskTests(unittest.TestCase):
             self.assertIn('trace.missing', report['members'][0]['energy_flags'])
             self.assertNotEqual(next(iter(report['model_windows'].values()))['U1']['status'], 'pass')
             self.assertIn('Exact exclusion intervals', (output/'THERMAL.md').read_text())
+
+    def test_cli_keeps_a_member_without_artifact_and_refuses_unresolved_references(self):
+        from tests.align.test_thermal_gate import NativeIntegrationTests
+        from scripts.align_v4_thermal_desk import main
+        helper = NativeIntegrationTests('test_real_workload_endpoint_budget_and_held_stream_keep_exact_tokens')
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            bundle, status, _ = helper.held_run(root/'fake-member')
+            self.assertEqual(status.status.value, 'succeeded')
+            present = {'bundle': str(bundle), 'window': 'W1'}
+            missing = {'bundle': str(root/'never-written'), 'id': 'failed-member', 'window': 'W1',
+                       'model': 'qwen3-30b-a3b'}
+            manifest = root/'manifest.json'
+            manifest.write_text(json.dumps({'members': [present, missing]}))
+            self.assertEqual(main(['--manifest', str(manifest), '--output', str(root/'desk')]), 0)
+            rows = {m['id']: m for m in json.loads((root/'desk'/'PILOT.json').read_text())['members']}
+            self.assertIn('member.artifact_missing', rows['failed-member']['flags'])
+            self.assertTrue(rows['failed-member']['excluded'])
+            self.assertEqual(len(rows), 2)
+            for key in ('pilot7_reference_id', 'compare_reference_id'):
+                manifest.write_text(json.dumps({'members': [{**present, key: 'nobody'}]}))
+                with self.assertRaisesRegex(ValueError, f'unresolved {key}: nobody'):
+                    main(['--manifest', str(manifest), '--output', str(root/f'desk-{key}')])
 
     def test_k_session_reader_u4_pass_fail_and_inconclusive(self):
         def write(root, index, offset=0, complete=True):

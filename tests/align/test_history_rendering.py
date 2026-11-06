@@ -26,6 +26,14 @@ class CaptureTokenizer:
         return json.dumps({"messages": messages, "kwargs": kwargs}, sort_keys=True)
 
 
+class TemplateTokenizer:
+    def __init__(self, template):
+        self.template = template
+
+    def apply_chat_template(self, messages, **kwargs):
+        return self.template.render(messages=messages, **kwargs)
+
+
 class HistoryRenderingTests(unittest.TestCase):
     def test_unset_fields_preserve_spec_bytes(self):
         spec = episode_spec(hidden=False)
@@ -133,9 +141,10 @@ class RealTemplateHistoryTests(unittest.TestCase):
         from joulewise.align.apple.endpoint import parse_completion
         tools = [{"type": "function", "function": {"name": "any", "parameters": {
             "type": "object", "properties": {"value": {}}}}}]
-        endpoint = MlxEndpoint(SimpleNamespace(_tokenizer=CaptureTokenizer()), base_config(),
+        config = base_config()
+        config = replace(config, model=replace(config.model, family="qwen3_8"))
+        endpoint = MlxEndpoint(SimpleNamespace(_tokenizer=TemplateTokenizer(template_renderer())), config,
                                FakeClock(), episode_domain="prefix")
-        endpoint._render_prompt = template_renderer()
         for value in ('"quoted"', '{"a":1,"b":[2,3]}'):
             wire = ("<tool_call>\n<function=any>\n<parameter=value>\n" + value
                     + "\n</parameter>\n</function>\n</tool_call>")
