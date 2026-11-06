@@ -188,6 +188,10 @@ def main(argv=None):
     parser.add_argument('--label', default='run')
     parser.add_argument('--sample-ms', type=int, default=200)
     parser.add_argument('--keep-custody', action='store_true')
+    parser.add_argument('--vdl-mode', default='on',
+                        help="JOULEWISE_B5_VDL for the run: 'on' (default; serves verified hits as a real blind "
+                             "run's BLIND_ON does, so timings are comparable), 'off', or 'shadow:<permille>' "
+                             "(the synthetic default, recomputes sampled hits: stricter, slower)")
     parser.add_argument('--cprofile', type=Path,
                         help='write per-step cProfile stats of the driver and of every pool task to DIR '
                              '(slows the run; use for attribution, not for timing)')
@@ -201,6 +205,7 @@ def main(argv=None):
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir(parents=True)
     _environment(args.workers, args.sample_ms, scratch)
+    os.environ['JOULEWISE_B5_VDL'] = args.vdl_mode
     if args.cprofile is not None:
         _forbid(args.cprofile.absolute())
         args.cprofile.mkdir(parents=True, exist_ok=True)
@@ -226,6 +231,7 @@ def main(argv=None):
     phases = run_dir / 'restricted/logs/runtime-phases.jsonl'
     summary = dict(
         synthetic_only=True, label=args.label, workers=args.workers, sample_ms=args.sample_ms,
+        vdl_mode=args.vdl_mode,
         exit_code=result.code, wall_s=result.wall_s, restore_s=restore_s,
         machine=dict(cpu_count=os.cpu_count(), platform=platform.platform(), python=sys.version),
         git_head=_git('rev-parse', 'HEAD'), git_status=_git('status', '--porcelain', '--', 'joulewise', 'scripts',
