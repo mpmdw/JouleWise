@@ -49,7 +49,7 @@ TIMINGS_RELATIVE_PATH = "scripts/test_timings.json"
 UNKNOWN_WEIGHT_KEY = "unknown_module_weight_seconds"
 SPLIT_MODULES_KEY = "split_modules"
 SPLIT_DECLARATION_KEYS = frozenset(
-    {"granularity", "reason", "declared", "remainder_weight_seconds"}
+    {"granularity", "reason", "declared", "remainder_weight_seconds", "awaiting_lane"}
 )
 REMAINDER_SUFFIX = "::remainder"
 SHARD_SUMMARY_RE = re.compile(
@@ -183,7 +183,8 @@ def load_split_declarations(path: Path | str = DEFAULT_TIMINGS_PATH) -> dict[str
             "granularity": "test",
             "reason": "<why splitting this module is safe>",
             "declared": {"tests.test_reduce.SomeClass.test_heavy_a": 252.9, ...},
-            "remainder_weight_seconds": 264.0
+            "remainder_weight_seconds": 264.0,
+            "awaiting_lane": "<optional: branch that adds the module>"
           }
         }
 
@@ -193,6 +194,13 @@ def load_split_declarations(path: Path | str = DEFAULT_TIMINGS_PATH) -> dict[str
     automatically and no one has to hand-edit this file to keep the suite
     covered.  Enumerating every test id here instead would mean two hand-kept
     lists of the same thing, and the second one rots.
+
+    ``awaiting_lane`` is optional.  It marks a FORWARD declaration: the module
+    is added by another lane (named there) and is not in this tree yet, so the
+    checked-in guard (tests/test_shard_split.py) accepts the module's absence
+    instead of failing.  Scheduling does not read it -- a declaration for a
+    module that is not scheduled is inert (see ``expand_units``) -- and once
+    the module is discovered the declaration is verified like any other.
 
     Absent key -> ``{}``, and every caller then behaves module-atomically.
 
@@ -285,11 +293,21 @@ def load_split_declarations(path: Path | str = DEFAULT_TIMINGS_PATH) -> dict[str
                     "positive"
                 )
 
+        awaiting_lane = declaration.get("awaiting_lane")
+        if awaiting_lane is not None and (
+            not isinstance(awaiting_lane, str) or not awaiting_lane.strip()
+        ):
+            raise ValueError(
+                f"awaiting_lane for {module!r} must be a nonempty string naming "
+                "the lane that adds the module"
+            )
+
         splits[module] = {
             "granularity": "test",
             "reason": reason,
             "declared": weights,
             "remainder_weight_seconds": remainder_seconds,
+            "awaiting_lane": awaiting_lane,
         }
     return splits
 

@@ -53,6 +53,59 @@ def _qualified(modules) -> set[str]:
     return {m if m.startswith("tests.") else f"tests.{m}" for m in modules}
 
 
+UNTIMED_ALLOWANCE_KEY = "untimed_module_allowance"
+
+
+def _untimed_allowance_rules(payload) -> dict[str, dict]:
+    """Validate and return the timing map's ``untimed_module_allowance`` rules.
+
+    Each non-``_`` key is a module-name prefix (``tests.align.`` covers that
+    package; ``tests.test_qwen4`` covers top-level modules with that stem).
+    A rule carries ``max_source_bytes`` and a nonempty ``reason``.
+    """
+
+    block = payload.get(UNTIMED_ALLOWANCE_KEY, {})
+    if not isinstance(block, dict):
+        raise AssertionError(f"{UNTIMED_ALLOWANCE_KEY} must be a JSON object")
+    rules = {}
+    for prefix, rule in block.items():
+        if prefix.startswith("_"):
+            continue
+        if not prefix.startswith("tests.") or len(prefix) <= len("tests."):
+            raise AssertionError(f"allowance prefix {prefix!r} must name tests.<something>")
+        if not isinstance(rule, dict):
+            raise AssertionError(f"allowance for {prefix!r} must be a JSON object")
+        limit = rule.get("max_source_bytes")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise AssertionError(f"allowance for {prefix!r} needs a positive max_source_bytes")
+        reason = rule.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise AssertionError(f"allowance for {prefix!r} needs a nonempty reason")
+        rules[prefix] = rule
+    return rules
+
+
+def _untimed_allowance_violations(modules, timings, exemptions, rules, root: Path):
+    """Return discovered modules with no weight that no allowance covers.
+
+    A module without a weight is packed at ``unknown_module_weight_seconds``.
+    That is acceptable only for a module under an allowed prefix whose source
+    file is no larger than the rule's ``max_source_bytes``; everything else
+    needs a measured weight or a documented exemption.
+    """
+
+    violations = set()
+    for module in set(modules) - set(timings) - set(exemptions):
+        source = root.joinpath(*module.split(".")).with_suffix(".py")
+        if not any(
+            module.startswith(prefix)
+            and source.stat().st_size <= rule["max_source_bytes"]
+            for prefix, rule in rules.items()
+        ):
+            violations.add(module)
+    return violations
+
+
 class ShardPartitionInvariantTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -73,6 +126,15 @@ class ShardPartitionInvariantTests(unittest.TestCase):
                 self.assertEqual(len(flattened), len(set(flattened)))
 
     def test_every_discovered_module_has_timing_or_documented_exemption(self):
+        """Every module is weighed, exempted, or inside a documented allowance.
+
+        Modules land on many lanes at once, so the allowance lets a small new
+        module under a declared prefix (today tests.align. and tests.test_qwen4)
+        merge before a CI harvest weighs it, packed at the documented
+        unknown_module_weight_seconds.  A module above the size bound, or
+        outside every prefix, still fails here until it carries a weight.
+        """
+
         payload = shard_tests._load_timings_payload(shard_tests.DEFAULT_TIMINGS_PATH)
         exemptions = payload.get("timing_exemptions", {})
         self.assertIsInstance(exemptions, dict)
@@ -81,8 +143,50 @@ class ShardPartitionInvariantTests(unittest.TestCase):
                 self.assertIsInstance(reason, str)
                 self.assertTrue(reason.strip())
                 self.assertNotIn(module, self.timings)
-        uncovered = set(self.modules) - set(self.timings) - set(exemptions)
-        self.assertEqual(uncovered, set())
+        rules = _untimed_allowance_rules(payload)
+        self.assertEqual(
+            _untimed_allowance_violations(
+                self.modules, self.timings, exemptions, rules, ROOT
+            ),
+            set(),
+        )
+
+    def test_untimed_allowance_admits_only_small_modules_under_a_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "tests/align").mkdir(parents=True)
+            (root / "tests/align/test_small.py").write_bytes(b"#" * 100)
+            (root / "tests/align/test_large.py").write_bytes(b"#" * 101)
+            (root / "tests/test_other.py").write_bytes(b"#" * 10)
+            (root / "tests/test_timed.py").write_bytes(b"#" * 10_000)
+            modules = (
+                "tests.align.test_small",
+                "tests.align.test_large",
+                "tests.test_other",
+                "tests.test_timed",
+            )
+            rules = _untimed_allowance_rules(
+                {
+                    UNTIMED_ALLOWANCE_KEY: {
+                        "_doc": "ignored",
+                        "tests.align.": {"max_source_bytes": 100, "reason": "r"},
+                    }
+                }
+            )
+            violations = _untimed_allowance_violations(
+                modules, {"tests.test_timed": 1.0}, {}, rules, root
+            )
+        self.assertEqual(violations, {"tests.align.test_large", "tests.test_other"})
+        for bad in (
+            {"tests.align.": {"max_source_bytes": 0, "reason": "r"}},
+            {"tests.align.": {"max_source_bytes": True, "reason": "r"}},
+            {"tests.align.": {"max_source_bytes": 100, "reason": " "}},
+            {"align.": {"max_source_bytes": 100, "reason": "r"}},
+            [],
+        ):
+            with self.subTest(bad=bad):
+                with self.assertRaises(AssertionError):
+                    _untimed_allowance_rules({UNTIMED_ALLOWANCE_KEY: bad})
 
     def test_partition_is_deterministic(self):
         for shard_count in (1, 2, 4, 8):
