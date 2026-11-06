@@ -22,6 +22,8 @@ def run_reference(request, checkpoint):
     config = Qwen4ExpTextConfig(**checkpoint.text)
     config._attn_implementation = "eager"
     traces = {}
+    qsa_ties = {"topk_calls": 0, "straddling_ties": 0}
+    router_ties = {"topk_calls": 0, "rows": 0, "straddling_ties": 0}
     ids = torch.tensor(request["input_ids"], dtype=torch.long)
     unit = request["unit"]
     hidden = None if request.get("hidden") is None else torch.from_numpy(
@@ -29,6 +31,15 @@ def run_reference(request, checkpoint):
 
     def capture(name, value):
         traces[name] = value.detach().float().cpu().numpy().copy() if value.is_floating_point() else value.detach().cpu().numpy().copy()
+
+    def observe_norm(norm, name, transform=lambda x: x):
+        # Gate amendment A1: the exact tensor(s) the official norm consumed.
+        def inputs(m, a):
+            capture(name + ".input", transform(a[0]))
+            if len(a) > 1:
+                capture(name + ".gate", transform(a[1]))
+        norm.register_forward_pre_hook(inputs)
+        norm.register_forward_hook(lambda m, a, o: capture(name, transform(o)))
 
     class ExpertSlice:
         # Only the storage changes: Qwen4ExpTextExperts.forward remains official.
@@ -102,7 +113,7 @@ def run_reference(request, checkpoint):
             with torch.device("meta"):
                 module = ref.Qwen4ExpTextGatedResidual(config, use_combine=False)
             module = load(module, checkpoint.prefix + "hyper_connection_mixer.")
-            module.hc_norm.register_forward_hook(lambda m, a, o: capture("final.norm", o))
+            observe_norm(module.hc_norm, "final.norm")
             out = module(hidden)
         else:
             layer_idx = int(unit)
@@ -110,7 +121,7 @@ def run_reference(request, checkpoint):
                 module = ref.Qwen4ExpTextDecoderLayer(config, layer_idx)
             module = load(module, checkpoint.prefix + f"layers.{layer_idx}.")
             for stem, hc in [("attn", module.attn_hyper_connection), ("mlp", module.mlp_hyper_connection)]:
-                hc.hc_norm.register_forward_hook(lambda m, a, o, s=stem: capture(s + ".norm", o))
+                observe_norm(hc.hc_norm, stem + ".norm")
                 def hyper_hook(m, a, o, s=stem):
                     capture(s+".mix", o[0]); capture(s+".residual", o[1]); capture(s+".inject", o[2])
                 hc.register_forward_hook(hyper_hook)
@@ -118,20 +129,22 @@ def run_reference(request, checkpoint):
             attention = module.linear_attn if module.layer_type == "linear_attention" else module.self_attn
             attention.register_forward_hook(lambda m, a, o: capture("attention", o[0] if isinstance(o, tuple) else o))
             if module.layer_type == "linear_attention":
-                attention.norm.register_forward_hook(lambda m, a, o: capture("attention.gated_norm", o))
+                observe_norm(attention.norm, "attention.gated_norm")
             else:
-                attention.q_norm.register_forward_hook(lambda m, a, o: capture("attention.q_norm", o))
-                attention.k_norm.register_forward_hook(lambda m, a, o: capture("attention.k_norm", o))
+                observe_norm(attention.q_norm, "attention.q_norm")
+                observe_norm(attention.k_norm, "attention.k_norm")
+                deterministic_qsa_ties(attention.indexer, torch, qsa_ties)
                 attention.indexer.register_forward_hook(lambda m, a, o: capture("qsa.mask", o == 0 if o.is_floating_point() else o))
             def router_hook(m, a, o):
                 capture("router.logits", o[0]); capture("router.weights", o[1]); capture("router.experts", o[2])
+            deterministic_router_ties(module.mlp.gate, torch, router_ties)
             module.mlp.gate.register_forward_hook(router_hook)
             module.mlp.register_forward_hook(lambda m, a, o: capture("moe", o))
             if module.ple is not None:
                 module.ple.register_forward_hook(lambda m, a, o: capture("ple", o))
                 module.ple.ple_embedding.register_forward_hook(lambda m, a, o: capture("ple.embedding", o))
                 for stem in ["norm_key", "norm_query", "norm_conv"]:
-                    getattr(module.ple, stem).register_forward_hook(lambda m, a, o, s=stem: capture("ple."+s, o))
+                    observe_norm(getattr(module.ple, stem), "ple." + stem)
             positions = torch.arange(ids.shape[1]).view(1, 1, -1).expand(3, ids.shape[0], -1)
             rotary = ref.Qwen4ExpTextRotaryEmbedding(config)
             position_embeddings = rotary(hidden, positions)
@@ -146,7 +159,92 @@ def run_reference(request, checkpoint):
     return traces, {"transformers": transformers.__version__, "torch": torch.__version__,
                     "reference_source_sha256": sha256(inspect.getfile(ref)),
                     "device": "cpu", "experts": "official forward with sliced storage",
+                    "qsa_topk": dict(qsa_ties, tie_rule="score descending, block ascending"),
+                    "router_topk": dict(router_ties, tie_rule="fp32 probability descending, expert ascending"),
                     "reads": checkpoint.reads}
+
+
+def deterministic_qsa_ties(indexer, torch, counts):
+    """Fix the official QSA indexer's unspecified top-k tie order.
+
+    Qwen4ExpTextQSAIndexer.forward selects blocks with ``scores.topk(k, dim=0)``.
+    relu makes a block score exactly 0.0 whenever every indexer head's dot
+    product is <= 0, so exact ties at the k-th score occur in practice, and
+    torch.topk leaves the order of equal values unspecified. The official
+    selected set is then not a function of the inputs, and an exact
+    ``qsa.mask`` gate against it would compare with an arbitrary draw.
+    Inside this indexer's forward only, topk returns the stable
+    (score descending, block ascending) order: one of torch.topk's permitted
+    outputs. It selects a different set than torch's own call only on an exact
+    tie straddling the k-th score; scores are untouched, and the indexer's
+    scatter makes the index order irrelevant. Same rule as the canonical port
+    (D0, ``topk_mask_lowest_index``) and its validation reference ("REF").
+    The MoE router has its own, identically scoped patch
+    (``deterministic_router_ties``).
+    """
+    from unittest.mock import patch
+
+    def topk(values, k, dim=-1, largest=True, sorted=True):
+        if not largest or values.dim() != 1:
+            raise RuntimeError("unexpected QSA indexer topk call")
+        counts["topk_calls"] += 1
+        order = torch.sort(-values, dim=0, stable=True).indices
+        if k < values.shape[0] and bool(values[order[k - 1]] == values[order[k]]):
+            counts["straddling_ties"] += 1
+        index = order[:k]
+        return torch.return_types.topk((values.gather(0, index), index))
+
+    forward = indexer.forward
+
+    def tie_ordered_forward(*args, **kwargs):
+        with patch.object(torch.Tensor, "topk", topk):
+            return forward(*args, **kwargs)
+    # Instance attribute: nn.Module.__call__ still runs the registered hooks.
+    indexer.forward = tie_ordered_forward
+
+
+def deterministic_router_ties(router, torch, counts):
+    """Fix the official MoE router's unspecified top-k tie order.
+
+    Qwen4ExpTextTopKRouter.forward ranks fp32 softmax probabilities with
+    ``torch.topk(router_probs, top_k, dim=-1)``. Equal bf16 logits give equal
+    fp32 probabilities, and at the released scale (512 experts, top-10) exact
+    ties straddling the k-th probability are common in bf16 (canonical.md
+    deviation 7: 8 of 54 rows at layer 2). torch.topk leaves their order
+    unspecified (on CPU it is not even reproducible), so the official expert
+    set is not a function of the inputs there. Inside this router's forward
+    only, topk returns the stable (probability descending, expert ascending)
+    order: one of torch.topk's permitted outputs, differing from torch's own
+    call only on an exact tie straddling the k-th value. Probabilities and the
+    renormalised weights are untouched. This is the rule canonical.md
+    (follow-up P4/P11) prescribes for the reference; the canonical port's
+    ``argpartition`` on fp32 probabilities is unspecified on ties as well, and
+    its GPU order is lowest-index in every straddling tie observed (gold run
+    layers 1-2, and 14,531 synthetic 512-expert top-10 rows). router.experts
+    stays an exact gate in fp32; in bf16 any other port choice must pass gate
+    amendment A2 (admissible boundary swap plus a teacher-forced layer).
+    """
+    from unittest.mock import patch
+
+    def topk(values, k, dim=-1, largest=True, sorted=True):
+        if not largest or values.dim() != 2 or dim not in (-1, 1):
+            raise RuntimeError("unexpected MoE router topk call")
+        counts["topk_calls"] += 1
+        counts["rows"] += values.shape[0]
+        order = torch.sort(values, dim=-1, descending=True, stable=True).indices
+        if k < values.shape[-1]:
+            ranked = values.gather(-1, order[:, k - 1:k + 1])
+            counts["straddling_ties"] += int((ranked[:, 0] == ranked[:, 1]).sum())
+        index = order[:, :k]
+        return torch.return_types.topk((values.gather(-1, index), index))
+
+    forward = router.forward
+
+    def tie_ordered_forward(*args, **kwargs):
+        with patch.object(torch, "topk", topk):
+            return forward(*args, **kwargs)
+    # Instance attribute: nn.Module.__call__ still runs the registered hooks.
+    router.forward = tie_ordered_forward
 
 
 def make_tiny(root):
