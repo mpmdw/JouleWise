@@ -811,11 +811,21 @@ def check_checkpoint_native(ctx):
     script = ctx.repo / "scripts/align_cache_checkpoint_native.py"
     proc = subprocess.run([sys.executable, "-B", str(script)], capture_output=True, text=True, timeout=1800,
                           cwd=str(ctx.repo), env={**os.environ, "PYTHONPATH": str(ctx.repo)})
-    try:
-        payload = json.loads(proc.stdout)
-    except ValueError:
-        payload = {"stdout_tail": proc.stdout[-800:]}
-    return {"status": "pass" if proc.returncode == 0 else "fail", "exit_code": proc.returncode,
+    lines = []
+    for line in proc.stdout.splitlines():
+        try:
+            lines.append(json.loads(line))
+        except ValueError:
+            lines.append({"unparsed": line[-300:]})
+    final = lines[-1] if lines else {}
+    exact = [x["exactness"] for x in lines if "exactness" in x]
+    # The script's own tolerances decide; bitwise agreement is recorded, not imposed.
+    bitwise = sum(all(v.get("bitwise") for v in e.values() if isinstance(v, dict) and "bitwise" in v)
+                  for e in exact)
+    ok = proc.returncode == 0 and final.get("status") == "passed" and bool(exact)
+    payload = {"final": final, "exactness_rows": len(exact), "bitwise_rows": bitwise,
+               "families": sorted({e.get("family") for e in exact})}
+    return {"status": "pass" if ok else "fail", "exit_code": proc.returncode,
             "result": payload, "stderr_tail": proc.stderr[-800:],
             "fidelity": ("Restore exactness on tiny qwen3_5/qwen3_next configs on any Metal GPU. W1 runs D "
                          "with hybrid_checkpoint_limit 0; B7 timing and the D verdict stay on the Mac.")}
