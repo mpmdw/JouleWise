@@ -246,6 +246,9 @@ def build_files(root=ROOT):
             spec = json.loads(config['workload_profile']['prompt_text'])
             spec.pop('max_episode_seconds', None)
             spec.update(condition=condition, seed=seed_index, warmup_condition='benign')
+            # D members are cloned from anchor 1 (spam); the runtime builds the
+            # task from task_kwargs, so the roster pair must be written here.
+            spec['task_kwargs'] = {**spec['task_kwargs'], 'task_pair': pair}
             if name == 'D':
                 config['model'].update(name='Qwen3.8-27B-8bit', family='qwen3_5',
                                        source=D_SOURCE, revision=D_REVISION)
@@ -450,7 +453,7 @@ No synthetic sensor, reference temperature, model digest or turn count is used.
 
 Sizing_preview.json contains A1's planning guesses only. No arm-compatible
 sizing_b5.json is supplied. Use fit_roster with R1 measured cost estimates:
-drop only 17 first, then decrease B_D by 1024 down to 6144; otherwise return
+drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,

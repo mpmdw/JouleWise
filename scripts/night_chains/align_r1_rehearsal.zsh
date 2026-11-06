@@ -14,7 +14,11 @@ on_signal() {
 trap 'restore_automatic' EXIT
 trap 'on_signal' HUP INT TERM
 
-# Prove the exact Automatic command works before any model/runtime work.
+# Refuse before model/runtime work unless the exact two commands are visible
+# and Automatic can actually be restored. Broader sudo access is not consumed.
+SUDO_RULES="$(sudo -n -l)"
+print -r -- "$SUDO_RULES" | /usr/bin/grep -F -- '/usr/bin/pmset -c powermode 0' >/dev/null
+print -r -- "$SUDO_RULES" | /usr/bin/grep -F -- '/usr/bin/pmset -c powermode 2' >/dev/null
 restore_automatic
 
 : "${NIGHT_DIR:?run_night must supply NIGHT_DIR}"

@@ -389,6 +389,34 @@ class SessionParameterTests(unittest.TestCase):
                 session.install('synthetic-session')
             install.assert_not_called()
 
+    def test_v4_install_reads_measurement_r1_slots_and_refuses_powermode_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            measurement = Path(tmp)
+            plan = json.loads((ROOT / kit.KIT / 'collection_plan.json').read_text())
+            plan['runtime_requirements']['ac_powermode'] = 2
+            (measurement / kit.KIT / 'registration').mkdir(parents=True)
+            (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
+            (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': 2}))
+            seen = []
+            with patch.object(pilot.h, 'read', return_value={'measurement_root': str(measurement)}), \
+                    patch.object(kit, 'read_inputs', return_value={}), \
+                    patch.object(kit, 'require_ready', side_effect=lambda i, s: seen.append(s)), \
+                    patch.object(pilot, 'install') as install:
+                with self.assertRaisesRegex(ValueError, 'AC powermode mismatch'):
+                    session.install('synthetic-session', observe_powermode=lambda: 0)
+                install.assert_not_called()
+                self.assertEqual(seen, [{'ac_powermode': 2}])
+                session.install('synthetic-session', observe_powermode=lambda: 2)
+                install.assert_called_once()
+
+    def test_every_member_spec_runs_its_roster_task_pair(self):
+        files = kit.build_files(ROOT)
+        for member in json.loads(files[kit.KIT / 'collection_plan.json'])['members']:
+            self.assertEqual(member['spec']['task_kwargs']['task_pair'], member['task_pair'], member['run_id'])
+            config = json.loads(files[Path(member['config_path'])])
+            spec = json.loads(config['workload_profile']['prompt_text'])
+            self.assertEqual(spec['task_kwargs']['task_pair'], member['task_pair'], member['run_id'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -26,7 +26,7 @@ No synthetic sensor, reference temperature, model digest or turn count is used.
 
 Sizing_preview.json contains A1's planning guesses only. No arm-compatible
 sizing_b5.json is supplied. Use fit_roster with R1 measured cost estimates:
-drop only 17 first, then decrease B_D by 1024 down to 6144; otherwise return
+drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,

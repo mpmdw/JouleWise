@@ -373,7 +373,7 @@
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e08.json",
-      "config_sha256": "b57f5e12a69d72f7f4f25a5a9956d1bfddf6808b1e9223e7b3e88e95c92895b9",
+      "config_sha256": "4e68d2f885c00f93c98b023bf8865957f69db8c6b99ead0ab03897b2735cf4ba",
       "expected_episode_seed": 16366097954358066666,
       "expected_turn_seed_0": 5149075953107999825,
       "held_out": false,
@@ -412,7 +412,7 @@
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
           "give_hint": true,
-          "task_pair": "spam_filter_update"
+          "task_pair": "bank_transfer_2"
         },
         "temperature": 1.0,
         "thermal": {
@@ -753,7 +753,7 @@
       "block": "D",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e14.json",
-      "config_sha256": "fce064e51ed871e98f385ea02aeed109a974b5fff3954b1a55621238376fcf6e",
+      "config_sha256": "ee0729025416e00d49d117675b87ea225fb3c47e671c62c259cef9d31968a565",
       "expected_episode_seed": 16366097954358066666,
       "expected_turn_seed_0": 5149075953107999825,
       "held_out": false,
@@ -792,7 +792,7 @@
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
           "give_hint": true,
-          "task_pair": "spam_filter_update"
+          "task_pair": "bank_transfer_2"
         },
         "temperature": 1.0,
         "thermal": {
@@ -1012,7 +1012,7 @@
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e18.json",
-      "config_sha256": "4236d91f0170f6e1244cdb6ea693b978967a85cea51aa500428c0db886e1d9c3",
+      "config_sha256": "a1a30afe282ab2a37016db348e31f396bd2b8db4db0fb3270bf73a5207a2a51b",
       "expected_episode_seed": 15667618974046976403,
       "expected_turn_seed_0": 8805628232305408028,
       "held_out": false,
@@ -1051,7 +1051,7 @@
         "task_kwargs": {
           "cache_dir": "/Users/edr/.cache/joulewise/shade",
           "give_hint": true,
-          "task_pair": "spam_filter_update"
+          "task_pair": "bank_transfer_2"
         },
         "temperature": 1.0,
         "thermal": {
