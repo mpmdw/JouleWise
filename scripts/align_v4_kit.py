@@ -494,8 +494,11 @@ pilot night-plan v5 family; it is not itself a run_night plan (prepare writes
 that). Every R1 value, including every member cost, is an explicit
 `PENDING_R1` value. Validate a separately filled copy with
 `python3 -B scripts/validate_align_v4_w1_plan.py <copy>`; the command refuses
-any placeholder or disagreement with registration/inputs.json and recomputes
-both the 26,940 s span cap and 44,640 s window maximum. The template is not
+any placeholder or disagreement with registration/inputs.json (and with
+r1_slots.json max_r1_tail_s), applies lead ruling L1 to T_dead, validates the
+template's own heavy/per_turn gate policy, and recomputes both the 26,940 s
+span cap and 44,640 s window maximum. After any kit regeneration, rebuild the
+template's member bindings with `--regenerate-template`. The template is not
 custody, an arm receipt, or an installation.
 """
 

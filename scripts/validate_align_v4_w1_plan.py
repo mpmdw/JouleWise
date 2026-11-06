@@ -23,9 +23,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.b5 import plan as night_plan  # noqa: E402  (window-maximum constants)
 
+from scripts import align_v4_kit as kit  # noqa: E402  (L1 rule, registered roster)
+
 PLACEHOLDER = "PENDING_R1"
 TEMPLATE_SCHEMA = "joulewise.align_v4.w1_plan_template.v1"
 INPUTS = ROOT / "configs/campaigns/align_v4/registration/inputs.json"
+R1_SLOTS = ROOT / "configs/campaigns/align_v4/registration/r1_slots.json"
+COLLECTION_PLAN = ROOT / "configs/campaigns/align_v4/collection_plan.json"
+MEMBER_BINDINGS = ("ordinal", "role", "run_id", "config_path", "config_sha256")
 SPAN_CAP_S = 26_940
 WINDOW_CAP_S = 44_640
 T0_STAGE_CAP_S = night_plan.T0_STAGE_CAP_S
@@ -58,7 +63,52 @@ def _read_inputs() -> dict:
     return json.loads(INPUTS.read_text(encoding="utf-8"))
 
 
-def validate(value: dict, inputs: dict | None = None) -> dict:
+def _read_r1_slots() -> dict:
+    return json.loads(R1_SLOTS.read_text(encoding="utf-8"))
+
+
+def build_template(collection_plan: dict | None = None) -> dict:
+    """The committed template, regenerated from the registered kit roster.
+
+    Its member bindings (including config_sha256) come from collection_plan.json,
+    so any kit regeneration that changes a config hash shows up as template
+    drift. Every R1/R0 value is PENDING_R1; D's gate policy is heavy and
+    per-turn by construction, so those two keys are fixed true.
+    """
+    plan = collection_plan if collection_plan is not None else json.loads(COLLECTION_PLAN.read_text())
+    pending = PLACEHOLDER
+    return {
+        "align_v4": {
+            "B_D": pending, "I_D": pending, "T_dead": pending, "max_r1_tail_s": pending,
+            "arithmetic": {"align_s": pending, "pause_limit_s": PAUSE_LIMIT_S,
+                           "programmed_span_s": pending, "scaffold_s": kit.SCAFFOLD_S,
+                           "session_wait_budget_s": SESSION_WAIT_BUDGET_S, "span_cap_s": SPAN_CAP_S,
+                           "t0_stage_cap_s": T0_STAGE_CAP_S, "window_cap_s": WINDOW_CAP_S},
+            "config_root": "configs/campaigns/align_v4", "effort": pending,
+            "members": [{**{key: member[key] for key in MEMBER_BINDINGS}, "member_s": pending}
+                        for member in plan["members"]],
+            "status": pending,
+            "thermal_policy": {"chunk_tokens": pending, "delta_fast_c": pending, "delta_slow_c": pending,
+                               "heavy": True, "per_turn": True,
+                               "sensors": {"fan_keys": pending, "r0_sha256": pending,
+                                           "s_fast": pending, "s_slow": pending},
+                               "turn_cap_s": pending},
+            "window": 1,
+        },
+        "night_plan_schema": "joulewise.night_plan.v5",
+        "night_plan_schema_version": 5,
+        "plan_id": "align-v4-w1-" + pending,
+        "receipt_class": "HAZARD_PACK",
+        "schema": TEMPLATE_SCHEMA,
+        "window_max_s": pending,
+    }
+
+
+def template_bytes(collection_plan: dict | None = None) -> bytes:
+    return (json.dumps(build_template(collection_plan), indent=2, sort_keys=True) + "\n").encode()
+
+
+def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = None) -> dict:
     pending = list(_placeholder_paths(value))
     if pending:
         _fail("refused PENDING_R1 placeholder(s): " + ", ".join(pending))
@@ -81,9 +131,12 @@ def validate(value: dict, inputs: dict | None = None) -> dict:
         _fail("B_D must be a multiple of 1024 in [6144, 40960]")
     idle = _finite(align.get("I_D"), "I_D")
     dead = _finite(align.get("T_dead"), "T_dead")
-    if not 0 <= idle < 1750 or not math.isclose(dead, (1750 - idle) / 1.13544,
-                                                rel_tol=1e-9, abs_tol=1e-9):
-        _fail("T_dead must equal (1750 - I_D) / 1.13544")
+    tail = _finite(align.get("max_r1_tail_s"), "max_r1_tail_s")
+    if not 0 <= idle < 1750 or tail < 0 or not math.isclose(
+            dead, kit.l1_t_dead(idle, tail), rel_tol=1e-9, abs_tol=1e-9):
+        _fail("T_dead must equal min((1750 - I_D), (1800 - I_D - max_r1_tail_s - 10)) / 1.13544 "
+              "(lead ruling L1)")
+    kit.check_l1_member_fit(idle, dead, tail)
 
     policy = align.get("thermal_policy")
     sensor_keys = {"s_fast", "s_slow", "fan_keys", "r0_sha256"}
@@ -91,13 +144,19 @@ def validate(value: dict, inputs: dict | None = None) -> dict:
         _fail("thermal_policy and thermal_policy.sensors must be objects")
     if set(policy["sensors"]) != sensor_keys:
         _fail("thermal_policy.sensors must explicitly contain " + ", ".join(sorted(sensor_keys)))
-    # The same canonical gate-policy validation the kit applies to D members.
+    # The same canonical gate-policy validation the kit applies to D members:
+    # the template's own heavy/per_turn keys are validated, never supplied here.
+    if "window_reference" in policy:
+        _fail("thermal_policy.window_reference is installed per member by the kit, not templated")
     from joulewise.align.apple.thermal_gates import validate_gate_policy
-    validate_gate_policy({**policy, "heavy": True, "per_turn": True, "window_reference": {"role": "capture"}})
+    checked = validate_gate_policy({**policy, "window_reference": {"role": "capture"}})
+    if checked["heavy"] is not True or checked["per_turn"] is not True:
+        _fail("D thermal_policy must be heavy with per-turn gates and holds")
 
     # The template is a second copy of values the kit installs from
     # registration/inputs.json; refuse any disagreement.
     inputs = _read_inputs() if inputs is None else inputs
+    r1_slots = _read_r1_slots() if r1_slots is None else r1_slots
     r1 = (inputs or {}).get("R1") or {}
     bound = {"B_D": r1.get("B_D"), "I_D": r1.get("I_D"), "T_dead": r1.get("T_dead"),
              "thermal_policy": r1.get("thermal_policy"),
@@ -108,6 +167,10 @@ def validate(value: dict, inputs: dict | None = None) -> dict:
     mismatched = sorted(k for k, v in bound.items() if align.get(k) != v)
     if mismatched:
         _fail("template disagrees with registration/inputs.json on: " + ", ".join(mismatched))
+    if (r1_slots or {}).get("max_r1_tail_s") is None:
+        _fail("registration/r1_slots.json is still pending for: max_r1_tail_s")
+    if align.get("max_r1_tail_s") != r1_slots["max_r1_tail_s"]:
+        _fail("template disagrees with registration/r1_slots.json on: max_r1_tail_s")
 
     members = align.get("members")
     if not isinstance(members, list) or len(members) != 18:
@@ -119,8 +182,8 @@ def validate(value: dict, inputs: dict | None = None) -> dict:
     expected = {"anchor": 4, "X-S": 2, "X-G": 2, "Y-S": 2, "Y-G": 2, "D": 6}
     if {role: roles.count(role) for role in expected} != expected or set(roles) != set(expected):
         _fail("member roles do not match the Amendment-1 window-1 roster")
-    registered = json.loads((ROOT / "configs/campaigns/align_v4/collection_plan.json").read_text())
-    bindings = ("ordinal", "role", "run_id", "config_path", "config_sha256")
+    registered = json.loads(COLLECTION_PLAN.read_text())
+    bindings = MEMBER_BINDINGS
     if [[row.get(key) for key in bindings] for row in members] != [
             [row.get(key) for key in bindings] for row in registered["members"]]:
         _fail("members must be the registered configs/campaigns/align_v4 roster")
@@ -161,10 +224,19 @@ def main(argv=None) -> int:
     parser.add_argument("plan", nargs="?", type=Path, default=DEFAULT_PLAN)
     parser.add_argument("--inputs", type=Path, default=INPUTS,
                         help="registration/inputs.json the kit installs (default: this checkout's)")
+    parser.add_argument("--r1-slots", type=Path, default=R1_SLOTS,
+                        help="registration/r1_slots.json (default: this checkout's)")
+    parser.add_argument("--regenerate-template", action="store_true",
+                        help="rewrite the committed template from collection_plan.json and exit")
     args = parser.parse_args(argv)
+    if args.regenerate_template:
+        DEFAULT_PLAN.write_bytes(template_bytes())
+        print(f"regenerated {DEFAULT_PLAN.relative_to(ROOT)}")
+        return 0
     try:
         inputs = json.loads(args.inputs.read_text(encoding="utf-8"))
-        result = validate(json.loads(args.plan.read_text(encoding="utf-8")), inputs)
+        r1_slots = json.loads(args.r1_slots.read_text(encoding="utf-8"))
+        result = validate(json.loads(args.plan.read_text(encoding="utf-8")), inputs, r1_slots)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
