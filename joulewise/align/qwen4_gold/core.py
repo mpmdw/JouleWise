@@ -275,7 +275,7 @@ def required_traces(config, unit):
 # formula in float64 from each side's OWN input and the checkpoint weight.
 # Untraced norms (QSA indexer q/k_layernorm, DeltaNet in-kernel l2norm) are out
 # of scope: they are covered only through downstream traces.
-GATE_AMENDMENTS = ["A1-input-conditioned-norms"]
+GATE_AMENDMENTS = ["A1-input-conditioned-norms", "A2-bf16-router-boundary-swaps"]
 # Supremum of |activation'(z)|: sigmoid 1/4; silu 1.0998 (rounded up).
 ACTIVATION_LIPSCHITZ = {"sigmoid": 0.25, "silu": 1.1}
 
@@ -378,6 +378,75 @@ def compare_exact(reference, candidate):
     return True
 
 
+def router_boundary_swaps(reference_experts, candidate_experts, reference_logits, candidate_logits, dtype):
+    """Gate amendment A2 (bf16 only; see gold_parity.md): classify expert-set differences.
+
+    A row passes if both sides select the same set, or if the differing experts
+    pair up one-to-one as boundary swaps: for each pair (a only in the
+    reference set, b only in the candidate set), with allowance
+    A = atol + rtol * min(|l_ref[a]|, |l_ref[b]|) (the router.logits gate),
+    |l_ref[a] - l_ref[b]| <= A and |l_mlx[a] - l_mlx[b]| <= A, and a and b both
+    lie within A of the k-th selected logit on each side.  Every other expert
+    must match exactly.  The caller must then gate router.weights and moe of the
+    swapped rows under teacher-forced routing.
+    """
+    import numpy as np
+    if dtype != "bf16":
+        return {"pass": False, "reason": "A2 applies to bf16 only"}
+    t = TOLERANCES[dtype]
+    ref_ids, mlx_ids = (np.asarray(_comparable(v)) for v in (reference_experts, candidate_experts))
+    ref_logits, mlx_logits = (np.asarray(_comparable(v), dtype=np.float64) for v in (reference_logits, candidate_logits))
+    if ref_ids.shape != mlx_ids.shape or ref_ids.ndim < 1 or ref_logits.shape != mlx_logits.shape:
+        return {"pass": False, "reason": "shape_mismatch"}
+    k, experts = ref_ids.shape[-1], ref_logits.shape[-1]
+    ref_ids, mlx_ids = ref_ids.reshape(-1, k).astype(np.int64), mlx_ids.reshape(-1, k).astype(np.int64)
+    ref_logits, mlx_logits = ref_logits.reshape(-1, experts), mlx_logits.reshape(-1, experts)
+    if ref_logits.shape[0] != ref_ids.shape[0] or min(ref_ids.min(), mlx_ids.min()) < 0 or max(
+            ref_ids.max(), mlx_ids.max()) >= experts or not (np.isfinite(ref_logits).all() and np.isfinite(mlx_logits).all()):
+        return {"pass": False, "reason": "invalid_router_arrays"}
+    rows, admissible, failed = [], [], []
+    for r in range(ref_ids.shape[0]):
+        ref_set, mlx_set = set(ref_ids[r].tolist()), set(mlx_ids[r].tolist())
+        if ref_set == mlx_set:
+            continue
+        only_ref, only_mlx = sorted(ref_set - mlx_set), sorted(mlx_set - ref_set)
+        kth = {"reference": ref_logits[r, ref_ids[r]].min(), "mlx": mlx_logits[r, mlx_ids[r]].min()}
+
+        def pair(a, b):
+            allow = t["atol"] + t["rtol"] * min(abs(ref_logits[r, a]), abs(ref_logits[r, b]))
+            margins = (abs(ref_logits[r, a] - ref_logits[r, b]), abs(mlx_logits[r, a] - mlx_logits[r, b]))
+            boundary = all(abs(logits[r, e] - kth[side]) <= allow for side, logits in
+                           (("reference", ref_logits), ("mlx", mlx_logits)) for e in (a, b))
+            return margins[0] <= allow and margins[1] <= allow and boundary, allow, margins
+
+        match = {}
+
+        def augment(a, seen):
+            for b in only_mlx:
+                if b not in seen and pair(a, b)[0]:
+                    seen.add(b)
+                    if b not in match or augment(match[b], seen):
+                        match[b] = a
+                        return True
+            return False
+        ok = (len(ref_set) == len(mlx_set) == k and len(only_ref) == len(only_mlx)
+              and all(augment(a, set()) for a in only_ref))
+        detail = {"row": r, "reference_only": only_ref, "candidate_only": only_mlx, "admissible": bool(ok)}
+        if ok:
+            detail["pairs"] = []
+            for b, a in sorted(match.items(), key=lambda item: item[1]):
+                _, allow, margins = pair(a, b)
+                detail["pairs"].append({"reference": a, "candidate": b, "allowance": allow,
+                                        "reference_margin": margins[0], "candidate_margin": margins[1],
+                                        "exact_reference_tie": bool(margins[0] == 0.0)})
+            admissible.append(r)
+        else:
+            failed.append(r)
+        rows.append(detail)
+    return {"pass": not failed, "gate": "A2-boundary-swap", "exact_set_agreement": not rows,
+            "mismatched_rows": len(rows), "admissible_rows": admissible, "non_admissible_rows": failed,
+            "admissible_swaps": sum(len(d.get("pairs", [])) for d in rows), "rows": rows}
+
 class _Gate:
     """Streaming elementwise + cosine accumulator for one pair of arrays.
 
@@ -479,6 +548,38 @@ def gate_activation(gate, name):
     return sigmoid if name == "sigmoid" else gate * sigmoid
 
 
+def norm_allowance(x_ref, x_mlx, weight, spec, z_ref=None, z_mlx=None):
+    """Gate amendment A1's propagated allowance P, per element (float64 rows).
+
+    A rigorous bound on |f(x_ref) - f(x_mlx)| for the official norm f, whose
+    first-order expansion is P_c = |s_c| (|dx_c|/r + |x_c| mean_g|x_j dx_j| / r^3)
+    (gold_parity.md). With n = x/r over the element's own RMS group g of G
+    channels, r' the candidate input's RMS, and d = x_mlx - x_ref:
+    n'_c - n_c = d_c/r' + x_c (r - r')/(r r'), and
+    |r' - r| = |r'^2 - r^2|/(r + r') = |mean_g(2 x d + d^2)|/(r + r')
+             <= (2 mean_g|x d| + mean_g d^2)/(r + r'),
+    so no second-order remainder is neglected. Gated: f = w act(z) n, and
+    |act(z') n' - act(z) n| <= |act(z')| |n' - n| + |n| L |z' - z|.
+    Only the element's own row and group contribute.
+    """
+    import numpy as np
+    rows, width = x_ref.shape
+    group = spec["group"]
+    shape = (rows, width // group, group)
+
+    def per_group(value):
+        return np.broadcast_to(value.reshape(shape).mean(-1, keepdims=True), shape).reshape(rows, width)
+    d = x_mlx - x_ref
+    r = np.sqrt(per_group(x_ref * x_ref) + spec["eps"])
+    r_mlx = np.sqrt(per_group(x_mlx * x_mlx) + spec["eps"])
+    rms_shift = (2.0 * per_group(np.abs(x_ref * d)) + per_group(d * d)) / (r + r_mlx)
+    norm_delta = np.abs(d) / r_mlx + np.abs(x_ref) * rms_shift / (r * r_mlx)
+    if spec["kind"] == "gated":
+        lipschitz = ACTIVATION_LIPSCHITZ[spec["activation"]]
+        return (np.abs(weight) * np.abs(gate_activation(z_mlx, spec["activation"])) * norm_delta
+                + np.abs(weight) * np.abs(x_ref) / r * lipschitz * np.abs(z_mlx - z_ref))
+    return np.abs(1.0 + weight) * norm_delta
+
 def compare_norm(reference, candidate, reference_input, candidate_input, weight, spec, dtype,
                  reference_gate=None, candidate_gate=None):
     """Gate amendment A1 for a normalization-output trace (see gold_parity.md).
@@ -490,10 +591,12 @@ def compare_norm(reference, candidate, reference_input, candidate_input, weight,
       which also validates this harness's transcription of f);
     - input (and gate): the two sides' norm inputs within the unchanged gate;
     - chained y_ref vs y_mlx: cosine floor unchanged, and elementwise
-      |dy| <= atol + rtol*|y_ref| + P, with the first-order propagated bound
-      P_c = |s_c|/r * e_x * (1 + |x_c|*mean|x|/r^2) [+ |w_c||n_c| L e_z gated],
-      using the element's own input error and the exact row-local first-order
-      Jacobian bound (no error from another row or channel is borrowed).
+      |dy| <= atol + rtol*|y_ref| + P, P = norm_allowance(): a rigorous
+      per-element bound on |f(x_ref) - f(x_mlx)| whose first-order term is
+      P_c = |s_c| * (|dx_c|/r + |x_c| * mean_{j in group(c)} |x_j||dx_j| / r^3)
+            [+ |w_c||n_c| L |dz_c| gated],
+      computed from the element's own RMS group only (no error from another
+      row or group is borrowed, and a group's cross term is never diluted).
     """
     import numpy as np
     arrays = [_comparable(v) for v in (reference, candidate, reference_input, candidate_input)]
@@ -533,24 +636,11 @@ def compare_norm(reference, candidate, reference_input, candidate_input, weight,
         if not all(np.isfinite(v).all() for v in (y_ref, y_mlx, x_ref, x_mlx, *z)):
             return {"pass": False, "reason": "nonfinite"}
         z_ref, z_mlx = z if gated else (None, None)
-        f_ref, r, mean_abs = norm_reference(x_ref, weight, spec, z_ref)
+        f_ref, _, _ = norm_reference(x_ref, weight, spec, z_ref)
         f_mlx, _, _ = norm_reference(x_mlx, weight, spec, z_mlx)
         reference_op.add(f_ref, y_ref)
         mlx_op.add(f_mlx, y_mlx)
-        # For n_c=x_c/r, dn_c = dx_c/r - x_c*mean(x*dx)/r^3.
-        # Triangle inequality gives an element-specific, row-local bound.  In
-        # particular, a large error in another row (or merely another channel)
-        # cannot widen this output element's gate.
-        dx = np.abs(x_ref - x_mlx)
-        row_cross = np.mean(np.abs(x_ref) * dx, axis=-1, keepdims=True)
-        norm_delta = dx / r + np.abs(x_ref) * row_cross / (r*r*r)
-        if gated:
-            activation = np.abs(gate_activation(z_ref, spec["activation"]))
-            dz = np.abs(z_ref - z_mlx)
-            allowance = (np.abs(weight) * activation * norm_delta
-                         + np.abs(weight) * np.abs(x_ref) / r * lipschitz * dz)
-        else:
-            allowance = np.abs(1.0 + weight) * norm_delta
+        allowance = norm_allowance(x_ref, x_mlx, weight, spec, z_ref, z_mlx)
         max_allowance = max(max_allowance, float(allowance.max()))
         chained.add(y_ref, y_mlx, allowance)
         unpropagated.add(y_ref, y_mlx)

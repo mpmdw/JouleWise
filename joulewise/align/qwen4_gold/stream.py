@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core import (IndexedCheckpoint, REFERENCE_VERSION, TraceFile, digest,
                    file_stamp, sha256, write_json)
-from .runner import Harness, execute, failure_summary, load_prompts, runtime_identity
+from .runner import Harness, execute, failure_summary, load_prompts, runtime_identity, runtime_version
 from .stream_ple import BUFFER_SUFFIXES, copy_tensors, extract_part, header, is_table, valid_entry
 
 REPO_ID = "Qwen/Qwen3.8-Flash-Next"
@@ -185,7 +185,7 @@ class StreamDriver:
         self.prompts = load_prompts(args.prompts_json, self.checkpoint.text)
         self.runtimes = runtimes if runtimes is not None else {
             "reference": runtime_identity(args.ref_python), "mlx": runtime_identity(args.mlx_python)}
-        if self.runtimes["reference"].get("transformers") != REFERENCE_VERSION:
+        if runtime_version(self.runtimes["reference"], "transformers") != REFERENCE_VERSION:
             raise ValueError(f"requires transformers {REFERENCE_VERSION}")
         identity = {"source": self.source_info, "config": self.checkpoint.config,
                     "weight_map": self.checkpoint.weight_map, "stamps": {}}
@@ -195,10 +195,11 @@ class StreamDriver:
         self.harness = Harness(args, self.checkpoint, identity, self.prompts, self.runtimes)
         self.path = self.work / "manifest.json"
         self._verified = {}
+        rerun = self.rerun_identity() if getattr(args, "rerun_from", None) else None
         fp = digest([STREAM_SCHEMA, self.harness.fingerprint, args.min_free_gb, args.max_staging_gb,
                      str(Path(args.convert_out).resolve()) if args.convert_out else None,
                      {p: sha256(p) for p in (args.canonical_converter, args.canonical_module) if p},
-                     args.shared_shards])
+                     args.shared_shards] + ([rerun["identity"]] if rerun else []))
         if self.path.exists():
             self.state = json.loads(self.path.read_text())
             if not args.resume:
@@ -209,7 +210,10 @@ class StreamDriver:
             self.state = {"schema": STREAM_SCHEMA, "fingerprint": fp, "source": self.source_info,
                           "plan": self.plan, "storage": self.storage, "shards": {}, "derived_shards": {},
                           "units": {}, "chain": {}, "ple": {"entries": {}}}
+            if rerun:
+                self.adopt_rerun(rerun)
             self.save()
+        self.selected = set(self.state["rerun"]["units"]) if "rerun" in self.state else None
 
     def save(self):
         write_json(self.path, self.state)
@@ -266,6 +270,8 @@ class StreamDriver:
 
     def release(self):
         done = set(self.state["units"])
+        if self.selected is not None:
+            done |= set(self.plan["units"]) - self.selected  # never run here
         for filename in self.state["shards"]:
             for unit in set(self.plan["users"].get(filename, [])) & done:
                 self.consume(filename, unit)
@@ -371,6 +377,83 @@ class StreamDriver:
         write_json(store / "store.json", ple)
         self.args.worker_extra.update(sparse_store=str(store), sparse_digest=sha256(store / "store.json"))
 
+    def rerun_identity(self):
+        """Selected units of a finished/in-progress run, re-run on its reference chain.
+
+        The source work directory is only read. Its recorded predecessor
+        outputs (the official reference chain) are byte-checked against its
+        manifest's unit artifact hashes and copied here; nothing is trusted
+        from its verdicts except the FAIL list used by --rerun-failed.
+        """
+        old_work = Path(self.args.rerun_from).resolve()
+        if old_work == self.work or old_work in self.work.parents or self.work in old_work.parents:
+            raise ValueError("--rerun-from must be a different, non-nested work directory")
+        old = json.loads((old_work / "manifest.json").read_text())
+        if old.get("schema") != STREAM_SCHEMA:
+            raise ValueError("--rerun-from is not a streaming work directory")
+        if (old["source"]["repo"], old["source"]["revision"], old["source"]["shards"]) != (
+                self.source_info["repo"], self.source_info["revision"], self.metadata):
+            raise ValueError("--rerun-from used a different pinned checkpoint")
+        units = list(getattr(self.args, "units", None) or [])
+        if getattr(self.args, "rerun_failed", False):
+            units += [u for u, row in old["units"].items() if row.get("status") != "PASS"]
+        unknown = set(units) - set(self.plan["units"])
+        if unknown:
+            raise ValueError(f"unknown units: {sorted(unknown)}")
+        units = [u for u in self.plan["units"] if u in set(units)]
+        if not units:
+            raise ValueError("no units selected to re-run (--units and/or --rerun-failed)")
+        keys = [dtype + ":" + prompt["name"] for dtype in ("fp32", "bf16") for prompt in self.prompts]
+        inputs = {}
+        for unit in units:
+            index = self.plan["units"].index(unit)
+            previous = self.plan["units"][index - 1] if index else None
+            if previous is None or previous in units:
+                continue  # embed needs no input; a re-run predecessor supplies its own.
+            row, chain = old["units"].get(previous), old.get("chain", {}).get(previous)
+            if row is None or chain is None:
+                raise ValueError(f"--rerun-from has no completed reference chain at {previous}")
+            for key in keys:
+                source = Path(chain[key]) if key in chain else None
+                relative = str(source.relative_to(old_work)) if source else None
+                if source is None or row["artifacts"].get(relative) != sha256(source):
+                    raise ValueError(f"reference chain input missing or changed: {previous}/{key}")
+                inputs.setdefault(previous, {})[key] = {"source": str(source), "sha256": row["artifacts"][relative]}
+        return {"old_work": old_work, "old": old, "units": units, "inputs": inputs,
+                "identity": {"source_fingerprint": old["fingerprint"], "units": units, "inputs": inputs}}
+
+    def adopt_rerun(self, rerun):
+        directory = self.work / "rerun-inputs"
+        for previous, keys in rerun["inputs"].items():
+            for key, row in keys.items():
+                target = directory / previous / (key.replace(":", "-") + ".npy")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(row["source"], target)
+                if sha256(target) != row["sha256"]:
+                    raise ValueError("reference chain input changed while copying")
+                row["path"] = str(target)
+        old_ple = rerun["old"].get("ple", {})
+        if "plans" in old_ple:
+            # The official sparse PLE rows already extracted for these prompts:
+            # copied byte-checked; prepare_ple re-binds them to the pinned shards.
+            store = self.work / "sparse-ple"
+            store.mkdir(exist_ok=True)
+            for tensor, entry in old_ple["entries"].items():
+                if not valid_entry(rerun["old_work"] / "sparse-ple", entry):
+                    raise ValueError(f"--rerun-from sparse PLE rows changed: {tensor}")
+                shutil.copyfile(rerun["old_work"] / "sparse-ple" / entry["file"], store / entry["file"])
+            self.state["ple"] = {k: v for k, v in old_ple.items() if k != "source_shards"}
+        self.state["rerun"] = {"source_work": str(rerun["old_work"]), "source_fingerprint": rerun["old"]["fingerprint"],
+                               "units": rerun["units"], "inputs": rerun["inputs"]}
+
+    def chain_input(self, previous, key):
+        if previous in self.state["chain"]:
+            return Path(self.state["chain"][previous][key])
+        row = self.state.get("rerun", {}).get("inputs", {}).get(previous, {}).get(key)
+        if row is None or sha256(row["path"]) != row["sha256"]:
+            raise ValueError(f"reference chain input missing or changed: {previous}/{key}")
+        return Path(row["path"])
+
     def run_unit(self, unit):
         import numpy as np
         chain = {}
@@ -378,7 +461,7 @@ class StreamDriver:
         for dtype in ("fp32", "bf16"):
             for prompt in self.prompts:
                 key = dtype + ":" + prompt["name"]
-                hidden = Path(self.state["chain"][previous][key]) if previous else None
+                hidden = self.chain_input(previous, key) if previous else None
                 output = self.harness.case(unit, dtype, prompt, "real", hidden)
                 if output is None:
                     raise RuntimeError(f"reference chain incomplete at {unit}/{key}")
@@ -451,12 +534,16 @@ class StreamDriver:
                 if path.exists():
                     shutil.rmtree(path)
         for unit in self.plan["units"]:
-            if unit in self.state["units"]:
+            if unit in self.state["units"] or (self.selected is not None and unit not in self.selected):
                 continue
             print(f"Unit {unit}", flush=True)
             ple_ids = self.checkpoint.text.get("ple_layer_ids") or []
-            if ple_ids and unit == str(min(ple_ids) - 1):
+            first_ple = str(min(ple_ids) - 1) if ple_ids else None
+            if ple_ids and unit == first_ple:
                 self.prepare_ple()
+            elif (self.selected is not None and first_ple is not None and "source_shards" not in self.state["ple"]
+                  and self.plan["units"].index(unit) > self.plan["units"].index(first_ple)):
+                self.prepare_ple()  # Re-run: rows adopted from --rerun-from, or extracted now.
             elif "plans" in self.state["ple"]:
                 store = self.work / "sparse-ple"
                 self.args.worker_extra.update(sparse_store=str(store), sparse_digest=sha256(store / "store.json"))
@@ -493,7 +580,9 @@ class StreamDriver:
                    "fingerprint": self.state["fingerprint"],
                    "coverage": {"layers": list(range(self.checkpoint.text["num_hidden_layers"])),
                                 "dtypes": ["fp32", "bf16"], "input_modes": ["random", "real"], "endpoints": True,
-                                "full_48_layer_gold": not failures and self.checkpoint.text["num_hidden_layers"] == 48},
+                                "full_48_layer_gold": (not failures and self.selected is None
+                                                       and self.checkpoint.text["num_hidden_layers"] == 48),
+                                "rerun": self.state.get("rerun")},
                    "failures": failures, "units": self.state["units"], "skipped_keys": self.plan["skipped_keys"]}
         write_json(self.work / "summary.json", summary)
         if failures:
@@ -533,7 +622,14 @@ def main(argv=None):
     parser.add_argument("--convert-out")
     parser.add_argument("--canonical-converter", help="canonical scripts/align_convert_qwen4_exp.py (not merged by this lane)")
     parser.add_argument("--canonical-module", help="canonical joulewise/align/models/qwen4_exp.py")
+    parser.add_argument("--rerun-from", help="re-run selected units of this (read-only) streaming work directory "
+                        "into a fresh --work, on its recorded official reference chain inputs")
+    parser.add_argument("--units", type=lambda v: [u for u in v.split(",") if u],
+                        help="with --rerun-from: comma-separated units (embed, 0..N-1, final, head)")
+    parser.add_argument("--rerun-failed", action="store_true", help="with --rerun-from: add every non-PASS unit")
     args = parser.parse_args(argv)
+    if (args.units or args.rerun_failed) and not args.rerun_from:
+        parser.error("--units/--rerun-failed require --rerun-from")
     args.random_scale = 1.0
     if args.convert_out and (not args.canonical_converter or not args.canonical_module):
         parser.error("--convert-out requires --canonical-converter and --canonical-module from the canonical branch")

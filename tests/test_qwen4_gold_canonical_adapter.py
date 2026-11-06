@@ -278,6 +278,44 @@ class NativeCanonicalAdapterTests(unittest.TestCase):
 
     def test_fp32_all_units_make_tiny(self):
         self.harness("fp32")
+        self.check_teacher_forced_routing(self.root / "parity/layer-000/probe-fp32-real")
+
+    def check_teacher_forced_routing(self, case):
+        """A2: the canonical MoE block re-run under a given expert selection."""
+        import numpy as np
+        request = json.loads((case / "mlx/request.json").read_text())
+        ids = np.load(case / "reference/router.experts.npy")
+        self.assertEqual(Path(request["forced_experts"]).resolve(), (case / "reference/router.experts.npy").resolve())
+        self.assertNotIn("moe.forced", json.loads((case / "mlx/result.json").read_text())["traces"])  # sets agreed
+        forced = ids.copy()
+        forced[1, -1] = next(e for e in range(4) if e not in ids[1])  # swap row 1's last expert
+        path = self.root / "forced.npy"
+        np.save(path, forced)
+        request.update(forced_experts=str(path), forced_experts_sha256=sha256(path))
+        result = execute(sys.executable, request, self.root / "forced-mlx", 8, 120)
+        self.assertNotIn("error", result)
+        load = lambda name: np.load(self.root / "forced-mlx" / result["traces"][name])
+        logits = load("router.logits").astype(np.float64)
+        probs = np.exp(logits - logits.max(-1, keepdims=True)); probs /= probs.sum(-1, keepdims=True)
+        expected = np.take_along_axis(probs, forced, -1)
+        expected /= expected.sum(-1, keepdims=True)
+        np.testing.assert_allclose(load("router.weights.forced"), expected, rtol=1e-5, atol=1e-6)
+        moe, forced_moe = load("moe").reshape(len(ids), -1), load("moe.forced").reshape(len(ids), -1)
+        others = [r for r in range(len(ids)) if r != 1]
+        np.testing.assert_allclose(forced_moe[others], moe[others], rtol=1e-5, atol=1e-6)
+        self.assertFalse(np.allclose(forced_moe[1], moe[1], rtol=1e-3, atol=1e-4))
+        # The unforced traces are unchanged by the extra pass.
+        np.testing.assert_array_equal(load("router.experts"), np.load(case / "mlx/router.experts.npy"))
+        # The whole layer re-ran: upstream of the router it is bit-identical
+        # (fresh caches), the selection is the forced one, and every trace has
+        # a forced twin for the A2 comparator.
+        names = set(result["traces"])
+        unforced = {n for n in names if not n.endswith(".forced")}
+        self.assertEqual({n + ".forced" for n in unforced}, names - unforced)
+        for name in ("attn.norm", "attention", "mlp.norm", "router.logits"):
+            np.testing.assert_array_equal(load(name + ".forced"), load(name))
+        np.testing.assert_array_equal(load("router.experts.forced"), forced)
+        self.assertFalse(np.array_equal(load("output.forced"), load("output")))
 
     def test_bf16_all_units_make_tiny(self):
         self.harness("bf16")

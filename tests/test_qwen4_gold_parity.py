@@ -229,14 +229,84 @@ class NormGateTests(unittest.TestCase):
         clean = compare_norm(f_ref, f_mlx, x_ref, x_mlx, weight, spec, "fp32")
         self.assertGreater(clean["propagation"]["max_allowance"], 0)
         self.assertTrue(clean["chained_pass"], clean)
-        self.assertFalse(result["chained_pass"])  # cosine floor still binds
-        self.assertLess(result["cosine"], 0.999999)
+        # The cosine floor is satisfied, so it is the elementwise row-1 check
+        # (allowance 0 there) that fails; exactly one element is outside.
+        self.assertGreaterEqual(result["cosine"], 0.999999)
+        self.assertEqual(result["fraction_within"], 7 / 8)
+        # Non-vacuous regression: the former trace-global bound
+        # P = |s|/r * e_x * (1 + |x|*mean|x|/r^2) would have admitted row 1.
+        e_x = float(np.abs(x_ref.astype(np.float64) - x_mlx).max())
+        r = np.sqrt(1.0 + 1e-6)
+        old_allowance = 1.0 / r * e_x * (1.0 + 1.0 / (r * r))
+        diff = abs(float(y_ref[1, 3]) - float(y_mlx[1, 3]))
+        self.assertLess(diff, 1e-4 + 1e-4 * abs(float(y_ref[1, 3])) + old_allowance)
         local = self.x.copy()
         local[0, 3, 7] += 0.5  # One large upstream error cannot buy a loose allowance.
         result = self.compare(self.norm(self.x), self.norm(local), self.x, local)
         self.assertTrue(result["mlx_op"]["pass"] and result["reference_op"]["pass"])
         self.assertFalse(result["input"]["pass"])
         self.assertFalse(result["pass"])
+
+    def test_other_rms_group_neither_loosens_nor_dilutes(self):
+        """The cross term averages over the element's own group, not the row."""
+        import numpy as np
+        from joulewise.align.qwen4_gold.core import compare_norm
+        # One row holding two RMS groups of 4 (as an hc_norm holds hc_count streams).
+        spec = {"kind": "offset", "group": 4, "eps": 1e-6}
+        weight = np.zeros(8, np.float32)
+        x_ref = np.ones((1, 8), np.float32)
+        x_mlx = x_ref.copy(); x_mlx[0, 0] += 9e-5
+        f_ref, f_mlx = f32_norm(x_ref, 1 + weight, 4), f32_norm(x_mlx, 1 + weight, 4)
+        # Group 1 has no input error, so its propagated allowance is exactly 0;
+        # a row-wide mean would have granted it 9e-5/8 ~ 1.1e-5.
+        y_ref, y_mlx = f_ref.copy(), f_mlx.copy()
+        y_ref[0, 5] -= 1.025e-4; y_mlx[0, 5] += 1.025e-4
+        result = compare_norm(y_ref, y_mlx, x_ref, x_mlx, weight, spec, "fp32")
+        self.assertTrue(result["mlx_op"]["pass"] and result["reference_op"]["pass"])
+        self.assertFalse(result["chained_pass"])
+        self.assertEqual(result["fraction_within"], 7 / 8)
+        # Not diluted: for a large in-group error the group-mean cross term is
+        # needed in full; a row-wide mean (half as large here) is not a bound.
+        # (The cosine floor and input gate fail at this size; only the
+        # elementwise allowance is under test.)
+        x_mlx = x_ref.copy(); x_mlx[0, 0] += 0.02
+        f_mlx = f32_norm(x_mlx, 1 + weight, 4)
+        clean = compare_norm(f_ref, f_mlx, x_ref, x_mlx, weight, spec, "fp32")
+        self.assertEqual(clean["fraction_within"], 1.0, clean)
+        dy = abs(float(f_ref[0, 1]) - float(f_mlx[0, 1]))  # ~5.01e-3, x_1 = 1, dx_1 = 0
+        row_wide = 1.0 * (0.02 / 8)  # what a row-wide mean would allow
+        self.assertGreater(dy, 1e-4 + 1e-4 * abs(float(f_ref[0, 1])) + row_wide)
+
+    def test_allowance_bounds_float64_propagation_elementwise(self):
+        """P bounds |f(x_ref)-f(x_mlx)| per element in float64, including second order."""
+        import numpy as np
+        from joulewise.align.qwen4_gold.core import norm_allowance, norm_reference
+        x = self.x[0].astype(np.float64)
+        weight = self.weight.astype(np.float64)
+        G = self.spec["group"]
+        for scale in (6e-7, 1e-3, 0.05, 0.3):  # fp32 noise ... large bf16-like relative errors
+            dx = self.rng.uniform(-scale, scale, x.shape) * (1 + 50 * (self.rng.random(x.shape) < 0.01))
+            f_ref, r, _ = norm_reference(x, weight, self.spec)
+            f_mlx, _, _ = norm_reference(x + dx, weight, self.spec)
+            allowance = norm_allowance(x, x + dx, weight, self.spec)
+            ratio = np.abs(f_ref - f_mlx) / allowance
+            self.assertLessEqual(ratio.max(), 1 + 1e-9, scale)
+            self.assertGreater(ratio.max(), 0.5)  # and it is not vacuously loose
+            if scale == 6e-7:  # first-order limit: the documented P_c
+                cross = (np.abs(x) * np.abs(dx)).reshape(x.shape[0], -1, G).mean(-1, keepdims=True)
+                cross = np.broadcast_to(cross, (x.shape[0], x.shape[1] // G, G)).reshape(x.shape)
+                first = np.abs(1 + weight) * (np.abs(dx) / r + np.abs(x) * cross / r**3)
+                np.testing.assert_allclose(allowance, first, rtol=1e-4)
+        # Gated norm, including the gate's own error.
+        spec = {"kind": "gated", "group": 32, "eps": 1e-6, "activation": "silu"}
+        w = self.rng.normal(1, 0.2, 32)
+        x = self.rng.normal(0, 0.3, (16, 32)); z = self.rng.normal(0, 2, (16, 32))
+        for scale in (1e-6, 0.02, 0.2):
+            dx, dz = (self.rng.uniform(-scale, scale, x.shape) for _ in range(2))
+            f_ref, _, _ = norm_reference(x, w, spec, z)
+            f_mlx, _, _ = norm_reference(x + dx, w, spec, z + dz)
+            ratio = np.abs(f_ref - f_mlx) / norm_allowance(x, x + dx, w, spec, z, z + dz)
+            self.assertLessEqual(ratio.max(), 1 + 1e-9, scale)
 
     def test_reference_self_consistency_is_gated(self):
         y_ref = self.norm(self.x)
@@ -428,6 +498,68 @@ class BF16Tests(unittest.TestCase):
         self.assertIs(torch.Tensor.topk, original)  # patched only inside the indexer forward
 
 
+    def test_router_topk_ties_break_to_lowest_expert_inside_router_only(self):
+        """Live gold run, layer 1, tokens-b bf16 real, token row 2 (official router)."""
+        import types
+        import torch
+        from transformers.models.qwen4_exp.modeling_qwen4_exp import Qwen4ExpTextTopKRouter
+        from joulewise.align.qwen4_gold.reference import deterministic_router_ties
+        # The saved bf16 router logits of that row (512 experts, little-endian
+        # bf16 bit patterns). Experts 50, 228, 234 tie exactly at -4.125 for the
+        # 9th and 10th slots; torch's own order picked {228, 234}, MLX {50, 228}.
+        bits = bytes.fromhex(
+            "afc0bcc0bfc0c6c0e6c0c8c0b6c0cfc0b3c0b3c09ac086c0a6c0b2c0a1c0b2c0e0c0bcc0b1c073c0a6c0b7c0d1c0cbc0"
+            "adc0bdc0c3c099c092c0b5c0ccc0a7c0b7c0aac0dcc0c9c0acc0a2c0acc0d9c0d1c091c09fc0afc0b4c0abc0a1c0ccc0"
+            "bec0afc084c093c0a2c0b0c09ec0bcc0cdc0b7c0a9c0cbc0dac0cac0e3c09bc0bfc0d1c0bdc09cc0b9c0afc097c0c7c0"
+            "d9c0d5c0b4c0c9c0cac0acc0c2c0abc0cfc09bc0a8c0c0c0c8c0d4c0b8c0c2c0aec0a6c0adc0c7c0b2c0b9c0b5c090c0"
+            "bcc0b8c09fc0e2c0abc09fc0d0c09fc0c5c092c0b3c0b6c0adc0b0c0d1c0b8c0bec0d8c0bac0e3c0b6c0bfc0a2c0d2c0"
+            "a6c0b4c05ec0c6c0a4c0bdc0b5c098c0b9c0c3c0e5c0abc0a0c0c4c0bbc0d9c0a4c099c09ec0adc097c0bbc094c0d2c0"
+            "c1c0c3c0b9c081c0afc0b6c090c0a7c0c0c08bc094c0a7c0e6c0bbc0a2c0bec0d7c0bac0c0c06ac0c1c098c09cc0bac0"
+            "a5c0ddc0b8c0b7c0b5c0c7c0bfc0b0c090c08fc09dc0d0c0b3c0aac0b5c0d6c0aac0c0c0c0c0b0c0a6c0c4c0a8c0b5c0"
+            "a7c0a7c093c0cec0b1c0ccc0acc0c3c0aac0bfc0b9c0cec0d7c0cfc0a1c0b2c0afc0cdc0bfc0cdc0e1c0aac0a7c0bac0"
+            "b0c0bec0bcc09cc0b1c0b0c07fc0b6c0f5c0d2c0cbc0cdc084c09dc0aec0b8c092c0b2c084c0b0c0d4c0ecc0f5c0b0c0"
+            "cac0bdc0b6c0cbc0ecc099c0dac0b6c0acc077c0aec0dbc0c2c0b5c0a2c0afc0bcc0c8c07dc0b0c0c2c0c4c0cec0dec0"
+            "d6c0c8c0b9c0a2c0d1c08bc08cc0b1c0b8c0d8c0e0c0bac0b8c0bbc0a4c0a3c0d2c0c5c08fc0acc0c8c0c3c0b8c0c5c0"
+            "b9c098c0a5c0c5c0bac0fcc0e6c0b1c0c0c098c092c098c0b0c0dac0e1c0b0c0dbc0d7c092c0c7c093c0b3c094c0d8c0"
+            "aec0abc0bbc0bcc0d3c09dc0d0c0c0c0a6c0c0c0b9c0afc0acc0eac0a2c0a5c0b2c0aec0d3c0b7c0b7c0b0c0e3c0bcc0"
+            "cdc09fc0c8c0b1c0dbc09ac0cfc0c1c0b2c0bbc0bbc0b5c0abc093c0bec0d1c0afc0c1c093c0bbc09bc0c0c0a9c0bec0"
+            "c0c0b6c0b2c0cdc0bac0b4c0b8c0b0c0bfc0aac0e7c09dc0bfc0c4c0bfc0c3c0a2c0b0c0e8c0b7c0bcc0c4c0afc0b2c0"
+            "cbc0cdc0a6c089c09dc0a7c0b2c0a9c08ec0b6c0bdc0c3c094c0a6c0bbc0b1c0b0c0c6c0c4c0f0c0d4c0cfc0b0c0a8c0"
+            "b8c0b1c0c8c0afc0adc0d2c0bac0c4c0b5c09bc0a6c0b6c0d9c0c8c0c9c0c7c0bec09bc0aec0c1c0b9c0c2c0c0c0b4c0"
+            "bfc0c5c0dbc0bbc0a0c0b9c0aac08ec0c1c0cac09fc0a8c0c3c0bdc09fc0c1c0a4c0bdc0dbc0b8c0b5c0a2c0d1c0c1c0"
+            "b6c0aec0b6c0c7c0c4c0bac0a2c0b0c0b5c0cbc0a9c0afc0a8c0c0c0adc0c8c0b6c0bbc0b7c0b4c0d8c0b7c0bdc0b3c0"
+            "b7c0d2c0c6c0d7c0adc0acc0a3c0c2c0a8c0b3c0b5c0d6c0b7c0cac0b1c0e4c0b7c0b1c0adc0e1c094c0c0c05bc0c4c0"
+            "d1c0a4c0b0c0a0c091c0c3c0dfc0bac0"
+        )
+        import numpy as np
+        logits = torch.from_numpy(np.frombuffer(bits, "<i2").copy()).view(torch.bfloat16).float()[None]
+        self.assertEqual([logits[0, e].item() for e in (50, 228, 234)], [-4.125] * 3)
+        config = types.SimpleNamespace(num_experts_per_tok=10, num_experts=512, norm_topk_prob=True, hidden_size=512)
+        router = Qwen4ExpTextTopKRouter(config).to(torch.bfloat16)
+        with torch.no_grad():
+            router.weight.copy_(torch.eye(512, dtype=torch.bfloat16))  # logits == the bf16 inputs exactly
+        hidden = logits.to(torch.bfloat16)
+        _, plain_scores, _ = router(hidden)
+        counts, seen = {"topk_calls": 0, "rows": 0, "straddling_ties": 0}, []
+        original = torch.topk
+        deterministic_router_ties(router, torch, counts)
+        router.register_forward_hook(lambda m, a, o: seen.append(o))
+        router_logits, scores, indices = router(hidden)
+        self.assertEqual(router_logits[0, 50].item(), router_logits[0, 234].item())
+        self.assertEqual(set(indices[0].tolist()), {502, 122, 163, 19, 249, 258, 222, 147, 50, 228})
+        self.assertEqual(indices[0, -2:].tolist(), [50, 228])  # tied block in ascending expert order
+        # Probabilities/weights are untouched: same multiset as torch's own call.
+        self.assertTrue(torch.equal(scores.sort(dim=-1).values, plain_scores.sort(dim=-1).values))
+        self.assertEqual(len(seen), 1)  # registered hooks still run
+        self.assertEqual(counts, {"topk_calls": 1, "rows": 1, "straddling_ties": 1})
+        self.assertIs(torch.topk, original)  # patched only inside the router forward
+        # No tie at the cut: identical to torch.topk, and not counted.
+        logits[0, 228], logits[0, 234] = -4.0, -4.15625
+        _, _, untied = router(logits.to(torch.bfloat16))
+        self.assertEqual(set(untied[0].tolist()), {502, 122, 163, 19, 249, 258, 222, 147, 228, 50})
+        self.assertEqual(counts["straddling_ties"], 1)
+
+
 @unittest.skipUnless(HAS_ARRAYS, "optional NumPy")
 class VerdictTests(unittest.TestCase):
     def test_stub_can_never_pass_and_missing_trace_refuses(self):
@@ -514,6 +646,201 @@ class VerdictTests(unittest.TestCase):
             self.assertFalse(row["metrics"]["final.norm"]["mlx_op"]["pass"])
             summary = failure_summary({"cases": harness.rows["final"]})
             self.assertEqual(summary[1]["failing_traces"], ["final.norm", "output"])
+
+
+@unittest.skipUnless(HAS_ARRAYS, "optional NumPy")
+class RouterA2Tests(unittest.TestCase):
+    """Gate amendment A2: bf16 router boundary swaps under teacher-forced MoE."""
+    E, K, H, ROWS = 512, 10, 16, 4
+
+    def logits(self):
+        import numpy as np
+        from joulewise.align.qwen4_gold.core import round_bf16
+        rng = np.random.default_rng(5)
+        value = rng.uniform(-9, -6, (self.ROWS, self.E))
+        top = [1.5, 1.4375, 1.375, 1.3125, 1.25, 1.1875, 1.15625, 1.125, 1.09375]
+        for row in range(self.ROWS):
+            value[row, [3, 17, 40, 77, 101, 150, 200, 260, 300]] = top
+            value[row, 342] = value[row, 349] = 1.015625  # exact reference tie at the k-th slot
+            value[row, 400] = 0.5
+        return round_bf16(value)
+
+    def run_case(self, ref_logits, mlx_logits, mlx_ids=None, forced=True, forced_scale=1.0, dtype="bf16"):
+        import numpy as np
+        from joulewise.align.qwen4_gold.core import compare_arrays
+        experts_out = np.random.default_rng(9).normal(0, 1, (self.E, self.H))
+
+        def select(logits):  # canonical/A2 reference rule: descending, lowest index first
+            return np.argsort(-logits, axis=-1, kind="stable")[:, :self.K]
+
+        def weights(logits, ids):
+            p = np.exp(logits - logits.max(-1, keepdims=True)); p /= p.sum(-1, keepdims=True)
+            w = np.take_along_axis(p, ids, -1)
+            return (w / w.sum(-1, keepdims=True)).astype(np.float32)
+
+        def moe(ids, w):
+            return np.einsum("rk,rkh->rh", w, experts_out[ids]).astype(np.float32)[None]
+
+        ref_ids = select(ref_logits)
+        mlx_ids = select(mlx_logits) if mlx_ids is None else mlx_ids
+        arrays = {"reference": {"router.logits": ref_logits, "router.experts": ref_ids,
+                                "router.weights": weights(ref_logits, ref_ids),
+                                "moe": moe(ref_ids, weights(ref_logits, ref_ids))},
+                  "mlx": {"router.logits": mlx_logits, "router.experts": mlx_ids,
+                          "router.weights": weights(mlx_logits, mlx_ids), "moe": moe(mlx_ids, weights(mlx_logits, mlx_ids))}}
+        if forced:  # the candidate's whole-layer re-run under the reference's selection
+            w = weights(mlx_logits, ref_ids)
+            arrays["mlx"].update({"router.logits.forced": mlx_logits, "router.experts.forced": ref_ids,
+                                  "router.weights.forced": w, "moe.forced": moe(ref_ids, w) * forced_scale})
+        self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        results = {}
+        for side, values in arrays.items():
+            (root / side).mkdir()
+            for name, value in values.items():
+                np.save(root / side / (name + ".npy"), np.asarray(value))
+            results[side] = {"traces": {name: name + ".npy" for name in values}}
+        a, b = arrays["reference"], arrays["mlx"]
+        aligned = [np.take_along_axis(v["router.weights"], np.argsort(v["router.experts"], -1), -1) for v in (a, b)]
+        report = {"metrics": {"router.logits": compare_arrays(a["router.logits"], b["router.logits"], dtype),
+                              "router.experts": compare_arrays(a["router.experts"], b["router.experts"], dtype, exact=True),
+                              "router.weights": compare_arrays(*aligned, dtype),
+                              "moe": compare_arrays(a["moe"], b["moe"], dtype)}}
+        import types
+        harness = object.__new__(Harness)
+        harness.checkpoint = types.SimpleNamespace(config={"layer_types": ["linear_attention"], "hidden_size": self.H})
+        harness.router_a2("0", report, root, results["reference"], results["mlx"], dtype)
+        return report
+
+    def flip(self):
+        """The observed 1-ulp flip: layer 2, tokens-b bf16 random, row 7."""
+        ref = self.logits()
+        mlx = ref.copy(); mlx[1, 342] = 1.0078125  # one bf16 ulp below; MLX now ranks 349 first
+        return ref, mlx
+
+    def test_exact_reference_tie_resolves_to_the_same_set(self):
+        ref = self.logits()
+        report = self.run_case(ref, ref.copy())
+        self.assertTrue(report["metrics"]["router.experts"]["pass"])
+        self.assertTrue(report["metrics"]["router.experts"]["exact_set_agreement"])
+        self.assertNotIn("gate", report["metrics"]["router.experts"])  # A2 was never needed
+
+    def test_one_ulp_boundary_flip_passes_only_with_forced_moe(self):
+        import numpy as np
+        ref, mlx = self.flip()
+        report = self.run_case(ref, mlx)
+        experts = report["metrics"]["router.experts"]
+        self.assertTrue(experts["pass"], experts)
+        self.assertFalse(experts["unforced"]["pass"])
+        self.assertEqual(experts["admissible_rows"], [1])
+        self.assertEqual(experts["admissible_swaps"], 1)
+        pair = experts["rows"][0]["pairs"][0]
+        self.assertEqual((pair["reference"], pair["candidate"]), (342, 349))
+        self.assertTrue(pair["exact_reference_tie"])
+        self.assertAlmostEqual(pair["candidate_margin"], 0.0078125)
+        self.assertTrue(report["metrics"]["router.logits"]["pass"])
+        self.assertTrue(experts["forced"]["pass"])  # forced selection is exactly the reference's
+        for name in ("router.logits", "router.weights", "moe"):
+            self.assertEqual(report["metrics"][name]["gate"], "A2-teacher-forced")
+            self.assertTrue(report["metrics"][name]["pass"], report["metrics"][name])
+        self.assertFalse(report["metrics"]["moe"]["unforced"]["pass"])  # the flip is visible unforced
+        self.assertTrue(all(m["pass"] for m in report["metrics"].values()))
+        # Without the teacher-forced traces the swapped row cannot pass.
+        report = self.run_case(ref, mlx, forced=False)
+        self.assertEqual(report["metrics"]["router.experts"]["admissible_rows"], [1])  # classified admissible
+        self.assertFalse(report["metrics"]["router.experts"]["pass"])  # but no forced run to confirm it
+        self.assertFalse(report["metrics"]["moe"]["pass"])
+        self.assertIn("a2_forced_trace_missing", report["metrics"]["moe"]["reason"])
+        # fp32 stays exact set agreement.
+        report = self.run_case(ref, mlx, dtype="fp32")
+        self.assertFalse(report["metrics"]["router.experts"]["pass"])
+        self.assertNotIn("gate", report["metrics"]["router.experts"])
+
+    def test_mid_ranking_expert_difference_fails(self):
+        ref = self.logits()
+        ids = __import__("numpy").argsort(-ref, axis=-1, kind="stable")[:, :self.K].copy()
+        ids[2, 2] = 400  # drop the 3rd-ranked expert (40), select a far lower one
+        report = self.run_case(ref, ref.copy(), mlx_ids=ids)
+        self.assertFalse(report["metrics"]["router.experts"]["pass"])
+        self.assertEqual(report["metrics"]["router.experts"]["non_admissible_rows"], [2])
+
+    def test_boundary_swap_with_large_margin_fails(self):
+        ref = self.logits()
+        ids = __import__("numpy").argsort(-ref, axis=-1, kind="stable")[:, :self.K].copy()
+        ids[0, -1] = 400  # k-th selected 349 at 1.0156 vs 400 at 0.5: margin far above the allowance
+        report = self.run_case(ref, ref.copy(), mlx_ids=ids)
+        self.assertFalse(report["metrics"]["router.experts"]["pass"])
+        self.assertEqual(report["metrics"]["router.experts"]["non_admissible_rows"], [0])
+
+    def test_wrong_weights_moe_under_forced_routing_fails(self):
+        ref, mlx = self.flip()
+        report = self.run_case(ref, mlx, forced_scale=1.2)
+        self.assertTrue(report["metrics"]["router.experts"]["pass"])
+        self.assertFalse(report["metrics"]["moe"]["pass"])
+        self.assertEqual(report["metrics"]["moe"]["gate"], "A2-teacher-forced")
+
+
+@unittest.skipUnless(HAS_ARRAYS, "optional NumPy")
+class RegateToolTests(unittest.TestCase):
+    """Offline re-grading recomputes verdicts and refuses unauthenticated evidence."""
+
+    def make_case(self, work, mlx_value, legacy):
+        import numpy as np
+        from joulewise.align.qwen4_gold.core import digest, sha256
+        from joulewise.align.qwen4_gold.runner import artifacts
+        case = work / "parity/embed/p-fp32-real"
+        for side, value in (("reference", 1.0), ("mlx", mlx_value)):
+            (case / side).mkdir(parents=True)
+            traces = {"output": "output.npy", "embedding": "embedding.npy"}
+            for name, filename in traces.items():
+                np.save(case / side / filename, np.full((1, 2, 4), value if name == "output" else 1.0, np.float32))
+            write_json(case / side / "request.json", {"backend": side})
+            write_json(case / side / "result.json", {"traces": traces, "metadata": {"adapter_kind": "mlx"}})
+        if legacy:  # pre-inventory report: npy hashes only
+            inventory = {str(p.relative_to(case)): sha256(p) for p in case.rglob("*.npy")}
+            report = {"fingerprint": "f", "status": "PASS", "artifacts": inventory}
+        else:
+            inventory = artifacts(case)
+            report = {"fingerprint": "f", "status": "PASS", "artifacts": inventory,
+                      "evidence_digest": digest({"fingerprint": "f", "artifacts": inventory})}
+        write_json(case / "report.json", report)
+        write_json(work / "parity/embed.json", {"expected_cases": 1})
+        return case
+
+    def regate(self, work):
+        import importlib.util as util
+        import types
+        spec = util.spec_from_file_location("regate", Path(__file__).resolve().parents[1] / "scripts/qwen4_gold_regate_legacy.py")
+        module = util.module_from_spec(spec); spec.loader.exec_module(module)
+        checkpoint = types.SimpleNamespace(config={"hidden_size": 2, "hc_count": 2}, prefix="model.")
+        return module.regate_work(work, checkpoint)["units"]["embed"]
+
+    def test_verdicts_are_recomputed_and_evidence_is_authenticated(self):
+        import numpy as np
+        for legacy in (True, False):
+            with tempfile.TemporaryDirectory() as d:
+                work = Path(d)
+                case = self.make_case(work, 1.0, legacy)
+                unit = self.regate(work)
+                self.assertEqual(unit["status"], "PASS")
+                self.assertEqual(unit["cases"][0]["evidence"], "legacy-npy" if legacy else "v2")
+                # A result map aliasing the reference's arrays is refused.
+                result = json.loads((case / "mlx/result.json").read_text())
+                write_json(case / "mlx/result.json", dict(result, traces={"output": "../reference/output.npy",
+                                                                         "embedding": "embedding.npy"}))
+                self.assertEqual(self.regate(work)["cases"][0]["status"], "EVIDENCE_ERROR")
+                write_json(case / "mlx/result.json", result)
+                # A changed array is refused.
+                np.save(case / "mlx/output.npy", np.full((1, 2, 4), 2.0, np.float32))
+                self.assertEqual(self.regate(work)["cases"][0]["status"], "EVIDENCE_ERROR")
+            with tempfile.TemporaryDirectory() as d:
+                # Authentic evidence of a mismatch FAILs although the report says PASS.
+                work = Path(d)
+                self.make_case(work, 2.0, legacy)
+                unit = self.regate(work)
+                self.assertEqual(unit["cases"][0]["recorded_status"], "PASS")
+                self.assertEqual(unit["cases"][0]["status"], "FAIL")
+                self.assertEqual(unit["status"], "FAILED")
 
 
 if __name__ == "__main__":

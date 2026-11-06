@@ -128,12 +128,13 @@ def run_gold(request, checkpoint):
     args = rules.TextModelArgs.from_dict(checkpoint.text)
     dtype = mx.float32 if request["dtype"] == "fp32" else mx.bfloat16
     traces = {}
+    trace_suffix = [""]  # ".forced" during the A2 teacher-forced re-run
 
     def capture(name, value):
         mx.eval(value)
         if mx.issubdtype(value.dtype, mx.floating):
             value = value.astype(mx.float32)
-        traces[name] = np.array(value)
+        traces[name + trace_suffix[0]] = np.array(value)
 
     class Observe(rules.nn.Module):
         def __init__(self, inner, callback):
@@ -265,9 +266,10 @@ def run_gold(request, checkpoint):
         load_dense(module, {k: v for k, v in inventory.items() if not k.startswith(expert_prefix)})
         # Force the canonical mask path so gold/v1 can export the full selection.
         # These fresh caches are discarded after this cache-free prefill call.
-        ctx = rules._Context(B, S, 0, np.zeros(B, np.int64), rules.rope_inv_freq(args),
-                             None, S+1, S+1, False)
-        cache = rules.make_layer_caches(args)[layer]
+        fresh = lambda: (rules._Context(B, S, 0, np.zeros(B, np.int64), rules.rope_inv_freq(args),
+                                        None, S+1, S+1, False), rules.make_layer_caches(args)[layer])
+        ctx, cache = fresh()
+        emb = None
         if module.has_ple:
             spec, base = checkpoint_hash_spec(checkpoint, rules, args, layer)
             history = np.concatenate([np.full((B, spec.context_len), spec.eos, np.int64), ids], axis=1)
@@ -306,8 +308,21 @@ def run_gold(request, checkpoint):
             attention.indexer = Observe(attention.indexer, selection_trace)
         observe(module, "linear_attn" if module.is_linear else "self_attn", "attention")
         route = module.mlp.route
+        routed = {}
         def traced_route(x):
-            logits, indices, scores = route(x)
+            if "forced" in routed:
+                # Gate amendment A2 teacher forcing: the canonical route itself,
+                # with only its top-k selection replaced by the reference's.
+                forced = routed["forced"]
+                original = mx.argpartition
+                mx.argpartition = lambda a, kth, axis=-1: forced
+                try:
+                    logits, indices, scores = route(x)
+                finally:
+                    mx.argpartition = original
+            else:
+                logits, indices, scores = route(x)
+                routed.update(shape=indices.shape)
             capture("router.logits", logits.reshape(-1, args.num_experts))
             capture("router.experts", indices.reshape(-1, args.num_experts_per_tok))
             capture("router.weights", scores.reshape(-1, args.num_experts_per_tok))
@@ -316,6 +331,31 @@ def run_gold(request, checkpoint):
         observe(module, "mlp", "moe")
         out = module(hidden, ctx, cache)
         capture("mlp.streams", out)
+        forced_path = request.get("forced_experts")
+        if forced_path:
+            if hashlib.sha256(Path(forced_path).read_bytes()).hexdigest() != request.get("forced_experts_sha256"):
+                raise ValueError("reference router.experts changed after the reference worker")
+            reference = np.load(forced_path, allow_pickle=False)
+            mine = traces["router.experts"]
+            if reference.shape != mine.shape:
+                raise ValueError("reference router.experts shape mismatch")
+            if any(set(r.tolist()) != set(m.tolist()) for r, m in zip(reference, mine)):
+                # Only when the expert sets differ: the whole canonical layer
+                # again, on the same input with fresh caches, under the
+                # reference's expert selection (A2). Every trace it emits is
+                # recorded as <trace>.forced; the unforced traces stay as they are.
+                routed["forced"] = mx.array(reference.astype(np.uint32)).reshape(routed["shape"])
+                trace_suffix[0] = ".forced"
+                ctx, cache = fresh()
+                if emb is not None:
+                    # Token-id functions, computed before the layer: identical.
+                    traces["ple.ngram_ids.forced"] = traces["ple.ngram_ids"]
+                    capture("ple.embedding", emb)
+                    ctx.ngram_emb[layer] = emb
+                forced_out = module(hidden, ctx, cache)
+                capture("mlp.streams", forced_out)
+                capture("output", forced_out)
+                trace_suffix[0] = ""
     capture("output", out)
     return traces, {"device": str(mx.default_device()), "mlx_version": importlib.metadata.version("mlx"),
                     "peak_mlx_bytes": mx.get_peak_memory(), "canonical_sources": provenance,

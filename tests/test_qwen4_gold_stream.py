@@ -88,7 +88,7 @@ def fake_unit(driver, unit):
             value = 1.
             if number:
                 prior = driver.plan["units"][number-1]
-                value += float(np.load(driver.state["chain"][prior][key], allow_pickle=False)[0])
+                value += float(np.load(driver.chain_input(prior, key), allow_pickle=False)[0])
             path = driver.work / "fake" / unit / (key.replace(":", "-") + ".npy")
             atomic_npy(path, np.array([value], dtype=np.float32))
             chain[key] = str(path)
@@ -287,6 +287,55 @@ class LifecycleTests(unittest.TestCase):
                     for p in ("tokens-a", "tokens-b") for d in ("fp32", "bf16")}
         self.assertEqual({h for u, m, h in seen if u == "1" and m == "real"}, expected)
         self.assertEqual(set(driver.state["chain"]["0"].values()), expected)
+
+    def test_rerun_selected_units_on_the_recorded_reference_chain(self):
+        import numpy as np
+        args = options(self.work)
+        args.keep_going = True
+        old = StreamDriver(args, LocalSource(self.fixture, self.work), RUNTIMES)
+        def failing(unit):
+            row = fake_unit(old, unit)
+            if unit == "0":
+                row.update(status="FAIL", failures=[])
+            return row
+        old.run_unit = failing
+        self.assertEqual(old.run()["status"], "FAIL")
+        before = {p: sha256(p) for p in self.work.rglob("*") if p.is_file()}
+
+        def rerun(work, **options_):
+            args = options(work, options_.pop("resume", False))
+            args.rerun_from, args.units, args.rerun_failed = str(self.work), options_.get("units"), options_.get("failed", False)
+            source = LocalSource(self.fixture, work)
+            driver = StreamDriver(args, source, RUNTIMES)
+            ran = []
+            driver.run_unit = lambda u: (ran.append(u), fake_unit(driver, u))[1]
+            return driver, source, ran
+
+        new = self.base / "rerun"
+        driver, source, ran = rerun(new, failed=True)
+        summary = driver.run()
+        self.assertEqual(ran, ["0"])
+        self.assertEqual(summary["status"], "PASS")
+        self.assertEqual(summary["coverage"]["rerun"]["units"], ["0"])
+        self.assertFalse(summary["coverage"]["full_48_layer_gold"])
+        self.assertNotIn("final.safetensors", source.downloads)  # only the selected unit's weights
+        # Unit 0 ran on the old run's official embed output, copied and byte-checked.
+        self.assertEqual(float(np.load(driver.state["chain"]["0"]["fp32:tokens-a"])[0]), 2.)
+        self.assertEqual(before, {p: sha256(p) for p in self.work.rglob("*") if p.is_file()})  # source untouched
+        resumed, _, ran = rerun(new, failed=True, resume=True)
+        resumed.run()
+        self.assertEqual(ran, [])
+        # Consecutive selections chain through the re-run predecessor.
+        driver, _, ran = rerun(self.base / "rerun2", units=["1"], failed=True)
+        driver.run()
+        self.assertEqual(ran, ["0", "1"])
+        self.assertEqual(float(np.load(driver.state["chain"]["1"]["fp32:tokens-a"])[0]), 3.)
+        with self.assertRaisesRegex(ValueError, "no units selected"):
+            rerun(self.base / "rerun3")
+        # A changed recorded chain input refuses before anything runs.
+        np.save(old.state["chain"]["embed"]["fp32:tokens-a"], np.array([9.], np.float32))
+        with self.assertRaisesRegex(ValueError, "reference chain input missing or changed"):
+            rerun(self.base / "rerun4", units=["0"])
 
     def test_sha256_mismatch_refuses(self):
         driver, source = self.driver()
@@ -623,6 +672,10 @@ class OfficialTinyPLETests(unittest.TestCase):
                 for filename in result["traces"].values():
                     shutil.copyfile(reference / filename, directory / filename)
                 result["metadata"].update(adapter_kind="mlx", peak_mlx_bytes=0, test_double=True)
+                # Like real execute/worker: request.json and result.json are
+                # durable and belong to the fingerprint-bound resume inventory.
+                write_json(directory / "request.json", request)
+                write_json(directory / "result.json", result)
                 return result
             original_case = driver.harness.case
             def kill_after_first_case(*a, **kw):
@@ -651,6 +704,29 @@ class OfficialTinyPLETests(unittest.TestCase):
                     actual = np.load(root / "parity" / name / f"one-{dtype}-real/input.npy")
                     expected = np.load(resumed.state["chain"][previous][dtype + ":one"])
                     np.testing.assert_array_equal(actual, expected)
+            # Re-run only the first PLE unit from this (read-only) work directory:
+            # official reference chain input and sparse PLE rows are adopted;
+            # no table or other unit's shard is fetched, and the official
+            # reference worker reproduces the same output bit for bit.
+            first_ple = str(min(resumed.checkpoint.text["ple_layer_ids"]) - 1)
+            sibling = tempfile.TemporaryDirectory(); self.addCleanup(sibling.cleanup)
+            rerun_work = Path(sibling.name) / "rerun"
+            rerun_args = options(rerun_work)
+            rerun_args.shared_shards, rerun_args.prompts_json = "restage", str(prompts)
+            rerun_args.rerun_from, rerun_args.units, rerun_args.rerun_failed = str(root), [first_ple], False
+            before = {p: sha256(p) for p in root.rglob("*") if p.is_file()}
+            source = LocalSource(self.fixture, rerun_work)
+            rerun = StreamDriver(rerun_args, source, RUNTIMES)
+            calls.clear()
+            with patch("joulewise.align.qwen4_gold.runner.execute", worker):
+                self.assertEqual(rerun.run()["coverage"]["rerun"]["units"], [first_ple])
+            self.assertEqual({c[0] for c in calls}, {first_ple})
+            tables = {rerun.checkpoint.weight_map[k] for k in rerun.plan["tables"]}
+            self.assertFalse(tables - set(rerun.plan["shards"][first_ple]) & set(source.downloads))
+            self.assertEqual(set(source.downloads), set(rerun.plan["shards"][first_ple]))
+            for key, path in rerun.state["chain"][first_ple].items():
+                np.testing.assert_array_equal(np.load(path), np.load(resumed.state["chain"][first_ple][key]))
+            self.assertEqual(before, {p: sha256(p) for p in root.rglob("*") if p.is_file()})
 
     @unittest.skipUnless(HAS_MLX and os.environ.get("JW_GOLD_CANONICAL_MODULE"),
                          "native Metal/MLX and explicit canonical path required; run on the lead's Mac")

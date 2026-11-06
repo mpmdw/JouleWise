@@ -23,6 +23,7 @@ def run_reference(request, checkpoint):
     config._attn_implementation = "eager"
     traces = {}
     qsa_ties = {"topk_calls": 0, "straddling_ties": 0}
+    router_ties = {"topk_calls": 0, "rows": 0, "straddling_ties": 0}
     ids = torch.tensor(request["input_ids"], dtype=torch.long)
     unit = request["unit"]
     hidden = None if request.get("hidden") is None else torch.from_numpy(
@@ -136,6 +137,7 @@ def run_reference(request, checkpoint):
                 attention.indexer.register_forward_hook(lambda m, a, o: capture("qsa.mask", o == 0 if o.is_floating_point() else o))
             def router_hook(m, a, o):
                 capture("router.logits", o[0]); capture("router.weights", o[1]); capture("router.experts", o[2])
+            deterministic_router_ties(module.mlp.gate, torch, router_ties)
             module.mlp.gate.register_forward_hook(router_hook)
             module.mlp.register_forward_hook(lambda m, a, o: capture("moe", o))
             if module.ple is not None:
@@ -158,6 +160,7 @@ def run_reference(request, checkpoint):
                     "reference_source_sha256": sha256(inspect.getfile(ref)),
                     "device": "cpu", "experts": "official forward with sliced storage",
                     "qsa_topk": dict(qsa_ties, tie_rule="score descending, block ascending"),
+                    "router_topk": dict(router_ties, tie_rule="fp32 probability descending, expert ascending"),
                     "reads": checkpoint.reads}
 
 
@@ -176,7 +179,8 @@ def deterministic_qsa_ties(indexer, torch, counts):
     tie straddling the k-th score; scores are untouched, and the indexer's
     scatter makes the index order irrelevant. Same rule as the canonical port
     (D0, ``topk_mask_lowest_index``) and its validation reference ("REF").
-    The MoE router's topk is not touched.
+    The MoE router has its own, identically scoped patch
+    (``deterministic_router_ties``).
     """
     from unittest.mock import patch
 
@@ -197,6 +201,50 @@ def deterministic_qsa_ties(indexer, torch, counts):
             return forward(*args, **kwargs)
     # Instance attribute: nn.Module.__call__ still runs the registered hooks.
     indexer.forward = tie_ordered_forward
+
+
+def deterministic_router_ties(router, torch, counts):
+    """Fix the official MoE router's unspecified top-k tie order.
+
+    Qwen4ExpTextTopKRouter.forward ranks fp32 softmax probabilities with
+    ``torch.topk(router_probs, top_k, dim=-1)``. Equal bf16 logits give equal
+    fp32 probabilities, and at the released scale (512 experts, top-10) exact
+    ties straddling the k-th probability are common in bf16 (canonical.md
+    deviation 7: 8 of 54 rows at layer 2). torch.topk leaves their order
+    unspecified (on CPU it is not even reproducible), so the official expert
+    set is not a function of the inputs there. Inside this router's forward
+    only, topk returns the stable (probability descending, expert ascending)
+    order: one of torch.topk's permitted outputs, differing from torch's own
+    call only on an exact tie straddling the k-th value. Probabilities and the
+    renormalised weights are untouched. This is the rule canonical.md
+    (follow-up P4/P11) prescribes for the reference; the canonical port's
+    ``argpartition`` on fp32 probabilities is unspecified on ties as well, and
+    its GPU order is lowest-index in every straddling tie observed (gold run
+    layers 1-2, and 14,531 synthetic 512-expert top-10 rows). router.experts
+    stays an exact gate in fp32; in bf16 any other port choice must pass gate
+    amendment A2 (admissible boundary swap plus a teacher-forced layer).
+    """
+    from unittest.mock import patch
+
+    def topk(values, k, dim=-1, largest=True, sorted=True):
+        if not largest or values.dim() != 2 or dim not in (-1, 1):
+            raise RuntimeError("unexpected MoE router topk call")
+        counts["topk_calls"] += 1
+        counts["rows"] += values.shape[0]
+        order = torch.sort(values, dim=-1, descending=True, stable=True).indices
+        if k < values.shape[-1]:
+            ranked = values.gather(-1, order[:, k - 1:k + 1])
+            counts["straddling_ties"] += int((ranked[:, 0] == ranked[:, 1]).sum())
+        index = order[:, :k]
+        return torch.return_types.topk((values.gather(-1, index), index))
+
+    forward = router.forward
+
+    def tie_ordered_forward(*args, **kwargs):
+        with patch.object(torch, "topk", topk):
+            return forward(*args, **kwargs)
+    # Instance attribute: nn.Module.__call__ still runs the registered hooks.
+    router.forward = tie_ordered_forward
 
 
 def make_tiny(root):

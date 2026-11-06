@@ -82,10 +82,23 @@ an interrupted overall run can resume before a final summary exists.
 Resume never accepts a verdict from `report.json`. The coordinator verifies a
 fingerprint-bound inventory containing both workers' requests, results, and all
 NumPy arrays, then re-runs every current comparator and replaces the report.
-Changing a stored status or metric therefore has no effect. A finished work
-directory can be graded the same way without running either worker:
-`python3 scripts/qwen4_gold_regate_legacy.py --work-dir WORK --checkpoint CHECKPOINT`.
-The immutable recomputation is written to `WORK/regate.json`.
+Changing a stored status or metric therefore has no effect. A finished or
+in-progress work directory can be graded the same way without running either
+worker, strictly read-only (no lock is taken, nothing under WORK is written):
+`python3 scripts/qwen4_gold_regate_legacy.py --work-dir WORK --checkpoint VIEW [--checkpoint VIEW2 ...] --output OUT.json`.
+`VIEW` is any local checkpoint or restaged view holding the compared norm
+weights; views named like a streaming manifest's `staging/views/<unit>` are
+byte-checked against its recorded derived-shard hashes first. Cases written
+before the request/result inventory existed are accepted only if their array
+inventory matches the arrays exactly, each `result.json` names only its own
+canonically named `<trace>.npy` files, and (for a streaming WORK) every array
+matches the manifest's independently recorded unit artifact hashes. Cases
+still running (no `report.json`) are skipped and their unit reported
+`INCOMPLETE`. Norm traces need their unit's norm weights; a streamed run deletes
+its restaged views, so pass a retained view per unit (a missing weight fails
+that norm metric with `norm_weight_unavailable`). A2 cases saved without forced
+traces fail with `a2_forced_trace_missing` and need a rerun (below). `--output` is required for a streaming WORK (which may be live)
+and must lie outside it; otherwise it defaults to `WORK/regate.json`.
 
 ## Inputs, precision, and coverage
 
@@ -123,11 +136,30 @@ indexer's forward only, the reference worker's `topk` returns the stable
 (score descending, block ascending) order, one of torch's permitted outputs;
 scores are untouched and every other selection is the same set. This is the
 canonical port's rule (D0) and its validation reference ("REF"). Reference
-metadata records `qsa_topk` call and straddling-tie counts. The MoE router's
-top-k is not touched. Found natively: the tiny fp32 random case at layer 3 has
+metadata records `qsa_topk` call and straddling-tie counts. Found natively: the tiny fp32 random case at layer 3 has
 a three-way exact-zero tie for the second block of query 8 (blocks 0, 1, 3);
 the canonical rule picks block 0, unpatched torch picked block 1, and the
 resulting one-row mask difference propagated into every downstream trace.
+
+The MoE router's top-k tie order is fixed the same way. The official
+`Qwen4ExpTextTopKRouter` ranks fp32 softmax probabilities with
+`torch.topk(router_probs, top_k, dim=-1)`; equal bf16 logits give equal fp32
+probabilities, and at the released scale (512 experts, top-10) exact ties at
+the k-th probability are common in bf16 (canonical.md deviation 7). Inside the
+router's forward only, the reference worker's `torch.topk` returns the stable
+(probability descending, expert ascending) order, one of torch's permitted
+outputs; probabilities and weights are untouched. Metadata records
+`router_topk` calls, rows and straddling ties. **The canonical port has no
+router tie rule**: its `SparseMoeBlock.route` uses `mx.argpartition(-probs)`,
+whose tie order is unspecified (canonical.md: "parity checks must be
+tie-aware"; its follow-up prescribes exactly this reference patch). Its GPU
+order was lowest-index on every straddling tie observed: all tied rows of live
+streamed units 1-2 and 14,531 of 14,531 straddling rows of a synthetic bf16
+512-expert top-10 router. `router.experts` stays an exact (fp32) or A2 (bf16)
+gate, so a port that ever orders a tie differently is still caught. Found in
+the live run (unit 1, `tokens-b-bf16-real`, token row 2): experts 50, 228, 234
+tie at logit -4.125 for the 9th and 10th slots in both workers; torch picked
+{228, 234}, MLX {50, 228}.
 
 The reference observes:
 
@@ -331,24 +363,51 @@ The plain chained elementwise result is still reported (`unpropagated_pass`,
 `max_relative`, `relative_l2` and `cosine` are the chained ones. Metric entries
 carry `gate: "A1-input-conditioned"`; reports carry `gate_amendments`.
 
-**Derivation of `P` (per-element, row-local).** For one group, `r = sqrt(mean(x^2) + eps)` and
-`y_c = s_c x_c / r` (`s = 1 + w`). Since `dr/dx_j = x_j / (G r)`,
-`dy_c/dx_j = s_c (delta_cj / r - x_c x_j / (G r^3))`. With an input
-perturbation `dx_j = x_ref,j - x_mlx,j`, to first order
+**Derivation of `P` (per-element, group-local).** For the RMS group `g(c)` of
+`G` channels containing element `c` (`G = len(w)` for an ungrouped norm, `G =
+hidden_size` for each of the `hc_count` streams of an `hc_norm`, `G =
+linear_value_head_dim` for the gated norm), `r = sqrt(mean_{j in g(c)}(x_j^2) + eps)`
+and `y_c = s_c x_c / r` (`s = 1 + w`). Since `dr/dx_j = x_j / (G r)` for `j` in
+`g(c)` and 0 otherwise, `dy_c/dx_j = s_c (delta_cj / r - x_c x_j / (G r^3))`.
+With the measured input perturbation `dx_j = x_ref,j - x_mlx,j`, to first order
 
-`|dy_c| <= |s_c| / r * (|dx_c| + |x_c| * sum_j |x_j||dx_j| / (G r^2))
-       = |s_c| * (|dx_c|/r + |x_c| mean_j(|x_j dx_j|)/r^3) = P_c`.
+`|dy_c| <= |s_c| / r * (|dx_c| + |x_c| * sum_{j in g(c)} |x_j||dx_j| / (G r^2))
+       = |s_c| * (|dx_c|/r + |x_c| mean_{j in g(c)}(|x_j||dx_j|)/r^3) = P_c`.
 
-This evaluates the absolute first-order Jacobian against the actual error
-vector for that exact RMS row. It deliberately performs no trace-global max
-reduction: an error in another row cannot loosen this row, and an error in
-another channel contributes only through that row's RMS derivative. For the
-gated norm the gate input adds `|w_c| |n_c| L |dz_c|` with `n_c = x_c / r`
+This is the absolute first-order Jacobian of the element's own RMS group
+applied to that group's actual error vector. It deliberately performs no
+trace-global max reduction: an error in another token row or another RMS group
+cannot loosen this element, an error in another channel of the same group
+contributes only through the RMS derivative, and the cross term is averaged over
+exactly `G` channels (never diluted across the streams of a multi-group row).
+For the gated norm the gate input adds `|w_c| |n_c| L |dz_c|` with `n_c = x_c / r`
 and `L` the activation's Lipschitz constant (sigmoid 1/4, silu 1.1), and
-`s_c` becomes `w_c * act(z_c)`. `r`, `mean|x|`, `x_c`, `z_c` are taken from the
-reference input in float64. Second-order terms are `O(e_x^2 / r^2)`; criteria
-1-3 bound everything else independently. Reports retain global input maxima
-as diagnostics only; those maxima are never used as allowances.
+`s_c` becomes `w_c * act(z_c)`.
+
+**The implemented `P` is a rigorous bound, not only first order**
+(`core.norm_allowance`). With `d = x_mlx - x_ref` and `r'` the candidate
+input's group RMS, exactly `n'_c - n_c = d_c/r' + x_c (r - r')/(r r')` and
+`|r' - r| = |r'^2 - r^2|/(r + r') = |mean_g(2 x d + d^2)|/(r + r')` (eps
+cancels), so
+
+`|n'_c - n_c| <= B_c = |d_c|/r' + |x_c| (2 mean_g|x_j d_j| + mean_g d_j^2) / ((r + r') r r')`
+
+and offset `P_c = |s_c| B_c`, which reduces to the first-order `P_c` above as
+`d -> 0`. Gated: `P_c = |w_c| |act(z'_c)| B_c + |w_c| |n_c| L |dz_c|` (mean value
+theorem on `act`). Nothing is neglected, so `P_c >= |f(x_ref)_c - f(x_mlx)_c|`
+for every element up to float64 rounding. This matters in bf16: on the saved
+layer-0 `mlp.norm` artifacts the first-order expression alone was exceeded by
+the exact float64 propagation by up to 8.3% (`tokens-a-bf16-real`; second-order
+terms, input errors up to 0.08 r); the rigorous form is never exceeded beyond
+3e-15 absolute (float64 cancellation) in any of the 8 cases, and in fp32 the
+two agree to 1e-6 relative. `x_c`, `r`, `z_c` are the reference input's, `r'`
+and `z'_c` the candidate's, all in float64; criteria 1-3 bound everything else
+independently. Reports retain global input maxima (`propagation.input_max_abs`)
+as diagnostics only; those maxima are never used as allowances. Two defects of
+an earlier per-element revision were fixed with regression tests: averaging the
+cross term over the whole multi-group row instead of the element's own RMS
+group (which both borrowed other streams' errors and diluted its own), and the
+first-order truncation above.
 
 **Why the chained comparison alone is wrong for norm outputs.** Every trace is
 compared against a reference computed from the reference's own upstream
@@ -405,8 +464,16 @@ stored plain-gate PASS (A1 applies on rerun). All 8 cases PASS under A1:
 
 `attn.norm` in every case: input identical (`P = 0`), chained max abs
 <= 2.9e-6 (fp32) / 0 (bf16), op max rel <= 2.2e-7 (fp32) / 3.9e-3 (bf16, one
-bf16 rounding). At the failing element the bound is 1.43e-4 + `P` 6.03e-4 =
-7.46e-4; the largest diff/bound ratio over the trace is 0.23.
+bf16 rounding). These figures used the original trace-global `P`. Under the
+current per-element, group-local `P` (re-evaluated 2026-11-05 on the same saved
+arrays, same inputs): at the failing element `P_c = 1.714e-4` (first-order term
+1.714e-4; the trace-global value was 6.03e-4), the allowance is 1.433e-4 +
+1.714e-4 = 3.147e-4 and the per-element ratio diff/allowance is **0.539**; the
+exact float64 propagation there is 1.6967e-4 = 0.990 `P_c`. All 8 cases still
+PASS; the maximum per-element ratio over each `mlp.norm` trace is 0.193 / 0.102
+/ 0.539 / 0.113 (fp32: a-real, a-random, b-real, b-random) and 0.341 / 0.262 /
+0.347 / 0.229 (bf16, same order), and the maximum per-element `P` is 1.86e-4 /
+5.36e-5 / 1.71e-4 / 7.26e-5 (fp32) and 0.054 / 0.069 / 0.057 / 0.046 (bf16).
 
 **Adopted after seeing a failure; why this is not result-fitting.** This
 amendment was written after, and because of, the layer-0 failure above. It is
@@ -424,6 +491,87 @@ reported for every norm trace, so any reader can see where A1 changed a verdict;
 with the amendment. The non-norm traces and their gates are untouched. Results
 computed before A1 are not comparable verbatim: the harness fingerprint
 changes, and the streamed run must be repeated in a fresh work directory.
+
+### Gate amendment A2: bf16 router boundary swaps, teacher-forced layer (2026-11-05)
+
+**What.** Applies to `router.experts` in **bf16 only**; fp32 keeps exact
+expert-set agreement. A bf16 case's expert sets must agree exactly, or differ
+only by boundary swaps (`core.router_boundary_swaps`). Per token row, the
+experts only the reference selected and those only the candidate selected
+must pair one-to-one (a bipartite matching) such that for each pair `(a, b)`,
+with `A = atol + rtol * min(|l_ref[a]|, |l_ref[b]|)` (the unchanged bf16
+`router.logits` elementwise allowance):
+
+1. `|l_ref[a] - l_ref[b]| <= A` and `|l_mlx[a] - l_mlx[b]| <= A`;
+2. `a` and `b` lie within `A` of the k-th selected logit on each side (they are
+   boundary experts); every other selected expert matches exactly.
+
+Any other difference fails. For a case with an admissible swap, the candidate
+must also supply a **teacher-forced run**: the MLX adapter re-runs the whole
+canonical decoder layer on the same input with fresh caches, with only the
+canonical router's top-k selection replaced by the reference's
+(`router.experts` from the reference worker, passed by path and sha256; the
+canonical `route` computes the weights itself). Every trace of that run is
+recorded as `<trace>.forced`, and **every compared trace of the case is gated
+on its forced twin under the unchanged gates** (`gate: "A2-teacher-forced"`),
+including `router.weights`, `moe`, `mlp.streams` and `output`; the forced
+`router.experts` must equal the reference's exactly. The unforced metrics are
+kept under `unforced` (informative), the A2 classification of each row (pairs,
+margins, allowance, whether the reference tie was exact) under
+`router.experts`, and the count of admissible swaps per case
+(`a2_admissible_swaps`) and per unit (unit JSON and Markdown). The forced run
+happens only when the candidate's expert sets differ from the reference's.
+Gating whole forced traces (not only swapped rows) is required because the
+layer after the MoE is not token-local in general (PLE's causal conv), and live
+unit 5 (`tokens-b-bf16-random`) shows a swap reaching `mlp.streams`/`output`.
+
+**Derivation.** The k-th/(k+1)-th selection is a discontinuous function of the
+logits. Two implementations whose logits each pass the `router.logits` gate
+can legitimately rank two experts differently when their logits are within the
+gate's allowance; the reference's own choice at an exact tie is arbitrary
+(torch.topk). Requiring both sides' margins within `A` admits exactly those
+flips and nothing that a logit error the gate already rejects could produce;
+it is stricter than the `2A` that two independently admissible logits could
+span. A different selected expert changes the MoE output by roughly the
+boundary expert's weight times the difference of two expert outputs, so the
+unforced `moe` is not comparable; forcing the reference's selection makes the
+candidate compute the same mathematical function as the reference, which must
+then pass the ordinary gates. An admissible swap therefore never waives a
+numerical check: every trace is still gated, on the forced run.
+
+**Triggering evidence.** The live streamed run (`/private/tmp/jwgold-run-a1`,
+harness `12bf3f725`) recorded bf16 failures on `router.experts`/
+`router.weights`/`moe` in units 1-6 (every fp32 case passed). Offline
+classification of all 28 mismatched rows (15 bf16 cases in units 1-6, one swap
+per row): every one is an admissible boundary swap, none is non-admissible.
+23 are exact ties in both workers' logits where MLX took the lower index
+(e.g. unit 1 `tokens-b-bf16-real` row 2: experts 50/228/234 at -4.125, torch
+234, MLX 50); the reference tie rule above resolves those. The other 5 are
+bf16 rounding flips at the boundary (3 tied only in the reference, 2 only in
+MLX), e.g. unit 2 `tokens-b-bf16-random` row 7: reference
+logits 342 and 349 both 1.015625, MLX 342 = 1.0078125 (one bf16 ulp lower), so
+MLX selects 349 (margin 0.0078 against `A` = 0.063); unit 5
+`tokens-a-bf16-real` row 8 has an MLX margin of 0.03125 (`A` 0.18), unit 6
+`tokens-b-bf16-real` row 5 a reference margin of 0.03125 (`A` 0.158). Those
+saved cases cannot be re-graded offline: they have no forced traces (the
+re-gate tool reports `a2_forced_trace_missing`); re-run them with
+`--rerun-from` below.
+
+**Adopted after seeing failures; why this is not result-fitting.** A2 was
+written after, and because of, the live failures above, like A1. (a) No
+tolerance constant changed; the margin allowance is the existing bf16
+`router.logits` gate, fixed before any comparison. (b) The rule is a
+closed-form consequence of the selection's discontinuity plus that gate, with
+no free parameter, applied to every row of every bf16 case; fp32 is untouched.
+(c) It removes no numerical check: the expert-set gate is replaced by a
+classification plus a complete teacher-forced re-run in which every trace,
+including the MoE output and the layer output, must pass the unchanged gates,
+and the forced selection must equal the reference's exactly. (d) The unforced
+metrics and the per-row margins are reported for every swapped case, and swap
+counts per unit. (e) Unit tests fix its sensitivity: an exact tie, the 1-ulp
+flip (passes only with the forced run), a mid-ranking difference and a
+large-margin boundary swap (both fail), and a wrong-weights MoE under forced
+routing (fails). The A2 worker change also changes the harness fingerprint.
 
 `layer-NNN.json` and `.md` aggregate all cases for each layer; `embed`, `final`,
 and `head` have equivalent reports. Per-case directories hold requests, worker
@@ -566,6 +714,36 @@ Failed units are not converted with `--convert-out`. `summary.json` then has
 the end. A recorded FAIL unit is integrity-checked on resume and never silently
 rerun. `--keep-going` does not enter the invocation fingerprint, since it does
 not change any comparison.
+
+**Re-running selected units** (`--rerun-from OLD_WORK --units 1,2` and/or
+`--rerun-failed`, into a fresh `--work`): only the selected units run, each on
+the old run's recorded official reference chain. For every selected unit whose
+predecessor is not itself selected, the predecessor's recorded
+`reference/output.npy` per dtype/prompt is byte-checked against the old
+manifest's unit artifact hashes and copied into `WORK/rerun-inputs/`; a
+selected predecessor supplies its own fresh output instead. The old work
+directory is only read (no lock is taken; nothing is written there), so it may
+still be running. `--rerun-failed` adds every non-PASS unit recorded in the old
+manifest at start. The old run must have used the same pinned checkpoint
+(repo, revision and every shard's LFS sha256). The old run's extracted sparse
+PLE rows are copied byte-checked and re-bound to the pinned shards, so a PLE
+unit needs no table download. The source fingerprint, the selection and every
+copied input hash enter the invocation fingerprint; `--resume` on the rerun
+work continues it. Shards of unselected units are never fetched;
+`full_48_layer_gold` is never set by a rerun, and `summary.json`'s coverage
+records the rerun. A rerun unit's new reference output may differ from what
+the old run's later units consumed (e.g. the router tie rule changed it); that
+does not affect those units' verdicts, since each was compared on one
+legitimate official input. Example after the main run, to re-run every
+recorded failure with the A2 worker (add `--keep-going` to record, not stop
+at, a remaining failure):
+
+```bash
+... scripts/run_qwen4_gold_stream.py --work /private/tmp/jwgold-rerun \
+  --rerun-from /private/tmp/jwgold-run-a1/work --rerun-failed \
+  <the same --ref-python/--mlx-python/--mlx-module/--adapter-dependency/--shared-shards/budget flags> \
+  --keep-going
+```
 
 Add `--plan-only` to that same command first to save exact pinned file sizes and
 download estimates without downloading weight shards. Remove only `--plan-only`
