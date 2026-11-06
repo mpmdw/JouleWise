@@ -1,5 +1,10 @@
 # R0 step-test duration ruling — 2026-11-05
 
+
+> **WP14(a) supersession:** The fitted S_fast/S_slow rules in this document are
+> retained only as `exponential_fit_diagnostic`. Status and the thermometry bar
+> use the model-free v4 classifier. The 300/900/600 profile remains because a
+> 900 s load is three times the selectable 300 s cooling-tau ceiling.
 Authority: laptop lead, 2026-11-05, ruling supplied with the PR #661 task.
 This supersedes **FINAL-DESIGN-AMENDMENT-1 §A5, R0 item 3** only as to the
 60 s SMC step. Amendment source: commit

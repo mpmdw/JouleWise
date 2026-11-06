@@ -230,7 +230,9 @@ class EpisodeRuntimeAdapter:
                     self.thermal_sidecar.start()
         except Exception as exc:
             self._close_thermal()
-            self.flags.append(f"task_unavailable:{type(exc).__name__}:{exc}")
+            from joulewise.align.apple.thermal_gates import WindowReferenceRefused
+            self.flags.append(exc.code if isinstance(exc, WindowReferenceRefused)
+                              else f"task_unavailable:{type(exc).__name__}:{exc}")
             return AdapterResult(
                 ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
                 message=self.flags[-1], metadata={"align_episode_flags": list(self.flags)},
@@ -381,6 +383,10 @@ class EpisodeRuntimeAdapter:
                 self.flags.append(f"warmup_failed:{result.message}")
         except Exception as exc:
             self.flags.append(f"warmup_failed:{type(exc).__name__}:{exc}")
+            from joulewise.align.apple.thermal_gates import WindowReferenceRefused
+            if isinstance(exc, WindowReferenceRefused):
+                return AdapterResult(ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                                     message=exc.code, metadata={"flags": list(self.flags)})
         return AdapterResult(ok=True, metadata={"flags": list(self.flags)})
 
     def run_workload(

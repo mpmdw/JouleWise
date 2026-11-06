@@ -7226,3 +7226,10 @@ work. The generated region controls task selection.
 - Git author identity on this machine auto-selected as
   `Ed R <edr@Eds-MacBook-Pro.local>`. Amend future commits if a
   different identity is needed.
+
+## ALIGN v4 WP15 implementation handoff (2026-11-06)
+
+WP15 is implemented on the WP14-rulings integration lane: the unified WP14(a)
+classifier, WP14(b) reference custody, and cited WP14(c) CLI registry rebind are
+covered by synthetic unittests. Native SMC/MLX/APFS and cross-stage hardware
+verification remains as listed in `docs/run_reports/2026-11-06-align-v4-wp15.md`.

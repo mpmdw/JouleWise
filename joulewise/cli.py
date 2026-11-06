@@ -341,6 +341,13 @@ def _cmd_run_body(args: argparse.Namespace) -> int:
             "--instrument-calibration-dir and --instrument-power-policy must be supplied together"
         )
     config = BenchmarkConfig.from_mapping(_load_config(Path(args.config)))
+    registry = None
+    if config.workload_profile.name == "align_episode":
+        # WP14(c) cited rebind: docs/align/council-2026-11-05/WP14-RULINGS.md
+        from joulewise.align.apple.registry_select import registry_for_config
+        registry = registry_for_config(config)
+    if registry is not None and config.workload_profile.repetitions > 1:
+        raise SchemaError("thermal gate cells require repetitions == 1 (fresh process per member)")
     clock = _select_clock(config)
     post_window_sampling_dwell_s = (
         args.post_window_sampling_dwell_s
@@ -422,6 +429,7 @@ def _cmd_run_body(args: argparse.Namespace) -> int:
         config,
         Path(args.runs_dir),
         clock,
+        registry=registry,
         instrument_calibration_dir=(
             Path(args.instrument_calibration_dir)
             if args.instrument_calibration_dir is not None

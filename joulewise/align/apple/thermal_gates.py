@@ -6,8 +6,10 @@ legacy hazards.temperature alias retain their isolated import boundary.
 from __future__ import annotations
 from collections.abc import Mapping
 from contextlib import nullcontext
+import hashlib
 import json
 import math
+import os
 from statistics import median
 from types import GeneratorType
 
@@ -16,6 +18,23 @@ from joulewise.align.apple.thermal import NS, Coverage, validate_policy, valid_v
 from joulewise.align.apple.sampler import monotonic_ns, _stamp_record
 from joulewise.align.apple.budget import DeadmanExpired
 from joulewise.interfaces import RuntimeEvent
+
+REFERENCE_SCHEMA = 'joulewise.align_window_reference.v1'
+
+
+class WindowReferenceRefused(RuntimeError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+def _canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True,
+                      allow_nan=False).encode()
+
+
+def _policy_digest(sensors):
+    return hashlib.sha256(_canonical(sensors)).hexdigest()
 
 
 class _EpisodeClocks:
@@ -57,7 +76,8 @@ def sample_rows(rows):
 
 def validate_gate_policy(value):
     required = {'sensors', 'delta_fast_c', 'delta_slow_c', 'turn_cap_s', 'per_turn', 'heavy', 'chunk_tokens'}
-    if not isinstance(value, Mapping) or not required <= value.keys() or set(value) - required - {'window_reference'}:
+    if (not isinstance(value, Mapping) or not required <= value.keys()
+            or 'window_reference' not in value or set(value) - required - {'window_reference'}):
         raise ValueError('thermal policy has missing or unknown fields')
     policy = dict(value)
     policy['sensors'] = validate_policy(policy['sensors'])
@@ -75,17 +95,104 @@ def validate_gate_policy(value):
         raise ValueError('thermal.chunk_tokens must be a positive multiple of 256')
     if policy['heavy'] and not policy['per_turn']:
         raise ValueError('heavy cells require per-turn gates and holds')
-    if 'window_reference' in policy:
-        ref = policy['window_reference']
-        if (not isinstance(ref, Mapping) or set(ref) != {'fast_c', 'slow_c', 'source_member', 'span_ns'}
-                or not isinstance(ref['source_member'], str) or not ref['source_member']
-                or not isinstance(ref['span_ns'], list) or len(ref['span_ns']) != 2
-                or any(type(t) is not int for t in ref['span_ns'])
-                or ref['span_ns'][1] - ref['span_ns'][0] != 60 * NS
-                or any(not valid_value('Tref', ref[k]) for k in ('fast_c', 'slow_c'))):
-            raise ValueError('thermal.window_reference requires temperatures and 60 s custody provenance')
-        policy['window_reference'] = dict(ref)
+    ref = policy['window_reference']
+    if not isinstance(ref, Mapping) or ref.get('role') not in ('capture', 'consume'):
+        raise ValueError('thermal.window_reference requires a capture or consume role')
+    if ref['role'] == 'capture' and set(ref) != {'role'}:
+        raise ValueError('capture window_reference has unknown source fields')
+    if ref['role'] == 'consume':
+        if set(ref) != {'role', 'source_run_id', 'source_config_sha256'}:
+            raise ValueError('consume window_reference requires both source fields')
+        if (not isinstance(ref['source_run_id'], str) or not ref['source_run_id']
+                or not isinstance(ref['source_config_sha256'], str)
+                or len(ref['source_config_sha256']) != 64
+                or any(c not in '0123456789abcdef' for c in ref['source_config_sha256'])):
+            raise ValueError('consume window_reference source fields are invalid')
+    policy['window_reference'] = dict(ref)
     return policy
+
+
+def load_window_reference(policy, context):
+    """Load and independently verify a consumer's source-bundle custody record."""
+    ref = policy['window_reference']
+    if ref['role'] == 'capture':
+        return None, None
+    from joulewise.bundle import sanitize_id_component
+    source_id = ref['source_run_id']
+    if sanitize_id_component(source_id) != source_id or source_id == context.run_id:
+        raise WindowReferenceRefused('thermal.window_reference_path_refused')
+    root = context.bundle_path.parent.resolve()
+    source = context.bundle_path.parent / source_id
+    output = source / 'outputs'
+    path = output / 'align_window_reference.json'
+    try:
+        if any(p.is_symlink() for p in (source, output, path)):
+            raise WindowReferenceRefused('thermal.window_reference_path_refused')
+        resolved = path.resolve()
+        if root not in resolved.parents:
+            raise WindowReferenceRefused('thermal.window_reference_path_refused')
+        raw = path.read_bytes()
+    except WindowReferenceRefused:
+        raise
+    except FileNotFoundError as exc:
+        raise WindowReferenceRefused('thermal.window_reference_missing') from exc
+    except OSError as exc:
+        raise WindowReferenceRefused('thermal.window_reference_path_refused') from exc
+    try:
+        record = json.loads(raw)
+        digest = record.pop('record_sha256')
+        fields = {'schema', 'status', 'source', 'sensors', 'sensors_policy_sha256', 'rule',
+                  'span_ns', 'span_epoch_ns', 'coverage_fraction', 'samples', 'fast_c',
+                  'slow_c', 'journal'}
+        if (set(record) != fields or record.get('schema') != REFERENCE_SCHEMA
+                or record.get('status') not in ('captured', 'unobserved')
+                or hashlib.sha256(_canonical(record)).hexdigest() != digest):
+            raise ValueError
+        complete = {**record, 'record_sha256': digest}
+        if raw != _canonical(complete) + b'\n':
+            raise ValueError
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        raise WindowReferenceRefused('thermal.window_reference_corrupt') from exc
+    config_path = source / 'config.json'
+    try:
+        config_digest = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise WindowReferenceRefused('thermal.window_reference_binding_mismatch') from exc
+    expected_source = {'run_id': source_id, 'config_sha256': ref['source_config_sha256']}
+    if (record.get('source') != expected_source or config_digest != ref['source_config_sha256']
+            or record.get('sensors') != policy['sensors']
+            or record.get('sensors_policy_sha256') != _policy_digest(policy['sensors'])):
+        raise WindowReferenceRefused('thermal.window_reference_binding_mismatch')
+    if record.get('journal') != 'outputs/align_thermal.jsonl':
+        raise WindowReferenceRefused('thermal.window_reference_corrupt')
+    journal_path = source / record['journal']
+    try:
+        journal_raw = journal_path.read_bytes()
+        journal_digest = hashlib.sha256(journal_raw).hexdigest()
+    except OSError as exc:
+        raise WindowReferenceRefused('thermal.window_reference_unverified') from exc
+    if record['status'] == 'captured':
+        try:
+            journal_rows = sample_rows([json.loads(line) for line in journal_raw.splitlines() if line.strip()])
+            end = record['span_ns'][1]
+            keys = (policy['sensors']['s_fast'], policy['sensors']['s_slow'])
+            good = _good_window_rows(journal_rows, end, keys)
+            coverage = _window_coverage(journal_rows, end, keys)['sample_fraction']
+            samples = [[r['monotonic_ns'], r['sensors'][keys[0]], r['sensors'][keys[1]]] for r in good]
+            if (coverage is None or coverage < .9 or samples != record['samples']
+                    or median(x[1] for x in samples) != record['fast_c']
+                    or median(x[2] for x in samples) != record['slow_c']):
+                raise ValueError
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise WindowReferenceRefused('thermal.window_reference_unverified') from exc
+        value = {'fast_c': record['fast_c'], 'slow_c': record['slow_c'],
+                 'source_member': source_id, 'span_ns': record['span_ns']}
+    else:
+        value = None
+    custody = {'record_sha256': digest, 'source_run_id': source_id,
+               'source_config_sha256': ref['source_config_sha256'],
+               'source_journal_sha256': journal_digest}
+    return value, custody
 
 
 def _good_window_rows(rows, end_ns, keys):
@@ -191,7 +298,10 @@ class ThermalSession:
         self.clock, self.context = clock, context
         self.status_reader = status_reader
         self.intervals, self.events, self.flags = [], [], []
-        self.reference = self.policy.get('window_reference')
+        self.reference, self.custody = (load_window_reference(self.policy, context)
+                                        if context is not None else (None, None))
+        if self.policy['window_reference']['role'] == 'consume' and self.reference is None:
+            self.flags.append('thermal.window_reference_unobserved')
         self.episode_reference = None
         if isinstance(clock, SystemClock):
             ctx = Context()  # Real monotonic/raw/epoch stamps; never synthesize RAW.
@@ -236,7 +346,7 @@ class ThermalSession:
 
     def capture_reference(self, member):
         """Called at warmup entry: the final 60 s of first member's idle."""
-        if self.reference is not None:
+        if self.policy['window_reference']['role'] != 'capture' or self.reference is not None:
             return
         now = monotonic_ns(self.clock.stamp())
         rows = [r for r in self.rows if now - 60 * NS <= r['monotonic_ns'] < now]
@@ -244,12 +354,58 @@ class ThermalSession:
         # Missing baseline never becomes a guessed release reference.
         good = _good_window_rows(rows, now, (sensors['s_fast'], sensors['s_slow']))
         fraction = _window_coverage(self.rows, now, (sensors['s_fast'], sensors['s_slow']))['sample_fraction']
-        if fraction is None or fraction < .9:
+        captured = fraction is not None and fraction >= .9
+        if not captured:
             self.flags.append('thermal.state_unobserved')
+            fast_c = slow_c = None
+        else:
+            fast_c = median(r['sensors'][sensors['s_fast']] for r in good)
+            slow_c = median(r['sensors'][sensors['s_slow']] for r in good)
+            self.reference = {'fast_c': fast_c, 'slow_c': slow_c,
+                              'source_member': member, 'span_ns': [now - 60 * NS, now]}
+        if self.context is None:
             return
-        self.reference = {'fast_c': median(r['sensors'][sensors['s_fast']] for r in good),
-                          'slow_c': median(r['sensors'][sensors['s_slow']] for r in good),
-                          'source_member': member, 'span_ns': [now - 60 * NS, now]}
+        config_raw = (self.context.bundle_path / 'config.json').read_bytes()
+        stamp = self.clock.stamp()
+        epoch_end = round(stamp.epoch_s * NS)
+        record = {'schema': REFERENCE_SCHEMA, 'status': 'captured' if captured else 'unobserved',
+                  'source': {'run_id': self.context.run_id,
+                             'config_sha256': hashlib.sha256(config_raw).hexdigest()},
+                  'sensors': sensors, 'sensors_policy_sha256': _policy_digest(sensors),
+                  'rule': {'anchor': 'warmup_entry', 'window_s': 60, 'statistic': 'median',
+                           'min_coverage': .9},
+                  'span_ns': [now-60*NS, now], 'span_epoch_ns': [epoch_end-60*NS, epoch_end],
+                  'coverage_fraction': fraction, 'samples': [[r['monotonic_ns'],
+                      r['sensors'][sensors['s_fast']], r['sensors'][sensors['s_slow']]] for r in good]
+                      if captured else [],
+                  'fast_c': fast_c, 'slow_c': slow_c,
+                  'journal': 'outputs/align_thermal.jsonl'}
+        record['record_sha256'] = hashlib.sha256(_canonical(record)).hexdigest()
+        data = _canonical(record) + b'\n'
+        final = self.context.outputs_dir / 'align_window_reference.json'
+        temporary = self.context.outputs_dir / f'.align_window_reference.{os.getpid()}.tmp'
+        try:
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                os.write(fd, data)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.link(temporary, final)
+            directory = os.open(self.context.outputs_dir, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except OSError as exc:
+            self.flags.append('thermal.window_reference_write_failed')
+            raise WindowReferenceRefused('thermal.window_reference_write_failed') from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+        self.custody = {'record_sha256': record['record_sha256'],
+                        'source_run_id': self.context.run_id,
+                        'source_config_sha256': record['source']['config_sha256'],
+                        'source_journal_sha256': None}
 
     def wait(self, kind, *, turn=0, token_count=None, deadman=None, defer_resume=False):
         """G0 proceeds on timeout; unobserved gates wait then proceed with X4.
@@ -329,7 +485,8 @@ class ThermalSession:
             reason = 'deadman'
         exit_stamp = self.clock.stamp()
         if unobserved:
-            self.flags.append('thermal.state_unobserved')
+            if 'thermal.state_unobserved' not in self.flags:
+                self.flags.append('thermal.state_unobserved')
         elif reason == 'timeout':
             self.flags.append('thermal.start_gate_timeout' if kind == 'G0' else
                               f'thermal.{"hold" if kind == "H" else "gate"}_timeout:{turn}')
@@ -382,7 +539,7 @@ class ThermalSession:
     def record(self):
         return {'policy': self.policy, 'window_reference': self.reference,
                 'episode_reference': self.episode_reference, 'intervals': list(self.intervals),
-                'flags': list(dict.fromkeys(self.flags))}
+                'flags': list(dict.fromkeys(self.flags)), 'custody': self.custody}
 
     def close(self):
         try:

@@ -16,6 +16,7 @@ from joulewise.measurement_liveness import census, custody_parent, ADDITIONAL_PA
 from joulewise.night_gate import ProbeResult, agent_census
 from joulewise.prewindow import PS_ARGV, busy_contaminants
 from joulewise.align.r0_step import ProfileRefused, profile_config, rank_response, step_budget
+from joulewise.align.apple.smc_enumeration import rank as classify_smc
 
 
 class Refused(RuntimeError):
@@ -262,13 +263,15 @@ def smc_enumeration(repo, output, step=None):
         if hashlib.sha256(raw).hexdigest() != payload["samples_sha256"]:
             raise ValueError("SMC journal SHA-256 mismatch")
         samples = [json.loads(line) for line in raw.splitlines() if line.strip()]
-        response = rank_response(payload, samples, profile)
-        selection = {name: response[name] for name in ("s_fast", "s_slow")}
+        diagnostic = rank_response(payload, samples, profile)
+        classification = classify_smc({**payload, "samples": samples}, stage="r0")
+        selection = {name: classification[name] for name in ("s_fast", "s_slow")}
         resolved = all(isinstance(v, str) and re.fullmatch(r"T[!-~]{3}", v) for v in selection.values())
         resolved = resolved and selection["s_fast"] != selection["s_slow"]
-        receipt.update(selection=selection, response=response, source_response=payload["response"])
+        receipt.update(selection=selection, response=classification,
+                       exponential_fit_diagnostic=diagnostic, source_response=payload["response"])
         coverage = payload["coverage"]
-        readable = resolved and coverage["period_ns"] == 1_000_000_000
+        readable = resolved and classification["readability_bar_met"] and coverage["period_ns"] == 1_000_000_000
         if readable:
             for key in selection.values():
                 stats = coverage["per_key"][key]
@@ -282,7 +285,7 @@ def smc_enumeration(repo, output, step=None):
             receipt["reason"] = "SMC selected-key coverage does not meet 1 Hz / <1% errors / 10 min"
         else:
             receipt["status"] = "pass"
-            receipt["reason"] = "Ruled load fits, slow recovery confirmation and readability bars met; locations PROVISIONAL"
+            receipt["reason"] = "WP14(a) model-free classifier and readability bars met; picks PROVISIONAL"
     except (OSError, ValueError, KeyError, TypeError) as exc:
         receipt["reason"] = f"SMC r0.json selection unavailable: {exc}"
     return receipt

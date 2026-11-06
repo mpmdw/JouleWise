@@ -20,9 +20,9 @@ from typing import Any
 from joulewise.align.apple import thermal as temperature
 from joulewise.hazards.base import Context
 
-RULE = ("FINAL-DESIGN §2.6: R0 emits inventory/step data only; R1's planning-turn step "
-        "classifies sensors. S_fast: largest physical rise ΔT with t63 <=5 s. "
-        "S_slow: longest cooling tau <=300 s among keys with ΔT >=3 degC. "
+RULE = ("WP14(a) v4 model-free classifier: t63 uses the 50-60 s rise; "
+        "die: t63 <=5 s and cooling tau <=300 s; heatsink: t63 >5 s, "
+        "30 s < cooling tau <=300 s, and ΔT >=3 degC. "
         "Keys with tau >300 s are recorded, not gated. Each phase needs >=99% "
         "coverage and <1% read errors. Constant/stale idle series are rejected; "
         "noise is a quality gate with a >=0.05 degC/sensor-quantum floor, never a ranking ratio.")
@@ -223,7 +223,7 @@ def _crossing(points, threshold, *, rising):
 
 
 def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
-    """Inventory by default. Only explicit R1 planning-turn data selects keys.
+    """Apply the single WP14(a) classifier for both R0 and R1 journals.
 
     Heating t63 and cooling tau are independent model-free crossings. ΔT is
     the final 10% load median minus the idle median, not an extrapolated fit.
@@ -237,10 +237,11 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
     for sensor in capture["inventory"]["keys"]:
         key = sensor["key"]
         row = {**sensor, "amplitude": None, "observed_rise": None, "noise": None,
-               "noise_floor": None, "idle_distinct_values": 0, "t63_s": None,
+               "noise_floor": None, "idle_distinct_values": 0, "delta_t60": None,
+               "t63_s": None, "t63_end_s": None, "class": "record-only",
                "tau_s": None, "amplitude_to_noise": None, "fit_r2": None, "eligible": False,
                "phase_coverage": {}, "phase_read_error_fraction": {}, "phase_medians": {},
-               "reason": "R0 inventory/step data only; R1 planning-turn classification required"}
+               "reason": "quality gate not evaluated"}
         rows.append(row)
         good = {p: [] for p in phases}
         for phase, bounds in phases.items():
@@ -268,10 +269,8 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         idle = [v for _, v in good.get("idle", [])]
         row["noise"] = statistics.pstdev(idle) if idle else None
         row["idle_distinct_values"] = len(set(idle))
-        if stage == "r0":
-            continue
         if set(phases) != {"idle", "load", "recovery"}:
-            row["reason"] = "R1 requires idle, planning-turn load and recovery"
+            row["reason"] = "classifier requires idle, load and recovery"
             continue
         if any(len(good[p]) < 5 or row["phase_coverage"][p] < .99 or
                row["phase_read_error_fraction"][p] >= .01 for p in phases):
@@ -293,30 +292,46 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         rise = statistics.median(tail) - baseline if tail else 0
         row.update(amplitude=rise, observed_rise=rise)
         heating = [(t-onset, v) for t, v in good["load"]]
+        rise60_values = [v for t, v in good["load"] if 50 <= t-onset <= 60]
+        if len(rise60_values) < 5:
+            row["reason"] = "fewer than five valid load samples at 50-60 s"
+            continue
+        rise60 = statistics.median(rise60_values) - baseline
         recovery_onset = phases["recovery"]["start_s"]
         cooling = [(t-recovery_onset, v) for t, v in good["recovery"]]
-        t63 = _crossing(heating, baseline + (1-math.exp(-1))*rise, rising=True) if rise > 0 else None
+        t63 = _crossing(heating, baseline + .632*rise60, rising=True) if rise60 > 0 else None
+        t63_end = _crossing(heating, baseline + .632*rise, rising=True) if rise > 0 else None
         peak = cooling[0][1] - baseline
         tau = _crossing(cooling, baseline + peak/math.e, rising=False) if peak > 0 else None
         if tau is not None:
             # The reference peak is the first observed recovery value. Missing
             # initial reads move that reference, not the physical decay time.
             tau -= cooling[0][0]
-        row.update(t63_s=t63, tau_s=tau)
-        row["eligible"] = (sensor["unit"] == "degC" and rise > 3*floor
-                           and t63 is not None and tau is not None and tau <= 300)
-        row["reason"] = ("model-free R1 step response" if row["eligible"] else
-                         "non-temperature, weak rise, unresolved cooling, or tau >300 s; recorded only")
+        row.update(delta_t60=rise60, t63_s=t63, t63_end_s=t63_end, tau_s=tau)
+        die = (sensor["unit"] == "degC" and rise > 3*floor and rise60 > 3*floor
+               and t63 is not None and t63 <= 5 and tau is not None and tau <= 300)
+        heatsink = (sensor["unit"] == "degC" and rise >= 3.0 and t63 is not None and t63 > 5
+                    and tau is not None and 30 < tau <= 300)
+        row["class"] = "die" if die else "heatsink" if heatsink else "record-only"
+        row["eligible"] = die or heatsink
+        row["reason"] = (f"model-free {row['class']} step response" if row["eligible"] else
+                         "not in a selectable die/heatsink class; recorded only")
     ordered = sorted(rows, key=lambda r: (-(r["observed_rise"] or 0), r["key"]))
-    proposed = select_keys(ordered) if stage == "r1" else {"s_fast": None, "s_slow": None}
-    return {"rule": RULE, "ranking": ordered, **proposed, "stage": stage, "status": "PROVISIONAL"}
+    proposed = select_keys(ordered)
+    die_candidates = [r["key"] for r in ordered if r["class"] == "die"]
+    heatsink_candidates = [r["key"] for r in ordered if r["class"] == "heatsink"]
+    record_only = [r["key"] for r in ordered if r["class"] == "record-only"]
+    bar = proposed["s_fast"] is not None and proposed["s_slow"] is not None
+    return {"rule": RULE, "ranking": ordered, **proposed, "selection": dict(proposed),
+            "die_candidates": die_candidates, "heatsink_candidates": heatsink_candidates,
+            "record_only": record_only, "readability_bar_met": bar, "stage": stage,
+            "status": "pass" if bar else "inconclusive", "picks_provisional": stage == "r0"}
 
 
 def select_keys(rows: Sequence[Mapping[str, Any]]) -> dict[str, str | None]:
     """FINAL-DESIGN §2.6; inclusive physical boundaries, lexical ties."""
-    usable = [r for r in rows if r["eligible"] and r.get("tau_s") is not None and r["tau_s"] <= 300]
-    fast = [r for r in usable if r.get("t63_s") is not None and r["t63_s"] <= 5]
-    slow = [r for r in usable if r["observed_rise"] >= 3]
+    fast = [r for r in rows if r.get("class") == "die"]
+    slow = [r for r in rows if r.get("class") == "heatsink"]
     return {"s_fast": min(fast, key=lambda r: (-r["observed_rise"], r["key"]))["key"] if fast else None,
             "s_slow": min(slow, key=lambda r: (-r["tau_s"], r["key"]))["key"] if slow else None}
 

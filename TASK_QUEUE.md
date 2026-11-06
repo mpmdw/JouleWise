@@ -1351,3 +1351,8 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+
+## ALIGN v4 WP15 follow-up (2026-11-06)
+
+- [ ] Execute the native/hardware verification checklist in
+  `docs/run_reports/2026-11-06-align-v4-wp15.md`; cloud work remains PROVISIONAL.

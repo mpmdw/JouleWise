@@ -162,3 +162,11 @@ checkout import and cleanup. Then run R0 and the separate R1 planning-turn
 classification/coverage/overhead checks. Neither native check was executed
 in this sandbox. The module gates hardware on explicit opt-in and MLX on
 importability; it never attempts a CPU fallback.
+
+## WP14(a) v4 supersession
+
+Both R0 and R1 use the single model-free classifier in `smc_enumeration.py`.
+It measures t63 against the 50–60 s rise, retains `t63_end_s` only as a
+diagnostic, assigns disjoint `die`, `heatsink`, and `record-only` classes, and
+never substitutes for a null pick. R0's picks are provisional; R1 selects from
+its production D step.
