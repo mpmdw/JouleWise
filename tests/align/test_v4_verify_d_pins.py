@@ -37,6 +37,20 @@ class VerifyDPinsTest(unittest.TestCase):
             problems = verify(report, self.pins)
             self.assertTrue(any(word in p for p in problems), (word, problems))
 
+    def test_hf_local_dir_bookkeeping_is_ignored_but_counted(self):
+        from scripts.align_v4_verify_d_pins import bookkeeping
+        report = copy.deepcopy(self.report)
+        files = report["checks"][0]["models"]["D"]["files"]
+        files += [{"path": ".cache/huggingface/download/model.safetensors.lock", "bytes": 0, "sha256": "e"},
+                  {"path": ".cache/huggingface/.gitignore", "bytes": 1, "sha256": "e"}]
+        self.assertEqual(verify(report, self.pins), [])
+        self.assertEqual(len(bookkeeping(report)), 2)
+        # only the hf bookkeeping prefix is exempt
+        for path in (".cache/other/x.bin", "cache/huggingface/x", "sub/.cache/huggingface/x"):
+            r = copy.deepcopy(self.report)
+            r["checks"][0]["models"]["D"]["files"].append({"path": path, "bytes": 1, "sha256": "a"})
+            self.assertTrue(any("unpinned" in p for p in verify(r, self.pins)), path)
+
     def test_wrong_revision_or_no_disk_check_fails(self):
         report = copy.deepcopy(self.report)
         report["checks"][0]["models"]["D"]["revision"] = "x"

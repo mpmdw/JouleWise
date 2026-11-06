@@ -41,9 +41,11 @@ class FakeBackend:
         self.generation = None
         self.closed = False
         self.endpoint = SimpleNamespace(assistant_history_message=lambda result: r0.ChatMessage("assistant", result.raw_usage["raw_text"]))
-        self.config = SimpleNamespace(model=SimpleNamespace(family="qwen3_next"))
-    def new_session(self, effort):
+        self.config = SimpleNamespace(model=SimpleNamespace(family="qwen3_next", revision=FAKE_REVISION))
+        self.greedy_turns, self.greedy_session = 0, False
+    def new_session(self, effort, *, greedy=False):
         self.sessions.append(effort)
+        self.greedy_session = greedy
     def device_info(self):
         return {"status": "pass", "fake": True}
     def close(self):
@@ -61,7 +63,10 @@ class FakeBackend:
     def synthetic_completion(self, index):
         raw = '<think>echo</think><tool_call>{"name":"r0_echo","arguments":{"value":"desk-check"}}</tool_call>'
         return raw, self.encode(raw + "!")
-    def chat(self, messages, tools, max_tokens, seed):
+    def chat(self, messages, tools, max_tokens, seed, *, greedy=False):
+        if greedy != self.greedy_session:
+            raise AssertionError("greedy chat outside a greedy session")
+        self.greedy_turns += greedy
         short = messages[-1].content == r0.SHORT_PROMPT
         raw = "42" if short else self.synthetic_completion(0)[0]
         calls = () if short else (ToolCallRequest("echo", "r0_echo", '{"value":"desk-check"}'),)
@@ -74,8 +79,8 @@ class FakeBackend:
         return self.generation
     def task(self, pair, seed):
         return FakeTask()
-    def nll(self, ids):
-        return 2.99
+    def nll_losses(self, ids):
+        return [2.99] * (len(ids) - 1)
     def long_decode(self, *, eval_metadata):
         return {"positions": 40960, "errors": [], "memory_samples": [
             {"position": 0, "active_bytes": 1_000_000_000},
@@ -84,6 +89,30 @@ class FakeBackend:
     def memory_peak(self, *, context, decode_budget):
         return {"positions": context, "decode_tokens": decode_budget, "peak_bytes": 1_000_000,
                 "swap_before_bytes": 0, "swap_after_bytes": 0, "errors": []}
+
+
+FAKE_REVISION = "fake-revision"
+
+
+def fake_references(mean=2.99, mode="reference", **entry):
+    """A verdict table that names FakeBackend's revision and fixture."""
+    row = {"label": "fake", "revision": FAKE_REVISION, "mode": mode,
+           "fixture_sha256": r0.digest(r0.nll_fixture(FakeBackend())),
+           "provenance": {"implementation": "synthetic"}}
+    if mode == "reference":
+        row.update(targets=2048, reference={"nll_nats_per_token": mean, "bins256": [mean] * 8},
+                   tolerance={"mean_nats_per_token": 0.1, "bin_nats_per_token": 0.5})
+    else:
+        row["nll_limit"] = 3.0
+    row.update(entry)
+    return {"schema": r0.NLL_REFERENCE_SCHEMA, "bin_width": 256, "targets": 2048, "models": [row]}
+
+
+def patch_references(case, references=None):
+    """Runner paths read the shipped table; point them at the fake model's entry."""
+    gate = patch.object(r0, "nll_references", return_value=(references or fake_references(), "0" * 64))
+    gate.start()
+    case.addCleanup(gate.stop)
 
 
 def config_at(root):
@@ -98,6 +127,7 @@ class R0ChecksTest(unittest.TestCase):
         gate = patch("joulewise.align.r0_runner.host_identity", return_value={"status": "pass", "fake": True})
         gate.start()
         self.addCleanup(gate.stop)
+        patch_references(self)
 
     def test_wrong_host_blocks_all_model_loads_even_if_host_check_not_selected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -154,10 +184,16 @@ class R0ChecksTest(unittest.TestCase):
         result = r0.load_coherence(FakeBackend())
         self.assertEqual(result["status"], "pass")
         self.assertEqual(result["nll_targets"], 2048)
+        self.assertEqual(result["nll_mode"], "reference")
+        self.assertEqual(result["generation"]["status"], "pass")
         self.assertTrue(result["tool_round_trip"]["tool_outputs"])
-        with patch.object(FakeBackend, "nll", return_value=3.0001):
+        patch_references(self, fake_references(mean=11.0))
+        # No absolute bar in reference mode: a reference-equivalent 11.04 passes.
+        with patch.object(FakeBackend, "nll_losses", return_value=[11.04] * 2048):
+            self.assertEqual(r0.load_coherence(FakeBackend())["status"], "pass")
+        with patch.object(FakeBackend, "nll_losses", return_value=[11.2] * 2048):
             self.assertEqual(r0.load_coherence(FakeBackend())["status"], "fail")
-        with patch.object(FakeBackend, "nll", return_value=float("nan")):
+        with patch.object(FakeBackend, "nll_losses", return_value=[float("nan")] * 2048):
             self.assertEqual(r0.load_coherence(FakeBackend())["status"], "fail")
 
     def test_missing_generation_evidence_never_passes(self):
@@ -219,6 +255,8 @@ class R0ChecksTest(unittest.TestCase):
         class Backend(FakeBackend):
             def chat(self, *args, **kwargs):
                 result = super().chat(*args, **kwargs)
+                if kwargs.get("greedy"):
+                    return result  # the generation check is a bar, not a diagnostic
                 return replace(result, content="\\boxed{42}") if result.content == "42" else replace(result, tool_calls=())
         result = r0.load_coherence(Backend())
         self.assertEqual(result["status"], "pass")

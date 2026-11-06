@@ -22,6 +22,15 @@ CHECKS = ("host", "disk", "load", "template", "generated", "memory", "smc", "lad
 ACCEPTED_OUTCOMES = {"checkpoint": {"required", "not_required"}, "ladder": {"pass", "fallback"},
                      "template": {"diagnostic"}, "disk": {"diagnostic"}}
 REPO = Path(__file__).resolve().parents[2]
+LOAD_REFERENCE_NOTE = "docs/align/v4/R0-LOAD-REFERENCE-NOTE.md"
+LOAD_REFERENCE_BASIS = ("lead ruling 2026-11-06 under RUN_STATE items 181/183 (Ed: approve changes "
+                        "that speed the science and harm nothing)")
+
+
+def git_blob_sha1(path):
+    """The git blob id of a file's bytes (what `git hash-object` prints)."""
+    data = Path(path).read_bytes()
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
 class DeadlineExpired(BaseException):
@@ -104,12 +113,16 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "evidence_kind": "live_desk" if backend_factory.__module__ == "joulewise.align.r0_mlx" else "injected_backend",
               "selected_checks": checks, "selected_models": models,
               "keep_going": keep_going, "long_decode_max_attempts": long_decode_attempts,
-              "authority": "origin/lane/2026-11-05-align-window-council:docs/align/council-2026-11-05/FINAL-DESIGN.md §§2.1,2.2,2.8",
+              "authority": ("origin/lane/2026-11-05-align-window-council:docs/align/council-2026-11-05/FINAL-DESIGN.md "
+                            "§§2.1,2.2,2.8; load NLL bar: authority_load_reference"),
               "authority_commit": "219fb151515383cbbcde887d096837a829c67396",
               "authority_blob": "0a802a3097a20c9f4dd5e8823d858302ae596785",
               "authority_amendment_commit": "6eb1ff5be31bec330ae5af262c2b4c7601e7755e",
               "authority_amendment": "docs/align/council-2026-11-05/FINAL-DESIGN-AMENDMENT-1.md §§A1,A3,A5",
               "authority_step_ruling": "docs/align/r0_step_test_ruling.md (laptop lead, 2026-11-05)",
+              # The load NLL bar is per-model reference equivalence, not §2.1's absolute limit.
+              "authority_load_reference": LOAD_REFERENCE_NOTE,
+              "authority_load_reference_basis": LOAD_REFERENCE_BASIS,
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
@@ -117,11 +130,25 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}
         report["checks"].append(row)
+        unserializable = []
         def progress(data):
             row.update(data)
             row["check_seconds"] = time.monotonic() - started
             report["total_seconds"] = time.monotonic() - started_run
             report["census"] = guard.receipts
+            if not unserializable:
+                try:
+                    save_report(output, report)
+                    return
+                except (TypeError, ValueError) as exc:  # e.g. NaN/inf under allow_nan=False
+                    unserializable.append(f"{type(exc).__name__}: {exc}")
+            # The row cannot be recorded as strict JSON: record a fail, never crash or
+            # leave the report at running. Stays failed for the rest of this check.
+            seconds = row["check_seconds"]
+            row.clear()
+            row.update({"check": name, **({"model": model} if model else {}), "status": "fail",
+                        "reason": "report_serialization_error", "error": unserializable[0],
+                        "check_seconds": seconds})
             save_report(output, report)
         def run_unit(fn):
             guard.check(force=True)
@@ -167,7 +194,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (Path(__file__), Path(r0.__file__), REPO / "joulewise/align/r0_host.py",
                          REPO / "joulewise/align/r0_mlx.py", REPO / "joulewise/align/r0_step.py",
-                         REPO / "scripts/align_r0_checks.py")}
+                         REPO / "scripts/align_r0_checks.py", r0.NLL_REFERENCE_PATH)}
+        report["authority_load_reference_blob"] = git_blob_sha1(REPO / LOAD_REFERENCE_NOTE)
         report["config_sha256"] = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         report["checkout_head"] = command(("git", "-C", str(REPO), "rev-parse", "HEAD")).strip()
         for name, fn in (("host", host_snapshot), ("disk", lambda: disk_census(config, r0.PINS, guard.check))):
