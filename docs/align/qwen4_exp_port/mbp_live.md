@@ -13,6 +13,14 @@ seven-worker analysis job before the Saturday native checks; do not stop it
 as part of preparing this runbook. Exit all agent sessions before native
 validation. `--validation-only` is the operator's explicit assertion that
 these conditions hold; it is not an automatic census of measurement jobs.
+One automatic guard exists: every live command (download, convert, each
+native probe, the bf16 benchmark) refuses while `launchctl list` shows a
+measurement agent (`com.joulewise.night*`, `com.joulewise.b6loop`,
+`com.joulewise.b6wake*`). It checks at command start only, in the logged-in
+GUI user's launchd domain; run from Terminal on the Mac, not over SSH. Unload
+those agents by the lead's procedure before validation and restore them only
+after step 7's eject. The magistrate/watchdog is not covered: stop it first
+so it cannot arm a window mid-validation.
 
 ## Hardware, storage and acceptance
 
@@ -21,6 +29,9 @@ prevented for the duration. The 1 TB internal SSD has little free space.
 Keep **all** checkpoint/cache/conversion/temp/evidence bytes on the WD SN7100
 2 TB in the OWC Express 1M2 USB4 enclosure, APFS `/Volumes/JW-EXT`. Expected
 sequential throughput is about 3 GB/s; random PLE paging may be much slower.
+The SN7100 is DRAM-less and relies on host memory buffer (HMB), which a
+USB4-NVMe bridge cannot provide; expect higher random-read latency than its
+internal-slot specification, so first-pass PLE gathers can bound decode.
 Do not reformat, wipe, offload or delete study data. This external-storage
 plan supersedes the old internal-SSD/offload logistics for this run only.
 
@@ -44,7 +55,14 @@ Stop the native worker on **any** of:
 
 - Swap usage nonzero before loading, any new `vm_stat` Swapouts (or a reset
   of that counter), pressure level other than normal (`1`), or
-  `memory_pressure -Q` free percentage below 10%.
+  `memory_pressure -Q` free percentage below 10%. The abort reason names
+  which one fired. 128 GB here is 128 GiB = 137.4e9 bytes; the 10% floor
+  leaves about 24.7e9 bytes beside a 112.7e9-byte Metal peak for macOS,
+  apps and reclaimable cache, so a floor-only stop (no swap, kernel level
+  1) at the 40,960 rung is plausible. It is still a stop and a headroom
+  failure; record it as such for the lead. Never lower the floor to rescue
+  maxfit. On the M4 Air an MLX 4 GiB Metal allocation moved this
+  percentage by 22 points (25.8e9-byte machine), so it does track Metal.
 - Compressor growth >2 GB, Metal peak above the effective ceiling, an
   allocation error, inability to sample/parse the memory monitors, or PLE
   resident file pages above 21.5 GB at a probe checkpoint.
@@ -72,7 +90,7 @@ and the counter never changes. Do not disable swap or raise the wired limit.
 | Step | Budget | Required output / stop |
 |---|---|---|
 | Inventory, venv checks, native tiny tests | 20–45 min | correct Mac/disk, green native checks; no concurrent jobs |
-| Pinned source download | 1–6 h | 360 GB at ~17–100 MB/s; resumable cache; hash receipt |
+| Pinned source download | 3–5 h | 360 GB; home link measured 267 Mbit/s down (33 MB/s, M4 Air Wi-Fi, 11-05 `networkQuality`) = 3.0 h at full link rate; Ethernet may be faster; resumable cache; hash receipt |
 | Source SHA verification and maxfit conversion | 1–4 h | bounded streaming converter; source reverified; finished manifest |
 | Ordinary SHA256SUMS + manifest verification | 10–40 min | external checksum sidecar + recorded manifest pin |
 | Memory 4k → 16k → 40,960, 64 decode forwards | 15–90 min | zero new swap, normal pressure, fit + accounting review |
@@ -81,8 +99,13 @@ and the counter never changes. Do not disable swap or raise the wired limit.
 | Speed at low/medium/xhigh, both chunk sizes | 1–4 h | warmup + 3 repeats per effort/context/chunk |
 | PLE cache/I/O passes + report + eject | 15–45 min | post-load per-pass physical-disk counters and residency |
 
-Budget a full day, possibly longer on slow Internet or prefill. Stage downloads
-in an earlier non-measurement daytime slot if necessary. A fallback conversion
+The rows sum to roughly 7–20 h, plus about 2–5 min per native command
+(seven of them) to re-hash 211 GB and load about 109 GB of weights. Serial
+source hashing runs near 2.4 GB/s (SHA-256, single thread, measured), so each
+360 GB source verification is minutes, not hours. Expect probes to spill past
+Saturday evening: start the download first thing, and do not arm a
+measurement window Saturday night unless step 7's eject is complete. Stage
+downloads in an earlier non-measurement daytime slot if necessary. A fallback conversion
 adds another 1–4 h plus complete validation. Do not rush an unfinished gate
 into a measurement window. The hash passes and full model verification also
 consume real external I/O; their time is included, not claimed as PLE paging.
@@ -100,13 +123,23 @@ or production measurement environment change is part of this task.
 ```sh
 export PY="$PWD/.venv-qwen4exp/bin/python"  # operator's approved validation venv
 export JW_REPO_ROOT="$PWD"
-"$PY" -B -c 'import importlib.metadata as m; print({p:m.version(p) for p in ("mlx","mlx-lm","transformers","huggingface-hub","jinja2")})'
+"$PY" -B -c 'import importlib.metadata as m; print({p:m.version(p) for p in ("mlx","mlx-lm","transformers","huggingface-hub","jinja2","torch")})'
+sysctl vm.swapusage          # used must be 0.00M; otherwise reboot cleanly NOW, before the download
+memory_pressure -Q | tail -1 # expect well above 10% on an idle Mac
+launchctl list | grep -E 'com\.joulewise\.(night|b6loop|b6wake|magistrate)' || echo 'no joulewise agents loaded'
 git rev-parse HEAD
 git status --short --branch
 diskutil list external physical
 diskutil info /Volumes/JW-EXT
 df -h /Volumes/JW-EXT
+mdutil -s /Volumes/JW-EXT
+tmutil isexcluded /Volumes/JW-EXT
 ```
+
+Before any write, add JW-EXT to Spotlight Privacy (System Settings) and
+confirm `mdutil -s` reports indexing disabled; confirm Time Machine excludes
+it. Indexing 570 GB adds whole-disk I/O to the paging counters and can hold
+the volume open at eject.
 
 Verify the device is the SN7100/Express 1M2, attached by USB4, APFS, and has
 the space above. Set `DISK` to its **physical whole disk**, not the APFS
@@ -144,7 +177,14 @@ one at a time; no full suite while sharing this machine.
 ```sh
 "$PY" -B -m unittest tests.test_qwen4exp_mbp_live
 "$PY" -B -m unittest tests.test_qwen4exp_e2e_eval
+"$PY" -B -m unittest tests.test_qwen4exp_hosted_reference
 ```
+
+Expected, as run natively on the M4 Air on 2026-11-05 (mlx 0.31.2, mlx-lm
+0.31.3, transformers 5.22.1, torch 2.15.0, Metal): `test_qwen4exp_mbp_live`
+30 tests OK, 0 skips; `test_qwen4exp_e2e_eval` 37 OK, 1 skip (item rebuild
+needs `QWEN4EXP_ITEM_SOURCES`, fetched public sources; acceptable);
+`test_qwen4exp_hosted_reference` 13 OK, 0 skips. Any other skip is OPEN.
 
 The first includes canonical maxfit conversion + verified load + QSA/PLE
 timed-cache smoke, the tiny hybrid timing check, and Darwin mincore. It
@@ -160,7 +200,12 @@ the immutable revision, selects the 131 shards and tokenizer/config files,
 uses two concurrent transfers, disables the Xet chunk cache, and caps the
 Xet shard cache at 1 GiB. Inspect actual cache growth/free disk during a long
 transfer; the Xet limit is a library cache limit, not a filesystem quota.
-Partial transfers remain in the external cache for resumption. A fresh
+Partial transfers remain in the external cache for resumption.
+`HF_HOME` on JW-EXT also moves the token lookup to `$HF_HOME/token`, which
+does not exist. The pinned repo needs none if it is public; if `model_info`
+answers 401/403, export `HF_TOKEN` from the existing login for this shell
+only (never echo it) and rerun. Do not run `hf auth login`, which would
+write a token onto JW-EXT. A fresh
 receipt is written only after every file is authenticated: upstream LFS
 SHA-256 for large files, upstream Git blob identity for small files, plus
 ordinary SHA-256 for all files in the receipt. No unpinned Python is fetched.
@@ -405,11 +450,14 @@ after the lead reviews actual outputs. Keep GOAL 11 full gold evidence separate.
 # All Python workers, shell CWDs and file viewers must have released JW-EXT.
 cd "$JW_REPO_ROOT"
 sync
+lsof +f -- /Volumes/JW-EXT   # must print nothing; close any holder first
 diskutil eject /Volumes/JW-EXT
 kill "$JW_CAFFEINATE_PID"
 ```
 
-Confirm successful eject, **physically unplug** the enclosure, then hand the
+Confirm successful eject, then close this shell: it still exports `TMPDIR`
+and `HF_*` paths on the removed volume. **Physically unplug** the enclosure,
+`df` must no longer list JW-EXT, then hand the
 Mac back to the lead's clean measurement-window procedure. No measurement
 starts until validation has ended, agents are gone, and normal quiet-machine
 checks pass. No result in this bundle is an energy measurement.
