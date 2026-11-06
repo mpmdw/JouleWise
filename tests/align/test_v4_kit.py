@@ -539,8 +539,18 @@ class WP11IdentityTests(unittest.TestCase):
 
     def test_committed_wp11_is_not_pending_and_binds_the_folded_pins(self):
         self.assertFalse([p for p in kit.pending_inputs(kit.read_inputs(ROOT)) if p.startswith('WP11.')])
-        self.assertEqual(kit.validate_d_identity(self.wp11, self.pins), self.FOLDED)
+        raw = (ROOT / kit.D_PINS).read_bytes()
+        self.assertEqual(kit.validate_d_identity(self.wp11, self.pins, pins_raw=raw), self.FOLDED)
         self.assertEqual(self.wp11['identity_unit']['model_artifact_sha256'], self.FOLDED)
+
+    def test_wp11_receipt_pins_the_actual_hf_pin_document_bytes(self):
+        raw = (ROOT / kit.D_PINS).read_bytes()
+        bad = deepcopy(self.wp11)
+        bad['local_file_verification']['hf_pins']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'committed pins bytes'):
+            kit.validate_d_identity(bad, self.pins, pins_raw=raw)
+        with self.assertRaisesRegex(ValueError, 'committed pins bytes'):
+            kit.validate_d_identity(self.wp11, self.pins, pins_raw=raw + b' ')
 
     def test_kit_identity_pins_load_with_a_64_hex_d_sha(self):
         files = kit.build_files(ROOT)
@@ -602,15 +612,34 @@ class PendingMessageTests(unittest.TestCase):
             kit.require_ready(inputs, {'ac_powermode': 0, 'max_r1_tail_s': 20.0})
         return str(caught.exception)
 
-    def test_r0_effort_placeholder_says_it_waits_for_r0_to_pass(self):
+    def test_r0_effort_placeholder_names_the_ladder_evidence_not_all_of_r0(self):
         text = self.message(R0=('reasoning_effort',))
         self.assertIn('BLOCKED by placeholders: R0.reasoning_effort |', text)
-        self.assertIn('R0: R0.reasoning_effort stays a placeholder until R0 passes.', text)
+        self.assertIn('R0 D ladder records status=pass and a selected rung', text)
+        self.assertIn('does not wait for unrelated R0 checks', text)
         self.assertNotIn('WP18:', text)
         inputs, slots = ready_inputs()
         inputs['R0']['reasoning_effort'] = 'high'
-        with self.assertRaisesRegex(ValueError, 'R0.reasoning_effort stays a placeholder until R0 passes'):
+        with self.assertRaisesRegex(ValueError, 'R0 D ladder records status=pass'):
             kit.require_ready(inputs, slots)
+
+    def test_wp18_filled_digests_must_bind_committed_fixture_bytes(self):
+        inputs, _ = ready_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, relative in kit.WP18_FIXTURES.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                raw = (name + '-synthetic-token-ids').encode()
+                path.write_bytes(raw)
+                inputs['WP18'][name]['token_fixture_sha256'] = hashlib.sha256(raw).hexdigest()
+            kit.validate_wp18_fixtures(inputs, root)
+            (root / kit.WP18_FIXTURES['Y']).write_bytes(b'tampered')
+            with self.assertRaisesRegex(ValueError, 'WP18.Y.token_fixture_sha256 does not match'):
+                kit.validate_wp18_fixtures(inputs, root)
+            (root / kit.WP18_FIXTURES['X']).unlink()
+            with self.assertRaisesRegex(ValueError, 'WP18.X token fixture is missing'):
+                kit.validate_wp18_fixtures(inputs, root)
 
     def test_wp18_placeholder_names_the_pilot7_members_turn_counts_and_fixture(self):
         text = self.message(WP18=('X', 'Y'))
@@ -696,6 +725,9 @@ class W1SizingTests(unittest.TestCase):
                 kit.require_sizing(tmp)
             (Path(tmp) / kit.SIZING).write_bytes(self.files[kit.SIZING])
             kit.require_sizing(tmp)
+            (Path(tmp) / kit.W1_PLAN).write_bytes(self.raw + b' ')
+            with self.assertRaisesRegex(ValueError, 'is stale'):
+                kit.require_sizing(tmp)
 
 
 class W1DiskGateTests(unittest.TestCase):
@@ -719,6 +751,7 @@ class W1DiskGateTests(unittest.TestCase):
     def config(self, tmp):
         path = Path(tmp) / 'r0.json'
         config = json.loads((ROOT / 'configs/align/v4/r0_desk.json').read_text())
+        config['disk_path'] = str(Path(tmp).resolve())
         config['offloads'] = [{'label': 'pilot10', 'inventory': '/x/pilot10.json', 'destination': '/x/pilot10'}]
         path.write_text(json.dumps(config))
         return path

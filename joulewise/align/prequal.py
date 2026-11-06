@@ -496,7 +496,8 @@ def check_kit(ctx):
     if not any(p.startswith("WP11.") for p in pending):
         # A filled WP11 must bind the pinned shards at every stage, not only at W1.
         try:
-            d_identity = kit.validate_d_identity(inputs["WP11"], kit.read_d_pins(ctx.repo))
+            pins_raw = (ctx.repo / kit.D_PINS).read_bytes()
+            d_identity = kit.validate_d_identity(inputs["WP11"], json.loads(pins_raw), pins_raw=pins_raw)
         except (ValueError, OSError, KeyError, TypeError) as exc:
             d_identity = f"{type(exc).__name__}: {exc}"
             problems.append("WP11 D identity: " + d_identity)

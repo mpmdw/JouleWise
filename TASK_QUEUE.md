@@ -1356,3 +1356,10 @@ the author and integration repairs; later council work orders remain separate.
 
 - [ ] Execute the native/hardware verification checklist in
   `docs/run_reports/2026-11-06-align-v4-wp15.md`; cloud work remains PROVISIONAL.
+
+## ALIGN v4 W1 blocker burn-review follow-up (2026-11-06)
+
+- [ ] On the measurement Mac, supply the two WP18 recorded turn counts and
+  committed X/Y token-id fixtures, the passing R0 D-ladder selected rung, the
+  R1-filled W1 plan and derived sizing, and the WP15 runtime entrypoint; then run
+  the kit check and prequal before entering the quiet-machine arm workflow.

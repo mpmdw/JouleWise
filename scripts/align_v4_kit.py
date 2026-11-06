@@ -38,6 +38,10 @@ R1_SLOTS = KIT / 'registration/r1_slots.json'
 W1_PLAN = KIT / 'registration/w1_plan.json'
 SIZING = KIT / 'registration/sizing_b5.json'
 D_PINS = Path('configs/align/v4/qwen38-27b-8bit-hf-pins.json')
+WP18_FIXTURES = {
+    'X': KIT / 'registration/wp18_x_token_ids.json',
+    'Y': KIT / 'registration/wp18_y_token_ids.json',
+}
 D_REPO = 'mlx-community/Qwen3.8-27B-8bit'
 D_TAG = 'qwen3.8-27b'
 D_REVISION = '815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9'
@@ -121,7 +125,8 @@ PENDING_REASONS = {
              'token_fixture_sha256 = SHA-256 of the committed WP18 token-id fixture built from those '
              'two members\' align_turns.jsonl in the pilot 6-7 offload copy and p7-PILOT.json '
              '(plan WP18; CHAIR ruling 9(d)).'),
-    'R0': 'R0.reasoning_effort stays a placeholder until R0 passes.',
+    'R0': ('R0.reasoning_effort stays a placeholder until the R0 D ladder records status=pass '
+           'and a selected rung; use that selected rung. It does not wait for unrelated R0 checks.'),
     'R1': ('R1 hardware rehearsal (scripts/align_r1_rehearsal.py): B_D, I_D, T_dead (lead ruling L1) '
            'and the thermal policy.'),
     'WP15': 'WP15 supplies the operator-pinned W1 runtime entrypoint.',
@@ -169,8 +174,9 @@ def require_ready(inputs, r1_slots=None):
         if not valid_digest(ref.get('token_fixture_sha256')):
             raise ValueError(f'WP18.{name} requires a token fixture SHA256')
     if inputs['R0']['reasoning_effort'] not in ('xhigh', 'medium', 'low'):
-        raise ValueError('R0.reasoning_effort stays a placeholder until R0 passes; then it must be '
-                         'the selected ladder rung (xhigh, medium or low)')
+        raise ValueError('R0.reasoning_effort stays a placeholder until the R0 D ladder records '
+                         'status=pass and a selected rung; then it must be that selected ladder rung '
+                         '(xhigh, medium or low)')
     slots = inputs['R1']
     validate_budget(slots['B_D'])
     if not finite(slots['I_D']) or not 0 <= slots['I_D'] < 1750:
@@ -230,7 +236,7 @@ def check_l1_member_fit(i_d, t_dead, max_r1_tail_s):
     return worst
 
 
-def validate_d_identity(wp11, pins):
+def validate_d_identity(wp11, pins, *, pins_raw=None):
     """WP11 binds the exact pinned D weights, independently of the Mac's record.
 
     The artifact inventory is the governed model_artifact_identity file set the
@@ -249,6 +255,12 @@ def validate_d_identity(wp11, pins):
         raise ValueError('WP11 D identity must bind the pinned 8-bit artifact')
     if pins.get('repo') != D_REPO or pins.get('revision') != D_REVISION:
         raise ValueError('D HF pins must name the pinned repo and revision')
+    pin_receipt = verification.get('hf_pins')
+    if (not isinstance(pin_receipt, dict) or pin_receipt.get('path') != D_PINS.as_posix()
+            or pin_receipt.get('repo') != D_REPO or pin_receipt.get('revision') != D_REVISION):
+        raise ValueError('WP11 local verification must identify the D HF pins document')
+    if pins_raw is not None and pin_receipt.get('sha256') != sha(pins_raw):
+        raise ValueError('WP11 local verification HF pins sha256 does not match the committed pins bytes')
     weights = {name: row for name, row in pins['files'].items() if name.endswith('.safetensors')}
     if not weights or any(not valid_digest(row.get('sha256')) for row in weights.values()):
         raise ValueError('D HF pins must carry an LFS sha256 for every weight shard')
@@ -270,6 +282,25 @@ def validate_d_identity(wp11, pins):
     if verification.get('status') != 'verified':
         raise ValueError('WP11 local_file_verification must record status verified')
     return folded
+
+
+def validate_wp18_fixtures(inputs, root=ROOT):
+    """Bind the two Mac-supplied WP18 digests to committed token-id fixtures.
+
+    The fixture bytes are historical inputs, not generated kit output.  A bare
+    digest in inputs.json is not evidence that those bytes will be available at
+    arm/review time, so readiness requires both files beside the registration.
+    """
+    root = Path(root)
+    for name, relative in WP18_FIXTURES.items():
+        path = root / relative
+        if not path.is_file():
+            raise ValueError(f'WP18.{name} token fixture is missing: commit {relative}')
+        expected = inputs['WP18'][name]['token_fixture_sha256']
+        observed = sha(path.read_bytes())
+        if observed != expected:
+            raise ValueError(f'WP18.{name}.token_fixture_sha256 does not match {relative}: '
+                             f'expected {expected}, observed {observed}')
 
 
 def derive_sizing(root, w1_plan, inputs, r1_slots, tree, collection_plan, w1_plan_raw):
@@ -336,15 +367,25 @@ def require_sizing(root=ROOT):
             'scripts/validate_align_v4_w1_plan.py), then regenerate the kit, which derives sizing_b5.json.')
     if not (Path(root) / SIZING).is_file():
         raise ValueError(f'{SIZING} is missing; regenerate the kit from {W1_PLAN}')
+    try:
+        sizing = json.loads((Path(root) / SIZING).read_bytes())
+        pinned = sizing['sources']['w1_plan']
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(f'{SIZING} does not carry its W1-plan provenance: {exc}') from exc
+    observed = sha(read_w1_plan_bytes(root))
+    if pinned.get('path') != W1_PLAN.as_posix() or pinned.get('sha256') != observed:
+        raise ValueError(f'{SIZING} is stale for {W1_PLAN}; regenerate the kit')
 
 
 def require_w1_ready(root=ROOT):
     """Everything W1 prepare/arm needs from the kit: inputs, D identity, R1 sizing."""
     inputs = read_inputs(root)
     if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
-        validate_d_identity(inputs['WP11'], read_d_pins(root))
+        pins_raw = (Path(root) / D_PINS).read_bytes()
+        validate_d_identity(inputs['WP11'], json.loads(pins_raw), pins_raw=pins_raw)
     require_ready(inputs, read_r1_slots(root))
     require_sizing(root)
+    validate_wp18_fixtures(inputs, root)
 
 
 def valid_digest(value):

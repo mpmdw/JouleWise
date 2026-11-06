@@ -7233,3 +7233,12 @@ WP15 is implemented on the WP14-rulings integration lane: the unified WP14(a)
 classifier, WP14(b) reference custody, and cited WP14(c) CLI registry rebind are
 covered by synthetic unittests. Native SMC/MLX/APFS and cross-stage hardware
 verification remains as listed in `docs/run_reports/2026-11-06-align-v4-wp15.md`.
+
+## ALIGN v4 W1 blocker burn-review handoff (2026-11-06)
+
+The review at `docs/align/reviews/sol-burn-w1-review.md` found and repaired
+three readiness binding gaps (stale R1 sizing provenance, WP11 pin-document
+bytes, and retained WP18 X/Y fixture bytes) plus the over-broad R0 effort
+instruction. The production disk gate was already wired fail-closed. W1 remains
+blocked on the Mac-owned WP18 fixtures/counts, D-ladder selection, R1 outputs,
+and WP15 entrypoint. No live or quiet-machine work was performed.
