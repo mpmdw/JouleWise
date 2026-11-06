@@ -31,16 +31,18 @@ class ContractTests(unittest.TestCase):
         fields = {f for key in contract.KIND_FIELDS for f in contract.required_fields(key, quiet=True)}
         for name in ("cpu_busy_cores", "census", "sensor_series_c", "recovery_curve", "deadman.phases_s",
                      "admitted_turns", "x7", "energy_j", "e_D_j_per_token", "released", "t_decline_s",
-                     "delta_slow_c", "g0_release_c", "reference_c", "slots"):
+                     "delta_slow_c", "g0_release_c", "reference_c", "slots",
+                     "battery_drain_pct_per_h", "charge_resume_soc_pct"):
             self.assertIn(name, fields)
         self.assertIn("deadman.phases_s.tail", contract.required_fields("d-bank-benign-s1", quiet=False))
 
     def test_missing_fields_reports_nested_and_quiet_fields(self):
-        result = {"energy_j": 1.0, "admitted_turns": 3, "x7": False,
+        result = {"energy_j": 1.0, "admitted_turns": 3, "x7": False, "battery_drain_pct_per_h": 3.0,
                   "deadman": {"T_dead_s": 1.0, "phases_s": {p: 0.0 for p in contract.DEADMAN_PHASES[:-1]}}}
         self.assertEqual(contract.missing_fields("d-spam-benign-s1-a", result, quiet=False),
                          ["deadman.phases_s.tail"])
-        self.assertEqual(contract.missing_fields("step-30b", {}, quiet=True), ["cpu_busy_cores", "census"])
+        self.assertEqual(contract.missing_fields("step-30b", {}, quiet=True),
+                         ["cpu_busy_cores", "census", "battery_drain_pct_per_h"])
         with self.assertRaisesRegex(ValueError, "no kind"):
             contract.required_fields("unknown", quiet=False)
 
@@ -82,6 +84,13 @@ class LoadJournalTests(unittest.TestCase):
         for kind in contract.KIND_FIELDS:
             self.assertIn(f"`{kind}`", doc)
         self.assertIn("--soak-reference", doc)
+        for field in ("`battery_drain_pct_per_h`", "`charge_resume_soc_pct`", "runtime_custody.json"):
+            self.assertIn(field, doc)
+
+    def test_ruling_4b_battery_fields_are_required_where_the_driver_reads_them(self):
+        for kind in ("step-30b", "step-d", *contract.GATED_D_KINDS):
+            self.assertIn("battery_drain_pct_per_h", contract.required_fields(kind, quiet=True))
+        self.assertIn("charge_resume_soc_pct", contract.required_fields("harvest", quiet=False))
 
 
 if __name__ == "__main__":

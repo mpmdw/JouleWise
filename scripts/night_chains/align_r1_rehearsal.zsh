@@ -25,7 +25,6 @@ print -r -- "$SUDO_RULES" | /usr/bin/grep -F -- '/usr/bin/pmset -c powermode 2' 
 restore_automatic
 
 : "${NIGHT_DIR:?run_night must supply NIGHT_DIR}"
-: "${ALIGN_R1_RUNTIME:?WP15 runtime argv is required}"
 REPO="${0:A:h:h:h}"
 PY="${PY:-$REPO/.venv/bin/python}"
 REGISTRATION="${ALIGN_R1_REGISTRATION:-$NIGHT_DIR/align-r1/r1_slots.json}"
@@ -38,9 +37,17 @@ if [[ -e "$POWER_MARKER" ]]; then
   restore_automatic
 fi
 
-# ALIGN_R1_RUNTIME is an operator-pinned executable path, not shell text.
+# The WP15 runtime argv is the list inputs.WP15.runtime_entrypoint (a
+# repo-relative script run by "$PY" -B, then its arguments). ALIGN_R1_RUNTIME,
+# if set, overrides it with one operator-pinned executable path (not shell text).
+INPUTS="${ALIGN_R1_INPUTS:-$REPO/configs/campaigns/align_v4/registration/inputs.json}"
+if [[ -n "${ALIGN_R1_RUNTIME:-}" ]]; then
+  RUNTIME_ARGS=(--runtime "$ALIGN_R1_RUNTIME")
+else
+  RUNTIME_ARGS=(--runtime-entrypoint "$INPUTS")
+fi
 "$PY" -B "$REPO/scripts/align_r1_rehearsal.py" \
   --output "$NIGHT_DIR/align-r1" \
   --registration "$REGISTRATION" \
   --power-marker "$POWER_MARKER" \
-  --runtime "$ALIGN_R1_RUNTIME"
+  "${RUNTIME_ARGS[@]}"

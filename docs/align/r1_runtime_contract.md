@@ -6,6 +6,12 @@ The R1 driver (`scripts/align_r1_rehearsal.py`) does no model, SMC or gate work 
 
 It then reads one JSON object from stdout. A non-zero exit, a result that is not JSON, or a missing field refuses R1 (exit 3). The Automatic power mode is still restored.
 
+The runtime argv is the list `inputs.WP15.runtime_entrypoint` in `configs/campaigns/align_v4/registration/inputs.json` (Fable cold pass LOW-3):
+
+    ["scripts/align_r1_runtime.py", "--config", "configs/align/v4/r1_runtime.json"]
+
+Element 0 is a repo-relative Python script; the chain passes `--runtime-entrypoint <inputs.json>` and the driver runs it with its own interpreter (`$PY -B`, the pinned venv), followed by the remaining elements verbatim. `ALIGN_R1_RUNTIME`, if set, overrides the list with one operator-pinned executable path (never shell text); this is the only place the override is defined.
+
 The field table lives in `joulewise/align/apple/r1_runtime_contract.py` (`KIND_FIELDS`, `QUIET_FIELDS`, `NEEDS_SOAK_REFERENCE`). The driver checks every result against it at the seam. This document is the prose form of that table, and a test keeps the two in step.
 
 ## Arguments
@@ -18,6 +24,14 @@ The field table lives in `joulewise/align/apple/r1_runtime_contract.py` (`KIND_F
 
   Every release, the post-D cooldown, the designed planning-turn start states and the A-B-A legs measure against this R. The kinds marked "R" below refuse without it.
 - `--duration-s N` is given for fixed-length idle segments only.
+- The kinds that run D under the R1 slots (`x-g`, the gated D runs) read the accepted step-d result, `<R1 output>/step_D_prefill_10k_decode_4096/runtime_result.json`, for T_dead, B_D, N_chunk and G_turn. They refuse without it. Reading a sibling is the runtime's only access outside `DIR`.
+
+## Signals and custody (Fable cold pass MEDIUM-1)
+
+- On its first TERM/INT/HUP the driver sends TERM to the running runtime, waits at most 20 s (inside run_night's 30 s), and only then sends KILL. Later signals are ignored so the wait and the Automatic restore complete.
+- On TERM the runtime must stop work and, within 20 s: let an open controller bundle salvage and finalize (that stops powermetrics and closes the bundle's SMC sidecar), close its own SMC sessions, heater and journals, write its terminal record and exit 128 + signal. The WP15 runtime forces its own exit after 15 s.
+- The terminal record is `DIR/runtime_custody.json` (`status`: `complete`, `refused`, `failed` or `aborted`, the signal, and the SHA-256 of every other file in `DIR`). It is written last on every exit path. After an abort `DIR` is incomplete: it holds the salvaged bundle and journals, and the custody record says so. Nothing is printed on stdout unless the segment completed.
+- The runtime refuses (exit 2) when `DIR` already exists, an input is PENDING (R0 sensor keys, the kit's R0 reasoning effort, WP18's X-G turn count, the D-4bit source) or `--soak-reference` is missing or unreadable; it exits 3 when the segment ran but cannot supply its fields.
 
 ## Fields every quiet segment returns (council ruling 8)
 
@@ -44,16 +58,18 @@ Each returns:
 | `calibration-post` | | none |
 | `idle` | | none (cooldown after the 30B; not quiet) |
 | `idle_soak` | | quiet fields, plus `sensor_series_c`: `{sensor key: [per-second °C, ≥ 1,200 values]}`. Contract key for the `idle` kind of the `idle_soak` segment; the soak is redone unless `abs(slope) <= 0.2` °C/min over the last 20 min. |
-| `step-30b` | | quiet fields |
-| `step-d` | | quiet fields; `slots` (S1-S9, B_D, I_D, T_dead, N_chunk, t_decline: finite numbers; `class`: `heavy` or `light`); `e_D_j_per_token` (> 0) |
+| `step-30b` | | quiet fields; `battery_drain_pct_per_h` (ruling 4(b)) |
+| `step-d` | | quiet fields; `slots` (S1-S9, B_D, I_D, T_dead, N_chunk, t_decline: finite numbers; `class`: `heavy` or `light`); `e_D_j_per_token` (> 0); `battery_drain_pct_per_h` |
 | `idle-until-soak` | R | `recovery_curve`: non-empty list of `[t_s, S_slow °C]`. Idle until S_slow is within δ of R, or 1,500 s (ruling 1(c)). |
 | `x-g` | | none |
-| `d-spam-benign-s1-a`, `d-spam-benign-s1-b`, `d-bank-benign-s1` | | `energy_j`; `admitted_turns` (int ≥ 0); `x7` (bool); `deadman.T_dead_s` (the deadman the run armed at G0 entry; it must equal the `step-d` `slots.T_dead`, or R1 refuses at that run); `deadman.phases_s.{G0,G1,H,decode,prefill,tool,tail}` (finite seconds) (ruling 1(a), 1(d)) |
+| `d-spam-benign-s1-a`, `d-spam-benign-s1-b`, `d-bank-benign-s1` | | `energy_j`; `admitted_turns` (int ≥ 0); `x7` (bool); `deadman.T_dead_s` (the deadman the run armed at G0 entry; it must equal the `step-d` `slots.T_dead`, or R1 refuses at that run); `deadman.phases_s.{G0,G1,H,decode,prefill,tool,tail}` (finite seconds) (ruling 1(a), 1(d)); `battery_drain_pct_per_h` |
 | `d-planning-turn-r-plus-0c`, `d-planning-turn-r-plus-2c`, `d-planning-turn-r-plus-4c` | R | quiet fields; `reference_c` (R, identical across the three); `g0_release_c` (the S_slow **measured** at release); `delta_slow_c` (the gate band, identical across the three, > 0); `energy_j`. The driver refuses a release outside R + offset ± δ_slow and fits β_T on the measured release temperatures (ruling 6). |
 | `d-4bit` | | none (optional) |
 | `g0-release-soak` | R | `released`: true if S_slow came within δ of R before the G0 cap (600 s), false on timeout |
 | `high-power-aba-a1`, `high-power-aba-b`, `high-power-aba-a2` | R | quiet fields; `t_decline_s`: positive seconds, or null for no decline (infinite) |
-| `harvest` | | none (authenticated harvest; recorded verbatim) |
+| `harvest` | | `charge_resume_soc_pct`: the SoC (%) at the first observed charge resume during R1, or null if charging never resumed (ruling 4(b)) |
+
+`battery_drain_pct_per_h` is the OLS drain rate in %/h (positive = discharging) over the segment's non-charging `pmset -g batt` samples, or null when the segment charged throughout. The driver records both ruling 4(b) outputs in `r1_slots.battery`: the drain under D (mean of step-d and the three gated runs) and under the 30B (step-30b), and the charge-resume SoC.
 
 ## How the driver uses the fields
 
@@ -75,14 +91,23 @@ Each returns:
   - The value is read through `EpisodeRuntimeAdapter.powermode_reader`. `ThermalRegistry(powermode_reader=...)` binds it, and a real run defaults to a read-only `pmset -g custom`.
   - The v4 desk compares every member's recorded value with the frozen series value, using `validate_powermode_members`. Any mismatch, or an unobserved value, sets the `ac_powermode_members` check false, so `instrument_ok` is false.
 
-## Not yet implemented in the runtime
+## The WP15 runtime (`joulewise/align/apple/r1_runtime.py`)
 
-`LoadJournal` and the bundle powermode record are implemented. Every other field above needs the WP15 R1 runtime executable, which does not yet exist. That runtime must drive the episode adapter, the SMC sidecar and `ThermalSession`, which this contract does not touch:
-- `sensor_series_c` and `recovery_curve`: SMC sidecar rows;
-- `deadman.phases_s`: the G0, G1 and H intervals from `ThermalSession.record()`, plus decode, prefill and tool time from the episode, plus the post-deadline tail;
-- `released`: the G0 wait outcome;
-- `t_decline_s`;
-- `energy_j`: the episode attribution;
-- `e_D_j_per_token`: the step-D decode energy divided by decode tokens.
+The runtime adds orchestration only; every measurement uses an existing production path:
 
-The R1 chain refuses (exit 3) until every field is present.
+- **Model segments** (`step-30b`, `step-d`, the planning turns, the A-B-A legs, `x-g`, the gated D runs, `d-4bit`) run `run_benchmark` with a `ThermalRegistry`: the ALIGN episode adapter, `MlxEndpoint` on mlx_lm, `ThermalSession` (SMC sidecar, G0/G1/H, the powermetrics status tap), the episode deadman, the powermetrics telemetry adapter, the bundle custody writer and the ruling 7 powermode record. Members are built from the generated kit configs named in `configs/align/v4/r1_runtime.json`, tagged `align-v4-r1`/`non-claim` without launch lineage. Bundles land in `DIR/runs/`.
+- **Step tests** (10k fed prefill + 4,096 seeded decode) are one-turn episodes of a deterministic long-prefill task (`StepTask`), gated by a G0 against the soak R with no G1 or holds so the decode is continuous.
+- **Sensor segments** (`idle`, `idle-until-soak`, `g0-release-soak`) run a `ThermalSession` alone in `DIR/<label>/align_thermal.jsonl`; `g0-release-soak` starts powermetrics for the PM state, pre-rolls 65 s for the slope window and calls the production `wait('G0')` with R as its reference.
+- **Read-back** uses `read_episode_bundle`, `thermal_desk.read_bundle_record` (`energy_j` is its `turn_owned_j`), `thermal_desk.native_pm_samples` (the PM clock) and `attribute_episode` (decode energy).
+- **Journals**: `contract.LoadJournal` once a second (the runtime's own PID tree excluded) and `pmset -g batt` every 30 s (`DIR/battery.jsonl`).
+
+Field derivations and their stated approximations:
+
+- `sensor_series_c`: the valid 1 Hz reads of the R0 gate keys in order; a failed read is dropped, never interpolated.
+- `recovery_curve`: `[t_s, S_slow]` per read until |S_slow − R| ≤ δ_slow, or the cap.
+- `deadman.phases_s`: G0/G1/H from the episode's `ThermalSession.record()` intervals; prefill (turn start to first token), decode (first token to turn end, holds removed) and tool time from the episode; tail = episode end past the G0-entry deadline.
+- `slots` (step-d): S1/S2 = fast-key ΔT and t63; S3/S4 = slow-key ΔT and cooling τ (key names and the FD 2.6 class checks are in `slot_detail`); S5 = δ_slow = max(1.0 °C, 3 × soak SD); S6 = the δ_slow the R1 gates use (the S6 tuning is the lead's after the gated runs); S7 = G_turn = min(300 s, 3 × the recovery from the step peak to within δ of R, observed for up to 300 s after the step); S8 = N_chunk; S9 = t_decline (FD 2.6; when no decline occurs it is censored at the observed decode length and N_chunk = 2,048, A1 A3.1; no PM clock support refuses); I_D = member wall − (episode end − G0 entry); B_D = 1024 × ⌊((1800 − I_D)/1.13544 − prefill_s) × r_decode / 1024⌋, ≤ 40,960; T_dead = (1750 − I_D)/1.13544 (L1's first term; the kit applies the tail); class = D's protocol class (A1 A3.1), with the FD 2.5 rule recorded beside it.
+- `e_D_j_per_token`: decode-segment energy over decode tokens of the step-d episode.
+- Designed start states (planning kinds): a proportional MLX heater (`ProcessHeater`, a child process) preheats to R + offset and holds S_slow there during the production G0, whose reference is R + offset on S_slow (S_fast is not banded); it stops before the episode starts. `g0_release_c` is the G0 interval's measured release.
+- `released`: the G0 outcome. `t_decline_s`: the step's t_decline, null when no decline occurred.
+- `calibration-pre`/`-post` record the read-only host snapshot at the brackets; the meter calibration itself belongs to the R1 night plan's scaffold. `harvest` writes `DIR/harvest_manifest.json` (SHA-256 of every file under the R1 output) and aggregates the charge-resume events.

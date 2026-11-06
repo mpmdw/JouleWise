@@ -295,7 +295,9 @@ class KitTests(unittest.TestCase):
                 continue
             candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
                          if isinstance(v, dict)}
-            candidate[owner] = fields
+            # Committed values may already be supplied (WP15's runtime argv is);
+            # an owner whose leaves are emptied must still block on its own.
+            candidate[owner] = {name: None for name in fields}
             with self.assertRaisesRegex(ValueError, 'BLOCKED.*' + owner):
                 kit.require_ready(candidate)
 
@@ -380,13 +382,22 @@ def ready_inputs(i_d=300.0, tail=20.0):
                  'Y': {'max_turns': 10, 'token_fixture_sha256': 'd' * 64}},
         'R0': {'reasoning_effort': 'xhigh'},
         'R1': {'B_D': 8192, 'I_D': i_d, 'T_dead': t_dead, 'thermal_policy': policy},
-        'WP15': {'runtime_entrypoint': 'scripts/align_v4_launch.py'},
+        'WP15': {'runtime_entrypoint': ['scripts/align_r1_runtime.py', '--config', 'configs/align/v4/r1_runtime.json']},
     }
     return inputs, {'ac_powermode': 0, 'max_r1_tail_s': tail}
 
 
 class L1Tests(unittest.TestCase):
     """Lead ruling L1: restated council ruling 1(f)."""
+
+    def test_runtime_entrypoint_must_be_an_argv_list(self):
+        # Fable cold pass LOW-3: one shell string is not an argv.
+        inputs, slots = ready_inputs(300.0, 20.0)
+        kit.require_ready(inputs, slots)
+        for bad in ('scripts/align_r1_runtime.py --config configs/align/v4/r1_runtime.json', [], ['']):
+            inputs['WP15']['runtime_entrypoint'] = bad
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'argv list|BLOCKED'):
+                kit.require_ready(inputs, slots)
 
     def test_small_tail_keeps_the_original_t_dead(self):
         inputs, slots = ready_inputs(300.0, 20.0)

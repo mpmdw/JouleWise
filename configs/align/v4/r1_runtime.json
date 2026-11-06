@@ -1,0 +1,17 @@
+{
+  "schema": "joulewise.align.r1_runtime_config.v1",
+  "backend": "production",
+  "note": "WP15 R1 runtime config (docs/align/r1_runtime_contract.md). Templates are the generated v4 kit configs; R0 fills sensors and the kit's reasoning_effort, WP18 the X-G max_turns. The runtime refuses (exit 2) while any of them is PENDING.",
+  "templates": {
+    "d_spam": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json",
+    "d_bank": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e08.json",
+    "model_30b": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e01.json",
+    "x_g": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json"
+  },
+  "d_pins": "configs/align/v4/qwen38-27b-8bit-hf-pins.json",
+  "d_4bit_source": null,
+  "d_class": "heavy",
+  "sensors": "PENDING_R0",
+  "step": {"prefill_chars": 40000, "decode_tokens": 4096, "seed": 1, "deadman_s": 1580},
+  "battery_poll_s": 30
+}

@@ -1089,8 +1089,7 @@
     "R1.B_D",
     "R1.I_D",
     "R1.T_dead",
-    "R1.thermal_policy",
-    "WP15.runtime_entrypoint"
+    "R1.thermal_policy"
   ],
   "plan_id": "align-v4",
   "protocol": "docs/align/pilot_protocol_v4.md",
@@ -1101,7 +1100,11 @@
   "runtime_requirements": {
     "D_tools": "family-validated XML via qwen3_5",
     "ac_powermode": null,
-    "launcher": null,
+    "launcher": [
+      "scripts/align_r1_runtime.py",
+      "--config",
+      "configs/align/v4/r1_runtime.json"
+    ],
     "presence_penalty": 0,
     "window_reference": "WP15 custody; member 5 captures; later members consume"
   },

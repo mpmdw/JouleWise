@@ -80,8 +80,38 @@ class Refusal(RuntimeError):
     pass
 
 
+# Fable cold pass MEDIUM-1: on the first signal the runtime (which owns the SMC
+# sidecar, the thermal journal, powermetrics and its output custody) gets TERM
+# and up to 20 s to close them, inside run_night's 30 s; only then KILL.
+RUNTIME_TERM_GRACE_S = 20.0
+
+
+def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> None:
+    """TERM, wait at most ``grace_s`` (default RUNTIME_TERM_GRACE_S), then KILL."""
+    grace_s = RUNTIME_TERM_GRACE_S if grace_s is None else grace_s
+    if process.poll() is None:
+        try:
+            process.send_signal(signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.communicate(timeout=grace_s)
+            return
+        except subprocess.TimeoutExpired:
+            process.kill()
+    process.communicate()
+
+
 def _run(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, text=True, capture_output=True, check=False)
+    # Not subprocess.run: on any exception (the one-shot signal handler raises
+    # KeyboardInterrupt here) it SIGKILLs the child at once.
+    process = subprocess.Popen(list(argv), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        stdout, stderr = process.communicate()
+    except BaseException:
+        _terminate(process)
+        raise
+    return subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
 
 
 class PowerModeGuard(AbstractContextManager):
@@ -298,6 +328,28 @@ def planning_temperature_summary(results):
             # Ruling 6: the U5 bar is |beta_T|_90 x delta_slow <= c x sigma_pair.
             "abs_beta_T_90_j_per_c": max(abs(ci90[0]), abs(ci90[1])),
             "u5_bar_form": "|beta_T|_90 * delta_slow <= c * sigma_pair, c = 1.0 (lead ruling L2)"}
+
+
+def battery_report(results, harvested):
+    """Council ruling 4(b): drain rate (%/h) under D and under the 30B, and the
+    SoC at which charging resumed, to predict top-ups per window."""
+    def drain(name):
+        value = results[name].get("battery_drain_pct_per_h")
+        # null: the segment charged throughout or had too few samples.
+        return None if value is None else _finite_number(value, f"{name}.battery_drain_pct_per_h")
+    d_names = ("step_D_prefill_10k_decode_4096", *(name for name, _ in GATED_D_RUNS))
+    per_segment = {name: drain(name) for name in ("step_30b", *d_names)}
+    d_values = [per_segment[name] for name in d_names if per_segment[name] is not None]
+    soc = harvested.get("charge_resume_soc_pct")
+    if soc is not None:
+        soc = _finite_number(soc, "harvest.charge_resume_soc_pct")
+        if not 0 <= soc <= 100:
+            raise Refusal("harvest.charge_resume_soc_pct must be within [0, 100]")
+    return {"authority": "CHAIR ruling 4(b)",
+            "drain_pct_per_h": {"D": math.fsum(d_values) / len(d_values) if d_values else None,
+                                "30B": per_segment["step_30b"]},
+            "drain_pct_per_h_by_segment": per_segment, "charge_resume_soc_pct": soc,
+            "charge_resume_events": harvested.get("charge_resume_events", [])}
 
 
 def u5_verdict(temperature, gated):
@@ -614,6 +666,7 @@ def run(args):
                 "fallback_order": list(DUTY_FALLBACK_ORDER)}
         mde = projected_mde(results["step_D_prefill_10k_decode_4096"].get("e_D_j_per_token"), gated)
         u5 = u5_verdict(temperature_summary, gated)
+        battery = battery_report(results, harvested)
         # Ruling 7 + 16: the frozen series AC powermode is the A-B-A outcome.
         ac_powermode = 2 if adoption["verdict"] == "adopt" else 0
         registration = {"schema": SCHEMA, "source": "R1 synthetic rehearsal" if args.synthetic else "R1 hardware rehearsal",
@@ -622,7 +675,7 @@ def run(args):
                         "high_power": {"t_decline_s": legs, "g0_released": releases, **adoption},
                         "deadman_budget": deadman, "duty_bar": duty,
                         "max_r1_tail_s": max(row["phases_s"]["tail"] for row in deadman),
-                        "projected_mde": mde}
+                        "projected_mde": mde, "battery": battery}
         reg = args.registration.resolve()
         reg.parent.mkdir(parents=True, exist_ok=True)
         reg.write_text(json.dumps(registration, indent=2, sort_keys=True) + "\n")
@@ -649,15 +702,41 @@ def main(argv=None):
                         help="default: <output>/r1_slots.json")
     parser.add_argument("--power-marker", type=Path,
                         help="persistent SIGKILL recovery marker (default: beside output)")
-    parser.add_argument("--runtime", nargs="+", required=True,
-                        help="WP15 runtime argv; receives --r1-kind/--output[/--duration-s]"
-                             "[/--soak-reference] (docs/align/r1_runtime_contract.md)")
+    runtime = parser.add_mutually_exclusive_group(required=True)
+    runtime.add_argument("--runtime", nargs="+",
+                         help="WP15 runtime argv override; receives --r1-kind/--output[/--duration-s]"
+                              "[/--soak-reference] (docs/align/r1_runtime_contract.md)")
+    runtime.add_argument("--runtime-entrypoint", type=Path, metavar="INPUTS_JSON",
+                         help="read the runtime argv list from INPUTS_JSON WP15.runtime_entrypoint")
     parser.add_argument("--include-4bit", action="store_true")
     parser.add_argument("--synthetic", action="store_true")
     args = parser.parse_args(argv)
     if args.registration is None:
         args.registration = args.output / "r1_slots.json"
+    if args.runtime_entrypoint is not None:
+        try:
+            args.runtime = runtime_argv_from_inputs(args.runtime_entrypoint)
+        except (OSError, ValueError, Refusal) as error:
+            print(f"align_r1_rehearsal: refused: {error}", file=sys.stderr)
+            return 3
     return run(args)
+
+
+def runtime_argv_from_inputs(path):
+    """``inputs.WP15.runtime_entrypoint`` is the runtime argv as a list (Fable LOW-3).
+
+    Element 0 is a repo-relative Python script, run by this driver's own
+    interpreter (``$PY``, the pinned venv) with ``-B``; the remaining elements
+    are passed verbatim (repo-relative paths are resolved by the runtime).
+    """
+    inputs = json.loads(Path(path).read_text())
+    argv = (inputs.get("WP15") or {}).get("runtime_entrypoint")
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
+        raise Refusal("inputs.WP15.runtime_entrypoint must be a non-empty argv list of strings")
+    script = Path(argv[0])
+    if script.is_absolute() or ".." in script.parts or script.suffix != ".py" or not (ROOT / script).is_file():
+        raise Refusal("inputs.WP15.runtime_entrypoint[0] must be a repo-relative Python script")
+    return [sys.executable, "-B", str(ROOT / script), *argv[1:]]
 
 
 if __name__ == "__main__":
