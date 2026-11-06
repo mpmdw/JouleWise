@@ -18,8 +18,20 @@ including R0 and R1.** Gold setup, rolling bf16 shards, caches, converted
 weights and paged tables may use it by day only. Those external files are
 unavailable to a measurement. Step 13's external-volume census is mandatory
 immediately before arming. An ejected but still plugged-in enclosure is an
-energy confound. The nominal gold peak is 120 GB; never stage the whole
-roughly 360 GB/131-shard bf16 checkpoint.
+energy confound: the census therefore also compares Thunderbolt/USB/NVMe bus
+devices against an **unplugged bus baseline recorded once on this Mac before
+the SSD is first plugged in** (§15), and Saturday proves it refuses an
+ejected-but-plugged enclosure. The nominal gold peak is 120 GB; never stage
+the whole roughly 360 GB/131-shard bf16 checkpoint.
+
+**Saturday is COPY-ONLY (§15, run A):** pause, bus baseline, SSD copies of
+pilots 8–10 and the existing iCloud-only archives, eject, census proof,
+unplug. Cloud upload/round trip (steps 5 and 7, needing the parser pin),
+W1-offload inventories and any deletion are run B, on a later day; the sources
+stay on the Mac, so nothing is lost by deferring them. R0's disk check is
+report-only and needs no pilot offload or SSD copy (v4 plan ruling 6,
+`origin/lane/2026-11-05-align-v4-wp4-r0` @ 82cca4295); this runbook carries no
+R0 patch.
 
 Authority: RUN_STATE's item-26 capture-retention rule (historically cited as
 line 45), amended item 170 / PR #662 and **items 171–174**. Item 174 ends v3
@@ -161,9 +173,16 @@ jw_pause_check
 # Ed confirms no collection.active, armed plan or scheduled t0; all products sealed.
 mkdir -m 700 "$JW_OP"
 [[ "$JW_OFFLOAD_CODE_COMMIT" == [0-9a-f]## && ${#JW_OFFLOAD_CODE_COMMIT} == 40 ]]
-git -C "$JW_CANON" show "${JW_OFFLOAD_CODE_COMMIT}:scripts/align_offload_delete_root.py" \
-  > "$JW_OP/delete_root.py"
-shasum -a 256 "$JW_OP/delete_root.py" > "$JW_OP/manifest-helper.sha256"
+# Pin every operational script once (N11); later steps run only these copies.
+for jw_pin in align_offload_delete_root.py:delete_root.py \
+    align_offload_disk_guard.py:disk_guard.py \
+    align_offload_model_keep.py:align_offload_model_keep.py \
+    external_volume_census.py:external_volume_census.py; do
+  git -C "$JW_CANON" show "${JW_OFFLOAD_CODE_COMMIT}:scripts/${jw_pin%%:*}" > "$JW_OP/${jw_pin#*:}"
+done
+shasum -a 256 "$JW_OP/delete_root.py" "$JW_OP/disk_guard.py" \
+  "$JW_OP/align_offload_model_keep.py" "$JW_OP/external_volume_census.py" \
+  > "$JW_OP/manifest-helper.sha256"
 {
   print -r -- 'setopt interactivecomments errexit nounset pipefail extendedglob noclobber'
   for name in JW_CANON JW_MEAS JW_RECORDS JW_OP JW_P9_PIN JW_P9_PILOT JW_P10_PIN JW_P10_PILOT; do
@@ -189,8 +208,11 @@ jw_uploaded() {
   python3.13 -I -B "$JW_OP/delete_root.py" uploaded "$1"
 }
 jw_wait_dataless() {
-  local file="$1" expected="$2" flags attempt
-  for attempt in {1..240}; do
+  # Optional 3rd argument: attempts of 5 s (default 240 = 20 min), size-scaled
+  # by callers that hydrate large archives (N6).
+  local file="$1" expected="$2" limit="${3:-240}" flags attempt
+  [[ "$limit" == [1-9][0-9]# ]] || { print -u2 -- 'STOP: bad attempt limit'; return 2; }
+  for attempt in {1..$limit}; do
     flags="$(/usr/bin/stat -f %Sf "$file")"
     if [[ "$expected" == yes && "$flags" == *dataless* ]]; then return 0; fi
     if [[ "$expected" == no && "$flags" != *dataless* ]]; then return 0; fi
@@ -215,12 +237,20 @@ mkdir "$JW_OP/plists"
 # Discover paths without following symlinked plists or printing their contents.
 find /Users/edr/Library/LaunchAgents /Library/LaunchAgents /Library/LaunchDaemons \
   -maxdepth 1 \( -type f -o -type l \) -name '*.plist' -print
-crontab -l
-atq
+# No crontab is a recorded fact, not a STOP (N4a); any OTHER failure is a STOP.
+if crontab -l > "$JW_OP/crontab-local.txt" 2> "$JW_OP/crontab-stderr.txt"; then
+  print -r -- 'crontab PRESENT: Ed reviews $JW_OP/crontab-local.txt locally'
+elif [[ "$(<"$JW_OP/crontab-stderr.txt")" == "crontab: no crontab for $(id -un)" ]]; then
+  print -r -- "crontab ABSENT for $(id -un) $(date -u +%FT%TZ)" > "$JW_OP/crontab-absent.txt"
+  print -r -- 'crontab absent: recorded'
+else
+  print -u2 -- 'STOP: crontab -l failed for another reason'; exit 1
+fi
+atq > "$JW_OP/atq-local.txt"
 ```
 
-`crontab -l` exits nonzero if no crontab exists; record that exact absence and
-resume the reviewed script after it, not with a blanket `|| true`. Ed reviews
+`crontab -l` exits nonzero if no crontab exists; the script records that exact
+absence in `crontab-absent.txt` and continues; any other failure stops. Ed reviews
 system launchers/cron/at locally. Never upload raw `ps`, `plutil -p`, crontab
 commands, `launchctl print` or plist contents: they can contain credentials.
 The journal gets only domain, label, original disabled/loaded state, PID and
@@ -238,25 +268,51 @@ not EnvironmentVariables. Save system disabled states locally too. Preserve
 `local.jwbench.keepawake`, its plist, AC settings, checkouts and venvs.
 
 Save this continuation as `step2-pause.zsh`; review exact discovered jobs first.
-The source of `JW_PLAN` is the current terminal-plan handoff, not an old date.
+Ed writes the reviewed launchd targets, one `gui/501/<label>` or
+`system/<label>` per line, to `$JW_OP/job-targets.txt` (always including
+`gui/<uid>/com.joulewise.magistrate`, `.night` and `.night.deadman`; never
+`local.jwbench.keepawake`). The script is **idempotent** (N4): a STOP it
+created earlier is accepted on resume, an already-absent job is recorded and
+still disabled, and the night agent is uninstalled only if it is still loaded
+(the magistrate normally uninstalled it after pilot 10; `JW_PLAN` is then
+not needed).
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_PLAN:?Set exact TERMINAL night_plan.json from handoff}"
+shasum -a 256 -c "$JW_OP/env.sha256"
 jw_pause_check
+jw_stop=/Users/edr/night-custody/magistrate/STOP
+jw_text="ALIGN paused for MBP offload and gold validation; $JW_OP"
 # Only now may the operation create STOP or boot out/uninstall anything.
-test ! -e /Users/edr/night-custody/magistrate/STOP
-printf '%s\n' "ALIGN paused for MBP offload and gold validation; $JW_OP" \
-  > /Users/edr/night-custody/magistrate/STOP
-cp -p /Users/edr/night-custody/magistrate/STOP "$JW_OP/our-STOP.txt"
-"$JW_MEAS/scripts/install_night_agent.sh" --plan "$JW_PLAN" --uninstall
-/bin/launchctl bootout "gui/$(id -u)/com.joulewise.magistrate"
-/bin/launchctl disable "gui/$(id -u)/com.joulewise.magistrate"
-# Repeat these two operations for each reviewed non-keepawake launcher.
-: "${JW_JOB_TARGET:?Set discovered exact domain/label}"
-/bin/launchctl bootout "$JW_JOB_TARGET"
-/bin/launchctl disable "$JW_JOB_TARGET"
-/bin/launchctl list > "$JW_OP/launchd-paused.txt"
+if [[ -e "$jw_stop" ]]; then
+  # Resume: accept only OUR earlier STOP; never overwrite or remove another.
+  test -f "$JW_OP/our-STOP.txt"
+  cmp "$JW_OP/our-STOP.txt" "$jw_stop"
+  print -r -- 'operation STOP already present and ours: resume'
+else
+  printf '%s\n' "$jw_text" > "$jw_stop"
+  cp -p "$jw_stop" "$JW_OP/our-STOP.txt"
+fi
+jw_uid="$(id -u)"
+if /bin/launchctl print "gui/$jw_uid/com.joulewise.night" >/dev/null 2>&1 ||
+   /bin/launchctl print "gui/$jw_uid/com.joulewise.night.deadman" >/dev/null 2>&1; then
+  : "${JW_PLAN:?Night agent still loaded: set exact TERMINAL night_plan.json from handoff}"
+  "$JW_MEAS/scripts/install_night_agent.sh" --plan "$JW_PLAN" --uninstall
+else
+  print -r -- "night agent already absent $(date -u +%FT%TZ)" >> "$JW_OP/pause-absent.txt"
+fi
+test -s "$JW_OP/job-targets.txt"
+while IFS= read -r jw_target || [[ -n "$jw_target" ]]; do
+  [[ "$jw_target" == (gui/[0-9]##|system)/com.joulewise.[A-Za-z0-9._-]## ]]
+  if /bin/launchctl print "$jw_target" >/dev/null 2>&1; then
+    /bin/launchctl bootout "$jw_target"
+    print -r -- "booted out $jw_target $(date -u +%FT%TZ)" >> "$JW_OP/pause-actions.txt"
+  else
+    print -r -- "already absent $jw_target $(date -u +%FT%TZ)" >> "$JW_OP/pause-absent.txt"
+  fi
+  /bin/launchctl disable "$jw_target"  # also valid for an absent job
+done < "$JW_OP/job-targets.txt"
+/bin/launchctl list > "$JW_OP/launchd-paused-$(date -u +%Y%m%dT%H%M%SZ).txt"
 # Assert no com.joulewise.* job is loaded in GUI OR system domain.
 python3.13 -I -B - <<'PY'
 import subprocess
@@ -270,9 +326,9 @@ jw_pause_check
 jw_disk_check
 ```
 
-If a job is already absent, document the specific absence and continue via a
-reviewed revised script. A pre-existing STOP is never overwritten or removed.
-Resume first checks `shasum -a 256 -c "$JW_OP/env.sha256"`; it also requires `cmp "$JW_OP/our-STOP.txt" .../STOP`, env/helper hash checks,
+A pre-existing STOP that is not this operation's is never overwritten or
+removed (`cmp` fails). Resume first checks `shasum -a 256 -c "$JW_OP/env.sha256"`;
+it also requires `cmp "$JW_OP/our-STOP.txt" .../STOP`, env/helper hash checks,
 no active writer and reviewed disable-state receipts. Optional remote
 `ops/stop*` control is lead-owned; this offline procedure does not push it.
 
@@ -282,21 +338,31 @@ lock owner gone, no named agent/writer, no collection/armed t0, launchers
 absent/disabled, external schedulers accounted for. This check precedes all
 STOP/bootout actions; repeat on resume. Agents must exit before measurements.
 
-After STOP 2, perform the Ed-only SSD attach subsection **9a** before
-step 3; it is a storage prerequisite, not permission to begin downloads.
+After STOP 2, record the unplugged bus baseline (§15 `step2b`), only then
+plug in the SSD and perform the Ed-only attach subsection **9a** before the
+step-6 copies; it is a storage prerequisite, not permission to begin downloads.
 
-## 3. Mechanical model KEEP census and pre-offload R0 inventories
+## 3. Mechanical model KEEP census (run B; no R0 prerequisite)
 
-Use one repository object store containing each reviewed ref; no merged
-checkout is required. The model census reads only `git show <full-sha>:<path>`. Before **any offload or archive**, prepare the reviewed R0 config
-from PR #661's `docs/align/r0_desk.example.json`. Keep `disk_path` on the
-**measurement internal volume**; the example's `/Volumes/ALIGN_MODELS` is not
-appropriate for the measurement disk gate. Set all custody parents. Set
-`offloads[].destination` to separate **uncompressed directory copies** on
-independent storage. Copy regular files as bytes and preserve pilot view
-symlinks as links; never follow their targets. Model mirrors require regular
-materialized files, not HF snapshot symlinks; tar.zst is not an R0 directory.
-Pilot 9's source is retained even though R0's schema calls its copy an offload.
+**Deferred to run B (§15).** Not part of Saturday's copy-only run: the SSD
+copies in step 6 delete nothing, so they need no model census. Use one
+repository object store containing each reviewed ref; no merged checkout is
+required. The model census reads only `git show <full-sha>:<path>`.
+
+**R0 needs nothing from this runbook.** Per v4 plan ruling 6, implemented on
+`origin/lane/2026-11-05-align-v4-wp4-r0` (82cca4295, `r0_host.py` and
+`docs/align/r0_desk_runbook.md`), R0's disk check is **report-only**: 66 GB
+free and no offloads do not block R0, and R0 never reads offload receipts or
+destinations, so an unplugged SSD cannot block it. The earlier R0 disk-gate/
+symlink-inventory patch proposals are withdrawn. Only the separate **W1** arm
+gate (`w1_disk_gate`: at least 80 GB free after R0, plus every configured
+offload inventory matching) can ever involve pilot inventories, and only if
+the lead configures W1 offloads. Because all pilot sources are retained, W1
+currently has `offloads: []`. If the lead later configures one, the W1-only
+`--inventory` commands below run in run B before that offload, using the
+reviewed wp4 R0 checkout, with the destination on storage that W1's own gate
+can read at arm time. That gate's interaction with a day-only SSD is the W1
+lead's ruling, not something this runbook settles.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
@@ -308,22 +374,21 @@ source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_R0_CONFIG_BLOB:?Set repository-relative v4 R0 config blob path}"
 : "${JW_P8_SOURCE:?Set exact pilot-8 root from handoff}"
 export JW_R0_CODE JW_R0_CONFIG JW_P8_SOURCE
-python3.13 -I -B "$JW_CANON/scripts/align_offload_model_keep.py" \
+python3.13 -I -B "$JW_OP/align_offload_model_keep.py" \
   --repo "$JW_CANON" --main-ref origin/main \
   --bytes-ref c58282f87 --b6-ref dda456f98 \
   --align-ref "$JW_ALIGN_V4_REF" --amendment-ref "$JW_AMENDMENT_REF" \
   --r0-ref "$JW_R0_V4_REF" --r0-config "$JW_R0_CONFIG_BLOB" \
   --output "$JW_OP/model-keep-provenance.json" > "$JW_OP/model-KEEP.txt"
 cat "$JW_OP/model-KEEP.txt"
-# --inventory only, not the R0 measurement/selection run. Run before any offload.
-"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
-  --config "$JW_R0_CONFIG" --inventory "$JW_P8_SOURCE" --output "$JW_OP/pilot8-r0-inventory.json"
-"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
-  --config "$JW_R0_CONFIG" --inventory /Users/edr/night-align/pilot-v8-20261105T102850Z \
-  --output "$JW_OP/pilot9-r0-inventory.json"
-"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
-  --config "$JW_R0_CONFIG" --inventory /Users/edr/night-align/pilot-v9-20261105T231016Z \
-  --output "$JW_OP/pilot10-backup-inventory.json"
+# W1-ONLY and only if the lead configured W1 offloads: --inventory, not an R0 run.
+if [[ "${JW_W1_OFFLOADS_CONFIGURED:-no}" == yes ]]; then
+  "$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
+    --config "$JW_R0_CONFIG" --inventory "$JW_P8_SOURCE" --output "$JW_OP/pilot8-w1-inventory.json"
+  "$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
+    --config "$JW_R0_CONFIG" --inventory /Users/edr/night-align/pilot-v8-20261105T102850Z \
+    --output "$JW_OP/pilot9-w1-inventory.json"
+fi
 jw_disk_check
 ```
 
@@ -368,14 +433,12 @@ Expected Next-80B and Qwen3.5-122B names are hypotheses, not approvals. Until th
 complete census and Ed's specific list pass, **budget zero reclaimed bytes**.
 No cache-wide, custody, calibration, B6/BYTES or personal-tree removal is granted.
 
-**STOP 3:** R0 inventories for pilots 8/9 plus pilot10's backup inventory saved outside sources; materialized
-copy destinations agreed and budgeted, full model KEEP printed and reviewed,
-all three Mac pilot roots retained. R0 must use both [coordination patches](r0_disk_gate_patch.md): pilot view
-symlinks are recorded as exact target text without following them; model
-inventories still require materialized files. Restricted content still refuses;
-retain the source and ask the lead rather than weakening that boundary.
-Do not run a live R0 desk session from an agent. Copies may be made under this
-paused Ed-only procedure; full R0 remains its own lead-controlled gate.
+**STOP 3:** full model KEEP printed and reviewed, all three Mac pilot roots
+retained; W1 inventories exist only if the lead configured W1 offloads.
+Restricted content still refuses; retain the source and ask the lead rather
+than weakening that boundary. Do not run a live R0 desk session from an agent;
+R0 remains its own lead-controlled gate and is not run while this operation's
+STOP exists or the SSD is attached.
 
 ## 4. KEEP roots and immutable custody
 
@@ -405,7 +468,16 @@ inode. Missing mandatory roots or unresolved KEEP entries are a refusal.
 /Users/edr/jw_models
 /Users/edr/.cache/huggingface/hub
 /Users/edr/Library/LaunchAgents
+/Users/edr/night-align
 ```
+
+The guard checks these **by inode** (st_dev, st_ino), not only by spelling, so
+a case or Unicode variant such as `/Users/edr/NIGHT-ALIGN/pilot-v7-…` cannot
+slip past KEEP or the pilot rule on case-insensitive APFS (N3). In addition,
+**every existing** `/Users/edr/night-*`, `/Users/edr/jw-b5-*` and
+`/Users/edr/jw_models` directory must be in KEEP by inode, even one not named
+above; an unlisted measurement root refuses deletion. Nothing under
+`night-align`, by any spelling, is deletable by this program.
 
 KEEP also includes calibration/acceptance/quarantine, raw streams and archived
 attempts, night-plan-staging, control state, keepawake, and `.OFFLOADED.json`
@@ -461,7 +533,7 @@ source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_WRITER_VOLUME:?Set exact writable destination volume}"
 : "${JW_WRITER_BUDGET:?Set computed/admitted maximum new bytes}"
 jw_disk_check "$JW_WRITER_BUDGET" "$JW_WRITER_VOLUME"
-python3.13 -I -B "$JW_CANON/scripts/align_offload_disk_guard.py" \
+python3.13 -I -B "$JW_OP/disk_guard.py" \
   --path /System/Volumes/Data --path "$JW_WRITER_VOLUME" -- \
   /bin/zsh -f -euo pipefail "$JW_WRITER_FILE"
 ```
@@ -722,102 +794,104 @@ reviews credentials. Sources and raw custody records remain immutable.
 
 ### 7a. Copy the existing iCloud-only archives to this SSD (M6)
 
-Required even when no deletion is eligible: **ALIGN pilots 0–7**, under
+**Saturday run A, one row at a time.** Rows: **ALIGN pilots 0–7**, under
 `JouleWise-archive/2026-11-04-align-pilots`, **BYTES H/H2 raw tars** (historical
-RUN_STATE:1239) and **R7 A343/P0/READY**. Ed supplies each exact archive path,
-authenticated original manifest/digest and original reviewed verifier. No
-wildcard hydration or agent reads. One checklist row per item records source,
-coverage, archive/manifest SHA-256, SSD UUID, full member/restore result and UTC.
+RUN_STATE:1239) and **R7 A343/P0/READY**. Ed supplies, per row, the exact
+iCloud archive and manifest paths, their **authenticated original SHA-256s**
+(from the original custody pointers/manifests, never re-hashed from the cloud
+copy) and their byte sizes. No wildcard hydration or agent reads.
 
-In a guarded `step7-existing.zsh` writer, admit internal archive hydration and
-SSD archive plus largest complete restore workspace separately. Require
-uploaded, hydrate and poll not-dataless, check **original expected** digests,
-copy to a new SSD item directory, rebind those expected checksums to destination
-filenames and run `shasum -a 256 -c`. Stream ALL members using the original
-format/verifier, restore into an empty directory, re-hash every restored byte
-against the original manifest. Verify copied manifest/helper hashes too. Apply
-the same proved cloud round trip with that original verifier. Missing original
-hash/coverage/parser/quota is BLOCKED; hashing a possibly corrupt copy never
-creates a replacement trust anchor. Preserve the attributed per-item receipt.
-No archive is deleted. Only after verification may the uploaded cloud staging
-copy be evicted; poll dataless. Finish by day or preserve state and eject/unplug
-at day end. The measurement pause continues if work is incomplete.
+This is a pure copy of an existing archive (N9): matching the original
+authenticated archive and manifest digests proves the SSD copy is
+byte-identical to what was originally verified. It therefore needs neither the
+unpinned upload parser nor a per-format verifier. Full member/restore checks of
+these rows are optional and later (run B). Each row: admit hydration
+(archive + manifest) internally and the copy on the SSD; download; poll
+not-dataless with a size-scaled timeout; verify **original** digests in iCloud;
+copy to a NEW SSD row directory; verify the same original digests on the SSD
+copy; evict both iCloud files and poll dataless, which returns the hydration
+bytes before the next row (N6); write an exclusive receipt. A digest mismatch is
+a STOP for that row: never create a replacement trust anchor from a copy.
 
-Save the following as the guarded `step7-existing.zsh` for one original-format
-item. Ed supplies the exact original hashes and a reviewed format-specific
-verifier file whose commands perform BOTH full member and restore comparison,
-with these exported paths. The file is a required input, not a supplied or
-guessed historical interface; absent reviewed verifier means STOP for that row.
+`step7-existing.zsh`, a guarded writer (`--path` internal AND SSD):
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
 source "$JW_OP/external-env.zsh"
 shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" "$JW_OP/manifest-helper.sha256"
 jw_external_check
+: "${JW_ROW:?Set unique row ID, e.g. align-pilot-v3 or bytes-h2}"
 : "${JW_EXISTING_ARCHIVE:?Set exact iCloud archive from original custody records}"
-: "${JW_EXISTING_MANIFEST:?Set its original manifest}"
-: "${JW_EXISTING_ARCHIVE_SHA:?Set authenticated original archive digest}"
-: "${JW_EXISTING_MANIFEST_SHA:?Set authenticated original manifest digest}"
-: "${JW_EXISTING_COPY:?Set NEW exact item directory on enrolled SSD}"
-: "${JW_EXISTING_VERIFY_FILE:?Set reviewed original-format verifier writer file}"
-: "${JW_EXISTING_VERIFY_SHA:?Set its reviewed SHA256}"
-: "${JW_EXISTING_INTERNAL_BUDGET:?Set recorded archive plus manifest hydration bytes}"
-: "${JW_EXISTING_SSD_BUDGET:?Set archive plus complete restore and controls}"
-export JW_EXISTING_ARCHIVE JW_EXISTING_MANIFEST JW_EXISTING_COPY
-jw_disk_check "$JW_EXISTING_INTERNAL_BUDGET"
-jw_disk_check "$JW_EXISTING_SSD_BUDGET" "$JW_EXTERNAL"
-jw_uploaded "$JW_EXISTING_ARCHIVE"
-jw_uploaded "$JW_EXISTING_MANIFEST"
+: "${JW_EXISTING_MANIFEST:?Set its exact iCloud manifest}"
+: "${JW_EXISTING_ARCHIVE_SHA:?Set authenticated ORIGINAL archive digest}"
+: "${JW_EXISTING_MANIFEST_SHA:?Set authenticated ORIGINAL manifest digest}"
+: "${JW_EXISTING_BYTES:?Set archive plus manifest bytes from the original records}"
+[[ "$JW_ROW" == [A-Za-z0-9_-]## ]]
+export JW_ROW JW_EXISTING_ARCHIVE JW_EXISTING_MANIFEST JW_EXISTING_ARCHIVE_SHA JW_EXISTING_MANIFEST_SHA
+[[ "$JW_EXISTING_ARCHIVE_SHA" == [0-9a-f]## && ${#JW_EXISTING_ARCHIVE_SHA} == 64 ]]
+[[ "$JW_EXISTING_MANIFEST_SHA" == [0-9a-f]## && ${#JW_EXISTING_MANIFEST_SHA} == 64 ]]
+[[ "$JW_EXISTING_ARCHIVE" == "$JW_CLOUD"/JouleWise-archive/* ]]
+[[ "$JW_EXISTING_MANIFEST" == "$JW_CLOUD"/JouleWise-archive/* ]]
+export JW_ROW_DIR="$JW_EXTERNAL/JouleWise-backup/existing-archives/$JW_ROW"
+export JW_ROW_RECEIPT="$JW_OP/existing-$JW_ROW.json"
+test ! -e "$JW_ROW_DIR"
+test ! -e "$JW_ROW_RECEIPT"
+# Each row's hydration must fit internally with the 30 GB floor; SSD copy too.
+jw_disk_check "$JW_EXISTING_BYTES"
+jw_disk_check "$JW_EXISTING_BYTES" "$JW_EXTERNAL"
+# Size-scaled hydration timeout: assume >= 2 MB/s, never below the 20 min default.
+jw_attempts=$(( JW_EXISTING_BYTES / 10000000 + 240 ))
+/usr/bin/stat -f '%Sf %z %N' "$JW_EXISTING_ARCHIVE" "$JW_EXISTING_MANIFEST" \
+  > "$JW_OP/existing-$JW_ROW-before.txt"
 /usr/bin/brctl download "$JW_EXISTING_ARCHIVE"
 /usr/bin/brctl download "$JW_EXISTING_MANIFEST"
-jw_wait_dataless "$JW_EXISTING_ARCHIVE" no
-jw_wait_dataless "$JW_EXISTING_MANIFEST" no
-mkdir -m 700 "$JW_EXISTING_COPY"
+jw_wait_dataless "$JW_EXISTING_ARCHIVE" no "$jw_attempts"
+jw_wait_dataless "$JW_EXISTING_MANIFEST" no "$jw_attempts"
 printf '%s  %s\n' "$JW_EXISTING_ARCHIVE_SHA" "$JW_EXISTING_ARCHIVE" \
-  "$JW_EXISTING_MANIFEST_SHA" "$JW_EXISTING_MANIFEST" \
-  "$JW_EXISTING_VERIFY_SHA" "$JW_EXISTING_VERIFY_FILE" > "$JW_EXISTING_COPY/original.sha256"
-shasum -a 256 -c "$JW_EXISTING_COPY/original.sha256"
-cp -p "$JW_EXISTING_ARCHIVE" "$JW_EXISTING_COPY/archive"
-cp -p "$JW_EXISTING_MANIFEST" "$JW_EXISTING_COPY/manifest"
-printf '%s  %s\n' "$JW_EXISTING_ARCHIVE_SHA" "$JW_EXISTING_COPY/archive" \
-  "$JW_EXISTING_MANIFEST_SHA" "$JW_EXISTING_COPY/manifest" > "$JW_EXISTING_COPY/copied.sha256"
-shasum -a 256 -c "$JW_EXISTING_COPY/copied.sha256"
-/bin/zsh -f -euo pipefail "$JW_EXISTING_VERIFY_FILE"
+  "$JW_EXISTING_MANIFEST_SHA" "$JW_EXISTING_MANIFEST" > "$JW_OP/existing-$JW_ROW-original.sha256"
+shasum -a 256 -c "$JW_OP/existing-$JW_ROW-original.sha256"
+mkdir -p "${JW_ROW_DIR:h}"
+mkdir -m 700 "$JW_ROW_DIR"
+cp -p "$JW_EXISTING_ARCHIVE" "$JW_ROW_DIR/${JW_EXISTING_ARCHIVE:t}"
+cp -p "$JW_EXISTING_MANIFEST" "$JW_ROW_DIR/${JW_EXISTING_MANIFEST:t}"
+printf '%s  %s\n' "$JW_EXISTING_ARCHIVE_SHA" "$JW_ROW_DIR/${JW_EXISTING_ARCHIVE:t}" \
+  "$JW_EXISTING_MANIFEST_SHA" "$JW_ROW_DIR/${JW_EXISTING_MANIFEST:t}" > "$JW_ROW_DIR/original.sha256"
+shasum -a 256 -c "$JW_ROW_DIR/original.sha256"
+# Return the hydration bytes before the next row; the archive stays in iCloud.
+/usr/bin/brctl evict "$JW_EXISTING_ARCHIVE"
+/usr/bin/brctl evict "$JW_EXISTING_MANIFEST"
+jw_wait_dataless "$JW_EXISTING_ARCHIVE" yes "$jw_attempts"
+jw_wait_dataless "$JW_EXISTING_MANIFEST" yes "$jw_attempts"
+python3.13 -I -B - <<'PY'
+import json, os
+from datetime import datetime, timezone
+from pathlib import Path
+e = os.environ
+row = dict(schema='joulewise.offload.existing-archive-ssd-copy.v1', row=e['JW_ROW'],
+           icloud_archive=e['JW_EXISTING_ARCHIVE'], icloud_manifest=e['JW_EXISTING_MANIFEST'],
+           original_archive_sha256=e['JW_EXISTING_ARCHIVE_SHA'],
+           original_manifest_sha256=e['JW_EXISTING_MANIFEST_SHA'],
+           ssd_volume=e['JW_EXTERNAL'], ssd_volume_uuid=e['JW_EXTERNAL_UUID'],
+           ssd_media=e['JW_EXTERNAL_MEDIA'], ssd_dir=e['JW_ROW_DIR'],
+           verification='original digests matched in iCloud and on SSD copy; member/restore deferred (N9)',
+           icloud_evicted_after_copy=True, verified_utc=datetime.now(timezone.utc).isoformat())
+with Path(e['JW_ROW_RECEIPT']).open('x') as f:
+    json.dump(row, f, sort_keys=True, indent=1)
+PY
+jw_disk_check
 ```
 
-### 7b. Materialized R0 copies, retaining all sources
+If an eviction does not reach dataless (an archive that was never uploaded or
+a Keep Downloaded folder), the row's SSD copy is already verified; STOP, keep
+the hydrated file, record it and continue only after Ed's review. Finish by day
+or preserve state and eject/unplug at day end. The measurement pause continues
+if work is incomplete.
 
-R0's own `--inventory` receipts for **pilot8 and pilot9** must already exist
-from step 3. Also inventory and copy pilot10 for backup. Destinations are
-**uncompressed directories**, never tar.zst. Preserve pilot measurement-view
-symlinks as links without following targets; models require materialized
-non-symlink files. Use both [R0 inventory patches](r0_disk_gate_patch.md).
+### 7b. Withdrawn: no R0 copies are needed
 
-```zsh
-source "${JW_OP:?Set existing operation}/env.zsh"
-source "$JW_OP/external-env.zsh"
-source "$JW_OP/r0-env.zsh"
-shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256"
-jw_external_check
-: "${JW_R0_SOURCE:?Set exact pilot source}"
-: "${JW_R0_DEST:?Set configured NEW SSD directory destination}"
-: "${JW_R0_EXPECTED:?Set original pre-offload inventory JSON}"
-: "${JW_R0_ACTUAL:?Set NEW comparison receipt path}"
-test ! -e "$JW_R0_DEST"
-mkdir -m 700 "$JW_R0_DEST"
-cp -pRP "$JW_R0_SOURCE/." "$JW_R0_DEST/"
-"$JW_R0_CODE/.venv/bin/python" -B "$JW_R0_CODE/scripts/align_r0_checks.py" \
-  --config "$JW_R0_CONFIG" --inventory "$JW_R0_DEST" --output "$JW_R0_ACTUAL"
-cmp "$JW_R0_EXPECTED" "$JW_R0_ACTUAL"
-```
-
-Run through the two-volume guard, with all remaining bytes admitted. Agree
-labels/destinations before copying; never rewrite original locators. **The SSD
-is absent during R0.** Copy verification is a daytime desk phase; preserve its
-authenticated receipts, then eject/unplug before measurement. If the current
-R0 gate requires probing external destinations during measurement, STOP for
-the R0 lead to separate copy verification from measurement admission. Do not
-claim that gate passes after unplugging or measure with the enclosure attached.
+The former materialized-R0-copy step is withdrawn. R0 needs no offloads or
+copies (§3). If the lead later configures a **W1** offload, its copy step and
+destination are specified with that ruling in run B; never improvise one.
 
 ## 8. LAST: Ed-only deletion through one hashed program
 
@@ -875,7 +949,7 @@ can make them differ. **Freed in this authoring session: 0 bytes.**
 
 ## 9. Combined internal/external budget and primary external-SSD plan
 
-### 9a. Ed-only Saturday SSD attach gate (after STOP 2, before step 3 copies)
+### 9a. Ed-only Saturday SSD attach gate (after STOP 2 and the bus baseline, before step-6 copies)
 
 From Saturday November 7, use the borrowed **WD_Black SN7100 2 TB / OWC
 Express 1M2 USB4** SSD, attached **by day only**. Wear is no concern. Ed checks
@@ -887,29 +961,55 @@ separate from internal storage and iCloud; two folders on it are one device.
 Keep backups in `JouleWise-backup`, apart from gold scratch. Budget every use.
 Eject and physically unplug before R0, R1 or any other measurement, every time.
 
-Save this as an Ed-reviewed writer file, run via step 5's guard with both
-internal and external volumes (at this point only small control writes).
-Choose one fixed mount and operation location, not a new date on resume.
+**Plug the SSD in only after §15's bus baseline is recorded.** First run the
+read-only `step9a-identify.zsh` and read the printed VolumeUUID, BusProtocol
+and whole-disk MediaName:
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_EXTERNAL:?Set actual attached APFS mount under /Volumes}"
-: "${JW_EXTERNAL_UUID:?Set verified Volume UUID from diskutil info}"
-export JW_EXTERNAL JW_EXTERNAL_UUID
+python3.13 -I -B - "$JW_EXTERNAL" <<'PY'
+import plistlib, subprocess, sys
+def info(target):
+    return plistlib.loads(subprocess.run(['/usr/sbin/diskutil', 'info', '-plist', target],
+                                         check=True, capture_output=True).stdout)
+v = info(sys.argv[1])
+print('VolumeUUID', v.get('VolumeUUID'), 'BusProtocol', v.get('BusProtocol'),
+      'Internal', v.get('Internal'), 'FilesystemType', v.get('FilesystemType'))
+for row in v.get('APFSPhysicalStores', []):
+    store = info(row['APFSPhysicalStore'])
+    whole = info(store['ParentWholeDisk'])
+    print('store', row['APFSPhysicalStore'], store.get('BusProtocol'),
+          'whole', store['ParentWholeDisk'], whole.get('BusProtocol'), 'MediaName', repr(whole.get('MediaName')))
+PY
+```
+
+A `Disk Image`, `Apple Fabric`, unknown bus or `Internal=True` anywhere is a
+STOP: that is not an independent device (N7). Then save the attach gate as
+`step9a.zsh` and run it **directly, NOT through the guard** (N4b): it writes
+only a few hundred bytes and `sudo tmutil` needs the terminal, which guarded
+writers deliberately lack. Run `sudo -v` first.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/manifest-helper.sha256"
+: "${JW_EXTERNAL:?Set actual attached APFS mount under /Volumes}"
+: "${JW_EXTERNAL_UUID:?Set verified Volume UUID from step9a-identify}"
+: "${JW_EXTERNAL_MEDIA:?Set exact whole-disk MediaName from step9a-identify}"
+export JW_EXTERNAL JW_EXTERNAL_UUID JW_EXTERNAL_MEDIA
 jw_external_check() {
+  # Pinned program: exact mount, VolumeUUID, APFS, NOT internal, and the volume,
+  # its APFS physical store and whole disk all on USB/Thunderbolt/PCIe media
+  # with the enrolled MediaName; a disk image anywhere refuses (N7).
+  python3.13 -I -B "$JW_OP/delete_root.py" volume-check --volume "$JW_EXTERNAL" \
+    --uuid "$JW_EXTERNAL_UUID" --media "$JW_EXTERNAL_MEDIA"
   python3.13 -I -B - <<'PY'
-import os, plistlib, subprocess
+import os
 from pathlib import Path
 p = Path(os.environ['JW_EXTERNAL'])
 assert p.parent == Path('/Volumes') and not p.is_symlink()
-s = subprocess.run(['/usr/sbin/diskutil', 'info', '-plist', str(p)],
-                   check=True, capture_output=True).stdout
-d = plistlib.loads(s)
-assert d['VolumeUUID'] == os.environ['JW_EXTERNAL_UUID']
-assert d.get('Internal') is False
-assert d['FilesystemType'].casefold() == 'apfs' and d['MountPoint'] == str(p)
 assert os.stat(p).st_dev != os.stat('/System/Volumes/Data').st_dev
-print('external volume identity PASS')
+print('external volume device PASS')
 PY
 }
 jw_external_check
@@ -919,7 +1019,7 @@ sudo /usr/bin/tmutil addexclusion -p "$JW_EXTERNAL"
 export JW_GOLD="$JW_EXTERNAL/flashnext-gold-20261105.noindex"
 export JW_GOLD_CODE=/Users/edr/code/JouleWise-flashnext-gold-20261105
 {
-  for name in JW_EXTERNAL JW_EXTERNAL_UUID JW_GOLD JW_GOLD_CODE; do
+  for name in JW_EXTERNAL JW_EXTERNAL_UUID JW_EXTERNAL_MEDIA JW_GOLD JW_GOLD_CODE; do
     printf 'export %s=%q\n' "$name" "${(P)name}"
   done
   functions jw_external_check
@@ -940,8 +1040,8 @@ throughput and thermal behavior; these are setup observations, not energy
 validation. External paging is forbidden during measurements under the day-only
 rule. A model/table required for a later measurement must first fit and be
 verified on internal storage, with its own disk and no-swap admission. Otherwise
-that measurement stays blocked. Neither gold parity nor an attached external
-R0 copy authorizes leaving the enclosure connected.
+that measurement stays blocked. Neither gold parity nor any external copy
+authorizes leaving the enclosure connected.
 
 ### 9b. Honest reachable space and one combined admission
 
@@ -959,39 +1059,39 @@ not live observations):
 | Current estimate, all pilot sources retained | about **66 GB**; no pilot reclaim credited |
 | Hypothetical later approval of pilots 8 + 9, about 26 GB each | about **118 GB**, below the 150 GB gold target |
 | Hypothetical later approval of pilot 10 too, another about 26 GB | about **144 GB**, still below 150 GB; actual pilot-10 size unknown |
-| R0 admission | at least **80 GB + remaining journal/control bytes**, AND any larger reviewed plan requirement |
+| R0 | **report-only** disk check (v4 ruling 6): 66 GB does not block R0 |
+| W1 admission (`w1_disk_gate`, after R0) | at least **80 GB free + remaining journal/control bytes**, AND any larger reviewed plan requirement |
 | Internal 95 GB converted model + historical 41.2 GB next window + 30 GB floor | **166.2 GB + journal**, unavailable in all the estimates above |
 
 The hypothetical rows authorize nothing. Compute live post-offload availability
 as `F_before + actual_source_available_delta - still_resident_staging - new_journal`.
 Do not count logical sizes, snapshots, purgeable capacity or promised evictions.
-R0's minimum is **80,000,000,000 bytes plus journal**, after model weights; if
-the reviewed amendment-1 gate is larger, also enforce **two copies + 30 GB**
-(`max(80 GB, 2 * W1_bundle_bytes + 30 GB) + remaining journal`). Pin actual
-W1 bytes/config/citation using the [R0 patch series](r0_disk_gate_patch.md).
-Unknown W1/budget or a gate still probing an unplugged SSD is STOP, not waiver.
+R0's disk check is report-only and needs no offload (§3). W1's arm gate
+(`w1_disk_gate` on the wp4 R0 lane) requires **80,000,000,000 bytes plus
+journal** free after R0; amendment 1 estimates 37.4 GB for two W1 copies, which
+is below that floor, so 80 GB + journal binds. Unknown journal/budget is STOP,
+not waiver.
 
-`step9-budget.zsh` records and enforces the combined internal requirement; it
+`step9-budget.zsh` (run B, before a W1 arm) records and enforces this; it
 reads only filesystem free-space metadata. The budget inputs come from the
 reviewed current plan, never a guessed number or zero for an unknown need.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_W1_BUNDLE_BYTES:?Set pinned amendment-1 one-copy bytes}"
 : "${JW_JOURNAL_REMAINING_BYTES:?Set remaining journal/control allocation}"
-export JW_W1_BUNDLE_BYTES JW_JOURNAL_REMAINING_BYTES
+export JW_JOURNAL_REMAINING_BYTES
 python3.13 -I -B - <<'PY'
 import json, os
 from pathlib import Path
-w1 = int(os.environ['JW_W1_BUNDLE_BYTES'])
 journal = int(os.environ['JW_JOURNAL_REMAINING_BYTES'])
-assert w1 > 0 and journal > 0, 'STOP: missing allocation bounds'
+assert journal > 0, 'STOP: missing allocation bound'
 s = os.statvfs('/System/Volumes/Data')
 free = s.f_bavail * s.f_frsize
-required = max(80_000_000_000, 2*w1 + 30_000_000_000) + journal
-with Path(os.environ['JW_OP'], 'r0-budget.json').open('x') as f:
-    json.dump(dict(available=free, required=required, shortfall=max(0, required-free)), f)
-assert free >= required, 'STOP: R0 internal disk budget'
+required = 80_000_000_000 + journal
+with Path(os.environ['JW_OP'], 'w1-budget.json').open('x') as f:
+    json.dump(dict(available=free, required=required, shortfall=max(0, required-free),
+                   r0='report-only; not gated here'), f)
+assert free >= required, 'STOP: W1 internal disk budget'
 PY
 ```
 
@@ -1003,17 +1103,17 @@ kit's exact allocation before arming; independently admit that need + floor.
 
 Use this single budget before packaging, hydration, copying, setup and every
 gold unit. Fill **all** remaining allocations, and repeat after metadata pins,
-retries and materialized R0 copies. Count allocations already reflected in
+retries and any W1 copies. Count allocations already reflected in
 current `df` once, not again as future bytes. Use maximum **simultaneous** use.
 
 | Filesystem / stage | Remaining new bytes to fund, in addition to current resident bytes |
 |---|---|
 | Internal, per offload | One archive upper bound from `source.json`, cloud hydration, probe copies and small journal/control writes. Keep source resident until step 8 passes. Retained pilots 8–10 and all KEEP weights remain. |
-| Internal, future selection/measurement | After present weights/copies: R0 requires **amendment-1 window-1 bundle bytes for two copies + 30 GB** on the internal measurement `disk_path`. Pin the plan/config citation and actual bytes; also enforce the 80 GB minimum plus journal. Next ALIGN separately admits its reviewed allocation plus the floor. Use the larger bound for simultaneous needs; see [R0 patch series](r0_disk_gate_patch.md). |
-| External, R0 | Uncompressed pilot 8/9/10 materialized copies, matching the pre-offload inventories; complete materialized mirrors of the reviewed v4 R0 models if not already present, using their exact pinned inventories and measured bytes. Do not count a compressed tar or HF symlinks as a mirror. Keep inventories/config/results outside sources. |
+| Internal, future selection/measurement | R0: report-only, no admission. W1 (`w1_disk_gate`): **80 GB free after R0 + journal** on the internal measurement `disk_path`. Next ALIGN separately admits its reviewed allocation plus the floor. Use the larger bound for simultaneous needs. |
+| External, W1 offload copies | None while `offloads: []`. Only if the lead configures a W1 offload: its copy, per that ruling. |
 | External, durable custody | Existing ALIGN 0–7, H/H2, R7 archive/manifest copies, any separately approved new backup archives, plus **largest complete restore workspace**. If this is gold's device, all copies compete in the same budget and remain resident. Otherwise budget/check the backup device separately. |
 | External, streaming gold | Remaining converted output up to **95 GB**, maximum simultaneous bounded bf16/download/temp unit initially **15 GB**, and remaining env/cache/metadata/activation/journal overhead initially **10 GB**, plus **30 GB floor**. Replace estimates with the actual frozen schedule; incomplete downloads, output temp/atomic overlap, caches and re-downloads count. |
-| Whole operation | Every filesystem passes its own current-free ≥ remaining simultaneous allocations + required floor; the amendment-1 R0 two-copy-plus-floor gate and future ALIGN gate also pass before those stages. Do not add free bytes across disks to satisfy any single-filesystem constraint. |
+| Whole operation | Every filesystem passes its own current-free ≥ remaining simultaneous allocations + required floor; the W1 80 GB-plus-journal gate and future ALIGN gate also pass before those stages. Do not add free bytes across disks to satisfy any single-filesystem constraint. |
 
 Layer 0's roughly 24-shard union and layer 1's roughly 35-shard/100 GB bf16
 n-gram table need bounded subunits, not entire unions staged simultaneously.
@@ -1023,7 +1123,7 @@ files, partials, shared-shard consumers and activation checkpoints. The exact
 step-11 `weight_map` schedule controls final weight admission. No full 360 GB
 snapshot or duplicate shared HF cache is admitted on either SSD.
 
-**STOP 9:** the estimated 66 GB retained-source case fails R0; do not claim an arm is unblocked. Ed records volume identities, available bytes and every remaining
+**STOP 9:** the estimated 66 GB retained-source case fails W1's 80 GB gate (R0 itself is report-only); do not claim a W1 arm is unblocked. Ed records volume identities, available bytes and every remaining
 allocation in one budget receipt. External capacity/throughput/exclusions and
 internal future-window budget must pass. Retention overrides capacity; if no
 plan can pass R0/ALIGN internal headroom, STOP for the lead. Do not bypass R0,
@@ -1457,9 +1557,8 @@ the SSD.
    Spotlight/other service state recorded at pause. Keep the new large model
    external volume excluded from indexing and Time Machine. Keep the converted
    model and paged n-gram table external for daytime setup only. They cannot be
-   dependencies of an unplugged window. R0 requires at least 80 GB plus journal
-   AND amendment-1 window-1 bundle bytes for two copies plus 30 GB
-   internal free after present weights, with the full plan/config citation.
+   dependencies of an unplugged window. R0's disk check is report-only; W1
+   requires at least 80 GB plus journal internal free after R0 (§9b).
    Independently admit the next kit's exact measurement-volume budget plus
    the 30 GB floor. Use the larger bound for the next stage.
 3. Finish the guarded writers, validate backup coverage/receipts, preserve
@@ -1477,20 +1576,68 @@ python3.13 -I -B "$JW_OP/delete_root.py" census
 /usr/sbin/diskutil eject "$JW_EXTERNAL"
 ```
 
-   **Physically unplug before the next script.** The magistrate runs the
-   read-only census below immediately before **every** R0, R1 and later arm,
-   with a fresh receipt filename. A nonzero exit prevents arm/install and
-   keeps STOP. It uses `diskutil list -plist external` AND `mount`, refuses
-   unknown/tool-failure state, any mounted non-system external/network/image
-   volume and even attached-but-unmounted external media. It writes only
-   redacted mount points/device IDs; never raw mount options/credentials.
-   An all-clear is an instant census, not proof against later reconnection.
+   **Do NOT unplug yet.** `step13-ejected-census.zsh` is the N2 acceptance
+   test: with the enclosure ejected but still plugged in, the census MUST
+   refuse, and it must be the **bus layer** that refuses (the volume layer is
+   expected clean after eject). If it passes, or refuses only for another
+   reason, the bus census cannot see this enclosure: STOP, keep the operation
+   STOP in place and tell the lead; no R0/R1/window may rely on the census.
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+shasum -a 256 -c "$JW_OP/manifest-helper.sha256" "$JW_OP/bus-baseline.sha256"
+jw_receipt="$JW_OP/census-ejected-plugged-$(date -u +%Y%m%dT%H%M%SZ).json"
+if python3.13 -I -B "$JW_OP/external_volume_census.py" --baseline "$JW_OP/bus-baseline.json" \
+    --baseline-sha256 "$(cut -d' ' -f1 "$JW_OP/bus-baseline.sha256")" > "$jw_receipt"; then
+  print -u2 -- 'STOP: census PASSED with the enclosure still plugged in (N2 not proven)'
+  exit 1
+fi
+python3.13 -I -B - "$jw_receipt" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+assert r['safe_to_arm'] is False
+assert r['external_device_ids'] == [] and r['refused_mounts'] == [], \
+    'STOP: eject incomplete; volume layer still sees the SSD'
+assert r['extra_bus_devices'], 'STOP: refused, but not by the bus layer'
+print('N2 acceptance PASS: ejected-but-plugged enclosure refused by bus layer:',
+      r['extra_bus_devices'])
+PY
+```
+
+   **Now physically unplug the enclosure and its cable.** Then
+   `step13-unplugged-census.zsh` must pass (exit 0):
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+shasum -a 256 -c "$JW_OP/manifest-helper.sha256" "$JW_OP/bus-baseline.sha256"
+python3.13 -I -B "$JW_OP/external_volume_census.py" --baseline "$JW_OP/bus-baseline.json" \
+  --baseline-sha256 "$(cut -d' ' -f1 "$JW_OP/bus-baseline.sha256")" \
+  > "$JW_OP/census-unplugged-$(date -u +%Y%m%dT%H%M%SZ).json"
+print -r -- 'unplugged census PASS'
+```
+
+   The magistrate runs the read-only census below immediately before
+   **every** R0, R1 and later arm or desk session, with a fresh receipt
+   filename. A nonzero exit prevents arm/install and keeps STOP. Layer 1 uses
+   `diskutil list -plist external` AND `mount`: unknown/tool-failure state,
+   any mounted non-system external/network/image volume and even
+   attached-but-unmounted external media refuse. Layer 2 compares
+   system_profiler Thunderbolt/USB/USB-host/NVMe nodes and ioreg Thunderbolt
+   switches, USB host devices and block-storage devices with the pinned
+   unplugged baseline; any extra device refuses, and a missing baseline
+   always refuses. It writes only redacted mount points, device IDs and
+   generic device labels; serials and the platform UUID appear only as
+   digests. An all-clear is an instant census, not proof against later
+   reconnection. Moving the charger/KM003C cable to another port can make it
+   refuse: restore the baseline cabling rather than re-recording.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_EXTERNAL_CENSUS_RECEIPT:?Set NEW unique pre-arm JSON receipt path}"
-python3.13 -I -B "$JW_CANON/scripts/external_volume_census.py" \
-  > "$JW_EXTERNAL_CENSUS_RECEIPT"
+: "${JW_BUS_BASELINE:=$JW_OP/bus-baseline.json}"
+: "${JW_BUS_BASELINE_SHA256:=$(cut -d' ' -f1 "$JW_OP/bus-baseline.sha256")}"
+python3.13 -I -B "$JW_OP/external_volume_census.py" --baseline "$JW_BUS_BASELINE" \
+  --baseline-sha256 "$JW_BUS_BASELINE_SHA256" > "$JW_EXTERNAL_CENSUS_RECEIPT"
 ```
 
 4. Restore any temporarily unloaded non-measurement infrastructure from the
@@ -1536,8 +1683,8 @@ before installation; failure prevents the following command:
 source "${JW_OP:?Set existing operation}/env.zsh"
 : "${JW_NEXT_SESSION:?Set approved NEW session root}"
 : "${JW_EXTERNAL_CENSUS_RECEIPT:?Set NEW unique pre-arm JSON receipt}"
-python3.13 -I -B "$JW_CANON/scripts/external_volume_census.py" \
-  > "$JW_EXTERNAL_CENSUS_RECEIPT"
+python3.13 -I -B "$JW_OP/external_volume_census.py" --baseline "$JW_OP/bus-baseline.json" \
+  --baseline-sha256 "$(cut -d' ' -f1 "$JW_OP/bus-baseline.sha256")" > "$JW_EXTERNAL_CENSUS_RECEIPT"
 "$JW_MEAS/.venv/bin/python" -B "$JW_MEAS/scripts/align_pilot_session.py" \
   install --session-root "$JW_NEXT_SESSION"
 ```
@@ -1569,3 +1716,137 @@ model revision inventory, pilots 8–10 terminal/desk/pin and retained-source
 status, SSD eject/unplug receipt and each pre-arm external-volume census.
 Report UNKNOWN, BLOCKED and PROVISIONAL explicitly. **No offload or hardware
 validation occurred merely because this runbook was written.**
+
+## 15. Saturday 2026-11-07: copy-only run A, then deferred run B
+
+Run A is **copy-only**: nothing is deleted, uploaded or measured, every source
+stays on the Mac, and the parser, R0 and retention rulings are not needed. It
+is split at the two physical actions (plug in, unplug) into three driver files,
+each run with `zsh -f -euo pipefail` inside tmux plus caffeinate. A failed
+command stops the driver; resume by re-running the same driver (steps 2-pause,
+2b and the census steps are idempotent; step 2 and step-6 items refuse to
+overwrite and need a reviewed retry ID). Ed saves the reviewed step fences in
+one fixed `JW_STEPS` directory.
+
+`step2b-bus-baseline.zsh` (read-only except the baseline files; **the SSD has
+never been plugged in**, and the charger/KM003C path and any other
+measurement-time USB device are cabled exactly as in a measurement window):
+
+```zsh
+source "${JW_OP:?Set existing operation}/env.zsh"
+shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/manifest-helper.sha256"
+if [[ -e "$JW_OP/bus-baseline.json" ]]; then
+  shasum -a 256 -c "$JW_OP/bus-baseline.sha256"  # resume: never re-record
+else
+  python3.13 -I -B "$JW_OP/external_volume_census.py" \
+    --record-baseline "$JW_OP/bus-baseline.json" --attest-unplugged
+  shasum -a 256 "$JW_OP/bus-baseline.json" > "$JW_OP/bus-baseline.sha256"
+fi
+# The fresh baseline must pass in the state it was recorded in.
+python3.13 -I -B "$JW_OP/external_volume_census.py" --baseline "$JW_OP/bus-baseline.json" \
+  --baseline-sha256 "$(cut -d' ' -f1 "$JW_OP/bus-baseline.sha256")" \
+  > "$JW_OP/census-baseline-check-$(date -u +%Y%m%dT%H%M%SZ).json"
+```
+
+**Driver A1, `saturday-A1.zsh`: nothing plugged in.**
+
+```zsh
+setopt interactivecomments errexit nounset pipefail extendedglob noclobber
+export JW_OP=/Users/edr/night-archive/mbp-offload-20261107
+: "${JW_STEPS:?Set exact directory of reviewed step files}"
+zsh -f -euo pipefail "$JW_STEPS/step1.zsh"
+# STOP 1 review. Step 2 needs the terminal pilot-10 handoff, dead lock, clear census.
+[[ -e "$JW_OP/env.zsh" ]] || zsh -f -euo pipefail "$JW_STEPS/step2.zsh"
+zsh -f -euo pipefail "$JW_STEPS/step2-pause.zsh"
+zsh -f -euo pipefail "$JW_STEPS/step2b-bus-baseline.zsh"
+print -r -- 'A1 done. Only NOW plug in the SSD; then run saturday-A2.zsh.'
+```
+
+**Driver A2, `saturday-A2.zsh`: SSD plugged in and mounted.** Ed first runs
+`step9a-identify.zsh` alone, reads the values and writes them into this file.
+
+```zsh
+setopt interactivecomments errexit nounset pipefail extendedglob noclobber
+export JW_OP=/Users/edr/night-archive/mbp-offload-20261107
+: "${JW_STEPS:?Set exact directory of reviewed step files}"
+source "$JW_OP/env.zsh"
+: "${JW_EXTERNAL:?Set actual attached SSD mount under /Volumes}"
+: "${JW_EXTERNAL_UUID:?Set VolumeUUID read from step9a-identify}"
+: "${JW_EXTERNAL_MEDIA:?Set whole-disk MediaName read from step9a-identify}"
+export JW_EXTERNAL JW_EXTERNAL_UUID JW_EXTERNAL_MEDIA
+zsh -f -euo pipefail "$JW_STEPS/step9a-identify.zsh"
+if [[ ! -e "$JW_OP/external-env.zsh" ]]; then
+  sudo -v  # tmutil needs the terminal; 9a is NOT guarded (N4b)
+  zsh -f -euo pipefail "$JW_STEPS/step9a.zsh"
+fi
+source "$JW_OP/external-env.zsh"
+shasum -a 256 -c "$JW_OP/external-env.sha256"
+guarded() {
+  python3.13 -I -B "$JW_OP/disk_guard.py" \
+    --path /System/Volumes/Data --path "$JW_EXTERNAL" -- \
+    /bin/zsh -f -euo pipefail "$1"
+}
+zsh -f -euo pipefail "$JW_STEPS/step6-tool.zsh"
+# 1. SSD copies of pilots 8-10, full member + restore verification (step 6).
+for JW_ID JW_SRC in \
+  pilot8 /Users/edr/night-align/pilot-v7-20261105T015948Z \
+  pilot9 /Users/edr/night-align/pilot-v8-20261105T102850Z \
+  pilot10 /Users/edr/night-align/pilot-v9-20261105T231016Z; do
+  export JW_ID JW_SRC JW_ITEM="$JW_OP/$JW_ID"
+  if [[ -e "$JW_ITEM/ssd.sha256" ]]; then
+    print -r -- "$JW_ID already copied and verified: skip"
+    continue
+  fi
+  guarded "$JW_STEPS/step6-item.zsh"
+  guarded "$JW_STEPS/step6-ssd.zsh"
+done
+# 2. Existing iCloud-only archives (7a), one reviewed row file at a time, each
+#    verified by ORIGINAL digest and evicted before the next row.
+jw_rows=("$JW_STEPS"/rows/*.zsh(N))
+print -r -- "7a rows prepared: ${#jw_rows}"
+for jw_row in $jw_rows; do
+  ( source "$jw_row"
+    if [[ -e "$JW_OP/existing-$JW_ROW.json" ]]; then print -r -- "$JW_ROW done: skip"; exit 0; fi
+    guarded "$JW_STEPS/step7-existing.zsh" )
+done
+# 3. Eject, then the N2 acceptance test while the enclosure is STILL PLUGGED IN.
+zsh -f -euo pipefail "$JW_STEPS/step13-eject.zsh"
+zsh -f -euo pipefail "$JW_STEPS/step13-ejected-census.zsh"
+print -r -- 'A2 done. Now physically unplug the enclosure; then run saturday-A3.zsh.'
+```
+
+Each `$JW_STEPS/rows/<row>.zsh` exports exactly `JW_ROW`, `JW_EXISTING_ARCHIVE`,
+`JW_EXISTING_MANIFEST`, `JW_EXISTING_ARCHIVE_SHA`, `JW_EXISTING_MANIFEST_SHA`
+and `JW_EXISTING_BYTES` from the original custody records (§7a); it is
+reviewed before Saturday. Zero row files means M6 stays open; the run still
+completes the pilot copies.
+
+**Driver A3, `saturday-A3.zsh`: enclosure physically unplugged.**
+
+```zsh
+setopt interactivecomments errexit nounset pipefail extendedglob noclobber
+export JW_OP=/Users/edr/night-archive/mbp-offload-20261107
+: "${JW_STEPS:?Set exact directory of reviewed step files}"
+zsh -f -euo pipefail "$JW_STEPS/step13-unplugged-census.zsh"
+print -r -- 'A3 done: unplugged census PASS. Operation STOP stays in place.'
+```
+
+After A3 the operation STOP remains. No R0, R1, window or desk session runs
+while that STOP exists or the SSD is attached, and every later arm runs the
+pinned census first (RUN_STATE item supplied with this PR). Restoring the
+magistrate (§13 items 4–5) is a separate Ed go.
+
+**Run B, a later day (any day: the sources are retained).** Each day the SSD
+is used: plug in, `jw_external_check` from the existing external-env, work,
+then `step13-eject.zsh`, `step13-ejected-census.zsh`, unplug,
+`step13-unplugged-census.zsh`. Contents, in order, each behind its gate:
+
+1. Step 5 probe and native `fileproviderctl` sample capture, then the lead's
+   reviewed parser rewrite and pin (N5) in a new `JW_OFFLOAD_CODE_COMMIT`
+   operation; then `step5-roundtrip.zsh` and `step7-cloud.zsh` per pilot, with
+   N6's archive-size admission and resume-skip fixes landed first.
+2. Optional §7a member/restore verification of the copied rows.
+3. Step 3 model census; W1-only inventories only if the lead configures W1
+   offloads; `step9-budget.zsh` before any W1 arm.
+4. Step 8 deletion stays refused for all pilot roots until Ed's retention
+   ruling and a reviewed inode-keyed allowlist change land.

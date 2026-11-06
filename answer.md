@@ -1,5 +1,12 @@
 # PR #665: Saturday SSD safety handoff
 
+> **Round 3 (Opus data-safety re-review, SAFE_WITH_FIXES): N1, N2, N3, N4, N7
+> and N8 are fixed; the R0 patch series is withdrawn (R0 is report-only per v4
+> ruling 6).** Current state, evidence and the Saturday run-A sequence are in
+> [the round-3 run report](docs/run_reports/2026-11-05-mbp-offload-fix-round-3.md)
+> and runbook §15. Statements below about the R0 patch, the R0 two-copy disk
+> gate and the old Saturday sequence are historical.
+
 Implemented on `lane/2026-11-05-mbp-offload-runbook`, without rebasing or
 pushing. Implementation commit: `e18c89c64` (`fix(offload): require verified
 day-only SSD custody and unplugged windows`). The following handoff commit
@@ -62,113 +69,13 @@ Synthetic tests establish refusal/verification logic, never live custody.
 
 ## Exact Saturday command sequence
 
-These are **Ed-only commands on the paused measurement MBP**, not commands
-for this clone/agent. Save the runbook fences as their named reviewed `.zsh`
-files in one fixed `JW_STEPS` directory. Save the sequence below as a file
-and run it with `zsh -f -euo pipefail`; do not paste into default interactive
-zsh. Each file sources the persistent operation env. A failed command stops
-the sequence. Never continue past an unresolved STOP.
-
-Before starting, the lead must supply reviewed actual values for records,
-pilot-9/10 handoff products/plan, integrated tooling SHA with native upload
-parser pin, R0 code/config/ref pins, exact SSD mount/UUID, remaining allocation
-bounds, original archive trust anchors/verifiers, KEEP and baseline reviews.
-No values were obtained from real data here. Absent any required input: STOP.
-Do not overwrite an existing operation; resume its env/receipts instead.
-
-```zsh
-setopt interactivecomments errexit nounset pipefail extendedglob noclobber
-export JW_OP=/Users/edr/night-archive/mbp-offload-20261107
-: "${JW_STEPS:?Set exact directory of reviewed step files}"
-zsh -f -euo pipefail "$JW_STEPS/step1.zsh"
-# Requires terminal pilot-10 handoff, dead lock and clear process census first.
-zsh -f -euo pipefail "$JW_STEPS/step2.zsh"
-zsh -f -euo pipefail "$JW_STEPS/step2-pause.zsh"
-source "$JW_OP/env.zsh"
-: "${JW_EXTERNAL:?Set actual attached SSD mount}"
-: "${JW_EXTERNAL_UUID:?Set enrolled Volume UUID}"
-export JW_EXTERNAL JW_EXTERNAL_UUID
-
-guarded() {
-  python3.13 -I -B "$JW_CANON/scripts/align_offload_disk_guard.py" \
-    --path /System/Volumes/Data --path "$JW_EXTERNAL" -- \
-    /bin/zsh -f -euo pipefail "$1"
-}
-guarded "$JW_STEPS/step9a.zsh"
-source "$JW_OP/external-env.zsh"
-zsh -f -euo pipefail "$JW_STEPS/step3.zsh"
-# STOP 4: actual KEEP, baseline, locator and capacity review before real copies.
-guarded "$JW_STEPS/step5-probe.zsh"
-# STOP 5: reviewed real fileproviderctl grammar/pin; no synthetic substitute.
-guarded "$JW_STEPS/step5-roundtrip.zsh"
-zsh -f -euo pipefail "$JW_STEPS/step6-tool.zsh"
-
-# Complete all SSD backups first. Preserve sources and all failed attempts.
-for JW_ID JW_SRC in \
-  pilot8 /Users/edr/night-align/pilot-v7-20261105T015948Z \
-  pilot9 /Users/edr/night-align/pilot-v8-20261105T102850Z \
-  pilot10 /Users/edr/night-align/pilot-v9-20261105T231016Z; do
-  export JW_ID JW_SRC
-  guarded "$JW_STEPS/step6-item.zsh"
-  export JW_ITEM="$JW_OP/$JW_ID"
-  guarded "$JW_STEPS/step6-ssd.zsh"
-done
-
-# Then each cloud upload and full dataless/hydration/member/hash round trip.
-for JW_ID in pilot8 pilot9 pilot10; do
-  export JW_ID JW_ITEM="$JW_OP/$JW_ID"
-  guarded "$JW_STEPS/step7-cloud.zsh"
-done
-
-# For EACH original custody row: ALIGN 0–7, H/H2, R7 A343/P0/READY,
-# set the exact JW_EXISTING_* fields from that row, then run:
-guarded "$JW_STEPS/step7-existing.zsh"
-# Repeat explicitly per row, with a new destination, until checklist complete.
-# For EACH pilot's configured uncompressed copy, set JW_R0_SOURCE/DEST/
-# EXPECTED/ACTUAL from its agreed config and pre-copy inventory, then run:
-guarded "$JW_STEPS/step7b.zsh"
-# Repeat for all three pilot backups; R0 requires the pilot8/pilot9 pair.
-```
-
-The last two commands are per-item templates: do not run them once and claim
-the checklist complete. Unknown original-format verifiers or custody rows
-remain BLOCKED; this blind session cannot invent them. The existing-format
-writer must perform its full original-verifier cloud round trip as required
-by §7a, as well as member/restore verification.
-
-**Do not run step8-delete.zsh for pilots 8–10.** After an installed retention
-ruling/guard change, all receipts and actual copies would still be required;
-this version deliberately refuses. No public-weight deletion is an alternative.
-For any separately eligible source, Ed's command is exactly the pinned call
-in runbook §8; it is never an agent operation or shell removal.
-
-After backup, save a redacted journal/receipt export on both destinations,
-verify its hashes/coverage, and finish all writers. Then:
-
-```zsh
-# Exporting the journal is itself a guarded, admitted writer; exclude raw secrets.
-zsh -f -euo pipefail "$JW_STEPS/step13-eject.zsh"
-```
-
-**Physically unplug the enclosure now.** After unplugging, the magistrate uses
-the following read-only command immediately before each R0/R1/other arm;
-a nonzero exit prevents arm/install. Use a new receipt path each time:
-
-```zsh
-setopt interactivecomments errexit nounset pipefail extendedglob noclobber
-source "${JW_OP:?Set existing operation}/env.zsh"
-: "${JW_EXTERNAL_CENSUS_RECEIPT:?Set NEW unique receipt path}"
-python3.13 -I -B "$JW_CANON/scripts/external_volume_census.py" \
-  > "$JW_EXTERNAL_CENSUS_RECEIPT"
-```
-
-Run `step9-budget.zsh` with the actual pinned W1/journal numbers before R0
-admission. Expected historical retained-source availability (~66 GB) fails:
-at least 80 GB plus remaining journal, and any larger two-copy-plus-floor
-plan requirement, is mandatory. Repeat df admission immediately before arm.
-Do not restore the magistrate/remove the operation STOP until the lead's
-fresh-plan/notice/installation and all remaining gates pass. The runbook
-separates prepare from install and repeats the census directly before install.
+**Superseded (round 3, re-review N4).** The single-file sequence that stood
+here aborted before any SSD copy and mixed cloud/R0 steps into Saturday. The
+only valid Saturday procedure is the COPY-ONLY run A in runbook
+[§15](docs/align/mbp_offload_and_gold_setup.md) (drivers `saturday-A1.zsh`,
+`saturday-A2.zsh`, `saturday-A3.zsh`); cloud, model-census, W1 and any
+deletion steps are run B on a later day. See the
+[round-3 run report](docs/run_reports/2026-11-05-mbp-offload-fix-round-3.md).
 
 ## Verification, remaining risks and uncertainty
 
