@@ -118,11 +118,19 @@ class SyntheticArtifactTests(unittest.TestCase):
             self.skipTest("set JW_QWEN4EXP_OFFICIAL_CONFIG to pinned de4b8e4d config.json on the Mac")
         config = json.loads(Path(path).read_text())
         # Converter planning is exact; these are the Saturday size-model
-        # targets (decimal bytes) for six- and five-bit routed experts.
-        targets = {"maxfit": 211e9, "maxfit5": 203e9}
+        # targets (decimal bytes): 108.0 / 92.9 GB of weights plus the
+        # 102.4 GB bf16 PLE table.  (An earlier 203 GB maxfit5 target was
+        # wrong: 5-bit/g64 is 5.5 bits per routed-expert weight against
+        # 6.5, so maxfit5 is 15.1 GB, not 8 GB, smaller than maxfit.)
+        targets = {"maxfit": 210.4e9, "maxfit5": 195.3e9}
+        actual = {profile: synthetic.predicted_bytes(config, profile) for profile in targets}
         for profile, target in targets.items():
-            actual = synthetic.predicted_bytes(config, profile)
-            self.assertLess(abs(actual - target) / target, 0.005)
+            self.assertLess(abs(actual[profile] - target) / target, 0.005, profile)
+        # Independent cross-check: only routed experts change, so the size
+        # delta is the memory model's peak delta (112.7 - 97.6 GB).
+        peak = live.PREDICTED_PEAK
+        self.assertAlmostEqual((actual["maxfit"] - actual["maxfit5"]) / 1e9,
+                               (peak["maxfit"] - peak["maxfit5"]) / 1e9, delta=0.15)
 
     def test_native_metal_load_and_one_forward(self):
         import mlx.core as mx

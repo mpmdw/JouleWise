@@ -114,7 +114,9 @@ not a second 360 GB copy. Allow at least **650 GB free initially**: source
 360 + maxfit about 211 + temp/headroom (the download refuses below it). A
 resumed download is credited the source blobs already cached, so an
 interrupted transfer restarts with the same command. Keeping maxfit5 as well
-requires another roughly 200 GB: its convert refuses below 225 GB free, so
+requires another 195.3 GB (the converter's plan for the pinned config: 92.9 GB
+of weights plus the 102.4 GB PLE table; maxfit is 210.4 GB): its convert
+refuses below 225 GB free, so
 the fallback path needs about **800 GB free initially** (650 GB leaves about
 80 GB after maxfit). Check `df -h /Volumes/JW-EXT` before starting it. The
 source stays intact for retry and reproducibility. No automatic deletion.
