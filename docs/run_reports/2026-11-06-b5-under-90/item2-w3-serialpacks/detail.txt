@@ -1,0 +1,55 @@
+
+step 0: wall 16 s, driver cpu 23 s, serial 16 s, unattributed 9 s (58.3% of sampled)
+  driver self: other 9s, k.archive.runs_root 6s, op.initial 0s
+  driver incl: op.initial 16s, k.archive.runs_root 6s, other 0s
+  programs: driver:op.initial x1 16s
+
+step 1: wall 324 s, driver cpu 5 s, serial 4 s, unattributed 0 s (0.1% of sampled)
+  driver self: dispatch.wait 320s, k.rehash 4s, other 0s, w.future 0s
+  driver incl: dispatch.wait 320s, w.future 320s, k.rehash 4s, other 0s
+  child  self: k.anchor 446s, k.pm_parse 272s, k.detect 140s, k.strict 34s, k.reduce 32s, k.env 12s, w.future 3s, k.strict.bundle 3s
+  child  incl: prog.cli.validate 921s, k.strict.bundle 921s, k.strict 918s, k.reduce 609s, k.anchor 446s, k.pm_parse 272s, k.env 232s, k.rederive 156s
+  pool dispatch: batches 1, busy 947 s over 320 s x 3 (98.5%)
+  programs: child:prog.cli.validate x262 946s, driver:op.kept x1 0s
+
+step 2: wall 18 s, driver cpu 10 s, serial 9 s, unattributed 5 s (30.5% of sampled)
+  driver self: dispatch.wait 8s, other 5s, k.rehash 4s, w.future 0s
+  driver incl: dispatch.wait 8s, w.future 8s, k.rehash 4s, other 0s
+  child  self: other 11s
+  child  incl: other 0s
+  pool dispatch: batches 1, busy 11 s over 8 s x 3 (43.7%)
+  programs: child:prog.cli.reduce x262 10s
+
+step 3: wall 0 s, driver cpu 0 s, serial 0 s, unattributed 0 s (100.0% of sampled)
+  driver self: other 0s, op.tripwires 0s
+  driver incl: op.tripwires 0s, other 0s
+  programs: driver:op.tripwires x1 0s
+
+step 3b: wall 294 s, driver cpu 31 s, serial 28 s, unattributed 4 s (1.4% of sampled)
+  driver self: pool.wait 266s, k.bracket 8s, k.archive.read 8s, k.bracket.inputs 7s, other 4s, k.calib 0s, op.brackets 0s, w.future 0s
+  driver incl: op.brackets 294s, k.bracket 290s, pool.wait 266s, w.future 266s, k.bracket.inputs 182s, k.archive.read 8s, k.calib 0s, other 0s
+  member self: k.pm_parse 202s, k.anchor 198s, k.detect 174s, k.reduce 47s, k.strict 31s, k.env 13s, w.future 6s, other 6s
+  member incl: k.strict.bundle 454s, k.strict 452s, k.reduce 299s, k.pm_parse 202s, k.anchor 198s, k.rederive 193s, k.refit 193s, k.detect 174s
+  pool k.bracket.strict: batches 3, busy 486 s over 166 s x 3 (97.1%)
+  pool member.other: batches 3, busy 195 s over 99 s x 3 (65.8%)
+  programs: driver:op.brackets x1 294s
+
+step 4: wall 180 s, driver cpu 0 s, serial 0 s, unattributed 0 s (0.3% of sampled)
+  driver self: dispatch.wait 180s, other 0s, w.future 0s
+  driver incl: dispatch.wait 180s, w.future 180s, other 0s
+  child  self: pool.wait 93s, k.anchor 92s, k.pm_parse 38s, k.ww.prepare 22s, k.env 11s, k.extract 10s, k.reduce 8s, k.bracket.inputs 7s
+  child  incl: prog.extract_floors 312s, k.extract 293s, k.ww.refusal 277s, k.ww.validate 272s, k.ww.validate_uncached 272s, k.ww.rederive 264s, k.ww.prepare 242s, w.future 98s
+  member self: k.anchor 110s, k.pm_parse 37s, other 18s, k.reduce 9s, k.env 3s, w.future 0s
+  member incl: k.anchor 110s, k.reduce 89s, k.pm_parse 37s, k.env 10s, w.future 0s, other 0s
+  pool child:member.other: batches 1, busy 179 s over 93 s x 2 (96.0%)
+  pool dispatch: batches 1, busy 312 s over 180 s x 2 (86.6%)
+  programs: child:prog.extract_floors x2 312s
+
+step 5: wall 885 s, driver cpu 892 s, serial 885 s, unattributed 1 s (0.2% of sampled)
+  driver self: k.vdl.hit 332s, k.auth_read 218s, k.ww.prepare 69s, k.ww.rederive 59s, k.detect 55s, k.ww.validate_uncached 22s, k.mint.auth 18s, k.ww.refusal 15s
+  driver incl: k.pinset 562s, prog.pinset 562s, k.ww.refusal 431s, k.mint.auth 368s, k.vdl.hit 332s, k.mint.compose 324s, prog.mint 323s, k.bracket 316s
+  programs: driver:prog.pinset x1 562s, driver:prog.mint x1 323s
+
+step 8: wall 0 s, driver cpu 0 s, serial 0 s, unattributed 0 s (0.0% of sampled)
+  driver self: k.rehash 0s
+  driver incl: k.rehash 0s

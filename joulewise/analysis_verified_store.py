@@ -1119,6 +1119,9 @@ class LeafSpec:
     plain_trees: bool = False
     # A registered key-only projection; forwarded call arguments stay intact.
     scalar_key: Callable[[tuple], tuple] | None = None
+    # A registered value predicate (review of PR #634, finding 1): a fill whose
+    # value fails it is never stored, so it is never exported or merged either.
+    storable_value: Callable[[Any], bool] | None = None
 
     def roles(self) -> dict[str, str]:
         return dict(self.params)
@@ -1136,6 +1139,13 @@ def _bracket_scalar_key(values: tuple) -> tuple:
     return tuple((name, replace(value, ledger_path=Path(value.ledger_path.name))
                   if name == "ledger_snapshot" and isinstance(value, CalibrationLedgerSnapshot)
                   and isinstance(value.ledger_path, PurePath) else value) for name, value in values)
+
+
+def _bracket_storable_value(value: Any) -> bool:
+    """L4 stores only the passed, reason-free outcome it would serve (bracket._storable_value)."""
+    from joulewise.b5_analysis.bracket import _storable_value
+
+    return _storable_value(value)
 
 
 def _calibration_key(metadata: Any) -> str | None:
@@ -1281,6 +1291,7 @@ LEAVES: tuple[LeafSpec, ...] = (
          ("_allow_unissued_fixture", SCALAR)),
         path_free=True,
         scalar_key=_bracket_scalar_key,
+        storable_value=_bracket_storable_value,
     ),
     LeafSpec(
         "L5_environment_refusals",
@@ -2111,6 +2122,12 @@ class VerifiedStore:
             _FILLS.reset(token)
         if fill.v2_failed or any(getattr(row, "failed", False) for row in recorded or ()):
             storable = False
+        if storable and prepared.spec.storable_value is not None:
+            try:
+                if not prepared.spec.storable_value(value):
+                    fill.unstorable.add("value_predicate")
+            except Exception:  # noqa: BLE001 - an unjudgeable value is not stored
+                fill.unstorable.add("value_predicate")
         if not storable:
             self._count(f"{leaf_id}:unstorable")
             for reason in sorted(fill.unstorable) or ["run_state"]:
