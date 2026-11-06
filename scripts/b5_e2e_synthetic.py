@@ -188,6 +188,8 @@ def main(argv=None):
     parser.add_argument('--label', default='run')
     parser.add_argument('--sample-ms', type=int, default=200)
     parser.add_argument('--keep-custody', action='store_true')
+    parser.add_argument('--stop-after', help='synthetic partial run: every later step refuses with '
+                        "'synthetic_stop_after' (so the record still closes); for time-boxed hosts")
     parser.add_argument('--vdl-mode', default='on',
                         help="JOULEWISE_B5_VDL for the run: 'on' (default; serves verified hits as a real blind "
                              "run's BLIND_ON does, so timings are comparable), 'off', or 'shadow:<permille>' "
@@ -217,6 +219,15 @@ def main(argv=None):
     fixtures_s10.tempfile = shim
     joined_s10.tempfile = shim
     from joulewise.b5_analysis import dry_run as d
+    if args.stop_after is not None:
+        ids = [step for step, _ in d.STEPS]
+        if args.stop_after not in ids:
+            parser.error('--stop-after must be a registered step id')
+        cut = ids.index(args.stop_after)
+
+        def stopped(s, r):
+            raise d.AnalysisRefusal('synthetic_stop_after')
+        d.STEPS = tuple(item if i <= cut else (item[0], stopped) for i, item in enumerate(d.STEPS))
 
     started = time.monotonic()
     print('restoring committed synthetic S10 windows', flush=True)
@@ -250,6 +261,19 @@ def main(argv=None):
             subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/b5_phase_report.py'), '--detail', str(phases)],
                            stdout=handle, stderr=subprocess.STDOUT)
     (out / 'stderr.txt').write_text(result.stderr)
+    codes = run_dir / 'restricted/decisions/step-codes.jsonl'
+    if codes.exists():  # synthetic custody: raw refusal codes per step
+        shutil.copyfile(codes, out / 'step-codes.jsonl')
+    logs = run_dir / 'restricted/logs'
+    if result.code != 0 and logs.is_dir():
+        # Synthetic custody only: keep the child logs that carry a traceback or refusal.
+        kept = out / 'failure-logs'
+        kept.mkdir()
+        for path in sorted(logs.iterdir()):
+            if path.is_file() and path.stat().st_size < 2_000_000:
+                text = path.read_text(errors='replace')
+                if 'Traceback' in text or 'refus' in text.lower() or 'error' in text.lower():
+                    shutil.copyfile(path, kept / path.name)
     if args.keep_custody:
         shutil.move(str(custody), str(out / 'custody'))
     harness.close()
