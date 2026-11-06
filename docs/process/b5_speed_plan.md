@@ -22,7 +22,8 @@ approximately 153 minutes. These are elapsed step times, not CPU totals.
 The combined <1 minute for steps 2/3 is allocated 0.4/0.1 below solely to make
 the schedule additive. Expected times are **budgets for the complete proposed
 schedule**, including unimplemented work; they are not measured forecasts from
-the one runtime change in this lane. All times are minutes.
+the changes in this lane. Stage-2 observations are recorded separately below.
+All times are minutes.
 
 | Step / owning code | Now | Dominant cost / serialization | Proposed change | Budget 7 / 10 workers | Equivalence risk | Test needed |
 |---|---:|---|---|---:|---|---|
@@ -90,8 +91,9 @@ work 3/4 and 5/5. Do not create three full-sized member pools. Account for
 idle parent processes, resident store copies, serialized store payloads and
 spawn RSS as well as active CPU workers. On the 24 GB target, measure peak
 memory/swap before accepting ten workers. Explicit `--workers 10` is needed;
-the existing automatic default caps at eight. This session used zero worker
-processes for profiling and never changed the running job.
+the existing automatic default caps at eight. Stage 1 used zero worker
+processes for its profiles; stage 2 uses three for synthetic comparisons.
+Neither stage changes the running job.
 
 Admission is empirical: after release, meet these step budgets on synthetic
 production-dispatch inputs first, then perform the authorized blinded
@@ -126,8 +128,8 @@ quantile proof, outputs, or registered members.
 binary prefix ranges preserves every tested byte and saves a little CPU, but
 the full-size paired wall timings showed no reliable improvement. Keep its
 candidate in the synthetic benchmark only. The production bracket module is
-unchanged. This is why the lane implements one confirmed optimization, within
-the brief's requested one-to-two range.
+unchanged. Stage 1 therefore implemented one confirmed optimization, within
+that brief's requested one-to-two range; stage 2 adds the scheduling work below.
 
 The implemented census wiring is byte-preserving engineering:
 no arithmetic, leaf eligibility, cache key, scientific policy, comparator
@@ -205,6 +207,7 @@ or creates/opens `restricted/`. Git observations are the documented
 |---|---:|---:|---|
 | 3b — independent pack brackets | 180.781 / 89.707 | 50.4% | All 277 registered files, 5 accumulated records and all archive censuses in the joined prefix match exactly |
 | 10 — isolated issuer/opener packs | 433.000 / 205.929 | 52.4%, **cold restart only** | All 442 registered files, 14 accumulated records and all archive censuses match exactly |
+| 11 — independent sensitivity pack derivations | 2752.383 / 2607.381 | 5.3%, single retained-prefix pair | All 449 registered files, 15 accumulated records and all archive censuses match exactly, including sensitivity, disclosures and fill |
 
 These are single paired synthetic observations under the concurrent job, not
 production forecasts. **Step 10 has no demonstrated warm pipeline gain:** an
@@ -225,6 +228,7 @@ index, and checks actual registered-file digests, complete step records and
 archive censuses. The detailed method, refusal regressions and limitations are
 in the [stage-2 report](../run_reports/2026-11-05-b5-speed-plan-stage2.md);
 the [3b ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-3b.json) and
-[step-10 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-10.json) preserve
+[step-10 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-10.json), plus the
+[step-11 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-11.json), preserve
 the matching commitments and per-file hashes. Full joined production promotion
 still needs the authorized blinded equivalence gate.
