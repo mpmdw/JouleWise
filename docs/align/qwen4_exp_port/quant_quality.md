@@ -6,8 +6,12 @@ This harness compares teacher-forced final-layer logits from the Saturday
 `maxfit` MLX build with the pinned bf16 official-reference chain.  It does not
 keep the bf16 model resident: `capture` reads the already-produced gold `head`
 arrays one prompt at a time and emits a small, reusable reference.  `score`
-then loads only a quantized model.  The prompt default is imported from
-`qwen4_gold.runner.DEFAULT_PROMPTS`, so the two harnesses cannot silently drift.
+then loads only a quantized model.  `capture --gold-root` takes the prompts
+from the gold run's own `parity/provenance.json` and every head output from
+the stream `manifest.json` (`units.head` must be `done`; each
+`chain.head["bf16:<prompt>"]` file must match its recorded SHA-256), so the
+two harnesses cannot silently drift.  `score` always scores the prompts pinned
+in the reference sidecar.
 
 The compact record contains, for every token, the reference top 64 token ids
 and logits, full-vocabulary log-sum-exp, and the teacher-forced next-token
@@ -64,7 +68,7 @@ git fetch origin lane/2026-11-07-qwen4exp-mbp-live
 git rev-parse FETCH_HEAD                 # retain this live-kit commit in notes
 git switch work                          # branch containing this harness
 
-export GOLD_RUN=/Volumes/ALIGN/qwen4-gold-work/reports
+export GOLD_RUN=/Volumes/ALIGN/qwen4-gold-work   # stream --work folder (holds manifest.json)
 export MAXFIT=/Volumes/ALIGN/qwen4-maxfit
 export QQ=/Volumes/ALIGN/qwen4-quant-quality
 mkdir -p "$QQ"
@@ -80,6 +84,7 @@ python3 -B scripts/run_qwen4_quant_quality.py score \
   --reference "$QQ/reference-top64.npz" \
   --adapter joulewise.align.qwen4_quant_mlx_adapter:teacher_forced_logits \
   --model "$MAXFIT" \
+  --manifest-sha256 "$MAXFIT_MANIFEST_SHA256" \
   --variant-name maxfit-g64 \
   --output "$QQ/maxfit-g64.json"
 
@@ -96,8 +101,14 @@ PY
 
 To score another assembled directory, repeat step 2 with a new `--model`,
 `--variant-name`, and output JSON.  Do not rerun capture.  For an explicitly
-pinned prompt file, pass the same `--prompts-json FILE` to both capture and
-score; absence means the gold defaults.  CI/tiny-oracle tests can instead pass
+pinned prompt set, run the gold stream with `--prompts-json FILE` (for example
+the hosted/NLL continuations written by
+`scripts/qwen4exp_gold_logprob_compare.py prepare` + `prompts-json`); capture
+then inherits those prompts from the run.  A `--prompts-json` given to capture
+or score is only a cross-check and must match exactly.  The default adapter
+loads the artifact once through the live kit's pinned
+`align_convert_qwen4_exp.load_verified_model`, so `--manifest-sha256` is
+required.  CI/tiny-oracle tests can instead pass
 an NPZ containing one `[sequence,vocabulary]` float array under each prompt
 name via `--logits-npz`.
 

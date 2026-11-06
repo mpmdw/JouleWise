@@ -128,6 +128,7 @@ def score(reference, logits_by_prompt, output=None, variant=None):
                 summary["mean_nll_delta"] <= g["mean_nll_delta_max"])
     label = "acceptable" if passes(POLICY["acceptable"]) else "marginal" if passes(POLICY["marginal"]) else "reject"
     result = {"schema": SCHEMA, "kind": "score", "variant": variant or {}, "reference_sha256": _sha(reference),
+              "reference_manifest_sha256": _sha(str(reference) + ".json"),
               "metric_note": "projected_kl is exact on reference-top-k plus one OTHER bucket and lower-bounds full-vocabulary KL",
               "summary": summary, "classification": label, "policy": POLICY, "tokens": per_token}
     if output: Path(output).write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n")
@@ -140,22 +141,75 @@ def load_npz(path, prompts):
         return {p["name"]: np.array(data[p["name"]], dtype=np.float32) for p in prompts}
 
 
-def load_gold(root, prompts):
+def _same_prompts(a, b):
+    return [(p["name"], list(p["input_ids"])) for p in a] == [(p["name"], list(p["input_ids"])) for p in b]
+
+
+def load_gold(work, prompts=None):
+    """Read bf16 head logits from a ``qwen4-gold-stream/v1`` work folder.
+
+    The work folder (not its ``parity`` subdirectory) is required: its
+    manifest is the only record of which head outputs completed and of their
+    SHA-256.  Prompts come from the run's own provenance, so next-token
+    targets cannot be paired with a different prompt pin.  ``prompts`` is an
+    optional cross-check and must match exactly.
+    """
     import numpy as np
-    root = Path(root); result = {}
-    for p in prompts:
-        matches = list(root.glob(f"head/{p['name']}-bf16-real/reference/output.npy"))
-        if len(matches) != 1: raise ValueError(f"missing unique gold head output for {p['name']}")
-        result[p["name"]] = np.load(matches[0], allow_pickle=False)
-    return result
+    from .qwen4_gold.core import sha256 as file_sha
+    from .qwen4_gold.stream import STREAM_SCHEMA
+    work = Path(work)
+    manifest_path = work / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(f"not a gold stream work folder (no manifest.json): {work}")
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("schema") != STREAM_SCHEMA:
+        raise ValueError("gold work manifest has an unexpected schema")
+    unit, chain = manifest.get("units", {}).get("head"), manifest.get("chain", {}).get("head")
+    if not unit or unit.get("state") != "done" or not chain:
+        raise ValueError("gold head unit has not completed")
+    provenance = json.loads((work / "parity" / "provenance.json").read_text())
+    run_prompts = [{"name": p["name"], "input_ids": [int(i) for i in p["input_ids"]]} for p in provenance["prompts"]]
+    if prompts is not None and not _same_prompts(prompts, run_prompts):
+        raise ValueError("--prompts-json differs from the prompts pinned by the gold run")
+    result, outputs = {}, {}
+    for p in run_prompts:
+        path = chain.get("bf16:" + p["name"])
+        if path is None:
+            raise ValueError(f"missing gold bf16 head output for {p['name']}")
+        path = Path(path)
+        rel = str(path.relative_to(work)) if path.is_absolute() else str(path)
+        digest = unit.get("artifacts", {}).get(rel)
+        if digest is None or file_sha(work / rel) != digest:
+            raise ValueError(f"gold head output is not pinned by the manifest or changed: {rel}")
+        result[p["name"]] = np.load(work / rel, allow_pickle=False)
+        outputs[p["name"]] = {"path": rel, "sha256": digest}
+    source = {"gold_work": str(work), "gold_fingerprint": manifest.get("fingerprint"),
+              "gold_manifest_schema": STREAM_SCHEMA, "head_status": unit.get("status"),
+              "head_result_sha256": unit.get("result_sha256"), "head_outputs": outputs,
+              "provenance_fingerprint": provenance.get("fingerprint")}
+    return result, run_prompts, source
 
 
-def load_adapter(spec, model, prompts):
+def load_adapter(spec, model, prompts, manifest_sha256=None):
+    """Load the model once, then score every prompt teacher-forced.
+
+    An adapter module may define ``load(model_path, manifest_sha256=...)``;
+    its handle is passed to the scoring function for every prompt, so a
+    ~200 GB model is opened exactly once per score run.
+    """
     import numpy as np
     module, _, function = spec.partition(":")
     if not function: function = "teacher_forced_logits"
-    call = getattr(importlib.import_module(module), function)
-    return {p["name"]: np.asarray(call(model, p["input_ids"]), np.float32) for p in prompts}
+    module = importlib.import_module(module)
+    call = getattr(module, function)
+    loader = getattr(module, "load", None)
+    handle = loader(model, manifest_sha256=manifest_sha256) if loader is not None else model
+    return {p["name"]: np.asarray(call(handle, p["input_ids"]), np.float32) for p in prompts}
+
+
+def reference_prompts(reference):
+    manifest = json.loads(Path(str(reference) + ".json").read_text())
+    return [{"name": p["name"], "input_ids": p["input_ids"]} for p in manifest["prompts"]]
 
 
 def main(argv=None):
@@ -163,13 +217,38 @@ def main(argv=None):
     for name in ("capture", "score"):
         p = sub.add_parser(name); p.add_argument("--prompts-json"); p.add_argument("--logits-npz")
         p.add_argument("--adapter"); p.add_argument("--model"); p.add_argument("--output", required=True)
-        if name == "capture": p.add_argument("--gold-root"); p.add_argument("--top-k", type=int, default=64)
-        else: p.add_argument("--reference", required=True); p.add_argument("--variant-name", required=True)
-    args = parser.parse_args(argv); prompts = _prompts(args.prompts_json)
-    sources = sum(bool(x) for x in (args.logits_npz, getattr(args, "gold_root", None), args.adapter))
+        if name == "capture": p.add_argument("--gold-root", help="gold stream work folder (contains manifest.json)"); p.add_argument("--top-k", type=int, default=64)
+        else:
+            p.add_argument("--reference", required=True); p.add_argument("--variant-name", required=True)
+            p.add_argument("--manifest-sha256", help="pinned manifest.json sha256 of the assembled artifact")
+    args = parser.parse_args(argv)
+    gold = getattr(args, "gold_root", None)
+    sources = sum(bool(x) for x in (args.logits_npz, gold, args.adapter))
     if sources != 1: parser.error("select exactly one of --logits-npz, --gold-root, or --adapter")
-    logits = load_npz(args.logits_npz, prompts) if args.logits_npz else load_gold(args.gold_root, prompts) if getattr(args, "gold_root", None) else load_adapter(args.adapter, args.model, prompts)
-    result = capture(logits, prompts, args.output, args.top_k, {"gold_root": args.gold_root} if getattr(args, "gold_root", None) else {}) if args.command == "capture" else score(args.reference, logits, args.output, {"name": args.variant_name, "model": args.model})
+    if args.adapter and not args.model: parser.error("--adapter requires --model")
+    explicit = _prompts(args.prompts_json) if args.prompts_json else None
+    source = {}
+    if args.command == "score":
+        # Score exactly the sequences the reference pinned; a different prompt
+        # file would pair quantized logits with the wrong targets.
+        prompts = reference_prompts(args.reference)
+        if explicit is not None and not _same_prompts(explicit, prompts):
+            parser.error("--prompts-json differs from the prompts pinned by --reference")
+    else:
+        prompts = explicit if explicit is not None else _prompts(None)
+    if gold:
+        logits, prompts, source = load_gold(gold, explicit)
+    elif args.logits_npz:
+        logits = load_npz(args.logits_npz, prompts)
+        source = {"logits_npz": str(args.logits_npz), "logits_npz_sha256": _sha(args.logits_npz)}
+    else:
+        logits = load_adapter(args.adapter, args.model, prompts, getattr(args, "manifest_sha256", None))
+    if args.command == "capture":
+        result = capture(logits, prompts, args.output, args.top_k, source)
+    else:
+        result = score(args.reference, logits, args.output,
+                       {"name": args.variant_name, "model": args.model, "adapter": args.adapter,
+                        "manifest_sha256": args.manifest_sha256, **source})
     print(json.dumps(result.get("summary", result), indent=2)); return 0
 
 
