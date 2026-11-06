@@ -3934,6 +3934,254 @@ def _authenticate_v2_component(
     return authenticated
 
 
+def _authenticate_v2_producer(
+    producer, manifest_row, *, block5, acceptance, acceptance_sha256,
+    ledger_snapshot, pinset_path, pinset_sha256, strict_validator,
+    consumption_semantics_id, evidence_roots, evidence_core=None,
+):
+    """Original producer body; the caller owns shared-root and refusal order."""
+    if evidence_core is None:
+        evidence_core = _fresh_original_core()
+    plan_id = producer["plan"]["plan_id"]
+    if manifest_row is None:
+        raise MintError(f"v2 input manifest is missing producer {plan_id!r}")
+    if block5:
+        entry = _producer_by_plan_id(plan_id)
+        acceptance_raw = _read_block5_archive_input(entry, "sources/inputs/acceptance.json", "block5 calibration acceptance")
+        acceptance_value = _strict_json_value(acceptance_raw, "block5 calibration acceptance")
+        acceptance = evidence_core.load_calibration_acceptance_bound(
+            entry.window.archive_root / "sources/inputs/acceptance.json")
+        if not isinstance(acceptance, Mapping):
+            raise MintError("v2 calibration acceptance evidence is not authenticated")
+        acceptance_sha256 = hashlib.sha256(acceptance_raw).hexdigest()
+        ledger_snapshot = entry.ledger_snapshot
+    plan_path = Path(
+        _string(
+            manifest_row["calibration_plan"],
+            f"v2 input manifest producer {plan_id}.calibration_plan",
+        )
+    )
+    plan, plan_raw = _strict_json_file(
+        plan_path, f"producer {plan_id!r} calibration plan"
+    )
+    if not isinstance(plan, Mapping):
+        raise MintError(f"producer {plan_id!r} calibration plan must be an object")
+    if hashlib.sha256(plan_raw).hexdigest() != producer["plan"]["sha256"]:
+        raise MintError(f"producer {plan_id!r} calibration plan sha256 mismatch")
+    sidecar_path = Path(
+        _string(
+            manifest_row["calibration_plan_sidecar"],
+            f"v2 input manifest producer {plan_id}.calibration_plan_sidecar",
+        )
+    )
+    try:
+        sidecar_raw = read_authentication_input(
+            sidecar_path,
+            grammar="raw",
+            label=f"producer {plan_id!r} plan sidecar",
+        )
+        sidecar_text = sidecar_raw.decode("utf-8")
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
+    except OSError as exc:
+        raise MintError(
+            f"producer {plan_id!r} plan sidecar cannot be read: "
+            f"{exc.strerror or type(exc).__name__}"
+        ) from exc
+    except UnicodeDecodeError as exc:
+        raise MintError(
+            f"producer {plan_id!r} plan sidecar is not UTF-8"
+        ) from exc
+    sidecar_parts = sidecar_text.strip().split()
+    if (
+        len(sidecar_parts) != 2
+        or sidecar_parts[0] != producer["plan"]["declared_sha256"]
+        or sidecar_parts[0] != hashlib.sha256(plan_raw).hexdigest()
+        or sidecar_parts[1] != plan_path.name
+        or hashlib.sha256(sidecar_raw).hexdigest()
+        != producer["plan"]["sidecar_sha256"]
+    ):
+        raise MintError(f"producer {plan_id!r} plan sidecar pins mismatch")
+    bracket_path = Path(
+        _string(
+            manifest_row["bracket_binding"],
+            f"v2 input manifest producer {plan_id}.bracket_binding",
+        )
+    )
+    if block5:
+        bracket_raw = _read_block5_archive_input(entry, "derived/bracket-binding.json", f"producer {plan_id!r} bracket binding", path=bracket_path)
+        bracket_binding = _strict_json_value(bracket_raw, f"producer {plan_id!r} bracket binding")
+    else:
+        bracket_binding, bracket_raw = _strict_json_file(bracket_path, f"producer {plan_id!r} bracket binding")
+    if not isinstance(bracket_binding, Mapping):
+        raise MintError(f"producer {plan_id!r} bracket binding must be an object")
+    cells = manifest_row["cells"]
+    if not isinstance(cells, list) or len(cells) != 2:
+        raise MintError(
+            f"v2 input manifest producer {plan_id!r} must contain two cells"
+        )
+    cell_rows: dict[str, Mapping[str, Any]] = {}
+    for cell_index, cell_value in enumerate(cells):
+        cell_label = (
+            f"v2 input manifest producer {plan_id}.cells[{cell_index}]"
+        )
+        cell_row = _object(
+            cell_value,
+            cell_label,
+            {
+                "role",
+                "absolute",
+                "comparative",
+                "allowed_consumer_condition_families",
+            },
+        )
+        role = _string(cell_row["role"], f"{cell_label}.role")
+        if role in cell_rows:
+            raise MintError(f"producer {plan_id!r} cell roles must be unique")
+        cell_rows[role] = cell_row
+    if set(cell_rows) != {"decode", "prefill"}:
+        raise MintError(
+            f"producer {plan_id!r} input cells must be decode and prefill"
+        )
+
+    component_paths: dict[tuple[str, str], ComponentInputs] = {}
+    producer_evidence_root: Path | None = None
+    for cell_pins in producer["cells"]:
+        role = cell_pins["role"]
+        cell_row = cell_rows[role]
+        for component_name in ("absolute", "comparative"):
+            paths = _v2_component_input_paths(
+                cell_row[component_name],
+                f"producer {plan_id}.{role}.{component_name}",
+            )
+            # Refuse an unindexed hazard root before reading any report or bundle.
+            try:
+                if hasattr(evidence_core, "_block5_producer"):
+                    evidence_core._block5_producer(paths.evidence_root)
+            except evidence_core.MintError as exc:
+                raise MintError(str(exc)) from exc
+            component_paths[(role, component_name)] = paths
+            root_id = cell_pins[component_name]["evidence_root_id"]
+            existing_root = evidence_roots.get(root_id)
+            if existing_root is not None and existing_root.resolve() != (
+                paths.evidence_root.resolve()
+            ):
+                raise MintError(
+                    f"evidence-root id {root_id!r} maps to multiple paths"
+                )
+            evidence_roots[root_id] = paths.evidence_root
+            if (
+                producer_evidence_root is not None
+                and producer_evidence_root.resolve()
+                != paths.evidence_root.resolve()
+            ):
+                raise MintError(
+                    f"producer {plan_id!r} components map to multiple evidence roots"
+                )
+            producer_evidence_root = paths.evidence_root
+    if producer_evidence_root is None:
+        raise MintError(f"producer {plan_id!r} has no authenticated evidence root")
+    authenticated_cells: dict[str, V2CellComponents] = {}
+    for cell_pins in producer["cells"]:
+        role = cell_pins["role"]
+        cell_row = cell_rows[role]
+        configured = _v2_mint_pinset(producer, cell_pins)
+        core = _configured_core(
+            configured,
+            pinset_path=pinset_path,
+            expected_pinset_sha256=pinset_sha256,
+        )
+        authenticated = []
+        for component_name, expected_kind in (
+            ("absolute", "absolute"),
+            ("comparative", "comparative"),
+        ):
+            paths = component_paths[(role, component_name)]
+            root_id = cell_pins[component_name]["evidence_root_id"]
+            _pre_admit_legacy_report(
+                paths.report_path,
+                f"producer {plan_id}.{role}.{component_name} extraction report",
+            )
+            _allow_governed_extraction_spec(paths.spec_path)
+            try:
+                component = _authenticate_v2_component(
+                    core,
+                    core.ComponentPaths(
+                        evidence_root_id=root_id,
+                        evidence_root=paths.evidence_root,
+                        report_path=paths.report_path,
+                        spec_path=paths.spec_path,
+                        order_manifest_path=paths.order_manifest_path,
+                        calibration_cell_id=cell_pins[component_name][
+                            "calibration_cell_id"
+                        ],
+                        expected_kind=expected_kind,
+                    ),
+                    expected_cell_id=cell_pins[component_name][
+                        "calibration_cell_id"
+                    ],
+                    expected_basis_sha256=cell_pins[component_name][
+                        "evaluation_basis_sha256"
+                    ],
+                    strict_validator=strict_validator,
+                    expected_consumption_semantics_id=cell_pins[
+                        component_name
+                    ]["consumption_semantics_id"],
+                    calibration_ledger_snapshot=ledger_snapshot,
+                    calibration_bracket_binding=bracket_binding,
+                )
+            except core.MintError as exc:
+                raise MintError(str(exc)) from exc
+            authenticated.append(component)
+        families = cell_row["allowed_consumer_condition_families"]
+        if not isinstance(families, list):
+            raise MintError(
+                f"producer {plan_id}.{role} allowed families must be an array"
+            )
+        authenticated_cells[role] = V2CellComponents(
+            absolute=authenticated[0],
+            comparative=authenticated[1],
+            allowed_consumer_condition_families=tuple(families),
+        )
+    if consumption_semantics_id is not None:
+        pinned_semantics = {
+            cell[component_name]["consumption_semantics_id"]
+            for cell in producer["cells"]
+            for component_name in ("absolute", "comparative")
+        }
+        if pinned_semantics != {consumption_semantics_id}:
+            raise MintError(
+                "explicit v2 consumption semantics dispatch contradicts "
+                "per-component pins"
+            )
+    authenticated_inputs = V2ProducerInputs(
+        plan=dict(plan),
+        cells=authenticated_cells,
+        evidence_root=producer_evidence_root,
+        plan_sha256=hashlib.sha256(plan_raw).hexdigest(),
+        plan_declared_sha256=sidecar_parts[0],
+        plan_sidecar_sha256=hashlib.sha256(sidecar_raw).hexdigest(),
+        calibration_acceptance=dict(acceptance),
+        calibration_acceptance_sha256=acceptance_sha256,
+        bracket_binding=dict(bracket_binding),
+        bracket_binding_sha256=hashlib.sha256(bracket_raw).hexdigest(),
+    )
+    authenticated_pre, authenticated_post, allowance_projection = (
+        _v2_authenticate_bracket_binding(
+            producer=producer,
+            inputs=authenticated_inputs,
+            ledger_snapshot=ledger_snapshot,
+        )
+    )
+    authenticated_inputs = replace(
+        authenticated_inputs,
+        authenticated_pre_observation=authenticated_pre,
+        authenticated_post_observation=authenticated_post,
+        calibration_allowance_projection=dict(allowance_projection),
+    )
+    return authenticated_inputs, evidence_roots
+
+
 def _authenticate_v2_inputs(
     *,
     pinset: V2Pinset,
@@ -3944,6 +4192,7 @@ def _authenticate_v2_inputs(
     consumption_semantics_id: str | None,
     input_manifest: Mapping[str, Any] | None = None,
     calibration_custody_store: Path | None = None,
+    _parallel_prepare: bool | None = None,
 ) -> tuple[
     Mapping[str, V2ProducerInputs],
     Mapping[str, Path],
@@ -3961,10 +4210,15 @@ def _authenticate_v2_inputs(
                     consumption_semantics_id=consumption_semantics_id,
                     input_manifest=input_manifest,
                     calibration_custody_store=calibration_custody_store,
+                    _parallel_prepare=_parallel_prepare,
                 )
         except V2AuthenticationInputError as exc:
             raise MintError(str(exc)) from exc
 
+    # An internal mint-owned prefix may opt in using the eligibility captured
+    # before its first read. Direct callers with earlier reads remain serial.
+    parallel_prepare = (not active_v2_authentication_session().records
+                        if _parallel_prepare is None else _parallel_prepare)
     manifest = (
         input_manifest
         if input_manifest is not None
@@ -4078,245 +4332,30 @@ def _authenticate_v2_inputs(
 
     result: dict[str, V2ProducerInputs] = {}
     evidence_roots: dict[str, Path] = {}
+    from joulewise.b5_analysis import pack_parallel as pp, mint_parallel
+    calls = mint_parallel.authentication_calls(
+        pinset, by_plan_id, block5=block5, acceptance=acceptance,
+        acceptance_sha256=acceptance_sha256, ledger_snapshot=ledger_snapshot,
+        pinset_path=pinset_path, pinset_sha256=pinset_sha256,
+        strict_validator=strict_validator, consumption_semantics_id=consumption_semantics_id,
+    ) if parallel_prepare else None
+    outcomes = pp.pack_map(mint_parallel.authenticate_producer, calls) if calls is not None else None
     for producer_index, producer in enumerate(pinset.value["producer_plans"]):
         plan_id = producer["plan"]["plan_id"]
-        manifest_row = by_plan_id.get(plan_id)
-        if manifest_row is None:
-            raise MintError(f"v2 input manifest is missing producer {plan_id!r}")
-        if block5:
-            entry = _producer_by_plan_id(plan_id)
-            acceptance_raw = _read_block5_archive_input(entry, "sources/inputs/acceptance.json", "block5 calibration acceptance")
-            acceptance_value = _strict_json_value(acceptance_raw, "block5 calibration acceptance")
-            acceptance = evidence_core.load_calibration_acceptance_bound(
-                entry.window.archive_root / "sources/inputs/acceptance.json")
-            if not isinstance(acceptance, Mapping):
-                raise MintError("v2 calibration acceptance evidence is not authenticated")
-            acceptance_sha256 = hashlib.sha256(acceptance_raw).hexdigest()
-            ledger_snapshot = entry.ledger_snapshot
-        plan_path = Path(
-            _string(
-                manifest_row["calibration_plan"],
-                f"v2 input manifest producer {plan_id}.calibration_plan",
-            )
+        outcome = None if outcomes is None else outcomes[producer_index]
+        inputs, roots = mint_parallel.consume_authenticated(
+            outcome,
+            lambda: _authenticate_v2_producer(
+                producer, by_plan_id.get(plan_id), block5=block5,
+                acceptance=acceptance, acceptance_sha256=acceptance_sha256,
+                ledger_snapshot=ledger_snapshot, pinset_path=pinset_path,
+                pinset_sha256=pinset_sha256, strict_validator=strict_validator,
+                consumption_semantics_id=consumption_semantics_id,
+                evidence_roots=evidence_roots, evidence_core=evidence_core,
+            ),
         )
-        plan, plan_raw = _strict_json_file(
-            plan_path, f"producer {plan_id!r} calibration plan"
-        )
-        if not isinstance(plan, Mapping):
-            raise MintError(f"producer {plan_id!r} calibration plan must be an object")
-        if hashlib.sha256(plan_raw).hexdigest() != producer["plan"]["sha256"]:
-            raise MintError(f"producer {plan_id!r} calibration plan sha256 mismatch")
-        sidecar_path = Path(
-            _string(
-                manifest_row["calibration_plan_sidecar"],
-                f"v2 input manifest producer {plan_id}.calibration_plan_sidecar",
-            )
-        )
-        try:
-            sidecar_raw = read_authentication_input(
-                sidecar_path,
-                grammar="raw",
-                label=f"producer {plan_id!r} plan sidecar",
-            )
-            sidecar_text = sidecar_raw.decode("utf-8")
-        except V2AuthenticationInputError as exc:
-            raise MintError(str(exc)) from exc
-        except OSError as exc:
-            raise MintError(
-                f"producer {plan_id!r} plan sidecar cannot be read: "
-                f"{exc.strerror or type(exc).__name__}"
-            ) from exc
-        except UnicodeDecodeError as exc:
-            raise MintError(
-                f"producer {plan_id!r} plan sidecar is not UTF-8"
-            ) from exc
-        sidecar_parts = sidecar_text.strip().split()
-        if (
-            len(sidecar_parts) != 2
-            or sidecar_parts[0] != producer["plan"]["declared_sha256"]
-            or sidecar_parts[0] != hashlib.sha256(plan_raw).hexdigest()
-            or sidecar_parts[1] != plan_path.name
-            or hashlib.sha256(sidecar_raw).hexdigest()
-            != producer["plan"]["sidecar_sha256"]
-        ):
-            raise MintError(f"producer {plan_id!r} plan sidecar pins mismatch")
-        bracket_path = Path(
-            _string(
-                manifest_row["bracket_binding"],
-                f"v2 input manifest producer {plan_id}.bracket_binding",
-            )
-        )
-        if block5:
-            bracket_raw = _read_block5_archive_input(entry, "derived/bracket-binding.json", f"producer {plan_id!r} bracket binding", path=bracket_path)
-            bracket_binding = _strict_json_value(bracket_raw, f"producer {plan_id!r} bracket binding")
-        else:
-            bracket_binding, bracket_raw = _strict_json_file(bracket_path, f"producer {plan_id!r} bracket binding")
-        if not isinstance(bracket_binding, Mapping):
-            raise MintError(f"producer {plan_id!r} bracket binding must be an object")
-        cells = manifest_row["cells"]
-        if not isinstance(cells, list) or len(cells) != 2:
-            raise MintError(
-                f"v2 input manifest producer {plan_id!r} must contain two cells"
-            )
-        cell_rows: dict[str, Mapping[str, Any]] = {}
-        for cell_index, cell_value in enumerate(cells):
-            cell_label = (
-                f"v2 input manifest producer {plan_id}.cells[{cell_index}]"
-            )
-            cell_row = _object(
-                cell_value,
-                cell_label,
-                {
-                    "role",
-                    "absolute",
-                    "comparative",
-                    "allowed_consumer_condition_families",
-                },
-            )
-            role = _string(cell_row["role"], f"{cell_label}.role")
-            if role in cell_rows:
-                raise MintError(f"producer {plan_id!r} cell roles must be unique")
-            cell_rows[role] = cell_row
-        if set(cell_rows) != {"decode", "prefill"}:
-            raise MintError(
-                f"producer {plan_id!r} input cells must be decode and prefill"
-            )
-
-        component_paths: dict[tuple[str, str], ComponentInputs] = {}
-        producer_evidence_root: Path | None = None
-        for cell_pins in producer["cells"]:
-            role = cell_pins["role"]
-            cell_row = cell_rows[role]
-            for component_name in ("absolute", "comparative"):
-                paths = _v2_component_input_paths(
-                    cell_row[component_name],
-                    f"producer {plan_id}.{role}.{component_name}",
-                )
-                # Refuse an unindexed hazard root before reading any report or bundle.
-                try:
-                    if hasattr(evidence_core, "_block5_producer"):
-                        evidence_core._block5_producer(paths.evidence_root)
-                except evidence_core.MintError as exc:
-                    raise MintError(str(exc)) from exc
-                component_paths[(role, component_name)] = paths
-                root_id = cell_pins[component_name]["evidence_root_id"]
-                existing_root = evidence_roots.get(root_id)
-                if existing_root is not None and existing_root.resolve() != (
-                    paths.evidence_root.resolve()
-                ):
-                    raise MintError(
-                        f"evidence-root id {root_id!r} maps to multiple paths"
-                    )
-                evidence_roots[root_id] = paths.evidence_root
-                if (
-                    producer_evidence_root is not None
-                    and producer_evidence_root.resolve()
-                    != paths.evidence_root.resolve()
-                ):
-                    raise MintError(
-                        f"producer {plan_id!r} components map to multiple evidence roots"
-                    )
-                producer_evidence_root = paths.evidence_root
-        if producer_evidence_root is None:
-            raise MintError(f"producer {plan_id!r} has no authenticated evidence root")
-        authenticated_cells: dict[str, V2CellComponents] = {}
-        for cell_pins in producer["cells"]:
-            role = cell_pins["role"]
-            cell_row = cell_rows[role]
-            configured = _v2_mint_pinset(producer, cell_pins)
-            core = _configured_core(
-                configured,
-                pinset_path=pinset_path,
-                expected_pinset_sha256=pinset_sha256,
-            )
-            authenticated = []
-            for component_name, expected_kind in (
-                ("absolute", "absolute"),
-                ("comparative", "comparative"),
-            ):
-                paths = component_paths[(role, component_name)]
-                root_id = cell_pins[component_name]["evidence_root_id"]
-                _pre_admit_legacy_report(
-                    paths.report_path,
-                    f"producer {plan_id}.{role}.{component_name} extraction report",
-                )
-                _allow_governed_extraction_spec(paths.spec_path)
-                try:
-                    component = _authenticate_v2_component(
-                        core,
-                        core.ComponentPaths(
-                            evidence_root_id=root_id,
-                            evidence_root=paths.evidence_root,
-                            report_path=paths.report_path,
-                            spec_path=paths.spec_path,
-                            order_manifest_path=paths.order_manifest_path,
-                            calibration_cell_id=cell_pins[component_name][
-                                "calibration_cell_id"
-                            ],
-                            expected_kind=expected_kind,
-                        ),
-                        expected_cell_id=cell_pins[component_name][
-                            "calibration_cell_id"
-                        ],
-                        expected_basis_sha256=cell_pins[component_name][
-                            "evaluation_basis_sha256"
-                        ],
-                        strict_validator=strict_validator,
-                        expected_consumption_semantics_id=cell_pins[
-                            component_name
-                        ]["consumption_semantics_id"],
-                        calibration_ledger_snapshot=ledger_snapshot,
-                        calibration_bracket_binding=bracket_binding,
-                    )
-                except core.MintError as exc:
-                    raise MintError(str(exc)) from exc
-                authenticated.append(component)
-            families = cell_row["allowed_consumer_condition_families"]
-            if not isinstance(families, list):
-                raise MintError(
-                    f"producer {plan_id}.{role} allowed families must be an array"
-                )
-            authenticated_cells[role] = V2CellComponents(
-                absolute=authenticated[0],
-                comparative=authenticated[1],
-                allowed_consumer_condition_families=tuple(families),
-            )
-        if consumption_semantics_id is not None:
-            pinned_semantics = {
-                cell[component_name]["consumption_semantics_id"]
-                for cell in producer["cells"]
-                for component_name in ("absolute", "comparative")
-            }
-            if pinned_semantics != {consumption_semantics_id}:
-                raise MintError(
-                    "explicit v2 consumption semantics dispatch contradicts "
-                    "per-component pins"
-                )
-        authenticated_inputs = V2ProducerInputs(
-            plan=dict(plan),
-            cells=authenticated_cells,
-            evidence_root=producer_evidence_root,
-            plan_sha256=hashlib.sha256(plan_raw).hexdigest(),
-            plan_declared_sha256=sidecar_parts[0],
-            plan_sidecar_sha256=hashlib.sha256(sidecar_raw).hexdigest(),
-            calibration_acceptance=dict(acceptance),
-            calibration_acceptance_sha256=acceptance_sha256,
-            bracket_binding=dict(bracket_binding),
-            bracket_binding_sha256=hashlib.sha256(bracket_raw).hexdigest(),
-        )
-        authenticated_pre, authenticated_post, allowance_projection = (
-            _v2_authenticate_bracket_binding(
-                producer=producer,
-                inputs=authenticated_inputs,
-                ledger_snapshot=ledger_snapshot,
-            )
-        )
-        result[plan_id] = replace(
-            authenticated_inputs,
-            authenticated_pre_observation=authenticated_pre,
-            authenticated_post_observation=authenticated_post,
-            calibration_allowance_projection=dict(allowance_projection),
-        )
+        evidence_roots.update(roots)
+        result[plan_id] = inputs
     snapshots = {entry.producer_plan_id: entry.ledger_snapshot for entry in BLOCK5_PRODUCERS.values()}
     return result, evidence_roots, snapshots if block5 else ledger_snapshot
 
@@ -4446,9 +4485,15 @@ def mint_multi_cell_floor_artifact(
     calibration_custody_store: Path | None = None,
     d165_replay_out: Path | None = None,
     window_index: Path | None = None,
+    _parallel_authenticate: bool | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate all v2 sources, mint once, rebind, and write exclusively."""
     _refuse_custody_override_mint()
+    if _parallel_authenticate is None:
+        # Capture ownership before composition/pinset/manifest reads. Reusing a
+        # caller's earlier reads must preserve its original first-read behavior.
+        session = active_v2_authentication_session()
+        _parallel_authenticate = session is None or not session.records
 
     if window_index is not None:
         if calibration_custody_store is not None or consumption_semantics_id is not None:
@@ -4468,7 +4513,8 @@ def mint_multi_cell_floor_artifact(
                 pinset_path=pinset_path, pinset_sha256=pinset_sha256,
                 input_manifest_path=input_manifest_path, floor_path=floor_path, statement_path=statement_path,
                 project_commit=project_commit, project_tree_state=project_tree_state,
-                strict_validator=strict_validator, d165_replay_out=d165_replay_out)
+                strict_validator=strict_validator, d165_replay_out=d165_replay_out,
+                _parallel_authenticate=_parallel_authenticate)
         finally:
             BLOCK5_PRODUCERS.clear()
 
@@ -4495,6 +4541,7 @@ def mint_multi_cell_floor_artifact(
             consumption_semantics_id=consumption_semantics_id,
             calibration_custody_store=calibration_custody_store,
             d165_replay_out=d165_replay_out,
+            _parallel_authenticate=_parallel_authenticate,
         )
     try:
         with V2AuthenticationReadSession():
@@ -4510,6 +4557,7 @@ def mint_multi_cell_floor_artifact(
                 consumption_semantics_id=consumption_semantics_id,
                 calibration_custody_store=calibration_custody_store,
                 d165_replay_out=d165_replay_out,
+                _parallel_authenticate=_parallel_authenticate,
             )
     except V2AuthenticationInputError as exc:
         raise MintError(str(exc)) from exc
@@ -4528,6 +4576,7 @@ def _mint_multi_cell_floor_artifact_active(
     consumption_semantics_id: str | None = None,
     calibration_custody_store: Path | None = None,
     d165_replay_out: Path | None = None,
+    _parallel_authenticate: bool = False,
 ) -> Mapping[str, Any]:
     """Implementation body; caller guarantees one active v2 read session."""
 
@@ -4563,6 +4612,7 @@ def _mint_multi_cell_floor_artifact_active(
         consumption_semantics_id=consumption_semantics_id,
         input_manifest=input_manifest,
         calibration_custody_store=calibration_custody_store,
+        _parallel_prepare=_parallel_authenticate,
     )
     # The path has now participated in successful ledger authentication;
     # derive its last-changing commit only after that domain owner accepts it.
@@ -4785,6 +4835,8 @@ def main(argv: list[str] | None = None) -> int:
                     args.consumption_semantics_id))):
             raise MintError("window_index_conflicting_arguments")
         if args.v2_input_manifest is not None:
+            session = active_v2_authentication_session()
+            parallel_authenticate = session is None or not session.records
             with V2AuthenticationReadSession():
                 loaded = load_pinset(args.pinset, args.pinset_sha256)
                 if not isinstance(loaded, V2Pinset):
@@ -4799,9 +4851,8 @@ def main(argv: list[str] | None = None) -> int:
                     statement_path=args.single_count_out,
                     project_commit=args.project_commit,
                     project_tree_state=args.project_tree_state,
-                    strict_validator=lambda path, strict: validate_bundle(
-                        path, strict=strict
-                    ),
+                    strict_validator=validate_bundle,
+                    _parallel_authenticate=parallel_authenticate,
                     consumption_semantics_id=args.consumption_semantics_id,
                     calibration_custody_store=(
                         args.calibration_custody_store
