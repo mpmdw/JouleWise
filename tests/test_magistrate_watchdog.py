@@ -2692,7 +2692,7 @@ class ContractTests(WatchdogTestCase):
         ordered = (
             "normal gate ledger",
             "pull --ff-only",
-            "five pinned files",
+            "eight pinned files",
             "stop every background task",
             "magistrate_watchdog.py handoff-daemons",
             "claude daemon stop --any",
@@ -2708,9 +2708,12 @@ class ContractTests(WatchdogTestCase):
         for pinned in (
             "scripts/magistrate_watchdog.py",
             "scripts/install_magistrate_watchdog.sh",
+            "scripts/launch_align_r0.py",
+            "scripts/run_align_r0_launchagent.sh",
             "docs/process/MAGISTRATE_WATCHDOG.md",
             "docs/process/MAGISTRATE_RELAUNCH_PROMPT.md",
             "docs/process/NIGHT_HANDBACK.md",
+            "docs/process/R0_HEADLESS_LAUNCH.md",
         ):
             self.assertIn(pinned, watchdog)
         self.assertIn("against the merge commit on `main`", watchdog)
@@ -2723,7 +2726,7 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("FROM", handback)
         self.assertIn("plan's `measurement_root`", handback)
 
-    def test_documented_merge_commit_digest_gate_compares_all_five_files(self) -> None:
+    def test_documented_merge_commit_digest_gate_compares_all_eight_files(self) -> None:
         repo = Path(__file__).resolve().parents[1]
         watchdog = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
             encoding="utf-8"
@@ -2763,9 +2766,12 @@ class ContractTests(WatchdogTestCase):
         pinned = (
             "scripts/magistrate_watchdog.py",
             "scripts/install_magistrate_watchdog.sh",
+            "scripts/launch_align_r0.py",
+            "scripts/run_align_r0_launchagent.sh",
             "docs/process/MAGISTRATE_WATCHDOG.md",
             "docs/process/MAGISTRATE_RELAUNCH_PROMPT.md",
             "docs/process/NIGHT_HANDBACK.md",
+            "docs/process/R0_HEADLESS_LAUNCH.md",
         )
         for index, relative in enumerate(pinned):
             path = checkout / relative
