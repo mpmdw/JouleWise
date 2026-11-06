@@ -50,6 +50,7 @@ import math
 import mmap
 import os
 import resource
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -1592,6 +1593,9 @@ class ExpertStream:
     This intentionally uses ``pread`` rather than an MLX lazy safetensor: a
     cache eviction must release the only array which owns those bytes.  The
     cache and counters are host-side objects and therefore are not parameters.
+    Access is serialized because a model may be called by more than one host
+    thread.  One forward call retains at most one layer's distinct experts in
+    its lazy graph, in addition to this bounded cache.
     """
 
     def __init__(self, meta: dict, layer: int):
@@ -1605,43 +1609,83 @@ class ExpertStream:
         self.dims = int(entry["dims"])
         self.hidden = int(entry["hidden"])
         self.bytes_per_expert = 2 * (2 * self.hidden * self.dims + self.dims * self.hidden)
+        if meta.get("format") != "bf16":
+            self.close()
+            raise ValueError("expert streaming requires format bf16")
+        experts = int(entry["experts"])
+        expected_size = experts * self.bytes_per_expert
+        actual_size = os.fstat(self.fd).st_size
+        if int(entry.get("size_bytes", -1)) != expected_size or actual_size != expected_size:
+            self.close()
+            raise ValueError(f"expert stream size mismatch: layer {layer}: "
+                             f"metadata={entry.get('size_bytes')}, file={actual_size}, expected={expected_size}")
         per_layer = int(float(meta["cache_gb"]) * 2 ** 30) // max(1, len(meta["layers"]))
         self.limit = max(self.bytes_per_expert, per_layer)
         self.cache = OrderedDict()
         self.cache_bytes = 0
-        self.hits = self.misses = self.bytes_read = 0
+        self._lock = threading.RLock()
+        self.reset()
 
     def get(self, expert: int):
-        expert = int(expert)
-        if expert in self.cache:
-            self.hits += 1
-            value = self.cache.pop(expert)
+        with self._lock:
+            expert = int(expert)
+            if expert in self.cache:
+                self.hits += 1
+                value = self.cache.pop(expert)
+                self.cache[expert] = value
+                return value
+            self.misses += 1
+            raw = os.pread(self.fd, self.bytes_per_expert, expert * self.bytes_per_expert)
+            if len(raw) != self.bytes_per_expert:
+                raise IOError(f"short expert read: layer {self.layer}, expert {expert}")
+            self.bytes_read += len(raw)
+            words = np.frombuffer(raw, dtype="<u2")
+            floats = (words.astype(np.uint32) << 16).view(np.float32)
+            cut = 2 * self.hidden * self.dims
+            value = (mx.array(floats[:cut].reshape(2 * self.hidden, self.dims)).astype(mx.bfloat16),
+                     mx.array(floats[cut:].reshape(self.dims, self.hidden)).astype(mx.bfloat16))
+            mx.eval(*value)
+            while self.cache and self.cache_bytes + self.bytes_per_expert > self.limit:
+                self.cache.popitem(last=False)
+                self.cache_bytes -= self.bytes_per_expert
             self.cache[expert] = value
+            self.cache_bytes += self.bytes_per_expert
             return value
-        self.misses += 1
-        raw = os.pread(self.fd, self.bytes_per_expert, expert * self.bytes_per_expert)
-        if len(raw) != self.bytes_per_expert:
-            raise IOError(f"short expert read: layer {self.layer}, expert {expert}")
-        self.bytes_read += len(raw)
-        words = np.frombuffer(raw, dtype="<u2")
-        floats = (words.astype(np.uint32) << 16).view(np.float32)
-        cut = 2 * self.hidden * self.dims
-        value = (mx.array(floats[:cut].reshape(2 * self.hidden, self.dims)).astype(mx.bfloat16),
-                 mx.array(floats[cut:].reshape(self.dims, self.hidden)).astype(mx.bfloat16))
-        mx.eval(*value)
-        while self.cache and self.cache_bytes + self.bytes_per_expert > self.limit:
-            self.cache.popitem(last=False)
-            self.cache_bytes -= self.bytes_per_expert
-        self.cache[expert] = value
-        self.cache_bytes += self.bytes_per_expert
-        return value
+
+    def record_call(self, unique_count: int, decode: bool):
+        with self._lock:
+            bucket = self.decode if decode else self.prefill
+            bucket["calls"] += 1
+            bucket["experts"] += int(unique_count)
+
+    def reset(self):
+        with getattr(self, "_lock", threading.RLock()):
+            self.hits = self.misses = self.bytes_read = 0
+            self.prefill = {"calls": 0, "experts": 0}
+            self.decode = {"calls": 0, "experts": 0}
 
     def counters(self):
-        return {"hits": self.hits, "misses": self.misses, "bytes_read": self.bytes_read}
+        with self._lock:
+            return {"hits": self.hits, "misses": self.misses, "bytes_read": self.bytes_read,
+                    "prefill": dict(self.prefill), "decode": dict(self.decode)}
+
+    def close(self):
+        with getattr(self, "_lock", threading.RLock()):
+            fd, self.fd = getattr(self, "fd", -1), -1
+            if fd >= 0:
+                os.close(fd)
+            getattr(self, "cache", {}).clear()
+            self.cache_bytes = 0
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 class StreamingFusedSwitchGLU(nn.Module):
-    """Slow, exact-quality expert path used only by the streaming reference."""
+    """Slow expert path, equivalent to resident bf16 within the bf16 bound."""
 
     def __init__(self, dims, hidden, meta, layer):
         super().__init__()
@@ -1652,12 +1696,21 @@ class StreamingFusedSwitchGLU(nn.Module):
         k = indices.shape[-1]
         flat_x = mx.repeat(x.reshape(-1, x.shape[-1]), k, axis=0)
         flat_i = np.asarray(indices).reshape(-1)
-        rows = []
-        for pos, expert in enumerate(flat_i):
+        unique, inverse = np.unique(flat_i, return_inverse=True)
+        self.stream.record_call(len(unique), decode=shape[-2] == 1)
+        groups, positions = [], []
+        for group, expert in enumerate(unique):
+            pos = np.flatnonzero(inverse == group)
             gu, down = self.stream.get(int(expert))
-            gate, up = mx.split(mx.matmul(flat_x[pos], gu.T), 2, axis=-1)
-            rows.append(mx.matmul(silu_once(gate) * up, down.T))
-        return mx.stack(rows).reshape(*shape, -1)
+            gate, up = mx.split(mx.matmul(mx.take(flat_x, pos, axis=0), gu.T), 2, axis=-1)
+            groups.append(mx.matmul(silu_once(gate) * up, down.T))
+            positions.append(pos)
+        # Expert-major batching above is undone without materialising a full
+        # expert tensor.  Thus transient expert storage is bounded by this
+        # layer's distinct experts plus the configured LRU cache.
+        rows = mx.concatenate(groups, axis=0)
+        order = np.argsort(np.concatenate(positions))
+        return mx.take(rows, order, axis=0).reshape(*shape, -1)
 
 
 class FusedSwitchGLU(nn.Module):
@@ -2063,13 +2116,20 @@ class Model(nn.Module):
         return rt.tables
 
     def expert_streaming_counters(self):
-        """Per-layer cumulative LRU counters (empty on the default path)."""
+        """Per-layer cache and prefill/decode counters (empty by default)."""
         answer = {}
         for layer in self.layers:
             stream = getattr(layer.mlp.switch_mlp, "stream", None)
             if stream is not None:
                 answer[str(layer.layer_idx)] = stream.counters()
         return answer
+
+    def reset_expert_streaming_counters(self):
+        """Reset all streamed-expert cache and call counters."""
+        for layer in self.layers:
+            stream = getattr(layer.mlp.switch_mlp, "stream", None)
+            if stream is not None:
+                stream.reset()
 
     def sanitize(self, weights: Dict[str, mx.array]) -> Dict[str, mx.array]:
         """HF/reference names -> port names; idempotent on converted weights.

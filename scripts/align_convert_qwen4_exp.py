@@ -50,7 +50,7 @@ PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 # sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
 # default. Rebind it with every module change (the canonical test checks it
 # against the file; canonical.md records it under "Pin").
-MODULE_SHA256 = "cba1bda13b3890fc1609b118c791e207b0cd7db33a02efca59f4f1028a4efc61"
+MODULE_SHA256 = "305b31a7f334690e96f5e2cd99a9f92674b05085dbb2f8a818533311e45065f8"
 EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
 DTYPES = {"BF16": "<u2", "F32": "<f4", "F16": "<f2", "I64": "<i8"}
@@ -483,18 +483,31 @@ def expected_parameters(rules, text_config):
 
 def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=None, ngram_group_size=32,
             module_file=MODULE_FILE, shard_bytes=SHARD_BYTES, expert_streaming_cache_gb=0.0):
-    import numpy as np
-    rules = load_rules(module_file)
-    ple_storage = rules.ple_storage_for(profile, ple_storage, group_size)
     checkpoint, output = Path(checkpoint), Path(output)
     if "restricted" in checkpoint.parts or "restricted" in output.parts:
         raise ValueError("restricted paths are not conversion inputs/outputs")
     if output.exists():
         raise ValueError("output directory must not exist")
+    cache_gb = float(expert_streaming_cache_gb)
+    if cache_gb < 0:
+        raise ValueError("expert streaming cache size must not be negative")
+    streaming = cache_gb > 0
+    if streaming and profile != "bf16":
+        raise ValueError("expert streaming currently stores bf16 experts; use --profile bf16")
+    import numpy as np
+    rules = load_rules(module_file)
+    ple_storage = rules.ple_storage_for(profile, ple_storage, group_size)
     config = json.loads((checkpoint / "config.json").read_text())
     c = _text_config(config)
     expected, targs = expected_parameters(rules, c)
     inventory, tables, constants, omitted, input_files = sources(checkpoint, rules)
+    if streaming:
+        routed = [(key, entries) for key, entries in inventory.items()
+                  if ".mlp.switch_mlp." in key]
+        fused = [key for key, entries in routed if not entries or any(e[4] != "expert" for e in entries)]
+        if fused:
+            raise ValueError("expert streaming requires per-expert HF gate/up/down tensors; "
+                             f"fused HF expert layout is unsupported: {fused[0]}")
     if targs.tie_word_embeddings:
         inventory.pop("language_model.lm_head.weight", None)
     if set(inventory) != set(expected):
@@ -522,9 +535,6 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
             raise ValueError(f"conversion requires the pinned stack: {package} {version}")
     import mlx.core as mx
     output.mkdir(parents=True)
-    streaming = float(expert_streaming_cache_gb) > 0
-    if streaming and profile not in ("bf16",):
-        raise ValueError("expert streaming currently stores bf16 experts; use --profile bf16")
     dtype_name = "F32" if profile == "fp32" else "BF16"
     out_np = np.dtype("<f4") if profile == "fp32" else np.dtype("<u2")
     weight_map, quant_cfg, ngram_layers, ngram_manifest = {}, {}, {}, {}
@@ -605,7 +615,7 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
                       eos_token_id=c.get("eos_token_id"), tie_word_embeddings=bool(c.get("tie_word_embeddings")))
     if streaming:
         config_out["expert_streaming"] = dict(enabled=True, dir=".", format="bf16",
-                                               cache_gb=float(expert_streaming_cache_gb),
+                                               cache_gb=cache_gb,
                                                layers=expert_layers)
     if quant_cfg:
         first = next(iter(quant_cfg.values()))
