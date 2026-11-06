@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 import copy
 import io
 from pathlib import Path
+import re
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -12,6 +13,45 @@ from joulewise import arm_readiness as readiness, v5_qualification as q
 from scripts import harvest_v5_qualification as h
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle, fixture_replay
 from tests.test_v5_block4_x7 import bind_history_fixture, put
+
+
+_HEX_BYTES = frozenset(b"0123456789abcdefABCDEF")
+_DIGEST_MIN_HEX_CHARS = 32
+
+
+def _inside_hex_digest(body, start, end):
+    """True when body[start:end] lies inside a hex digest: a maximal hex run of
+    at least 32 characters (md5/sha1/sha256 width) holding an a-f letter."""
+
+    while start > 0 and body[start - 1] in _HEX_BYTES:
+        start -= 1
+    while end < len(body) and body[end] in _HEX_BYTES:
+        end += 1
+    run = body[start:end]
+    return len(run) >= _DIGEST_MIN_HEX_CHARS and re.search(rb"[a-fA-F]", run) is not None
+
+
+def forbidden_public_tokens(body, forbidden):
+    """Return the forbidden tokens that occur in a public file.
+
+    Only an all-decimal secret is exempted, and only where it sits inside a
+    hex digest (a sha256 can contain any six-digit string by chance).  Field
+    names keep plain substring matching, and a decimal secret embedded in a
+    longer decimal (scaled units, epoch nanoseconds) is still a leak.
+    """
+
+    found = []
+    for token in forbidden:
+        if not token.isdigit():
+            if token in body:
+                found.append(token)
+            continue
+        for match in re.finditer(b"(?=" + re.escape(token) + b")", body):
+            start = match.start()
+            if not _inside_hex_digest(body, start, start + len(token)):
+                found.append(token)
+                break
+    return found
 
 
 def verdict(status="PASS"):
@@ -141,7 +181,7 @@ class QualificationHarvestTests(unittest.TestCase):
             record = self.harvest()
         public = readiness.render_json(record) + (self.args.archive_root / "derived/s1-qualification-verdict.json").read_bytes()
         for leaked in (b"314159", b"271828", b"secret", b"gross_energy"):
-            self.assertNotIn(leaked, public)
+            self.assertEqual(forbidden_public_tokens(public, (leaked,)), [], leaked)
         self.assertEqual(output.getvalue(), "")
         self.assertIn("raw secret", (self.args.archive_root / "withheld/t0-evaluation.txt").read_text())
         with self.assertRaisesRegex(q.HarvestRefusal, "claim_plan_seal"):
@@ -170,7 +210,33 @@ class QualificationHarvestTests(unittest.TestCase):
                 body = path.read_bytes()
                 for forbidden in (b"mtime_ns", b'"size"', b"gross_energy_j", b"power_w", b"duration_s",
                                   b"314159", b"271828", b"161803"):
-                    self.assertNotIn(forbidden, body, str(path))
+                    self.assertEqual(forbidden_public_tokens(body, (forbidden,)), [], str(path))
+
+    def test_blind_scan_ignores_decimal_digits_inside_hex_digest(self):
+        digest = b"a" * 12 + b"271828" + b"f" * 46
+        self.assertEqual(len(digest), 64)
+        self.assertEqual(forbidden_public_tokens(digest + b"  SHA256SUMS\n", (b"271828",)), [])
+
+    def test_blind_scan_still_finds_decimal_leak(self):
+        body = b'{"power_w": 271828}\n'
+        self.assertEqual(forbidden_public_tokens(body, (b"271828",)), [b"271828"])
+
+    def test_blind_scan_keeps_substring_matching_for_field_names(self):
+        for body, token in ((b'{"duration_sec": 1}', b"duration_s"), (b'{"power_watts": 1}', b"power_w"),
+                            (b'{"dmtime_ns": 1}', b"mtime_ns"), (b'{"egross_energy_j": 1}', b"gross_energy_j")):
+            with self.subTest(body=body):
+                self.assertEqual(forbidden_public_tokens(body, (token,)), [token])
+
+    def test_blind_scan_finds_decimal_secret_inside_longer_decimal(self):
+        for body in (b'{"energy_mj": 314159000}', b'{"t": 1762416416314159123}', b"a314159b",
+                     b"deadbeef314159"):
+            with self.subTest(body=body):
+                self.assertEqual(forbidden_public_tokens(body, (b"314159",)), [b"314159"])
+
+    def test_blind_scan_digest_exemption_is_per_occurrence(self):
+        digest = b"a" * 12 + b"161803" + b"f" * 46
+        self.assertEqual(forbidden_public_tokens(digest + b'  x\n{"d": 161803}\n', (b"161803",)), [b"161803"])
+        self.assertEqual(forbidden_public_tokens(b"161803" * 6, (b"161803",)), [b"161803"])
 
     def test_reharvest_requires_same_bytes_and_new_archive(self):
         with mock.patch.object(h.t0_rehearsal, "evaluate_qualification", side_effect=RuntimeError("fixture fault")):
