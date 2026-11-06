@@ -1353,3 +1353,10 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+# 2026-11-06 bounded Saturday-kit task
+
+MISSING-9 (resumable Qwen4-exp canonical conversion) is implemented from the
+reviewed Saturday head `97d780d59`. The only remaining gate is the native MLX
+test sequence recorded in
+`docs/run_reports/2026-11-06-qwen4exp-resumable-conversion.md`; this note does
+not alter the generated project work-selection ordering below.

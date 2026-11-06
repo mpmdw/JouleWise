@@ -46,6 +46,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 MODULE_FILE = REPO / "joulewise" / "align" / "models" / "qwen4_exp.py"
 FORMAT = "joulewise-qwen4-exp-canonical-v2"
+JOURNAL_NAME = ".conversion-progress.json"
+JOURNAL_FORMAT = "joulewise-qwen4-exp-conversion-progress-v1"
 PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 # sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
 # default. Rebind it with every module change (the canonical test checks it
@@ -122,6 +124,28 @@ def sha256(path, chunk_bytes=HASH_CHUNK_BYTES):
 def digest_scheme(chunk_bytes=HASH_CHUNK_BYTES):
     return dict(algorithm="sha256", chunk_bytes=chunk_bytes,
                 large_files="sha256 of the concatenated sha256 digests of consecutive chunk_bytes ranges")
+
+
+def _span_digest(path, start, length, chunk_bytes=HASH_CHUNK_BYTES):
+    """Use the manifest's chunked digest scheme for a byte span."""
+    parts = [_range_digest(path, pos, min(chunk_bytes, start + length - pos))
+             for pos in range(start, start + max(length, 1), chunk_bytes)]
+    return parts[0].hex() if length <= chunk_bytes else hashlib.sha256(b"".join(parts)).hexdigest()
+
+
+def _write_journal(path, journal):
+    """Durably replace the small progress receipt after an output boundary."""
+    path, tmp = Path(path), Path(str(path) + ".tmp")
+    raw = (json.dumps(journal, indent=2, sort_keys=True) + "\n").encode()
+    with tmp.open("wb") as f:
+        f.write(raw)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _converter_sha256():
+    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 
 def tensor_header(path):
@@ -282,7 +306,8 @@ def tensor_chunks(entries, max_bytes=32 * 1024 * 1024, raw_bf16=False):
             source._mmap.close()
 
 
-def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_bytes=32 * 1024 * 1024):
+def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_bytes=32 * 1024 * 1024,
+                      *, journal=None, journal_path=None, input_digests=None):
     """Append the n-gram row shards into one record file; never concatenate.
 
     bf16 -> bf16 passes the source bits through unchanged (S's raw path); the
@@ -295,9 +320,31 @@ def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_
         raise ValueError(f"n-gram table layer {layer}: {rows_total}x{dim}, expected "
                          f"{spec.padded_vocab_size}x{spec.head_dim}")
     record = rules.ngram_record_layout(fmt, dim, group_size)["record_bytes"]
-    shards, row = [], 0
-    with (Path(output) / name).open("xb") as f:
-        for entry in entries:
+    shards, row, completed = [], 0, []
+    prior = (journal or {}).get("ple", {}).get(str(layer), [])
+    path = Path(output) / name
+    if prior:
+        if not path.is_file():
+            raise ValueError(f"resume PLE file missing: {name}")
+        for i, span in enumerate(prior):
+            expected_start = completed[-1]["byte_stop"] if completed else 0
+            if i >= len(entries) or span["tensor"] != entries[i][2] or span["byte_start"] != expected_start:
+                raise ValueError(f"resume PLE journal plan mismatch: {name}")
+            consumed = {entries[i][1].name: input_digests[entries[i][1].name]}
+            if span.get("source_digests") != consumed or span["byte_stop"] > path.stat().st_size:
+                raise ValueError(f"resume PLE source/span mismatch: {name}")
+            if _span_digest(path, span["byte_start"], span["byte_stop"] - span["byte_start"]) != span["digest"]:
+                raise ValueError(f"resume PLE digest mismatch: {name}")
+            completed.append(span)
+            row = span["row_stop"]
+        with path.open("r+b") as f:
+            f.truncate(completed[-1]["byte_stop"])
+    else:
+        # An interrupt may leave bytes before the first durable span boundary.
+        path.unlink(missing_ok=True)
+    with path.open("ab" if prior else "xb") as f:
+        shards.extend({k: v for k, v in span.items() if k not in ("digest", "source_digests")} for span in completed)
+        for entry in entries[len(completed):]:
             start = f.tell()
             for chunk in tensor_chunks([entry], max_bytes, raw_bf16=fmt == "bf16"):
                 if chunk.dtype == np.dtype("<u2"):
@@ -307,8 +354,15 @@ def write_ngram_table(rules, output, layer, entries, spec, fmt, group_size, max_
             n = entry[3][0]
             if f.tell() - start != n * record:
                 raise ValueError(f"incomplete n-gram shard: {entry[2]}")
-            shards.append(dict(input_file=entry[1].name, tensor=entry[2], row_start=row, row_stop=row + n,
-                               byte_start=start, byte_stop=f.tell()))
+            public = dict(input_file=entry[1].name, tensor=entry[2], row_start=row, row_stop=row + n,
+                          byte_start=start, byte_stop=f.tell())
+            shards.append(public)
+            f.flush()
+            os.fsync(f.fileno())
+            span = dict(public, digest=_span_digest(path, start, f.tell() - start),
+                        source_digests={entry[1].name: input_digests[entry[1].name]})
+            journal.setdefault("ple", {}).setdefault(str(layer), []).append(span)
+            _write_journal(journal_path, journal)
             row += n
         size = f.tell()
     if size != rows_total * record:
@@ -482,19 +536,23 @@ def expected_parameters(rules, text_config):
 
 
 def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=None, ngram_group_size=32,
-            module_file=MODULE_FILE, shard_bytes=SHARD_BYTES):
+            module_file=MODULE_FILE, shard_bytes=SHARD_BYTES, resume_from=None):
     import numpy as np
     rules = load_rules(module_file)
     ple_storage = rules.ple_storage_for(profile, ple_storage, group_size)
     checkpoint, output = Path(checkpoint), Path(output)
     if "restricted" in checkpoint.parts or "restricted" in output.parts:
         raise ValueError("restricted paths are not conversion inputs/outputs")
-    if output.exists():
-        raise ValueError("output directory must not exist")
+    if resume_from is not None and Path(resume_from) != output:
+        raise ValueError("resume_from must name the conversion output directory")
+    if output.exists() != (resume_from is not None):
+        raise ValueError("output directory must not exist (or pass it as resume_from)")
     config = json.loads((checkpoint / "config.json").read_text())
     c = _text_config(config)
     expected, targs = expected_parameters(rules, c)
     inventory, tables, constants, omitted, input_files = sources(checkpoint, rules)
+    inputs = hash_files([checkpoint / "config.json", *input_files])
+    input_digests = {p.name: d for p, d in inputs.items()}
     if targs.tie_word_embeddings:
         inventory.pop("language_model.lm_head.weight", None)
     if set(inventory) != set(expected):
@@ -521,7 +579,25 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
         if importlib.metadata.version(package) != version:
             raise ValueError(f"conversion requires the pinned stack: {package} {version}")
     import mlx.core as mx
-    output.mkdir(parents=True)
+    identity = dict(format=JOURNAL_FORMAT, profile=profile, group_size=group_size,
+                    ple_storage=ple_storage, ngram_group_size=ngram_group_size,
+                    shard_bytes=shard_bytes, pins=PINS,
+                    module_sha256=hashlib.sha256(Path(module_file).read_bytes()).hexdigest(),
+                    converter_sha256=_converter_sha256(), source_receipt=input_digests)
+    journal_path = output / JOURNAL_NAME
+    if resume_from is None:
+        output.mkdir(parents=True)
+        journal = dict(identity, status="running", shards={}, ple={})
+        _write_journal(journal_path, journal)
+    else:
+        if not journal_path.is_file():
+            raise ValueError("resume progress journal missing")
+        journal = json.loads(journal_path.read_text())
+        if journal.get("status") != "running":
+            raise ValueError("failed/completed conversion cannot be resumed; choose a new artifact name")
+        for key, value in identity.items():
+            if journal.get(key) != value:
+                raise ValueError(f"resume identity mismatch: {key}")
     dtype_name = "F32" if profile == "fp32" else "BF16"
     out_np = np.dtype("<f4") if profile == "fp32" else np.dtype("<u2")
     weight_map, quant_cfg, ngram_layers, ngram_manifest = {}, {}, {}, {}
@@ -547,8 +623,19 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
         current.append(item)
         size += item[4]
     shards += [current] if current else []
-    for number, shard in enumerate(shards, 1):
+    try:
+      for number, shard in enumerate(shards, 1):
         name = f"model-{number:05d}-of-{len(shards):05d}.safetensors"
+        consumed = {e[1].name: input_digests[e[1].name] for item in shard for e in item[1]}
+        done = journal["shards"].get(name)
+        if done:
+            if done.get("source_digests") != consumed or not (output / name).is_file() or sha256(output / name) != done.get("digest"):
+                raise ValueError(f"resume shard verification failed: {name}")
+            for key, entries, quant, tensors, _ in shard:
+                for tensor in tensors:
+                    weight_map[tensor] = name
+            continue
+        (output / name).unlink(missing_ok=True)
         writer = TensorFile(output / name, {t: spec for item in shard for t, spec in item[3].items()})
         for key, entries, quant, tensors, _ in shard:
             base = key[:-len("weight")]
@@ -570,9 +657,16 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
             for tensor in tensors:
                 weight_map[tensor] = name
         writer.close()
-    for layer, entries in sorted(tables.items()):
+        journal["shards"][name] = {"digest": sha256(output / name), "source_digests": consumed}
+        _write_journal(journal_path, journal)
+      for layer, entries in sorted(tables.items()):
         ngram_layers[str(layer)], ngram_manifest[str(layer)] = write_ngram_table(
-            rules, output, layer, entries, specs[layer], ple_storage, ngram_group_size)
+            rules, output, layer, entries, specs[layer], ple_storage, ngram_group_size,
+            journal=journal, journal_path=journal_path, input_digests=input_digests)
+    except Exception:
+        journal["status"] = "failed"
+        _write_journal(journal_path, journal)
+        raise
 
     config_out = dict(model_type="qwen4_exp", architectures=["Qwen4ExpForConditionalGeneration"],
                       model_file="qwen4_exp.py", jw_format=FORMAT, text_config=c,
@@ -588,8 +682,7 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
                  "chat_template.jinja", "vocab.json", "merges.txt"):
         if (checkpoint / name).is_file():
             shutil.copyfile(checkpoint / name, output / name)
-    inputs = hash_files([checkpoint / "config.json", *input_files])
-    outputs = hash_files([p for p in sorted(output.iterdir()) if p.is_file()], nofollow=True)
+    outputs = hash_files([p for p in sorted(output.iterdir()) if p.is_file() and p.name != JOURNAL_NAME], nofollow=True)
     manifest = dict(format=FORMAT, pins=PINS, profile=profile, group_size=group_size, ngram_storage=ple_storage,
                     ngram_tables=ngram_manifest, module_sha256=outputs[output / "qwen4_exp.py"],
                     norm_representation="raw HF zero-centered; runtime 1 + w",
@@ -597,6 +690,7 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
                     inputs={p.name: d for p, d in inputs.items()},
                     files={p.name: d for p, d in outputs.items()})
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    journal_path.unlink()
     # Structure check of what was just written; its bytes were hashed above.
     _verify(output, known_digests=manifest["files"])
     return manifest
@@ -614,9 +708,10 @@ def main():
                    help="q8/q4 n-gram record group size (must divide the n-gram head dim)")
     p.add_argument("--shard-gb", type=float, default=SHARD_BYTES / 2 ** 30,
                    help="maximum weight shard size in GiB (a larger single tensor gets its own shard)")
+    p.add_argument("--resume", action="store_true", help="resume the interrupted conversion in OUTPUT")
     a = p.parse_args()
     manifest = convert(a.checkpoint, a.output, a.profile, a.group_size, a.ple_storage, a.ngram_group_size,
-                       shard_bytes=int(a.shard_gb * 2 ** 30))
+                       shard_bytes=int(a.shard_gb * 2 ** 30), resume_from=a.output if a.resume else None)
     print(json.dumps(dict(output=str(a.output), payload_files=len(manifest["files"]),
                           manifest_sha256=sha256(a.output / "manifest.json"))))
 

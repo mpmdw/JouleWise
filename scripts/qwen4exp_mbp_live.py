@@ -204,13 +204,16 @@ def convert(args):
     if verify_source(source, receipt["metadata"]) != receipt["sha256"]:
         raise ValueError("source differs from download receipt")
     artifact = external(args.artifact)
-    if artifact.exists():
+    if artifact.exists() and not args.resume:
         raise ValueError("conversion output must be new; preserve failed attempts")
+    if args.resume and not artifact.exists():
+        raise ValueError("--resume requires an interrupted conversion artifact")
     need = 240e9 if args.profile == "maxfit" else 225e9
     st = os.statvfs(VOLUME)
     if st.f_bavail * st.f_frsize < need:
         raise ValueError("insufficient free external disk space for this build")
-    converter.convert(source, artifact, profile=args.profile, group_size=64, ple_storage="bf16")
+    converter.convert(source, artifact, profile=args.profile, group_size=64, ple_storage="bf16",
+                      resume_from=artifact if args.resume else None)
     # Plain sha256 sidecar lives OUTSIDE strict converter inventory. Converter
     # manifest v2 uses SHA256(concat(chunk SHA256s)) for files >256 MiB.
     sums = Path(str(args.out) + ".SHA256SUMS")
@@ -650,6 +653,7 @@ def parse_args(argv=None):
     p.add_argument("--manifest-sha256")
     p.add_argument("--source-receipt", type=Path)
     p.add_argument("--profile", choices=("maxfit", "maxfit5"), default="maxfit")
+    p.add_argument("--resume", action="store_true", help="resume an interrupted conversion; failed attempts need a new artifact name")
     p.add_argument("--contexts", type=int, nargs="+", default=list(CONTEXTS))
     p.add_argument("--decode-tokens", type=int, default=64)
     p.add_argument("--prefill-step", type=int, choices=(512, 2048), default=512)

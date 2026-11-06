@@ -1886,6 +1886,69 @@ class ValidationRound1Test(unittest.TestCase):
             t.close()
 
     # -------------------------------------------- systems LOW (converter)
+    def test_converter_resume_is_byte_identical_at_every_durable_boundary(self):
+        """Every completed weight shard and PLE source span is a restart point.
+
+        KeyboardInterrupt models a killed/interrupted process (ordinary
+        exceptions deliberately mark an attempt failed and are not resumable).
+        """
+        import shutil
+        import tempfile
+        from unittest import mock
+        fx, conv = self.fx, self.fx.converter()
+        fx.reference.build_checkpoint()
+        with tempfile.TemporaryDirectory(dir=fx.ref_dir) as tmp:
+            root = Path(tmp)
+            clean = root / "clean"
+            options = dict(profile="bf16", shard_bytes=256 * 1024)
+            snapshots = []
+            real_write = conv._write_journal
+            def observe(path, journal):
+                real_write(path, journal)
+                if journal.get("shards") or journal.get("ple"):
+                    snapshots.append(copy.deepcopy(journal))
+            with mock.patch.object(conv, "_write_journal", side_effect=observe):
+                conv.convert(fx.reference.ckpt, clean, **options)
+            expected_manifest = (clean / "manifest.json").read_bytes()
+            expected = {p.name: conv.sha256(p) for p in clean.iterdir() if p.is_file()}
+
+            # Re-run through every durable boundary. The interrupt is raised
+            # after the journal rename, exactly as a SIGINT between units.
+            for boundary in range(1, len(snapshots) + 1):
+                out, calls = root / f"resume-{boundary}", 0
+                def interrupt(path, journal):
+                    nonlocal calls
+                    real_write(path, journal)
+                    if journal.get("shards") or journal.get("ple"):
+                        calls += 1
+                        if calls == boundary:
+                            raise KeyboardInterrupt
+                with self.subTest(boundary=boundary):
+                    with mock.patch.object(conv, "_write_journal", side_effect=interrupt), self.assertRaises(KeyboardInterrupt):
+                        conv.convert(fx.reference.ckpt, out, **options)
+                    conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+                    self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
+                    self.assertEqual({p.name: conv.sha256(p) for p in out.iterdir() if p.is_file()}, expected)
+
+            # Leave an unjournalled partial PLE record span, then ensure resume
+            # truncates it and reproduces the clean artifact.
+            out = root / "resume-mid-ple"
+            real_chunks = conv.tensor_chunks
+            def interrupted_chunks(entries, *args, **kwargs):
+                iterator = real_chunks(entries, *args, **kwargs)
+                first = next(iterator)
+                if entries[0][4] == "ngram" and first.shape[0] > 1:
+                    cut = max(1, first.shape[0] // 2)
+                    yield first[:cut]
+                    raise KeyboardInterrupt
+                yield first
+                yield from iterator
+            with mock.patch.object(conv, "tensor_chunks", side_effect=interrupted_chunks), self.assertRaises(KeyboardInterrupt):
+                conv.convert(fx.reference.ckpt, out, **options)
+            conv.convert(fx.reference.ckpt, out, resume_from=out, **options)
+            self.assertEqual((out / "manifest.json").read_bytes(), expected_manifest)
+            self.assertEqual({p.name: conv.sha256(p) for p in out.iterdir() if p.is_file()}, expected)
+
     def test_r1_converter_packs_shards_and_bounds_open_files(self):
         """One safetensors file per tensor meant 1163 files for the released
         structure, every one held open by mlx-lm's load_model until the first
