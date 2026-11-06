@@ -212,12 +212,21 @@ root=Path(os.environ['WP10_FIXTURE_ROOT'])
 with (root/'launchctl.log').open('a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')
 if sys.argv[1]=='bootstrap':
     if (root/'fail-bootstrap').exists(): sys.exit(19)
+    job=plistlib.loads(Path(sys.argv[3]).read_bytes())
+    (root/'service.loaded').write_text(sys.argv[2]+'/'+job['Label'])
     # A small synthetic launchd reaps the worker and records its exit status.
     # The test does not signal a completed job's potentially recycled PID.
     subprocess.Popen([sys.executable, str(root/'fake-launchd'), sys.argv[3]],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 else:
-    if (root/'worker.pid').exists():
+    if (root/'fail-bootout').exists():
+        print('fixture bootout denied', file=sys.stderr); sys.exit(5)
+    if not (root/'service.loaded').exists():
+        print('Could not find service', file=sys.stderr); sys.exit(113)
+    assert (root/'service.loaded').read_text()==sys.argv[2]
+    (root/'bootout-signals.log').write_text((root/'signals.log').read_text() if (root/'signals.log').exists() else '')
+    (root/'service.loaded').unlink()
+    if (root/'worker.pid').exists() and not (root/'worker.done').exists():
         try: os.kill(int((root/'worker.pid').read_text()), signal.SIGTERM)
         except ProcessLookupError: pass
 ''')
@@ -241,9 +250,10 @@ root=Path(os.environ['WP10_FIXTURE_ROOT'])
 print("Now drawing from 'Battery Power'" if (root/'battery').exists() else "Now drawing from 'AC Power'")
 ''')
         self.pgrep = self.script("pgrep", '''
-import os, sys
+import json, os, sys
 from pathlib import Path
 root=Path(os.environ['WP10_FIXTURE_ROOT'])
+with (root/'pgrep.log').open('a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')
 if (root/'pgrep-error').exists() and sys.argv[-1]=='spotlightknowledged': sys.exit(2)
 print(900000001 if sys.argv[-1]=='corespotlightd' else 900000002)
 ''')
@@ -348,6 +358,19 @@ sys.exit(7 if c['case']=='error' else 0)
         stdout = next(self.custody.glob("r0-launches/*/stdout.log")).read_text()
         self.assertIn('"disk_check": "report_only"', stdout)
         self.assert_resumed()
+        self.assert_unloaded(0)
+
+    def assert_unloaded(self, exit_status):
+        self.wait_for(lambda: (self.root / "worker.done").exists())
+        self.assertEqual(str(exit_status), (self.root / "worker.done").read_text())
+        calls = [json.loads(row) for row in (self.root / "launchctl.log").read_text().splitlines()]
+        job = plistlib.loads(next(self.custody.glob("r0-launches/*/*.plist")).read_bytes())
+        self.assertEqual(["bootstrap", "bootout"], [call[0] for call in calls])
+        self.assertEqual(["bootout", f"gui/{os.getuid()}/{job['Label']}"], calls[1])
+        self.assertFalse((self.root / "service.loaded").exists())
+        snapshot = self.root / "bootout-signals.log"
+        if snapshot.exists():
+            self.assertEqual((self.root / "signals.log").read_text(), snapshot.read_text())
 
     def assert_resumed(self):
         lines = (self.root / "signals.log").read_text().splitlines()
@@ -369,6 +392,7 @@ sys.exit(7 if c['case']=='error' else 0)
         self.wait_for(lambda: launcher.read_fence(self.custody) is None)
         self.assert_resumed()
         self.assertTrue(self.watchdog().launch)
+        self.assert_unloaded(7)
 
     def test_spotlight_resumes_on_sigterm(self):
         self.config.write_text(json.dumps({"root": str(self.root), "case": "term"}))
@@ -378,6 +402,35 @@ sys.exit(7 if c['case']=='error' else 0)
         os.kill(int((self.root / "worker.pid").read_text()), signal.SIGTERM)
         self.wait_for(lambda: launcher.read_fence(self.custody) is None)
         self.assert_resumed()
+        self.assert_unloaded(143)
+
+    def test_bootout_tolerates_service_already_gone(self):
+        self.assertEqual(0, self.launch().returncode)
+        (self.root / "service.loaded").unlink()
+        self.stop(self.owner)
+        self.assert_unloaded(0)
+        self.assertIsNone(launcher.read_fence(self.custody))
+        self.assert_resumed()
+        self.assertNotIn("bootout failed", self.logs())
+
+    def test_bootout_failure_reports_error_after_spotlight_cleanup(self):
+        (self.root / "fail-bootout").touch()
+        self.assertEqual(0, self.launch().returncode)
+        self.stop(self.owner)
+        self.wait_for(lambda: (self.root / "worker.done").exists())
+        self.assertEqual("2", (self.root / "worker.done").read_text())
+        self.assertIsNone(launcher.read_fence(self.custody))
+        self.assert_resumed()
+        self.assertTrue((self.root / "service.loaded").exists())
+        self.assertIn("LaunchAgent bootout failed", self.logs())
+
+    def test_spotlight_census_scopes_exact_names_to_current_uid(self):
+        self.assertEqual(0, self.launch().returncode)
+        self.stop(self.owner)
+        self.assert_unloaded(0)
+        calls = [json.loads(row) for row in (self.root / "pgrep.log").read_text().splitlines()]
+        self.assertEqual([["-U", str(os.getuid()), "-x", name]
+                          for name in ("corespotlightd", "spotlightknowledged")], calls)
 
     def test_sigterm_during_magistrate_wait_clears_fence_without_pausing(self):
         self.assertEqual(0, self.launch().returncode)

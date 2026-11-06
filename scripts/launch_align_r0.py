@@ -192,6 +192,7 @@ def launch(args) -> None:
     token = uuid.uuid4().hex
     purpose = f"align-r0:{token}"
     label = f"com.joulewise.align-r0.{token}"
+    domain = f"gui/{os.getuid()}"
     job = root / "r0-launches" / token
     job.mkdir(parents=True)
     plist = job / f"{label}.plist"
@@ -204,7 +205,8 @@ def launch(args) -> None:
     arguments = ["/bin/bash", str(wrapper), str(Path(__file__).resolve()),
                  str(args.python_bin), str(root), purpose, str(args.magistrate_pid),
                  str(args.deadline), str(args.exit_wait_seconds), args.pmset_bin,
-                 str(args.disk_path), args.pgrep_bin, args.kill_bin, str(runner_spec)]
+                 str(args.disk_path), args.pgrep_bin, args.kill_bin, str(runner_spec),
+                 args.launchctl_bin, f"{domain}/{label}"]
     plist.write_bytes(plistlib.dumps({
         "Label": label, "ProgramArguments": arguments, "RunAtLoad": True,
         "WorkingDirectory": str(args.repo),
@@ -216,7 +218,6 @@ def launch(args) -> None:
         if current and current["deadline"] > time.time() and pid_alive(current["pid"]):
             raise ValueError("an active desk fence already exists")
         write_fence(root, {"purpose": purpose, "pid": args.magistrate_pid, "deadline": args.deadline})
-    domain = f"gui/{os.getuid()}"
     try:
         subprocess.run([args.launchctl_bin, "bootstrap", domain, str(plist)], check=True, timeout=30)
         until = time.monotonic() + args.start_wait_seconds

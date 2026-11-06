@@ -76,18 +76,22 @@ SIGKILL can defeat shell cleanup; these require an operator check.
 The uniquely labeled plist and `runner.json`, `stdout.log`, `stderr.log` live
 under `<custody>/r0-launches/<id>/`. It has `RunAtLoad` and no `KeepAlive`,
 schedule, or restart policy. It is bootstrapped directly from custody, never
-installed in `~/Library/LaunchAgents`, so it cannot run again at login. After
-inspection the lead may unload the completed label with
-`launchctl bootout gui/<uid>/<label>`; retain the custody files.
+installed in `~/Library/LaunchAgents`, so it cannot run again at login. The
+wrapper unloads its own label with `launchctl bootout gui/<uid>/<label>` after
+cleanup on every trapped exit path, tolerating an already-absent service.
+Other unload failures are logged and return a failure status. Retain the
+custody files. SIGKILL or host failure can leave the label loaded; after
+recovery the lead can repeat that same bootout command safely.
 
 After the magistrate exits, the wrapper checks `pmset -g batt` for AC power
 and reports free bytes at `--disk-path`. In accordance with ALIGN v4 ruling 6,
 66 GB is permitted: the 80 GB and offload gates belong to W1. An unreadable
 disk or indeterminate power probe refuses startup.
 
-The wrapper sends SIGSTOP to the exact PIDs found by `pgrep -x corespotlightd`
-and `pgrep -x spotlightknowledged`. Its EXIT trap attempts SIGCONT for every
-PID recorded before STOP, including partial pause failures. Normal completion,
+The wrapper sends SIGSTOP to the current user's exact-name PIDs found by
+`pgrep -U "$(id -u)" -x corespotlightd` and
+`pgrep -U "$(id -u)" -x spotlightknowledged`. Its EXIT trap attempts SIGCONT
+for every PID recorded before STOP, including partial pause failures. Normal completion,
 command failure, SIGTERM, SIGINT and SIGHUP all use that cleanup; a running
 R0 child is terminated and reaped first. Before each SIGSTOP the wrapper
 appends `<pid> <name>` to `r0-launches/<id>/spotlight-stopped`; it deletes

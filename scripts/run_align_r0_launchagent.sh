@@ -6,7 +6,7 @@ exit_wait=$7 pmset_bin=$8 disk_path=$9
 shift 9
 pgrep_bin=$1 kill_bin=$2
 shift 2
-runner_spec=$1
+runner_spec=$1 launchctl_bin=$2 service_target=$3
 # Durable record of SIGSTOPped Spotlight PIDs. SIGKILL cannot run the trap;
 # the record survives for the operator, and the watchdog's stale-fence notice
 # points at it. Removed only after every SIGCONT succeeds.
@@ -39,6 +39,18 @@ cleanup() {
         # queues a desk_fence_stale notice for Ed.
         echo "desk fence left for watchdog stale notice; see $spotlight_record" >&2
     fi
+    # Unload only our unique one-shot label, after runner/Spotlight/fence
+    # cleanup. bootout may signal us; termination traps remain ignored here.
+    local bootout_output bootout_code
+    if bootout_output=$("$launchctl_bin" bootout "$service_target" 2>&1); then
+        :
+    else
+        bootout_code=$?
+        if [[ "$bootout_code" -ne 113 || "$bootout_output" != *[Cc]ould\ not\ find\ service* ]]; then
+            echo "LaunchAgent bootout failed for $service_target: $bootout_output" >&2
+            code=2
+        fi
+    fi
     exit "$code"
 }
 trap cleanup EXIT
@@ -57,7 +69,7 @@ child_pid=""
 
 for name in corespotlightd spotlightknowledged; do
     matches=""
-    if matches=$("$pgrep_bin" -x "$name"); then
+    if matches=$("$pgrep_bin" -U "$(id -u)" -x "$name"); then
         for pid in $matches; do
             [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 ]] || { echo "invalid Spotlight pid: $pid" >&2; exit 2; }
             # Record before STOP so a partial failure still attempts every CONT.
