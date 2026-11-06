@@ -308,6 +308,7 @@ class _StreamObservation:
                         self.deadman_expired = True
                         break
                     if (thermal is not None and thermal.policy['heavy']
+                            and not thermal.holds_suppressed
                             and count % thermal.policy['chunk_tokens'] == 0
                             and (max_tokens is None or count < max_tokens)
                             and self.finish_reason not in ('stop', 'eos', 'length', 'max_tokens')):
