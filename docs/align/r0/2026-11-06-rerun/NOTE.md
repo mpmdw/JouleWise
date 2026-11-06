@@ -52,7 +52,35 @@ under mlx 0.31.2 / mlx_lm 0.31.3) gives corrupted next-token distributions on th
 and tool prompt. The pilots' agents run on exactly this kind of prompt, so the fault would reach
 generation too. The `load` check caught what it exists to catch. The likely places to look are
 the runtime's handling of this architecture (attention or linear-attention state over this
-prefix) and the 8-bit quantization; a bf16 or other-quant copy of D, or another mlx_lm version,
-would separate the two. I did not test those, and I did not change anything.
+prefix) and the 8-bit quantization. The controls below test both; nothing in the record, checkout or
+pinned venv was changed.
 
-Decision for the laptop lead (item 179 (2)): R0 is not run again from here.
+## Controls run after RUN_STATE item 181 (magistrate owns R0 decisions)
+
+Each control used the same pinned text. The other models scored the text after it was
+re-encoded with their own tokenizer.
+
+| Control | Script | Mean nats/token | 256-token bins |
+|---|---|---|---|
+| D, one token per call (recurrent decode path) | `step_diag.py` | 11.06 | 4.55 10.29 10.33 8.07 13.23 15.30 15.75 10.98 |
+| D, 16- and 64-token chunks | `step_diag.py` | 11.04, 11.03 | same shape |
+| D under mlx 0.32.4 / mlx_lm 0.32.2 (throwaway venv, deleted) | `pos_diag.py` | ≈11 | 4.54 10.30 10.32 7.92 13.09 15.30 15.77 10.99 |
+| Qwen3-30B-A3B-4bit anchor (`qwen3_moe`, pinned venv) | `anchor_control.py` | 0.37 | 1.32 0.21 0.60 0.34 0.08 0.01 0.04 0.31 |
+| Qwen3.5-122B-A10B-4bit (`qwen3_5_moe`, same hybrid linear-attention family as D) | `anchor_control.py` | 2.35 | 0.97 1.08 1.59 1.22 2.99 4.31 4.45 2.22 |
+
+- The prefill and decode paths agree. A kernel fault in only one of them is ruled out.
+- The latest mlx and mlx_lm reproduce the numbers to 0.1 nat per bin, so upgrading the runtime
+  does not cure it.
+- The mlx stack itself is sound: on the same text, the older-architecture anchor is near-perfect.
+- The 122B sibling passes the 3.0 limit, but its loss rises in the same token region where D
+  peaks (bins 5-7), on JSON that the anchor predicts at 0.01-0.08. The fault therefore looks
+  family-wide (either the `qwen3_5` family on this prompt, or mlx_lm's shared implementation of
+  it in both versions), with D's 8-bit build much the worst.
+- What is left to tell apart: (a) the D artifact, (b) mlx_lm's `qwen3_5` code in every version,
+  (c) the model itself. Doing that needs a reference implementation that is not mlx (HF
+  transformers on the upstream bf16 weights, about 54 GB) scoring these same 2,049 IDs. That is
+  off this Mac's pinned stack.
+
+**Classification under item 181:** not an infrastructure defect in our code. Every way to cure
+it changes the pinned model artifact or the pinned runtime, which is a model change. This
+escalates to Ed.
