@@ -12,7 +12,7 @@
     "anchor": 782.8175
   },
   "non_claim": true,
-  "note": "R1 must replace guesses, requalify budget, derive sizing_b5.json and disk before prepare.",
+  "note": "R1 must replace guesses and requalify budget; sizing_b5.json is derived from the R1-filled registration/w1_plan.json, never from this preview.",
   "planning_align_s": 21931.27,
   "planning_span_s": 26927,
   "planning_two_copy_GB": 37.4,

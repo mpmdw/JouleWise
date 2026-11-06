@@ -1,9 +1,11 @@
 """WP16 acceptance on pinned repo configs and synthetic inputs; no study data."""
 from collections import Counter
+from copy import deepcopy
 from contextlib import redirect_stderr
 import hashlib
 import io
 import json
+import math
 from pathlib import Path
 import subprocess
 import tempfile
@@ -13,7 +15,9 @@ from unittest.mock import patch
 from joulewise.align.apple.workload import EpisodeSpec
 from joulewise.b5 import chain
 from joulewise.schemas import BenchmarkConfig
+from joulewise.b6 import registration
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_session as session
+from scripts import validate_align_v4_w1_plan as validator
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -234,7 +238,7 @@ class KitTests(unittest.TestCase):
                 self.assertEqual(row[key], member[key])
         self.assertEqual(self.tree['module_order'], ['align-v4-qwen3-30b-a3b', 'align-v4-qwen3.8-27b'])
 
-    def test_d_identity_placeholders_and_legacy_pins_have_exact_rosters(self):
+    def test_d_identity_and_legacy_pins_have_exact_rosters(self):
         from scripts.bytes_h_session import align_unit_id
         pins = json.loads(self.files[kit.KIT / 'registration/identity_pins.json'])
         inventory = json.loads(self.files[kit.KIT / 'registration/model_artifact_inventory.json'])
@@ -245,9 +249,12 @@ class KitTests(unittest.TestCase):
             unit = pins['units'][uid]
             self.assertEqual(unit['config_paths'], [m['config_path']])
             if m['role'] == 'D':
-                self.assertIsNone(unit['model_artifact_sha256'])
-                self.assertIsNone(inventory['artifacts'][uid])
-                self.assertIn('PENDING_WP11_D_IDENTITY', unit['flags'])
+                # WP11 supplied: the folded sha of the pinned shards, no placeholder flag.
+                wp11 = kit.read_inputs(ROOT)['WP11']
+                self.assertEqual(unit['model_artifact_sha256'], wp11['identity_unit']['model_artifact_sha256'])
+                self.assertEqual(inventory['artifacts'][uid], wp11['artifact_inventory'])
+                self.assertEqual(unit['flags'], ['runtime_stack_unobserved'])
+                self.assertEqual(unit['stack_identity'], {})
             else:
                 self.assertRegex(unit['model_artifact_sha256'], r'^[0-9a-f]{64}$')
 
@@ -266,7 +273,8 @@ class KitTests(unittest.TestCase):
         self.assertFalse(verdict['instrument_ok'])
         self.assertEqual(verdict['powermode_mismatches'][0]['run_id'], plan['members'][7]['run_id'])
 
-    def test_sizing_is_only_a_provisional_preview(self):
+    def test_sizing_is_only_a_provisional_preview_until_r1_fills_the_w1_plan(self):
+        self.assertNotIn(kit.W1_PLAN, self.files)
         self.assertNotIn(kit.KIT / 'registration/sizing_b5.json', self.files)
         preview = json.loads(self.files[kit.KIT / 'registration/sizing_preview.json'])
         self.assertEqual(preview['planning_span_s'], 26927)
@@ -276,7 +284,7 @@ class KitTests(unittest.TestCase):
         self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP11.*WP18'):
+        with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18.*R0'):
             kit.generate(ROOT, check=True)
         inputs = kit.read_inputs(ROOT)
         inputs['status'] = 'ready'
@@ -290,8 +298,10 @@ class KitTests(unittest.TestCase):
     def test_each_missing_owner_is_independently_fail_closed(self):
         # Even if all other owners have supplied nonempty values, this owner
         # cannot disappear from the required-input check.
+        pending_owners = {p.split('.')[0] for p in kit.pending_inputs(kit.read_inputs(ROOT))}
+        self.assertEqual(pending_owners, {'WP18', 'R0', 'R1', 'WP15'})
         for owner, fields in kit.read_inputs(ROOT).items():
-            if not isinstance(fields, dict):
+            if not isinstance(fields, dict) or owner not in pending_owners:
                 continue
             candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
                          if isinstance(v, dict)}
@@ -367,15 +377,13 @@ class FitRuleTests(unittest.TestCase):
 
 
 def ready_inputs(i_d=300.0, tail=20.0):
-    """Synthetic, fully supplied inputs (no model, no study data)."""
+    """Synthetic, fully supplied inputs (no model, no study data); WP11 is the committed one."""
     t_dead = kit.l1_t_dead(i_d, tail)
     policy = {'sensors': {'s_fast': 'TC0P', 's_slow': 'TG0P', 'fan_keys': [], 'r0_sha256': 'a' * 64},
               'delta_fast_c': 8.0, 'delta_slow_c': 1.5, 'turn_cap_s': 120, 'chunk_tokens': 512,
               'heavy': True, 'per_turn': True}
     inputs = {
-        'WP11': {'identity_unit': {'model_source': kit.D_SOURCE, 'model_revision': kit.D_REVISION,
-                                   'model_artifact_sha256': 'b' * 64},
-                 'artifact_inventory': {'files': ['x']}, 'local_file_verification': {'ok': True}},
+        'WP11': deepcopy(kit.read_inputs(ROOT)['WP11']),
         'WP18': {'X': {'max_turns': 12, 'token_fixture_sha256': 'c' * 64},
                  'Y': {'max_turns': 10, 'token_fixture_sha256': 'd' * 64}},
         'R0': {'reasoning_effort': 'xhigh'},
@@ -439,15 +447,28 @@ class SessionParameterTests(unittest.TestCase):
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP11'):
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18'):
+                session.prepare(ROOT, target)
+            prepare.assert_not_called()
+            self.assertFalse(target.exists())
+
+    def test_v4_prepare_with_ready_inputs_refuses_on_missing_r1_sizing_before_shared_prepare(self):
+        inputs, slots = ready_inputs()
+        with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare, \
+                patch.object(kit, 'read_inputs', return_value=inputs), \
+                patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'build_files', return_value={}):
+            target = Path(tmp) / 'new-session'
+            with self.assertRaisesRegex(ValueError, r'BLOCKED: .*sizing_b5\.json is not derivable yet.*'
+                                                    r'FINAL-DESIGN B8.*w1_plan\.json'):
                 session.prepare(ROOT, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
 
     def test_v4_install_refuses_before_shared_installer(self):
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP11'):
-                session.install('synthetic-session')
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18'):
+                session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
 
     def test_v4_install_reads_measurement_r1_slots_and_refuses_powermode_mismatch(self):
@@ -459,15 +480,18 @@ class SessionParameterTests(unittest.TestCase):
             (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
             (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': 2}))
             seen = []
+            passing = lambda config: {'status': 'pass', 'offloads': []}
             with patch.object(pilot.h, 'read', return_value={'measurement_root': str(measurement)}), \
                     patch.object(kit, 'read_inputs', return_value={}), \
-                    patch.object(kit, 'require_ready', side_effect=lambda i, s: seen.append(s)), \
+                    patch.object(kit, 'require_w1_ready', side_effect=seen.append), \
+                    patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
+                    patch.object(pilot.h, 'write'), \
                     patch.object(pilot, 'install') as install:
                 with self.assertRaisesRegex(ValueError, 'AC powermode mismatch'):
-                    session.install('synthetic-session', observe_powermode=lambda: 0)
+                    session.install('synthetic-session', observe_powermode=lambda: 0, disk_gate=passing)
                 install.assert_not_called()
-                self.assertEqual(seen, [{'ac_powermode': 2}])
-                session.install('synthetic-session', observe_powermode=lambda: 2)
+                self.assertEqual(seen, [str(measurement)])
+                session.install('synthetic-session', observe_powermode=lambda: 2, disk_gate=passing)
                 install.assert_called_once()
 
     def test_every_member_spec_runs_its_roster_task_pair(self):
@@ -477,6 +501,276 @@ class SessionParameterTests(unittest.TestCase):
             config = json.loads(files[Path(member['config_path'])])
             spec = json.loads(config['workload_profile']['prompt_text'])
             self.assertEqual(spec['task_kwargs']['task_pair'], member['task_pair'], member['run_id'])
+
+
+def planning_member_s(member):
+    """Amendment-1 planning member seconds (anchors 3131.27/4, D 1800, G 1150, S 850)."""
+    role = member['role']
+    return 1800 if role == 'D' else 3131.27 / 4 if role == 'anchor' else 1150 if role.endswith('G') else 850
+
+
+def filled_w1_plan(inputs, slots, seconds=planning_member_s, collection_plan=None):
+    """A synthetic R1-filled copy of the W1 template (validator arithmetic)."""
+    plan = validator.build_template(collection_plan)
+    block = plan['align_v4']
+    r1 = inputs['R1']
+    block.update(B_D=r1['B_D'], I_D=r1['I_D'], T_dead=r1['T_dead'], max_r1_tail_s=slots['max_r1_tail_s'],
+                 effort=inputs['R0']['reasoning_effort'], thermal_policy=deepcopy(r1['thermal_policy']),
+                 status='SYNTHETIC_FILLED')
+    for member in block['members']:
+        member['member_s'] = seconds(member)
+    align_s = math.fsum(m['member_s'] for m in block['members'])
+    span = math.ceil(block['arithmetic']['scaffold_s'] + align_s)
+    block['arithmetic'].update(align_s=align_s, programmed_span_s=span)
+    plan['window_max_s'] = 60 * math.ceil((span + validator.T0_STAGE_CAP_S + validator.PAUSE_LIMIT_S
+                                           + validator.SESSION_WAIT_BUDGET_S) / 60)
+    plan['plan_id'] = 'align-v4-w1-synthetic'
+    return plan
+
+
+class WP11IdentityTests(unittest.TestCase):
+    """W1 blocker 3: the D artifact sha in the identity pins was null."""
+
+    FOLDED = 'a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30'
+
+    def setUp(self):
+        self.wp11 = deepcopy(kit.read_inputs(ROOT)['WP11'])
+        self.pins = kit.read_d_pins(ROOT)
+
+    def test_committed_wp11_is_not_pending_and_binds_the_folded_pins(self):
+        self.assertFalse([p for p in kit.pending_inputs(kit.read_inputs(ROOT)) if p.startswith('WP11.')])
+        self.assertEqual(kit.validate_d_identity(self.wp11, self.pins), self.FOLDED)
+        self.assertEqual(self.wp11['identity_unit']['model_artifact_sha256'], self.FOLDED)
+
+    def test_kit_identity_pins_load_with_a_64_hex_d_sha(self):
+        files = kit.build_files(ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / 'identity_pins.json'
+            target.write_bytes(files[kit.KIT / 'registration/identity_pins.json'])
+            pins = registration.load_identity_pins(target)
+        d_units = [u for u in pins['units'].values() if u['model_source'] == kit.D_SOURCE]
+        self.assertEqual(len(d_units), 6)
+        self.assertEqual({u['model_artifact_sha256'] for u in d_units}, {self.FOLDED})
+        inventory = json.loads(files[kit.KIT / 'registration/model_artifact_inventory.json'])['artifacts']
+        for uid, unit in pins['units'].items():
+            if unit['model_source'] == kit.D_SOURCE:
+                self.assertEqual(sorted(f['path'] for f in inventory[uid]['inventory']),
+                                 sorted(n for n in self.pins['files'] if n.endswith('.safetensors')))
+
+    def test_a_wrong_or_partial_d_copy_is_refused(self):
+        def tamper(fn):
+            wp11 = deepcopy(self.wp11)
+            fn(wp11)
+            return wp11
+        first = 'model-00001-of-00006.safetensors'
+        cases = {
+            'shard hash': lambda w: w['artifact_inventory']['files'].update({first: '0' * 64}),
+            'missing shard': lambda w: (w['artifact_inventory']['files'].pop(first),
+                                        w['artifact_inventory']['inventory'].pop(0)),
+            'row size': lambda w: w['artifact_inventory']['inventory'][0].update(size_bytes=1),
+            'unit sha': lambda w: w['identity_unit'].update(model_artifact_sha256='f' * 64),
+            'verification sha': lambda w: w['local_file_verification'].update(folded_sha256='f' * 64),
+            'unverified': lambda w: w['local_file_verification'].update(status='pending'),
+            'root': lambda w: w['artifact_inventory'].update(root='/elsewhere'),
+            'revision': lambda w: w['identity_unit'].update(model_revision='0' * 40),
+        }
+        for name, fn in cases.items():
+            with self.subTest(name), self.assertRaises(ValueError):
+                kit.validate_d_identity(tamper(fn), self.pins)
+        pins = deepcopy(self.pins)
+        pins['files'][first]['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'HF LFS pins'):
+            kit.validate_d_identity(self.wp11, pins)
+
+    def test_require_w1_ready_checks_d_identity_before_other_pending_inputs(self):
+        inputs = kit.read_inputs(ROOT)
+        inputs['WP11']['artifact_inventory']['files']['model-00001-of-00006.safetensors'] = '0' * 64
+        with patch.object(kit, 'read_inputs', return_value=inputs), \
+                self.assertRaisesRegex(ValueError, 'HF LFS pins'):
+            kit.require_w1_ready(ROOT)
+
+
+class PendingMessageTests(unittest.TestCase):
+    """W1 blockers 4 and 5: each remaining placeholder names exactly what it waits for."""
+
+    def message(self, **remove):
+        inputs, _ = ready_inputs()
+        for owner, keys in remove.items():
+            for key in keys:
+                inputs[owner][key] = None if owner != 'WP18' else {'max_turns': None, 'token_fixture_sha256': None}
+        with self.assertRaises(ValueError) as caught:
+            kit.require_ready(inputs, {'ac_powermode': 0, 'max_r1_tail_s': 20.0})
+        return str(caught.exception)
+
+    def test_r0_effort_placeholder_says_it_waits_for_r0_to_pass(self):
+        text = self.message(R0=('reasoning_effort',))
+        self.assertIn('BLOCKED by placeholders: R0.reasoning_effort |', text)
+        self.assertIn('R0: R0.reasoning_effort stays a placeholder until R0 passes.', text)
+        self.assertNotIn('WP18:', text)
+        inputs, slots = ready_inputs()
+        inputs['R0']['reasoning_effort'] = 'high'
+        with self.assertRaisesRegex(ValueError, 'R0.reasoning_effort stays a placeholder until R0 passes'):
+            kit.require_ready(inputs, slots)
+
+    def test_wp18_placeholder_names_the_pilot7_members_turn_counts_and_fixture(self):
+        text = self.message(WP18=('X', 'Y'))
+        for needle in ('WP18.X.max_turns', 'WP18.Y.token_fixture_sha256', 'Mac-side',
+                       'align-pilot-v3-episodes-b-e25', 'seed index 16', 'align-pilot-v3-episodes-b-e18',
+                       'index 14', 'recorded pilot-7 turn count', 'never the configured 12-turn ceiling',
+                       'align_turns.jsonl', 'p7-PILOT.json', 'CHAIR ruling 9(d)'):
+            self.assertIn(needle, text)
+
+    def test_committed_kit_check_states_every_remaining_owner_reason(self):
+        with self.assertRaises(ValueError) as caught:
+            kit.generate(ROOT, check=True)
+        text = str(caught.exception)
+        self.assertNotIn('WP11', text)
+        for owner in ('WP18', 'R0', 'R1', 'WP15'):
+            self.assertIn(f'| {owner}: ' + kit.PENDING_REASONS[owner], text)
+
+
+class W1SizingTests(unittest.TestCase):
+    """W1 blocker 2: sizing_b5.json is derived from the R1-filled W1 plan."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inputs, cls.slots = ready_inputs()
+        with patch.object(kit, 'read_inputs', return_value=deepcopy(cls.inputs)), \
+                patch.object(kit, 'read_r1_slots', return_value=deepcopy(cls.slots)), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+            # D config bytes depend on the R1 inputs; bind the plan to that roster.
+            cls.collection_plan = json.loads(kit.build_files(ROOT)[kit.KIT / 'collection_plan.json'])
+        cls.plan = filled_w1_plan(cls.inputs, cls.slots, collection_plan=cls.collection_plan)
+        cls.raw = (json.dumps(cls.plan, indent=2, sort_keys=True) + '\n').encode()
+        with patch.object(kit, 'read_inputs', return_value=deepcopy(cls.inputs)), \
+                patch.object(kit, 'read_r1_slots', return_value=deepcopy(cls.slots)), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=cls.raw):
+            cls.files = kit.build_files(ROOT)
+        cls.sizing = json.loads(cls.files[kit.SIZING])
+
+    def test_kit_derives_sizing_from_the_filled_plan_with_the_design_arithmetic(self):
+        self.assertEqual(self.files[kit.W1_PLAN], self.raw)
+        sized = self.sizing['packs'][kit.PACK_ID]
+        # Amendment 1 W1 arithmetic at the planning member_s.
+        self.assertEqual(sized['programmed_span_s'], 26927)
+        self.assertEqual(sized['window_max_s'], 44640)
+        self.assertAlmostEqual(sized['align_s'], 21931.27, places=6)
+        self.assertEqual(sized['T_stream_max_s'], 1800)
+        self.assertTrue(sized['fits_spent_cap'])
+        self.assertEqual(round(sized['disk_derivation']['B_bytes'] / 1e9, 2), 18.71)
+        self.assertEqual(sized['estimated_footprint_bytes'], 2 * sized['disk_derivation']['B_bytes'])
+        tree = json.loads(self.files[kit.KIT / 'plan_tree.json'])
+        collected = sum(s['expected_count'] for s in tree['stage_graph'] if s['kind'] == 'campaign_collection')
+        self.assertEqual((sized['align_members'], sized['member_count']), (18, collected))
+        self.assertEqual(self.sizing['sources']['w1_plan']['sha256'], hashlib.sha256(self.raw).hexdigest())
+
+    def test_sizing_loads_through_the_prepare_and_plan_input_readers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'sizing_b5.json').write_bytes(self.files[kit.SIZING])
+            sized = registration.load_sizing(tmp)['packs'][kit.PACK_ID]
+        from joulewise.b6 import plan_inputs
+        self.assertEqual(plan_inputs.window_max_s({'programmed_span_s': {'seconds': sized['programmed_span_s']}}),
+                         sized['window_max_s'])
+        terms = sized['disk_derivation']
+        for key in ('peak_copies', 'B_bytes', 'extra_wait_peak_bytes', 'fixed_retained_bytes'):
+            self.assertIsInstance(terms[key], int)
+        self.assertEqual(plan_inputs.sizing_label({'packs': {'x': sized}}, kit.PACK_ID), 'x')
+
+    def test_invalid_filled_plan_refuses_generation(self):
+        bad = deepcopy(self.plan)
+        bad['align_v4']['members'][4]['member_s'] = 1801
+        raw = json.dumps(bad).encode()
+        with patch.object(kit, 'read_inputs', return_value=deepcopy(self.inputs)), \
+                patch.object(kit, 'read_r1_slots', return_value=deepcopy(self.slots)), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=raw), \
+                self.assertRaisesRegex(ValueError, '1,800 s spent cap'):
+            kit.build_files(ROOT)
+
+    def test_require_sizing_needs_the_plan_then_the_derived_file(self):
+        with self.assertRaisesRegex(ValueError, r'sizing_b5\.json is not derivable yet.*FINAL-DESIGN B8'):
+            kit.require_sizing(ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / kit.W1_PLAN).parent.mkdir(parents=True)
+            (Path(tmp) / kit.W1_PLAN).write_bytes(self.raw)
+            with self.assertRaisesRegex(ValueError, 'missing; regenerate'):
+                kit.require_sizing(tmp)
+            (Path(tmp) / kit.SIZING).write_bytes(self.files[kit.SIZING])
+            kit.require_sizing(tmp)
+
+
+class W1DiskGateTests(unittest.TestCase):
+    """W1 blocker 1: w1_disk_gate was never called on the W1 arm path."""
+
+    def install(self, tmp, **kwargs):
+        measurement = Path(tmp) / 'm'
+        plan = {'runtime_requirements': {'ac_powermode': 0}}
+        (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
+        (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
+        session_root = Path(tmp) / 's'
+        (session_root / 'staging').mkdir(parents=True, exist_ok=True)
+        (session_root / 'session.json').write_text(json.dumps({'measurement_root': str(measurement)}))
+        with patch.object(kit, 'require_w1_ready'), patch.object(pilot, 'install') as install:
+            try:
+                session.install(session_root, observe_powermode=lambda: 0, **kwargs)
+            finally:
+                self.called = install.called
+        return session_root
+
+    def config(self, tmp):
+        path = Path(tmp) / 'r0.json'
+        config = json.loads((ROOT / 'configs/align/v4/r0_desk.json').read_text())
+        config['offloads'] = [{'label': 'pilot10', 'inventory': '/x/pilot10.json', 'destination': '/x/pilot10'}]
+        path.write_text(json.dumps(config))
+        return path
+
+    def test_arm_without_a_disk_config_is_refused_before_the_installer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, 'W1 arm requires --w1-disk-config'):
+                self.install(tmp)
+            self.assertFalse(self.called)
+
+    def test_a_failing_gate_refuses_the_arm_and_the_real_gate_is_the_default(self):
+        seen = []
+        def failing(config):
+            seen.append(config)
+            return {'status': 'fail', 'free_bytes_after_present_weights': 70_000_000_000,
+                    'required_free_bytes_after_r0': 80_000_000_000,
+                    'offloads': [{'label': 'pilot10', 'pass': False, 'error': 'FileNotFoundError'}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, 'W1 disk gate refused the arm.*pilot10'):
+                self.install(tmp, w1_disk_config=self.config(tmp), disk_gate=failing)
+            self.assertFalse(self.called)
+            self.assertEqual(seen[0]['offloads'][0]['label'], 'pilot10')
+            # Without an injected gate the real r0_host.w1_disk_gate runs: the
+            # configured offload does not exist here, so the arm is refused.
+            with self.assertRaisesRegex(ValueError, 'W1 disk gate refused the arm'):
+                self.install(tmp, w1_disk_config=self.config(tmp))
+            self.assertFalse(self.called)
+
+    def test_a_passing_gate_is_recorded_and_the_installer_runs(self):
+        receipt = {'status': 'pass', 'purpose': 'w1_arm_gate', 'offloads': []}
+        with tempfile.TemporaryDirectory() as tmp:
+            session_root = self.install(tmp, w1_disk_config=self.config(tmp), disk_gate=lambda c: receipt)
+            self.assertTrue(self.called)
+            self.assertEqual(json.loads((session_root / 'staging/w1_disk_gate.json').read_text()), receipt)
+
+    def test_cli_install_requires_and_forwards_the_disk_config(self):
+        with patch.object(session, 'install') as install, redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                session.main(['install', '--session-root', 's'])
+            install.assert_not_called()
+        seen = {}
+        def fake(session_root, **kwargs):
+            seen.update(kwargs, session_root=session_root)
+        with patch.object(session, 'install', fake):
+            self.assertEqual(pilot.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json'],
+                                        install_fn=session.install, install_options=(
+                                            ('--w1-disk-config', dict(type=Path, required=True)),)), 0)
+        self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json')})
+        seen.clear()
+        with patch.object(session, 'install', fake):
+            self.assertEqual(session.main(['install', '--session-root', 's', '--w1-disk-config', '/c.json']), 0)
+        self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json')})
 
 
 if __name__ == '__main__':

@@ -749,6 +749,10 @@ def markdown(report):
         elif row["check"] == "disk" and "models" in row:
             lines.extend([f"Free after present weights: {row['free_bytes_after_present_weights']} bytes (R0 report-only; no free-space or offload gate).",
                           f"W1 arm gate, evaluated separately after R0: ≥{row['w1_required_free_bytes_after_r0']} bytes and configured offload hash matches.",
+                          *([f"W1 requirement now: free space would {'pass' if row['w1_requirement']['free_space_would_pass_now'] else 'FAIL'} "
+                             f"(shortfall {row['w1_requirement']['shortfall_bytes']} bytes); offloads re-hashed at arm: "
+                             f"{row['w1_requirement']['offload_labels_rehashed_at_arm']}; gate called by {row['w1_requirement']['called_by']}."]
+                            if isinstance(row.get("w1_requirement"), dict) else []),
                           f"SMC capture: {row['smc_step_budget']['capture_seconds']} s; journal estimate: {row['smc_step_budget']['journal_bytes_estimate']} bytes.",
                           "", "| Model | Observed bytes | Design download bytes | Difference |", "|---|---|---|---|"])
             lines.extend(f"| {tag} | {m['bytes']} | {m['design_download_bytes']} | {m['difference_bytes']} |"

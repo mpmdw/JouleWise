@@ -11,9 +11,13 @@ conditions), development 93 at ordinal 18, and a replay of 5 at 17. Development
 The window-plan draft's D index 101 is superseded by synthesized WP16/A1.
 Checkpointing is explicitly off for D throughout the series, superseding A1.
 
-WP11 must provide D file identities/inventory/verification; WP18 must provide
-X=b-e25/index16 and Y=b-e18/index14 historical max_turns and fixture digests.
-No configured 12-turn fallback is used for the contrast. R0 must select effort;
+WP11 (supplied) binds D's six weight shards: the R0 re-run record's governed
+model_artifact_identity, checked shard by shard against the HF LFS pins at
+815b83c0 (configs/align/v4/qwen38-27b-8bit-hf-pins.json); the folded sha256
+recomputes from the pins alone. WP18 (Mac-side) must provide X=b-e25/index16
+and Y=b-e18/index14 recorded pilot-7 turn counts and the token-id fixture
+digest. No configured 12-turn fallback is used for the contrast.
+R0.reasoning_effort stays a placeholder until R0 passes.
 R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
@@ -27,10 +31,17 @@ WP15 must wire the thermal launcher and custody for R: 5 captures its last
 The scaffold's campaign commands remain a skeleton pending that wiring.
 No synthetic sensor, reference temperature, model digest or turn count is used.
 
-Sizing_preview.json contains A1's planning guesses only. No arm-compatible
-sizing_b5.json is supplied. Use fit_roster with R1 measured cost estimates:
+Sizing_preview.json contains A1's planning guesses only. sizing_b5.json comes
+from R1 (FINAL-DESIGN B8): once registration/w1_plan.json (the R1-filled copy
+of night_plan.template.json) is committed and validates, the kit derives
+sizing_b5.json from its member_s (span, window, T_stream_max_s) and the
+pilot-3 disk law (two copies). Until then --check and prepare refuse with
+that reason. Use fit_roster with R1 measured cost estimates:
 drop only 18 first, then decrease B_D by 1024 down to 6144; otherwise return
 to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
+W1 arm (align_v4_session.py install --w1-disk-config) runs the R0 host
+w1_disk_gate: >=80 decimal GB free after R0 and every configured offload
+re-hashed; anything but pass refuses the arm.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.

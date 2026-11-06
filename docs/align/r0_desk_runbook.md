@@ -69,9 +69,14 @@ the Terminal launch example below does not satisfy that headless gate.
    Configure each W1 receipt as `{"label": "pilot10", "inventory": "/absolute/manifest.json",
    "destination": "/absolute/offload"}` in `offloads`. Labels are unique nonempty
    strings supplied by config; every configured receipt must match at W1 arm.
-   The lead's W1 arm path must call
-   `joulewise.align.r0_host.w1_disk_gate(validated_config)` after R0 and require
-   `status == "pass"`; this is a storage gate, not an arm authorization.
+   The W1 arm path calls
+   `joulewise.align.r0_host.w1_disk_gate(validated_config)` after R0 and requires
+   `status == "pass"`: `scripts/align_v4_session.py install --session-root S
+   --w1-disk-config .desk/align-r0/config.json` validates this config, runs the
+   gate before the installer, refuses on anything but pass and keeps the receipt
+   as `S/staging/w1_disk_gate.json`. This is a storage gate, not an arm
+   authorization. R0's own disk row reports the same requirement (`w1_requirement`:
+   bytes required, whether free space would pass now, offload labels re-hashed at arm).
 
 3. Start the unattended desk run after model preparation.
    Use a new record directory for every attempt; expect approximately **3–4 h

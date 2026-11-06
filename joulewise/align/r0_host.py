@@ -192,6 +192,26 @@ def inventory(root, tick=lambda: None):
     return sorted(rows, key=lambda row: row["path"])
 
 
+# The W1 arm's storage bar (FINAL-DESIGN 11; Amendment 1 R1 item 1): free bytes after
+# R0, decimal. One constant, so R0's report states exactly what w1_disk_gate enforces.
+W1_REQUIRED_FREE_BYTES = 80_000_000_000
+W1_DISK_GATE_CALLER = "scripts/align_v4_session.py install --w1-disk-config (before the installer)"
+
+
+def w1_requirement(config, free):
+    """What the W1 arm gate will require, stated in R0's report-only disk row."""
+    labels = [item["label"] for item in config.get("offloads", [])]
+    return {"gate": "joulewise.align.r0_host.w1_disk_gate", "called_by": W1_DISK_GATE_CALLER,
+            "required_free_bytes_after_r0": W1_REQUIRED_FREE_BYTES,
+            "free_bytes_now": free, "free_space_would_pass_now": free >= W1_REQUIRED_FREE_BYTES,
+            "shortfall_bytes": max(0, W1_REQUIRED_FREE_BYTES - free),
+            "offload_labels_rehashed_at_arm": labels,
+            "offloads_checked_by_r0": False,
+            "note": ("Report only. At W1 arm the gate re-reads free space (after R0) and re-hashes every "
+                     "configured offload destination against its saved inventory; any fail refuses the arm. "
+                     "prepare separately requires the sizing_b5.json two-copy footprint.")}
+
+
 def disk_census(config, pins, tick=lambda: None):
     """Report R0 storage and local model hashes; no W1 arm gates or offloads."""
     budget = step_budget(config.get("smc_step"))
@@ -208,7 +228,8 @@ def disk_census(config, pins, tick=lambda: None):
                        "identity_note": "Local hashes; revision is configured, not independently authenticated."}
     return {"status": "diagnostic", "purpose": "r0_report_only",
             "free_bytes_after_present_weights": free, "smc_step_budget": budget,
-            "w1_required_free_bytes_after_r0": 80_000_000_000,
+            "w1_required_free_bytes_after_r0": W1_REQUIRED_FREE_BYTES,
+            "w1_requirement": w1_requirement(config, free),
             "design": {"W1_bytes_per_copy": 18_710_000_000, "W1_two_copies_bytes": 37_400_000_000,
                        "D_two_copies_bytes": 52_900_000_000, "disk_figures_are_rounded_planning_estimates": True},
             "anchor": {"files": anchor_files, "bytes": sum(r["bytes"] for r in anchor_files),
@@ -239,9 +260,9 @@ def w1_disk_gate(config, tick=lambda: None):
             row.update(observed=actual, **{"pass": isinstance(expected, list) and bool(expected) and expected == actual})
         except (OSError, ValueError) as exc:
             row["error"] = f"{type(exc).__name__}: {exc}"
-    return {"status": "pass" if free >= 80_000_000_000 and all(row["pass"] for row in offloads) else "fail",
+    return {"status": "pass" if free >= W1_REQUIRED_FREE_BYTES and all(row["pass"] for row in offloads) else "fail",
             "purpose": "w1_arm_gate", "free_bytes_after_present_weights": free,
-            "required_free_bytes_after_r0": 80_000_000_000, "offloads": offloads,
+            "required_free_bytes_after_r0": W1_REQUIRED_FREE_BYTES, "offloads": offloads,
             "required_offload_labels": [row["label"] for row in offloads]}
 
 
