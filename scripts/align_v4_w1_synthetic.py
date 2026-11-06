@@ -55,7 +55,7 @@ SYN_INPUTS = {
                                           'r0_sha256': R0_SHA},
                               'delta_fast_c': 1.5, 'delta_slow_c': 1.0, 'turn_cap_s': 120,
                               'chunk_tokens': 2048, 'heavy': True, 'per_turn': True}},
-    'WP15': {'runtime_entrypoint': 'python -m joulewise run (WP14(c) registry_select)'},
+    'WP15': {'runtime_entrypoint': ['scripts/align_r1_runtime.py', '--config', 'configs/align/v4/r1_runtime.json']},
 }
 
 # One of each injected event, on distinct members (ordinal -> event).

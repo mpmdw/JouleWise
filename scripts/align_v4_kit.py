@@ -119,6 +119,10 @@ def require_ready(inputs, r1_slots=None):
             raise ValueError(f'WP18.{name}.max_turns must be a recorded positive integer')
         if not valid_digest(ref.get('token_fixture_sha256')):
             raise ValueError(f'WP18.{name} requires a token fixture SHA256')
+    entry = inputs['WP15']['runtime_entrypoint']
+    if not isinstance(entry, list) or not entry or not all(isinstance(a, str) and a for a in entry):
+        # Fable LOW-3: the runtime is an argv list, never one shell string.
+        raise ValueError('WP15.runtime_entrypoint must be a non-empty argv list of strings')
     if inputs['R0']['reasoning_effort'] not in ('xhigh', 'medium', 'low'):
         raise ValueError('R0 reasoning effort must be a selected ladder rung')
     slots = inputs['R1']

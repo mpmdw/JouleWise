@@ -1,0 +1,1319 @@
+"""WP15 R1 runtime: one ALIGN v4 R1 segment per invocation.
+
+The R1 driver (``scripts/align_r1_rehearsal.py``) runs, once per segment,
+
+    <runtime argv> --r1-kind KIND --output DIR [--duration-s N] [--soak-reference FILE]
+
+and reads one JSON object from stdout (``docs/align/r1_runtime_contract.md``;
+the field table is ``r1_runtime_contract.KIND_FIELDS``).
+
+This module adds orchestration only. Every measurement goes through the
+production ALIGN paths:
+
+- model segments run ``joulewise.controller.run_benchmark`` with the ALIGN
+  episode adapter (``EpisodeRuntimeAdapter`` -> ``MlxEndpoint`` -> mlx_lm),
+  ``ThermalRegistry``/``ThermalSession`` (SMC sidecar, G0/G1/H gates and the
+  powermetrics status tap), the episode deadman, the powermetrics telemetry
+  adapter and the bundle custody writer;
+- sensor-only segments run the same ``ThermalSession`` SMC collector;
+- fields are read back from the finished bundle with the existing readers
+  (``read_episode_bundle``, ``thermal_desk.read_bundle_record`` and
+  ``native_pm_samples``, ``attribute_episode``);
+- the CPU load journal and census are ``r1_runtime_contract.LoadJournal``.
+
+The runtime writes only inside ``DIR``. Its terminal record is
+``DIR/runtime_custody.json`` (status and the SHA-256 of every other file in
+``DIR``), written last on every exit path including TERM. On the first
+TERM/INT/HUP the runtime stops work, lets the controller salvage and finalize
+an open bundle (which stops powermetrics and closes the SMC sidecar), closes
+its own collectors, writes the terminal record and exits 128 + signal; a
+watchdog forces the exit after ``TERM_TEARDOWN_S`` so the driver's 20 s grace
+is never needed.
+"""
+from __future__ import annotations
+
+import argparse
+from copy import deepcopy
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import re
+import signal
+from statistics import median
+import subprocess
+import sys
+import threading
+import time
+import traceback
+from types import SimpleNamespace
+
+from joulewise.align.apple import r1_runtime_contract as contract
+
+ROOT = Path(__file__).resolve().parents[3]
+CONFIG_SCHEMA = "joulewise.align.r1_runtime_config.v1"
+RESULT_SCHEMA = "joulewise.align.r1_runtime_result.v1"
+CUSTODY_SCHEMA = "joulewise.align.r1_runtime_custody.v1"
+SOAK_REFERENCE_SCHEMA = "joulewise.align.r1_soak_reference.v1"
+RESULT_NAME = "runtime_result.json"
+CUSTODY_NAME = "runtime_custody.json"
+# The accepted step-d attempt always owns this canonical directory (driver).
+STEP_D_SEGMENT = "step_D_prefill_10k_decode_4096"
+NS = 1_000_000_000
+TERM_TEARDOWN_S = 15.0       # forced exit, inside the driver's 20 s TERM grace
+G0_PREROLL_S = 65            # a G0 judges the slope over the preceding 60 s
+RECOVERY_CAP_S = 300         # step-d post-decode recovery observation (S4, S7)
+COOLDOWN_CAP_S = 1500        # ruling 1(c)
+PREHEAT_CAP_S = 900
+PREHEAT_MARGIN_C = 0.5
+PLANNING_FAST_CEILING_C = 150.0   # designed start states band S_slow only (ruling 6)
+DEADMAN_FACTOR = 1.13544
+MEMBER_CAP_S = 1800
+BAND_FLOOR_C = 1.0           # FD 2.6: delta_k = max(1.0 C, 3 SD_k)
+EXIT_REFUSED, EXIT_FAILED = 2, 3
+PMSET_BATT = ("/usr/bin/pmset", "-g", "batt")
+STEP_TASK_FACTORY = "joulewise.align.apple.r1_runtime:step_task"
+SYNTHETIC_TASK_FACTORY = "tests.align.w1_synthetic:make_task"
+MODEL_KINDS = ("step-30b", "step-d", "x-g", "d-4bit", *contract.GATED_D_KINDS,
+               *contract.PLANNING_KINDS, *contract.HIGH_POWER_KINDS)
+# Ruling 4(b): the drain rate is reported under D and under the 30B.
+BATTERY_DRAIN_KINDS = ("step-30b", "step-d", *contract.GATED_D_KINDS)
+
+
+class Refused(RuntimeError):
+    """Fail closed: an input is pending or invalid (exit 2)."""
+
+
+class RuntimeFailure(RuntimeError):
+    """The segment ran but cannot supply its contract fields (exit 3)."""
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def resolve(path):
+    path = Path(path)
+    return path if path.is_absolute() else ROOT / path
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _finite(value):
+    return type(value) in (int, float) and math.isfinite(value)
+
+
+def _pending(value):
+    return value is None or (isinstance(value, str) and value.startswith("PENDING"))
+
+
+# --------------------------------------------------------------------------
+# Inputs
+# --------------------------------------------------------------------------
+def load_config(path):
+    raw = Path(path).read_bytes()
+    config = json.loads(raw)
+    if not isinstance(config, dict) or config.get("schema") != CONFIG_SCHEMA:
+        raise Refused(f"r1 runtime config {path} is not {CONFIG_SCHEMA}")
+    if config.get("backend") not in ("production", "synthetic"):
+        raise Refused("r1 runtime config backend must be production or synthetic")
+    for key in ("d_spam", "d_bank", "model_30b", "x_g"):
+        if not isinstance(config.get("templates", {}).get(key), str):
+            raise Refused(f"r1 runtime config templates.{key} must name a kit config")
+    return config, hashlib.sha256(raw).hexdigest()
+
+
+def sensors_policy(config):
+    from joulewise.align.apple.thermal import validate_policy
+    value = config.get("sensors")
+    if _pending(value):
+        raise Refused("r1 runtime config sensors are PENDING R0 (SMC key selection)")
+    try:
+        return validate_policy(value)
+    except ValueError as error:
+        raise Refused(f"r1 runtime config sensors: {error}") from error
+
+
+def read_soak_reference(path):
+    if path is None:
+        return None
+    try:
+        value = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as error:
+        raise Refused(f"--soak-reference {path} is unreadable: {error}") from error
+    if not isinstance(value, dict) or value.get("schema") != SOAK_REFERENCE_SCHEMA:
+        raise Refused(f"--soak-reference {path} is not {SOAK_REFERENCE_SCHEMA}")
+    return value
+
+
+def reference_c(soak, sensors):
+    """The soak reference R for the two gate keys (driver: last 1,200 s mean)."""
+    try:
+        values = {role: float(soak["sensors_c"][sensors[role]]) for role in ("s_fast", "s_slow")}
+    except (KeyError, TypeError, ValueError) as error:
+        raise Refused(f"soak reference lacks gate key {error}") from error
+    if not all(math.isfinite(v) for v in values.values()):
+        raise Refused("soak reference values must be finite")
+    return {"fast_c": values["s_fast"], "slow_c": values["s_slow"]}
+
+
+def bands_c(soak, sensors):
+    """FD 2.6 / slot S5: delta_k = max(1.0 C, 3 x the detrended soak SD of key k)."""
+    out = {}
+    for role, name in (("s_fast", "delta_fast_c"), ("s_slow", "delta_slow_c")):
+        try:
+            sd = float(soak["detrended"][sensors[role]]["detrended_sd_c"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise Refused(f"soak reference lacks the detrended SD of {sensors[role]}") from error
+        if not math.isfinite(sd) or sd < 0:
+            raise Refused("soak detrended SD must be finite and non-negative")
+        out[name] = max(BAND_FLOOR_C, 3.0 * sd)
+    return out
+
+
+def gate_policy(sensors, bands, *, turn_cap_s, chunk_tokens, heavy, per_turn):
+    from joulewise.align.apple.thermal_gates import validate_gate_policy
+    return validate_gate_policy({
+        "sensors": sensors, "delta_fast_c": bands["delta_fast_c"], "delta_slow_c": bands["delta_slow_c"],
+        "turn_cap_s": turn_cap_s, "chunk_tokens": chunk_tokens, "heavy": heavy, "per_turn": per_turn,
+        # Every R1 member captures its own reference at warmup (no W1 custody chain).
+        "window_reference": {"role": "capture"}})
+
+
+def read_template(path):
+    config = json.loads(resolve(path).read_text())
+    spec = json.loads(config["workload_profile"]["prompt_text"])
+    return config, spec
+
+
+def member_config(template, spec, *, run_id, kind):
+    """A non-claim R1 member from a kit config: no launch lineage, R1 tags."""
+    config = deepcopy(template)
+    config["run_id"] = run_id
+    config["hardware_target"]["notes"] = "ALIGN v4 R1 rehearsal member (non-claim qualification)."
+    model = "d" if config["model"].get("family") == "qwen3_5" else "30b"
+    config["run_metadata"]["tags"] = ["align-v4-r1", "non-claim", "align", "align_episode",
+                                      "align-r1-kind=" + kind, "align-r1-model=" + model]
+    spec = dict(spec)
+    spec.pop("max_episode_seconds", None)
+    config["workload_profile"]["prompt_text"] = canonical(spec)
+    return config
+
+
+def require_effort(spec, label):
+    effort = (spec.get("chat_template_kwargs") or {}).get("reasoning_effort", "absent")
+    if spec.get("chat_template_kwargs") is not None and _pending(effort):
+        raise Refused(f"{label} template carries a PENDING R0 reasoning_effort; regenerate the kit after R0")
+
+
+# --------------------------------------------------------------------------
+# The planning-turn step task (10k fed prefill + seeded decode, one turn)
+# --------------------------------------------------------------------------
+class StepTask:
+    """Deterministic long-prefill single-turn task for the R1 step tests.
+
+    No tools and no score: the episode is one model call whose fed prefill is
+    the system prompt (about ``prefill_chars`` characters) and whose decode
+    is capped by the spec's ``max_tokens``. The realized token counts are
+    read back from the bundle.
+    """
+    scratchpad_tags = ("<think>", "</think>")
+
+    def __init__(self, prefill_chars=40000, task_pair="r1/planning_turn_step"):
+        if type(prefill_chars) is not int or prefill_chars <= 0:
+            raise ValueError("prefill_chars must be a positive integer")
+        self.prefill_chars = prefill_chars
+        self.task_pair = task_pair
+        self.flags = []
+        self.calls = []
+        self.give_hint = None
+        self.evaluation_outputs = {}
+
+    def reset(self, seed):
+        self.seed = seed
+        self.calls = []
+
+    def system_prompt(self, condition):
+        lines, i = ["You are auditing a plant telemetry log. Records follow.\n"], 0
+        size = len(lines[0])
+        statuses = ("ok", "warn", "check", "ok", "drift")
+        while size < self.prefill_chars:
+            line = (f"record {i:05d}: unit-{i % 97:02d} reading {((i * 7919) % 10007) / 100:.2f} "
+                    f"delta {((i * 104729) % 2003) / 1000:.3f} status {statuses[i % 5]}\n")
+            lines.append(line)
+            size += len(line)
+            i += 1
+        return "".join(lines)[:self.prefill_chars]
+
+    def user_prompt(self):
+        return ("Reason carefully and at length about every record above: group the units, "
+                "check each delta against its status, and list every inconsistency you find.")
+
+    def task_description(self):
+        return self.user_prompt()
+
+    def tool_schemas(self):
+        return []
+
+    def call_tool(self, name, arguments_json):
+        self.calls.append(name)
+        return json.dumps({"error": "the R1 step test has no tools"})
+
+    def environment_state_sha256(self):
+        return hashlib.sha256(json.dumps(self.calls).encode()).hexdigest()
+
+    def score_main(self, transcript):
+        return None
+
+    def score_side(self, transcript):
+        return None
+
+
+def step_task(prefill_chars=40000):
+    return StepTask(prefill_chars)
+
+
+def step_spec(template_spec, step, policy, *, deadman_s):
+    keep = ("schema", "enable_thinking", "sampler", "temperature", "assistant_history",
+            "chat_template_kwargs", "prompt_cache", "max_context_tokens", "hybrid_checkpoint_limit")
+    spec = {key: template_spec[key] for key in keep if key in template_spec}
+    spec.update(task_factory=STEP_TASK_FACTORY, task_kwargs={"prefill_chars": step["prefill_chars"]},
+                condition="benign", seed=step["seed"], max_turns=1, max_tokens=step["decode_tokens"],
+                mock_turns=[], deadman_s=deadman_s, thermal=policy, warmup_condition="benign")
+    return spec
+
+
+# --------------------------------------------------------------------------
+# Journals: battery (ruling 4(b)) and per-second ticks
+# --------------------------------------------------------------------------
+_BATT = re.compile(r"(\d{1,3})%;(.*)$")
+
+
+def parse_pmset_batt(stdout):
+    """``pmset -g batt`` -> {soc_pct, state, ac}; state is charging, discharging,
+    charged, not_charging or None. Only the first InternalBattery line is read."""
+    lines = (stdout or "").splitlines()
+    ac = bool(lines) and "'AC Power'" in lines[0]
+    for line in lines[1:]:
+        if "InternalBattery" not in line:
+            continue
+        match = _BATT.search(line)
+        if not match:
+            break
+        rest = match.group(2).lower()
+        state = ("not_charging" if "not charging" in rest else "discharging" if "discharging" in rest
+                 else "charging" if ("charging" in rest or "finishing charge" in rest)
+                 else "charged" if "charged" in rest else None)
+        return {"soc_pct": int(match.group(1)), "state": state, "ac": ac}
+    return {"soc_pct": None, "state": None, "ac": ac}
+
+
+def battery_summary(rows):
+    """Drain rate (%/h, positive = discharging) over non-charging samples, and
+    every observed charge resume (a non-charging sample followed by charging)."""
+    good = [r for r in rows if r.get("soc_pct") is not None]
+    drain_rows = [r for r in good if r.get("state") != "charging"]
+    drain, reason = None, None
+    if len(drain_rows) < 2 or drain_rows[-1]["epoch_s"] <= drain_rows[0]["epoch_s"]:
+        reason = "charging_throughout" if good and not drain_rows else "too_few_samples"
+    else:
+        t0 = drain_rows[0]["epoch_s"]
+        xs = [(r["epoch_s"] - t0) / 3600.0 for r in drain_rows]
+        ys = [float(r["soc_pct"]) for r in drain_rows]
+        xbar, ybar = sum(xs) / len(xs), sum(ys) / len(ys)
+        sxx = sum((x - xbar) ** 2 for x in xs)
+        drain = -sum((x - xbar) * (y - ybar) for x, y in zip(xs, ys)) / sxx
+    events = [{"epoch_s": b["epoch_s"], "soc_pct": b["soc_pct"], "prior_soc_pct": a["soc_pct"]}
+              for a, b in zip(good, good[1:]) if a.get("state") != "charging" and b.get("state") == "charging"]
+    return {"samples": len(rows), "valid_samples": len(good), "drain_pct_per_h": drain,
+            "drain_unavailable_reason": reason, "charge_resume_events": events,
+            "charge_resume_soc_pct": events[0]["soc_pct"] if events else None,
+            "first": good[0] if good else None, "last": good[-1] if good else None,
+            "resolution": "pmset -g batt integer percent; OLS over non-charging samples"}
+
+
+class BatteryJournal:
+    def __init__(self, runner, epoch, path):
+        self.runner, self.epoch, self.path = runner, epoch, Path(path)
+        self.rows = []
+        self.lock = threading.Lock()
+
+    def sample(self):
+        row = {"epoch_s": self.epoch()}
+        try:
+            result = self.runner(PMSET_BATT)
+            if result.returncode:
+                raise ValueError(f"pmset -g batt exit {result.returncode}")
+            row.update(parse_pmset_batt(result.stdout), raw=result.stdout)
+        except Exception as error:  # noqa: BLE001 - a failed read is journaled, not fatal
+            row.update(soc_pct=None, state=None, error=f"{type(error).__name__}: {error}")
+        with self.lock:
+            self.rows.append(row)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+    def summary(self):
+        with self.lock:
+            return battery_summary(list(self.rows))
+
+
+# --------------------------------------------------------------------------
+# Measurement read-back from finished bundles and journals
+# --------------------------------------------------------------------------
+def journal_rows(path):
+    """Normalized SMC sample rows (thermal_gates.sample_rows) from a journal file."""
+    from joulewise.align.apple.thermal_gates import sample_rows
+    path = Path(path)
+    if not path.is_file():
+        return []
+    return sample_rows([json.loads(line) for line in path.read_text().splitlines() if line.strip()])
+
+
+def valid_series(rows, key):
+    from joulewise.align.apple.thermal import valid_value
+    return [(r["monotonic_ns"], r["sensors"][key]) for r in rows
+            if key not in r.get("errors", {}) and valid_value(key, r.get("sensors", {}).get(key))]
+
+
+def episode_phases(ep):
+    """Ruling 1(a): deadman consumption by phase, from the episode record.
+
+    G0/G1/H from ThermalSession.record() intervals; prefill and decode from
+    each turn's start/first-token/end stamps (holds removed from decode);
+    tool from the tool-call intervals; tail = episode end past the deadline.
+    """
+    thermal = ep.hardware.get("thermal") or {}
+    intervals = thermal.get("intervals", [])
+    gates = {kind: math.fsum(r["duration_s"] for r in intervals if r["kind"] == kind) for kind in ("G0", "G1", "H")}
+    prefill = decode = tool = 0
+    for turn in ep.turns:
+        first = turn.first_token_ns if turn.first_token_ns is not None else turn.end_ns
+        holds = sum(r["end_ns"] - r["start_ns"] for r in intervals
+                    if r["kind"] == "H" and r["turn"] == turn.index)
+        prefill += max(0, first - turn.start_ns)
+        decode += max(0, turn.end_ns - first - holds)
+        tool += sum(c.end_ns - c.start_ns for c in turn.tool_calls)
+    budget = ep.hardware.get("token_budget") or {}
+    deadline = budget.get("deadline_ns")
+    tail = max(0, ep.end_ns - deadline) / NS if type(deadline) is int else 0.0
+    return {**gates, "decode": decode / NS, "prefill": prefill / NS, "tool": tool / NS, "tail": tail}
+
+
+def t_decline(pm_samples, turn):
+    """FD 2.6 slot S9: step start to the first of 2 consecutive PM samples whose
+    active-weighted GPU clock is < 0.97 x the median clock of the first 10 s of
+    decode. Returns (seconds | None, status) with status declined, no_decline
+    or unobserved (no PM clock support; never read as 'no decline')."""
+    first = turn.first_token_ns
+    if first is None:
+        return None, "unobserved"
+    rows = sorted((r for r in pm_samples if r.get("clock_mhz") is not None
+                   and r["end_ns"] > first and r["start_ns"] < turn.end_ns), key=lambda r: r["end_ns"])
+    base = [r["clock_mhz"] for r in rows if r["end_ns"] <= first + 10 * NS]
+    if not base:
+        return None, "unobserved"
+    threshold = 0.97 * median(base)
+    for a, b in zip(rows, rows[1:]):
+        if a["clock_mhz"] < threshold and b["clock_mhz"] < threshold:
+            return (a["end_ns"] - turn.start_ns) / NS, "declined"
+    return None, "no_decline"
+
+
+def step_response(rows, key, start_ns, end_ns):
+    """Rise and cooling of one key around a step: baseline (median of the 60 s
+    before the step), peak, delta T, t63 rise from step start, and tau (peak to
+    a 63 % fall). Censored values carry a flag and the observed bound."""
+    series = valid_series(rows, key)
+    before = [v for t, v in series if start_ns - 60 * NS <= t < start_ns]
+    after = [(t, v) for t, v in series if t >= start_ns]
+    if not before or not after:
+        raise RuntimeFailure(f"step response of {key}: no samples around the step")
+    base = median(before)
+    peak_t, peak = max(after, key=lambda tv: (tv[1], -tv[0]))
+    rise = peak - base
+    flags = []
+    if rise <= 0:
+        flags.append("no_rise")
+        t63 = 0.0
+    else:
+        t63 = next((t - start_ns) / NS for t, v in after if v >= base + 0.63 * rise)
+    cool = [(t, v) for t, v in after if t >= peak_t]
+    target = peak - 0.63 * rise
+    tau = next(((t - peak_t) / NS for t, v in cool if v <= target and rise > 0), None)
+    if tau is None:
+        flags.append("tau_censored")
+        tau = (cool[-1][0] - peak_t) / NS
+    return {"key": key, "baseline_c": base, "peak_c": peak, "peak_ns": peak_t, "delta_t_c": rise,
+            "t63_s": t63, "tau_s": tau, "flags": flags,
+            "observed_until_s": (after[-1][0] - start_ns) / NS, "step_end_s": (end_ns - start_ns) / NS}
+
+
+def recovery_time(rows, sensors, reference, bands, peak_ns):
+    """Peak to the first sample with both keys within delta of R (FD 2.6 S7)."""
+    fast, slow = sensors["s_fast"], sensors["s_slow"]
+    from joulewise.align.apple.thermal import valid_value
+    for r in rows:
+        if r["monotonic_ns"] < peak_ns:
+            continue
+        values = r.get("sensors", {})
+        if (valid_value(fast, values.get(fast)) and valid_value(slow, values.get(slow))
+                and values[fast] <= reference["fast_c"] + bands["delta_fast_c"]
+                and values[slow] <= reference["slow_c"] + bands["delta_slow_c"]):
+            return max(1.0, (r["monotonic_ns"] - peak_ns) / NS), False
+    last = rows[-1]["monotonic_ns"] if rows else peak_ns
+    return max(1.0, (last - peak_ns) / NS), True
+
+
+def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_censored, bands,
+                        t_decline_s, t_decline_status, d_class):
+    """Slot vocabulary S1-S9, B_D, I_D, T_dead, N_chunk, t_decline, class.
+
+    S1-S4 are the R0-picked keys' step response (S1 fast delta T, S2 fast t63,
+    S3 slow delta T, S4 slow tau); the key names and the class checks are in
+    the detail. S5 = delta_slow from the soak; S6 = the delta_slow R1 gates use
+    (the S6 tuning is the lead's after the gated runs); S7 = G_turn; S8 =
+    N_chunk; S9 = t_decline. A censored t_decline (no decline in the step)
+    is the observed decode length and N_chunk is 2,048 (A1 A3.1).
+    """
+    thermal = ep.hardware.get("thermal") or {}
+    g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
+    g0_start = g0["start_ns"] if g0 is not None else ep.start_ns
+    member_episode_s = (ep.end_ns - g0_start) / NS
+    i_d = wall_s - member_episode_s
+    first = turn.first_token_ns if turn.first_token_ns is not None else turn.end_ns
+    prefill_s = max(1e-9, (first - turn.start_ns) / NS)
+    decode_s = (turn.end_ns - first) / NS
+    if turn.decode_tokens <= 0 or decode_s <= 0:
+        raise RuntimeFailure("step-d produced no decode tokens")
+    r_decode = turn.decode_tokens / decode_s
+    r_prefill = turn.prefill_tokens / prefill_s
+    if i_d < 0 or i_d >= 1750:
+        raise RuntimeFailure(f"step-d member intercept I_D {i_d:.3f} s is outside [0, 1750)")
+    # FD 2.2: the largest multiple of 1,024 with the planning member <= 1,800 s,
+    # member wall = I_D + 1.13544 x episode wall (episode = 10k prefill + B decode).
+    budget = ((MEMBER_CAP_S - i_d) / DEADMAN_FACTOR - prefill_s) * r_decode
+    b_d = min(40960, max(0, 1024 * math.floor(budget / 1024)))
+    t_dead = (1750 - i_d) / DEADMAN_FACTOR   # L1 first term; the kit applies the tail
+    censored = t_decline_s is None
+    t_dec = decode_s if censored else t_decline_s
+    n_chunk = 2048 if censored else max(256, 256 * math.floor(0.6 * t_dec * r_decode / 256))
+    g_turn = min(300.0, 3.0 * recovery_s)
+    planning_turn_s = prefill_s + 4096 / r_decode
+    fast, slow = responses["s_fast"], responses["s_slow"]
+    slots = {"S1": fast["delta_t_c"], "S2": fast["t63_s"], "S3": slow["delta_t_c"], "S4": slow["tau_s"],
+             "S5": bands["delta_slow_c"], "S6": bands["delta_slow_c"], "S7": g_turn, "S8": float(n_chunk),
+             "S9": t_dec, "B_D": b_d, "I_D": i_d, "T_dead": t_dead, "N_chunk": n_chunk,
+             "t_decline": t_dec, "class": d_class}
+    detail = {
+        "S1_S4_keys": {"s_fast": fast["key"], "s_slow": slow["key"]},
+        "classification": {"s_fast_t63_le_5s": fast["t63_s"] <= 5.0,
+                           "s_slow_delta_t_ge_3c": slow["delta_t_c"] >= 3.0,
+                           "s_slow_tau_le_300s": slow["tau_s"] <= 300.0},
+        "responses": responses, "bands_c": bands, "S6_tuning": "pending: lead applies FD 2.6 S6 after the gated runs",
+        "recovery_s": recovery_s, "recovery_censored": recovery_censored,
+        "t_decline_status": t_decline_status, "t_decline_censored": censored,
+        "r_decode_tok_per_s": r_decode, "r_prefill_tok_per_s": r_prefill,
+        "prefill_tokens": turn.prefill_tokens, "decode_tokens": turn.decode_tokens,
+        "prefill_s": prefill_s, "decode_s": decode_s, "member_wall_s": wall_s,
+        "member_episode_s_from_g0": member_episode_s,
+        "class_rule": {"protocol": d_class, "fd_2_5_heavy": (planning_turn_s >= 0.6 * t_dec) if not censored else False,
+                       "planning_turn_s": planning_turn_s},
+        "B_D_rule": "1024 * floor(((1800 - I_D) / 1.13544 - prefill_s) * r_decode / 1024), capped at 40960",
+        "T_dead_rule": "(1750 - I_D) / 1.13544 (lead ruling L1 first term; the kit applies max_r1_tail_s)",
+    }
+    return slots, detail
+
+
+def decode_energy(ep):
+    from joulewise.align.attribution import attribute_episode
+    attributed = attribute_episode(ep, source="powermetrics", channel="gpu_power")
+    joules = math.fsum(s.energy.joules for s in attributed.segments if s.kind == "decode")
+    tokens = sum(t.decode_tokens for t in ep.turns)
+    if tokens <= 0 or not math.isfinite(joules) or joules <= 0:
+        raise RuntimeFailure("step decode energy is not positive")
+    return joules, tokens, list(attributed.flags)
+
+
+# --------------------------------------------------------------------------
+# Signals and custody
+# --------------------------------------------------------------------------
+class Termination:
+    """First TERM/INT/HUP -> SystemExit(128 + signum); later ones are ignored so
+    teardown completes; a watchdog forces the exit after ``timeout_s``."""
+
+    SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+
+    def __init__(self, timeout_s=TERM_TEARDOWN_S, exit_now=os._exit):
+        self.timeout_s, self.exit_now = timeout_s, exit_now
+        self.signum = None
+        self.previous = {}
+        self.watchdog = None
+
+    def install(self):
+        for sig in self.SIGNALS:
+            self.previous[sig] = signal.signal(sig, self.handler)
+        return self
+
+    def handler(self, signum, _frame):
+        if self.signum is not None:
+            return
+        self.signum = signum
+        for sig in self.SIGNALS:
+            signal.signal(sig, signal.SIG_IGN)
+        self.watchdog = threading.Timer(self.timeout_s, self.exit_now, args=(128 + signum,))
+        self.watchdog.daemon = True
+        self.watchdog.start()
+        raise SystemExit(128 + signum)
+
+    def restore(self):
+        for sig, handler in self.previous.items():
+            signal.signal(sig, handler)
+        if self.watchdog is not None:
+            self.watchdog.cancel()
+
+
+def write_custody(out, record):
+    """Terminal record: digests of every other file in DIR, written last, atomically."""
+    out = Path(out)
+    files = {}
+    for path in sorted(out.rglob("*")):
+        if path.is_file() and not path.is_symlink() and path.name not in (CUSTODY_NAME, CUSTODY_NAME + ".tmp"):
+            try:
+                files[path.relative_to(out).as_posix()] = sha256_file(path)
+            except OSError as error:
+                files[path.relative_to(out).as_posix()] = f"unreadable: {error}"
+    record = {**record, "schema": CUSTODY_SCHEMA, "files": files}
+    temporary = out / (CUSTODY_NAME + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, indent=2, sort_keys=True, default=str) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, out / CUSTODY_NAME)
+
+
+# --------------------------------------------------------------------------
+# Production backend
+# --------------------------------------------------------------------------
+HEATER_CODE = r"""
+import os, sys, time
+import mlx.core as mx
+duty_path, parent = sys.argv[1], os.getppid()
+a = mx.random.normal((2048, 2048))
+mx.eval(a)
+while os.getppid() == parent:
+    try:
+        duty = min(1.0, max(0.0, float(open(duty_path).read() or 0)))
+    except (OSError, ValueError):
+        duty = 0.0
+    start = time.monotonic()
+    while time.monotonic() - start < duty:
+        mx.eval(a @ a)
+    rest = 1.0 - (time.monotonic() - start)
+    if rest > 0:
+        time.sleep(rest)
+"""
+
+
+class ProcessHeater:
+    """MLX matmul load in a child process at a duty cycle (designed start states).
+
+    The child is in the runtime's process tree, so the load journal excludes
+    it. It exits by itself if the runtime dies.
+    """
+
+    def __init__(self, workdir):
+        self.duty_path = Path(workdir) / "heater_duty"
+        self.duty_path.parent.mkdir(parents=True, exist_ok=True)
+        self.duty_path.write_text("0")
+        self.process = subprocess.Popen([sys.executable, "-c", HEATER_CODE, str(self.duty_path)],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def set_duty(self, duty):
+        self.duty_path.write_text(f"{min(1.0, max(0.0, duty)):.3f}")
+
+    def stop(self):
+        if self.process.poll() is None:
+            self.process.kill()
+        self.process.wait(timeout=10)
+
+
+class ManagedSession:
+    def __init__(self, session, closers=(), on_close=None):
+        self.session, self.closers, self.on_close = session, list(closers), on_close
+
+    def close(self):
+        try:
+            if self.on_close is not None:
+                self.on_close()
+            self.session.close()
+        finally:
+            for closer in self.closers:
+                closer()
+
+
+class ProductionBackend:
+    name = "production"
+
+    def __init__(self, config):
+        from joulewise.clock import SystemClock
+        self.config = config
+        self.clock = SystemClock()
+
+    def run_cmd(self, argv):
+        return subprocess.run(list(argv), text=True, capture_output=True, check=False, timeout=10)
+
+    def epoch(self):
+        return self.clock.now()
+
+    def monotonic(self):
+        return time.monotonic()
+
+    def ticker(self, callback):
+        stop = threading.Event()
+
+        def loop():
+            due = time.monotonic()
+            while not stop.is_set():
+                due += 1.0
+                if stop.wait(max(0.0, due - time.monotonic())):
+                    return
+                try:
+                    callback()
+                except Exception:  # noqa: BLE001 - a journal error never stops the segment
+                    pass
+        thread = threading.Thread(target=loop, name="r1-runtime-ticker", daemon=True)
+        thread.start()
+
+        def halt():
+            stop.set()
+            thread.join(timeout=5)
+        return halt
+
+    def _telemetry_config(self):
+        from joulewise.schemas import BenchmarkConfig
+        template, _ = read_template(self.config["templates"]["d_spam"])
+        return BenchmarkConfig.from_mapping(template)
+
+    def session(self, policy, outputs_dir, run_id, *, pm_status=False):
+        from joulewise.align.apple.thermal_gates import PowermetricsStatus, ThermalSession
+        closers, status = [], None
+        outputs_dir = Path(outputs_dir)
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+        context = SimpleNamespace(outputs_dir=outputs_dir, bundle_path=outputs_dir, run_id=run_id)
+        try:
+            if pm_status:
+                from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+                telemetry = PowermetricsTelemetryAdapter(self.clock)
+                config = self._telemetry_config()
+                # Registered before the start: a TERM during start_sampling must
+                # still stop the (sudo) powermetrics process the adapter spawned.
+                closers.append(lambda: telemetry.stop_sampling(config, None))
+                started = telemetry.start_sampling(config, None)
+                if not started.ok:
+                    raise RuntimeFailure(f"powermetrics status sampling failed: {started.message}")
+                status = PowermetricsStatus(telemetry, self.clock)
+            session = ThermalSession(policy, self.clock, context, status_reader=status)
+            session.start()
+        except BaseException:
+            for closer in closers:
+                try:
+                    closer()
+                except Exception:  # noqa: BLE001 - the original error is the one to report
+                    pass
+            raise
+        return ManagedSession(session, closers)
+
+    def run_member(self, config_map, runs_root, hook):
+        from joulewise.align.apple.powermode import observe_ac_powermode
+        from joulewise.align.apple.thermal_gates import ThermalRegistry, ThermalSession
+        from joulewise.controller import run_benchmark
+        from joulewise.schemas import BenchmarkConfig
+
+        def factory(policy, clock, context, status_reader=None):
+            session = ThermalSession(policy, clock, context, status_reader=status_reader)
+            if hook is not None:
+                hook(session)
+            return session
+        registry = ThermalRegistry(thermal_factory=factory, powermode_reader=observe_ac_powermode)
+        bundle, summary = run_benchmark(BenchmarkConfig.from_mapping(config_map), Path(runs_root), self.clock,
+                                        registry=registry)
+        return Path(bundle), summary
+
+    def heater(self, workdir):
+        return ProcessHeater(workdir)
+
+    def pm_samples(self, bundle, ep):
+        from joulewise.align.apple.thermal_desk import native_pm_samples
+        return native_pm_samples(bundle, ep)
+
+    def close(self):
+        pass
+
+
+def make_backend(config):
+    if config["backend"] == "production":
+        return ProductionBackend(config)
+    from tests.align.r1_synthetic import SyntheticBackend  # test-only seam (synthetic configs)
+    return SyntheticBackend(config)
+
+
+# --------------------------------------------------------------------------
+# One segment
+# --------------------------------------------------------------------------
+class Segment:
+    def __init__(self, *, kind, out, duration_s, soak, config, config_sha256, backend):
+        self.kind, self.out, self.duration_s = kind, Path(out), duration_s
+        self.soak, self.config, self.config_sha256, self.backend = soak, config, config_sha256, backend
+        self.clock = backend.clock
+        self.load = contract.LoadJournal((os.getpid(),), runner=backend.run_cmd, clock=backend.monotonic)
+        self.load_errors = []
+        self.battery = BatteryJournal(backend.run_cmd, backend.epoch, self.out / "battery.jsonl")
+        self._tick_count = 0
+        self._stop_ticker = None
+        self.open_sessions = []
+        self.heaters = []
+
+    # Journals -------------------------------------------------------------
+    def _tick(self):
+        self._tick_count += 1
+        try:
+            self.load.sample()
+        except Exception as error:  # noqa: BLE001
+            self.load_errors.append(f"{type(error).__name__}: {error}")
+        if self._tick_count % int(self.config.get("battery_poll_s", 30)) == 0:
+            self.battery.sample()
+
+    def start_journals(self):
+        self.load.snapshot("start")
+        self.battery.sample()
+        self._stop_ticker = self.backend.ticker(self._tick)
+
+    def stop_journals(self, *, final=True):
+        if self._stop_ticker is not None:
+            self._stop_ticker()
+            self._stop_ticker = None
+        if final:
+            self.load.snapshot("end")
+            self.battery.sample()
+        (self.out / "load_journal.json").write_text(json.dumps(
+            {"exclude_roots": list(self.load.exclude_roots), "errors": self.load_errors, **self.load.fields()},
+            sort_keys=True) + "\n")
+
+    def close(self):
+        """Idempotent teardown of every collector this segment opened."""
+        errors = []
+        for heater in self.heaters:
+            try:
+                heater.stop()
+            except Exception as error:  # noqa: BLE001
+                errors.append(error)
+        self.heaters = []
+        while self.open_sessions:
+            try:
+                self.open_sessions.pop().close()
+            except Exception as error:  # noqa: BLE001
+                errors.append(error)
+        if self._stop_ticker is not None:
+            self.stop_journals(final=False)
+        return errors
+
+    # Inputs ---------------------------------------------------------------
+    @property
+    def sensors(self):
+        return sensors_policy(self.config)
+
+    def reference(self):
+        if self.soak is None:
+            raise Refused(f"{self.kind} needs --soak-reference")
+        return reference_c(self.soak, self.sensors)
+
+    def bands(self):
+        if self.soak is None:
+            return {"delta_fast_c": BAND_FLOOR_C, "delta_slow_c": BAND_FLOOR_C}
+        return bands_c(self.soak, self.sensors)
+
+    def step_d_result(self):
+        path = self.out.parent / STEP_D_SEGMENT / RESULT_NAME
+        try:
+            value = json.loads(path.read_text())
+        except (OSError, ValueError) as error:
+            raise Refused(f"{self.kind} needs the accepted step-d result {path}") from error
+        if value.get("kind") != "step-d" or not isinstance(value.get("slots"), dict):
+            raise Refused(f"{path} is not an accepted step-d result")
+        return value
+
+    def now_ns(self):
+        from joulewise.align.apple.sampler import monotonic_ns
+        return monotonic_ns(self.clock.stamp())
+
+    # Sensor sessions --------------------------------------------------------
+    def observe_policy(self):
+        return gate_policy(self.sensors, self.bands(), turn_cap_s=300, chunk_tokens=256,
+                           heavy=False, per_turn=False)
+
+    def open_session(self, label, *, pm_status=False, reference=None, policy=None):
+        managed = self.backend.session(policy or self.observe_policy(), self.out / label,
+                                       f"r1-{self.kind}-{label}", pm_status=pm_status)
+        self.open_sessions.append(managed)
+        if reference is not None:
+            managed.session.reference = {**reference, "source_member": "r1_soak_reference", "span_ns": None}
+        return managed
+
+    def close_session(self, managed):
+        self.open_sessions.remove(managed)
+        managed.close()
+
+    def latest(self, session, key):
+        rows = valid_series(session.rows[-5:], key)
+        return rows[-1][1] if rows else None
+
+    def idle(self, session, seconds, until=None):
+        start = self.now_ns()
+        while (self.now_ns() - start) / NS < seconds:
+            self.clock.sleep(min(1.0, seconds - (self.now_ns() - start) / NS))
+            if until is not None and until():
+                return True
+        return False
+
+    # Model members ------------------------------------------------------------
+    def run_member(self, config_map, hook=None):
+        runs = self.out / "runs"
+        runs.mkdir(exist_ok=True)
+        from joulewise.align.apple.workload import read_episode_bundle
+        start = self.clock.stamp()
+        bundle, summary = self.backend.run_member(config_map, runs, hook)
+        end = self.clock.stamp()
+        from joulewise.align.apple.sampler import monotonic_ns
+        wall_s = (monotonic_ns(end) - monotonic_ns(start)) / NS
+        if not (bundle / "outputs" / "align_episode.json").is_file():
+            raise RuntimeFailure(f"{self.kind}: member {config_map['run_id']} wrote no episode "
+                                 f"(status {summary.status.value}: {getattr(summary, 'failure_message', '')})")
+        ep = read_episode_bundle(bundle)
+        return SimpleNamespace(bundle=bundle, summary=summary, ep=ep, wall_s=wall_s,
+                               status=summary.status.value,
+                               failure_reason=getattr(summary.failure_reason, "value", None))
+
+    def reference_hook(self, reference):
+        def hook(session):
+            session.reference = {**reference, "source_member": "r1_soak_reference", "span_ns": None}
+        return hook
+
+    def planning_hook(self, reference, target_slow_c):
+        """Designed start state: preheat, then hold S_slow at R + offset with a
+        proportional MLX heater while the production G0 (reference R + offset
+        on S_slow) decides the release. The heater stops before the episode."""
+        segment, slow_key = self, self.sensors["s_slow"]
+
+        def hook(session):
+            session.reference = {"fast_c": PLANNING_FAST_CEILING_C, "slow_c": target_slow_c,
+                                 "source_member": "r1_designed_start_state", "span_ns": None,
+                                 "soak_reference_c": reference}
+            original = session.wait
+
+            def wait(kind, **kwargs):
+                if kind != "G0":
+                    return original(kind, **kwargs)
+                heater = segment.backend.heater(segment.out / "heater")
+                segment.heaters.append(heater)
+                stop = None
+                try:
+                    heater.set_duty(1.0)
+                    start = segment.now_ns()
+                    while (segment.now_ns() - start) / NS < PREHEAT_CAP_S:
+                        value = segment.latest(session, slow_key)
+                        if value is not None and value >= target_slow_c - PREHEAT_MARGIN_C:
+                            break
+                        segment.clock.sleep(1.0)
+
+                    def control():
+                        value = segment.latest(session, slow_key)
+                        heater.set_duty(0.0 if value is None else 0.5 + 0.5 * (target_slow_c - value))
+                    control()
+                    stop = segment.backend.ticker(control)
+                    return original(kind, **kwargs)
+                finally:
+                    if stop is not None:
+                        stop()
+                    heater.stop()
+                    segment.heaters.remove(heater)
+            session.wait = wait
+        return hook
+
+    def template(self, key):
+        config, spec = read_template(self.config["templates"][key])
+        return config, spec
+
+    def step_member(self, model_key, *, label, source=None):
+        template, tspec = self.template(model_key)
+        require_effort(tspec, model_key)
+        if source is not None:
+            template = deepcopy(template)
+            template["model"].update(source)
+        reference = self.reference()
+        policy = gate_policy(self.sensors, self.bands(), turn_cap_s=300, chunk_tokens=256,
+                             heavy=False, per_turn=False)
+        step = self.config["step"]
+        spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
+        config = member_config(template, spec, run_id=f"align-v4-r1-{label}", kind=self.kind)
+        return self.run_member(config, self.reference_hook(reference)), reference
+
+    # Kinds -----------------------------------------------------------------
+    def k_calibration(self):
+        from joulewise.align.r0_host import host_snapshot
+
+        def run(argv):
+            result = self.backend.run_cmd(argv)
+            if result.returncode:
+                raise RuntimeError(f"{argv[0]} exit {result.returncode}")
+            return result.stdout
+        snapshot = host_snapshot(run=run)
+        (self.out / "host_snapshot.json").write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+        return {"host": snapshot, "bracket": self.kind.split("-")[1],
+                "note": "host state at the bracket; the meter calibration itself is the R1 night plan's scaffold"}
+
+    def k_idle(self):
+        seconds = self.duration_s
+        if not _finite(seconds) or seconds <= 0:
+            raise Refused("idle needs a positive --duration-s")
+        managed = self.open_session("sensors")
+        self.idle(managed.session, seconds)
+        self.close_session(managed)
+        rows = journal_rows(self.out / "sensors" / "align_thermal.jsonl")
+        series, failed = {}, {}
+        for key in (self.sensors["s_fast"], self.sensors["s_slow"]):
+            values = valid_series(rows, key)
+            series[key] = [v for _, v in values]
+            failed[key] = len(rows) - len(values)
+        return {"sensor_series_c": series, "sensor_series_failed_reads": failed,
+                "sensor_series_note": "valid 1 Hz reads in order; a failed read is dropped, never interpolated",
+                "duration_s": seconds}
+
+    def k_idle_until_soak(self):
+        reference, bands = self.reference(), self.bands()
+        cap = self.duration_s if _finite(self.duration_s) and self.duration_s > 0 else COOLDOWN_CAP_S
+        managed = self.open_session("sensors")
+        slow = self.sensors["s_slow"]
+
+        def within():
+            value = self.latest(managed.session, slow)
+            return value is not None and abs(value - reference["slow_c"]) <= bands["delta_slow_c"]
+        released = self.idle(managed.session, cap, until=within)
+        start = None
+        curve = []
+        rows = managed.session.rows
+        self.close_session(managed)
+        for t, value in valid_series(journal_rows(self.out / "sensors" / "align_thermal.jsonl") or rows, slow):
+            start = t if start is None else start
+            curve.append([(t - start) / NS, value])
+        if not curve:
+            raise RuntimeFailure("idle-until-soak observed no valid S_slow sample")
+        return {"recovery_curve": curve, "released": released, "reference_c": reference["slow_c"],
+                "delta_slow_c": bands["delta_slow_c"], "cap_s": cap}
+
+    def k_g0_release_soak(self):
+        reference = self.reference()
+        managed = self.open_session("g0", pm_status=True, reference=reference)
+        self.idle(managed.session, G0_PREROLL_S)
+        row = managed.session.wait("G0")
+        flags = list(managed.session.flags)
+        self.close_session(managed)
+        return {"released": row["outcome"] == "released", "g0": row, "reference_c": reference["slow_c"],
+                "release_c": row["release"]["slow_c"], "flags": flags}
+
+    def k_step(self, model_key, *, label, source=None):
+        member, reference = self.step_member(model_key, label=label, source=source)
+        if member.status != "succeeded":
+            raise RuntimeFailure(f"{self.kind}: step member {member.status} ({member.failure_reason})")
+        ep = member.ep
+        if not ep.turns:
+            raise RuntimeFailure(f"{self.kind}: step member has no turn")
+        turn = ep.turns[0]
+        decline_s, decline_status = t_decline(self.backend.pm_samples(member.bundle, ep), turn)
+        joules, tokens, flags = decode_energy(ep)
+        thermal = ep.hardware.get("thermal") or {}
+        g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
+        return member, {
+            "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
+            "g0_outcome": g0["outcome"] if g0 else None, "t_decline_status": decline_status,
+            "t_decline_s": decline_s, "decode_energy_j": joules, "decode_tokens": tokens,
+            "prefill_tokens": turn.prefill_tokens, "energy_flags": flags, "episode_flags": list(ep.flags),
+            "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
+
+    def k_step_30b(self):
+        _, fields = self.k_step("model_30b", label="step-30b")
+        if fields["t_decline_status"] == "unobserved":
+            raise RuntimeFailure("step-30b: no powermetrics GPU clock support for t_decline")
+        return fields
+
+    def k_step_d(self):
+        member, fields = self.k_step("d_spam", label="step-d")
+        if fields["t_decline_status"] == "unobserved":
+            raise RuntimeFailure("step-d: no powermetrics GPU clock support for t_decline (slot S9)")
+        reference, bands, sensors = self.reference(), self.bands(), self.sensors
+        # Post-decode recovery (S4 tau, S7 G_turn), on the same monotonic clock.
+        managed = self.open_session("recovery")
+        member_rows = journal_rows(member.bundle / "outputs" / "align_thermal.jsonl")
+        peak_ns = max((t for t, _ in valid_series(member_rows, sensors["s_slow"])
+                       if t >= member.ep.start_ns), default=member.ep.start_ns)
+
+        def recovered():
+            rows = managed.session.rows
+            return bool(rows) and not recovery_time(rows[-1:], sensors, reference, bands, peak_ns)[1]
+        self.idle(managed.session, RECOVERY_CAP_S, until=recovered)
+        self.close_session(managed)
+        rows = sorted(member_rows + journal_rows(self.out / "recovery" / "align_thermal.jsonl"),
+                      key=lambda r: r["monotonic_ns"])
+        turn = member.ep.turns[0]
+        responses = {role: step_response(rows, sensors[role], member.ep.start_ns, member.ep.end_ns)
+                     for role in ("s_fast", "s_slow")}
+        recovery_s, censored = recovery_time(rows, sensors, reference, bands, responses["s_slow"]["peak_ns"])
+        slots, detail = derive_step_d_slots(
+            ep=member.ep, turn=turn, wall_s=member.wall_s, responses=responses, recovery_s=recovery_s,
+            recovery_censored=censored, bands=bands, t_decline_s=fields["t_decline_s"],
+            t_decline_status=fields["t_decline_status"], d_class=self.config.get("d_class", "heavy"))
+        return {**fields, "slots": slots, "slot_detail": detail,
+                "e_D_j_per_token": fields["decode_energy_j"] / fields["decode_tokens"]}
+
+    def k_aba_leg(self):
+        _, fields = self.k_step("d_spam", label=self.kind)
+        if fields["t_decline_status"] == "unobserved":
+            raise RuntimeFailure(f"{self.kind}: no powermetrics GPU clock support for t_decline")
+        return fields   # t_decline_s: seconds, or None for no decline (infinite)
+
+    def k_d_4bit(self):
+        source = self.config.get("d_4bit_source")
+        if _pending(source):
+            raise Refused("d-4bit: r1 runtime config d_4bit_source is not set (R0.10 did not trigger)")
+        _, fields = self.k_step("d_spam", label="d-4bit", source=source)
+        return fields
+
+    def gated_policy(self, slots, *, heavy, per_turn, chunk_tokens=256):
+        turn_cap = min(300.0, max(1.0, float(slots["S7"])))
+        return gate_policy(self.sensors, self.bands(), turn_cap_s=turn_cap, chunk_tokens=chunk_tokens,
+                           heavy=heavy, per_turn=per_turn)
+
+    def k_gated_d(self):
+        step = self.step_d_result()
+        slots = step["slots"]
+        key = "d_bank" if self.kind == "d-bank-benign-s1" else "d_spam"
+        template, tspec = self.template(key)
+        require_effort(tspec, key)
+        t_dead = float(slots["T_dead"])
+        spec = dict(tspec)
+        b_d = slots.get("B_D")
+        spec.update(deadman_s=t_dead, thermal=self.gated_policy(slots, heavy=True, per_turn=True,
+                                                                chunk_tokens=int(slots["N_chunk"])),
+                    warmup_condition="benign",
+                    max_episode_decode_tokens=(int(b_d) if type(b_d) is int and 1024 <= b_d <= 40960 else None))
+        config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
+        member = self.run_member(config)
+        from joulewise.align.apple.thermal_desk import read_bundle_record
+        record = read_bundle_record(member.bundle)
+        ep = member.ep
+        budget = ep.hardware.get("token_budget") or {}
+        x7 = any(flag.startswith("episode.deadman:") for flag in ep.flags)
+        return {"energy_j": record["turn_owned_j"], "gross_episode_j": record["gross_episode_j"],
+                "admitted_turns": len(ep.turns), "x7": x7,
+                "deadman": {"T_dead_s": budget.get("deadman_s"), "deadline_ns": budget.get("deadline_ns"),
+                            "phases_s": episode_phases(ep)},
+                "B_D": spec["max_episode_decode_tokens"], "bundle": str(member.bundle.relative_to(self.out)),
+                "member_status": member.status, "failure_reason": member.failure_reason,
+                "episode_flags": list(ep.flags), "ac_powermode": ep.hardware.get("ac_powermode")}
+
+    def k_planning(self):
+        offset = int(self.kind.rsplit("-", 1)[-1][:-1])
+        reference, bands = self.reference(), self.bands()
+        target = reference["slow_c"] + offset
+        template, tspec = self.template("d_spam")
+        require_effort(tspec, "d_spam")
+        policy = gate_policy(self.sensors, bands, turn_cap_s=300, chunk_tokens=256, heavy=False, per_turn=False)
+        step = self.config["step"]
+        spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
+        config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
+        member = self.run_member(config, self.planning_hook(reference, target))
+        from joulewise.align.apple.thermal_desk import read_bundle_record
+        record = read_bundle_record(member.bundle)
+        thermal = member.ep.hardware.get("thermal") or {}
+        g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
+        if g0 is None:
+            raise RuntimeFailure(f"{self.kind}: member has no G0 interval")
+        return {"reference_c": reference["slow_c"], "g0_release_c": g0["release"]["slow_c"],
+                "delta_slow_c": bands["delta_slow_c"], "energy_j": record["turn_owned_j"],
+                "designed_offset_c": offset, "designed_release_c": target, "g0_outcome": g0["outcome"],
+                "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
+                "episode_flags": list(member.ep.flags)}
+
+    def k_x_g(self):
+        template, tspec = self.template("x_g")
+        if type(tspec.get("max_turns")) is not int:
+            raise Refused("x-g template carries a PENDING WP18 X max_turns; regenerate the kit after WP18")
+        step = self.step_d_result()
+        spec = dict(tspec)
+        spec.update(thermal=self.gated_policy(step["slots"], heavy=False, per_turn=True), warmup_condition="benign")
+        config = member_config(template, spec, run_id="align-v4-r1-x-g", kind=self.kind)
+        member = self.run_member(config)
+        from joulewise.align.apple.thermal_desk import read_bundle_record
+        record = read_bundle_record(member.bundle)
+        return {"energy_j": record["turn_owned_j"], "admitted_turns": len(member.ep.turns),
+                "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
+                "episode_flags": list(member.ep.flags), "phases_s": episode_phases(member.ep)}
+
+    def k_harvest(self):
+        parent = self.out.parent
+        files, events = {}, []
+        for path in sorted(parent.rglob("*")):
+            if not path.is_file() or path.is_symlink() or self.out in path.parents:
+                continue
+            files[path.relative_to(parent).as_posix()] = sha256_file(path)
+            if path.name == RESULT_NAME:
+                try:
+                    battery = json.loads(path.read_text()).get("battery") or {}
+                except ValueError:
+                    continue
+                for event in battery.get("charge_resume_events", ()):
+                    events.append({**event, "segment": path.parent.relative_to(parent).as_posix()})
+        manifest = {"schema": "joulewise.align.r1_harvest_manifest.v1", "root": str(parent), "files": files}
+        raw = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+        (self.out / "harvest_manifest.json").write_bytes(raw)
+        events.sort(key=lambda e: e["epoch_s"])
+        return {"files": len(files), "manifest_sha256": hashlib.sha256(raw).hexdigest(),
+                "charge_resume_events": events,
+                "charge_resume_soc_pct": events[0]["soc_pct"] if events else None}
+
+    def dispatch(self):
+        kind = self.kind
+        if kind in ("calibration-pre", "calibration-post"):
+            return self.k_calibration()
+        if kind == "idle":
+            return self.k_idle()
+        if kind == "idle-until-soak":
+            return self.k_idle_until_soak()
+        if kind == "g0-release-soak":
+            return self.k_g0_release_soak()
+        if kind == "step-30b":
+            return self.k_step_30b()
+        if kind == "step-d":
+            return self.k_step_d()
+        if kind in contract.HIGH_POWER_KINDS:
+            return self.k_aba_leg()
+        if kind == "d-4bit":
+            return self.k_d_4bit()
+        if kind in contract.GATED_D_KINDS:
+            return self.k_gated_d()
+        if kind in contract.PLANNING_KINDS:
+            return self.k_planning()
+        if kind == "x-g":
+            return self.k_x_g()
+        if kind == "harvest":
+            return self.k_harvest()
+        raise Refused(f"unknown --r1-kind {kind!r}")
+
+    def run(self):
+        if self.kind in contract.NEEDS_SOAK_REFERENCE and self.soak is None:
+            raise Refused(f"{self.kind} needs --soak-reference")
+        if self.kind not in ("calibration-pre", "calibration-post", "harvest"):
+            self.sensors  # refuse a PENDING R0 sensor selection before any host command
+        self.start_journals()
+        fields = self.dispatch()
+        self.stop_journals()
+        battery = self.battery.summary()
+        result = {"schema": RESULT_SCHEMA, "kind": self.kind, "backend": self.backend.name,
+                  "config_sha256": self.config_sha256, **fields, **self.load.fields(),
+                  "load_journal_errors": self.load_errors, "battery": battery}
+        if self.kind in BATTERY_DRAIN_KINDS:
+            result["battery_drain_pct_per_h"] = battery["drain_pct_per_h"]
+        missing = contract.missing_fields(self.kind, result, quiet=True,
+                                          contract_key="idle_soak" if self.kind == "idle" else None)
+        if missing:
+            raise RuntimeFailure(f"{self.kind}: runtime result misses contract fields {missing}")
+        return result
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--config", type=Path, required=True, help="R1 runtime config (repo-relative or absolute)")
+    parser.add_argument("--r1-kind", required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--duration-s", type=float)
+    parser.add_argument("--soak-reference", type=Path)
+    return parser.parse_args(argv)
+
+
+def main(argv=None, *, backend_factory=None, stdout=None):
+    args = parse_args(argv)
+    term = Termination().install()
+    out = Path(args.output).resolve()
+    # Every print below this point (controller, adapters, mlx) goes to stderr;
+    # stdout carries exactly one JSON object for the driver.
+    own_stdout = stdout is None
+    stdout = os.fdopen(os.dup(1), "w") if own_stdout else stdout
+    saved_fd = os.dup(1)
+    os.dup2(2, 1)
+    previous_stdout, sys.stdout = sys.stdout, sys.stderr
+    record = {"kind": args.r1_kind, "status": "refused", "started_epoch_s": time.time()}
+    result, code, segment, backend = None, EXIT_REFUSED, None, None
+    created = False
+    try:
+        try:
+            out.mkdir(parents=True, exist_ok=False)
+        except FileExistsError as error:
+            # Never write into another attempt's directory (the driver renames rejected ones).
+            raise Refused(f"--output {out} already exists") from error
+        created = True
+        config, config_sha256 = load_config(resolve(args.config))
+        record["config_sha256"] = config_sha256
+        soak = read_soak_reference(args.soak_reference)
+        backend = (backend_factory or make_backend)(config)
+        segment = Segment(kind=args.r1_kind, out=out, duration_s=args.duration_s, soak=soak, config=config,
+                          config_sha256=config_sha256, backend=backend)
+        result = segment.run()
+        (out / RESULT_NAME).write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n")
+        record["status"], code = "complete", 0
+    except SystemExit as stop:
+        record.update(status="aborted", signal=term.signum, error=f"SystemExit: {stop.code}")
+        code = stop.code if isinstance(stop.code, int) else 128 + (term.signum or signal.SIGTERM)
+    except Refused as error:
+        record.update(status="refused", error=str(error))
+        code = EXIT_REFUSED
+    except BaseException as error:  # noqa: BLE001 - every exit path writes the terminal record
+        record.update(status="failed", error=f"{type(error).__name__}: {error}",
+                      traceback=traceback.format_exc()[-4000:])
+        code = EXIT_FAILED
+    finally:
+        try:
+            if segment is not None:
+                for error in segment.close():
+                    record.setdefault("teardown_errors", []).append(f"{type(error).__name__}: {error}")
+            if backend is not None:
+                backend.close()
+        except BaseException as error:  # noqa: BLE001
+            record.setdefault("teardown_errors", []).append(f"{type(error).__name__}: {error}")
+        finally:
+            record["ended_epoch_s"] = time.time()
+            if created:
+                try:
+                    write_custody(out, record)
+                except OSError as error:
+                    record.setdefault("teardown_errors", []).append(f"custody: {error}")
+            os.dup2(saved_fd, 1)
+            os.close(saved_fd)
+            sys.stdout = previous_stdout
+            if code == 0:
+                stdout.write(json.dumps(result, sort_keys=True, allow_nan=False) + "\n")
+                stdout.flush()
+            if own_stdout:
+                stdout.close()
+            if code != 0:
+                print(f"align_r1_runtime: {record['status']}: {record.get('error')}", file=sys.stderr)
+            term.restore()
+    return code

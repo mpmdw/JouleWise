@@ -639,28 +639,24 @@ def calibration_exclusions(member):
     return sorted(set(reasons))
 
 
-def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, registered_span_ns=None):
-    """Read existing immutable bundle artifacts and anchored native PM records.
+def native_pm_samples(bundle, ep):
+    """Native PM records on the episode clock: {start_ns, end_ns, state, active_ns, clock_mhz}.
 
-    Accept hazard-journal rows from the desk caller, or use the member-local
-    sidecar. No config model/cache/data path is followed and no bundle is written.
+    Read from the bundle's raw powermetrics plist and rich telemetry rows,
+    anchored with the episode's powermetrics clock mapping. Empty when the
+    bundle has no rich rows or no mapping; missing clocks stay null. Also
+    used by the WP15 R1 runtime (t_decline) so both read one extraction.
     """
     import json
     from pathlib import Path
-    from joulewise.align.apple.workload import read_episode_bundle
     from joulewise.align.apple.sampler import seconds_ns
     from joulewise.adapters.powermetrics import parse_powermetrics_records
     from joulewise.desk_compress import read_bytes
     bundle = Path(bundle)
-    ep = read_episode_bundle(bundle)
-    def jsonl(path):
-        try:
-            return [json.loads(line) for line in read_bytes(path).splitlines() if line.strip()]
-        except FileNotFoundError:
-            return []
-    gate_journal = jsonl(bundle/'outputs/align_thermal.jsonl')
-    journal = temperature_journal if temperature_journal is not None else gate_journal
-    rich = jsonl(bundle/'rich_telemetry.jsonl')
+    try:
+        rich = [json.loads(line) for line in read_bytes(bundle/'rich_telemetry.jsonl').splitlines() if line.strip()]
+    except FileNotFoundError:
+        rich = []
     pm = []
     trace = next((t for t in ep.power_traces if t.source == 'powermetrics' and t.channel == 'gpu_power'), None)
     mapping = next((m for m in ep.clock_mappings if trace is not None and m.trace_domain == trace.clock_domain
@@ -676,6 +672,29 @@ def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, regis
             clock = sum(s['freq']*s.get('used_ns', 0) for s in states)/active if active else None
             pm.append({'start_ns': end-native.elapsed_ns, 'end_ns': end, 'state': native.thermal_pressure,
                        'active_ns': active, 'clock_mhz': clock})
+    return pm
+
+
+def read_bundle_record(bundle, *, os_journal=(), temperature_journal=None, registered_span_ns=None):
+    """Read existing immutable bundle artifacts and anchored native PM records.
+
+    Accept hazard-journal rows from the desk caller, or use the member-local
+    sidecar. No config model/cache/data path is followed and no bundle is written.
+    """
+    import json
+    from pathlib import Path
+    from joulewise.align.apple.workload import read_episode_bundle
+    from joulewise.desk_compress import read_bytes
+    bundle = Path(bundle)
+    ep = read_episode_bundle(bundle)
+    def jsonl(path):
+        try:
+            return [json.loads(line) for line in read_bytes(path).splitlines() if line.strip()]
+        except FileNotFoundError:
+            return []
+    gate_journal = jsonl(bundle/'outputs/align_thermal.jsonl')
+    journal = temperature_journal if temperature_journal is not None else gate_journal
+    pm = native_pm_samples(bundle, ep)
     os_readings = [(r['finished']['monotonic_ns'], r['values'].get('level')) for r in os_journal
                    if r.get('kind') == 'reading' and not r.get('error')]
     if not os_readings:

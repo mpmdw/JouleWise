@@ -29,17 +29,20 @@ KIND_FIELDS = {
     "calibration-post": (),
     "idle": (),
     "idle_soak": ("sensor_series_c",),
-    "step-30b": (),
-    "step-d": ("slots", "e_D_j_per_token"),
+    # Ruling 4(b): the battery drain rate (%/h) under the 30B and under D.
+    "step-30b": ("battery_drain_pct_per_h",),
+    "step-d": ("slots", "e_D_j_per_token", "battery_drain_pct_per_h"),
     "idle-until-soak": ("recovery_curve",),
     "x-g": (),
-    **{kind: ("energy_j", "admitted_turns", "x7", "deadman.T_dead_s", "deadman.phases_s")
+    **{kind: ("energy_j", "admitted_turns", "x7", "deadman.T_dead_s", "deadman.phases_s",
+              "battery_drain_pct_per_h")
        for kind in GATED_D_KINDS},
     **{kind: ("reference_c", "g0_release_c", "delta_slow_c", "energy_j") for kind in PLANNING_KINDS},
     "d-4bit": (),
     "g0-release-soak": ("released",),
     **{kind: ("t_decline_s",) for kind in HIGH_POWER_KINDS},
-    "harvest": (),
+    # Ruling 4(b): the SoC at which charging resumed during R1 (null if never).
+    "harvest": ("charge_resume_soc_pct",),
 }
 NEEDS_SOAK_REFERENCE = frozenset(("idle-until-soak", "g0-release-soak", *PLANNING_KINDS, *HIGH_POWER_KINDS))
 

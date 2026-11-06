@@ -6,7 +6,10 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -46,6 +49,7 @@ class FakeWorld:
         self.t_decline = t_decline or {"a1": 20.0, "b": 21.0, "a2": 20.0}
         self.busy_once = set(busy_once)
         self.unsettled_soak_once = unsettled_soak_once
+        self.charge_resume_soc = 94
         self.sudo_listing = sudo_listing if sudo_listing is not None else (
             "(root) NOPASSWD: /usr/bin/pmset -c powermode 0\n"
             "(root) NOPASSWD: /usr/bin/pmset -c powermode 2\n")
@@ -93,6 +97,10 @@ class FakeWorld:
                                                      for i in range(1800)]}
         if kind == "step-d":
             payload["e_D_j_per_token"] = 3.6
+        if kind in ("step-30b", "step-d") or kind.startswith(("d-spam", "d-bank")):
+            payload["battery_drain_pct_per_h"] = {"step-30b": 4.0, "step-d": 6.0}.get(kind, 7.0)
+        if kind == "harvest":
+            payload["charge_resume_soc_pct"] = self.charge_resume_soc
         if kind == "idle-until-soak":
             payload["recovery_curve"] = [[0, 55.0], [600, 45.0], [900, 41.0]]
         if kind.startswith("d-") and "planning" not in kind and kind != "d-4bit":
@@ -568,6 +576,138 @@ class R1Tests(unittest.TestCase):
                                   timeout=60)
             self.assertEqual(state.read_text().strip(), "0", proc.stderr)
             self.assertEqual(proc.returncode, 130)
+
+    def test_battery_drain_and_charge_resume_are_contract_fields_and_registered(self):
+        # Council ruling 4(b) (executing review M-4): R1 reports the drain rate
+        # under D and under the 30B and the SoC at which charging resumes.
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(r1, "_run", FakeWorld()):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            battery = json.loads((Path(td) / "registration/r1_slots.json").read_text())["battery"]
+            self.assertEqual(battery["drain_pct_per_h"]["30B"], 4.0)
+            self.assertAlmostEqual(battery["drain_pct_per_h"]["D"], (6.0 + 7.0 * 3) / 4)
+            self.assertEqual(battery["charge_resume_soc_pct"], 94)
+        for kind, field in (("step-30b", "battery_drain_pct_per_h"), ("step-d", "battery_drain_pct_per_h"),
+                            ("d-bank-benign-s1", "battery_drain_pct_per_h"), ("harvest", "charge_resume_soc_pct")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as td:
+                world = FakeWorld()
+
+                def runner(argv, kind=kind, field=field):
+                    result = world(argv)
+                    if "--r1-kind" in argv and argv[argv.index("--r1-kind") + 1] == kind:
+                        payload = json.loads(result.stdout)
+                        del payload[field]
+                        result = completed(argv, out=json.dumps(payload))
+                    return result
+                with patch.object(r1, "_run", runner):
+                    self.assertEqual(r1.run(self.args(td)), 3)
+                result = json.loads((Path(td) / "run/r1_result.json").read_text())
+                self.assertIn(f"contract fields missing: {field}", result["error"])
+
+    def test_first_signal_gives_the_runtime_a_term_grace_before_kill(self):
+        # Fable cold pass MEDIUM-1: subprocess.run SIGKILLed the runtime the
+        # instant the driver's handler raised, so a runtime that needs time on
+        # TERM (close the SMC journal, stop powermetrics, write its terminal
+        # custody record) never finished it.
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+            td = Path(td)
+            script = td / "slow_runtime.py"
+            script.write_text(
+                "import os, signal, sys, time\n"
+                "out = sys.argv[sys.argv.index('--output') + 1]\n"
+                "os.makedirs(out)\n"
+                "def term(signum, frame):\n"
+                "    time.sleep(1.0)\n"
+                "    open(os.path.join(out, 'terminal.json'), 'w').write('{\"status\": \"aborted\"}')\n"
+                "    sys.exit(143)\n"
+                "signal.signal(signal.SIGTERM, term)\n"
+                "open(os.path.join(out, 'pid'), 'w').write(str(os.getpid()))\n"
+                "time.sleep(60)\n")
+            world, real_run = FakeWorld(), r1._run
+            segment = td / "run" / "X_G_contrast"
+
+            def runner(argv):
+                if "--r1-kind" in argv and "x-g" in argv:
+                    return real_run([sys.executable, str(script), *argv[1:]])
+                return world(argv)
+
+            def signal_when_started():
+                deadline = time.monotonic() + 30
+                while not (segment / "pid").exists() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                time.sleep(0.2)
+                os.kill(os.getpid(), signal.SIGTERM)
+            thread = threading.Thread(target=signal_when_started, daemon=True)
+            thread.start()
+            with patch.object(r1, "_run", runner):
+                rc = r1.run(self.args(td, include_4bit=False))
+            thread.join()
+            self.assertEqual(rc, 4)
+            self.assertEqual(world.mode, 0)
+            self.assertTrue((segment / "terminal.json").exists(), "runtime was killed before its TERM teardown")
+            pid = int((segment / "pid").read_text())
+            with self.assertRaises(ProcessLookupError):
+                os.kill(pid, 0)
+
+    def test_runtime_that_ignores_term_is_killed_after_the_grace(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+            stubborn = subprocess.Popen([sys.executable, "-c",
+                                         "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                                         "print('ready', flush=True)\ntime.sleep(60)\n"],
+                                        stdout=subprocess.PIPE, text=True)
+            self.assertEqual(stubborn.stdout.readline().strip(), "ready")
+            started = time.monotonic()
+            r1._terminate(stubborn, grace_s=1.0)
+            self.assertLess(time.monotonic() - started, 15)
+            self.assertEqual(stubborn.returncode, -signal.SIGKILL)
+        self.assertEqual(r1.RUNTIME_TERM_GRACE_S, 20.0)
+
+    def test_runtime_argv_comes_from_the_inputs_list(self):
+        repo = Path(__file__).resolve().parents[2]
+        inputs = json.loads((repo / "configs/campaigns/align_v4/registration/inputs.json").read_text())
+        entry = inputs["WP15"]["runtime_entrypoint"]
+        self.assertIsInstance(entry, list)
+        argv = r1.runtime_argv_from_inputs(repo / "configs/campaigns/align_v4/registration/inputs.json")
+        self.assertEqual(argv[:3], [sys.executable, "-B", str(repo / entry[0])])
+        self.assertEqual(argv[3:], entry[1:])
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "inputs.json"
+            for bad in ("scripts/align_r1_runtime.py --config x", [], ["/bin/sh", "-c", "x"],
+                        ["../outside.py"], ["scripts/missing_runtime.py"]):
+                path.write_text(json.dumps({"WP15": {"runtime_entrypoint": bad}}))
+                with self.subTest(bad=bad), self.assertRaises(r1.Refusal):
+                    r1.runtime_argv_from_inputs(path)
+
+    def test_zsh_chain_passes_the_inputs_entrypoint_unless_overridden(self):
+        repo = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+            td = Path(td)
+            (td / "bin").mkdir()
+            sudo = td / "bin/sudo"
+            sudo.write_text("#!/bin/zsh\n"
+                            'if [[ "$1 $2" == "-n -l" ]]; then\n'
+                            '  print "(root) NOPASSWD: /usr/bin/pmset -c powermode 0, /usr/bin/pmset -c powermode 2"\n'
+                            "fi\nexit 0\n")
+            shim = td / "py"
+            shim.write_text(f'#!/bin/zsh\nprint -r -l -- "$@" > {td / "argv"}\n')
+            for path in (sudo, shim):
+                path.chmod(0o755)
+            (td / "mroot").mkdir()
+            env = dict(os.environ, PATH=f"{td / 'bin'}:{os.environ['PATH']}", PY=str(shim),
+                       NIGHT_DIR=str(td / "night"), MEASUREMENT_ROOT=str(td / "mroot"))
+            env.pop("ALIGN_R1_RUNTIME", None)
+            chain = ["/bin/zsh", str(repo / "scripts/night_chains/align_r1_rehearsal.zsh")]
+            proc = subprocess.run(chain, env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            argv = (td / "argv").read_text().splitlines()
+            self.assertEqual(argv[argv.index("--runtime-entrypoint") + 1],
+                             str(repo / "configs/campaigns/align_v4/registration/inputs.json"))
+            self.assertNotIn("--runtime", argv)
+            proc = subprocess.run(chain, env=dict(env, ALIGN_R1_RUNTIME="/opt/runtime"), capture_output=True,
+                                  text=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            argv = (td / "argv").read_text().splitlines()
+            self.assertEqual(argv[argv.index("--runtime") + 1], "/opt/runtime")
 
     def test_plan_pins_durations_and_gated_held_members(self):
         rows = r1.phase_plan(False)
