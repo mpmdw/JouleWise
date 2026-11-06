@@ -3,8 +3,11 @@
 **DRAFT SKELETON — PROVISIONAL; not registered or authorized to arm.**
 WP20, 2026-11-05. This document follows the configuration, roster, seed,
 instrument, analysis and sizing order of [protocol v3](pilot_protocol_v3.md).
-It carries the council design through Amendment 1 and the later execution-plan
-rulings. It does not certify implementation, native qualification or review.
+It carries the council design through Amendments 1 and 2 and the later
+execution-plan rulings. The 2026-11-06 v4 design-council rulings are **not yet
+installed**; they are listed in [Council 2026-11-06 rulings not yet
+reflected](#council-2026-11-06-rulings-not-yet-reflected). It does not certify
+implementation, native qualification or review.
 WP14's three rulings are installed below; implementation and live qualification
 remain pending. Protocol v4's blind Fable + Opus registration gate is required
 for W1 registration; WP20 itself is not a prerequisite to arm R1.
@@ -28,6 +31,8 @@ present in this checkout. Source paths describing external data are text only.
 | V | `83e2dac59`, `docs/align/pilot_protocol_v3.md` |
 | F | `6eb1ff5be`, `docs/align/council-2026-11-05/FINAL-DESIGN.md` |
 | A | `6eb1ff5be`, `docs/align/council-2026-11-05/FINAL-DESIGN-AMENDMENT-1.md` |
+| A2 | `ca17b3a1d`, `docs/align/council-2026-11-05/FINAL-DESIGN-AMENDMENT-2.md` |
+| C | `5ea21c17f`, `docs/align/council-2026-11-06-v4-review/CHAIR.md` (v4 design-council chair ruling) |
 | P | Lead execution plan, `/private/tmp/jwsol/v4-plan-synth.md`, SHA-256 `528c5217a5e279192bfc69a055a2db8bd5be2c2427d1a3ff2d136b46872e7b9e` |
 | T | `c8ef6b2f6`, `docs/align/smc_temperature.md` |
 | R | `c8ef6b2f6`, `docs/align/r0_step_test_ruling.md` |
@@ -186,7 +191,9 @@ remain R1 qualifications. `F:470–473,497–510; G:69–85,97–103,127–138,2
 computes” and “What R1 computes”. One model-free classifier supplies R0's
 provisional candidates/bar and R1's final selection. It supersedes the fitted
 R0 selection bullets and corrects council §2.6; the 300/900/600 s R0 capture
-profile and its short-load refusal remain. `W:67–95,108–136,381–391`
+profile and its short-load refusal remain. Mac15,9 keys are provisional until
+R0 classifies them; no R1 or W1 thermal policy may name a key R0 did not
+classify. `W:67–95,108–136,381–391; A2:5–10,21–25`
 
 Classify a full-inventory 1 Hz journal with idle ≥300 s and recovery ≥600 s.
 Temperature keys must have unit °C; each phase needs coverage ≥99%, failed
@@ -440,13 +447,15 @@ fits for sabotage; no clock, temperature or duration predictor is added to
 the primary fit. A temperature sensitivity is labelled separately.
 `V:133–153; F:421–430`
 
-**PENDING-INTEGRATION — WP12 / WP21:** the execution plan names the actual
-alternative desk `cda28a5ef` and calibration `7fbd95e31` as unchanged imports;
-WP12 must cite the former's diff against the council's `4d54cb47b`. Record the
+**PENDING-INTEGRATION — WP21:** the execution plan names the actual
+alternative desk `cda28a5ef` and calibration `7fbd95e31` as unchanged imports.
+Amendment 2 §2 (WP12) records that `cda28a5ef` only pins `FROZEN_COMMIT` to
+the council's `4d54cb47b` and changes no analysis code, so `4d54cb47b`'s
+implementation is what runs and desk invocations name `cda28a5ef`. Record the
 admitted desk/kit commits instead of claiming those scripts are integrated
 here. Anchors, contrast, sentinels and development runs never enter held-out
 pools; no pooling across task pairs or configuration/stack changes.
-`P:161–167,252–258; F:518–519; A:103–109`
+`P:161–167,252–258; F:518–519; A:103–109; A2:12–19`
 
 For known-H omission, retain measured joules and context/prefill while
 stripping logged reasoning counts from the first k sabotage residual rows.
@@ -467,8 +476,12 @@ are read. One W1 session cannot estimate between-window variability.
 
 ## Discrepancies
 
-This is the exhaustive design/code discrepancy list for the pinned integration
-base `c8ef6b2f6`; the list records conflicts and does not adjudicate them.
+This is the design/code discrepancy list Sol recorded for the pinned
+integration base `c8ef6b2f6`; the list records conflicts and does not
+adjudicate them. It is **not exhaustive** (see the chair-verified items after
+it), and all four entries are resolved on the later assembled lane
+`lane/2026-11-05-align-v4-assembled` at `fc83cfe1d`, the commit the
+2026-11-06 council cites; each entry gives that status. `C:3`
 
 - **Checkpoint default.** The design requires the generic field to default to
   null and to be omitted when unset, while the endpoint constructor, workload
@@ -476,29 +489,97 @@ base `c8ef6b2f6`; the list records conflicts and does not adjudicate them.
   `0`. The series-level explicit `hybrid_checkpoint_limit=0` is not itself a
   discrepancy. `P:14–26; H:55–64`; code:
   `c8ef6b2f6:joulewise/align/apple/endpoint.py:359–382`,
-  `c8ef6b2f6:joulewise/align/apple/workload.py:73–101`.
+  `c8ef6b2f6:joulewise/align/apple/workload.py:73–101`. **Resolved at
+  `fc83cfe1d`:** both default to `None` (`workload.py:74`, `endpoint.py:366`).
 - **Sensor classifier.** The ruled design selects the fast and slow sensors by
   the model-free step classifier and retains the fitted response only as a
   diagnostic. The pinned host still imports and calls `rank_response`, whose
   fitted ranking therefore remains selection-bearing. `W:67–95,108–136`;
   code: `c8ef6b2f6:joulewise/align/r0_host.py:18,265` and
-  `c8ef6b2f6:joulewise/align/r0_step.py:77–141`.
+  `c8ef6b2f6:joulewise/align/r0_step.py:77–141`. **Resolved at
+  `fc83cfe1d`:** `r0_host.py:331–332` keeps `rank_response` as `diagnostic`
+  and selects through `smc_enumeration.rank` (`classify_smc`).
 - **Window-reference custody.** The ruled design requires one capture record
   and later source-bound consumers, and retires inline temperatures. The
   pinned parser instead accepts `window_reference` containing temperatures
   and custody provenance directly in each policy; it has no ruled
   capture/consume record path. `W:175–284`; code:
   `c8ef6b2f6:joulewise/align/apple/thermal_gates.py:60–87,194,383`.
+  **Resolved at `fc83cfe1d`:** `thermal_gates.py:99–101` accepts only the
+  `capture`/`consume` roles. The WP7 R1 fix to that custody (`9c92e685a`) is
+  unreviewed (council ruling 7).
 - **Thermal-registry reach.** The ruled design requires the align-local CLI
   selector and a lazy registry rebind at the existing run call. The pinned
   base contains no `joulewise.align.apple.registry_select` module and no
   `registry_for_config` call in `joulewise/cli.py`. `W:307–376`; code absence
-  established against tree `c8ef6b2f6` at those two ruled paths.
+  established against tree `c8ef6b2f6` at those two ruled paths. **Resolved
+  at `fc83cfe1d`:** the module exists and `cli.py` calls
+  `registry_for_config`.
 
-No other disagreement is asserted here: pending slots, unfilled hashes,
-unexecuted native qualifications and proposed analysis conventions are missing
-evidence or unfinished work, not contradictions between implemented behavior
-and the design.
+Design/code gaps the 2026-11-06 chair verified at `fc83cfe1d` and this list
+originally omitted:
+
+- **Deadman bound.** FINAL-DESIGN sets T_dead = (1,750 − I_D)/1.13544 s, but
+  `workload.py:153–159` checks only `deadman_s < 1800/1.13544`, never against
+  I_D. `F:269–271; C:25`
+- **Power-mode pin.** `configs/gates/physics_rows.json:2133` finds
+  `lowpowermode 0` anywhere in `pmset -g custom`, so it does not pin the AC
+  `powermode` value. `C:109`
+- **Refused XML tool call (WP8 F1).** A refused XML call is invisible to the
+  desk. The fix (`6d288fc3f`, malformed_tool_call stop + exclusion) is on
+  unreviewed lanes, not on `fc83cfe1d`. `C:54`
+
+Pending slots, unfilled hashes, unexecuted native qualifications and proposed
+analysis conventions are missing evidence or unfinished work, not
+contradictions between implemented behavior and the design.
+
+## Council 2026-11-06 rulings not yet reflected
+
+The v4 design-council chair ruling (`C`) postdates this draft. None of its 28
+rulings is installed in the sections above; this list records what each one
+still requires of this document. "v4" marks the rulings that chair ruling 22
+says must be in protocol v4 (2-6, 9-15 and 17); the others change R1, the kit,
+the desk or the paper and are listed so that the registration cold gate can
+check them. Installing a ruling means editing the named section and removing
+its row. Print-only operating characteristics for rulings 3, 6, 9 and 12 are
+in `docs/align/council-2026-11-06-v4-review/OC-TABLE.md` on
+`lane/2026-11-06-sol-v4-council-oc`.
+
+| # | v4 | Blocks | What this document still lacks (section) |
+|---:|:---:|---|---|
+| 1 | | R1 | D wall-time budget: R1 prints deadman use by phase and predicted turns; a third gated **bank/benign** D run in R1; extended post-D cooldown; the pre-declared duty bar (no X7, ≥ 3 admitted turns, G0 + G1 + H ≤ 40 % of T_dead) and the named fallback order (S6 joint tuning with δ_slow ≤ 2.0 °C, idle 450 s after D, 4-bit, screen-only); the kit assertion I_D + 1.13544·T_dead + tail + 60 s ≤ 1,800; and **W1 ordinals 17 and 18 swapped** (roster table, balance text and fit rule's "drop ordinal 17", which becomes the last ordinal). (Sizing; W1 roster; R1) `C:16–40` |
+| 2 | v4 | paper; before W1 registration | Registered sub-turn H\* estimand (Sol's grid promoted from print-only), benign-carrier detection curve (H50/H90 with window-cluster bootstrap), preserve_thinking estimand statement plus a print-only full-omission variant, WP8 F1 resolved before D1, residual-vs-hold-count print; the D positive-control cell as a paper gate. (Known-H tamper) `C:42–56` |
+| 3 | v4 | D-series | Count-only extension rule: run D_k until each pair has ≥ 21 eligible benign and ≥ 3 sabotage, capped at D5 (D6 under registration grade), triggered only by eligibility counts and U1-U3 status; a U3 failure means a replacement window. Replaces "D1-D3". (W1 roster and later windows) `C:58–67` |
+| 4 | v4 | W1; D-series | Battery: arm W1 only within ~30 min after a completed top-up (≥ 99 %, not charging, OBC off, ioreg block in the arm record); R1 drain rate; battery charging as a named exclusion with a window-level bar beside U1(b); desk prints SoC and charger W per member; Ed's D-series charge hold. Replaces "battery ≥ 95 %". (Physical checklist; exclusions) `C:69–81` |
+| 5 | v4 | W1 | U3 bar re-derived from separated-ordinal within-session replay differences (pilots 4-10) with its published false-fail rate; a U3 failure ties to ruling 3. (U table) `C:83–88` |
+| 6 | v4 | R1 (U5); W1 | U6 margins ±0.5·s_r with trajectory-clustered SEs and "calibration unresolved: imprecise"; D's turn-index slope replaced by per-turn-position residual means; U5 R1 step from 3 designed start states and bar \|β_T\|₉₀ × δ_slow ≤ c·σ_pair with c fixed before R1; U4 with W1 counted (W = 4 at D3) and E_ref = mean of R1 pair + W1 5 and 18; the 30B σ_w ≤ 6 J demoted to a print; U1(a) and U2(b) relabelled implementation checks; the OC table published before W1 registration. The OC table shows the ±0.5·s_r U6 still passes only ~4 % at m = 21 per pair, which needs a further ruling. (U table; acceptance consequences) `C:90–104` |
+| 7 | | R1; W1 | Opus executing review of the WP7 lane; r1_slots freezes the AC powermode; every arm and bundle records it, arm refuses on mismatch, desk sets `instrument_ok` false; POWERMODE-PREFLIGHT-RECORD-01 promoted. (R1; instrument checks) `C:106–116` |
+| 8 | | R1 | Soak and step tests outside 11:45-13:15 local; per-second CPU load journal; redo a segment above 0.5 core for 60 s; soak SD on the detrended last 20 min after \|slope\| ≤ 0.2 °C/min. (R1; bands) `C:118–125` |
+| 9 | v4 | W1 | Contrast: delivery condition (mean ΔS_slow ≥ δ_slow/2 or arm-G G1 wait on ≥ 50 % of turns, else "treatment not delivered"); stage indicator (3 df) or a re-ordered Y; T CONFIRMED requires d > 0 (the rule above still says "same sign"); WP19 renders Y's prompt bytes and token ids; the required paper sentence on the contrast's scope. (Deciding contrast) `C:127–140` |
+| 10 | v4 | D-series | Frozen-commit record fixes `max_episode_decode_tokens`, `deadman_s`, `max_tokens`, `max_turns` for D1-Dn; desk asserts one configuration key across held-out D members; any slot change starts a new cohort. (Residual analysis; seeds) `C:142–146` |
+| 11 | v4 | W1 | Checkpoints "off" is recorded above; still missing: R0 reports rewrites on all transitions (closed vs capped/unclosed) with the A3.6 5 % trigger on all transitions; confirmation that re-fed tokens after `cache.rebuilt_untrimmable` enter P/C; desk rebuild counts beside residuals and a print-only no-rebuild sensitivity. (Configuration) `C:147–155` |
+| 12 | v4 | paper | Replace "no 5 % FPR" with §D's conditional statement (marginal FPR ≤ 1/(m+1); realized FPR ≤ 1 − 0.1^(1/m) at 90 %); window-heterogeneity diagnostic; MDE at rank m and m − 1; flag a threshold > 1.5 × the next score. (Residual analysis; targets) `C:157–165` |
+| 13 | v4 | paper | Pre-registered, labelled clock-conditioned sensitivity; pre/post-gate correlation side by side. (Residual analysis) `C:167–171` |
+| 14 | v4 | D-series | Direction-conditional escalation ladder: timeout-driven failures loosen δ_slow in 0.5 °C steps to the 2.0 °C cap, spread-driven failures tighten; drop "holds on" for heavy cells. (Acceptance consequences) `C:173–176` |
+| 15 | v4 | W1 | Sentinel admissibility (completed, no X flag, ≥ 3 turns), pre-named alternate seed 93 bank/benign, multi-run E_ref, disclosed predecessor asymmetry. (Later windows; U4) `C:178–184` |
+| 16 | | R1 | High Power A-B-A: legs start after a G0-style release; adopt only if t_decline(B) ≥ 1.25 × max(A1, A2), with the ∞ and > 25 %-disagreement cases; if adopted, the contrast attribution is conditional on the v4 setup. (R1) `C:186–192` |
+| 17 | v4 | W1 | W1 is a second slot-filling pass that may revise δ_slow, G_turn, N_chunk, B_D, T_dead; sensor keys and heavy class stay fixed from R1; all slots frozen before D1; W1 D members enter no pool. (Gate semantics; PENDING-FILL) `C:194–196` |
+| 18 | | W1 | Desk prints R − R1 soak per sensor, `thermal.reference_warm` and a G0/G1 wait-against-ordinal table. (WP14(b); desk prints) `C:198–201` |
+| 19 | | D-series | Print-only ambient proxy (chassis key, τ > 300 s); Ed's thermostat hold and logger. (Physical checklist) `C:203–205` |
+| 20 | | W1 | Arm rules: no external volume mounted from t0 to the terminal record (`diskutil list external` in the census); offloads and SSD work only by day between windows. (Arm handoff) `C:207–211` |
+| 21 | | R1 | R0 dispositions print the capability proxy and capped-turn fraction with an exact binomial CI; the proxy changes the rung only if declared before reading the ladder. (R0 ladder) `C:213–215` |
+| 22 | | W1 | This draft exists with PENDING sections; the blind cold gate before W1 arm is still owed. (Status) `C:217–220` |
+| 23 | | none | Amendment 2 §2's pilot-7 addendum citation; no change here (this document cites A2 only for the desk-commit fact). `C:222–225` |
+| 24 | | none | A1/FD label "16 × 1,800" should read 18 × 1,800; this document quotes only the correct 58,260 s. `C:227–229` |
+| 25 | | D-series | Frozen-commit seed table (window, ordinal, pair, condition, index, expected_episode_seed) for D1-D5 including extension windows; seed-law tag carries the quantization (e.g. `qwen3.8-27b-8bit`, replacing `qwen3.8-27b` above); drop the "common random numbers" pairing claim. (Seeds) `C:231–236` |
+| 26 | | D-series | W1 desk compares R1's D spam/benign s1 tokens with W1 ordinals 5 and 18 before any held-out seed is spent. (Instrument checks) `C:238–240` |
+| 27 | | D-series | Spotlight daemons paused by name with pids recorded; runs root on Spotlight's Privacy list; auto-install of updates off and the /tmp rule as arm preconditions. (Arm handoff) `C:242–244` |
+| 28 | | none | R1 slot record prints the recomputed projected MDE from measured e_D, E_D and the R1 replay pair. (PENDING-FILL) `C:246–248` |
+
+The chair's questions for Ed (`C:258–266`: extension-window reservation,
+registration grade, D-series charge hold, ambient, E1 disk order, the named
+model, automatic updates) and the §D list of claims v4 cannot make
+(`C:307–322`) also belong in the registered text once Ed answers.
 
 ## Sizing, rehearsal and registration handoff
 
