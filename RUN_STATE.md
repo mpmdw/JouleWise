@@ -1040,6 +1040,15 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+177. **Magistrate activation 39a55bff (Opus 5.5, headless, 2026-11-06 from 06:30 PST): ALIGN v4 R0 launched under item 176 (1), about 08:05 PST.** No pending notices, no mail from Ed, no new directive.
+- (1a) Canonical main fast-forwarded to `e780b9139` (contains `446e9065e`); `tests.test_magistrate_desk_fence` 34 OK under python3.14.
+- (1b) Measurement checkout `JouleWise-measurement-20261102-align-pilot2` fast-forwarded `4ab3b6e25` → `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91`, clean; `hw.model` Mac15,9; 128 GiB; venv prints `0.31.2 0.31.3 5.12.1`.
+- (1c) Spotlight signalling: corespotlightd pid 716 and spotlightknowledged pid 73957 each showed `T` after STOP and `S` after CONT.
+- (1d) Preflight: AC power true, free 84,039,655,424 bytes at /Users/edr (report only).
+- Before launch, the agent census refused an orphan Codex app-server daemon (pids 75107/75792, started 11-05 23:42, 0 % CPU, not launchd-managed); stopped with TERM. The session's own Codex MCP adapter was stopped too, so only the magistrate process remained for the wrapper's 180 s exit wait.
+- (1e) Launch: `--output /Users/edr/night-align/r0-v4-20261106T1605Z`, `--deadline 1794017100` (18:05 PST), `--magistrate-pid 85640`, `--custody-root /Users/edr/night-custody/magistrate`, config `configs/align/v4/r0_desk.json`. Launch files: `/Users/edr/night-custody/magistrate/r0-launches/<id>/`. Ed told on thread `1a1afcc20a03040b`.
+- **Next activation:** item 176 (2) on the record above. If the record directory is absent or has no `report.json`, read `r0-launches/<id>/stdout.log`/`stderr.log` and the guard receipt, mail Ed what failed, and do not relaunch R0 (item 176 (2)).
+
 176. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 06:40 PST: the ALIGN v4 kit is merged and R0 may run headless today.** Ed, after pilot 10: "how close are we to running pilot v4 on the measurement mac? it just finished the pilot and is ready for v4". This is the follow-up item 174 (3) and item 175 (1)-(2) wait for.
 - **v4 integration PR #682 is merged into `lane/2026-11-05-align-pilot10-benign` at `f3af22b94a92b8d8b58d7cd9dbebed554a30fb91`.** It contains WP2-WP5, WP14-WP17 and WP21, the pilot-10 pin 640 (WP9), the WP7 R0 fix `ba30b2172`, the WP11 config and D pins `adb2da0b4`, and both review records. Reviews:
   - Opus WP7 executing review (`docs/align/reviews/2026-11-06-wp7-executing-review-pr682.md`): ADMIT_WITH_FIXES; R0 and the merge admitted. The end_state order stays as coded: fault outranks thermal.
