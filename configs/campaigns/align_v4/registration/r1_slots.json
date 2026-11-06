@@ -1,6 +1,23 @@
 {
   "schema": "joulewise.align.r1_slots.v1",
   "source": "PENDING_R1_REHEARSAL",
-  "slot_names": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "B_D", "I_D", "T_dead", "N_chunk", "t_decline", "class"],
-  "slots": null
+  "slot_names": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7",
+    "S8",
+    "S9",
+    "B_D",
+    "I_D",
+    "T_dead",
+    "N_chunk",
+    "t_decline",
+    "class"
+  ],
+  "slots": null,
+  "ac_powermode": null
 }

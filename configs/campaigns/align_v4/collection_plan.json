@@ -2,6 +2,7 @@
   "council_commit": "6eb1ff5be",
   "members": [
     {
+      "ac_powermode": null,
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e01.json",
@@ -46,6 +47,7 @@
       "task_pair": "spam_filter_update"
     },
     {
+      "ac_powermode": null,
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e02.json",
@@ -90,6 +92,7 @@
       "task_pair": "bank_transfer_2"
     },
     {
+      "ac_powermode": null,
       "block": "A",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e03.json",
@@ -134,6 +137,7 @@
       "task_pair": "spam_filter_update"
     },
     {
+      "ac_powermode": null,
       "block": "A",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-pilot-v3-episodes-a-e04.json",
@@ -178,6 +182,7 @@
       "task_pair": "bank_transfer_2"
     },
     {
+      "ac_powermode": null,
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json",
@@ -242,6 +247,7 @@
       "window_reference_role": "capture_last_60s_idle_before_warmup"
     },
     {
+      "ac_powermode": null,
       "block": "X-G",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json",
@@ -302,6 +308,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "Y-S",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e07.json",
@@ -362,6 +369,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e08.json",
@@ -428,6 +436,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "X-S",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e09.json",
@@ -488,6 +497,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "Y-G",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e10.json",
@@ -548,6 +558,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "D",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e11.json",
@@ -614,6 +625,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "Y-G",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e12.json",
@@ -675,6 +687,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "X-S",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e13.json",
@@ -736,6 +749,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "D",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e14.json",
@@ -802,6 +816,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "Y-S",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e15.json",
@@ -863,6 +878,7 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "X-G",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e16.json",
@@ -924,87 +940,22 @@
       "window_reference_role": "consume_member_5_custody_via_WP15"
     },
     {
+      "ac_powermode": null,
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e17.json",
-      "config_sha256": "21a3dffc5d715eb7356a0e340f922f5ff9b5e51b13f1f3c34c7fdf612d63859b",
-      "expected_episode_seed": 15667618974046976403,
-      "expected_turn_seed_0": 8805628232305408028,
-      "held_out": false,
-      "is_replay": false,
-      "model_id": "qwen3.8-27b",
-      "non_claim": true,
-      "ordinal": 17,
-      "repeat": 1,
-      "role": "D",
-      "run_id": "align-v4-episodes-b-e17",
-      "seed_index": 93,
-      "spec": {
-        "assistant_history": "reasoning_content",
-        "chat_template_kwargs": {
-          "reasoning_effort": null
-        },
-        "condition": "benign",
-        "deadman_s": null,
-        "enable_thinking": true,
-        "hybrid_checkpoint_limit": 0,
-        "max_context_tokens": 40960,
-        "max_episode_decode_tokens": null,
-        "max_tokens": 4096,
-        "max_turns": 12,
-        "mock_turns": [],
-        "prompt_cache": "episode_prefix",
-        "sampler": {
-          "min_p": 0,
-          "temperature": 1.0,
-          "top_k": 20,
-          "top_p": 0.95
-        },
-        "schema": "joulewise.align.apple.episode_spec.v1",
-        "seed": 93,
-        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
-        "task_kwargs": {
-          "cache_dir": "/Users/edr/.cache/joulewise/shade",
-          "give_hint": true,
-          "task_pair": "spam_filter_update"
-        },
-        "temperature": 1.0,
-        "thermal": {
-          "chunk_tokens": null,
-          "delta_fast_c": null,
-          "delta_slow_c": null,
-          "heavy": true,
-          "per_turn": true,
-          "sensors": null,
-          "turn_cap_s": null,
-          "window_reference": {
-            "role": "consume",
-            "source_config_sha256": "c05b83cd37c9c1dd0ec5e22995005333fca40461281e9b90249c13b33ad71c04",
-            "source_run_id": "align-v4-episodes-a-e05"
-          }
-        },
-        "warmup_condition": "benign"
-      },
-      "stage_id": "align-v4-episodes-b",
-      "task_pair": "bank_transfer_2",
-      "window_reference_role": "consume_member_5_custody_via_WP15"
-    },
-    {
-      "block": "D",
-      "condition": "benign",
-      "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e18.json",
-      "config_sha256": "1907373d0f5ead5cb3394f0c7e8fc33140f8e6c30de2bf9e64362690f6de30e7",
+      "config_sha256": "080713a87e4dd65d7854505948a5539452431a4718bf411ba06d02105c3b4240",
       "expected_episode_seed": 11160969177166136631,
       "expected_turn_seed_0": 13933079069872451601,
       "held_out": false,
       "is_replay": true,
       "model_id": "qwen3.8-27b",
       "non_claim": true,
-      "ordinal": 18,
+      "ordinal": 17,
       "repeat": 2,
       "replay_of": "align-v4-episodes-a-e05",
       "role": "D",
-      "run_id": "align-v4-episodes-b-e18",
+      "run_id": "align-v4-episodes-b-e17",
       "seed_index": 1,
       "spec": {
         "assistant_history": "reasoning_content",
@@ -1055,6 +1006,73 @@
       "stage_id": "align-v4-episodes-b",
       "task_pair": "spam_filter_update",
       "window_reference_role": "consume_member_5_custody_via_WP15"
+    },
+    {
+      "ac_powermode": null,
+      "block": "D",
+      "condition": "benign",
+      "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e18.json",
+      "config_sha256": "4236d91f0170f6e1244cdb6ea693b978967a85cea51aa500428c0db886e1d9c3",
+      "expected_episode_seed": 15667618974046976403,
+      "expected_turn_seed_0": 8805628232305408028,
+      "held_out": false,
+      "is_replay": false,
+      "model_id": "qwen3.8-27b",
+      "non_claim": true,
+      "ordinal": 18,
+      "repeat": 1,
+      "role": "D",
+      "run_id": "align-v4-episodes-b-e18",
+      "seed_index": 93,
+      "spec": {
+        "assistant_history": "reasoning_content",
+        "chat_template_kwargs": {
+          "reasoning_effort": null
+        },
+        "condition": "benign",
+        "deadman_s": null,
+        "enable_thinking": true,
+        "hybrid_checkpoint_limit": 0,
+        "max_context_tokens": 40960,
+        "max_episode_decode_tokens": null,
+        "max_tokens": 4096,
+        "max_turns": 12,
+        "mock_turns": [],
+        "prompt_cache": "episode_prefix",
+        "sampler": {
+          "min_p": 0,
+          "temperature": 1.0,
+          "top_k": 20,
+          "top_p": 0.95
+        },
+        "schema": "joulewise.align.apple.episode_spec.v1",
+        "seed": 93,
+        "task_factory": "joulewise.align.apple.pilot:offline_shade_task",
+        "task_kwargs": {
+          "cache_dir": "/Users/edr/.cache/joulewise/shade",
+          "give_hint": true,
+          "task_pair": "spam_filter_update"
+        },
+        "temperature": 1.0,
+        "thermal": {
+          "chunk_tokens": null,
+          "delta_fast_c": null,
+          "delta_slow_c": null,
+          "heavy": true,
+          "per_turn": true,
+          "sensors": null,
+          "turn_cap_s": null,
+          "window_reference": {
+            "role": "consume",
+            "source_config_sha256": "c05b83cd37c9c1dd0ec5e22995005333fca40461281e9b90249c13b33ad71c04",
+            "source_run_id": "align-v4-episodes-a-e05"
+          }
+        },
+        "warmup_condition": "benign"
+      },
+      "stage_id": "align-v4-episodes-b",
+      "task_pair": "bank_transfer_2",
+      "window_reference_role": "consume_member_5_custody_via_WP15"
     }
   ],
   "midpoint_after_ordinal": 9,
@@ -1082,6 +1100,7 @@
   ],
   "runtime_requirements": {
     "D_tools": "family-validated XML via qwen3_5",
+    "ac_powermode": null,
     "launcher": null,
     "presence_penalty": 0,
     "window_reference": "WP15 custody; member 5 captures; later members consume"

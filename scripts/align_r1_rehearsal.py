@@ -23,6 +23,7 @@ SCHEMA = "joulewise.align.r1_slots.v1"
 SLOT_NAMES = tuple(f"S{i}" for i in range(1, 10)) + (
     "B_D", "I_D", "T_dead", "N_chunk", "t_decline", "class",
 )
+PLANNING_START_OFFSETS_C = (0.0, 2.0, 4.0)
 
 
 class Refusal(RuntimeError):
@@ -38,7 +39,6 @@ class PowerModeGuard(AbstractContextManager):
 
     AUTO = ("sudo", "-n", "/usr/bin/pmset", "-c", "powermode", "0")
     HIGH = ("sudo", "-n", "/usr/bin/pmset", "-c", "powermode", "2")
-    LIST = ("sudo", "-n", "-l")
     QUERY = ("/usr/bin/pmset", "-g", "custom")
 
     def __init__(self, runner: Callable = _run, marker: Path | None = None):
@@ -68,11 +68,6 @@ class PowerModeGuard(AbstractContextManager):
         return result.returncode == 0
 
     def __enter__(self):
-        listing = self._must(self.LIST, "sudo_list_refused")
-        text = listing.stdout + listing.stderr
-        for required in ("/usr/bin/pmset -c powermode 0", "/usr/bin/pmset -c powermode 2"):
-            if required not in text:
-                raise Refusal("powermode.sudo_rule_missing: " + required)
         # Prove restore before any work, and leave the host Automatic.
         if not self.restore():
             raise Refusal("powermode.cannot_restore")
@@ -146,6 +141,57 @@ def derive_slots(observations):
     return slots
 
 
+def _ac_powermode(records):
+    values = []
+    for row in records:
+        if "stdout" not in row:
+            continue
+        import re
+        match = re.search(r"(?:^|\n)\s*AC Power:\s*(?:\n[^\n]*)*?powermode\s+([012])", row["stdout"] + "\n",
+                          re.MULTILINE)
+        if match:
+            values.append(int(match.group(1)))
+    if not values:
+        raise Refusal("powermode.AC reading missing")
+    baseline = values[0]
+    if baseline not in (0, 2):
+        raise Refusal("powermode.AC must be Automatic or High Power")
+    return baseline
+
+
+def planning_temperature_summary(results):
+    """Print-only R1 secondary path; it does not alter frozen analysis code."""
+    if len(results) != 3:
+        raise Refusal("planning-turn requires exactly three designed start states")
+    points = []
+    reference = None
+    for offset, result in zip(PLANNING_START_OFFSETS_C, results, strict=True):
+        try:
+            r = float(result["reference_c"])
+            release = float(result["g0_release_c"])
+            energy = float(result["energy_j"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise Refusal(f"planning-turn invalid temperature evidence: {error}") from error
+        if not all(math.isfinite(v) for v in (r, release, energy)):
+            raise Refusal("planning-turn temperature evidence must be finite")
+        reference = r if reference is None else reference
+        if not math.isclose(r, reference, abs_tol=1e-9) or not math.isclose(release, r + offset, abs_tol=1e-9):
+            raise Refusal("planning-turn G0 release does not equal R + designed offset")
+        points.append({"offset_c": offset, "reference_c": r, "g0_release_c": release, "energy_j": energy})
+    xs = [p["g0_release_c"] for p in points]
+    ys = [p["energy_j"] for p in points]
+    xbar, ybar = math.fsum(xs) / 3, math.fsum(ys) / 3
+    sxx = math.fsum((x - xbar) ** 2 for x in xs)
+    beta = math.fsum((x - xbar) * (y - ybar) for x, y in zip(xs, ys)) / sxx
+    intercept = ybar - beta * xbar
+    residual = math.fsum((y - (intercept + beta * x)) ** 2 for x, y in zip(xs, ys))
+    se = math.sqrt(residual / sxx)  # n-2 = 1
+    half = 12.706204736432095 * se  # two-sided 95%, t(df=1)
+    return {"label": "PRINT_ONLY_R1_PLANNING_TEMPERATURE_SECONDARY", "points": points,
+            "absolute_band_c": [reference, reference + 4.0],
+            "beta_T_j_per_c": beta, "beta_T_ci95_j_per_c": [beta - half, beta + half]}
+
+
 def run(args):
     marker = getattr(args, 'power_marker', None) or (args.output.parent / '.align-r1-high-power')
     marker = Path(marker).resolve()
@@ -153,6 +199,7 @@ def run(args):
     output.mkdir(parents=True, exist_ok=False)
     record = {"schema": SCHEMA, "status": "running", "phases": [], "powermode": []}
     slots_evidence = None
+    planning_results = []
     # Resolve the runner at call time so synthetic rehearsals can replace the
     # complete command boundary (runtime, SMC journal, sudo and pmset).
     guard = PowerModeGuard(_run, marker)
@@ -174,6 +221,14 @@ def run(args):
                 if kind == "step-d":
                     slots_evidence = result
 
+            for offset in PLANNING_START_OFFSETS_C:
+                result = _invoke(args.runtime, f"d-planning-turn-r-plus-{int(offset)}c",
+                                 output / f"planning_turn_r_plus_{int(offset)}c")
+                planning_results.append(result)
+                record["phases"].append({"name": f"planning_turn_R_plus_{int(offset)}C",
+                                         "class": "heavy", "designed_g0_offset_c": offset,
+                                         "result": result})
+
             # Ed ruling: A-B-A, Automatic / High Power / Automatic.  The same
             # bounded contrast workload is used in each segment.
             for mode, label in ((0, "A1"), (2, "B"), (0, "A2")):
@@ -186,12 +241,15 @@ def run(args):
             harvested = _invoke(args.runtime, "harvest", output / "harvest")
             record["phases"].append({"name": "harvest", "class": "light", "result": harvested})
         slots = derive_slots(slots_evidence or {})
+        temperature_summary = planning_temperature_summary(planning_results)
+        ac_powermode = _ac_powermode(guard.records)
         registration = {"schema": SCHEMA, "source": "R1 synthetic rehearsal" if args.synthetic else "R1 hardware rehearsal",
-                        "slots": slots, "slot_names": list(SLOT_NAMES)}
+                        "slots": slots, "slot_names": list(SLOT_NAMES),
+                        "planning_temperature": temperature_summary, "ac_powermode": ac_powermode}
         reg = args.registration.resolve()
         reg.parent.mkdir(parents=True, exist_ok=True)
         reg.write_text(json.dumps(registration, indent=2, sort_keys=True) + "\n")
-        record.update(status="complete", slots=slots)
+        record.update(status="complete", slots=slots, planning_temperature=temperature_summary, ac_powermode=ac_powermode)
         return 0
     except BaseException as error:
         record.update(status="refused" if isinstance(error, Refusal) else "aborted",

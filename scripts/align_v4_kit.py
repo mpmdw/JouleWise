@@ -31,6 +31,7 @@ CONTRAST_COMMIT = '45b47f7b6'
 COUNCIL_COMMIT = '6eb1ff5be'
 WINDOW_PLAN_COMMIT = '40c569cfd'
 INPUTS = KIT / 'registration/inputs.json'
+R1_SLOTS = KIT / 'registration/r1_slots.json'
 D_TAG = 'qwen3.8-27b'
 D_REVISION = '815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9'
 D_SOURCE = '/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit'
@@ -40,7 +41,7 @@ SPAN_LIMIT_S = 26940
 SCAFFOLD_S = 4995
 BUDGET_FLOOR = 6144
 
-# Ordinals remain stable after dropping 17; the late replay remains ordinal 18.
+# Ordinals remain stable after dropping 18; the late replay remains ordinal 18.
 # name, pair, condition, seed index. Arm letters refer only to the contrast.
 ROSTER = (
     ('anchor', 'spam_filter_update', 'benign', 1),
@@ -59,8 +60,8 @@ ROSTER = (
     ('D', 'bank_transfer_2', 'sabotage', 1),
     ('Y-S', 'spam_filter_update', 'benign', 14),
     ('X-G', 'spam_filter_update', 'sabotage', 16),
-    ('D', 'bank_transfer_2', 'benign', 93),
     ('D', 'spam_filter_update', 'benign', 1),
+    ('D', 'bank_transfer_2', 'benign', 93),
 )
 
 
@@ -99,10 +100,18 @@ def pending_inputs(inputs):
     return pending
 
 
-def require_ready(inputs):
+def read_r1_slots(root=ROOT):
+    return json.loads((Path(root) / R1_SLOTS).read_bytes())
+
+
+def require_ready(inputs, r1_slots=None):
     pending = pending_inputs(inputs)
     if pending:
         raise ValueError('v4 kit BLOCKED by placeholders: ' + ', '.join(pending))
+    if r1_slots is None:
+        r1_slots = read_r1_slots()
+    if r1_slots.get('ac_powermode') not in (0, 2):
+        raise ValueError('R1 r1_slots must freeze AC powermode 0 or 2')
     # Filled values are not automatically evidence; validate the bounded inputs.
     for name in ('X', 'Y'):
         ref = inputs['WP18'][name]
@@ -170,14 +179,14 @@ def fit_roster(budget, member_seconds):
                 raise ValueError('R1 member exceeds spent 1800 s cap; return to lead for requalification')
             return {'ordinals': ordinals, 'B_D': budget, 'programmed_span_s': span,
                     'actions': actions, 'requires_R1_requalification': bool(actions)}
-        if 17 in ordinals:
-            ordinals.remove(17)
-            actions.append({'drop_ordinal': 17})
+        if 18 in ordinals:
+            ordinals.remove(18)
+            actions.append({'drop_ordinal': 18})
         elif budget > BUDGET_FLOOR:
             budget -= 1024
             actions.append({'B_D': budget})
         else:
-            raise ValueError('roster does not fit at B_D=6144 after dropping 17; return to lead')
+            raise ValueError('roster does not fit at B_D=6144 after dropping 18; return to lead')
 
 
 def _rewrite(value):
@@ -204,7 +213,8 @@ def thermal_policy(inputs, *, heavy, per_turn, window_reference):
 def build_files(root=ROOT):
     root = Path(root)
     inputs = read_inputs(root)
-    files = {INPUTS: (root / INPUTS).read_bytes()}
+    files = {INPUTS: (root / INPUTS).read_bytes(), R1_SLOTS: (root / R1_SLOTS).read_bytes()}
+    ac_powermode = read_r1_slots(root).get("ac_powermode")
     old_tree = json.loads(frozen(root, ANCHOR_COMMIT, SOURCE_KIT / 'plan_tree.json'))
     tree = _rewrite(old_tree)
     stages = [s for s in tree['stage_graph'] if '-episodes-' in s['stage_id']]
@@ -261,7 +271,7 @@ def build_files(root=ROOT):
             model_id = D_TAG if name == 'D' else 'qwen3-30b-a3b'
             config['run_metadata']['tags'] = [PACK_ID, 'non-claim', 'launch_lineage_required', 'align', 'align_episode',
                 'align-model=' + model_id, 'align-condition=' + condition, 'align-task=' + pair,
-                'align-repeat=' + ('2' if ordinal in (12, 13, 15, 16, 18) else '1'),
+                'align-repeat=' + ('2' if ordinal in (12, 13, 15, 16, 17) else '1'),
                 'align-stage=episodes-' + ('a' if half == 0 else 'b')]
             raw = raw_json(config)
             if ordinal == 5:
@@ -274,14 +284,14 @@ def build_files(root=ROOT):
         files[path] = raw
         model_id = D_TAG if name == 'D' else 'qwen3-30b-a3b'
         seed = episode_seed(model_id, 'thinking_on', 'shade/' + pair, seed_index)
-        replay_of = {12: 10, 13: 9, 15: 7, 16: 6, 18: 5}.get(ordinal)
-        row = dict(run_id=config['run_id'], config=filename, config_path=path.as_posix(), config_sha256=sha(raw),
+        replay_of = {12: 10, 13: 9, 15: 7, 16: 6, 17: 5}.get(ordinal)
+        row = dict(ac_powermode=ac_powermode, run_id=config['run_id'], config=filename, config_path=path.as_posix(), config_sha256=sha(raw),
                    index=len(rows_by_stage[half]) + 1, rep=2 if replay_of else 1, role='absolute_repeat',
                    block_id=None, block_index=len(rows_by_stage[half]) + 1, position=None, position_in_block=1,
                    arm=None, model_tag=model_id + '-mlx', workload='align_episode',
                    module_id=PACK_ID + '-' + model_id, pack_id=PACK_ID)
         rows_by_stage[half].append(row)
-        member = dict(ordinal=ordinal, run_id=config['run_id'], stage_id=stage['stage_id'],
+        member = dict(ac_powermode=ac_powermode, ordinal=ordinal, run_id=config['run_id'], stage_id=stage['stage_id'],
                       role=name, block='D' if name == 'D' else 'A' if name == 'anchor' else name,
                       model_id=model_id, task_pair=pair, condition=condition, seed_index=seed_index,
                       expected_episode_seed=seed, expected_turn_seed_0=turn_seed(seed, 0),
@@ -319,7 +329,7 @@ def build_files(root=ROOT):
                 window_plan_commit=WINDOW_PLAN_COMMIT,
                 reconciliations=['WP16/A1 D seed 1 overrides window-plan choice 101; held-out starts at 2.',
                                  'Synthesized ruling: checkpoint limit 0 throughout series overrides A1 conditional enablement.'],
-                runtime_requirements=dict(D_tools='family-validated XML via qwen3_5', presence_penalty=0,
+                runtime_requirements=dict(ac_powermode=ac_powermode, D_tools='family-validated XML via qwen3_5', presence_penalty=0,
                                           window_reference='WP15 custody; member 5 captures; later members consume',
                                           launcher=inputs['WP15']['runtime_entrypoint']))
     files[KIT / 'collection_plan.json'] = raw_json(plan)
@@ -344,7 +354,7 @@ def build_files(root=ROOT):
         planning_align_s=21931.27, planning_span_s=26927, span_limit_s=SPAN_LIMIT_S,
         planning_window_max_s=44640, planning_two_copy_GB=37.4,
         member_seconds={'anchor': 3131.27 / 4, 'D': 1800, 'G': 1150, 'S': 850},
-        fit_rule=['drop ordinal 17', 'lower B_D by 1024 to 6144', 'return to lead'],
+        fit_rule=['drop ordinal 18', 'lower B_D by 1024 to 6144', 'return to lead'],
         note='R1 must replace guesses, requalify budget, derive sizing_b5.json and disk before prepare.'))
     files[KIT / 'README.md'] = README.encode()
     return files
@@ -380,6 +390,23 @@ def _identities(root, files, members, inputs):
         inherited_30B_commit=ANCHOR_COMMIT, note='No local files were inspected by this builder.'))
 
 
+def validate_powermode_members(plan, observed_by_run):
+    """Arm/desk secondary validation; frozen pilot analysis remains untouched."""
+    mismatches = []
+    for member in plan['members']:
+        expected = member.get('ac_powermode')
+        observed = observed_by_run.get(member['run_id'])
+        if observed != expected:
+            mismatches.append({'run_id': member['run_id'], 'expected': expected, 'observed': observed})
+    return {'instrument_ok': not mismatches, 'powermode_mismatches': mismatches}
+
+
+def arm_powermode_check(plan, observed_ac_powermode):
+    expected = plan.get('runtime_requirements', {}).get('ac_powermode')
+    if observed_ac_powermode != expected:
+        raise ValueError(f'AC powermode mismatch: expected {expected}, observed {observed_ac_powermode}')
+
+
 def generate(output_root=ROOT, *, check=False, source_root=ROOT):
     files = build_files(source_root)
     for path, raw in files.items():
@@ -391,7 +418,7 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
     if check:
-        require_ready(read_inputs(source_root))
+        require_ready(read_inputs(source_root), read_r1_slots(source_root))
     return files
 
 
@@ -403,7 +430,7 @@ No study/model path is followed. All source configs come from pinned Git objects
 
 18 members per Amendment A1: four exact original anchors, eight 30B contrast
 runs and six D runs. Midpoint follows ordinal 9. D uses seed 1 (both pairs and
-conditions), development 93 at ordinal 17, and a replay of 5 at 18. Development
+conditions), development 93 at ordinal 18, and a replay of 5 at 17. Development
 91–92 are reserved for R0; held-out starts at 2, excluding development indices.
 The window-plan draft's D index 101 is superseded by synthesized WP16/A1.
 Checkpointing is explicitly off for D throughout the series, superseding A1.
@@ -424,7 +451,7 @@ No synthetic sensor, reference temperature, model digest or turn count is used.
 Sizing_preview.json contains A1's planning guesses only. No arm-compatible
 sizing_b5.json is supplied. Use fit_roster with R1 measured cost estimates:
 drop only 17 first, then decrease B_D by 1024 down to 6144; otherwise return
-to lead. Preserve anchors, contrasts and 5/18. Requalify/freeze changed budgets.
+to lead. Preserve anchors, contrasts and 5/17. Requalify/freeze changed budgets.
 The additive align_v4_session.py refuses prepare/install while inputs are pending.
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.

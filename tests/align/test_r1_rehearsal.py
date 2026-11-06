@@ -27,9 +27,6 @@ class FakeWorld:
     def __call__(self, argv):
         argv = tuple(str(v) for v in argv)
         self.calls.append(argv)
-        if argv == r1.PowerModeGuard.LIST:
-            return completed(argv, out=("(root) NOPASSWD: /usr/bin/pmset -c powermode 0\n"
-                                        "(root) NOPASSWD: /usr/bin/pmset -c powermode 2\n"))
         if argv == r1.PowerModeGuard.QUERY:
             return completed(argv, out=f"AC Power: powermode {self.mode}\n")
         if argv in (r1.PowerModeGuard.AUTO, r1.PowerModeGuard.HIGH):
@@ -47,6 +44,9 @@ class FakeWorld:
         slots.update(B_D=8192, I_D=101.5, T_dead=1451.018, N_chunk=256,
                      t_decline=23.0, **{"class": "heavy"})
         payload = {"kind": kind, "fake_smc_journal": True,
+                   "reference_c": 40.0,
+                   "g0_release_c": 40.0 + (int(kind.rsplit("-", 1)[-1][:-1]) if kind.startswith("d-planning-turn") else 0),
+                   "energy_j": 100.0 + 3.0 * (int(kind.rsplit("-", 1)[-1][:-1]) if kind.startswith("d-planning-turn") else 0),
                    "slots": slots if kind == "step-d" else {}}
         return completed(argv, out=json.dumps(payload))
 
@@ -70,6 +70,11 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(names[:8], [row[0] for row in r1.phase_plan(True)][:8])
             self.assertIn("D_4bit_optional", names)
             self.assertEqual(names[-4:], ["high_power_A1", "high_power_B", "high_power_A2", "harvest"])
+            self.assertEqual([p["designed_g0_offset_c"] for p in result["phases"] if p["name"].startswith("planning_turn")], [0.0, 2.0, 4.0])
+            self.assertEqual(registration["planning_temperature"]["absolute_band_c"], [40.0, 44.0])
+            self.assertEqual(registration["ac_powermode"], 0)
+            self.assertAlmostEqual(registration["planning_temperature"]["beta_T_j_per_c"], 3.0)
+            self.assertEqual(registration["planning_temperature"]["beta_T_ci95_j_per_c"], [3.0, 3.0])
             self.assertEqual([p["powermode"] for p in result["phases"][-4:-1]], [0, 2, 0])
             self.assertEqual(world.mode, 0)
             self.assertGreaterEqual(world.calls.count(r1.PowerModeGuard.AUTO), 4)
@@ -94,10 +99,15 @@ class R1Tests(unittest.TestCase):
             self.assertEqual(runtime_calls, [])
             self.assertFalse((Path(td) / "registration/r1_slots.json").exists())
 
-    def test_refuses_incomplete_sudo_rule(self):
-        guard = r1.PowerModeGuard(lambda argv: completed(argv, out="/usr/bin/pmset -c powermode 0\n"))
-        with self.assertRaisesRegex(r1.Refusal, "sudo_rule_missing"):
-            guard.__enter__()
+    def test_power_helper_uses_only_the_two_allowed_sudo_commands(self):
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            sudo_calls = [call for call in world.calls if call and call[0] == "sudo"]
+            self.assertTrue(sudo_calls)
+            self.assertTrue(all(call in (r1.PowerModeGuard.AUTO, r1.PowerModeGuard.HIGH)
+                                for call in sudo_calls))
 
     def test_persistent_marker_recovers_prior_sigkill_with_fake_pmset_and_sudo(self):
         with tempfile.TemporaryDirectory() as td:
@@ -121,6 +131,11 @@ class R1Tests(unittest.TestCase):
         values["S9"] = float("nan")
         with self.assertRaisesRegex(r1.Refusal, "not finite"):
             r1.derive_slots({"slots": values})
+
+    def test_planning_temperature_refuses_wrong_g0_release(self):
+        rows = [{"reference_c": 40, "g0_release_c": 40 + o, "energy_j": 10 + o} for o in (0, 2, 5)]
+        with self.assertRaisesRegex(r1.Refusal, "designed offset"):
+            r1.planning_temperature_summary(rows)
 
     def test_plan_pins_durations_and_gated_held_members(self):
         rows = r1.phase_plan(False)

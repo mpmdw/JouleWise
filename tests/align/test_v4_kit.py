@@ -46,13 +46,15 @@ class KitTests(unittest.TestCase):
                     'D', 'Y-G', 'X-S', 'D', 'Y-S', 'X-G', 'D', 'D']
         self.assertEqual([m['role'] for m in self.members], expected)
         self.assertEqual([m['ordinal'] for m in self.members], list(range(1, 19)))
+        self.assertTrue(all('ac_powermode' in m for m in self.members))
+        self.assertIn('ac_powermode', self.plan['runtime_requirements'])
         self.assertEqual(Counter(m['model_id'] for m in self.members),
                          {'qwen3-30b-a3b': 12, 'qwen3.8-27b': 6})
         self.assertEqual([(m['ordinal'], m['task_pair'], m['condition'], m['seed_index'])
                           for m in self.members if m['role'] == 'D'], [
             (5, 'spam_filter_update', 'benign', 1), (8, 'bank_transfer_2', 'benign', 1),
             (11, 'spam_filter_update', 'sabotage', 1), (14, 'bank_transfer_2', 'sabotage', 1),
-            (17, 'bank_transfer_2', 'benign', 93), (18, 'spam_filter_update', 'benign', 1)])
+            (17, 'spam_filter_update', 'benign', 1), (18, 'bank_transfer_2', 'benign', 93)])
 
     def test_abba_and_baab_position_sums_are_22(self):
         for template in ('X', 'Y'):
@@ -170,7 +172,7 @@ class KitTests(unittest.TestCase):
         self.assertEqual(self.plan['runtime_requirements']['D_tools'], 'family-validated XML via qwen3_5')
 
     def test_d_replay_and_reference_origin_are_preserved(self):
-        early, late = self.members[4], self.members[17]
+        early, late = self.members[4], self.members[16]
         def without_reference(spec):
             value = json.loads(json.dumps(spec))
             value['thermal'].pop('window_reference')
@@ -240,6 +242,21 @@ class KitTests(unittest.TestCase):
             else:
                 self.assertRegex(unit['model_artifact_sha256'], r'^[0-9a-f]{64}$')
 
+    def test_powermode_arm_refuses_and_desk_marks_any_member_mismatch(self):
+        plan = json.loads(json.dumps(self.plan))
+        plan['runtime_requirements']['ac_powermode'] = 0
+        for member in plan['members']:
+            member['ac_powermode'] = 0
+        kit.arm_powermode_check(plan, 0)
+        with self.assertRaisesRegex(ValueError, 'AC powermode mismatch'):
+            kit.arm_powermode_check(plan, 2)
+        observed = {m['run_id']: 0 for m in plan['members']}
+        self.assertTrue(kit.validate_powermode_members(plan, observed)['instrument_ok'])
+        observed[plan['members'][7]['run_id']] = 2
+        verdict = kit.validate_powermode_members(plan, observed)
+        self.assertFalse(verdict['instrument_ok'])
+        self.assertEqual(verdict['powermode_mismatches'][0]['run_id'], plan['members'][7]['run_id'])
+
     def test_sizing_is_only_a_provisional_preview(self):
         self.assertNotIn(kit.KIT / 'registration/sizing_b5.json', self.files)
         preview = json.loads(self.files[kit.KIT / 'registration/sizing_preview.json'])
@@ -305,21 +322,21 @@ class FitRuleTests(unittest.TestCase):
         self.assertEqual(result['actions'], [])
         self.assertEqual(result['programmed_span_s'], 26927)
 
-    def test_drop_17_before_any_budget_reduction(self):
+    def test_drop_18_before_any_budget_reduction(self):
         result = kit.fit_roster(8192, lambda i, b: self.cost(i, b) + (0 if kit.ROSTER[i - 1][0] == 'D' else 10))
-        self.assertEqual(result['actions'], [{'drop_ordinal': 17}])
+        self.assertEqual(result['actions'], [{'drop_ordinal': 18}])
         self.assertEqual(result['B_D'], 8192)
-        self.assertNotIn(17, result['ordinals'])
+        self.assertNotIn(18, result['ordinals'])
 
-    def test_lower_budget_in_1024_steps_only_after_drop_and_preserve_5_18(self):
+    def test_lower_budget_in_1024_steps_only_after_drop_and_preserve_5_17(self):
         def measured_cost(i, b):
             role = kit.ROSTER[i - 1][0]
             return (800 + (b - 6144) / 1024 * 100 if role == 'D'
                     else self.cost(i, b) if role == 'anchor' else 1800)
         result = kit.fit_roster(10240, measured_cost)
-        self.assertEqual(result['actions'], [{'drop_ordinal': 17}, {'B_D': 9216},
+        self.assertEqual(result['actions'], [{'drop_ordinal': 18}, {'B_D': 9216},
                                             {'B_D': 8192}, {'B_D': 7168}, {'B_D': 6144}])
-        self.assertEqual(result['ordinals'], [i for i in range(1, 19) if i != 17])
+        self.assertEqual(result['ordinals'], [i for i in range(1, 19) if i != 18])
         self.assertEqual(result['B_D'], 6144)
         self.assertTrue(result['requires_R1_requalification'])
 

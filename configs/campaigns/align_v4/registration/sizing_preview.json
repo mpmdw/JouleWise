@@ -1,7 +1,7 @@
 {
   "align_members": 18,
   "fit_rule": [
-    "drop ordinal 17",
+    "drop ordinal 18",
     "lower B_D by 1024 to 6144",
     "return to lead"
   ],
