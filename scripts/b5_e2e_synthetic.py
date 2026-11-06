@@ -208,6 +208,12 @@ def main(argv=None):
                              '(an r2 resume drops L4_calibration_bracket, which r2 never stores)')
     parser.add_argument('--stop-after', help='synthetic partial run: every later step refuses with '
                         "'synthetic_stop_after' (so the record still closes); for time-boxed hosts")
+    parser.add_argument('--interrupt-after-step', metavar='STEP',
+                        help='production resume (lane b5-robust): kill the run (KeyboardInterrupt) right after '
+                             "STEP's checkpoint, then continue it with dry_run.run(..., resume=True)")
+    parser.add_argument('--interrupt-in-step', metavar='STEP',
+                        help='production resume: kill the run after the first serial runner invocation of STEP '
+                             'returns (its partial outputs stay on disk), then continue it with resume=True')
     parser.add_argument('--vdl-mode', default='on',
                         help="JOULEWISE_B5_VDL for the run: 'on' (default; serves verified hits as a real blind "
                              "run's BLIND_ON does, so timings are comparable), 'off', or 'shadow:<permille>' "
@@ -267,7 +273,24 @@ def main(argv=None):
     os.environ['JW_B5_E2E_REPO'], os.environ['JW_B5_E2E_HEAD'] = str(harness.repo), harness.head
     custody = scratch / 'custody'
     print('running joined driver: workers', args.workers, 'custody', custody, flush=True)
-    result = harness.execute(args.label, custody=custody)
+    if args.interrupt_after_step or args.interrupt_in_step:
+        interrupted = _production_interrupt(d, args.interrupt_after_step, args.interrupt_in_step)
+        try:
+            harness.execute(args.label, custody=custody)
+        except KeyboardInterrupt:
+            print('interrupted; resuming', flush=True)
+        else:
+            raise SystemExit('the run finished before the requested interrupt')
+        finally:
+            interrupted()
+        import functools
+        run, d.run = d.run, functools.partial(d.run, resume=True)
+        try:
+            result = harness.execute(args.label, custody=custody)
+        finally:
+            d.run = run
+    else:
+        result = harness.execute(args.label, custody=custody)
     run_dir = custody / 'dry-run'
     phases = run_dir / 'restricted/logs/runtime-phases.jsonl'
     summary = dict(
@@ -312,6 +335,35 @@ def main(argv=None):
     for step, row in (summary['steps'] or {}).items():
         print(f'step {step:>3}: {row["wall_s"]:9.1f} s', flush=True)
     return 0 if result.code == 0 else 1
+
+
+def _production_interrupt(d, after_step, in_step):
+    """Install one synthetic kill for --interrupt-after-step / --interrupt-in-step; return the uninstaller."""
+    from joulewise.b5_analysis import resume
+    ids = [step for step, _ in d.STEPS]
+    if after_step is not None:
+        if after_step not in ids:
+            raise SystemExit('--interrupt-after-step must be a registered step id')
+        position, write = ids.index(after_step) + 1, resume.Checkpoints.write
+
+        def killing_write(self, s, runner, *, position=None, stopped, ran, _at=position):
+            write(self, s, runner, position=position, stopped=stopped, ran=ran)
+            if position == _at:
+                raise KeyboardInterrupt('synthetic kill after step ' + after_step)
+        resume.Checkpoints.write = killing_write
+        return lambda: setattr(resume.Checkpoints, 'write', write)
+    if in_step not in ids:
+        raise SystemExit('--interrupt-in-step must be a registered step id')
+    run = d.StepRunner.run
+
+    def killing_run(self, main, argv, *, step, window=None, stdout_path=None):
+        result = run(self, main, argv, step=step, window=window, stdout_path=stdout_path)
+        if step == in_step:
+            raise KeyboardInterrupt('synthetic kill inside step ' + in_step)
+        return result
+    killing_run.__wrapped__ = run
+    d.StepRunner.run = killing_run
+    return lambda: setattr(d.StepRunner, 'run', run)
 
 
 # ------------------------------------------------------------ checkpoint / resume
