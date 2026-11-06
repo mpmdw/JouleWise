@@ -20,7 +20,9 @@ same scratch path) file by file. The D-188 comparator
 Writes OUT/summary.json (exit code, wall, per-step wall/cpu from the restricted
 timer, record digest, full custody manifest), OUT/runtime-phases.jsonl and
 OUT/detail.txt (scripts/b5_phase_report.py --detail). ``--keep-custody`` moves
-the custody tree to OUT/custody for the comparator.
+the custody tree to OUT/custody for the comparator. ``--cprofile DIR`` writes
+per-step cProfile stats of the driver and of every spawned pool task (slower;
+attribution only); ``--cprofile-report DIR OUT.txt`` renders them per step.
 """
 from __future__ import annotations
 
@@ -152,7 +154,32 @@ def step_table(phases_path):
     return steps
 
 
+def report_profiles(directory, out, top=40):
+    """Per step and process group (driver / pool workers): top functions by self and cumulative time."""
+    import io
+    import pstats
+    groups = {}
+    for path in sorted(Path(directory).glob('*.prof')):
+        group, _pid, step = path.stem.split('-', 2)
+        groups.setdefault((step.removeprefix('step'), group), []).append(str(path))
+    order = {s: i for i, s in enumerate(('0', '1', '2', '3', '3b', '4', '5', '8', '6', '9', '9b', '10', '11'))}
+    with open(out, 'w') as handle:
+        for (step, group), files in sorted(groups.items(), key=lambda kv: (order.get(kv[0][0], 99), kv[0][1])):
+            stats = pstats.Stats(files[0])
+            for extra in files[1:]:
+                stats.add(extra)
+            for key in ('tottime', 'cumulative'):
+                buffer = io.StringIO()
+                stats.stream = buffer
+                stats.sort_stats(key).print_stats(top)
+                handle.write(f'\n===== step {step} {group} ({len(files)} processes) by {key} =====\n')
+                handle.write(buffer.getvalue())
+
+
 def main(argv=None):
+    if argv is None and sys.argv[1:2] == ['--cprofile-report']:
+        report_profiles(Path(sys.argv[2]), Path(sys.argv[3]))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--scratch', type=Path, required=True,
                         help='fixed synthetic root (same path for runs that are compared)')
@@ -161,6 +188,9 @@ def main(argv=None):
     parser.add_argument('--label', default='run')
     parser.add_argument('--sample-ms', type=int, default=200)
     parser.add_argument('--keep-custody', action='store_true')
+    parser.add_argument('--cprofile', type=Path,
+                        help='write per-step cProfile stats of the driver and of every pool task to DIR '
+                             '(slows the run; use for attribution, not for timing)')
     args = parser.parse_args(argv)
     scratch, out = args.scratch.absolute(), args.out.absolute()
     for path in (scratch, out, Path(os.environ.get('TMPDIR', tempfile.gettempdir()))):
@@ -171,6 +201,11 @@ def main(argv=None):
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir(parents=True)
     _environment(args.workers, args.sample_ms, scratch)
+    if args.cprofile is not None:
+        _forbid(args.cprofile.absolute())
+        args.cprofile.mkdir(parents=True, exist_ok=True)
+        os.environ[PROFILE_ENV] = str(args.cprofile.absolute())
+        _profile_driver_steps(args.cprofile.absolute())
 
     from tests.b5_analysis import fixtures_s10, joined_s10
     shim = _fixed_tempfile(scratch)
@@ -219,8 +254,84 @@ def main(argv=None):
     return 0 if result.code == 0 else 1
 
 
+PROFILE_ENV = 'JW_B5_E2E_CPROFILE'
+_PROFILES = {}
+_ACTIVE = []
+
+
+def _current_step(directory):
+    try:
+        return (Path(directory) / 'current-step').read_text().strip() or 'none'
+    except OSError:
+        return 'none'
+
+
+def _dump_profiles(directory, prefix):
+    for step, profile in _PROFILES.items():
+        try:
+            profile.dump_stats(str(Path(directory) / f'{prefix}-{os.getpid()}-step{step}.prof'))
+        except Exception:  # noqa: BLE001 - attribution only
+            pass
+
+
+def _profile_driver_steps(directory):
+    """Parent: one profile per registered step, switched by the driver's own step hooks."""
+    import atexit
+    import cProfile
+    from joulewise.b5_analysis import phase_timing
+
+    begin, end = phase_timing.step_begin, phase_timing.step_end
+
+    def step_begin(step):
+        tmp = directory / 'current-step.tmp'
+        tmp.write_text(step)
+        os.replace(tmp, directory / 'current-step')
+        begin(step)
+        profile = _PROFILES.setdefault(step, cProfile.Profile())
+        try:
+            profile.enable()
+            _ACTIVE.append(profile)
+        except ValueError:
+            pass
+
+    def step_end(step):
+        while _ACTIVE:
+            _ACTIVE.pop().disable()
+        end(step)
+        (directory / 'current-step').write_text('none')
+
+    phase_timing.step_begin, phase_timing.step_end = step_begin, step_end
+    atexit.register(_dump_profiles, directory, 'driver')
+
+
+def _profiled_task(original, directory):
+    """Worker: profile each pool task under the step the driver is in."""
+    import cProfile
+    import functools
+
+    @functools.wraps(original)
+    def run(*args, **kwargs):
+        if _ACTIVE:
+            return original(*args, **kwargs)
+        profile = _PROFILES.setdefault(_current_step(directory), cProfile.Profile())
+        try:
+            profile.enable()
+        except ValueError:
+            return original(*args, **kwargs)
+        _ACTIVE.append(profile)
+        try:
+            return original(*args, **kwargs)
+        finally:
+            _ACTIVE.pop()
+            profile.disable()
+    return run
+
+
 def _seamed_pack_worker(original):
     """Spawned pack workers see the same synthetic Git observations as the parent."""
+    import functools
+
+    @functools.wraps(original)
     def run(task):
         from tests.b5_analysis.joined_s10 import JoinedHarness
         harness = object.__new__(JoinedHarness)
@@ -230,12 +341,32 @@ def _seamed_pack_worker(original):
     return run
 
 
+def _install_worker_hooks():
+    import importlib
+    try:
+        from joulewise.b5_analysis import pack_parallel as pp
+    except ImportError:  # r2 has no pack scheduling
+        pp = None
+    if pp is not None:
+        pp.run_pack = _seamed_pack_worker(pp.run_pack)
+    directory = os.environ.get(PROFILE_ENV)
+    if not directory:
+        return
+    import atexit
+    for module, name in (('joulewise.analysis_member_pool', 'run_member'),
+                         ('joulewise.b5_analysis.parallel', 'run_child'),
+                         ('joulewise.b5_analysis.pack_parallel', 'run_pack'),
+                         ('joulewise.whole_window', '_strict_validation_worker')):
+        try:
+            owner = importlib.import_module(module)
+        except ImportError:
+            continue
+        if hasattr(owner, name):
+            setattr(owner, name, _profiled_task(getattr(owner, name), directory))
+    atexit.register(_dump_profiles, directory, 'worker')
+
+
 if __name__ == '__main__':
     sys.exit(main())
 elif __name__ == '__mp_main__' and os.environ.get('JW_B5_E2E_REPO'):
-    try:
-        from joulewise.b5_analysis import pack_parallel as _pp
-    except ImportError:  # r2 has no pack scheduling
-        _pp = None
-    if _pp is not None:
-        _pp.run_pack = _seamed_pack_worker(_pp.run_pack)
+    _install_worker_hooks()
