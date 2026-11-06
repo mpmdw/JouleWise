@@ -1,4 +1,4 @@
-# Saturday 2026-11-07 Flash-Next validation: {{RUN_ID}}
+# Saturday 2026-11-07 Flash-Next validation: {{RUN_ID}} — {{SYNTHETIC}}
 
 PROVISIONAL — generated from validation evidence, never energy evidence.
 Operator: PENDING. Mac/OS/build/ambient conditions: PENDING.
@@ -12,6 +12,12 @@ Source revision: {{SOURCE}}
 {{ARTIFACT}}
 ```
 
+Receipt timings (UTC, elapsed, bytes and mean decimal MB/s):
+
+```json
+{{RECEIPT_TIMINGS}}
+```
+
 All GB are decimal; divide by 2^30 for GiB. Metal, RSS and file-cache
 residency overlap in unified memory. Never sum them. Converter v2 manifest
 digests for large files are chunked; the separate SHA256SUMS are ordinary SHA-256.
@@ -22,7 +28,18 @@ digests for large files are chunked; the separate SHA256SUMS are ordinary SHA-25
 
 ## Memory (GOAL 6)
 
+```json
+{{MEMORY_SUMMARY}}
+```
+
 {{MEMORY_ROWS}}
+
+{{MEMORY_STEP_ROWS}}
+
+Predicted versus observed allocation proxy (Metal, RSS and PLE are never
+summed; QSA is file-backed and shown only as a prediction component):
+
+{{ALLOCATION_ROWS}}
 
 ```json
 {{MEMORY_MONITOR}}
@@ -68,6 +85,8 @@ P5 targets from PR #670: prefill >=400 tok/s (512) / >=550 (2048), decode
 >=30 tok/s, stretch 40. These were e3 recipe extrapolations; target applicability
 to maxfit and any misses: PENDING. Monitoring overhead and cache state: PENDING.
 Efforts are low/medium/xhigh; all emitted reasoning tokens count as decode.
+Each cell shows median (minimum-maximum) over non-warmup repeats and a
+MEETS/MISSES result. These remain PR #670 e3-recipe extrapolations.
 
 ## PLE paging and external disk I/O
 
@@ -78,6 +97,13 @@ supports a cold claim. Warm pass follows identical tokens. iostat cumulative
 external-physical-disk MB delta and elapsed seconds: PENDING. Other disk I/O:
 PENDING. Fault counts and ru_inblock are diagnostic counters, not disk bytes.
 PLE gather-seconds delta / lookups and peak resident pages: PENDING.
+
+## Pre-decided next actions
+
+{{NEXT_ACTIONS}}
+
+These actions are generated from the report rule table. They do not edit or
+close any GOAL line below.
 
 ## Completion and custody
 

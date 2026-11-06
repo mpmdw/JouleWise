@@ -163,7 +163,9 @@ class SourceTests(unittest.TestCase):
                  patch.object(live, "verify_source", return_value={"a": "b"}), \
                  patch.object(os, "statvfs", return_value=types.SimpleNamespace(f_bavail=10**12, f_frsize=1)):
                 result = live.convert(args)
-            converter.convert.assert_called_once_with(snapshot, artifact, profile="maxfit", group_size=64, ple_storage="bf16")
+            converter.convert.assert_called_once_with(snapshot, artifact, profile="maxfit", group_size=64,
+                                                      ple_storage="bf16",
+                                                      progress_path=base / "convert.progress.jsonl")
             self.assertEqual(result["manifest_sha256"], live.raw_sha256(artifact / "manifest.json"))
             self.assertEqual(list(artifact.iterdir()), [artifact / "manifest.json"])
             self.assertTrue(Path(result["plain_sha256s"]).read_text().endswith("  manifest.json\n"))
@@ -216,6 +218,54 @@ class SourceTests(unittest.TestCase):
                 self.assertEqual(live.external(Path(tmp) / "future"), Path(tmp) / "future")
             with self.assertRaisesRegex(ValueError, "inside"):
                 live.external(tmp)
+
+    def test_full_verify_collects_corrupt_missing_and_quarantines_symlink_blobs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp); snapshot = base / "snapshot"; blobs = base / "blobs"
+            snapshot.mkdir(); blobs.mkdir()
+            metadata = self.make_snapshot(snapshot)
+            bad = blobs / "badblob"; bad.write_bytes(b"corrupt")
+            (snapshot / "model-00001.safetensors").unlink()
+            (snapshot / "model-00001.safetensors").symlink_to(bad)
+            (snapshot / "config.json").unlink()
+            _, failures = live.verify_source_all(snapshot, metadata, expected_shards=1)
+            self.assertEqual({x["file"] for x in failures}, {"config.json", "model-00001.safetensors"})
+            with patch.object(live, "utc_now", return_value=__import__("datetime").datetime(2026, 11, 7, tzinfo=__import__("datetime").timezone.utc)):
+                moved = live.quarantine_bad(snapshot, failures, base)
+            self.assertEqual(len(moved), 1)
+            self.assertFalse((snapshot / "model-00001.safetensors").exists())
+            self.assertTrue(Path(moved[0]).exists())
+
+    def test_progress_counts_incomplete_and_xet_without_network(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp); hub = base / "hub"; xet = base / "xet"; run = base / "run"
+            blobs = hub / "models--Qwen--Qwen3.8-Flash-Next" / "blobs"; blobs.mkdir(parents=True)
+            (blobs / "a").write_bytes(b"a" * 10); (blobs / "b.incomplete").write_bytes(b"b" * 20)
+            xet.mkdir(); (xet / "chunk").write_bytes(b"c" * 30); run.mkdir()
+            plan = base / "plan.json"; plan.write_text(json.dumps({"total_bytes": 100, "metadata": {}}))
+            args = live.parse_args(["progress", "--metadata", str(plan), "--run-dir", str(run),
+                                    "--volume", str(base), "--once"])
+            with patch.dict(os.environ, {"HF_HUB_CACHE": str(hub), "HF_XET_CACHE": str(xet)}), \
+                 patch.object(live, "utc_now", return_value=__import__("datetime").datetime(2026, 11, 7, tzinfo=__import__("datetime").timezone.utc)):
+                row = live.progress(args)
+            self.assertEqual(row["bytes_present"], 60)
+            self.assertEqual(json.loads((run / "download.progress.jsonl").read_text())["bytes_present"], 60)
+
+
+class ReportFixtureTests(unittest.TestCase):
+    def test_real_macos_iostat_header_variants(self):
+        for raw in ("          disk4\n    KB/t xfrs   MB\ndisk4  16.00 100 1234.50\n",
+                    "disk4\n KB/t xfrs MB read MB writ\ndisk4 8.0 2 10.0 20.0\n"):
+            self.assertEqual(reporting.iostat_cumulative_mb(raw, "disk4"), float(raw.splitlines()[-1].split()[-1]))
+
+    def test_report_pending_prediction_miss_and_speed_ranges(self):
+        template = "{{PERFORMANCE_ROWS}}\n{{EVIDENCE}}\n{{NEXT_ACTIONS}}\n{{SYNTHETIC}}"
+        reports = {"performance-512.json": {"results": {"runs": [
+            {"context": 4096, "reasoning_effort": "low", "warmup": False, "prefill_tps": 300, "decode_tps": 20},
+            {"context": 4096, "reasoning_effort": "low", "warmup": False, "prefill_tps": 320, "decode_tps": 22}] }},
+                   "memory.json": {"synthetic": True, "results": {"runs": []}}}
+        rendered = reporting.render(template, reports, "fixture")
+        self.assertIn("MISSES", rendered); self.assertIn("PENDING", rendered); self.assertIn("SYNTHETIC", rendered)
 
 
 class MemoryTests(unittest.TestCase):
