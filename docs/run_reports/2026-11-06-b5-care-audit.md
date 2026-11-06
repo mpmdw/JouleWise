@@ -242,6 +242,11 @@ order and stop rule. They cost about 2 min per run.
 
 Each entry below is a draft for the lead to sign.
 
+**Signed 2026-11-06.** The lead adopted DLE-0, DLE-1 and DLE-2 and did not adopt DLE-3, DLE-4 and DLE-5 for now. The
+signed entries are in `docs/analysis/b5/DEVIATION-LOG.md`, the deviation log of the block-5 analysis plan. The plan
+is sealed, so it cannot link to the log itself. The DLE-1 release is `scripts/release_b5.py`; its runbook is
+`docs/analysis/b5/RELEASE-RUNBOOK-lean.md`.
+
 **Blindness (applies to every entry).** Drafted 2026-11-06 while block 5 is blinded. The real-data r2 run on this
 laptop is a blind dry run, no released value exists, and this audit opened no restricted path. **The signer must
 restate, at signing, that the release event has not happened and that they have seen no block-5 energy or outcome.**
