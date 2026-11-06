@@ -1,0 +1,54 @@
+{
+  "mlx_vlm": "0.7.12",
+  "mlx": "0.32.4",
+  "A_bf16": {
+    "param_dtypes": {
+      "model.embed_tokens.weight": "mlx.core.bfloat16",
+      "model.layers.0.linear_attn.A_log": "mlx.core.bfloat16",
+      "model.layers.0.linear_attn.norm.weight": "mlx.core.bfloat16"
+    }
+  },
+  "A_fp32": {
+    "param_dtypes": {
+      "model.embed_tokens.weight": "mlx.core.float32",
+      "model.layers.0.linear_attn.A_log": "mlx.core.float32",
+      "model.layers.0.linear_attn.norm.weight": "mlx.core.float32"
+    }
+  },
+  "B_bf16": {
+    "param_dtypes": {
+      "model.embed_tokens.weight": "mlx.core.bfloat16",
+      "model.layers.0.linear_attn.A_log": "mlx.core.bfloat16",
+      "model.layers.0.linear_attn.norm.weight": "mlx.core.bfloat16",
+      "model.layers.1.linear_attn.A_log": "mlx.core.bfloat16",
+      "model.layers.2.linear_attn.A_log": "mlx.core.bfloat16"
+    }
+  },
+  "B_fp32": {
+    "param_dtypes": {
+      "model.embed_tokens.weight": "mlx.core.float32",
+      "model.layers.0.linear_attn.A_log": "mlx.core.float32",
+      "model.layers.0.linear_attn.norm.weight": "mlx.core.float32",
+      "model.layers.1.linear_attn.A_log": "mlx.core.float32",
+      "model.layers.2.linear_attn.A_log": "mlx.core.float32"
+    }
+  },
+  "C_bf16": {
+    "param_dtypes": {
+      "model.embed_tokens.weight": "mlx.core.bfloat16",
+      "model.layers.0.linear_attn.A_log": "mlx.core.bfloat16",
+      "model.layers.0.linear_attn.norm.weight": "mlx.core.bfloat16",
+      "model.layers.1.linear_attn.A_log": "mlx.core.bfloat16",
+      "model.layers.2.linear_attn.A_log": "mlx.core.bfloat16"
+    }
+  },
+  "C_fp32": {
+    "param_dtypes": {
+      "model.embed_tokens.weight": "mlx.core.float32",
+      "model.layers.0.linear_attn.A_log": "mlx.core.float32",
+      "model.layers.0.linear_attn.norm.weight": "mlx.core.float32",
+      "model.layers.1.linear_attn.A_log": "mlx.core.float32",
+      "model.layers.2.linear_attn.A_log": "mlx.core.float32"
+    }
+  }
+}
