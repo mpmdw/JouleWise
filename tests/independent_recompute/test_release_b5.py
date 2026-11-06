@@ -304,6 +304,48 @@ class ReleaseTests(unittest.TestCase):
         verdict, code, _ = self.release()
         self.assertEqual((code, verdict["reason"]), (2, "release_checkout_not_clean"))
 
+    def test_fifo_output_refuses_instead_of_hanging(self):
+        # Sol adversarial pass (PR #688): a FIFO among the custody outputs blocked the no-follow open.
+        record = json.loads((self.custody / rel.RECORD).read_text())
+        name = record["steps"][0]["outputs"][0]["name"]
+        path = self.custody / rel.RESTRICTED / name
+        path.unlink()
+        os.mkfifo(path)
+        verdict, code, out = self.release()
+        self.assertEqual((code, verdict["reason"]), (2, rel.DIFFERS))
+        self.assertEqual((out / "refusal-location.txt").read_text(), "output/" + name + "\n")
+
+    def fake_comparison(self, result, exit_code=0):
+        real = rel.run_program
+
+        def run(argv, restricted, name):
+            if name == "comparator":
+                Path(argv[argv.index("--restricted-out") + 1]).write_text(json.dumps(result))
+                return exit_code
+            return real(argv, restricted, name)
+        return mock.patch.object(rel, "run_program", run)
+
+    def test_comparison_without_coverage_lists_or_comparisons_holds(self):
+        # Sol adversarial pass (PR #688): exit 0 with {"counts": {}, "coverage": {}} released.
+        empty = {"unmapped": [], "nonfinite": [], "uncovered_numeric": [], "absent_sources": []}
+        cases = [({"counts": {}, "coverage": {}}, "comparison_output_unreadable"),
+                 ({"counts": {}, "coverage": empty}, "comparison_vacuous"),
+                 ({"counts": {"count": {"pass": 0, "fail": 0}}, "coverage": empty}, "comparison_vacuous")]
+        for result, reason in cases:
+            with self.subTest(reason=reason), self.fake_comparison(result):
+                verdict, code, _ = self.release()
+                self.assertEqual((code, verdict["verdict"], verdict["reason"]), (2, "hold", reason))
+        with self.fake_comparison({"counts": {"count": {"pass": 1, "fail": 0}}, "coverage": empty}):
+            verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["verdict"]), (0, "agree"))
+
+    def test_recompute_stop_payload_reaches_the_verdict_only_as_null(self):
+        ours = dict(self.ours, comparison_stopped={"word": "resolved", "value": 12})
+        verdict, code, _ = self.release(ours=ours)
+        self.assertEqual((code, verdict["reason"]), (2, "recompute_comparison_stopped"))
+        self.assertIsNone(verdict["stages"]["recompute"]["comparison_stopped"])
+        self.assertNotIn("resolved", json.dumps(verdict))
+
     def test_recompute_stop_flag_holds(self):
         ours = dict(self.ours, comparison_stopped=True)
         verdict, code, _ = self.release(ours=ours)

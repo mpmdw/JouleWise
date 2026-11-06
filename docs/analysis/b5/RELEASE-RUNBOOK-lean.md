@@ -73,7 +73,7 @@ echo "exit=$?"
 | 2 | `hold` | `dry_run_record_missing_or_incomplete`, `dry_run_record_invalid`, `dry_run_not_completed` | The record is absent, malformed, a release-mode record, or has a tooling refusal. | Fix the input. A dry run with a tooling refusal must first complete (PLAN §3.2 item 1). |
 | 2 | `hold` | `release_bars_differ`, `release_checkout_not_clean`, `release_checkout_unavailable`, `pinned_commit_invalid`, `pinned_commit_unavailable`, `seal_pins_invalid`, `window_index_unreadable`, `window_index_invalid` | Environment or binding problem. | Fix and re-run into a new `$OUT`. |
 | 2 | `hold` | `recompute_failed`, `recompute_output_unreadable`, `recompute_comparison_stopped` | The recompute exited non-zero, or raised a STOP flag. Its structure-only `stdout` is in `$OUT/recompute.stdout`; for example, `exclusions_rederivation_mismatch` or `trace_plist_missing`. | Tooling defect: R3, blind. |
-| 2 | `hold` | `comparator_refused`, `comparison_output_unreadable` | The comparator refused. Its code is `stages.comparator.refused`, and the step-11 coverage counts are in `stages.comparator.step11`. | Tooling defect: R3, blind. |
+| 2 | `hold` | `comparator_refused`, `comparison_output_unreadable`, `comparison_vacuous` | The comparator refused, wrote an output without its coverage lists, or compared nothing (no family with a pass). Its code is `stages.comparator.refused`, and the step-11 coverage counts are in `stages.comparator.step11`. | Tooling defect: R3, blind. |
 
 **What the verdict shows.**
 - `stages.digests`: how many outputs and input-census rows were re-hashed. `input_census_binding_rows` counts the
@@ -177,65 +177,26 @@ not independently recomputed (`docs/analysis/b5/LEAN-COVERAGE-AUDIT.md` §2 item
 This is accepted for block 5 only (DLE-1). Adding the seven to the lean program is required before the lean path
 becomes production for block 6 (DLE-2).
 
-## RESUME STATE (2026-11-06, paused for a Terminal restart)
+## Review record (PR #688)
 
-**Done (on this branch).**
-- The deviation log, with DLE-0, DLE-1 and DLE-2 signed. DLE-3, DLE-4 and DLE-5 are recorded as not adopted.
-- The `--workers` member pool, `release_b5.py`, the tests, this runbook, and the coverage audit
-  (`LEAN-COVERAGE-AUDIT.md`).
-- First commit: `422576dc5`.
-
-**Executing review by local Sol 6.1 (xhigh), at `422576dc5`.** It reported 4 MAJOR and 3 MINOR findings. All are
-fixed in the commit after `422576dc5`:
-1. A worker dying mid-reply hung the parent. The queue transport is replaced by per-worker pipes. A reply cut short
-   now gives EOF, and the pool refuses `member pool worker exited`.
-2. `--bars` could turn a hold into agree. The option is removed; the release bars are pinned by SHA-256
-   (`RELEASE_BARS_SHA256`), and any other bytes refuse `release_bars_differ`.
-3. A verdict the structure guard replaced still exited 0. It now exits 2.
-4. Free-text bar-set names, family names, labels and the pinned commit could reach the verdict. They are now
-   allowlisted: families and labels come from fixed lists, the bars digest replaces the bar-set name, and a pinned
-   commit that is not hex prints as null.
-5. Queue feeder threads leaked. There are no threads now.
-6. A symbolic link at `dry-run/restricted` itself was followed. The no-follow walk now starts at the custody root.
-7. The timing table was a placeholder. It is filled.
-
-Each fix has a regression test. The audit grep of both Sol event logs: 0 command hits; the text hits are quoted
-tracked docs only.
-
-**Test evidence after the fixes.**
-- `tests.independent_recompute.test_member_pool` plus `test_release_b5`: 32 tests OK, 1 skipped (the opt-in
-  full-size test).
-- Full-size synthetic with the pipe transport: `--workers 10` gives output identical to the serial reference (all
-  fields except `program_sha256`). Wall 45 s, CPU 49 s, at background QoS.
-- The 3-worker and serial re-runs of the new transport were stopped by the pause.
-
-**In flight, stopped by the pause; re-run these.**
-1. The census tests that scan `scripts/` and `tests/` were killed before finishing:
-   ```bash
-   nice -n 19 taskpolicy -b python3.13 -B -m unittest tests.test_battery_float_sweep \
-       tests.test_single_count_discipline_census tests.test_git_fixture_maintenance tests.test_custody_mode_inventory \
-       tests.test_network_time_off tests.hazards.test_import_graph tests.test_reason_code_partition \
-       tests.test_mint_policy_resolver_guard
-   nice -n 19 taskpolicy -b python3.13 -B -m unittest discover -s tests/independent_recompute -t .
-   ```
-2. The full-size worker-count determinism check on the new transport (the extraction is reused):
-   ```bash
-   JW_B5_FULLSIZE_RECOMPUTE=1 JW_B5_FULLSIZE_DIR=/Users/edr/code/CapstoneProject/jw-wt/b5-lr-synth \
-       nice -n 19 taskpolicy -b python3.13 -B -m unittest \
-       tests.independent_recompute.test_member_pool.FullSizeMemberPoolTests
-   ```
-3. Optionally, a second short Sol delta review of the fix commit.
-
-**Next steps.**
-1. Do steps 1-2 above.
-2. The lead runs section 1 against the dry-run custody (blinded verdict only).
-3. On `agree`, ask Ed for the unseal OK.
-
-**Local paths, all synthetic and none of them pushed.**
-- `/Users/edr/code/CapstoneProject/jw-wt/b5-lr-synth/`: the extracted full-size window (1.1 GB) and `out/`
-  (timing logs, recompute outputs).
-- `/Users/edr/code/CapstoneProject/jw-wt/b5-lr-sol-logs/`: Sol prompts and event logs.
-- `/Users/edr/code/CapstoneProject/jw-wt/b5-lr-sol-review/REVIEW-SOL.md`: the review, untracked.
-- `/Users/edr/code/CapstoneProject/jw-wt/b5-lr-sol-cov/COVERAGE-AUDIT.md`: the original of `LEAN-COVERAGE-AUDIT.md`.
-
-Delete these after use.
+- **Sol 6.1 executing review at `422576dc5`:** 4 MAJOR and 3 MINOR findings, all fixed with regression tests
+  (`docs/analysis/b5/REVIEW-SOL-422576dc5.md`).
+- **Opus executing review, Fable 5.1 cold pass and two local Sol adversarial passes at `ebf5fc8cc`:** no false-agree
+  path through a real comparator or a real dry-run record was found. Fixed, each with a regression test:
+  - a FIFO or other special file at an input-census path or among the custody outputs hung stage (a); both reads
+    now open non-blocking and refuse anything that is not a regular file;
+  - malformed `seal_pins.json` at the pinned commit was reported as `pinned_commit_unavailable`; it is now
+    `seal_pins_invalid`;
+  - a comparator exit 0 whose output lacks the coverage lists, or compared nothing, gave agree; it is now
+    `comparison_output_unreadable` or `comparison_vacuous`;
+  - a non-boolean `comparison_stopped` reached the verdict as written; only a boolean, or null, is printed.
+- **Rejected, with reasons:** census rows of a non-analysed pack (refuse as a difference, as L9's positional
+  comparison would; not reachable with the block-5 index); plan-tree binding rows not re-hashed (L9's own release
+  copies them unchanged); census inputs followed through symbolic links (L9's census hash does the same); prefetch
+  reading an unused reference spare (by design, a superset; outputs and `files_read` unchanged); a stalled, not
+  dead, worker mid-reply (needs an external SIGSTOP; a dead one refuses); `completed_without_tooling_refusal` trusted
+  (it is L9's own completion field).
+- **Worker-count determinism:** unit tests at 1, 3 and 10 workers; full-size synthetic window byte-identical across
+  1, 3 and 10 workers (cloud, 91 s); and on the three-window fault fixture the output at 1 and 10 workers equals
+  both the pre-pool script's and an independently written parallel recompute's (`sol/burn-recpar`), except
+  `program_sha256`.

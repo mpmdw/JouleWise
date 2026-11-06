@@ -113,7 +113,8 @@ def read_nofollow(base, relative):
         path = path / part
         if not stat.S_ISDIR(os.lstat(path).st_mode):
             raise OSError("not a directory")
-    fd = os.open(path / parts[-1], os.O_RDONLY | os.O_NOFOLLOW)
+    # O_NONBLOCK: a FIFO opens at once and is then refused as not regular, never a hang.
+    fd = os.open(path / parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             raise OSError("not a regular file")
@@ -349,7 +350,8 @@ def stage_recompute(entries, restricted, workers, python):
     except OSError:
         return status, "recompute_output_unreadable"
     stopped = result.get("comparison_stopped") if isinstance(result, dict) else None
-    status["comparison_stopped"] = stopped
+    # Only a boolean reaches the verdict; any other payload is reported as null (and holds).
+    status["comparison_stopped"] = stopped if isinstance(stopped, bool) else None
     if stopped is not False:
         return status, "recompute_comparison_stopped"
     return status, None
@@ -373,6 +375,12 @@ def stage_compare(custody, entries, index_path, restricted, python):
     counts, cover = result.get("counts"), result.get("coverage")
     if not isinstance(counts, dict) or not isinstance(cover, dict):
         return status, "comparison_output_unreadable", False
+    if not all(isinstance(cover.get(k), list) for k in ("unmapped", "nonfinite", "uncovered_numeric", "absent_sources")):
+        # The comparator always writes these lists (compare_b5_recompute.coverage); absent means unreadable.
+        return status, "comparison_output_unreadable", False
+    if not any(isinstance(row, dict) and type(row.get("pass")) is int and row["pass"] > 0 for row in counts.values()):
+        # A comparison that compared nothing is never agreement.
+        return status, "comparison_vacuous", False
     families = {}
     for family, row in sorted(counts.items()):
         if not (isinstance(row, dict) and type(row.get("pass")) is int and type(row.get("fail")) is int
