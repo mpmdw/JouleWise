@@ -58,6 +58,11 @@ from scripts.run_night import (  # noqa: E402
     make_probes,
 )
 from scripts.fixture_orphan_census import launch_observation  # noqa: E402
+from scripts.launch_align_r0 import (  # noqa: E402
+    FENCE_NAME as DESK_FENCE_NAME,
+    fence_lock as desk_fence_lock,
+    read_fence as read_desk_fence,
+)
 
 
 SCHEMA = "joulewise.magistrate_watchdog_state.v1"
@@ -1925,8 +1930,36 @@ def reset_backoff_after_reboot(
     )
 
 
+def desk_fence_active(storage: Storage, deps: Dependencies, now_epoch_s: float) -> dict[str, Any] | None:
+    """A bounded desk job fences relaunches without exempting any agent census.
+
+    No fence means no extra process-table call, lock file, or state mutation.
+    A malformed/unreadable fence fails closed through the callers' unsafe hold.
+    Stale removal shares a lock with the magistrate/LaunchAgent PID handoff.
+    """
+    path = storage.root / DESK_FENCE_NAME
+    if not storage.exists(path):
+        return None
+    with desk_fence_lock(storage.root, dry_run=storage.dry_run):
+        record = read_desk_fence(storage.root)
+        if record is None:
+            return None
+        if record["deadline"] > now_epoch_s:
+            try:
+                rows = deps.processes.snapshot()
+            except Exception as exc:
+                raise RuntimeError(f"desk process table unavailable: {exc}") from exc
+            if any(row.pid == record["pid"] and "<defunct>" not in row.command.casefold()
+                   for row in rows):
+                return record
+        storage.unlink(path)
+    return None
+
+
 def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> bool:
     now = deps.wall_now().astimezone()
+    if desk_fence_active(storage, deps, now.timestamp()):
+        return False
     snapshot = load_plans(storage, now_epoch_s=now.timestamp())
     if snapshot.errors:
         raise ValueError("; ".join(snapshot.errors))
@@ -1945,16 +1978,18 @@ def _probe_remote_stop(storage: Storage, deps: Dependencies, state: Mapping[str,
 
 
 def _launch_fence(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> Decision | None:
-    """Refresh both fence sources and time at each launch boundary."""
+    """Refresh plan and desk fence sources at each launch boundary."""
     try:
         now = deps.wall_now().astimezone()
+        if desk_fence_active(storage, deps, now.timestamp()):
+            return Decision("FENCED", "desk fence active at launch boundary")
         snapshot = load_plans(storage, now_epoch_s=now.timestamp())
         if snapshot.errors:
             return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
         now = deps.wall_now().astimezone()
         if any(plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans):
             return Decision("FENCED", "plan span active at launch boundary")
-    except (OSError, ValueError, OverflowError) as exc:
+    except (OSError, ValueError, OverflowError, RuntimeError) as exc:
         return Decision("HOLD_UNSAFE", f"launch_fence: {exc}")
     return None
 
@@ -1983,6 +2018,10 @@ def decide(
                 storage, state, [f"reader: {type(exc).__name__}: {exc}"], wall.timestamp())
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+    try:
+        desk = desk_fence_active(storage, deps, wall.timestamp())
+    except (OSError, ValueError, OverflowError, RuntimeError) as exc:
+        return Decision("HOLD_UNSAFE", f"desk_fence: {exc}")
     # Delivery is only a candidate for release. The courier and driver can
     # both outlive courier.sent; each has its own process-table observation.
     try:
@@ -2116,8 +2155,9 @@ def decide(
             lock = None
 
     active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage, state)]
-    if probe_span_active:
-        stop = StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
+    if probe_span_active or desk:
+        stop = StopObservation("NOT_PROBED", "remote stop probe skipped during "
+                               + ("plan span" if probe_span_active else "desk span"))
     else:
         try:
             stop = _probe_remote_stop(storage, deps, state)
@@ -2148,6 +2188,8 @@ def decide(
         if not census.empty:
             return Decision("HOLD_CENSUS", "production census non-empty inside plan span")
         return Decision("FENCED", "plan span active and census empty")
+    if desk:
+        return Decision("FENCED", f"desk fence active: {desk['purpose']}", adopt=owner is not None)
     if stop.state == "STOPPED":
         return Decision("STOPPED", stop.detail, adopt=owner is not None)
     if stop.state not in {"CLEAR", "NOT_PROBED"}:
@@ -2717,7 +2759,7 @@ def start_session(
     state: dict[str, Any],
     *,
     binary_path: Path | None = None,
-) -> ResidentSupervisor:
+) -> ResidentSupervisor | None:
     now = deps.wall_now().astimezone()
     activation_id = str(uuid.uuid4())
     activation_spawn_epoch_s = now.timestamp()
@@ -2762,6 +2804,18 @@ def start_session(
         "binary_version": binary_version,
         "status": "STARTING",
     }
+    # Recheck the desk after interpreter/version/prompt work, just before
+    # spawn. With no desk file, the existing plan path does no extra work.
+    try:
+        desk = desk_fence_active(storage, deps, deps.wall_now().timestamp())
+    except (OSError, ValueError, OverflowError, RuntimeError) as exc:
+        fence = Decision("HOLD_UNSAFE", f"desk_fence: {exc}")
+    else:
+        fence = Decision("FENCED", "desk fence active before spawn") if desk else None
+    if fence is not None:
+        transition(storage, state, fence.state, fence.reason, deps.wall_now().astimezone())
+        storage.atomic_json(storage.root / "state.json", state)
+        return None
     storage.exclusive_json(storage.root / "magistrate.lock", starting_lock)
     try:
         child = deps.spawn(argv, CANONICAL_REPO, stdout_path, stderr_path)

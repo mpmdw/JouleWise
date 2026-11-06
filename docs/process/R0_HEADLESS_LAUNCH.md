@@ -1,0 +1,102 @@
+# Headless ALIGN R0 handoff
+
+This is the WP10 interface for ALIGN v4 ruling 7. It does not authorize a
+measurement. The lead's R0 directive supplies the reviewed measurement head,
+config, new record directory, and absolute deadline, after `DESK_DONE` with no
+window armed. Main supplies the watchdog/launcher; the measurement checkout
+must contain `scripts/align_r0_checks.py` and its pinned environment.
+
+The magistrate runs this as its last work, with the actual magistrate session
+PID (the `pid` in its watchdog lock, not the PID of a transient tool shell):
+
+```sh
+"$WATCHDOG_PYTHON" "$WATCHDOG_REPO/scripts/launch_align_r0.py" launch \
+  --custody-root "$MAGISTRATE_CUSTODY" \
+  --magistrate-pid "$MAGISTRATE_PID" \
+  --deadline "$R0_DEADLINE_EPOCH" \
+  --repo "$R0_REPO" --python-bin "$R0_PYTHON" \
+  --config "$R0_CONFIG" --output "$R0_RECORD" \
+  --disk-path "$R0_DISK"
+```
+
+The custody root must be the installed watchdog's custody root. All file
+arguments are resolved to absolute paths before rendering. The interpreter
+must be the measurement environment's executable. No model files or config
+contents are inspected by the launch command. The new output directory is
+created by the R0 runner, preserving its exclusive-record semantics.
+
+Success prints the label, plist path and fence. **Immediately end the
+magistrate session and all its agent children.** Returning from a tool shell
+alone does not end the session. The launcher does not kill or exempt the
+magistrate. An error means inspect the launch logs and fence before retrying;
+it is never permission to run R0 inline. Retry decisions and fresh record
+directories belong to the R0 directive.
+
+## Fence lifecycle
+
+`<custody>/desk_fence.json` contains exactly three fields:
+
+```json
+{"purpose": "align-r0:<unique launch id>", "pid": 12345, "deadline": 1794000000.0}
+```
+
+`deadline` is Unix wall-clock seconds, supplied explicitly for the entire desk
+including startup and cleanup. The command writes the magistrate PID before
+`launchctl bootstrap gui/<uid> <plist>`. The LaunchAgent wrapper atomically
+takes ownership with its own PID. The command waits up to 30 seconds for that
+handoff before reporting success. The wrapper waits up to 180 seconds for the
+magistrate PID to disappear, then invokes the unchanged R0 guard. The guard
+still refuses any agent, occupied custody or armed night; no ancestor census
+exemption is added.
+
+A live, unexpired fence prevents watchdog relaunches at decision and spawn
+boundaries, and suppresses remote-stop probes as a plan span does. Existing
+plan stand-down deadlines retain precedence. Missing fences preserve ordinary
+watchdog behavior. Dead or defunct PIDs and deadlines at or before the current
+time cause stale removal; subsequent launches still require the existing
+stop/backoff/plan predicates. Malformed or unreadable fences hold unsafe.
+
+The separate `.desk-fence.lock` serializes publication, transfer, stale removal
+and ownership-checked cleanup. The resident service lock remains untouched.
+The fence has no process start token: PID reuse can delay recovery until the
+deadline. A deadline deliberately releases the fence even if its PID is live.
+The runner therefore times out 10 seconds before that deadline, allowing five
+seconds for TERM before KILL and then Spotlight cleanup. Scheduling stalls or
+SIGKILL can defeat shell cleanup; these require an operator check.
+
+## LaunchAgent and cleanup
+
+The uniquely labeled plist and `runner.json`, `stdout.log`, `stderr.log` live
+under `<custody>/r0-launches/<id>/`. It has `RunAtLoad` and no `KeepAlive`,
+schedule, or restart policy. It is bootstrapped directly from custody, never
+installed in `~/Library/LaunchAgents`, so it cannot run again at login. After
+inspection the lead may unload the completed label with
+`launchctl bootout gui/<uid>/<label>`; retain the custody files.
+
+After the magistrate exits, the wrapper checks `pmset -g batt` for AC power
+and reports free bytes at `--disk-path`. In accordance with ALIGN v4 ruling 6,
+66 GB is permitted: the 80 GB and offload gates belong to W1. An unreadable
+disk or indeterminate power probe refuses startup.
+
+The wrapper sends SIGSTOP to the exact PIDs found by `pgrep -x corespotlightd`
+and `pgrep -x spotlightknowledged`. Its EXIT trap attempts SIGCONT for every
+PID recorded before STOP, including partial pause failures. Normal completion,
+command failure, SIGTERM, SIGINT and SIGHUP all use that cleanup; a running
+R0 child is terminated and reaped first. Resume errors are logged and return
+a failure status. The owned fence is removed only after cleanup, and an older
+job cannot clear a newer job's fence. SIGKILL and host failure cannot run a
+trap. Before live use the lead must verify Spotlight signaling permissions
+and recovery on the measurement Mac.
+
+The runner command is read from `runner.json` rather than placed in launcher
+ancestor argv, so the existing measurement-chain census does not mistake the
+wrapper for a second R0 runner. There is no census change.
+
+## Verification still required
+
+`tests.test_magistrate_desk_fence` exercises the real watchdog entry point
+(only process/network seams injected) and uses fake launchctl, power probes
+and Spotlight PIDs for the handoff and cleanup cases. These are synthetic
+tests. They do not validate live launchd scheduling, permissions, MLX, hardware
+quietness, or an R0 result. Opus full-tier review, CI and the lead's native
+checks remain required before merge/use.

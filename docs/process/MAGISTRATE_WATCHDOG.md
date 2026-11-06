@@ -2,6 +2,11 @@
 
 `com.joulewise.magistrate` is a user LaunchAgent that evaluates a short Python tick at load and every 300 seconds. A safe tick forks a new session and leaves a resident supervisor running at 10-second resolution. The service never writes a repository tree. Its default mutable root is `~/night-custody/magistrate/`; `MAGISTRATE_WATCHDOG_CUSTODY_ROOT` or `--custody-root` may replace that root for a rehearsal.
 
+For the ALIGN R0 engineering desk, the magistrate can hand off to a one-shot
+LaunchAgent with a bounded [desk fence](R0_HEADLESS_LAUNCH.md). This also
+suppresses relaunches and remote-stop probes while the desk job is alive;
+the ordinary plan stand-down and R0 agent census remain in force.
+
 When the magistrate writes and sends a progress update with
 `scripts/window_status.sh`, that script first inventories recorded measurement
 processes: a **chain** runs the night's measurements and pauses; a **campaign**
@@ -225,7 +230,7 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
-0. Land the watchdog branch on `main` through the normal gate ledger: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the five pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
+0. Land the watchdog branch on `main` through the normal gate ledger: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the eight pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
 
    ```zsh
    cd /Users/edr/code/JouleWise
@@ -236,9 +241,12 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    pinned_files=(
      scripts/magistrate_watchdog.py
      scripts/install_magistrate_watchdog.sh
+     scripts/launch_align_r0.py
+     scripts/run_align_r0_launchagent.sh
      docs/process/MAGISTRATE_WATCHDOG.md
      docs/process/MAGISTRATE_RELAUNCH_PROMPT.md
      docs/process/NIGHT_HANDBACK.md
+     docs/process/R0_HEADLESS_LAUNCH.md
    )
    for path in "${pinned_files[@]}"; do
      main_sha256="$(/usr/bin/git show "$merge_sha:$path" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')"
