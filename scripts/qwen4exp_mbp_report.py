@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qwen4exp_mbp_live as live
+from qwen4exp_mbp_triage import ACTIONS
 
 TEMPLATE = live.ROOT / "docs/align/qwen4_exp_port/mbp_live_results_template.md"
 FILES = ("download.json", "convert.json", "memory.json", "quality.json", "benchmark.json",
@@ -195,6 +196,7 @@ def render(template, reports, run_id):
               "PAGING_ROWS": table(["Artifact", "Pass", "Disk MB", "Elapsed s", "MB/s", "PLE lookups", "Unique rows", "Gather s", "Gather share"], paging),
               "REFERENCE": json.dumps(ref_summary, indent=2),
               "EVIDENCE": table(["Artifact", "Evidence", "Status", "Abort/missing reason"], evidence),
+              "TRIAGE_ACTIONS": table(["Classification", "Next action"], ACTIONS.items()),
               "NEXT_ACTIONS": "\n".join(actions)}
     for key, value in values.items():
         template = template.replace("{{" + key + "}}", value)
