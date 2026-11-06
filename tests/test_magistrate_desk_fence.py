@@ -498,6 +498,18 @@ sys.exit(7 if c['case']=='error' else 0)
         self.assertIn("-CONT 900000001", lines)
         self.assertFalse((self.root / "runner.started").exists())
 
+    def test_venv_interpreter_symlink_is_kept_unresolved(self):
+        venv_bin = self.root / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        link = venv_bin / "python"
+        link.symlink_to(sys.executable)
+        result = self.launch("--python-bin", str(link))
+        self.assertEqual(0, result.returncode, result.stderr + self.logs())
+        (job,) = self.custody.glob("r0-launches/*")
+        self.assertEqual(str(link), json.loads((job / "runner.json").read_text())[0])
+        (plist,) = job.glob("*.plist")
+        self.assertIn(str(link), plistlib.loads(plist.read_bytes())["ProgramArguments"])
+
     def test_bootstrap_failure_clears_only_its_own_fence(self):
         (self.root / "fail-bootstrap").touch()
         self.assertEqual(2, self.launch().returncode)
