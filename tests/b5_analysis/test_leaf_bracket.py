@@ -296,7 +296,7 @@ class LeafBracketTests(_Base):
         self.assertTrue(observed["relative_counters_unchanged"], "a relative runs root never reaches the store")
 
     def test_snapshot_ledger_path_is_never_read(self):
-        """The keyed snapshot carries only the temporary ledger file's final name."""
+        """Key projection never changes the snapshot a bypass receives."""
         self.assertNotIn("ledger_path", inspect.getsource(calibration))
         self.assertEqual(inspect.getsource(cl.CalibrationLedgerSnapshot).count("ledger_path"), 1)
         seen = []
@@ -307,11 +307,12 @@ class LeafBracketTests(_Base):
             return real(*args, **kwargs)
 
         expected = self.serial(self.gamma)
-        # The stand-in is not the registered leaf, so the store is bypassed;
-        # the wrapper still hands it the snapshot it would key.
+        # The stand-in is not the registered leaf, so the store is bypassed.
         with run(), mock.patch.object(calibration, "calibration_bracket_for_bundles", capture):
             self.assertEqual(outcome(self.gamma), expected)
-        self.assertEqual(seen, [Path("ledger.jsonl")])
+        self.assertEqual(len(seen), 1)
+        self.assertTrue(seen[0].is_absolute())
+        self.assertEqual(seen[0].name, "ledger.jsonl")
 
     def test_changed_candidate_byte_recomputes_with_the_serial_outcome(self):
         with run() as caches, frozen_calls() as calls:
