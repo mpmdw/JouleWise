@@ -1,5 +1,12 @@
 # JouleWise Run State
 
+**Handoff 2026-11-06 — Qwen4Exp synthetic rehearsal artifact:** The
+canonical-v2 synthetic builder and synthetic-only live-probe gates are
+implemented on the Saturday-kit head. Sandbox checks pass; the pinned MLX
+Mac must run the native commands recorded in
+`docs/run_reports/2026-11-06-qwen4exp-synthetic-artifact.md` before Saturday
+use. No released weight was downloaded or used.
+
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;

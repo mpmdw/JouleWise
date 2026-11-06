@@ -1,5 +1,12 @@
 # JouleWise Task Queue
 
+## 2026-11-06 Direct owner task — Qwen4Exp synthetic rehearsal
+
+Implemented and awaiting the native Metal checks listed in
+`docs/run_reports/2026-11-06-qwen4exp-synthetic-artifact.md`. This direct,
+bounded Saturday-kit request outranked the historical queue; it creates no
+phase exit-matrix row and makes no measurement or claim.
+
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
