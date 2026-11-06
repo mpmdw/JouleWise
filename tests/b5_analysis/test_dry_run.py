@@ -1691,6 +1691,37 @@ class ClaimSideBoundStep9bTests(unittest.TestCase):
             contrast=side_bound_contrast();edit(contrast)
             self.assertFalse(_not_issuable(_verdict_bytes(side_bound_verdicts(contrast))))
 
+    def test_registered_contrast_lookup_optimization_is_result_equivalent(self):
+        """The set-backed lookup returns the old list-backed walk's exact answer."""
+        registered = [row['contrast_id'] for row in SIDE_BOUND_MANIFEST['contrasts']]
+        floor_cells = {row['cell_id'] for row in SIDE_BOUND_FLOOR['cells']}
+        cases = [side_bound_verdicts(), *(non_issuable_verdicts(state) for state in NON_ISSUABLE)]
+        for verdicts in cases:
+            structural = json.loads(_verdict_bytes(verdicts), parse_int=d._structure_number,
+                                    parse_float=d._structure_number)
+            self.assertEqual(d._first_condition_is_outcome(structural, registered, floor_cells),
+                             d._first_condition_is_outcome(structural, frozenset(registered), floor_cells))
+
+
+class Step9EvidenceRootCacheTests(unittest.TestCase):
+    def test_repeated_consumers_get_equal_defensive_copies_from_one_derivation(self):
+        state = object.__new__(d.RunState)
+        state.windows = {'alpha': object(), 'beta': object(), 'gamma': object()}
+        documents = {'floor_artifact': {'artifact_id': 'floor'},
+                     'extraction_alpha': {'pack': 'alpha'}, 'extraction_beta': {'pack': 'beta'}}
+        state.read = mock.Mock(side_effect=documents.__getitem__)
+        expected = {'alpha-evidence': Path('/synthetic/alpha'), 'beta-evidence': Path('/synthetic/beta')}
+        with mock.patch('scripts.produce_b5_disclosures._evidence_roots', return_value=expected) as derive:
+            first = state.evidence_roots()
+            first['mutated-by-caller'] = Path('/synthetic/mutation')
+            second = state.evidence_roots()
+        self.assertEqual(second, expected)
+        self.assertIsNot(first, second)
+        derive.assert_called_once_with(documents['floor_artifact'],
+                                       {'alpha': documents['extraction_alpha'],
+                                        'beta': documents['extraction_beta']}, state.windows)
+        self.assertEqual(state.read.call_count, 3)
+
 
 class ReferenceParityTests(unittest.TestCase):
     """Step-results uses the context owner's replay signal after row admission."""

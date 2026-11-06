@@ -834,8 +834,15 @@ class RunState:
 
     def evidence_roots(self):
         from scripts.produce_b5_disclosures import _evidence_roots
+        cached = getattr(self, '_evidence_roots_cache', None)
+        if cached is not None:
+            return cached.copy()
         artifact=self.read('floor_artifact')
-        return _evidence_roots(artifact,{p:self.read('extraction_'+p) for p in ('alpha','beta')},self.windows)
+        roots = _evidence_roots(artifact,{p:self.read('extraction_'+p) for p in ('alpha','beta')},self.windows)
+        # Steps 9, 9b, and 11 consume the same sealed floor, extraction reports,
+        # and analysed windows.  Do not parse and validate those inputs three times.
+        self._evidence_roots_cache = dict(roots)
+        return dict(roots)
 
 
 def _internal_step(state, runner, step, operation, *, flags=()):
@@ -1506,14 +1513,15 @@ def claim_side_bound_not_issuable(verdicts_raw, *, finalized_manifest, floor_art
     if type(verdicts_raw) is not bytes:
         return False
     try:
-        registered = [row['contrast_id'] for row in finalized_manifest['contrasts']]
+        registered_list = [row['contrast_id'] for row in finalized_manifest['contrasts']]
         floor_cells = {row['cell_id'] for row in floor_artifact['cells']}
         floor_id = floor_artifact['artifact_id']
     except (KeyError, TypeError):
         return False
-    if (not registered or any(type(item) is not str or not item for item in registered)
-            or len(set(registered)) != len(registered) or type(floor_id) is not str or not floor_id):
+    if (not registered_list or any(type(item) is not str or not item for item in registered_list)
+            or len(set(registered_list)) != len(registered_list) or type(floor_id) is not str or not floor_id):
         return False
+    registered = frozenset(registered_list)
     try:
         verdicts = json.loads(verdicts_raw.decode('utf-8'), object_pairs_hook=_structure_object,
                               parse_int=_structure_number, parse_float=_structure_number,
