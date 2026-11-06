@@ -10,6 +10,10 @@ import os
 from pathlib import Path
 import re
 import secrets
+import pickle
+import shutil
+import copyreg
+import types
 import subprocess
 import sys
 import traceback
@@ -17,6 +21,14 @@ import traceback
 from . import phase_timing as _phase_timing
 from .steps import require_primary_context, StepRecord, step_record, classify_step4_exit
 from .windows import AnalysisRefusal
+
+
+def _mappingproxy_from_dict(value):
+    return types.MappingProxyType(value)
+
+
+copyreg.pickle(types.MappingProxyType,
+               lambda value: (_mappingproxy_from_dict, (dict(value),)))
 
 ROOT = Path(__file__).resolve().parents[2]
 STEP_IDS = ('0', '1', '2', '3', '3b', '4', '5', '8', '6', '9', '9b', '10', '11')
@@ -113,7 +125,11 @@ class StepRunner:
         self.restricted = Path(restricted)
         self.logs = self.restricted / 'logs'
         self.logs.mkdir(parents=True, exist_ok=True)
-        self._counter = 0
+        counters=[]
+        for path in self.logs.glob('*.stderr.log'):
+            try:counters.append(int(path.name.split('-',1)[0]))
+            except (ValueError,IndexError):pass
+        self._counter = max(counters,default=0)
         # D-188 SHIP: the class of the exception that escaped the last program.
         self.last_exception_class = None
 
@@ -344,7 +360,7 @@ def refusal_classes():
     return json.loads((ROOT/'configs/analysis/b5/dry_run_refusal_classes.json').read_bytes())
 
 
-def custody_preflight(mode, custody, repo_root):
+def custody_preflight(mode, custody, repo_root, *, resume=False):
     """Reject aliases and occupied run directories before invoking any program."""
     if mode not in ('blind-dry-run', 'release'):
         raise AnalysisRefusal('analysis_mode_invalid')
@@ -357,8 +373,10 @@ def custody_preflight(mode, custody, repo_root):
     if root.exists() and (not root.is_dir() or any(p.is_symlink() for p in root.rglob('*'))):
         raise AnalysisRefusal('custody_path_invalid')
     target = root/('dry-run' if mode == 'blind-dry-run' else 'release')
-    if target.exists():
+    if target.exists() and not resume:
         raise AnalysisRefusal('custody_run_directory_exists')
+    if resume and not target.is_dir():
+        raise AnalysisRefusal('analysis_resume_checkpoint_invalid')
     if mode == 'release':
         previous = root/'dry-run/B5-BLIND-DRY-RUN-RECORD.json'
         try:
@@ -368,6 +386,69 @@ def custody_preflight(mode, custody, repo_root):
         except (OSError, ValueError, KeyError, TypeError):
             raise AnalysisRefusal('dry_run_record_missing_or_incomplete') from None
     return target
+
+
+RESUME_SCHEMA = 'joulewise.b5_analysis_resume.v1'
+RESUME_DIR = 'resume'
+RETRYABLE_TOOLING = frozenset({'calibration_wall_deadline_fired',
+    'calibration_deadline_observer_unavailable','analysis_worker_died',
+    'analysis_refit_budget_exhausted','analysis_child_timeout'})
+
+
+@dataclass
+class _ResumeKept:
+    """Pickle-safe projection used when a synthetic seam supplied lambdas."""
+    window: object
+    cells: object
+    kept: tuple[str,...]
+    removed: tuple[str,...]
+    def kept_run_ids(self, cell_id): return frozenset(self.kept)
+    def removed_run_ids(self): return frozenset(self.removed)
+
+
+def _checkpoint_path(restricted, ordinal):
+    return Path(restricted)/RESUME_DIR/f'{ordinal:02d}.pickle'
+
+
+def _checkpoint_state(s, ordinal):
+    """Atomically preserve a completed step and its authenticated output inventory."""
+    root=s.path(RESUME_DIR+'/manifest.json').parent
+    root.mkdir(parents=True,exist_ok=True)
+    saved=(s.deadline,s.vdl_store,s._runner,s.physics_store,s.pack_table,s.pins,s.kept)
+    s.deadline=s.vdl_store=s._runner=None;s.physics_store={};s.pack_table=s.pins=None
+    # Test seams occasionally use local lambdas; production KeptUnits are
+    # already pickle-safe. Project only those synthetic objects.
+    projected={}
+    for pack,value in s.kept.items():
+        try:pickle.dumps(value,protocol=5);projected[pack]=value
+        except (pickle.PickleError,AttributeError,TypeError):
+            first=next(iter(value.cells),None)
+            projected[pack]=_ResumeKept(value.window,value.cells,tuple(value.kept_run_ids(first)),tuple(value.removed_run_ids()))
+    s.kept=projected
+    try: payload=pickle.dumps(s,protocol=5)
+    finally: s.deadline,s.vdl_store,s._runner,s.physics_store,s.pack_table,s.pins,s.kept=saved
+    path=_checkpoint_path(s.restricted,ordinal);tmp=path.with_suffix('.tmp')
+    tmp.write_bytes(payload);os.replace(tmp,path)
+    manifest={'schema_version':RESUME_SCHEMA,'completed':ordinal,'state_sha256':hashlib.sha256(payload).hexdigest(),
+              'outputs':sorted(s.outputs.values(),key=lambda row:row['name'])}
+    raw=_canonical(manifest);tmp=root/'manifest.tmp';tmp.write_bytes(raw);os.replace(tmp,root/'manifest.json')
+
+
+def _load_checkpoint(restricted):
+    """Load only after re-verifying the checkpoint and every committed output byte."""
+    root=Path(restricted)/RESUME_DIR
+    try:
+        manifest=json.loads((root/'manifest.json').read_bytes())
+        if set(manifest)!= {'schema_version','completed','state_sha256','outputs'} or manifest['schema_version']!=RESUME_SCHEMA:
+            raise ValueError()
+        ordinal=manifest['completed'];payload=_checkpoint_path(restricted,ordinal).read_bytes()
+        if hashlib.sha256(payload).hexdigest()!=manifest['state_sha256']:raise ValueError()
+        require_step_inputs(restricted,manifest['outputs'])
+        state=pickle.loads(payload)
+        if not isinstance(state,RunState) or state.restricted!=Path(restricted):raise ValueError()
+        return ordinal,state
+    except (OSError,ValueError,TypeError,KeyError,pickle.PickleError,EOFError):
+        raise AnalysisRefusal('analysis_resume_checkpoint_invalid') from None
 
 
 def build_dry_run_record(*, mode, analysis_commit, window_index_sha256, sealed,
@@ -569,6 +650,9 @@ class RunState:
         # D-188 SHIP-FIX (finding C): stderr log name -> the bundle run id that
         # invocation ran (steps 1 and 2); in memory only, digested into step codes.
         self._members = {}
+        # Attempt 0 uses the registered budget. Retried tooling attempts run
+        # serially and expose 2x/4x to refit implementations through the state.
+        self.retry_budget_multiplier = 1
 
     def note_member(self, result, member):
         """Remember which bundle the runner invocation behind ``result`` ran (never raises)."""
@@ -646,8 +730,26 @@ class RunState:
     def invoke(self, runner, main, argv, *, step, window=None, outputs=(), stdout_path=None):
         require_primary_context(self.contexts)
         self.rehash()
-        result = runner.run(main, [str(x) for x in argv], step=step,window=window,
-                            **({'stdout_path':stdout_path} if stdout_path is not None else {}))
+        result=None
+        for attempt in range(3):
+            self.retry_budget_multiplier=1 << attempt
+            result = runner.run(main, [str(x) for x in argv], step=step,window=window,
+                                **({'stdout_path':stdout_path} if stdout_path is not None and attempt==0 else {}))
+            token=result.token() if result.exit_status and not result.exception else None
+            if token not in RETRYABLE_TOOLING or attempt==2:break
+            # A refusal may leave a partial declared artifact. It is never an
+            # analysis output and must not make the serial retry collide.
+            for _,path in outputs:
+                try:Path(path).unlink()
+                except OSError:pass
+            retry_path=self.path('logs/tooling-retries.jsonl')
+            with retry_path.open('ab') as retry_log:
+                retry_log.write((json.dumps({
+                'schema_version':'joulewise.b5_tooling_retry.v1','step':step,
+                'window':window,'refusal':token,'retry':attempt+1,
+                'budget_multiplier':1 << (attempt+1),'workers':1},sort_keys=True)+'\n').encode())
+            self.workers=1
+        self.retry_budget_multiplier=1
         found=[]
         for role,path in outputs:
             if Path(path).is_file(): found.append(self.register(role,path))
@@ -1947,7 +2049,8 @@ def _write_vdl_counters(s):
         pass
 
 
-def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=None,_test_repo_root=None,_runner=None,_git=None):
+def run(mode,index,custody,*,workers=None,resume=False,_test_pack_table=None,_test_seal_pins=None,_test_repo_root=None,_runner=None,_git=None,
+        _test_interrupt_after_step=None):
     """Run all registered steps. Return 0, 3 (registered outcome), or 2.
 
     The only public outputs are the closed record and two structure streams.
@@ -1970,7 +2073,7 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
         return 2
     repo_root=Path(_test_repo_root) if _test_repo_root is not None else ROOT
     try:
-        directory=custody_preflight(mode,custody,repo_root)
+        directory=custody_preflight(mode,custody,repo_root,resume=resume)
     except (AnalysisRefusal,OSError,RuntimeError):
         # An invalid root cannot safely receive a record. Its closed refusal is
         # exposed only as the same structure step line; no exception text leaks.
@@ -1987,14 +2090,30 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
     except Exception as exc:
         checkout_failed=True;commit='0'*40;checkout_exception=type(exc).__qualname__
     try:
-        directory.mkdir(parents=True)
-        restricted=directory/'restricted';restricted.mkdir()
+        directory.mkdir(parents=True,exist_ok=resume)
+        restricted=directory/'restricted';restricted.mkdir(exist_ok=resume)
     except OSError:
         print('step 0 - tooling_refusal',file=sys.stderr)
         return 2
     runner=_runner(restricted) if _runner is not None else StepRunner(restricted)
-    s=RunState(mode,index,restricted,commit,pack_table=_test_pack_table,seal_pins=_test_seal_pins,repo_root=repo_root)
-    stopped=False;difference=None;previous=None
+    resume_ordinal=-1
+    if resume:
+        try:
+            resume_ordinal,s=_load_checkpoint(restricted)
+            if s.mode!=mode or s.index_path!=Path(index) or s.commit!=commit:
+                raise AnalysisRefusal('analysis_resume_checkpoint_invalid')
+            from .windows import SealPins
+            s.pack_table=_test_pack_table
+            s.pins=_test_seal_pins or SealPins.load()
+        except AnalysisRefusal:
+            print('step 0 - tooling_refusal',file=sys.stderr);return 2
+    else:
+        s=RunState(mode,index,restricted,commit,pack_table=_test_pack_table,seal_pins=_test_seal_pins,repo_root=repo_root)
+    # Synthetic runners use this public testing seam; production StepRunner
+    # ignores the attribute.
+    runner.state=s
+    stopped=any(r.status!='ok' and not is_nonstopping_outcome(r.as_dict()) for r in s.step_records)
+    difference=None;previous=None
     from joulewise.whole_window import shared_instrument_calibration_physics_cache
     from joulewise.analysis_run_cache import analysis_run_caches
     from .deadline_observer import CALIBRATION_WALL_DEADLINE, OBSERVER_UNAVAILABLE, observe_wall_deadline
@@ -2042,7 +2161,9 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
                     difference={'path':'binding/window_index'}
             except (AnalysisRefusal,OSError,ValueError,TypeError,KeyError):
                 previous=None
-        for step,function in STEPS:
+        for ordinal,(step,function) in enumerate(STEPS):
+            if ordinal<=resume_ordinal:
+                continue
             if stopped:
                 records=[StepRecord(step,None,'not_run')]
             elif step=='0' and checkout_failed:
@@ -2085,6 +2206,9 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
             # D-189: step 9b's claim-side-bound non-issuance is the one refusing row that
             # does not stop the steps after it.
             if any(record.status!='ok' and not is_nonstopping_outcome(record) for record in records):stopped=True
+            _checkpoint_state(s,ordinal)
+            if _test_interrupt_after_step==step:
+                raise KeyboardInterrupt('synthetic step-boundary interruption')
         attempts,windows,census=_record_parts(s)
         sealed={key:s.pins.sealed[{'flag_catalog_sha256':'catalog_sha256'}.get(key,key)] for key in SEAL_KEYS}
         record=build_dry_run_record(mode=mode,analysis_commit=commit,window_index_sha256=s.index.sha256 if s.index else _index_digest(index),
@@ -2107,6 +2231,7 @@ def run(mode,index,custody,*,workers=None,_test_pack_table=None,_test_seal_pins=
         validate_dry_run_record(record,index=s.index,kept_units=s.kept)
         output=directory/('B5-BLIND-DRY-RUN-RECORD.json' if mode=='blind-dry-run' else 'B5-RELEASE-RECORD.json')
         with output.open('xb') as out:out.write(_canonical(record))
+        shutil.rmtree(restricted/RESUME_DIR,ignore_errors=True)
         _write_vdl_counters(s)
         _phase_timing.run_end()
         last=record['steps'][-1]

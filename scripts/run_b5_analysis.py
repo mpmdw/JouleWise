@@ -30,6 +30,9 @@ The arguments, each the only thing of its kind the run takes:
                        steps 1, 2 and 4 (spawned; every record decision stays serial in this
                        process). Default: JOULEWISE_B5_ANALYSIS_WORKERS, else min(8, CPU count - 2);
                        1 is the serial path. The record and every output are the same for every N.
+--resume               Continue an interrupted mode directory. Every completed-step checkpoint and
+                       every output digest is verified before execution restarts at the first
+                       incomplete step. Without this switch an existing mode directory still refuses.
 --phase-log PATH       Optional (D-188 TIMERS). A structure-only timing log for the operator: one JSON
                        line per event (run start, step begin, heartbeat, step end, run end) carrying only
                        step ids and integer wall seconds; no label, phase, count, status word or value.
@@ -93,6 +96,7 @@ def main(argv=None):
     parser.add_argument('--custody',type=Path,required=True)
     parser.add_argument('--workers',type=_positive_int,default=None)
     parser.add_argument('--phase-log',type=Path,default=None)
+    parser.add_argument('--resume',action='store_true')
     try:
         args=parser.parse_args(argv)
     except AnalysisRefusal:
@@ -116,9 +120,10 @@ _REPO=Path(__file__).resolve().parents[1]
 
 
 def _run(args):
+    resume = {'resume': True} if args.resume else {}
     if args.workers is None:
-        return run(args.mode,args.index,args.custody)
-    return run(args.mode,args.index,args.custody,workers=args.workers)
+        return run(args.mode,args.index,args.custody,**resume)
+    return run(args.mode,args.index,args.custody,workers=args.workers,**resume)
 
 
 def _positive_int(text):

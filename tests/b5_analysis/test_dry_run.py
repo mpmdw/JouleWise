@@ -580,16 +580,41 @@ class DriverAcceptanceTests(unittest.TestCase):
                 'bad_projection':False,'release_change':None,'real_9b':False,'verdicts':None}.items():
             setattr(DriverDouble,key,value)
 
-    def execute(self,*,mode='blind-dry-run',custody=None,runner=DriverDouble,git=None):
+    def execute(self,*,mode='blind-dry-run',custody=None,runner=DriverDouble,git=None,**run_kwargs):
         type(self).serial+=1
         custody=custody or self.root/('custody-'+str(self.serial))
         stdout,stderr=io.StringIO(),io.StringIO()
         with redirect_stdout(stdout),redirect_stderr(stderr):
             code=d.run(mode,self.index,custody,_test_pack_table=self.table,_test_repo_root=self.repo,
-                       _runner=runner,_git=git or (lambda repo:'b'*40))
+                       _runner=runner,_git=git or (lambda repo:'b'*40),**run_kwargs)
         record_path=custody/('dry-run/B5-BLIND-DRY-RUN-RECORD.json' if mode=='blind-dry-run' else 'release/B5-RELEASE-RECORD.json')
         record=json.loads(record_path.read_bytes()) if record_path.exists() else None
         return SimpleNamespace(code=code,custody=custody,record=record,path=record_path,stdout=stdout.getvalue(),stderr=stderr.getvalue())
+
+    def test_resume_at_every_step_is_byte_identical(self):
+        baseline=self.execute()
+        self.assertEqual(baseline.code,0,baseline.stderr)
+        expected=baseline.path.read_bytes()
+        for step in d.STEP_IDS:
+            with self.subTest(step=step):
+                custody=self.root/('resume-'+step)
+                with self.assertRaises(KeyboardInterrupt):
+                    self.execute(custody=custody,_test_interrupt_after_step=step)
+                resumed=self.execute(custody=custody,resume=True)
+                self.assertEqual(resumed.code,0,resumed.stderr)
+                self.assertEqual(resumed.path.read_bytes(),expected)
+                self.assertFalse((custody/'dry-run/restricted/resume').exists())
+
+    def test_retryable_tooling_refusal_retries_twice_serially(self):
+        DriverDouble.refusal=('5','analysis_refit_budget_exhausted')
+        result=self.execute()
+        self.assertEqual(result.code,2)
+        calls=[row for row in DriverDouble.calls if row[0]=='5']
+        retries=result.custody/'dry-run/restricted/logs/tooling-retries.jsonl'
+        self.assertEqual(len(calls),3,(calls,retries.read_text() if retries.exists() else 'missing'))
+        rows=[json.loads(line) for line in retries.read_text().splitlines()]
+        self.assertEqual([row['budget_multiplier'] for row in rows],[2,4])
+        self.assertTrue(all(row['workers']==1 for row in rows))
 
     def test_T1_closed_record_rejects_float_string_unnamed_integer_unknown_key(self):
         result=self.execute();self.assertEqual(result.code,0,result.stderr)
