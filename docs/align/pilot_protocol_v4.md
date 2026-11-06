@@ -402,11 +402,13 @@ R1 is an armed `run_night` rehearsal with calibration brackets and harvest:
 decode, 10-min cooldown each); one X-G identity run; two gated/held D s1
 spam/benign runs; optional qualified 4-bit run. Ed's appended ruling now
 **includes High Power A-B-A in R1**, superseding the earlier skip default.
-Ed installs a narrow sudoers rule limited to `pmset -c powermode {0,2}`.
-The driver verifies it with `sudo -n -l`, records mode before/after each
-segment, restores Automatic (0) on normal exit, error and signals, and refuses
-to start if it cannot restore. Adoption still requires the council's ≥25%
-longer t_decline and passing readiness/census. Native gates require no agent
+Ed installs `/etc/sudoers.d/joulewise-powermode`, a narrow sudoers rule
+limited to exactly `pmset -c powermode 0` and `pmset -c powermode 2`.
+The driver verifies the rule with `sudo -n -l`, records mode before/after each
+segment, restores Automatic (0) on every exit path (trap on normal exit,
+error and signals), and refuses to start if it cannot restore. Adoption still
+requires the council's ≥25% longer t_decline and passing readiness/census.
+Native gates require no agent
 session on the measurement Mac. `P:225–245,281–295,335–340; F:287–293`
 
 Before R1 the lead needs WP14→WP15→WP16→WP17, WP18→WP19, R0 dispositions,
