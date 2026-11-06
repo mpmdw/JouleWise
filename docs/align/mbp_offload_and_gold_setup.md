@@ -578,6 +578,9 @@ trust anchors; a new manifest cannot repair pre-existing missing coverage.
 exact source from the table. First admit manifest/control bytes from existing
 custody totals. No recursive home search. Resume sources this existing item-env
 and checks its hashes; never initialize a new date to bypass STOP/receipts.
+After an interrupted attempt, a reviewed new item ID may append `-retry01`
+(or another unique ASCII suffix); preserve the old item and partial in this
+same operation. Never reuse a partial or overwrite its manifest.
 
 ```zsh
 source "${JW_OP:?Set existing operation}/env.zsh"
@@ -585,8 +588,9 @@ source "$JW_OP/external-env.zsh"
 shasum -a 256 -c "$JW_OP/env.sha256" "$JW_OP/external-env.sha256" "$JW_OP/manifest-helper.sha256"
 jw_external_check
 : "${JW_SRC:?Set one exact pilot source from the table}"
-: "${JW_ID:?Set pilot8 pilot9 or pilot10}"
-[[ "$JW_ID" == (pilot8|pilot9|pilot10) ]]
+: "${JW_ID:?Set pilot8 pilot9 pilot10 or a reviewed unique retry ID}"
+[[ "$JW_ID" == [A-Za-z0-9_-]## ]]
+[[ "$JW_ID" == (pilot8|pilot9|pilot10|pilot8-*|pilot9-*|pilot10-*) ]]
 export JW_SRC JW_ID JW_ITEM="$JW_OP/$JW_ID"
 mkdir -m 700 "$JW_ITEM"
 {
