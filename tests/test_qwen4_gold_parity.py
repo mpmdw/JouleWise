@@ -51,12 +51,24 @@ class PolicyTests(unittest.TestCase):
             self.assertEqual(result["error"], "invalid_mlx_memory_metadata")
 
     def test_resume_requires_artifact_integrity(self):
-        from joulewise.align.qwen4_gold.core import sha256
+        from joulewise.align.qwen4_gold.core import digest
+        from joulewise.align.qwen4_gold.runner import artifacts
         with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / "report.json"
-            array = Path(d) / "output.npy"
+            root = Path(d); path = root / "report.json"
+            for side in ("reference", "mlx"):
+                (root / side).mkdir()
+                write_json(root / side / "request.json", {"backend": side})
+                write_json(root / side / "result.json", {"traces": {"output": "output.npy"}})
+            array = root / "reference/output.npy"
             array.write_bytes(b"test")
-            write_json(path, {"fingerprint": "a", "reference_valid": True, "artifacts": {"output.npy": sha256(array)}})
+            (root / "mlx/output.npy").write_bytes(b"test")
+            inventory = artifacts(root)
+            write_json(path, {"fingerprint": "a", "status": "FAIL", "artifacts": inventory,
+                              "evidence_digest": digest({"fingerprint": "a", "artifacts": inventory})})
+            self.assertTrue(reusable(path, "a"))
+            # The report verdict is presentation only; resume authenticates
+            # worker evidence and recomputes it under the current gate.
+            value = json.loads(path.read_text()); value["status"] = "PASS"; write_json(path, value)
             self.assertTrue(reusable(path, "a"))
             self.assertFalse(reusable(path, "b"))
             array.write_bytes(b"changed")
@@ -195,6 +207,28 @@ class NormGateTests(unittest.TestCase):
         result = self.compare(self.norm(self.x), self.norm(broad), self.x, broad)
         self.assertTrue(result["mlx_op"]["pass"] and result["reference_op"]["pass"])
         self.assertFalse(result["pass"])
+
+    def test_input_outlier_does_not_loosen_another_row(self):
+        """Regression: the former trace-global maximum made row 1 pass."""
+        import numpy as np
+        from joulewise.align.qwen4_gold.core import compare_norm
+        x_ref = np.ones((2, 4), np.float32)
+        x_mlx = x_ref.copy(); x_mlx[0, 0] += 9e-5
+        weight = np.zeros(4, np.float32)
+        spec = {"kind": "offset", "group": 4, "eps": 1e-6}
+        f_ref, f_mlx = f32_norm(x_ref, 1 + weight, 4), f32_norm(x_mlx, 1 + weight, 4)
+        y_ref, y_mlx = f_ref.copy(), f_mlx.copy()
+        # Each worker remains individually within its 2e-4 op allowance, but
+        # their opposite rounding errors exceed the chained base allowance.
+        y_ref[1, 3] -= 1.5e-4; y_mlx[1, 3] += 1.5e-4
+        result = compare_norm(y_ref, y_mlx, x_ref, x_mlx, weight, spec, "fp32")
+        self.assertFalse(result["pass"])
+        self.assertTrue(result["mlx_op"]["pass"] and result["reference_op"]["pass"])
+        self.assertFalse(result["chained_pass"])
+        # Causal row 0 receives a nonzero allowance; unrelated row 1 does not.
+        clean = compare_norm(f_ref, f_mlx, x_ref, x_mlx, weight, spec, "fp32")
+        self.assertGreater(clean["propagation"]["max_allowance"], 0)
+        self.assertTrue(clean["chained_pass"], clean)
         self.assertFalse(result["chained_pass"])  # cosine floor still binds
         self.assertLess(result["cosine"], 0.999999)
         local = self.x.copy()

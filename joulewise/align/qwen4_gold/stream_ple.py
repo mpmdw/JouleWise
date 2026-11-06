@@ -169,9 +169,42 @@ class SparseCheckpoint(IndexedCheckpoint):
         if sha256(manifest) != expected_digest:
             raise ValueError("sparse store manifest changed")
         self.sparse = json.loads(manifest.read_text())
+        expected_tensors = {tensor for plan in self.sparse.get("plans", {}).values() for tensor in plan["parts"]}
+        if set(self.sparse.get("entries", {})) != expected_tensors:
+            raise ValueError("sparse entries do not match official plan")
+        seen_ids = set()
+        for base, plan in self.sparse["plans"].items():
+            if base not in self.weight_map and not all(p in self.weight_map for p in plan["parts"]):
+                raise ValueError("sparse plan tensor is absent from checkpoint")
+            if plan["ids"] != sorted(set(plan["ids"])):
+                raise ValueError("sparse plan ids must be sorted and unique")
+            if len(plan["shape"]) != 2 or plan["part_rows"] != math.ceil(plan["shape"][0] / len(plan["parts"])):
+                raise ValueError("invalid sparse plan shape")
+            for index, tensor in enumerate(plan["parts"]):
+                entry = self.sparse["entries"][tensor]
+                if entry.get("tensor") != tensor:
+                    raise ValueError("sparse tensor association changed")
+                offset = index * plan["part_rows"]
+                rows = min(plan["part_rows"], plan["shape"][0] - offset)
+                expected_ids = [i for i in plan["ids"] if offset <= i < offset + rows]
+                if entry.get("ids") != expected_ids or entry.get("shape") != [rows, plan["shape"][1]]:
+                    raise ValueError("sparse row contract changed")
+                source = self.weight_map.get(tensor)
+                if source is None:
+                    raise ValueError("sparse tensor missing from weight map")
+                if entry.get("shard_sha256") != self.sparse.get("source_shards", {}).get(source):
+                    raise ValueError("sparse source shard identity changed")
+                if entry.get("storage") not in {"BF16", "F16", "F32"}:
+                    raise ValueError("unsupported sparse storage dtype")
+                seen_ids.update((base, i) for i in expected_ids)
         for entry in self.sparse["entries"].values():
             if not valid_entry(self.sparse_root, entry):
                 raise ValueError("sparse row bytes changed")
+            import numpy as np
+            value = np.load(self.sparse_root / entry["file"], allow_pickle=False, mmap_mode="r")
+            dtype = {"BF16": np.dtype("<u2"), "F16": np.dtype("<f2"), "F32": np.dtype("<f4")}[entry["storage"]]
+            if value.shape != (len(entry["ids"]), entry["shape"][1]) or value.dtype != dtype:
+                raise ValueError("sparse row file shape/dtype changed")
 
     def info(self, name):
         if is_table(name):

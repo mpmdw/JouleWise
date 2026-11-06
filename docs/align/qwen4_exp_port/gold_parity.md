@@ -79,6 +79,14 @@ Workers are serial. Interrupt and repeat **the same command** with `--resume`
 to continue across sessions. Each completed case and partial per-layer JSON/Markdown are durable immediately; even
 an interrupted overall run can resume before a final summary exists.
 
+Resume never accepts a verdict from `report.json`. The coordinator verifies a
+fingerprint-bound inventory containing both workers' requests, results, and all
+NumPy arrays, then re-runs every current comparator and replaces the report.
+Changing a stored status or metric therefore has no effect. A finished work
+directory can be graded the same way without running either worker:
+`python3 scripts/qwen4_gold_regate_legacy.py --work-dir WORK --checkpoint CHECKPOINT`.
+The immutable recomputation is written to `WORK/regate.json`.
+
 ## Inputs, precision, and coverage
 
 `--prompts-json` is a list of objects, each with a unique safe `name` and a
@@ -323,22 +331,24 @@ The plain chained elementwise result is still reported (`unpropagated_pass`,
 `max_relative`, `relative_l2` and `cosine` are the chained ones. Metric entries
 carry `gate: "A1-input-conditioned"`; reports carry `gate_amendments`.
 
-**Derivation of `P`.** For one group, `r = sqrt(mean(x^2) + eps)` and
+**Derivation of `P` (per-element, row-local).** For one group, `r = sqrt(mean(x^2) + eps)` and
 `y_c = s_c x_c / r` (`s = 1 + w`). Since `dr/dx_j = x_j / (G r)`,
 `dy_c/dx_j = s_c (delta_cj / r - x_c x_j / (G r^3))`. With an input
-perturbation bounded by `e_x = max |x_ref - x_mlx|` (the input trace's measured
-max abs diff over the whole trace), to first order
+perturbation `dx_j = x_ref,j - x_mlx,j`, to first order
 
 `|dy_c| <= |s_c| / r * (|dx_c| + |x_c| * sum_j |x_j||dx_j| / (G r^2))
-       <= |s_c| / r * e_x * (1 + |x_c| * mean|x| / r^2) = P_c`.
+       = |s_c| * (|dx_c|/r + |x_c| mean_j(|x_j dx_j|)/r^3) = P_c`.
 
-`|s_c| / r` is the per-element gain; the bracket is the correlated RMS term
-(at most `1 + |x_c|/r`). For the gated norm the gate input adds
-`|w_c| |n_c| L e_z` with `n_c = x_c / r`, `e_z` the gate's measured max abs
-diff and `L` the activation's Lipschitz constant (sigmoid 1/4, silu 1.1), and
+This evaluates the absolute first-order Jacobian against the actual error
+vector for that exact RMS row. It deliberately performs no trace-global max
+reduction: an error in another row cannot loosen this row, and an error in
+another channel contributes only through that row's RMS derivative. For the
+gated norm the gate input adds `|w_c| |n_c| L |dz_c|` with `n_c = x_c / r`
+and `L` the activation's Lipschitz constant (sigmoid 1/4, silu 1.1), and
 `s_c` becomes `w_c * act(z_c)`. `r`, `mean|x|`, `x_c`, `z_c` are taken from the
 reference input in float64. Second-order terms are `O(e_x^2 / r^2)`; criteria
-1-3 bound everything else independently.
+1-3 bound everything else independently. Reports retain global input maxima
+as diagnostics only; those maxima are never used as allowances.
 
 **Why the chained comparison alone is wrong for norm outputs.** Every trace is
 compared against a reference computed from the reference's own upstream

@@ -328,6 +328,10 @@ class StreamDriver:
         if not self.plan["tables"]:
             return
         ple = self.state["ple"]
+        # Canonical checkpoint identities against which every sparse entry is
+        # semantically revalidated by both workers.
+        ple["source_shards"] = {name: self.metadata[name]["sha256"] for name in sorted(
+            {self.checkpoint.weight_map[k] for k in self.plan["tables"]})}
         store = self.work / "sparse-ple"
         store.mkdir(exist_ok=True)
         if "plans" not in ple:
@@ -406,6 +410,8 @@ class StreamDriver:
                "result": str(result), "result_sha256": sha256(result),
                "artifacts": {str(p.relative_to(self.work)): sha256(p) for p in (self.harness.out / name).rglob("*.npy")},
                "chain": chain}
+        if self.args.worker_extra.get("sparse_digest"):
+            row["sparse_digest"] = self.args.worker_extra["sparse_digest"]
         if row["status"] != "PASS":
             row["failures"] = failure_summary(report)
         return row
@@ -415,6 +421,8 @@ class StreamDriver:
             # FAIL rows exist only from --keep-going: recorded, never retried.
             if row["status"] not in ("PASS", "FAIL") or sha256(row["result"]) != row["result_sha256"]:
                 raise ValueError(f"completed unit result changed: {unit}")
+            if row.get("sparse_digest") and sha256(self.work / "sparse-ple/store.json") != row["sparse_digest"]:
+                raise ValueError(f"completed unit sparse PLE contract changed: {unit}")
             for name, checksum in row["artifacts"].items():
                 if sha256(self.work / name) != checksum:
                     raise ValueError(f"completed unit activation/trace changed: {unit}/{name}")

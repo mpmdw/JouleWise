@@ -492,7 +492,8 @@ def compare_norm(reference, candidate, reference_input, candidate_input, weight,
     - chained y_ref vs y_mlx: cosine floor unchanged, and elementwise
       |dy| <= atol + rtol*|y_ref| + P, with the first-order propagated bound
       P_c = |s_c|/r * e_x * (1 + |x_c|*mean|x|/r^2) [+ |w_c||n_c| L e_z gated],
-      e_x the input's measured max abs diff.
+      using the element's own input error and the exact row-local first-order
+      Jacobian bound (no error from another row or channel is borrowed).
     """
     import numpy as np
     arrays = [_comparable(v) for v in (reference, candidate, reference_input, candidate_input)]
@@ -536,13 +537,20 @@ def compare_norm(reference, candidate, reference_input, candidate_input, weight,
         f_mlx, _, _ = norm_reference(x_mlx, weight, spec, z_mlx)
         reference_op.add(f_ref, y_ref)
         mlx_op.add(f_mlx, y_mlx)
-        amplification = 1.0 + np.abs(x_ref) * mean_abs / (r*r)
+        # For n_c=x_c/r, dn_c = dx_c/r - x_c*mean(x*dx)/r^3.
+        # Triangle inequality gives an element-specific, row-local bound.  In
+        # particular, a large error in another row (or merely another channel)
+        # cannot widen this output element's gate.
+        dx = np.abs(x_ref - x_mlx)
+        row_cross = np.mean(np.abs(x_ref) * dx, axis=-1, keepdims=True)
+        norm_delta = dx / r + np.abs(x_ref) * row_cross / (r*r*r)
         if gated:
             activation = np.abs(gate_activation(z_ref, spec["activation"]))
-            allowance = (np.abs(weight) * activation / r * e_x * amplification
-                         + np.abs(weight) * np.abs(x_ref) / r * lipschitz * e_z)
+            dz = np.abs(z_ref - z_mlx)
+            allowance = (np.abs(weight) * activation * norm_delta
+                         + np.abs(weight) * np.abs(x_ref) / r * lipschitz * dz)
         else:
-            allowance = np.abs(1.0 + weight) / r * e_x * amplification
+            allowance = np.abs(1.0 + weight) * norm_delta
         max_allowance = max(max_allowance, float(allowance.max()))
         chained.add(y_ref, y_mlx, allowance)
         unpropagated.add(y_ref, y_mlx)

@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
-"""Offline re-gate of one saved decoder-layer directory under gate amendment A1.
+"""Offline re-grade a finished Qwen4 gold work directory under the current gate.
 
-For case directories written before A1, which lack the ``*.input`` norm traces.
-The norm inputs are recovered from traces that already were the exact tensors
-each norm consumed: ``attn.norm`` <- the case ``input.npy`` cast to the compute
-dtype (both workers read the same snapshot), ``mlp.norm`` <- each side's own
-``attn.streams``. ``attention.gated_norm`` consumed untraced tensors; it is
-reported as not A1-evaluable, with its stored plain-gate result. Every other
-trace keeps its stored metric. No worker runs and nothing is downloaded. Norm
-weights are read from a local checkpoint view (e.g. the byte-exact restaged
-subset under work/staging/views/<unit>); pass --manifest to verify those view
-files against the streaming manifest's recorded hashes first.
+No worker, framework runtime, network access, or report verdict is trusted.  Each
+case's fingerprint-bound request/result/array inventory is authenticated and all
+trace metrics and unit verdicts are recomputed.  The original run is immutable;
+results are written to ``regate.json`` (or ``--output``).
 """
 import argparse
 import json
@@ -18,78 +12,52 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from joulewise.align.qwen4_gold.core import (IndexedCheckpoint, TraceFile, compare_norm, norm_specs,  # noqa: E402
-                                             round_bf16, sha256)
+from joulewise.align.qwen4_gold.core import IndexedCheckpoint, digest, write_json  # noqa: E402
+from joulewise.align.qwen4_gold.runner import Harness, artifacts, reusable  # noqa: E402
 
 
-def case_input(case, dtype):
-    import numpy as np
-    value = np.load(case / "input.npy", allow_pickle=False).astype(np.float32)
-    return round_bf16(value) if dtype == "bf16" else value
-
-
-def regate(layer_dir, checkpoint, unit):
-    specs = norm_specs(checkpoint.config, unit)
-    results = {}
-    for case in sorted(p for p in layer_dir.iterdir() if p.is_dir() and ".attempt-" not in p.name):
-        report = json.loads((case / "report.json").read_text())
-        dtype = "bf16" if "-bf16-" in case.name else "fp32"
-        rows = {}
-        for name, metric in sorted(report["metrics"].items()):
-            if name not in specs:
-                rows[name] = {"pass": metric["pass"], "source": "stored"}
+def regate_work(work, checkpoint):
+    work = Path(work).resolve()
+    harness = object.__new__(Harness)
+    harness.checkpoint = checkpoint
+    units = {}
+    for unit_dir in sorted(p for p in work.iterdir() if p.is_dir() and (p.name.startswith("layer-") or p.name in {"embed", "final", "head"})):
+        unit = unit_dir.name[6:].lstrip("0") or "0" if unit_dir.name.startswith("layer-") else unit_dir.name
+        cases = []
+        for case in sorted(p for p in unit_dir.iterdir() if p.is_dir() and ".attempt-" not in p.name):
+            path = case / "report.json"
+            if not path.is_file():
                 continue
-            if name == "attn.norm":
-                x_ref = x_mlx = case_input(case, dtype)
-            elif name == "mlp.norm":
-                x_ref, x_mlx = (TraceFile(case / side / "attn.streams.npy") for side in ("reference", "mlx"))
-            else:
-                rows[name] = {"pass": metric["pass"], "source": "stored plain gate; A1 not evaluable (inputs untraced)",
-                              "max_abs": metric.get("max_abs")}
+            old = json.loads(path.read_text())
+            fp = old.get("fingerprint")
+            if not fp or not reusable(path, fp):
+                cases.append({"case": case.name, "status": "EVIDENCE_ERROR",
+                              "reason": "fingerprint-bound artifact inventory failed"})
                 continue
-            weight = checkpoint.read(checkpoint.prefix + specs[name]["weight"], framework="numpy", dtype="fp32")
-            a1 = compare_norm(TraceFile(case / "reference" / f"{name}.npy"), TraceFile(case / "mlx" / f"{name}.npy"),
-                              x_ref, x_mlx, weight, specs[name], dtype)
-            rows[name] = {"pass": a1["pass"], "source": "A1 recomputed", "stored_plain_pass": metric["pass"], **a1}
-        results[case.name] = {"stored_status": report["status"],
-                              "a1_status": "PASS" if all(r["pass"] for r in rows.values()) else "FAIL",
-                              "traces": rows}
-    return results
+            dtype = "bf16" if "-bf16-" in case.name else "fp32"
+            mode = old.get("input_mode", case.name.rsplit("-", 1)[-1])
+            fresh = harness.grade_saved(unit, dtype, case, fp, mode, old.get("random_scale"))
+            fresh["artifacts"] = artifacts(case)
+            fresh["evidence_digest"] = digest({"fingerprint": fp, "artifacts": fresh["artifacts"]})
+            cases.append(fresh)
+        status = "PASS" if cases and all(c["status"] == "PASS" for c in cases) else "INCOMPLETE_OR_FAILED"
+        units[unit] = {"unit": unit, "status": status, "cases": cases}
+    return {"schema": "qwen4-gold/regate-v1", "work_dir": str(work), "units": units,
+            "status": "PASS" if units and all(u["status"] == "PASS" for u in units.values()) else "INCOMPLETE_OR_FAILED"}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--layer-dir", required=True, help="e.g. work/parity/layer-000")
-    parser.add_argument("--checkpoint", required=True, help="local checkpoint (view) holding the unit's norm weights")
-    parser.add_argument("--unit", required=True)
-    parser.add_argument("--manifest", help="streaming manifest.json; verifies the checkpoint view's derived-shard hashes")
-    parser.add_argument("--output", help="write full JSON here")
+    parser.add_argument("--work-dir", required=True)
+    parser.add_argument("--checkpoint", required=True, help="local checkpoint/view containing compared norm weights")
+    parser.add_argument("--output")
     args = parser.parse_args(argv)
-    root = Path(args.checkpoint).resolve()
-    if args.manifest:
-        manifest = json.loads(Path(args.manifest).read_text())
-        work = Path(args.manifest).resolve().parent
-        for key, row in manifest["derived_shards"].items():
-            if (work / key).parent == root and sha256(work / key) != row["sha256"]:
-                raise SystemExit(f"checkpoint view changed since the run: {key}")
-    checkpoint = IndexedCheckpoint(root)
-    results = regate(Path(args.layer_dir), checkpoint, args.unit)
-    if args.output:
-        Path(args.output).write_text(json.dumps(results, indent=2, sort_keys=True) + "\n")
-    for case, row in results.items():
-        print(f"{case}: stored={row['stored_status']} A1={row['a1_status']}")
-        for name, trace in row["traces"].items():
-            if trace["source"] != "stored" or not trace["pass"]:
-                detail = ""
-                if trace["source"] == "A1 recomputed":
-                    detail = (f" plain={trace['stored_plain_pass']} chained_max_abs={trace['max_abs']:.3g}"
-                              f" max_allowance={trace['propagation']['max_allowance']:.3g}"
-                              f" input_max_abs={trace['propagation']['input_max_abs']:.3g}"
-                              f" mlx_op_max_rel={trace['mlx_op']['max_relative']:.3g}"
-                              f" ref_op_max_rel={trace['reference_op']['max_relative']:.3g}"
-                              f" cosine={trace['cosine']:.15f}")
-                print(f"  {name}: pass={trace['pass']} [{trace['source']}]{detail}")
-    return 0 if all(r["a1_status"] == "PASS" for r in results.values()) else 2
+    result = regate_work(args.work_dir, IndexedCheckpoint(Path(args.checkpoint).resolve()))
+    output = Path(args.output) if args.output else Path(args.work_dir) / "regate.json"
+    write_json(output, result)
+    for unit, row in result["units"].items():
+        print(f"{unit}: {row['status']} ({len(row['cases'])} cases)")
+    return 0 if result["status"] == "PASS" else 2
 
 
 if __name__ == "__main__":

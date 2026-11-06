@@ -39,18 +39,26 @@ def worker_env(hf_home=None):
 
 
 def runtime_identity(python):
-    # Metadata/source hashes without importing either numerical framework.
-    code = """import hashlib, importlib.metadata as m, json, sys
+    # Bind the installed distribution records and every file they enumerate,
+    # rather than trusting mutable version strings or one modeling source.
+    code = """import hashlib, importlib.metadata as m, json, pathlib, sys
 versions = {}
 for name in ['transformers', 'torch', 'mlx', 'mlx-lm', 'numpy', 'safetensors']:
-    try: versions[name] = m.version(name)
+    try:
+        d=m.distribution(name); rows=[]
+        for f in sorted(d.files or [], key=str):
+            p=d.locate_file(f)
+            if p.is_file(): rows.append([str(f), hashlib.sha256(p.read_bytes()).hexdigest()])
+        versions[name]={'version':d.version,'distribution_sha256':hashlib.sha256(json.dumps(rows,separators=(',',':')).encode()).hexdigest(),'files':len(rows)}
     except m.PackageNotFoundError: pass
 if 'transformers' in versions:
-    source = m.distribution('transformers').locate_file('transformers/models/qwen4_exp/modeling_qwen4_exp.py')
-    versions['reference_source_sha256'] = hashlib.sha256(source.read_bytes()).hexdigest()
-print(json.dumps(dict(versions, python=sys.version)))"""
+    d=m.distribution('transformers')
+    for n in ['modeling_qwen4_exp.py','configuration_qwen4_exp.py']:
+        source=d.locate_file('transformers/models/qwen4_exp/'+n)
+        versions[n+'_sha256']=hashlib.sha256(source.read_bytes()).hexdigest()
+print(json.dumps(dict(versions, python=sys.version, python_executable_sha256=hashlib.sha256(pathlib.Path(sys.executable).read_bytes()).hexdigest())))"""
     result = subprocess.run([python, "-B", "-c", code], cwd=REPO, env=worker_env(),
-                            capture_output=True, text=True, timeout=30, check=True)
+                            capture_output=True, text=True, timeout=300, check=True)
     return json.loads(result.stdout)
 
 
@@ -198,17 +206,27 @@ def checkpoint_identity(checkpoint, layers, real, endpoints, progress):
 
 
 def artifacts(directory):
-    return {str(p.relative_to(directory)): sha256(p) for p in directory.rglob("*.npy")}
+    """Verdict inputs: arrays plus the exact requests/results naming them."""
+    files = list(directory.rglob("*.npy"))
+    for side in ("reference", "mlx"):
+        files += [directory / side / name for name in ("request.json", "result.json")]
+    return {str(p.relative_to(directory)): sha256(p) for p in sorted(set(files)) if p.is_file()}
 
 
 def reusable(path, fingerprint):
+    """Authenticate reusable worker evidence only; never authenticate a verdict."""
     if not path.exists():
         return False
     value = json.loads(path.read_text())
-    if value.get("fingerprint") != fingerprint or not value.get("reference_valid") or value.get("status") in {"MLX_ERROR", "REFERENCE_ERROR"}:
+    if value.get("fingerprint") != fingerprint:
         return False
     expected = value.get("artifacts", {})
-    return bool(expected) and all((path.parent / name).is_file() and sha256(path.parent / name) == h for name, h in expected.items())
+    if value.get("evidence_digest") != digest({"fingerprint": fingerprint, "artifacts": expected}):
+        return False
+    sides = ("reference", "mlx") if any(name.startswith("mlx/") for name in expected) else ("reference",)
+    required = {f"{side}/{name}" for side in sides for name in ("request.json", "result.json")}
+    return required <= set(expected) and expected == artifacts(path.parent) and all(
+        (path.parent / name).is_file() and sha256(path.parent / name) == h for name, h in expected.items())
 
 
 def failure_summary(report):
@@ -275,15 +293,78 @@ class Harness:
                    "adapter": str(args.mlx_module), "adapter_dependencies": self.adapter_dependencies,
                    "runtimes": runtimes, "scope": "prefill only"})
 
+    def grade_saved(self, unit, dtype, directory, fp, mode, scale):
+        """Recompute a case verdict exclusively from authenticated worker evidence."""
+        import numpy as np
+        reference = json.loads((directory / "reference/result.json").read_text())
+        candidate = json.loads((directory / "mlx/result.json").read_text())
+        report = {"schema": SCHEMA, "fingerprint": fp, "unit": unit, "case": directory.name,
+                  "reference": reference, "mlx": candidate, "reference_valid": True,
+                  "input_mode": mode, "random_scale": scale, "tolerances": TOLERANCES[dtype],
+                  "gate_amendments": GATE_AMENDMENTS, "input_sha256": sha256(directory / "input.npy") if
+                  (directory / "input.npy").is_file() else None, "status": "FAIL", "metrics": {}}
+        required = required_traces(self.checkpoint.config, unit)
+        missing_reference = required - reference.get("traces", {}).keys()
+        if missing_reference:
+            report.update(reference_valid=False, status="REFERENCE_ERROR",
+                          missing_reference_traces=sorted(missing_reference))
+            return report
+        missing = required - candidate.get("traces", {}).keys()
+        report["missing_traces"] = sorted(missing)
+        norms = norm_specs(self.checkpoint.config, unit)
+        for name in sorted(required & candidate.get("traces", {}).keys()):
+            a = TraceFile(directory / "reference" / reference["traces"][name])
+            b = TraceFile(directory / "mlx" / candidate["traces"][name])
+            if name in norms:
+                report["metrics"][name] = self.compare_norm(name, norms[name], directory, reference, candidate, dtype)
+            elif name in {"ple.ngram_ids", "qsa.mask"}:
+                exact = compare_exact(a, b)
+                report["metrics"][name] = {"pass": exact, "exact_agreement": exact}
+            else:
+                if name == "router.weights":
+                    a = np.load(directory / "reference" / reference["traces"][name], allow_pickle=False)
+                    b = np.load(directory / "mlx" / candidate["traces"][name], allow_pickle=False)
+                    a_ids = np.load(directory / "reference/router.experts.npy", allow_pickle=False)
+                    b_file = directory / "mlx/router.experts.npy"
+                    if b_file.exists():
+                        b_ids = np.load(b_file, allow_pickle=False)
+                        if a.shape == a_ids.shape and b.shape == b_ids.shape:
+                            a = np.take_along_axis(a, np.argsort(a_ids, axis=-1), axis=-1)
+                            b = np.take_along_axis(b, np.argsort(b_ids, axis=-1), axis=-1)
+                report["metrics"][name] = compare_arrays(a, b, dtype, exact=name == "router.experts")
+        passed = not missing and all(m["pass"] for m in report["metrics"].values())
+        report["status"] = "PASS" if passed else "FAIL"
+        if candidate.get("metadata", {}).get("adapter_kind") == "stub":
+            report["status"] = "STUB_NOT_VALIDATED"
+        return report
+
     def case(self, unit, dtype, prompt, mode, hidden, compare=True, scale=None):
         import numpy as np
         case = f"{prompt['name']}-{dtype}-{mode}"
         directory = self.out / (f"layer-{int(unit):03d}" if unit.isdigit() else unit) / case
         report_path = directory / "report.json"
-        fp = digest([self.fingerprint, unit, case, sha256(hidden) if hidden else None, compare, scale])
+        fp = digest([self.fingerprint, unit, case, sha256(hidden) if hidden else None, compare, scale,
+                     getattr(self.args, "worker_extra", {})])
         if self.args.resume and reusable(report_path, fp):
-            report = json.loads(report_path.read_text())
-            print(f"Resume {unit}/{case}: {report['status']}", flush=True)
+            # report.json is deliberately ignored: it is mutable presentation,
+            # not evidence.  Array/request/result hashes are fingerprint-bound
+            # and the current comparator produces a fresh verdict.
+            if compare:
+                report = self.grade_saved(unit, dtype, directory, fp, mode, scale)
+            else:
+                reference = json.loads((directory / "reference/result.json").read_text())
+                required = required_traces(self.checkpoint.config, unit)
+                missing = required - reference.get("traces", {}).keys()
+                report = {"schema": SCHEMA, "fingerprint": fp, "unit": unit, "case": case,
+                          "reference": reference, "reference_valid": not missing, "input_mode": mode,
+                          "random_scale": scale, "status": "REFERENCE_CHAIN_ONLY" if not missing else "REFERENCE_ERROR",
+                          "metrics": {}, "missing_reference_traces": sorted(missing)}
+            report["peak_bytes"] = max(report["reference"].get("observed_peak_bytes", 0),
+                                       report.get("mlx", {}).get("observed_peak_bytes", 0))
+            report["artifacts"] = artifacts(directory)
+            report["evidence_digest"] = digest({"fingerprint": fp, "artifacts": report["artifacts"]})
+            write_json(report_path, report)
+            print(f"Resume/re-gate {unit}/{case}: {report['status']}", flush=True)
         else:
             if directory.exists() and any(directory.iterdir()):
                 # Preserve earlier attempts; never turn stale result.json into success.
@@ -309,6 +390,7 @@ class Harness:
             request.update(getattr(self.args, "worker_extra", {}))
             print(f"Reference {unit}/{case}", flush=True)
             reference = execute(self.args.ref_python, request, directory / "reference", self.args.max_gb, self.args.timeout)
+            candidate = {}
             report = {"schema": SCHEMA, "fingerprint": fp, "unit": unit, "case": case,
                       "reference": reference, "reference_valid": "error" not in reference,
                       "input_mode": mode, "random_scale": scale, "tolerances": TOLERANCES[dtype],
@@ -327,39 +409,13 @@ class Harness:
                     if "error" in candidate:
                         report["status"] = "MLX_ERROR"
                     else:
-                        required = required_traces(self.checkpoint.config, unit)
-                        missing = required - candidate["traces"].keys()
-                        report["missing_traces"] = sorted(missing)
-                        norms = norm_specs(self.checkpoint.config, unit)
-                        for name in sorted(required & candidate["traces"].keys()):
-                            a = TraceFile(directory / "reference" / reference["traces"][name])
-                            b = TraceFile(directory / "mlx" / candidate["traces"][name])
-                            if name in norms:
-                                report["metrics"][name] = self.compare_norm(name, norms[name], directory,
-                                                                            reference, candidate, dtype)
-                            elif name in {"ple.ngram_ids", "qsa.mask"}:
-                                report["metrics"][name] = {"pass": compare_exact(a,b), "exact_agreement": compare_exact(a,b)}
-                            else:
-                                if name == "router.weights":
-                                    # Routing arrays are bounded by the same input-size guard.
-                                    a = np.load(directory / "reference" / reference["traces"][name], allow_pickle=False)
-                                    b = np.load(directory / "mlx" / candidate["traces"][name], allow_pickle=False)
-                                    a_ids = np.load(directory / "reference/router.experts.npy", allow_pickle=False)
-                                    b_file = directory / "mlx/router.experts.npy"
-                                    if b_file.exists():
-                                        b_ids = np.load(b_file, allow_pickle=False)
-                                        if a.shape == a_ids.shape and b.shape == b_ids.shape:
-                                            a = np.take_along_axis(a, np.argsort(a_ids, axis=-1), axis=-1)
-                                            b = np.take_along_axis(b, np.argsort(b_ids, axis=-1), axis=-1)
-                                report["metrics"][name] = compare_arrays(a, b, dtype, exact=name == "router.experts")
-                        passed = not missing and all(m["pass"] for m in report["metrics"].values())
-                        report["status"] = "PASS" if passed else "FAIL"
-                        if candidate["metadata"]["adapter_kind"] == "stub":
-                            report["status"] = "STUB_NOT_VALIDATED"
+                        report = self.grade_saved(unit, dtype, directory, fp, mode, scale)
                 else:
                     report["status"] = "REFERENCE_CHAIN_ONLY"
-            report["peak_bytes"] = max(reference.get("observed_peak_bytes", reference.get("peak_rss_bytes", 0)), report.get("mlx", {}).get("observed_peak_bytes", 0))
+            report["peak_bytes"] = max(reference.get("observed_peak_bytes", reference.get("peak_rss_bytes", 0)),
+                                       candidate.get("observed_peak_bytes", 0))
             report["artifacts"] = artifacts(directory)
+            report["evidence_digest"] = digest({"fingerprint": fp, "artifacts": report["artifacts"]})
             write_json(report_path, report)
         if compare:
             self.rows.setdefault(unit, []).append(report)

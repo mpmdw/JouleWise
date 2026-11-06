@@ -11,6 +11,30 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  qwen4-gold-cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install mandatory gold comparator stack
+        run: python -m pip install '.[gold-test]'
+      - name: Run non-vacuous CPU gold gate (Metal remains optional)
+        run: |
+          python - <<'PY'
+          import importlib, unittest
+          names = ['tests.test_qwen4_gold_parity', 'tests.test_qwen4_gold_stream']
+          suite = unittest.defaultTestLoader.loadTestsFromNames(names)
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          forbidden = [(test.id(), why) for test, why in result.skipped
+                       if 'mlx' not in test.id().lower() and 'canonical' not in test.id().lower()]
+          if forbidden:
+              raise SystemExit(f'mandatory CPU gold tests skipped: {forbidden}')
+          if not result.wasSuccessful():
+              raise SystemExit(1)
+          PY
+
   quick:
     needs: changes
     runs-on: ubuntu-latest

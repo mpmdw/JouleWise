@@ -496,6 +496,20 @@ class OfficialTinyPLETests(unittest.TestCase):
                 actual = cp.ngram_rows(base, captured[-1], "torch").flatten(-2)
                 self.assertTrue(torch.equal(expected, actual))
             self.assertEqual(set(planned["ids"]), set(np.concatenate([i.flatten() for i in captured]).tolist()))
+            # A new manifest hash is not enough: semantic substitutions must
+            # fail before any lookup even when row bytes themselves are valid.
+            manifest_path = store / "store.json"
+            original = json.loads(manifest_path.read_text())
+            tensor = next(iter(original["entries"]))
+            for mutate, message in (
+                (lambda m: m["entries"][tensor].__setitem__("tensor", tensor + ".swapped"), "association"),
+                (lambda m: m["entries"][tensor].__setitem__("shard_sha256", "0" * 64), "source shard"),
+                (lambda m: m["entries"][tensor].__setitem__("ids", m["entries"][tensor]["ids"] + [10**12]), "row contract"),
+            ):
+                changed = json.loads(json.dumps(original)); mutate(changed); write_json(manifest_path, changed)
+                with self.assertRaisesRegex(ValueError, message):
+                    SparseCheckpoint(driver.root, None, store, sha256(manifest_path))
+            write_json(manifest_path, original)
 
     def test_resume_mid_ple_uses_committed_rows(self):
         with tempfile.TemporaryDirectory() as d:
