@@ -38,10 +38,14 @@ def stand_in(entry):
 
 
 class AnalysedWindowsIndexTests(unittest.TestCase):
-    def setUp(self):
-        self.pins = SealPins.load()
-        self.index = load_window_index(INDEX)
-        self.raw = json.loads(INDEX.read_bytes())
+    @classmethod
+    def setUpClass(cls):
+        # These are immutable tracked inputs.  Loading them once per test
+        # process preserves every assertion while avoiding five full seal-pin
+        # and index parses (including the pack-table validation walk).
+        cls.pins = SealPins.load()
+        cls.index = load_window_index(INDEX)
+        cls.raw = json.loads(INDEX.read_bytes())
 
     def test_every_attempt_of_every_pack_is_indexed(self):
         attempts = {(e.seal, e.pack): [] for e in self.index.entries}

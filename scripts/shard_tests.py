@@ -19,6 +19,7 @@ exactly module-atomic.
 Examples:
   python3 scripts/shard_tests.py --shards 4 --index 1
   python3 scripts/shard_tests.py --workers 4
+  python3 scripts/shard_tests.py --workers 4 --start-directory tests/b5_analysis
   python3 scripts/shard_tests.py --shards 8 --index 1 --split
 """
 
@@ -796,7 +797,9 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
     return 0 if successful else 1
 
 
-def run_workers(worker_count: int, *, split: bool = False) -> int:
+def run_workers(
+    worker_count: int, *, split: bool = False, start_directory: Path = DEFAULT_TESTS_DIR
+) -> int:
     """Run all shards concurrently in child processes and aggregate results."""
 
     if worker_count < 1:
@@ -814,6 +817,8 @@ def run_workers(worker_count: int, *, split: bool = False) -> int:
                 str(worker_count),
                 "--index",
                 str(index),
+                "--start-directory",
+                os.fspath(start_directory),
             ]
             if split:
                 child_argv.append("--split")
@@ -883,6 +888,15 @@ def parse_args(argv=None):
             "(default off: whole-module scheduling)"
         ),
     )
+    parser.add_argument(
+        "--start-directory",
+        type=Path,
+        default=DEFAULT_TESTS_DIR,
+        help=(
+            "test package subtree to discover (default: tests); it must be "
+            "inside the repository and uses unittest discovery semantics"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.shards is not None:
         if args.index is None:
@@ -896,7 +910,11 @@ def parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    modules = discover_test_modules()
+    try:
+        modules = discover_test_modules(args.start_directory)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     shard_count = args.workers if args.workers is not None else args.shards
     try:
         _validate_shard_capacity(len(modules), shard_count)
@@ -905,7 +923,9 @@ def main(argv=None) -> int:
         return 2
 
     if args.workers is not None:
-        return run_workers(args.workers, split=args.split)
+        return run_workers(
+            args.workers, split=args.split, start_directory=args.start_directory
+        )
 
     timings = load_timing_map()
     if not args.split:

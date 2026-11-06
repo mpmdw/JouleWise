@@ -72,6 +72,13 @@ class ShardPartitionInvariantTests(unittest.TestCase):
                 self.assertEqual(len(flattened), len(self.discover_set))
                 self.assertEqual(len(flattened), len(set(flattened)))
 
+    def test_start_directory_discovers_only_the_requested_package_subtree(self):
+        modules = shard_tests.discover_test_modules(TESTS_DIR / "b5_analysis")
+        self.assertTrue(modules)
+        self.assertTrue(all(module.startswith("tests.b5_analysis.") for module in modules))
+        self.assertIn("tests.b5_analysis.test_windows", modules)
+        self.assertNotIn("tests.test_shard_tests", modules)
+
     def test_partition_is_deterministic(self):
         for shard_count in (1, 2, 4, 8):
             with self.subTest(shards=shard_count):
