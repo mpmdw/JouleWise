@@ -27,7 +27,12 @@ JW_RUN_METAL_SYNTHETIC=1 python -B -m unittest -v \
 ```
 
 These use only tiny random fixtures plus the official *configuration*, never
-official weights. Then build and probe with the externally recorded manifest
+official weights. The size gate's targets are the converter's own plan for the
+pinned config: maxfit 210.4 GB, maxfit5 195.3 GB (decimal; 5-bit/g64 routed
+experts are 5.5 bits per weight against 6.5, i.e. 15.1 GB smaller, matching the
+memory model's 112.7 - 97.6 GB peak delta). An earlier 203 GB maxfit5 target
+was a size-model error, not a converter error; checked against
+`/private/tmp/jwsol/hf-flashnext/config.json` on 2026-11-06. Then build and probe with the externally recorded manifest
 pin:
 
 ```bash
