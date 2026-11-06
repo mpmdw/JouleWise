@@ -177,6 +177,9 @@ def report_profiles(directory, out, top=40):
 
 
 def main(argv=None):
+    if argv is None and sys.argv[1:2] == ['--pack-checkpoint']:
+        pack_checkpoint(Path(sys.argv[2]), Path(sys.argv[3]))
+        return 0
     if argv is None and sys.argv[1:2] == ['--cprofile-report']:
         report_profiles(Path(sys.argv[2]), Path(sys.argv[3]))
         return 0
@@ -191,6 +194,16 @@ def main(argv=None):
     parser.add_argument('--sample-stacks', metavar='STEPS',
                         help='comma-separated step ids: sample the driver main thread\'s Python stack every '
                              '20 ms during those steps and write OUT/stacks-step<ID>.json (low overhead)')
+    parser.add_argument('--checkpoint-at', metavar='STEP',
+                        help='at the start of STEP (after every earlier step committed), save the run state and '
+                             'restricted custody to --checkpoint-dir, then stop the run (synthetic refusal)')
+    parser.add_argument('--checkpoint-dir', type=Path)
+    parser.add_argument('--resume', type=Path, metavar='DIR',
+                        help='a checkpoint directory (state.pkl + restricted.tar) or a directory of *.b64 parts '
+                             'from --pack-checkpoint: restore it as step 0 and run the remaining steps')
+    parser.add_argument('--resume-drop-leaves', default='',
+                        help='comma-separated VDL leaf ids whose checkpoint entries are not restored '
+                             '(an r2 resume drops L4_calibration_bracket, which r2 never stores)')
     parser.add_argument('--stop-after', help='synthetic partial run: every later step refuses with '
                         "'synthetic_stop_after' (so the record still closes); for time-boxed hosts")
     parser.add_argument('--vdl-mode', default='on',
@@ -231,6 +244,13 @@ def main(argv=None):
         def stopped(s, r):
             raise d.AnalysisRefusal('synthetic_stop_after')
         d.STEPS = tuple(item if i <= cut else (item[0], stopped) for i, item in enumerate(d.STEPS))
+    if args.checkpoint_at is not None:
+        if args.checkpoint_dir is None:
+            parser.error('--checkpoint-at needs --checkpoint-dir')
+        _forbid(args.checkpoint_dir.absolute())
+        _install_checkpoint(d, args.checkpoint_at, args.checkpoint_dir.absolute())
+    if args.resume is not None:
+        _install_resume(d, args.resume.absolute(), {x for x in args.resume_drop_leaves.split(',') if x})
 
     if args.sample_stacks:
         _sample_driver_stacks(out, set(args.sample_stacks.split(',')))
@@ -288,6 +308,183 @@ def main(argv=None):
     for step, row in (summary['steps'] or {}).items():
         print(f'step {step:>3}: {row["wall_s"]:9.1f} s', flush=True)
     return 0 if result.code == 0 else 1
+
+
+# ------------------------------------------------------------ checkpoint / resume
+# A one-hour host cannot run the whole synthetic chain. The state at the start of
+# a step (every earlier step committed) is saved by one run and restored as
+# "step 0" of another at the SAME fixed locators, so the remaining steps, the
+# final record and every custody byte are those of an uninterrupted run (the
+# member pools start cold; that changes timing only).
+
+_LIVE_LOGS = ('logs/runtime-phases.jsonl', 'logs/runtime-vdl-counters.json')
+
+
+def _transport_dumps(value):
+    """pack_parallel's private transport, self-contained so an r2 checkout can use it."""
+    import io
+    import pickle
+    from types import MappingProxyType
+    from joulewise.b5_analysis.windows import _SELECTION_TOKEN
+
+    buffer = io.BytesIO()
+
+    class TransportPickler(pickle.Pickler):
+        def persistent_id(self, item):
+            return 'selected-window' if item is _SELECTION_TOKEN else None
+
+    pickler = TransportPickler(buffer, protocol=pickle.HIGHEST_PROTOCOL)
+    pickler.dispatch_table = {MappingProxyType: lambda value: (_mapping_proxy, (dict(value),))}
+    pickler.dump(value)
+    return buffer.getvalue()
+
+
+def _mapping_proxy(value):
+    from types import MappingProxyType
+    return MappingProxyType(value)
+
+
+def _transport_loads(payload):
+    import io
+    import pickle
+    from joulewise.b5_analysis.archive import ArchiveHandle
+    from joulewise.b5_analysis.windows import _SELECTION_TOKEN
+
+    class TransportUnpickler(pickle.Unpickler):
+        def persistent_load(self, identity):
+            if identity != 'selected-window':
+                raise pickle.UnpicklingError('unknown transport identity')
+            return _SELECTION_TOKEN
+
+    reader = TransportUnpickler(io.BytesIO(payload))
+    value = reader.load()
+    for item in reader.memo.copy().values():
+        if isinstance(item, ArchiveHandle) and '_rebuilt_roster_bindings' in item.__dict__:
+            item._rebuilt_roster_bindings = {id(roster): roster for roster in item._rebuilt_roster_bindings.values()}
+    return value
+
+
+def _ensure_sources_replay_class():
+    """An r2 checkout builds the identical replay as a closure; give it the picklable class."""
+    from dataclasses import dataclass
+    from joulewise.b5_analysis import context
+
+    if hasattr(context, '_SourcesReplay'):
+        return
+
+    @dataclass(frozen=True)
+    class _SourcesReplay:
+        archive: object
+        roster: object
+
+        def __call__(self, candidate, runs_root):
+            from joulewise.b5_analysis.sources_replay import replay_claim_sources
+            return replay_claim_sources(candidate, runs_root, archive=self.archive, roster=self.roster).problem
+
+    _SourcesReplay.__module__ = context.__name__
+    _SourcesReplay.__qualname__ = '_SourcesReplay'
+    context._SourcesReplay = _SourcesReplay
+
+
+def _install_checkpoint(d, step, directory):
+    import copy as _copy
+    import tarfile
+    from joulewise import analysis_run_cache as arc
+
+    def checkpoint(s, r):
+        caches = arc.current()
+        saved = _copy.copy(s)
+        saved._runner = saved.vdl_store = saved.deadline = saved.physics_store = None
+        payload = dict(state=saved, physics=dict(s.physics_store or {}),
+                       entries=None if s.vdl_store is None else s.vdl_store.export_entries(),
+                       memos={k: dict(v) for k, v in (caches.memos or {}).items()},
+                       counter=r._counter, last_exception_class=r.last_exception_class, step=step)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'state.pkl').write_bytes(_transport_dumps(payload))
+        with tarfile.open(directory / 'restricted.tar', 'w') as tar:
+            for path in sorted(s.restricted.rglob('*')):
+                relative = path.relative_to(s.restricted).as_posix()
+                if path.is_file() and relative not in _LIVE_LOGS and not relative.startswith('logs/runtime-stack-'):
+                    tar.add(path, arcname=relative, recursive=False)
+        print('checkpoint written before step', step, flush=True)
+        raise d.AnalysisRefusal('synthetic_stop_after')
+
+    d.STEPS = tuple((sid, checkpoint) if sid == step else (sid, fn) for sid, fn in d.STEPS)
+
+
+def pack_checkpoint(directory, out, part_chars=3_000_000):
+    """Compress a checkpoint into base64 text parts small enough for a text diff."""
+    import base64
+    import io
+    import tarfile
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode='w:xz', preset=9) as tar:
+        for name in ('state.pkl', 'restricted.tar'):
+            tar.add(directory / name, arcname=name)
+    text = base64.encodebytes(buffer.getvalue()).decode()
+    out.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(buffer.getvalue()).hexdigest()
+    parts = [text[i:i + part_chars] for i in range(0, len(text), part_chars)]
+    for index, part in enumerate(parts):
+        (out / f'ckpt.part{index:03d}.b64').write_text(part)
+    (out / 'ckpt.sha256').write_text(digest + '\n')
+    print(json.dumps(dict(parts=len(parts), compressed_bytes=len(buffer.getvalue()), sha256=digest)))
+
+
+def _unpack_checkpoint(source):
+    import base64
+    import io
+    import tarfile
+    import tempfile as _tempfile
+    if (source / 'state.pkl').exists():
+        return source
+    raw = base64.decodebytes(''.join(p.read_text() for p in sorted(source.glob('ckpt.part*.b64'))).encode())
+    expected = (source / 'ckpt.sha256').read_text().strip()
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise SystemExit('checkpoint parts do not match ckpt.sha256')
+    target = Path(_tempfile.mkdtemp(prefix='b5-e2e-ckpt-'))
+    with tarfile.open(fileobj=io.BytesIO(raw), mode='r:xz') as tar:
+        tar.extractall(target, filter='data')
+    return target
+
+
+def _install_resume(d, source, drop_leaves):
+    import tarfile
+    from joulewise import analysis_run_cache as arc
+
+    source = _unpack_checkpoint(source)
+    _ensure_sources_replay_class()
+    payload = _transport_loads((source / 'state.pkl').read_bytes())
+    saved = payload['state']
+    done = {record.step for record in saved.step_records}
+    live = {'_runner', 'vdl_store', 'deadline', 'physics_store', 'workers', 'ignored_backup', 'restricted',
+            'step_records'}
+
+    def restore(s, r):
+        with tarfile.open(source / 'restricted.tar') as tar:
+            tar.extractall(s.restricted, filter='data')
+        for name, value in vars(saved).items():
+            if name not in live:
+                setattr(s, name, value)
+        s.physics_store.update(payload['physics'])
+        caches = arc.current()
+        if s.vdl_store is not None and payload['entries'] is not None:
+            entries = dict(payload['entries'])
+            entries['entries'] = {key: entry for key, entry in entries['entries'].items()
+                                  if entry.leaf_id not in drop_leaves}
+            s.vdl_store.merge_entries(entries)
+        for name, table in payload['memos'].items():
+            caches.memos.setdefault(name, {}).update(table)
+        r._counter = payload['counter']
+        r.last_exception_class = payload['last_exception_class']
+        print('resumed', len(saved.step_records), 'records; next step', payload['step'], flush=True)
+        return list(saved.step_records)
+
+    def skipped(s, r):
+        return []
+
+    d.STEPS = tuple((sid, restore) if sid == '0' else (sid, skipped) if sid in done else (sid, fn)
+                    for sid, fn in d.STEPS)
 
 
 def _sample_driver_stacks(out, steps, interval=0.02, depth=40):
