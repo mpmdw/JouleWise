@@ -55,6 +55,21 @@ class R0DispositionsTest(unittest.TestCase):
         self.assertIn("- capped/unclosed: 0/1 = 0.000000", output)
         self.assertIn("A3.6 5% trigger over all transitions: TRIGGERED", output)
 
+    def test_read_only_spam_analysis_tools_are_not_state_changing(self):
+        report = self.report()
+        episode = report["checks"][1]["rungs"][0]["episodes"][0]
+        for name in ("analyze_spam_patterns", "preview_rule", "find_overlapping_rules",
+                     "simulate_multiple_rules", "find_redundant_rules"):
+            episode["turns"][1]["visible_text"] = f'<tool_call>\n<function={name}>\n</function>\n</tool_call>'
+            with self.subTest(name=name):
+                self.assertIn("within the first 6,144 decode tokens: no", render(report))
+        episode["turns"][1]["visible_text"] = '<tool_call>\n<function=add_global_rule>\n</function>\n</tool_call>'
+        self.assertIn("within the first 6,144 decode tokens: yes (add_global_rule)", render(report))
+        episode["turns"][1]["visible_text"] = '<tool_call>\n<function=frobnicate>\n</function>\n</tool_call>'
+        output = render(report)
+        self.assertIn("within the first 6,144 decode tokens: no", output)
+        self.assertIn("unclassified tool names in that window (not counted): frobnicate", output)
+
     def test_exact_interval_boundary_and_cli_never_rewrites_report(self):
         self.assertEqual(exact_binomial_ci(0, 1)[0], 0.0)
         self.assertEqual(exact_binomial_ci(1, 1)[1], 1.0)
