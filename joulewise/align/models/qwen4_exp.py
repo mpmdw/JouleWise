@@ -241,6 +241,7 @@ class ModelArgs(BaseModelArgs):
     ngram_tables: dict = field(default_factory=dict)
     qsa_sparse_prefill_min_kv: int = QSA_SPARSE_PREFILL_MIN_KV
     qsa_sparse_decode_min_kv: int = QSA_SPARSE_DECODE_MIN_KV
+    compile_decode: bool = True
 
     @classmethod
     def from_dict(cls, params):
@@ -251,6 +252,7 @@ class ModelArgs(BaseModelArgs):
             ngram_tables=dict(params.get("ngram_tables") or {}),
             qsa_sparse_prefill_min_kv=int(params.get("qsa_sparse_prefill_min_kv", QSA_SPARSE_PREFILL_MIN_KV)),
             qsa_sparse_decode_min_kv=int(params.get("qsa_sparse_decode_min_kv", QSA_SPARSE_DECODE_MIN_KV)),
+            compile_decode=bool(params.get("compile_decode", True)),
         )
 
 
@@ -1714,8 +1716,49 @@ class DecoderLayer(nn.Module):
             self.ple = PLELayer(args)
         self.attn_hyper_connection = GatedResidual(args)
         self.mlp_hyper_connection = GatedResidual(args)
+        # Decode compilation is deliberately local to a layer.  Compiling the
+        # model loop would capture the Python cache objects and make their
+        # mutations invisible after the first trace.  This callable instead
+        # receives and returns every device-resident cache array explicitly.
+        # It is lazy so mx.compile sees the final (possibly quantized) module.
+        self._decode_ctx = None
+        self._compiled_decode = None
 
-    def __call__(self, h: mx.array, ctx: _Context, cache) -> mx.array:
+    def _decode_arrays(self, h: mx.array, cos: mx.array, sin: mx.array,
+                       ssm_mask: mx.array, ngram_emb: mx.array,
+                       offset_shape: mx.array, *state):
+        """Pure-ish compiled boundary for one batch-1, one-token layer.
+
+        ``mx.compile`` may only track array data.  A short-lived cache view
+        supplies the existing layer implementation with its Python protocol;
+        all mutable device state crosses this boundary in ``state`` and in the
+        returned tuple.  Host metadata (offset/padding and dispatch policy) is
+        read from the current context/cache view while tracing a shape.
+        """
+        ctx, original = self._decode_ctx
+        del offset_shape  # shape-specialises QSA's host-indexed cache slices
+        # These values change at every token and therefore must not be closed
+        # over by the trace.  The empty sentinels represent the two optional
+        # arrays without creating a second Python cache protocol.
+        ctx.cos, ctx.sin = cos, sin
+        ctx.ssm_mask = None if ssm_mask.size == 0 else ssm_mask
+        if self.has_ple:
+            ctx.ngram_emb[self.layer_idx] = ngram_emb
+        if self.is_linear:
+            view = Qwen4ExpLinearCache(len(state))
+            view.padding, view.offset = original.padding, original.offset
+            view.cache = list(state)
+            out = self._body(h, ctx, view)
+            return (out, *view.cache)
+
+        view = Qwen4ExpQSACache(original.padding)
+        view._ratio, view.offset = original._ratio, original.offset
+        view.keys, view.values, view.raw_keys, view.block_keys = state
+        out = self._body(h, ctx, view)
+        return out, view.keys, view.values, view.raw_keys, view.block_keys
+
+    def _body(self, h: mx.array, ctx: _Context, cache) -> mx.array:
+        """The common layer body; prefill always calls this directly."""
         if self.has_ple:
             h = h + self.ple(h, ctx.ngram_emb[self.layer_idx], ctx, cache)
         x, hyper, inject = self.attn_hyper_connection(h)
@@ -1723,6 +1766,34 @@ class DecoderLayer(nn.Module):
         h = _inject(hyper, x, inject)
         x, hyper, inject = self.mlp_hyper_connection(h)
         return _inject(hyper, self.mlp(x), inject)
+
+    def __call__(self, h: mx.array, ctx: _Context, cache, compile_decode: bool = True) -> mx.array:
+        # Prefill (and every batched/multi-token call) remains uncompiled.
+        if not compile_decode or ctx.B != 1 or ctx.S != 1 or cache.offset == 0:
+            return self._body(h, ctx, cache)
+        if self._compiled_decode is None:
+            self._compiled_decode = mx.compile(self._decode_arrays, shapeless=False)
+        self._decode_ctx = (ctx, cache)
+        empty = mx.zeros((0,), dtype=h.dtype)
+        # QSA's cache protocol uses the host offset for slices and selection.
+        # A shape-only argument makes shapeless=False retrace that layer at a
+        # new offset rather than reusing host constants.  Linear layers get a
+        # stable empty shape and keep the hot compiled graph across steps.
+        offset_shape = mx.zeros((cache.offset,), dtype=mx.uint8) if not self.is_linear else empty
+        dynamic = (ctx.cos, ctx.sin, ctx.ssm_mask if ctx.ssm_mask is not None else empty,
+                   ctx.ngram_emb[self.layer_idx] if self.has_ple else empty, offset_shape)
+        if self.is_linear:
+            result = self._compiled_decode(h, *dynamic, *cache.cache)
+            cache.cache = list(result[1:])
+            # _body advanced only the view; the owning cache carries host state.
+            cache.advance(1)
+        else:
+            state = (cache.keys, cache.values, cache.raw_keys, cache.block_keys)
+            result = self._compiled_decode(h, *dynamic, *state)
+            cache.keys, cache.values, cache.raw_keys, cache.block_keys = result[1:]
+            cache.offset += 1
+        self._decode_ctx = None
+        return result[0]
 
 
 class Qwen4ExpTextModel(nn.Module):
@@ -1782,6 +1853,7 @@ class TextModel(nn.Module):
         self._first_linear = (args.layer_types.index("linear_attention")
                               if "linear_attention" in args.layer_types else None)
         self._kernel_ok = sparse_kernel_supported(args.head_dim, args.num_attention_heads, args.num_key_value_heads)
+        self.compile_decode = runtime.compile_decode if runtime else True
 
     @property
     def layers(self):
@@ -1835,7 +1907,7 @@ class TextModel(nn.Module):
             self._gather_ngrams(np.asarray(inputs).astype(np.int64), ctx, cache, h.dtype)
         h = mx.tile(h, (1, 1, self.args.hc_count))
         for layer, c in zip(self.model.layers, cache):
-            h = layer(h, ctx, c)
+            h = layer(h, ctx, c, compile_decode=self.compile_decode)
         h = self.model.hyper_connection_mixer(h)
         if self.args.tie_word_embeddings:
             return self.model.embed_tokens.as_linear(h)

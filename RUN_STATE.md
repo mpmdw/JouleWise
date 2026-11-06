@@ -1,5 +1,10 @@
 # JouleWise Run State
 
+**2026-11-06 MISSING-11 lane:** compiled single-token layer decode, the new
+module pin, identity regression, and native handoff are recorded in
+`docs/run_reports/2026-11-06-missing-11-compiled-decode.md`. Native MLX/Metal,
+gold-adapter tiny, and live tiny gates remain lead-owned.
+
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;

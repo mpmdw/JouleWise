@@ -852,6 +852,50 @@ class CanonicalParityTest(unittest.TestCase):
                 self.assertLessEqual(d["max_abs"], FP32_TOL, f"{name}: {d}")
                 self.assertEqual(d.get("top1", 1.0), 1.0)
 
+    def test_compiled_decode_is_bitwise_identical_for_64_steps_past_qsa_2051_and_trim(self):
+        """MISSING-11: every layer kind crosses the compiled boundary, with
+        QSA already beyond 2051 tokens; restoring the midpoint snapshot trims
+        the QSA buffers before both paths continue."""
+        import mlx.core as mx
+        import numpy as np
+
+        model = self.fx.model("fp32")
+        prefix = (self.fx.seqs["seq_a"] * ((2052 + LEN_A - 1) // LEN_A))[:2052]
+        plain, compiled = model.make_cache(), model.make_cache()
+
+        model.language_model.compile_decode = False
+        run(model, [prefix], plain)
+        model.language_model.compile_decode = True
+        run(model, [prefix], compiled)
+
+        def arrays(c):
+            return [a for a in c.state if a is not None]
+
+        def equal_caches(step):
+            for layer_idx, (a, b) in enumerate(zip(plain, compiled)):
+                self.assertEqual(a.offset, b.offset, (step, layer_idx, "offset"))
+                self.assertEqual(len(arrays(a)), len(arrays(b)), (step, layer_idx, "arity"))
+                for slot, (x, y) in enumerate(zip(arrays(a), arrays(b))):
+                    mx.eval(x, y)
+                    self.assertTrue(np.array_equal(np.array(x), np.array(y)),
+                                    (step, layer_idx, slot, type(a).__name__))
+
+        midpoint = None
+        for step in range(64):
+            token = [[prefix[(step * 17 + 3) % len(prefix)]]]
+            model.language_model.compile_decode = False
+            a = run(model, token, plain)
+            model.language_model.compile_decode = True
+            b = run(model, token, compiled)
+            self.assertTrue(np.array_equal(a, b), (step, "logits"))
+            equal_caches(step)
+            if step == 31:
+                midpoint = (model.snapshot_cache(plain), model.snapshot_cache(compiled))
+            if step == 47:
+                model.restore_cache(plain, midpoint[0])
+                model.restore_cache(compiled, midpoint[1])
+                equal_caches("after trim")
+
     def test_greedy_32_tokens_identical_to_fp32_reference(self):
         fx = self.fx
         port = [int(t) for t in self.port("fp32")["greedy_tokens"]]

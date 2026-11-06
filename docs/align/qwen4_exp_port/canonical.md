@@ -280,11 +280,42 @@ Four seats validated the PR head `ce911c6e7` (module sha256 `55aecaea…b11a37f`
 
 ## Pin
 
-`joulewise/align/models/qwen4_exp.py` sha256 `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 (it was `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
+`joulewise/align/models/qwen4_exp.py` sha256 `af26a5a5bf15a6c475f21637989c5f03c6f8bd3a3e0b8824ac99765a99f7f95f` after MISSING-11 (it was `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 and `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
 - `MODULE_SHA256` in `scripts/align_convert_qwen4_exp.py`, the module `load_verified_model` runs by default. The suite checks it against the file (`test_r1_load_verified_model_requires_both_pins` fails if it is stale).
 - this section, which is a record and is not checked.
 
 The converter copies the module into every artifact and records `module_sha256` (== its `qwen4_exp.py` entry) in `manifest.json`. `load_verified_model(dir, expected_manifest_sha256)` fails closed without the artifact's manifest sha256 (recorded when it was converted; the CLI prints it), and refuses an artifact whose module differs from the module pin unless `expected_module_sha256` is given explicitly. It compiles the module from the bytes it hashed. Artifact format `joulewise-qwen4-exp-canonical-v2`: sharded weights, chunked digests for files over 256 MiB.
+
+### MISSING-11 compiled decode boundary
+
+Batch-one, single-token calls after the initial token compile each decoder
+layer with `mx.compile(..., shapeless=False)`. The input and output tuple
+carries every mutable cache array; position-dependent RoPE, the SSM mask and
+the PLE lookup are also array arguments rather than captured trace values.
+Multi-token prefill, batched calls and the first token remain uncompiled.
+`compile_decode: false` in `config.json` is the bitwise-reference switch.
+
+Because `qwen4_exp.py` is part of each artifact, existing artifacts do **not**
+acquire this change. In the live kit's step-8 clone, make a new artifact by
+copying the old artifact directory, replacing only `qwen4_exp.py`, and writing
+a new `manifest.json` whose `files["qwen4_exp.py"]` and `module_sha256` are the
+new module digest (then recompute the externally recorded manifest digest).
+Do not reconvert or touch weight/table payloads. Gold units must be re-attested
+against that new manifest/module pair.
+
+The native-Mac gate is all three kit checks, not just the new regression:
+
+```
+python -m unittest -v tests.align.test_qwen4_exp_canonical
+# Then run the Saturday kit's step-8 gold-adapter tiny command.
+# Then run the Saturday kit's step-8 live tiny command against /Volumes/JW-EXT.
+```
+
+The canonical module includes the 64-step compiled/uncompiled identity test:
+it compares logits and every cache array for linear, PLE and QSA layers,
+prefills QSA past 2051 tokens, and restores a midpoint snapshot to exercise a
+QSA trim. These are native MLX/Metal checks and intentionally skip where MLX
+is unavailable.
 
 ## Reproduce
 

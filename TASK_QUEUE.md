@@ -1353,3 +1353,8 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+# 2026-11-06 direct lane — MISSING-11
+
+- Implementation complete in the compiled-decode lane; native closure remains:
+  canonical qwen4_exp (32 tests, zero skips), step-8 gold-adapter tiny, step-8
+  live tiny, and gold-unit re-attestation under the new module/manifest pins.
