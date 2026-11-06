@@ -81,10 +81,12 @@ class PowerModeGuard(AbstractContextManager):
 
     def high(self):
         self.query("before_high")
-        self._must(self.HIGH, "high_failed")
         if self.marker is not None:
             self.marker.parent.mkdir(parents=True, exist_ok=True)
             self.marker.write_text("high-power restoration required\n")
+        # The marker must predate High Power: SIGKILL at any later instruction
+        # leaves a durable host-level restoration obligation.
+        self._must(self.HIGH, "high_failed")
         self.query("after_high")
 
     def automatic(self, label="after_automatic"):

@@ -517,8 +517,10 @@ class EpisodeRuntimeAdapter:
                         temperature=spec.temperature, seed=measured_seed,
                     )
                     turn_endpoint_flags = endpoint.turn_provenance[-1].get("flags", ())
-                    if any(flag.startswith(("malformed_tool_call:", "unsupported_tool_call_format"))
-                           for flag in turn_endpoint_flags):
+                    malformed = any(flag.startswith("malformed_tool_call:")
+                                    for flag in turn_endpoint_flags)
+                    budget_cut = f"turn_token_budget_reached:{index}" in turn_endpoint_flags
+                    if malformed and not budget_cut:
                         flags.append(f"episode.malformed_tool_call:{index}")
                     # Integer token counts establish that a model call returned work.
                     decode_tokens_used += result.completion_tokens
@@ -530,6 +532,8 @@ class EpisodeRuntimeAdapter:
                     thermal_abort = self.thermal is not None and any(
                         r['kind'] == 'H' and r['turn'] == index and r['outcome'] in ('timeout', 'deadman')
                         for r in self.thermal.intervals)
+                    if thermal_abort and f"episode.malformed_tool_call:{index}" in flags:
+                        flags.remove(f"episode.malformed_tool_call:{index}")
                     for call_index, call in enumerate(() if thermal_abort else result.tool_calls):
                         if deadman is not None and deadman.expired():
                             flags.append(f"episode.deadman:{index}")
@@ -596,6 +600,8 @@ class EpisodeRuntimeAdapter:
                     if deadman is not None and deadman.expired():
                         flags.append(f"episode.deadman:{index}")
                     if f"episode.deadman:{index}" in flags or f"episode.deadman:{index}" in endpoint.flags:
+                        break
+                    if f"episode.malformed_tool_call:{index}" in flags:
                         break
                     if any(c.name == "end_task" for c in calls):
                         flags.append(f"episode.end_task:{index}")

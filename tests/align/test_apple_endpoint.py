@@ -393,17 +393,16 @@ class AppleReviewRegressionTests(unittest.TestCase):
                 metadata = json.loads((bundle / "metadata.json").read_text())
                 self.assertEqual(
                     metadata["workload_provenance"]["episode_outcome"]["stop_condition"],
-                    ("episode.malformed_tool_call" if scenario == "truncate" else
-                     "turn_token_budget_reached" if cut else "episode_returned"),
+                    "turn_token_budget_reached" if cut else "episode_returned",
                 )
                 if scenario == "truncate":
                     self.assertTrue(any(flag.startswith("malformed_tool_call:") for flag in episode.flags))
-                    self.assertIn("episode.malformed_tool_call:1", episode.flags)
+                    self.assertNotIn("episode.malformed_tool_call:1", episode.flags)
                     self.assertEqual(len(episode.turns), 2)
                     desk_summary = episode_summary(bundle)
-                    self.assertEqual(desk_summary["end_state"], "episode.malformed_tool_call:1")
-                    self.assertIn("episode.malformed_tool_call:1",
-                                  episode_ineligibility_reasons({"summary": desk_summary}))
+                    self.assertEqual(desk_summary["end_state"], "turn_token_budget_reached:1")
+                    self.assertNotIn("episode.malformed_tool_call:1",
+                                     episode_ineligibility_reasons({"summary": desk_summary}))
                 self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_native_parsing_cases_cannot_silently_lose_hidden_work_or_calls(self):
@@ -426,6 +425,13 @@ class AppleReviewRegressionTests(unittest.TestCase):
                     self.assertEqual(episode.main_task_score, 1.0)  # Exactly three integer tool completions.
                 else:
                     self.assertIn("unsupported_tool_call_format", episode.flags)
+                    # A prose/JSON-looking diagnostic is tabulated only.  It
+                    # is not a malformed-call stop or an eligibility change.
+                    self.assertFalse(any(flag.startswith("episode.malformed_tool_call:")
+                                         for flag in episode.flags))
+                    metadata = json.loads((bundle / "metadata.json").read_text())
+                    self.assertEqual(metadata["workload_provenance"]["episode_outcome"]["stop_condition"],
+                                     "episode_returned")
                 self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_native_nonfinite_score_preserves_episode_artifacts(self):

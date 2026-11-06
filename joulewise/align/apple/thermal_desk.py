@@ -617,6 +617,11 @@ def calibration_exclusions(member):
         reasons.append('thermal.powermetrics_non_nominal')
     if any(f.startswith(('endpoint_error:', 'episode_error:')) for f in member.get('flags', ())):
         reasons.append('member.runtime_failure')
+    if any('thermal.collector_thread_dead' in f or 'thermal.collector_failed' in f
+           or f.startswith('collector_error:') for f in member.get('flags', ())):
+        # Collector loss is the protocol's X4 state-observation exclusion even
+        # when the runtime also (correctly) fails the member.
+        reasons.append('thermal.state_unobserved')
     reasons.extend(energy_exclusions(member))
     return sorted(set(reasons))
 

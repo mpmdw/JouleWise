@@ -36,6 +36,14 @@ def contrast(effect=12, noise=0):
 
 
 class DeskTests(unittest.TestCase):
+    def test_dead_collector_counts_as_x4_even_with_runtime_failure(self):
+        reasons = desk.calibration_exclusions({
+            'flags': ['episode_error:RuntimeError:thermal.collector_thread_dead'],
+            'turn_observation': [],
+        })
+        self.assertIn('thermal.state_unobserved', reasons)
+        self.assertIn('member.runtime_failure', reasons)
+
     def test_u4_requires_both_sentinel_equivalence_and_anchor_moments(self):
         anchors = {str(i): {str(j): 1000+100*j for j in range(4)} for i in range(3)}
         windows = {str(i): [1000] for i in range(3)}

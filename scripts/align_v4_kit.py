@@ -39,6 +39,11 @@ D_DEVELOPMENT_INDICES = (1, 91, 92, 93)
 SPAN_LIMIT_S = 26940
 SCAFFOLD_S = 4995
 BUDGET_FLOOR = 6144
+# R1's runner cap is 1,800 s and its measured host/member conversion is
+# 1.13544.  Use the largest whole-second contrast budget strictly below that
+# cap: 1585 * 1.13544 = 1799.6734 s.  This is a member-cap guard, not a short
+# gate timer; it includes G0, any G1 waits, and the pilot-7-count episode.
+CONTRAST_DEADMAN_S = 1585
 
 # Ordinals remain stable after dropping 17; the late replay remains ordinal 18.
 # name, pair, condition, seed index. Arm letters refer only to the contrast.
@@ -252,9 +257,7 @@ def build_files(root=ROOT):
                 reference = {'role': 'consume', 'source_run_id': capture_run_id,
                              'source_config_sha256': capture_config_sha256}
                 spec.update(max_turns=inputs['WP18'][name[0]]['max_turns'],
-                            # The gate cap is 300 s; 30 s permits cleanup and
-                            # propagation while bounding a dead collector.
-                            deadman_s=330,
+                            deadman_s=CONTRAST_DEADMAN_S,
                             thermal=thermal_policy(inputs, heavy=False, per_turn=name.endswith('G'),
                                                    window_reference=reference))
             config['workload_profile']['prompt_text'] = json.dumps(spec, sort_keys=True, separators=(',', ':'), allow_nan=False)

@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/align_v4_kit.py",
-    "sha256": "2943a006b1572d5c486b9c2f35994e7f2141307809d579ec2fe44d88370dcc84"
+    "sha256": "547fd9ddae4895c26add105aa1dbe141497076c202e391b4f748d2c998ffec67"
   },
   "module_order": [
     "align-v4-qwen3-30b-a3b",
@@ -77,8 +77,8 @@
   ],
   "non_claim": true,
   "plan": {
-    "actual_sha256": "a67033bb7976ce8f305e9946e1b2a3eed177c8a050b937e1cf807d239c28a732",
-    "declared_sha256": "a67033bb7976ce8f305e9946e1b2a3eed177c8a050b937e1cf807d239c28a732",
+    "actual_sha256": "6c35a1316c3ed9d59e5b3a0e5cbf61405359594a152920c59ab731ef0aae52a4",
+    "declared_sha256": "6c35a1316c3ed9d59e5b3a0e5cbf61405359594a152920c59ab731ef0aae52a4",
     "path": "collection_plan.json",
     "plan_id": "align-v4"
   },
@@ -189,7 +189,7 @@
       "block_index": 6,
       "config": "align-v4-episodes-a-e06.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json",
-      "config_sha256": "6d6534fb1bf0a5ddf83aca2ad9d41ab8f4b66982f0eecd017d56a12faecdd2f5",
+      "config_sha256": "17fc65c9d4131fe15afca5e45b0cbbd0a1faa33da77ffe77f1e4de44f7f08c7c",
       "index": 6,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -208,7 +208,7 @@
       "block_index": 7,
       "config": "align-v4-episodes-a-e07.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e07.json",
-      "config_sha256": "bc0a83910be9a2735370e7e14c2603e9df2eae641d46e5134f0058cf3c44caac",
+      "config_sha256": "046d0b2183a4d079a0efe75d40d2b98d90ff5970eba7c5c4ae11883b78fa3018",
       "index": 7,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -246,7 +246,7 @@
       "block_index": 9,
       "config": "align-v4-episodes-a-e09.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e09.json",
-      "config_sha256": "7dce41196c270cfcbea8305264be71036293958a0495ac77995e3b20aad61494",
+      "config_sha256": "b17368ae070c67a63d6dfbf6098f1b9982e8aa998bc31a910ca6f7a493781b81",
       "index": 9,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -265,7 +265,7 @@
       "block_index": 1,
       "config": "align-v4-episodes-b-e10.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e10.json",
-      "config_sha256": "229c6a32e2b92f9f6b2662aeeaa42d14e497fff1ba575305b70ce7b8e620c70a",
+      "config_sha256": "c80d7a3fc21c732898f379d5cfd6d517f984b7bcb7fb1c86023258f509fb27fd",
       "index": 1,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -303,7 +303,7 @@
       "block_index": 3,
       "config": "align-v4-episodes-b-e12.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e12.json",
-      "config_sha256": "30a7d028488eabb01dce2612a9d00b81071d0f4e286925ec50dcc379bac36c70",
+      "config_sha256": "4115d914eec8f5f6c031ad5af96f504ad014a5549610327dfd2341578dc55b05",
       "index": 3,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -322,7 +322,7 @@
       "block_index": 4,
       "config": "align-v4-episodes-b-e13.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e13.json",
-      "config_sha256": "9d5c15fdf68b2fc32e71c6079e114f7901fc54de32f6006870cc1c0326ff9c05",
+      "config_sha256": "38e6641b5374476f29b3385ff54eb084e2e6624604b3efc494e51b4ccaba0ef1",
       "index": 4,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -360,7 +360,7 @@
       "block_index": 6,
       "config": "align-v4-episodes-b-e15.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e15.json",
-      "config_sha256": "704127d3754b80512d163a0efc0d3ef6b85e99b13f496d50538792bf425eb2c2",
+      "config_sha256": "a9294b7e9fdfe9608971817030ff9019979fe2bc61240e10e8be15cd7e529d1c",
       "index": 6,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -379,7 +379,7 @@
       "block_index": 7,
       "config": "align-v4-episodes-b-e16.json",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e16.json",
-      "config_sha256": "71f89d2534f7317d418869112fedd290e4525485d4925e81410a0d88359c7596",
+      "config_sha256": "d4ebadea3664bc5b6653cbdd3cdcb14da801030d221d84de8beeb157b154d753",
       "index": 7,
       "model_tag": "qwen3-30b-a3b-mlx",
       "module_id": "align-v4-qwen3-30b-a3b",
@@ -940,7 +940,7 @@
         "kind": "manifest",
         "manifest_id": "align-v4-episodes-a",
         "path": "configs/campaigns/align_v4/stages/episodes-a/order_manifest.json",
-        "sha256": "029c4054afba4ba6f056e07c522eeead278bd92101d108b013a066ac8358ab42"
+        "sha256": "3c8f1297fd7ea972e9d2103d984fc7c6bd99054be6de7f2ffa183c3881b8d239"
       },
       "kind": "campaign_collection",
       "launch": {
@@ -1142,7 +1142,7 @@
         "kind": "manifest",
         "manifest_id": "align-v4-episodes-b",
         "path": "configs/campaigns/align_v4/stages/episodes-b/order_manifest.json",
-        "sha256": "aa5a715a17336125211029b768d377f362caaa9afeb7775ca156b50c1af1d5d0"
+        "sha256": "e5456e0e8fdbdcc429eb82e4b1183365cc82301c45d65365d756b1d91ebd8889"
       },
       "kind": "campaign_collection",
       "launch": {

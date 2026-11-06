@@ -112,6 +112,20 @@ class R1Tests(unittest.TestCase):
             self.assertFalse(marker.exists())
             self.assertEqual(world.mode, 0)
 
+    def test_marker_is_written_before_high_power_command(self):
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td)/'host.marker'
+            observed = []
+            world = FakeWorld()
+            def runner(argv):
+                if tuple(argv) == r1.PowerModeGuard.HIGH:
+                    observed.append(marker.exists())
+                return world(argv)
+            guard = r1.PowerModeGuard(runner, marker)
+            with guard:
+                guard.high()
+            self.assertEqual(observed, [True])
+
     def test_refuses_missing_or_nonfinite_slots(self):
         values = {name: 1.0 for name in r1.SLOT_NAMES[:-1]}
         values["class"] = "heavy"
