@@ -154,11 +154,19 @@ bin is within 0.5 of the reference bin; the reference is HF transformers 5.22.1 
 upstream bf16 weights (11.064 for D: D does not model its own system/tool block, so an
 absolute bar cannot apply). Mode `absolute` (30B anchor): ≤3.0. A model or fixture with
 no entry fails closed (`no_reference`); a malformed table fails (`invalid_reference_config`).
-(2) **Generation.** Greedy decode (no sampler; default effort, `enable_thinking=True`) of
-the real SHADE system+tools prompt plus a one-line user turn asking for one call to the
-listed tool with the fewest required parameters, capped at 4,096 tokens. Pass iff reasoning
-closes, the cap is not hit, and the reply holds exactly one well-formed envelope calling a
-listed tool with schema-valid arguments. Tokens, seconds and the call are recorded under
+This tier catches gross faults only, not subtle numeric ones (see the note). Every run also
+records the loss profile (`nll_loss_profile`: per-token loss digest, mean, bins, stack
+versions) and its sha. **Exact reproduction:** once an entry carries a `reproduce` pin (a
+previously qualified R0 report's profile and sha), the run must reproduce it within 1e-3
+on the mean and 1e-2 per bin; a different revision, fixture or stack is `not_comparable`
+and fails. Without a pin the tier reports `not_pinned`, which is not a fail.
+(2) **Generation.** Greedy decode (no sampler; `enable_thinking=True`) of the real SHADE
+system+tools prompt plus a one-line user turn asking for one call to the listed tool with
+the fewest required parameters, capped at 4,096 tokens. `load` runs before the ladder
+selects D's effort, so this turn uses the template default, which renders like xhigh, the
+highest-effort (worst-case length) setting. Pass iff reasoning closes, the cap is not hit,
+and the reply holds exactly one well-formed envelope calling **the requested tool** with
+schema-valid arguments (another listed tool, e.g. `end_task`, fails as `wrong_tool`). Tokens, seconds and the call are recorded under
 `generation`. Either part failing fails `load` (`reasons` lists which).
 Synthetic rewrite tables diagnose templates; **generated**
 transitions decide B7 (≥12 eligible transitions; any closed-reasoning rewind).

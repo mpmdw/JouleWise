@@ -42,9 +42,13 @@ class MlxBackend:
         if (not callable(getattr(MlxEndpoint, "assistant_history_message", None))
                 or "chat_template_kwargs" not in inspect.signature(MlxEndpoint).parameters):
             raise RuntimeError("Stage-1 B2 history/effort API missing; integrate before live R0")
+        stack = {}
         for dist, expected in (("mlx", "0.31.2"), ("mlx-lm", "0.31.3"), ("transformers", "5.12.1")):
-            if version(dist) != expected:
-                raise RuntimeError(f"stack pin mismatch: {dist} requires {expected}, found {version(dist)}")
+            stack[dist] = version(dist)
+            if stack[dist] != expected:
+                raise RuntimeError(f"stack pin mismatch: {dist} requires {expected}, found {stack[dist]}")
+        # Keys the R0 load exact-reproduction tier (r0.reproduction_verdict).
+        self.stack_versions = stack
         source = Path(source)
         if not source.is_absolute() or not source.is_dir():
             raise ValueError("model.source must be an existing absolute local directory; no downloads")

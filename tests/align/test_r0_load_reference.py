@@ -145,6 +145,130 @@ class ReferenceVerdictTest(unittest.TestCase):
         self.assertEqual(r0.load_coherence(FakeBackend(), references=fake_references())["status"], "pass")
 
 
+
+# ---------------------------------------------------------------- exact-reproduction tier
+
+STACK = {"mlx": "0.31.2", "mlx-lm": "0.31.3", "transformers": "5.12.1"}
+
+
+def qualified_losses():
+    """A D-regime profile with per-token spread (deterministic)."""
+    return [b + 0.25 * ((i * 7919) % 13 - 6) / 6 for i, b in enumerate(losses_from_bins(D_MLX_BINS))]
+
+
+def pin(table, losses, *, stack=STACK):
+    """Pin a qualified run's profile into D's entry, as an operator copies it from report.json."""
+    profile = json.loads(json.dumps(r0.loss_profile(losses, revision=r0.PINS["D"]["revision"],
+                                                    fixture_sha256=D_FIXTURE, stack_versions=stack)))
+    entry = next(e for e in table["models"] if e["label"] == "D")
+    entry["reproduce"] = {"profile_sha256": r0._canonical_sha256(profile), "profile": profile,
+                          "source": {"report": "records/<qualified-r0>/report.json", "check": "load"}}
+    return table
+
+
+def reproduce(losses, table, stack=STACK):
+    return r0.nll_verdict(losses, revision=r0.PINS["D"]["revision"], fixture_sha256=D_FIXTURE,
+                          references=table, stack_versions=stack)
+
+
+class ReproductionTierTest(unittest.TestCase):
+    def test_not_pinned_is_reported_and_is_not_a_fail(self):
+        verdict = reproduce(qualified_losses(), shipped())
+        self.assertEqual(verdict["status"], "pass", verdict)
+        self.assertEqual(verdict["reproduction"], {"status": "not_pinned"})
+        profile = verdict["loss_profile"]
+        self.assertEqual(profile["losses_sha256"], r0.digest(qualified_losses()))
+        self.assertEqual((profile["targets"], profile["stack_versions"]), (2048, STACK))
+        self.assertEqual(verdict["loss_profile_sha256"], r0._canonical_sha256(profile))
+
+    def test_exact_match_passes_bit_identical(self):
+        table = pin(shipped(), qualified_losses())
+        verdict = reproduce(qualified_losses(), table)
+        self.assertEqual((verdict["status"], verdict["reproduction"]["status"]), ("pass", "pass"), verdict)
+        self.assertTrue(verdict["reproduction"]["bit_identical"])
+        self.assertEqual(verdict["reproduction"]["max_abs_bin_delta"], 0.0)
+
+    def test_drift_inside_reproduction_tolerance_passes_but_is_not_bit_identical(self):
+        table = pin(shipped(), qualified_losses())
+        drifted = [v + 5e-4 for v in qualified_losses()]
+        verdict = reproduce(drifted, table)
+        self.assertEqual(verdict["status"], "pass", verdict)
+        self.assertFalse(verdict["reproduction"]["bit_identical"])
+
+    def test_mismatch_fails_even_inside_the_reference_tolerance(self):
+        table = pin(shipped(), qualified_losses())
+        # A subtle fault (the reviewer's middle-layer skip moved the sibling mean 0.017).
+        shifted = [v + 0.017 for v in qualified_losses()]
+        verdict = reproduce(shifted, table)
+        self.assertLessEqual(abs(verdict["delta_nats_per_token"]), 0.10)  # reference tier alone passes
+        self.assertEqual((verdict["status"], verdict["reason"]), ("fail", "reproduce_reproduction_mismatch"))
+        # Mean unchanged, one bin +0.02 and another -0.02: the bin bar catches it.
+        moved = qualified_losses()
+        moved[:256] = [v + 0.02 for v in moved[:256]]
+        moved[256:512] = [v - 0.02 for v in moved[256:512]]
+        verdict = reproduce(moved, table)
+        self.assertLess(abs(verdict["reproduction"]["delta_nats_per_token"]), 1e-9)
+        self.assertEqual(verdict["reproduction"]["reason"], "reproduction_mismatch")
+        self.assertEqual(verdict["status"], "fail")
+
+    def test_stack_version_mismatch_is_not_comparable_and_fails_closed(self):
+        table = pin(shipped(), qualified_losses())
+        for stack in ({**STACK, "mlx": "0.31.3"}, {k: v for k, v in STACK.items() if k != "transformers"}, None):
+            with self.subTest(stack=stack):
+                verdict = reproduce(qualified_losses(), table, stack=stack)
+                self.assertEqual(verdict["status"], "fail", verdict)
+                self.assertEqual(verdict["reason"], "reproduce_not_comparable")
+                self.assertEqual(verdict["reproduction"]["mismatch"], ["stack_versions"])
+
+    def test_reproduction_failure_combines_with_reference_failure(self):
+        table = pin(shipped(), qualified_losses())
+        verdict = reproduce([v + 0.2 for v in qualified_losses()], table)
+        self.assertEqual(verdict["reason"], "mean_outside_tolerance+reproduce_reproduction_mismatch")
+
+    def test_malformed_or_tampered_pin_invalidates_the_table(self):
+        def tampered(edit):
+            table = pin(shipped(), qualified_losses())
+            edit(r0.reference_entry(table, r0.PINS["D"]["revision"], D_FIXTURE)["reproduce"])
+            return reproduce(qualified_losses(), table)
+        cases = {
+            "edited mean": lambda p: p["profile"].update(nll_nats_per_token=p["profile"]["nll_nats_per_token"] + 0.01),
+            "wrong sha": lambda p: p.update(profile_sha256="0" * 64),
+            "no source": lambda p: p.pop("source"),
+            "empty pin": lambda p: p.clear(),
+        }
+        for name, edit in cases.items():
+            with self.subTest(name):
+                verdict = tampered(edit)
+                self.assertEqual((verdict["status"], verdict["reason"]), ("fail", "invalid_reference_config"))
+        # A self-consistent pin for another revision is rejected, not silently not_comparable.
+        table = pin(shipped(), qualified_losses())
+        entry = r0.reference_entry(table, r0.PINS["D"]["revision"], D_FIXTURE)
+        entry["reproduce"]["profile"]["model_revision"] = "0" * 40
+        entry["reproduce"]["profile_sha256"] = r0._canonical_sha256(entry["reproduce"]["profile"])
+        self.assertEqual(reproduce(qualified_losses(), table)["reason"], "invalid_reference_config")
+
+    def test_load_check_records_the_profile_and_a_later_run_reproduces_it(self):
+        backend = FakeBackend()
+        backend.stack_versions = dict(STACK)
+        first = r0.load_coherence(backend, references=fake_references())
+        self.assertEqual(first["status"], "pass", first["reasons"])
+        self.assertEqual(first["nll_reproduction"], {"status": "not_pinned"})
+        self.assertEqual(len(first["nll_losses"]), 2048)
+        self.assertEqual(first["nll_loss_profile"]["losses_sha256"], r0.digest(first["nll_losses"]))
+        report = json.loads(json.dumps(first))  # pin from the serialized report, as an operator would
+        table = fake_references(reproduce={"profile_sha256": report["nll_loss_profile_sha256"],
+                                           "profile": report["nll_loss_profile"],
+                                           "source": {"report": "synthetic"}})
+        again = r0.load_coherence(backend, references=table)
+        self.assertEqual((again["status"], again["nll_reproduction"]["status"]), ("pass", "pass"))
+        self.assertTrue(again["nll_reproduction"]["bit_identical"])
+        backend.stack_versions["mlx-lm"] = "0.32.0"
+        moved = r0.load_coherence(backend, references=table)
+        self.assertEqual((moved["status"], moved["reasons"]), ("fail", ["nll:reproduce_not_comparable"]))
+        self.assertEqual(r0.load_coherence(FakeBackend(), references=table)["reasons"],
+                         ["nll:reproduce_not_comparable"])  # a backend that reports no stack
+
+
 # ---------------------------------------------------------------- generation bar
 
 SHADE_LIKE_TOOLS = [
@@ -156,9 +280,18 @@ SHADE_LIKE_TOOLS = [
                                           "required": ["query"]}}},
 ]
 
+# search_emails (1 required) is the requested tool here: send_email needs 2.
+SEARCH_TARGET_TOOLS = [
+    SHADE_LIKE_TOOLS[1],
+    {"type": "function", "function": {"name": "send_email", "description": "Send an email",
+                                      "parameters": {"type": "object", "properties": {
+                                          "to": {"type": "string"}, "body": {"type": "string"}},
+                                          "required": ["to", "body"]}}},
+]
+
 XML_OK = "</think>\n\n<tool_call>\n<function=search_emails>\n<parameter=query>\nspam\n</parameter>\n</function>\n</tool_call>"
 CANNED = {
-    "well_formed": ("Find spam first.\n" + XML_OK, "pass", []),
+    "well_formed": ("Find spam first.\n" + XML_OK, "pass", []),  # under SEARCH_TARGET_TOOLS
     "well_formed_no_args": ("ok\n</think>\n\n<tool_call>\n<function=get_received_emails>\n</function>\n</tool_call>",
                             "pass", []),
     "malformed": ("x\n</think>\n\n<tool_call>\n<function=search_emails>\n<parameter=query>\nspam\n</function>\n</tool_call>",
@@ -201,22 +334,49 @@ class CannedBackend(FakeBackend):
                           1, 0, 1, 2_000_000_000, {"raw_text": self.raw, "joulewise": {"flags": flags}})
 
 
+# Cases whose call names search_emails are judged where search_emails is the requested tool.
+CANNED_TOOLS = {"well_formed": SEARCH_TARGET_TOOLS, "malformed": SEARCH_TARGET_TOOLS,
+                "missing_required": SEARCH_TARGET_TOOLS}
+
+
 class GenerationCheckTest(unittest.TestCase):
     def test_canned_outputs(self):
         for name, (raw, status, problems) in CANNED.items():
             with self.subTest(name):
-                result = r0.generation_check(CannedBackend(raw))
+                result = r0.generation_check(CannedBackend(raw, tools=CANNED_TOOLS.get(name, SHADE_LIKE_TOOLS)))
                 self.assertEqual(result["status"], status, result["problems"])
                 for problem in problems:
                     self.assertIn(problem, result["problems"])
                 self.assertEqual(result["decode"], "greedy")
                 self.assertEqual(result["seconds"], 2.0)
                 self.assertGreater(result["tokens"], 0)
-        ok = r0.generation_check(CannedBackend(CANNED["well_formed"][0]))
+        ok = r0.generation_check(CannedBackend(CANNED["well_formed"][0], tools=SEARCH_TARGET_TOOLS))
         self.assertEqual(ok["calls"], [{"name": "search_emails", "arguments_json": '{"query":"spam"}'}])
+        self.assertTrue(ok["called_requested_tool"])
+
+    def test_a_listed_tool_other_than_the_requested_one_fails(self):
+        # Executing review LOW: any listed tool used to pass, e.g. a no-argument end_task.
+        # Mirrors real SHADE: analyze_spam_patterns (0 required) is requested; end_task also needs none.
+        def no_arg(name):
+            return {"type": "function", "function": {"name": name, "description": name,
+                                                     "parameters": {"type": "object", "properties": {}}}}
+        tools = SHADE_LIKE_TOOLS + [no_arg("end_task"), no_arg("analyze_spam_patterns")]
+        call = "x\n</think>\n\n<tool_call>\n<function={}>\n</function>\n</tool_call>"
+        result = r0.generation_check(CannedBackend(call.format("end_task"), tools=tools))
+        self.assertEqual(result["requested_tool"], "analyze_spam_patterns")
+        self.assertEqual(result["status"], "fail", result)
+        self.assertEqual(result["problems"], ["wrong_tool:end_task"])
+        self.assertFalse(result["called_requested_tool"])
+        # A schema-valid call with arguments to another listed tool also fails.
+        result = r0.generation_check(CannedBackend(CANNED["well_formed"][0], tools=tools))
+        self.assertEqual(result["problems"], ["wrong_tool:search_emails"])
+        # The requested tool itself passes.
+        ok = r0.generation_check(CannedBackend(call.format("analyze_spam_patterns"), tools=tools))
+        self.assertEqual((ok["status"], ok["called_requested_tool"]), ("pass", True))
 
     def test_hit_cap_fails_even_with_a_call(self):
-        result = r0.generation_check(CannedBackend(CANNED["well_formed"][0], hit_cap=True))
+        result = r0.generation_check(CannedBackend(CANNED["well_formed"][0], hit_cap=True,
+                                                   tools=SEARCH_TARGET_TOOLS))
         self.assertEqual(result["status"], "fail")
         self.assertIn("hit_cap", result["problems"])
 
@@ -230,7 +390,8 @@ class GenerationCheckTest(unittest.TestCase):
         result = r0.generation_check(CannedBackend(wrong, family="qwen3_moe"))
         self.assertIn("arguments_schema_invalid:search_emails", result["problems"])
         good = 'x\n</think>\n\n<tool_call>\n{"name": "search_emails", "arguments": {"query": "spam"}}\n</tool_call>'
-        self.assertEqual(r0.generation_check(CannedBackend(good, family="qwen3_moe"))["status"], "pass")
+        self.assertEqual(r0.generation_check(CannedBackend(good, family="qwen3_moe", tools=SEARCH_TARGET_TOOLS))
+                         ["status"], "pass")
 
     def test_prompt_is_real_shade_system_plus_tools_and_targets_a_listed_tool(self):
         backend = CannedBackend(CANNED["well_formed"][0])
@@ -240,8 +401,11 @@ class GenerationCheckTest(unittest.TestCase):
         self.assertEqual(result["requested_tool"], "get_received_emails")  # fewest required parameters
         self.assertIn("get_received_emails", backend.greedy_messages[1].content)
         self.assertEqual(result["tool_names"], ["get_received_emails", "search_emails"])
-        self.assertEqual(backend.sessions[-1], None)  # default effort
+        self.assertEqual(backend.sessions[-1], None)  # template default effort (renders as xhigh)
+        self.assertEqual(result["effort"], "template_default")
+        self.assertIn("xhigh", result["effort_basis"])
         self.assertFalse(result["called_requested_tool"])
+        self.assertIn("wrong_tool:search_emails", result["problems"])
 
     def test_generation_failure_fails_the_load_check(self):
         backend = CannedBackend(CANNED["no_call"][0], tools=r0.ECHO_TOOLS)

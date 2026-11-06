@@ -10,7 +10,8 @@ import unittest
 from joulewise.align import r0
 from tests.align.test_r0_checks import FakeBackend, fake_references
 from tests.align.test_r0_load_reference import (
-    D_FIXTURE, D_MLX_BINS, SHADE_LIKE_TOOLS, CannedBackend, d_verdict, losses_from_bins, shipped)
+    D_FIXTURE, D_MLX_BINS, SEARCH_TARGET_TOOLS, SHADE_LIKE_TOOLS, CannedBackend, d_verdict,
+    losses_from_bins, shipped)
 
 D_REV = r0.PINS["D"]["revision"]
 
@@ -97,11 +98,11 @@ class GenerationProbes(unittest.TestCase):
         # The production parser decodes OpenAI-style string arguments; the check validates the object.
         raw = ('x\n</think>\n\n<tool_call>\n{"name": "search_emails", '
                '"arguments": "{\\"query\\": \\"spam\\"}"}\n</tool_call>')
-        result = r0.generation_check(CannedBackend(raw, family="qwen3_moe"))
+        result = r0.generation_check(CannedBackend(raw, family="qwen3_moe", tools=SEARCH_TARGET_TOOLS))
         self.assertEqual(result["status"], "pass", result)
         self.assertEqual(json.loads(result["calls"][0]["arguments_json"]), {"query": "spam"})
         raw = raw.replace('\\"spam\\"', "7")
-        result = r0.generation_check(CannedBackend(raw, family="qwen3_moe"))
+        result = r0.generation_check(CannedBackend(raw, family="qwen3_moe", tools=SEARCH_TARGET_TOOLS))
         self.assertIn("arguments_schema_invalid:search_emails", result["problems"])
 
     def test_call_only_inside_reasoning_fails(self):
@@ -123,12 +124,14 @@ class GenerationProbes(unittest.TestCase):
         result = r0.generation_check(CannedBackend(raw))
         self.assertEqual(result["status"], "fail", result)
 
-    def test_other_listed_tool_passes_but_is_recorded(self):
-        # Documented: the requested tool is diagnostic; any listed, schema-valid call passes.
+    def test_other_listed_tool_fails(self):
+        # Review fix: the call must name the requested tool; a schema-valid call to another fails.
         raw = ("x\n</think>\n\n<tool_call>\n<function=search_emails>\n<parameter=query>\nspam\n</parameter>\n"
                "</function>\n</tool_call>")
         result = r0.generation_check(CannedBackend(raw, tools=SHADE_LIKE_TOOLS))
-        self.assertEqual((result["status"], result["called_requested_tool"]), ("pass", False))
+        self.assertEqual((result["status"], result["called_requested_tool"]), ("fail", False))
+        self.assertEqual(result["problems"], ["wrong_tool:search_emails"])
+        self.assertEqual(r0.generation_check(CannedBackend(raw, tools=SEARCH_TARGET_TOOLS))["status"], "pass")
 
     def test_generation_and_nll_failures_are_both_reported(self):
         backend = CannedBackend("x\n</think>\n\nno call", tools=r0.ECHO_TOOLS)

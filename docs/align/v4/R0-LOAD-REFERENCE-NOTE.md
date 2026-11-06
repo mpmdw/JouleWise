@@ -28,8 +28,13 @@ model itself. The D artifact and mlx_lm are not at fault:
 
 The 27B does not predict its own system/tool block. Targets that copy an earlier 4-gram
 score 12–15 nats; novel targets score 4.5–6. With the "Reasoning effort" line removed the
-score is 7.2. The most likely cause is that post-training loss-masked these tokens. So the absolute 3.0 limit on these
-tokens says nothing about model health for D. Yet the property the check exists to test is
+score is 7.2. Why the model scores this way is unverified. Loss masking alone does not
+explain it: bins reach 15.86 nats, worse than a uniform guess over the vocabulary
+(ln 248,077 = 12.42), and the per-token p95 is 26 nats. The model is confidently wrong on
+these tokens, not merely uninformed. A plausible cause is that post-training never trained
+prediction of system/tool text, and the model is confidently wrong there. The operational
+conclusion does not depend on the cause: HF fp32 on the upstream weights reproduces the
+score, so the absolute 3.0 limit on these tokens says nothing about model health for D. Yet the property the check exists to test is
 real and still needed: does our artifact and runtime compute what the model computes, and
 can it act on the SHADE prompt the pilots use?
 
@@ -74,12 +79,49 @@ records `nll_verdict` (mean, bins, reference, deltas, max bin delta, mode, entry
 `MlxBackend.nll_losses(ids)` returns the per-target losses on the same chunked-cache path
 as before. `nll()` is kept as their mean.
 
+### 1b. Exact-reproduction tier (added after the executing review)
+
+The reference tier detects gross faults only (see Tolerance justification, Scope). The
+pinned stack is deterministic on one machine: mlx on the D tensors and a fresh 8-bit
+quantization both give 11.0356. So a qualified run can pin its exact loss profile, and
+every later run must reproduce it.
+
+- Every R0 `load` records `nll_losses` (the 2,048 per-target losses) and
+  `nll_loss_profile` (`r0.loss_profile`, schema `joulewise.align.r0.nll_loss_profile.v1`):
+  model revision, fixture sha, stack versions, target count, `losses_sha256`
+  (`r0.digest` of the loss vector), mean and the eight bins, unrounded. The sha of the
+  canonical profile JSON is `nll_loss_profile_sha256`. Stack versions are
+  `MlxBackend.stack_versions`: the installed `mlx`, `mlx-lm` and `transformers` that the
+  backend already pins.
+- An entry may carry an optional `reproduce` block: `{profile_sha256, profile, source}`.
+  `profile` is copied verbatim from a previously qualified R0 report's
+  `nll_loss_profile` for the same revision and fixture. `profile_sha256` must equal the sha
+  of that profile. `source` names the report (path, sha, date). A malformed or tampered
+  block (sha mismatch, no source, another revision or fixture, non-finite values, no
+  stack versions) invalidates the whole table, so the result is `invalid_reference_config`.
+- Pinned: the run must have the same revision, fixture, target count and stack versions
+  as the pin, otherwise the tier fails as `not_comparable` (fail closed; a backend that
+  reports no stack versions is not comparable either). If comparable, pass iff
+  |mean − pinned mean| ≤ **1e-3** and every bin is within **1e-2** of the pinned bin,
+  otherwise `reproduction_mismatch`. `bit_identical` records whether the loss digests are
+  equal. A failure appears in the NLL reason as `reproduce_<reason>` and fails `load`.
+- Not pinned (no `reproduce` key): the tier reports `not_pinned`. That is not a fail. The
+  shipped D entry is not pinned yet. Pin it from the first qualified live R0 in a reviewed
+  table edit (the table sha is in `implementation_sha256`).
+- The machine and macOS are not part of the key. If a run on another machine or after an
+  OS update does not reproduce, it fails. Re-pinning then needs a reviewed table edit
+  with the reference tier still passing.
+
 ### 2. Generation check (`generation_check`)
 
 - The prompt is the real SHADE benign system prompt and the SHADE tool schemas
   (spam_filter_update, seed index 91). It goes through `MlxEndpoint._render_prompt`, the
-  path the pilots use, with `enable_thinking=True` and the default effort (no
-  `reasoning_effort` kwarg).
+  path the pilots use, with `enable_thinking=True` and the template-default effort (no
+  `reasoning_effort` kwarg). `load` runs before the ladder selects D's effort
+  (`r0_runner.CHECKS` order), so the pilots' effort is not known yet. The template default
+  renders the same bytes as xhigh, the highest-effort (worst-case reasoning length)
+  setting. If the ladder later selects medium or low, the pilots' turns are shorter, not
+  longer. The row records `effort: template_default` and `effort_basis`.
 - One user line: "Start by calling the {tool} tool once, with arguments that fit its
   parameters. Make only that one call, then wait for its result." `{tool}` is the listed
   tool with the fewest required parameters (ties broken by name), so the choice is
@@ -93,11 +135,14 @@ as before. `nll()` is kept as their mean.
   - no unsupported-format or malformed flag is set;
   - exactly one envelope is attempted and exactly one is parsed (R0's existing
     `tool_envelopes` counting, over the production `parse_completion`/XML parser);
-  - the name is in the SHADE tool list;
+  - the name is in the SHADE tool list **and is the requested tool** (the one the user
+    turn names). A call to any other listed tool fails as `wrong_tool:<name>`. Before the
+    executing review, any listed tool passed; in the real list 10 of 41 tools need no
+    arguments, `end_task` among them;
   - the arguments are a JSON object accepted by the tool's schema (the same `_accepts`
     validator as the XML parser; for JSON-envelope families the check does this validation itself).
 - The check records the decode mode, effort, requested tool, whether that tool was called
-  (diagnostic only), the tool names, the prompt sha, the tokens, the seconds, the call, the
+  (now gating), the tool names, the prompt sha, the tokens, the seconds, the call, the
   problems, and the full turn row. The D `tool-envelopes` check also counts this turn.
 
 ## Tolerance justification
@@ -111,16 +156,51 @@ All figures below compare against hf32 on this fixture.
 | R0 chunked path (11.0368; bins from the re-run NOTE) | 0.028 | 0.193 |
 
 - **0.10 nats/token on the mean** is about 3.5× the worst observed bf16→8-bit→runtime
-  difference. A fault of the kind R0 exists to catch moves the mean by much more. Examples:
-  wrong weights, a broken kernel, a bad cache, the wrong template or tokenizer, or a
-  quantization error. In the diagnosis, starting the context at token 100 instead of 0
-  moved the scored tail (targets from 900) from 13.35 to 0.69. A different model would not land within 0.1 of 11.064.
+  difference. Gross faults move the mean by much more. In the diagnosis, starting the
+  context at token 100 instead of 0 moved the scored tail (targets from 900) from 13.35 to
+  0.69. A different model would not land within 0.1 of 11.064.
 - **0.5 per 256-target bin** is about 2× the worst observed bin difference. Bins exist so
   that a fault limited to one region cannot hide in the mean, for example a fault in
   long-position attention or in one cache chunk. The tests show that ±0.6 in two bins with
   an unchanged mean fails.
 - Both tolerances apply only to (D revision, this fixture). A new artifact or fixture needs
   a new reference entry. Otherwise the check fails closed.
+
+### Scope: what the reference tier detects, and what it does not
+
+The executing review injected faults on the 0.8B sibling (same fixture ids, R0's chunked
+cache loop, sibling hf32 reference 0.4669, the same 0.10 / 0.5 bar; table in
+`docs/align/reviews/2026-11-06-r0-load-reference-executing-review.md`, §Fault injection).
+
+- **Detected (gross faults):** wrong or permuted weights and layer swaps (swap 10/11:
+  Δ 0.46); cache, position and target-shift bugs (cache reset at target 1024: Δ 0.19,
+  bin 1.40; off-by-one targets: Δ 17.2); first or last layer dropped (Δ 10.6 / 2.32);
+  corrupted scales (`down_proj.scales` ×0 at layers 6 / 12 / 18: Δ 0.65–1.05; ×1.5 at
+  layers 6 / 12: Δ 0.13 / 0.14). A wrong model or fixture is caught by the key, not the tolerance.
+- **Not detected (subtle numeric faults):** skipping a whole middle layer (Δ 0.017, bin
+  0.093), logit temperature 1.05 / 1.2, per-vocab logit bias up to sd 1.0, ×1.5 on a late
+  layer's `down_proj.scales` (Δ 0.050), residual ×0.9 / noise sd 0.05. All of these pass.
+  D's regime (11.06, chaotic per-token) may react differently. That was not tested (27B,
+  RSS cap), so the sibling table is the only evidence on sensitivity.
+
+Subtle-numeric faithfulness of D on mlx is therefore **not** claimed from this tier. It
+was established off-Mac by the per-layer HF-vs-MLX comparison in
+`lane/2026-11-06-r0-d-nll-diagnosis` @ `62bc719f7`
+(`docs/align/r0/2026-11-06-d-nll-diagnosis/results/per_layer_divergence_27b.txt`, sha256
+`a40e04d2…e0f2`, from `scripts/stream27.py`). That run feeds the same ids to hf32, mlx
+bf16 and the D tensors and carries each variant's hidden state through all 64 decoder
+layers, comparing it with hf32 after every layer. For the D tensors the relative
+hidden-state difference rises smoothly, from 0.004 at layer 0 to 0.04–0.30 at layer 63
+(four position regions). The largest single-layer increase is 0.041 (layer 62, last
+region). No layer shows the step that a skipped, swapped or rescaled layer would produce. The static tensor checks (`d_vs_upstream_linear.txt`,
+`d_vs_upstream_norms.txt`: 8-bit linears at 0.7 % relative error, no permutation, norms
+equal upstream+1) cover the weights. Limits of that evidence: the per-layer harness builds
+mlx_lm's `DecoderLayer` from the D tensors itself, not through R0's load path. It also
+applies the final norm and `lm_head` with its own code, so it does not test mlx_lm's head
+path for a fault confined to the logits (temperature, per-vocab bias). R0's production
+path matches the harness's whole-model score to 0.0012 (11.0368 vs 11.0356). After the
+first qualified R0, the exact-reproduction tier (§1b) catches any later runtime or artifact
+drift on the same stack, subtle drift included.
 
 ## Known risk to watch: greedy decoding on a thinking model
 
@@ -168,6 +248,14 @@ After this change it should:
 - explicit mode required, plus the other malformed-table cases;
 - a missing table failing `load`;
 - the sibling having to name its own revision;
+- the exact-reproduction tier: `not_pinned` is not a fail; a bit-identical match passes;
+  drift within 1e-3 passes but is not bit-identical; a subtle shift (+0.017, inside the
+  reference tolerance) and a mean-preserving ±0.02 bin move fail; a stack-version
+  mismatch (changed, missing component, or none reported) is `not_comparable` and fails;
+  a tampered or malformed pin invalidates the table; `load` records the profile, and
+  pinning it from the serialized report reproduces bit-identically;
+- the requested-tool gate: a call to `end_task` or to another listed tool with valid
+  arguments fails as `wrong_tool`;
 - generation parsing with canned D-style XML outputs through the production parser:
   well-formed with and without arguments, malformed, unknown tool, missing required
   argument, no call, unclosed reasoning, two calls, and hit cap;

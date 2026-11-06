@@ -70,6 +70,7 @@ class ShimTest(unittest.TestCase):
                 patch.dict("sys.modules", {"mlx": SimpleNamespace(core=mx), "mlx.core": mx}):
             backend = MlxBackend("D", tmp, str(Path(tmp) / "shade"), FakeGuard())
             self.assertEqual(backend.config.model.context_window, 40960)
+            self.assertEqual(backend.stack_versions, versions)  # keys the load reproduction tier
             self.assertIsNone(backend.endpoint.template_kwargs)
             backend.new_session("medium")
             self.assertEqual(backend.endpoint.template_kwargs, {"reasoning_effort": "medium"})
