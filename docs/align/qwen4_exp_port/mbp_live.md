@@ -312,7 +312,7 @@ export SOURCE="$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["S
   --source-receipt "$SOURCE_RECEIPT" --artifact "$ARTIFACT" --profile maxfit --out "$RUN/convert.json"
 export CONVERT_RECEIPT="$RUN/convert.json"
 export PIN="$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["CONVERT_RECEIPT"]))["manifest_sha256"])')"
-(cd "$ARTIFACT" && shasum -a 256 -c "$RUN/convert.json.SHA256SUMS")
+(cd "$ARTIFACT" && shasum -a 256 -c "$CONVERT_RECEIPT.SHA256SUMS")
 ```
 
 Keep the recorded `PIN` independently with the run notes. Do not derive an
@@ -328,7 +328,18 @@ the same artifact name (the evidence output name must still be new):
 "$PY" -B scripts/qwen4exp_mbp_live.py convert --resume --validation-only \
   --source-receipt "$SOURCE_RECEIPT" --artifact "$ARTIFACT" --profile "$PROFILE" \
   --out "$RUN/convert-resumed.json"
+export CONVERT_RECEIPT="$RUN/convert-resumed.json"
+export PIN="$("$PY" -B -c 'import json,os; print(json.load(open(os.environ["CONVERT_RECEIPT"]))["manifest_sha256"])')"
+(cd "$ARTIFACT" && shasum -a 256 -c "$CONVERT_RECEIPT.SHA256SUMS")
 ```
+
+The interrupted attempt wrote no `convert.json`, so `CONVERT_RECEIPT` must
+name the resumed receipt; every later step (and a shell re-entry) reads `PIN`
+from it. A second interruption resumes again under another new name
+(`convert-resumed-2.json`) and re-exports both. An interrupt after the
+converter's manifest is written (including during the wrapper's
+`SHA256SUMS` hashing) resumes without rewriting anything: the complete
+manifest is re-verified against every payload digest and kept.
 
 Resume re-authenticates the source receipt, module and converter pins and every
 completed shard/PLE span before writing. A normal conversion error marks the

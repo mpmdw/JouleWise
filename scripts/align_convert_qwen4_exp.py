@@ -133,15 +133,55 @@ def _span_digest(path, start, length, chunk_bytes=HASH_CHUNK_BYTES):
     return parts[0].hex() if length <= chunk_bytes else hashlib.sha256(b"".join(parts)).hexdigest()
 
 
-def _write_journal(path, journal):
-    """Durably replace the small progress receipt after an output boundary."""
+def _fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _write_atomic(path, raw):
+    """Durably replace a small file: write a sibling .tmp, fsync, rename."""
     path, tmp = Path(path), Path(str(path) + ".tmp")
-    raw = (json.dumps(journal, indent=2, sort_keys=True) + "\n").encode()
     with tmp.open("wb") as f:
         f.write(raw)
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+    _fsync_dir(path.parent)
+
+
+def _write_journal(path, journal):
+    """Durably replace the small progress receipt after an output boundary."""
+    _write_atomic(path, (json.dumps(journal, indent=2, sort_keys=True) + "\n").encode())
+
+
+def _completed_manifest(output, expected, shard_names):
+    """The finished manifest of an interrupted conversion, or None if it is partial.
+
+    The manifest is the last payload written (atomically), so a parseable one
+    whose identity matches this conversion and whose every payload digest
+    re-verifies means only the journal removal was interrupted.
+    """
+    try:
+        manifest = json.loads((Path(output) / "manifest.json").read_bytes())
+        files = manifest["files"]
+        chunk = int(manifest["digest"]["chunk_bytes"])
+    except (ValueError, KeyError, TypeError):
+        return None  # partial manifest from a pre-atomic writer
+    for key, value in expected.items():
+        if manifest.get(key) != value:
+            raise ValueError(f"resume: complete manifest.json identity mismatch: {key}")
+    if {n for n in files if n.startswith("model-") and n.endswith(".safetensors")} != shard_names:
+        raise ValueError("resume: complete manifest.json shard plan mismatch")
+    try:
+        digests = hash_files([Path(output) / n for n in files], chunk, nofollow=True)
+    except OSError as exc:
+        raise ValueError(f"resume: complete manifest.json payload unreadable: {exc}") from exc
+    if any(digests[Path(output) / n] != d for n, d in files.items()):
+        raise ValueError("resume: complete manifest.json does not match its payload")
+    return manifest
 
 
 def _converter_sha256():
@@ -592,19 +632,26 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
                     module_sha256=hashlib.sha256(Path(module_file).read_bytes()).hexdigest(),
                     converter_sha256=_converter_sha256(), source_receipt=input_digests)
     journal_path = output / JOURNAL_NAME
+    manifest_path = output / "manifest.json"
     if resume_from is None:
         output.mkdir(parents=True)
         journal = dict(identity, status="running", shards={}, ple={})
         _write_journal(journal_path, journal)
     else:
-        if not journal_path.is_file():
+        # Interrupted atomic writes leave only their .tmp sibling behind.
+        for leftover in (JOURNAL_NAME + ".tmp", "manifest.json.tmp"):
+            (output / leftover).unlink(missing_ok=True)
+        if journal_path.is_file():
+            journal = json.loads(journal_path.read_text())
+            if journal.get("status") != "running":
+                raise ValueError("failed/completed conversion cannot be resumed; choose a new artifact name")
+            for key, value in identity.items():
+                if journal.get(key) != value:
+                    raise ValueError(f"resume identity mismatch: {key}")
+        elif manifest_path.is_file():
+            journal = None  # finished; only the caller's receipt may be missing
+        else:
             raise ValueError("resume progress journal missing")
-        journal = json.loads(journal_path.read_text())
-        if journal.get("status") != "running":
-            raise ValueError("failed/completed conversion cannot be resumed; choose a new artifact name")
-        for key, value in identity.items():
-            if journal.get(key) != value:
-                raise ValueError(f"resume identity mismatch: {key}")
     dtype_name = "F32" if profile == "fp32" else "BF16"
     out_np = np.dtype("<f4") if profile == "fp32" else np.dtype("<u2")
     weight_map, quant_cfg, ngram_layers, ngram_manifest = {}, {}, {}, {}
@@ -630,6 +677,22 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
         current.append(item)
         size += item[4]
     shards += [current] if current else []
+    if resume_from is not None and manifest_path.is_file():
+        # Interrupted between the manifest write and the journal removal (or
+        # after it): a complete manifest finishes the conversion as is.
+        done = _completed_manifest(
+            output, dict(format=FORMAT, pins=PINS, profile=profile, group_size=group_size,
+                         ngram_storage=ple_storage, module_sha256=identity["module_sha256"],
+                         digest=digest_scheme(), inputs=input_digests),
+            {f"model-{n:05d}-of-{len(shards):05d}.safetensors" for n in range(1, len(shards) + 1)})
+        if done is not None:
+            journal_path.unlink(missing_ok=True)
+            _fsync_dir(output)
+            _verify(output, known_digests=done["files"])
+            return done
+        if journal is None:
+            raise ValueError("resume: no progress journal and manifest.json is incomplete")
+        manifest_path.unlink()
     try:
       for number, shard in enumerate(shards, 1):
         name = f"model-{number:05d}-of-{len(shards):05d}.safetensors"
@@ -689,15 +752,19 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
                  "chat_template.jinja", "vocab.json", "merges.txt"):
         if (checkpoint / name).is_file():
             shutil.copyfile(checkpoint / name, output / name)
-    outputs = hash_files([p for p in sorted(output.iterdir()) if p.is_file() and p.name != JOURNAL_NAME], nofollow=True)
+    internal = {JOURNAL_NAME, JOURNAL_NAME + ".tmp", "manifest.json", "manifest.json.tmp"}
+    outputs = hash_files([p for p in sorted(output.iterdir()) if p.is_file() and p.name not in internal], nofollow=True)
     manifest = dict(format=FORMAT, pins=PINS, profile=profile, group_size=group_size, ngram_storage=ple_storage,
                     ngram_tables=ngram_manifest, module_sha256=outputs[output / "qwen4_exp.py"],
                     norm_representation="raw HF zero-centered; runtime 1 + w",
                     omitted_keys=omitted, quantized=sorted(quant_cfg), digest=digest_scheme(),
                     inputs={p.name: d for p, d in inputs.items()},
                     files={p.name: d for p, d in outputs.items()})
-    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    # Atomic and durable, then the journal goes: an interrupt in between leaves
+    # a complete manifest beside a running journal, which resume finishes.
+    _write_atomic(manifest_path, (json.dumps(manifest, indent=2) + "\n").encode())
     journal_path.unlink()
+    _fsync_dir(output)
     # Structure check of what was just written; its bytes were hashed above.
     _verify(output, known_digests=manifest["files"])
     return manifest
