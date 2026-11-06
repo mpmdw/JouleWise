@@ -303,10 +303,58 @@ def _calibration_assessment(runs_root: Path, paths: Sequence[Path], policy: Any,
                       bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
                       bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
                       bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
+    if hit is None:
+        _prefetch_candidate_physics(ledger_snapshot, mode)
     return store.call(L4, fn, runs_root, paths, policy, mode=mode, ledger_snapshot=ledger_snapshot,
                       bracket_binding=bracket_binding, bracket_window_id=bracket_window_id,
                       bracket_plan_id=bracket_plan_id, bracket_plan_sha256=bracket_plan_sha256,
                       bracket_evidence_root_id=bracket_evidence_root_id, trigger_scope=trigger_scope)
+
+
+def _prefetch_one_candidate(directory: str, runs_root: str, mode: str) -> None:
+    """Member task: authenticate one ledger candidate so its physics refit is remembered.
+
+    The frozen loader keeps the refit in the run's candidate-physics memo (shipped
+    back with the task); its result is discarded here.
+    """
+    calibration.load_calibration_candidate(Path(directory), runs_root=Path(runs_root), mode=mode)
+
+
+def _prefetch_candidate_physics(ledger_snapshot: Any, mode: Any) -> None:
+    """Speed only (b5 under-90 round 2): refit an L4 miss's ledger candidates in parallel.
+
+    The frozen evaluator then authenticates and verifies each candidate serially,
+    exactly as before, and finds each refit already remembered. Nothing here is
+    consumed: no read row, census, deadline, physics or store entry of a prefetch
+    task reaches the run, only refit values computed without a deadline firing.
+    Any failure leaves the frozen path to compute as it always did.
+    """
+    try:
+        from joulewise import analysis_run_cache
+        from joulewise.analysis_member_pool import member_map
+
+        caches = analysis_run_cache.current()
+        if caches is None or caches.workers < 2 or calibration.CANDIDATE_PHYSICS_MEMO is None:
+            return
+        calls = []
+        for observation in ledger_snapshot.observations:
+            if (observation.disposition != "valid" or observation.content_id is None
+                    or observation.is_historical_import or not observation.custody_locator):
+                continue
+            custody = Path(observation.custody_locator)
+            calls.append(((str(custody), str(custody.parent.parent), mode), {}))
+        if len(calls) < 2:
+            return
+        outcomes = member_map(_prefetch_one_candidate, calls, account=False)
+        table = analysis_run_cache.memo(calibration.CANDIDATE_PHYSICS_MEMO)
+        for outcome in outcomes or ():
+            memos = (outcome.vdl_new or {}).get("memos") or {}
+            if outcome.ok and outcome.firings == 0 and table is not None:
+                for key, value in (memos.get(calibration.CANDIDATE_PHYSICS_MEMO) or {}).items():
+                    if type(value) is float:
+                        table.setdefault(key, value)
+    except Exception:  # noqa: BLE001 - a prefetch never decides anything
+        return
 
 
 def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
