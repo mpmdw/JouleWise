@@ -108,6 +108,24 @@ of branch `lane/2026-11-06-b5-lean-release`.
 - **Effect on estimands.** None. No estimand, estimator, decision rule, threshold or reported quantity changes. The
   numbers that print are the dry run's L9 outputs, which (a) verifies byte for byte. Only how they are verified at
   the release changes.
+- **Coverage gap, accepted for block 5 only.** Seven registered families are not independently recomputed, so
+  stage (c) does not check them. They are `LEAN-COVERAGE-AUDIT.md` §2 items 1-7:
+  1. monitor cost;
+  2. arm hazards (arm/host and anchor summaries);
+  3. battery (phase and subject summaries, discharged energies);
+  4. battery temperature (the stage thermistor disclosure);
+  5. reference, corpus and NEG-8 history;
+  6. attempt history (all attempts, yield, G10);
+  7. selection (and full eligibility adjudication).
+
+  For block 5 these lines are covered by two things, and only by them:
+  - stage (a)'s byte verification of the L9 dry-run outputs that print them. This proves the bytes are the ones
+    the dry run produced (integrity); it does not prove the arithmetic (correctness);
+  - RS item 83, ruling 3: the post-release reader checks each such leaf the paper prints by hand, against the
+    source the audit names, before it enters the paper.
+
+  A comparator `agree` therefore says nothing about these seven families. Adding them to the lean program is
+  required before the lean path becomes production for block 6 (DLE-2, "Coverage before block-6 production").
 - **What is not changed.**
   - PLAN §3.2 item 3 (repairs after the release) stands.
   - The R3 loop for tooling refusals stands.
@@ -162,6 +180,17 @@ of branch `lane/2026-11-06-b5-lean-release`.
   - **Ties at thresholds.** The comparator's half of the tie rule is the FS3 rule (RS lines 589-602). The paper's half
     is the lead's FS3 note.
 - Block-6 sessions must also be blinded at signing.
+- **Open review points for the lead, before block-6 activation (not rulings; recorded 2026-11-06 from a skeptical
+  methods critique, cloud Sol `sol/burn-dle`, checked by the lean-release lane).**
+  - The rationale above says re-deriving collection-time judgments "protects against nothing that hash binding does
+    not". That holds for re-running the same deterministic code. It does not hold for the first derivation: a wrong
+    anchor, fit or verdict on unchanged bytes is caught only by a re-derivation, which under this entry is the heavy
+    audit run. The audit run is therefore the only check of those judgments for block 6.
+  - Because the audit is off the critical path, the entry should say what happens if it has not finished when the
+    block-6 numbers would be released: hold, or release labelled provisional pending the audit. Its disagreement
+    surface should include the strict refusal set, not only the comparator families.
+  - Neither point applies to block 5: the block-5 dry run is the full heavy pipeline, strict step 1 included, and
+    DLE-1 verifies its outputs byte for byte.
 
 > The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
 > preregistration rulings to the lead.

@@ -71,7 +71,7 @@ echo "exit=$?"
 | 1 | `hold` | `comparator_disagreement` | At least one family has `fail` > 0. The verdict shows which, with counts only. | DLE-2 disagreement rule: the release is held. A blind seat traces the disagreement structure-only from `$OUT/comparison.json`. Which side prints is decided by the defect found, never by the value. |
 | 2 | `hold` | `release_digest_differs_from_dry_run` | Stage (a) found a changed or missing output, a changed input, another commit, other sealed digests or another index. The location (a path, never a value) is in `$OUT/refusal-location.txt`. | R3, as a custody or determinism defect. Do not unseal. |
 | 2 | `hold` | `dry_run_record_missing_or_incomplete`, `dry_run_record_invalid`, `dry_run_not_completed` | The record is absent, malformed, a release-mode record, or has a tooling refusal. | Fix the input. A dry run with a tooling refusal must first complete (PLAN §3.2 item 1). |
-| 2 | `hold` | `release_bars_differ`, `release_checkout_not_clean`, `release_checkout_unavailable`, `pinned_commit_invalid`, `pinned_commit_unavailable`, `window_index_unreadable`, `window_index_invalid` | Environment or binding problem. | Fix and re-run into a new `$OUT`. |
+| 2 | `hold` | `release_bars_differ`, `release_checkout_not_clean`, `release_checkout_unavailable`, `pinned_commit_invalid`, `pinned_commit_unavailable`, `seal_pins_invalid`, `window_index_unreadable`, `window_index_invalid` | Environment or binding problem. | Fix and re-run into a new `$OUT`. |
 | 2 | `hold` | `recompute_failed`, `recompute_output_unreadable`, `recompute_comparison_stopped` | The recompute exited non-zero, or raised a STOP flag. Its structure-only `stdout` is in `$OUT/recompute.stdout`; for example, `exclusions_rederivation_mismatch` or `trace_plist_missing`. | Tooling defect: R3, blind. |
 | 2 | `hold` | `comparator_refused`, `comparison_output_unreadable` | The comparator refused. Its code is `stages.comparator.refused`, and the step-11 coverage counts are in `stages.comparator.step11`. | Tooling defect: R3, blind. |
 
@@ -81,6 +81,8 @@ echo "exit=$?"
 - `stages.recompute`: exit status, worker count and wall time.
 - `stages.comparator`: per family, `verdict` (agree or hold) with `pass` and `fail`; the pinned bars digest; step-11
   coverage counts; the structure-flag count.
+  `step11.uncovered_numeric` and `structure_flags` do not gate (as in the comparator's own exit); a nonzero count
+  under `agree` is expected. `uncovered_numeric` counts the leaves under named exemptions (section 5).
 - `release_checkout.commit`: the commit whose programs ran.
 
 As a last guard, `release_b5.py` replaces any verdict whose bytes read as a decimal number with
@@ -156,16 +158,24 @@ recompute STOP flag. It also runs the real recompute on synthetic archives.
 
 ## 5. What the lean recompute does not cover
 
-The recompute and the comparator do not re-derive every quantity the plan prints. The list is in
-`docs/analysis/b5/LEAN-COVERAGE-AUDIT.md` §2, mostly §8 disclosure lines:
-- monitor cost;
-- the arm and host summaries;
-- the battery phase, subject and temperature lines;
-- the full reference, attempt and G10 history.
+The recompute and the comparator do not re-derive every quantity the plan prints. Seven registered families are
+not independently recomputed (`docs/analysis/b5/LEAN-COVERAGE-AUDIT.md` §2 items 1-7, mostly §8 disclosure lines):
+1. monitor cost;
+2. arm hazards (the arm/host and anchor summaries);
+3. battery (phase and subject summaries, discharged energies);
+4. battery temperature;
+5. reference, corpus and NEG-8 history;
+6. attempt history (with yield and G10);
+7. selection.
 
-Those lines print from the L9 dry-run outputs, which stage (a) verifies byte for byte. They have no independent
-recomputation. RS item 83, ruling 3 applies: any uncovered leaf the paper prints is checked by hand by the
-post-release reader before it enters the paper, against a source the audit names.
+**An `agree` verdict says nothing about these seven.** For block 5 they are covered only by:
+- stage (a), which verifies byte for byte that the L9 dry-run outputs printing them are the dry run's own bytes
+  (integrity, not correctness); and
+- RS item 83, ruling 3: any such leaf the paper prints is checked by hand by the post-release reader before it
+  enters the paper, against a source the audit names.
+
+This is accepted for block 5 only (DLE-1). Adding the seven to the lean program is required before the lean path
+becomes production for block 6 (DLE-2).
 
 ## RESUME STATE (2026-11-06, paused for a Terminal restart)
 

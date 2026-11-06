@@ -29,7 +29,9 @@ Stages (docs/analysis/b5/DEVIATION-LOG.md, DLE-1):
 
 Release condition: (a) verified, the recompute exits 0 with comparison_stopped false, and the comparator
 exits 0 (every family passes, nothing unmapped, no absent step-11 output, no non-finite step-11 value).
-Any other result holds the release.
+Any other result holds the release. The verdict also reports step11.uncovered_numeric (leaves under a named
+exemption, the LEAN-COVERAGE-AUDIT gap) and structure_flags; like the comparator's own exit, these counts do not
+gate, and a nonzero count under agree is expected, not a defect.
 
 Exit codes: 0 agree; 1 hold (the comparator found a disagreement); 2 hold on a refusal (custody, binding,
 recompute or comparator). The verdict (stdout, and verdict.json in --restricted-out) carries structure only;
@@ -126,14 +128,28 @@ def read_nofollow(base, relative):
 
 
 def file_sha256(path):
+    """SHA-256 of a regular file (symbolic links followed, as L9's census hash does); None otherwise.
+
+    O_NONBLOCK makes opening a FIFO or similar special file return at once instead of blocking; anything that is
+    not a regular file then hashes to None (a digest difference), never a hang.
+    """
     digest = hashlib.sha256()
     try:
-        with open(path, "rb") as handle:
-            for chunk in iter(lambda: handle.read(1 << 20), b""):
-                digest.update(chunk)
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
     except OSError:
         return None
-    return digest.hexdigest()
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        while True:
+            chunk = os.read(fd, 1 << 20)
+            if not chunk:
+                return digest.hexdigest()
+            digest.update(chunk)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
 
 
 def git(repo, *args):
@@ -258,9 +274,10 @@ def verify_digests(custody, index_path, pinned, repo, threads=8):
     if record["analysis_commit"] != pinned:
         raise Refusal(DIFFERS, "binding/analysis_commit")
     try:
-        pins = strict_json(git(repo, "show", pinned + ":configs/analysis/b5/seal_pins.json"), "seal_pins_invalid")
+        raw_pins = git(repo, "show", pinned + ":configs/analysis/b5/seal_pins.json")
     except Refusal:
         raise Refusal("pinned_commit_unavailable") from None
+    pins = strict_json(raw_pins, "seal_pins_invalid")
     sealed = pins.get("sealed") if isinstance(pins, dict) else None
     if not isinstance(sealed, dict) or any(record["sealed"][k] != sealed.get(v) for k, v in SEAL_KEYS.items()):
         raise Refusal(DIFFERS, "binding/sealed")

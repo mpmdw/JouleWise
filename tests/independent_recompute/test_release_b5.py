@@ -224,6 +224,39 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((out / "refusal-location.txt").read_text(),
                          "input/beta/original/claim-runs/whole-window-verdict.json\n")
 
+    def test_special_file_in_input_census_refuses_instead_of_hanging(self):
+        # Fable cold pass (PR #688): a FIFO at an indexed input path blocked a hashing thread forever.
+        path = self.archives["beta"] / "sources/claim-runs/whole-window-verdict.json"
+        raw = path.read_bytes()
+        path.unlink()
+        os.mkfifo(path)
+
+        def restore():
+            path.unlink()
+            path.write_bytes(raw)
+        self.addCleanup(restore)
+        verdict, code, out = self.release()
+        self.assertEqual((code, verdict["reason"]), (2, rel.DIFFERS))
+        self.assertEqual((out / "refusal-location.txt").read_text(),
+                         "input/beta/original/claim-runs/whole-window-verdict.json\n")
+
+    def test_file_sha256_hashes_regular_files_only(self):
+        regular = self.root / "regular.bin"
+        regular.write_bytes(b"x" * (3 << 20))
+        self.assertEqual(rel.file_sha256(regular), hashlib.sha256(regular.read_bytes()).hexdigest())
+        self.assertIsNone(rel.file_sha256(self.root))
+        self.assertIsNone(rel.file_sha256(self.root / "absent"))
+
+    def test_malformed_seal_pins_at_the_commit_refuse_as_such(self):
+        # Fable cold pass (PR #688): malformed pins were reported as an unavailable commit.
+        real = rel.git
+
+        def git(repo, *args):
+            return b"{not json" if args[:1] == ("show",) else real(repo, *args)
+        with mock.patch.object(rel, "git", git):
+            verdict, code, _ = self.release()
+        self.assertEqual((code, verdict["reason"]), (2, "seal_pins_invalid"))
+
     def test_other_pinned_commit_refuses(self):
         verdict, code, out = self.release(pinned="a" * 40)
         self.assertEqual((code, verdict["reason"]), (2, rel.DIFFERS))
