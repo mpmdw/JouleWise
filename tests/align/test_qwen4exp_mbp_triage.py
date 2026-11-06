@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 
 SCRIPT = Path(__file__).parents[2] / "scripts/qwen4exp_mbp_triage.py"
@@ -99,13 +100,45 @@ class TriageClassesTest(unittest.TestCase):
         start = triage.dt.datetime.strptime(argv[argv.index("--start") + 1], triage.LOG_TIME_FORMAT).timestamp()
         self.assertGreaterEqual(start, 36000 - triage.KERNEL_LOOKBACK_SECONDS)
 
-    def test_preflight_refusal_leaves_no_evidence_and_is_classified_from_live_swap(self):
-        for swap, expected in ((2**30, "PREFLIGHT_SWAP"), (0, "REFUSED")):
+    def test_missing_evidence_is_no_evidence_whatever_the_live_swap(self):
+        # A mistyped --out or a preflight refusal leaves no file; swap now is
+        # context for the operator, never evidence of a PREFLIGHT_SWAP.
+        for swap in (2**30, 0):
             with self.subTest(swap=swap):
                 result = triage.classify({}, {}, "", [], [], log_runner=FakeLog(), ips_reader=lambda: [],
                                          clock=lambda: 30, swap_reader=lambda: swap)
-                self.assertEqual(expected, result["classification"])
+                self.assertEqual("NO_EVIDENCE", result["classification"])
+                self.assertEqual(triage.ACTIONS["NO_EVIDENCE"], result["next_action"])
                 self.assertTrue(result["no_evidence"])
+                self.assertEqual(swap, result["swap_used_bytes_at_triage"])
+
+    def test_run_on_a_missing_out_writes_a_no_evidence_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "memory.json"
+            with unittest.mock.patch.object(triage, "_validate_out", lambda path: path):
+                receipt = triage.run(out, swap_reader=lambda: 2**30)
+            self.assertEqual("NO_EVIDENCE", receipt["classification"])
+            saved = json.loads(Path(str(out) + ".triage.json").read_text())
+            self.assertEqual("NO_EVIDENCE", saved["classification"])
+
+    def test_completed_accepts_e2e_pass_and_skipped(self):
+        report = {"verdict": "completed", "worker_returncode": 0}
+        for worker_verdict in ("completed", "pass", "skipped"):
+            with self.subTest(worker_verdict):
+                result = self.classify(report, {"verdict": worker_verdict})
+                self.assertEqual("COMPLETED", result["classification"])
+                self.assertEqual(worker_verdict, result["worker_verdict"])
+        self.assertIn("no quality evidence", self.classify(report, {"verdict": "skipped"})["note"])
+        # Without a separate worker file the supervisor's nested results count.
+        nested = dict(report, results={"verdict": "pass"})
+        self.assertEqual("COMPLETED", self.classify(nested)["classification"])
+
+    def test_failed_or_unknown_worker_verdicts_are_not_completed(self):
+        for report, worker in (({"verdict": "fail", "worker_returncode": 1}, {"verdict": "fail"}),
+                               ({"verdict": "completed", "worker_returncode": 0}, {"verdict": "bogus"}),
+                               ({"verdict": "completed", "worker_returncode": 0}, {})):
+            with self.subTest(worker=worker):
+                self.assertEqual("INCOMPLETE", self.classify(report, worker)["classification"])
 
     def test_post_run_swap_abort_with_worker_output_is_abort_swap(self):
         # A finished worker's JSON always carries "tokenizer_preflight".
