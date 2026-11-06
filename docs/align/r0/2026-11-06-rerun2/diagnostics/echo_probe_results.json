@@ -1,0 +1,170 @@
+[
+ {
+  "prompt": "current",
+  "seed": 95,
+  "status": "inconclusive",
+  "transitions": 6,
+  "closed": 6,
+  "rewritten": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "off_spec": 0,
+  "verdict": {
+   "status": "inconclusive",
+   "eligible_transitions": 6,
+   "reason": "Need at least 12 generated transitions (closed reasoning for D); do not waive B7."
+  },
+  "last_visible": "ling r0_echo with \"desk-check\" each turn, re-invoking after every tool reply as instructed (six rounds so far, all successful). Let me know if you'd like me to continue this loop further or stop here.",
+  "seconds": 41.1
+ },
+ {
+  "prompt": "current",
+  "seed": 96,
+  "status": "pass",
+  "transitions": 12,
+  "closed": 12,
+  "rewritten": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "off_spec": 0,
+  "verdict": {
+   "status": "not_required",
+   "eligible_transitions": 12,
+   "rewind_fraction": 0.0
+  },
+  "last_visible": "\n\n<tool_call>\n<function=r0_echo>\n<parameter=value>\ndesk-check\n</parameter>\n</function>\n</tool_call>",
+  "seconds": 69.8
+ },
+ {
+  "prompt": "current",
+  "seed": 97,
+  "status": "pass",
+  "transitions": 12,
+  "closed": 12,
+  "rewritten": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "off_spec": 0,
+  "verdict": {
+   "status": "not_required",
+   "eligible_transitions": 12,
+   "rewind_fraction": 0.0
+  },
+  "last_visible": "\n\n<tool_call>\n<function=r0_echo>\n<parameter=value>\ndesk-check\n</parameter>\n</function>\n</tool_call>",
+  "seconds": 49.1
+ },
+ {
+  "prompt": "count16",
+  "seed": 95,
+  "status": "pass",
+  "transitions": 12,
+  "closed": 12,
+  "rewritten": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "off_spec": 0,
+  "verdict": {
+   "status": "not_required",
+   "eligible_transitions": 12,
+   "rewind_fraction": 0.0
+  },
+  "last_visible": "\n\n<tool_call>\n<function=r0_echo>\n<parameter=value>\ndesk-check\n</parameter>\n</function>\n</tool_call>",
+  "seconds": 45.2
+ },
+ {
+  "prompt": "count16",
+  "seed": 96,
+  "status": "pass",
+  "transitions": 12,
+  "closed": 12,
+  "rewritten": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "off_spec": 0,
+  "verdict": {
+   "status": "not_required",
+   "eligible_transitions": 12,
+   "rewind_fraction": 0.0
+  },
+  "last_visible": "\n\n<tool_call>\n<function=r0_echo>\n<parameter=value>\ndesk-check\n</parameter>\n</function>\n</tool_call>",
+  "seconds": 50.4
+ },
+ {
+  "prompt": "count16",
+  "seed": 97,
+  "status": "pass",
+  "transitions": 12,
+  "closed": 12,
+  "rewritten": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "off_spec": 0,
+  "verdict": {
+   "status": "not_required",
+   "eligible_transitions": 12,
+   "rewind_fraction": 0.0
+  },
+  "last_visible": "\n\n<tool_call>\n<function=r0_echo>\n<parameter=value>\ndesk-check\n</parameter>\n</function>\n</tool_call>",
+  "seconds": 49.3
+ }
+]
