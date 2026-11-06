@@ -723,6 +723,23 @@ class R1Tests(unittest.TestCase):
         self.assertEqual(moments[-1].astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z"), "2027-03-14 13:15 PDT")
         self.assertEqual(r1._now_local().tzinfo, PACIFIC)
 
+    def test_driver_record_satisfies_the_kit_evidence_binding(self):
+        # MEDIUM-3 end to end: the kit binds exactly what the driver writes.
+        from scripts import align_v4_kit as kit
+        from tests.align.test_v4_kit import ready_inputs
+        for synthetic in (False, True):
+            with self.subTest(synthetic=synthetic), tempfile.TemporaryDirectory() as td:
+                with patch.object(r1, "_run", FakeWorld()):
+                    self.assertEqual(r1.run(self.args(td, synthetic=synthetic)), 0)
+                slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
+                inputs, _ = ready_inputs(101.5, slots["max_r1_tail_s"])
+                if synthetic:
+                    with self.assertRaisesRegex(ValueError, "source must be"):
+                        kit.require_ready(inputs, slots)
+                    kit.require_ready(inputs, slots, synthetic=True)
+                else:
+                    kit.require_ready(inputs, slots)
+
     def test_plan_pins_durations_and_gated_held_members(self):
         rows = r1.phase_plan(False)
         self.assertEqual(rows[0], ("pre_calibration_bracket", "calibration-pre", None, "light"))
