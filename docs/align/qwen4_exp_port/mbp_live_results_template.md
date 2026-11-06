@@ -20,6 +20,13 @@ digests for large files are chunked; the separate SHA256SUMS are ordinary SHA-25
 
 {{EVIDENCE}}
 
+## Abort and crash triage (runbook step 4)
+
+The triage classifier and this report consume the same pre-decided action
+table. A generated `<stage>.json.triage.json` records the selected row.
+
+{{TRIAGE_ACTIONS}}
+
 ## Memory (GOAL 6)
 
 {{MEMORY_ROWS}}

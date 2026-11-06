@@ -10,6 +10,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qwen4exp_mbp_live as live
+from qwen4exp_mbp_triage import ACTIONS
 
 TEMPLATE = live.ROOT / "docs/align/qwen4_exp_port/mbp_live_results_template.md"
 FILES = ("download.json", "convert.json", "memory.json", "quality.json", "benchmark.json",
@@ -63,7 +64,8 @@ def render(template, reports, run_id):
               "PERFORMANCE_ROWS": table(["Prefill chunk", "Context", "Effort", "Prefill tok/s", "Decode tok/s"], speed),
               "PAGING_ROWS": table(["Pass", "Major faults", "Minor faults", "Input blocks", "PLE lookups", "Resident GB"], paging),
               "REFERENCE": json.dumps(ref_summary, indent=2),
-              "EVIDENCE": table(["Evidence", "Status", "Abort/missing reason"], evidence)}
+              "EVIDENCE": table(["Evidence", "Status", "Abort/missing reason"], evidence),
+              "TRIAGE_ACTIONS": table(["Classification", "Next action"], ACTIONS.items())}
     for key, value in values.items():
         template = template.replace("{{" + key + "}}", value)
     return template
