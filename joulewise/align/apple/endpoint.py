@@ -357,7 +357,7 @@ class MlxEndpoint:
         enforce_turn_cap: bool = False,
         thermal=None,
         reasoning_effort: str | None = None,
-        hybrid_checkpoint_limit: int | None = 0,
+        hybrid_checkpoint_limit: int | None = None,
     ) -> None:
         self.runtime = runtime
         self.config = config

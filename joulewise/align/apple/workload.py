@@ -70,7 +70,7 @@ class EpisodeSpec:
     chat_template_kwargs: Mapping[str, Any] | None = None
     # Fix per model before its first measured window; splitting the prefill
     # changes every hybrid turn's computation schedule and token trajectory.
-    hybrid_checkpoint_limit: int | None = 0
+    hybrid_checkpoint_limit: int | None = None
 
     def to_text(self) -> str:
         value = asdict(self)
