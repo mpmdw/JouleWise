@@ -65,6 +65,11 @@ class PlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.plan(idle_pairs=1)
 
+    def test_default_has_independent_presence_residual_degrees_of_freedom(self):
+        schedule = q.plan()
+        self.assertEqual(schedule["blocks"],
+                         ["attached", "detached", "attached", "detached", "attached"])
+
 
 class PatternTests(unittest.TestCase):
     def test_fixed_cadence_bytes_and_fsyncs(self):
@@ -146,6 +151,16 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.FAIL)
         self.assertEqual(verdict["strongest_option_allowed"], "C")
 
+    def test_three_block_presence_design_is_inconclusive_not_pseudoreplicated(self):
+        schedule = q.plan(blocks=("attached", "detached", "attached"))
+        verdict = q.evaluate(world(schedule=schedule), ops=GOOD_OPS)
+        self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.INCONCLUSIVE)
+        self.assertEqual(verdict["strongest_option_allowed"], "C")
+
+    def test_presence_interval_uses_blocks_as_independent_units(self):
+        estimate = q.presence_offset(world(), load="decode")
+        self.assertEqual(estimate["df"], 2)
+
     def test_noisy_decode_never_passes(self):
         for seed in range(5):
             verdict = q.evaluate(world(decode_sd=0.2, seed=seed), ops=GOOD_OPS)
@@ -209,7 +224,7 @@ class RunSessionTests(unittest.TestCase):
                                  pattern={"s": {"period_s": 0.005, "bytes": 4, "fsync_every_s": 0.01}},
                                  burst_bytes=16, burst_copies=2,
                                  ps_text=lambda: " 10 0:00.00 mds\n", is_attached=lambda: True)
-            self.assertEqual(presence, ["attached", "detached", "attached"])
+            self.assertEqual(presence, ["attached", "detached", "attached", "detached", "attached"])
             segments = [r for r in rows if r["kind"] == "segment"]
             self.assertEqual(len(segments), len(schedule["segments"]))
             on_disk = [json.loads(line) for line in (tmp / "internal/journal.jsonl").read_text().splitlines()]

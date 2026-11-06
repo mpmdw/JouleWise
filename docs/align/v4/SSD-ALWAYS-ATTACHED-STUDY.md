@@ -27,9 +27,10 @@ Why, in numbers:
 1. **The estimand cannot see the drive directly.** ALIGN's residual, U3 and the contrast all integrate
    `powermetrics:gpu_power`, the GPU rail from IOReport's energy model (`pilot_analysis.py:192`). The enclosure draws
    VBUS power from the Mac's USB-C port: forum measurements put it at about 1-1.5 W asleep, 4.5-6 W idle and 7.5-8 W
-   while writing. That power is in PSTR, PDTR and the battery path, and not in any SoC rail. The SoC-side USB4/PCIe
-   tunnel controller is in none of the three powermetrics rails either. The drive can reach the GPU rail only
-   indirectly: through heat, contention for the SoC power and memory fabric, or OS daemons on the CPU.
+   while writing. The external load is not GPU work, but neither Apple nor this repository supplies a public rail-boundary
+   specification proving that every host-controller cost is excluded from `gpu_power`, or that SMC PSTR/PDTR attribute
+   every VBUS watt in a particular way. The qualification must therefore measure GPU rail, PSTR, and PDTR rather than
+   infer one from another. Plausible indirect paths include heat, shared-fabric contention, and OS daemon CPU work.
 2. **The real write load is arm-independent during measured segments, by construction.** Bundles are 89 % raw
    powermetrics plists (mean 507 MB per pilot-v3 member). The plist streams to the internal `TMPDIR` at a fixed 10 Hz,
    about 512 kB/s, and is copied into the bundle only after the post-window dwell. Every arm-dependent byte (turns,
@@ -102,20 +103,22 @@ limits detection (fable-cold, MDE section).
 | same, drive asleep (LED off) | 1.0-1.5 W | MacRumors |
 | Whether macOS enables APST/ASPM for a tunnelled third-party NVMe | unknown **(guess: partially)**; the qualification measures the drive's states in PSTR | — |
 
-The figures in the table above are for **presence**. All of this power is VBUS from a Thunderbolt port: PDTR, PSTR and
-the battery path see it. The three powermetrics rails do not. A constant few watts, against a 140 W adapter that runs
+The figures in the table above are for **presence**. The enclosure is bus-powered, so its electrical input ultimately
+comes through the Mac's adapter/battery power path. How the undocumented SMC PSTR and PDTR keys report that load, and
+whether host-side work appears in a powermetrics modeled rail, are empirical questions in this protocol. A constant few watts, against a 140 W adapter that runs
 D's decode at roughly 60-100 W whole-machine **(guess)**, does not threaten the battery float. It slightly raises the
 odds of battery-assist seconds, which are DISCLOSE-only.
 
 ### 2.2 The SoC-side USB4 controller
 
-On the M3 Max, the Thunderbolt/USB4 host and its PCIe tunnel are on the SoC. Their power is not in `cpu_power`,
-`gpu_power` or `ane_power`. It lands in the unattributed part of PSTR. An active link costs some hundreds of mW on the
-die **(guess: 0.1-0.5 W)**.
+On the M3 Max, the Thunderbolt/USB4 host and its PCIe tunnel involve host-side logic. No source cited here establishes
+which powermetrics modeled domain, if any, receives that cost, nor that `PSTR - (CPU + GPU + ANE)` is a physically
+exclusive rail. An active-link cost of **0.1-0.5 W is an unverified planning guess**, not a physics input to a verdict.
 
-The only path from there into the GPU rail is temperature. At a GPU temperature sensitivity of about 0.1 W/°C
-**(guess: leakage ~15 % of 25 W, doubling per ~25 °C)** and +0.1-0.3 °C, the GPU rail moves by about 0.01-0.03 W. That
-is about 2-7 J over a 234 s 30B episode.
+One possible path into the GPU rail is temperature; shared-resource and scheduling paths are also possible. A planning
+calculation using GPU temperature sensitivity of about 0.1 W/°C **(unverified guess: leakage ~15 % of 25 W, doubling
+per ~25 °C)** and +0.1-0.3 °C gives about 0.01-0.03 W, or 2-7 J over a 234 s episode. This is a sensitivity scenario,
+not a measured enclosure effect.
 
 That figure is a constant **presence offset**, the same in every arm. Three things absorb it:
 - the per-session fit intercepts;
@@ -127,11 +130,13 @@ It matters only across a configuration change, so it is bounded at the U4 point 
 ### 2.3 Power-state transitions caused by writes
 
 This is the **variance and correlation** question. Under A, every write wakes the link and the drive (L1.2 to L0,
-PS4 to PS0), costing roughly 10-100 ms at +2-6 W, or about 0.02-0.6 J per wake, and **only in PSTR and PDTR**.
+PS4 to PS0). The stated 10-100 ms, +2-6 W, and 0.02-0.6 J ranges are unverified planning guesses. The external-device
+portion should primarily affect whole-system/input channels, but the protocol does not assume it appears **only** in
+PSTR and PDTR; host work and thermal coupling can alter modeled rails.
 
-The in-episode writers have fixed cadence: the thermal sidecar fsyncs every 5 s. Every 5 s is shorter than any
-low-power entry timer, so the drive sits in a constant awake state through an episode. That state is a constant, not a
-variance.
+The in-episode writers have fixed cadence: the thermal sidecar fsyncs every 5 s. Whether that cadence prevents this
+enclosure/SSD combination from entering a low-power state is unknown and must be observed; it cannot be inferred from a
+generic timer assumption.
 
 Under B nothing writes, so the drive falls asleep a set time after the last access and stays asleep. The one
 transition (−3 to −5 W in PSTR) must happen before the window, hence the quiet period in the amendment (A5).
@@ -270,7 +275,8 @@ any window's 53 GB. Log volume during a window is then not the pressure, and A's
 
 Risks:
 1. **Presence offset.** Absorbed by intercepts, the window reference and G0. Bounded by Q1.
-2. **The drive sleeps or wakes mid-window.** Only PSTR sees it (unassigned-residual prints carry the drive state).
+2. **The drive sleeps or wakes mid-window.** PSTR/PDTR are diagnostic candidates for the transition; GPU rail and
+   daemon traces are checked too because the channel attribution is not established from public documentation.
    The mid-window presence check uses `stat` only, so it does not wake the drive.
 3. **Disconnect mid-window.** Nothing is lost. A remount triggers trim, fsck and diskarbitration, so members
    overlapping the event are flagged and excluded, and the window continues.
@@ -329,12 +335,14 @@ Risks:
 - It cannot ride inside R1: R1 has to be quiet, and D is blocked (R0 NLL failure, item 182). The 30B is also the
   binding cell (smallest s_r).
 
-**Design (default plan, 87 segments, about 4.7 h).**
-- `python3 scripts/align_ssd_qualification.py plan --out plan.json` gives three physical blocks:
-  **attached → detached → attached** (A-B-A, as in the High Power lever test).
+**Design (corrected default plan, 125 segments, about 6.8 h).**
+- `python3 scripts/align_ssd_qualification.py plan --out plan.json` gives five physical blocks:
+  **attached → detached → attached → detached → attached**. The former three-block default was invalid
+  for an uncertainty interval: after fitting intercept, linear drift, and presence to three block means it had zero
+  residual degrees of freedom. Treating the repeated segments as independent presence assignments was pseudoreplication.
 - Each block has:
   - a 600 s settle;
-  - 8 idle pairs and 6 decode pairs of 120 s segments with 60 s gaps, in ABBA order (linear drift cancels within each
+  - 6 idle pairs and 6 decode pairs of 120 s segments with 60 s gaps, in ABBA order (linear drift cancels within each
     load level).
 - Pair conditions:
   - **Attached blocks: quiet vs write.** Write segments replay the window write pattern onto `JW-EXT`: the sidecar
@@ -344,8 +352,8 @@ Risks:
   the gap.
 - **Decode** is fixed work: `scripts/align_ssd_fixed_decode.py --model <30B dir, internal>`, a greedy 4,096-token
   decode with no EOS stop, stamped around the decode only.
-- **Extended plan** (tighter presence; df 4 instead of 2): `--blocks attached,detached,attached,detached,attached
-  --idle-pairs 6 --decode-pairs 6`, about 6.8 h.
+- A shorter three-block plan may still be used for debugging, but Q1 is mechanically INCONCLUSIVE and cannot authorize
+  any always-attached option.
 
 **Captures (all on the internal disk).**
 - One continuous `sudo powermetrics -b 0 -i 100 --samplers cpu_power,gpu_power,ane_power,thermal --format plist`
@@ -363,7 +371,7 @@ Risks:
 
 | Criterion | Estimate | Margin (30B, s_r,min = 19 J, T_ep = 234.5 s) | Why this margin |
 |---|---|---|---|
-| **Q1 presence (decode)** | attached − detached quiet decode GPU power; OLS with linear drift; df = blocks − 1 | ±0.25 % of decode power (≈ ±63 mW at 25 W) | the U4 point bar: presence must not move the cross-window frame. A constant offset within the series is absorbed anyway |
+| **Q1 presence (decode)** | attached − detached quiet decode GPU power; OLS on physical-block means with linear drift; df = blocks − 3 (2 by default) | ±0.25 % of decode power (≈ ±63 mW at 25 W) | the U4 point bar: presence must not move the cross-window frame. A constant offset within the series is absorbed anyway |
 | **Q2 write effect (idle)** | paired write − quiet, attached blocks, idle | ±0.05·s_r,min/T_ep = **±4.1 mW** (D: ±5.1 mW) | per-episode bias ≤ 0.05 s_r shifts scores by ≤ 0.05 against thresholds of 2.5-7.1 s_r; the 30B MDE moves ≤ 1.5 tokens |
 | **Q3 write effect (decode)** | same, under decode | ±0.30·s_r,min/T_ep = **±24 mW** (D: ±30 mW) | the whole in-episode write effect, taken as variance, raises s_r and the MDE by ≤ 4.4 % (√1.09). Conservative: the arm-correlated part is a fraction of it |
 | **Q5 operational** | journal | all of: arm check PASS at start and end; 0 volume losses; 0 attached segments with metadata-daemon CPU > 0.05 CPU-s/s; 0 idle segments with \|B0AC\| > 200 mA; \|S_slow presence offset\| ≤ 0.5 °C (half the δ band) | missing evidence fails |
@@ -381,10 +389,12 @@ Each criterion is PASS, FAIL or INCONCLUSIVE:
 An INCONCLUSIVE Q3 does not block B, because B writes nothing in windows. It does block A.
 
 **Expected precision (guesses, to be replaced by the data).**
-- Idle: pair-difference SD about 3 mW, 16 pairs, so a 90 % half-width of about 1.3 mW against 4.1 mW.
-- Decode: pair-difference SD about 0.11 % × 25 W ≈ 28 mW (the 30B identical-work pair SD as a fraction), 12 pairs, so
-  about ±14 mW against 24 mW.
-- Presence: about ±28 mW (t₂ = 2.92) against 63 mW.
+- Idle: pair-difference SD about 3 mW, 18 attached-block pairs, so a nominal independent-pair 90 % half-width of
+  about 1.2 mW against 4.1 mW.
+- Decode: pair-difference SD about 0.11 % × 25 W ≈ 28 mW (the 30B identical-work pair SD as a fraction), 18
+  attached-block pairs, so a nominal independent-pair half-width of about ±12 mW against 24 mW.
+- Presence precision comes from five physical block means (df 2), not from the number of segments. It cannot be
+  forecast from the segment pair SD without an assumption about block shocks.
 - If decode comes out INCONCLUSIVE, the extended plan or more decode pairs are the remedy; never a looser margin.
 
 **Also recorded, print only.**
@@ -409,7 +419,7 @@ An INCONCLUSIVE Q3 does not block B, because B writes nothing in windows. It doe
 | `scripts/align_external_volume.py` | CLI: `census`, `arm-check` (exit 0 PASS, 3 REFUSE), `route`, `prepare-plan` |
 | `configs/align/v4/external_log_volume.json` | the committed config: `status: "off"` |
 | `configs/align/v4/external_log_volume.qualification.example.json` | the Saturday template (placeholder UUID; fill from `diskutil info`) |
-| `joulewise/align/apple/ssd_qualification.py` | `plan` (ABBA, block balance), `PatternWriter` (fixed cadence, no drift), `teardown_burst`, `extract` (overlap-weighted steady-core rail power using the existing powermetrics parser, unchanged), `presence_offset`, `paired_write_effect`, `evaluate` (Q1-Q5, option), `summarize_ops`, `run_session` (journal on internal, 1 Hz SMC through `joulewise.hazards.smc.Reader` unchanged, `ps`-based metadata-daemon CPU) |
+| `joulewise/align/apple/ssd_qualification.py` | `plan` (ABBA, block balance), `PatternWriter` (fixed cadence, no drift), `teardown_burst`, `extract` (overlap-weighted steady-core rail power using the existing powermetrics parser, unchanged), `presence_offset`, `paired_write_effect`, `evaluate` (Q1-Q3 and Q5, option; Q4 is not defined), `summarize_ops`, `run_session` (journal on internal, 1 Hz SMC through `joulewise.hazards.smc.Reader` unchanged, `ps`-based metadata-daemon CPU) |
 | `scripts/align_ssd_qualification.py` | CLI: `plan`, `run`, `extract`, `evaluate`, `write-pattern` |
 | `scripts/align_ssd_fixed_decode.py` | fixed-work greedy decode (mlx-lm `generate_step`, no EOS stop), JSON stamps |
 | `tests/align/test_external_volume.py`, `tests/align/test_ssd_qualification.py` | 41 tests with fake runners and synthetic worlds; planted effects above each margin are caught; noisy data never PASS |

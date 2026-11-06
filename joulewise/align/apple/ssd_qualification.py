@@ -79,7 +79,7 @@ def _abba(n_pairs: int) -> list[tuple[str, str]]:
     return order
 
 
-def plan(*, blocks: Sequence[str] = ("attached", "detached", "attached"), idle_pairs: int = 8,
+def plan(*, blocks: Sequence[str] = ("attached", "detached", "attached", "detached", "attached"), idle_pairs: int = 6,
          decode_pairs: int = 6, segment_s: float = 120.0, gap_s: float = 60.0,
          settle_s: float = 600.0) -> dict[str, Any]:
     """The schedule. Every block repeats the same idle-then-decode shape."""
@@ -326,12 +326,12 @@ def _ols(x_rows: Sequence[Sequence[float]], y: Sequence[float]) -> tuple[list[fl
 def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str, Any] | None:
     """Attached minus detached quiet GPU power, adjusted for linear drift.
 
-    Model over the quiet segments of one load level: P = a + b * t + c *
-    attached, with t the segment start in hours. The interval for c uses the
-    segment residual variance but only df = blocks - 1, because block-level
-    shocks cannot be told from presence with so few physical swaps (the
-    study recommends at least A-D-A; A-D-A-D-A tightens it). Block means
-    minus the drift line are printed as the nonlinearity check.
+    Model over *block means* of the quiet segments: P = a + b * t + c *
+    attached, with t the mean segment start in hours.  Blocks, rather than
+    segments, are the independent units for the physical presence treatment.
+    Consequently the residual degrees of freedom are ``blocks - 3``.  The
+    old segment-level fit was pseudoreplication: changing the cable once did
+    not turn every segment in that block into an independent presence trial.
     """
 
     picked = []
@@ -344,25 +344,30 @@ def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str
         t = row.get("start_epoch_s")
         t = float(t) / 3600 if isinstance(t, (int, float)) else float(row["ordinal"]) * 180 / 3600
         picked.append((t, 1.0 if row["presence"] == "attached" else 0.0, value, row["block"]))
-    blocks = {b for *_x, b in picked}
-    kinds = {a for _t, a, _v, _b in picked}
-    if len(blocks) < 2 or kinds != {0.0, 1.0}:
+    grouped: dict[str, list[tuple[float, float, float]]] = {}
+    for t, attached, value, block in picked:
+        grouped.setdefault(block, []).append((t, attached, value))
+    if len(grouped) < 4:
         return None
-    t0 = min(t for t, *_r in picked)
-    x_rows = [[1.0, t - t0, a] for t, a, _v, _b in picked]
-    y = [v for _t, _a, v, _b in picked]
+    block_rows = [(block, statistics.fmean(t for t, _a, _v in members), members[0][1],
+                   statistics.fmean(v for _t, _a, v in members))
+                  for block, members in grouped.items()]
+    if {a for _block, _t, a, _v in block_rows} != {0.0, 1.0}:
+        return None
+    t0 = min(t for _block, t, _a, _v in block_rows)
+    x_rows = [[1.0, t - t0, a] for _block, t, a, _v in block_rows]
+    y = [v for _block, _t, _a, v in block_rows]
     try:
         beta, inv, s2, _df = _ols(x_rows, y)
     except ValueError:
         return None
     se = math.sqrt(s2 * inv[2][2]) if math.isfinite(s2) else math.nan
-    df = max(1, len(blocks) - 1)
+    df = len(block_rows) - 3
+    if df <= 0 or not math.isfinite(se):
+        return None
     t = student_t_quantile(0.95, df)
-    nonlinearity = {}
-    for block in sorted(blocks):
-        members = [(xr, v) for xr, v, (*_r, b) in zip(x_rows, y, picked) if b == block]
-        fitted = [beta[0] + beta[1] * xr[1] + beta[2] * xr[2] for xr, _v in members]
-        nonlinearity[block] = statistics.fmean(v for _x, v in members) - statistics.fmean(fitted)
+    nonlinearity = {block: value - sum(b * xv for b, xv in zip(beta, xr))
+                    for (block, _time, _attached, value), xr in zip(block_rows, x_rows)}
     return {"mean": beta[2], "se": se, "df": df, "lo": beta[2] - t * se, "hi": beta[2] + t * se,
             "drift_w_per_h": beta[1], "reference_power_w": statistics.fmean(y),
             "block_mean_minus_fit_w_print_only": nonlinearity}
