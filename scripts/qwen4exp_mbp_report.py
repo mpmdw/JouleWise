@@ -101,13 +101,16 @@ def ple_resident_gb(stats):
 def render(template, reports, run_id):
     def worker(name):
         return reports.get(name, {}).get("results", {})
+    def stamp(name):
+        report = reports.get(name, {})
+        return "SYNTHETIC" if report.get("synthetic") is True or worker(name).get("synthetic") is True else "REAL"
     memory, memory_steps = [], []
     monitor = reports.get("memory.json", {})
     for r in worker("memory.json").get("runs", []):
         cap = r.get("effective_metal_cap_bytes", worker("memory.json").get("effective_metal_cap_bytes", live.METAL_CAP))
         peak = r["metal"]["peak_bytes"]
         ple_pages = max((t.get("resident_bytes", 0) for t in r.get("ple_after", {}).values()), default=0) // 16384
-        memory.append([r["context"], r["prompt_tokens"], round(r["metal"]["peak_bytes"] / 1e9, 3),
+        memory.append([stamp("memory.json"), r["context"], r["prompt_tokens"], round(r["metal"]["peak_bytes"] / 1e9, 3),
                        ple_resident_gb(r["ple_after"]),
                        r.get("prediction", {}).get("relative_error", "n/a")])
         memory_steps.append([r["context"], round(peak/1e9, 3), round(cap/1e9, 3),
@@ -115,7 +118,7 @@ def render(template, reports, run_id):
     quality, benchmark = [], []
     for filename, rows in (("quality.json", quality), ("benchmark.json", benchmark)):
         for stage, r in worker(filename).get("e2e", {}).get("stages", {}).items():
-            rows.append([stage, r.get("verdict"), r.get("passed", "n/a"), r.get("n", "n/a")])
+            rows.append([stamp(filename), stage, r.get("verdict"), r.get("passed", "n/a"), r.get("n", "n/a")])
     speed = []
     for step in (512, 2048):
         source = worker(f"performance-{step}.json")
@@ -127,12 +130,12 @@ def render(template, reports, run_id):
             for (context, effort), rows in groups.items():
                 p = [x["prefill_tps"] for x in rows]; d = [x["decode_tps"] for x in rows]
                 verdict = "MEETS" if statistics.median(p) >= TARGETS[step][0] and statistics.median(d) >= TARGETS[step][1] else "MISSES"
-                speed.append([step, context, effort, f"{statistics.median(p):.2f} ({min(p):.2f}-{max(p):.2f})",
+                speed.append([stamp(f"performance-{step}.json"), step, context, effort, f"{statistics.median(p):.2f} ({min(p):.2f}-{max(p):.2f})",
                               f"{statistics.median(d):.2f} ({min(d):.2f}-{max(d):.2f})", verdict])
         else:
             for r in source.get("medians", []):
                 verdict = "MEETS" if r["prefill_tps"] >= TARGETS[step][0] and r["decode_tps"] >= TARGETS[step][1] else "MISSES"
-                speed.append([step, r["context"], r["reasoning_effort"], r["prefill_tps"], r["decode_tps"], verdict])
+                speed.append([stamp(f"performance-{step}.json"), step, r["context"], r["reasoning_effort"], r["prefill_tps"], r["decode_tps"], verdict])
     paging = []
     for r in worker("paging.json").get("runs", []):
         before, after = r["ple_before"], r["ple_after"]
@@ -147,10 +150,10 @@ def render(template, reports, run_id):
         except (OSError, ValueError, KeyError):
             pass
         rate = disk_mb/disk_seconds if isinstance(disk_mb, float) and disk_seconds > 0 else "PENDING"
-        paging.append(["cold-unknown" if r["repeat"] == 0 else "warm", disk_mb, disk_seconds, rate,
+        paging.append([stamp("paging.json"), "cold-unknown" if r["repeat"] == 0 else "warm", disk_mb, disk_seconds, rate,
                        lookups, unique, gather, gather/elapsed if elapsed else "PENDING"])
-    evidence = [[name, reports[name].get("verdict", "receipt"), reports[name].get("abort") or ""]
-                if name in reports else [name, "PENDING", "missing"] for name in FILES]
+    evidence = [[stamp(name), name, reports[name].get("verdict", "receipt"), reports[name].get("abort") or ""]
+                if name in reports else ["PENDING", name, "PENDING", "missing"] for name in FILES]
     reference = reports.get("bf16-benchmark.json", {})
     ref_summary = {"bf16_report_verdict": reference.get("verdict", "PENDING"),
                    "hosted_identity": reference.get("hosted_identity", "PENDING"),
@@ -181,17 +184,17 @@ def render(template, reports, run_id):
               "ARTIFACT": json.dumps(reports.get("convert.json", {}), indent=2),
               "RECEIPT_TIMINGS": json.dumps(receipts, indent=2),
               "MEMORY_SUMMARY": json.dumps(summary, indent=2),
-              "MEMORY_ROWS": table(["Final context", "Prompt tokens", "Metal peak GB", "PLE resident GB", "Prediction relative error"], memory),
+              "MEMORY_ROWS": table(["Artifact", "Final context", "Prompt tokens", "Metal peak GB", "PLE resident GB", "Prediction relative error"], memory),
               "MEMORY_STEP_ROWS": table(["Context", "Metal GB", "Cap GB", "Margin GB", "Margin %", "Max PLE resident pages"], memory_steps),
               "ALLOCATION_ROWS": table(["Context", "Experts B", "Non-expert bf16 B", "lm_head B", "FP KV B", "QSA cache B", "Observed residual B"], allocation),
               "MEMORY_MONITOR": json.dumps({k: v for k, v in reports.get("memory.json", {}).items()
                                              if k != "results"}, indent=2),
-              "QUALITY_ROWS": table(["Stage", "Verdict", "Passed", "n"], quality),
-              "BENCHMARK_ROWS": table(["Stage", "Verdict", "Passed", "n"], benchmark),
-              "PERFORMANCE_ROWS": table(["Prefill chunk", "Context", "Effort", "Prefill median (min-max)", "Decode median (min-max)", "Target"], speed),
-              "PAGING_ROWS": table(["Pass", "Disk MB", "Elapsed s", "MB/s", "PLE lookups", "Unique rows", "Gather s", "Gather share"], paging),
+              "QUALITY_ROWS": table(["Artifact", "Stage", "Verdict", "Passed", "n"], quality),
+              "BENCHMARK_ROWS": table(["Artifact", "Stage", "Verdict", "Passed", "n"], benchmark),
+              "PERFORMANCE_ROWS": table(["Artifact", "Prefill chunk", "Context", "Effort", "Prefill median (min-max)", "Decode median (min-max)", "Target"], speed),
+              "PAGING_ROWS": table(["Artifact", "Pass", "Disk MB", "Elapsed s", "MB/s", "PLE lookups", "Unique rows", "Gather s", "Gather share"], paging),
               "REFERENCE": json.dumps(ref_summary, indent=2),
-              "EVIDENCE": table(["Evidence", "Status", "Abort/missing reason"], evidence),
+              "EVIDENCE": table(["Artifact", "Evidence", "Status", "Abort/missing reason"], evidence),
               "NEXT_ACTIONS": "\n".join(actions)}
     for key, value in values.items():
         template = template.replace("{{" + key + "}}", value)

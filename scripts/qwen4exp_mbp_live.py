@@ -469,6 +469,8 @@ def supervise(args):
               "max_rss_bytes": max(s.get("rss_bytes", 0) for s in samples),
               "abort": reason, "worker_returncode": child.returncode,
               "verdict": "aborted" if reason or child.returncode else "completed"}
+    if args.synthetic:
+        result["synthetic"] = True
     if worker_out.exists():
         result["results"] = json.loads(worker_out.read_text())
         if result["results"].get("verdict") in ("fail", "incomplete"):
@@ -553,6 +555,16 @@ def check_tables(stats, io_mode="mmap"):
         raise ValueError("PLE resident file pages exceed operational 21.5 GB cap")
 
 
+def verify_artifact_mode(manifest, args):
+    """Bind an operator's synthetic declaration to the immutable manifest."""
+    artifact_synthetic = manifest.get("synthetic") is True
+    if artifact_synthetic != args.synthetic:
+        raise ValueError("--synthetic must match the artifact manifest synthetic flag")
+    if artifact_synthetic and args.command not in ("memory", "performance", "paging"):
+        raise ValueError("synthetic artifacts are only allowed for memory, performance and paging")
+    return artifact_synthetic
+
+
 def load_adapter(args):
     import align_convert_qwen4_exp as converter
     import qwen4exp_e2e_eval as e2e
@@ -567,6 +579,7 @@ def load_adapter(args):
     if hashlib.sha256(raw).hexdigest() != args.manifest_sha256:
         raise ValueError("manifest pin mismatch")
     manifest = json.loads(raw)
+    verify_artifact_mode(manifest, args)
     if (manifest["profile"] != args.profile or manifest["group_size"] != 64
             or manifest["ngram_storage"] != "bf16"):
         raise ValueError("artifact is not the selected maxfit recipe")
@@ -696,6 +709,8 @@ def native_worker(args):
               "environment": {p: importlib.metadata.version(p) for p in ("mlx", "mlx-lm", "transformers")},
               "ple_before": initial, "tokenizer_preflight": preflight, "load_metal": metal_stats(mx),
               "device": device, "effective_metal_cap_bytes": int(args.metal_cap_gb * 1e9)}
+    if args.synthetic:
+        result["synthetic"] = True
     checkpoint()
     if args.command in ("memory", "performance", "paging"):
         runs = []
@@ -802,6 +817,8 @@ def parse_args(argv=None):
     p.add_argument("--profile", choices=("maxfit", "maxfit5"), default="maxfit")
     p.add_argument("--resume", action="store_true", help="resume an interrupted conversion; failed attempts need a new artifact name")
     p.add_argument("--ple-io", choices=("mmap", "pread"), default="mmap")
+    p.add_argument("--synthetic", action="store_true",
+                   help="artifact is synthetic (memory/performance/paging only; must match manifest)")
     p.add_argument("--contexts", type=int, nargs="+", default=list(CONTEXTS))
     p.add_argument("--decode-tokens", type=int, default=64)
     p.add_argument("--prefill-step", type=int, choices=(512, 2048), default=512)
@@ -826,6 +843,8 @@ def parse_args(argv=None):
     p.add_argument("--once", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = p.parse_args(argv)
+    if args.synthetic and args.command not in ("memory", "performance", "paging"):
+        p.error("--synthetic is only allowed for memory, performance and paging")
     if (args.decode_tokens < 1 or args.repeats < 1 or not 0.1 <= args.poll_seconds <= 10
             or not 1 <= args.metal_cap_gb <= 115.4 or args.contexts != sorted(set(args.contexts))
             or any(c not in CONTEXTS for c in args.contexts) or args.interval <= 0
@@ -838,7 +857,7 @@ def main(argv=None):
     args = parse_args(argv)
     if args.dry_run:
         print(json.dumps({"dry_run": True, "command": args.command, "revision": REVISION,
-                          "profile": args.profile, "contexts": args.contexts,
+                          "profile": args.profile, "synthetic": args.synthetic, "contexts": args.contexts,
                           "reasoning_efforts": EFFORTS, "no_weights_loaded": True,
                           "steps": {"download": "pinned HF metadata -> external cache -> source sha256 receipt",
                                     "convert": "verify source -> streaming converter -> manifest pin + raw SHA256SUMS",
