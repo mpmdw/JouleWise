@@ -1742,10 +1742,12 @@ class DecoderLayer(nn.Module):
         self.mlp_hyper_connection = GatedResidual(args)
         # Decode compilation is deliberately local to a layer.  Compiling the
         # model loop would capture the Python cache objects and make their
-        # mutations invisible after the first trace.  It is lazy so mx.compile
-        # sees the final (possibly quantized) module.
-        self._decode_ctx = None
-        self._compiled_decode = None
+        # mutations invisible after the first trace.  The compiled functions
+        # are built lazily (mx.compile sees the final, possibly quantized,
+        # module) and owned by the TextModel, never by the layer: see
+        # ``_compile_decode_piece``.  A plain attribute, outside the module's
+        # array tree (``_compile_decode_piece`` captures that tree).
+        object.__setattr__(self, "_decode_ctx", None)
 
     def _decode_arrays(self, h: mx.array, ssm_mask: mx.array, ngram_emb: mx.array, *state):
         """Compiled boundary of one batch-1, one-token linear-attention layer.
@@ -1792,9 +1794,11 @@ class DecoderLayer(nn.Module):
         x, hyper, inject = self.mlp_hyper_connection(h)
         return _inject(hyper, self.mlp(x), inject)
 
-    def __call__(self, h: mx.array, ctx: _Context, cache, compile_decode: bool = True) -> mx.array:
-        # Prefill (and every batched/multi-token call) remains uncompiled.
-        if not compile_decode or ctx.B != 1 or ctx.S != 1 or cache.offset == 0:
+    def __call__(self, h: mx.array, ctx: _Context, cache, compiled: Optional[dict] = None) -> mx.array:
+        """``compiled``: the owning TextModel's registry of compiled decode
+        functions (None: eager). Prefill and every batched/multi-token call
+        remain uncompiled."""
+        if compiled is None or ctx.B != 1 or ctx.S != 1 or cache.offset == 0:
             return self._body(h, ctx, cache)
         if not self.is_linear:
             # QSA: the hyper-connections and the MoE are compiled; attention
@@ -1803,26 +1807,57 @@ class DecoderLayer(nn.Module):
             # attention must retrace at every token: slower than eager, and
             # every trace with its offset-sized constants stays in mlx's
             # compile cache for the life of the model (review of 0715fdf74).
-            if self._compiled_decode is None:
-                self._compiled_decode = (mx.compile(self._qsa_pre, inputs=EXACT_F32, shapeless=False),
-                                         mx.compile(self._qsa_post, inputs=EXACT_F32, shapeless=False))
-            pre, post = self._compiled_decode
+            fns = compiled.get(self.layer_idx)
+            if fns is None:
+                fns = compiled[self.layer_idx] = (_compile_decode_piece(self, "_qsa_pre"),
+                                                  _compile_decode_piece(self, "_qsa_post"))
+            pre, post = fns
             x, inject = pre(h)
             return post(h, self.self_attn(x, ctx, cache), inject)
-        if self._compiled_decode is None:
-            self._compiled_decode = mx.compile(self._decode_arrays, inputs=EXACT_F32, shapeless=False)
+        fn = compiled.get(self.layer_idx)
+        if fn is None:
+            fn = compiled[self.layer_idx] = _compile_decode_piece(self, "_decode_arrays")
         empty = mx.zeros((0,), dtype=h.dtype)
-        self._decode_ctx = (ctx, cache)
+        object.__setattr__(self, "_decode_ctx", (ctx, cache))
         try:
-            result = self._compiled_decode(h, ctx.ssm_mask if ctx.ssm_mask is not None else empty,
-                                           ctx.ngram_emb[self.layer_idx] if self.has_ple else empty,
-                                           *cache.cache)
+            result = fn(h, ctx.ssm_mask if ctx.ssm_mask is not None else empty,
+                        ctx.ngram_emb[self.layer_idx] if self.has_ple else empty, *cache.cache)
         finally:
-            self._decode_ctx = None
+            object.__setattr__(self, "_decode_ctx", None)
         cache.cache = list(result[1:])
         # _body advanced only the view; the owning cache carries host state.
         cache.advance(1)
         return result[0]
+
+
+def _compile_decode_piece(layer: DecoderLayer, name: str):
+    """``mx.compile`` of ``layer.<name>`` for the decode path.
+
+    The layer's whole array tree (weights, quantization scales, norms) is a
+    captured input, with ``EXACT_F32``: inside the trace every parameter is a
+    tracer, so the cached tape holds placeholders and trace-local scalars, no
+    model buffer. Compiled with the parameters as closure constants instead,
+    repeated load / decode / delete cycles kept old weights alive for the life
+    of the process (tiny fp32 fixture: 9.8 MB over 12 cycles of a 19 MB model,
+    in 0.4-2 MB steps at random cycles; eager decode: 12 B per cycle). The
+    compiled functions themselves were freed; which mlx 0.31.2 path retains
+    a tape's constants was not isolated. Captured, the residue is a few
+    trace-local scalars (about 30 B per cycle). A weight update after the
+    first trace is also seen by the next step (a constant would replay the
+    old weights). Cost: flattening the layer's arrays at each call (24 in the
+    fp32 fixture: +1.5 us per call).
+
+    The returned function holds the layer (captured inputs and the closure),
+    so the layer must not hold it: the TextModel owns the registry. No
+    reference cycle runs through a compiled function, so it is freed, and its
+    compile-cache entry erased, by reference counting on the thread that drops
+    the model. (mlx's compile cache is thread-local: a cycle collected by the
+    garbage collector on another thread erases nothing.) ``getattr`` at trace
+    time keeps the method an instance attribute may override (the tests count
+    traces that way)."""
+    def piece(*args):
+        return getattr(layer, name)(*args)
+    return mx.compile(piece, inputs=[EXACT_F32, layer], shapeless=False)
 
 
 class Qwen4ExpTextModel(nn.Module):
@@ -1883,6 +1918,15 @@ class TextModel(nn.Module):
                               if "linear_attention" in args.layer_types else None)
         self._kernel_ok = sparse_kernel_supported(args.head_dim, args.num_attention_heads, args.num_key_value_heads)
         self.compile_decode = runtime.compile_decode if runtime else True
+        # layer index -> compiled decode function(s); plain attribute, so it is
+        # outside parameters() / update(). See _compile_decode_piece.
+        object.__setattr__(self, "_compiled_decode", {})
+
+    def release_compiled_decode(self) -> None:
+        """Drop every compiled decode function and its mlx compile-cache entry
+        (call on the thread that decoded). Optional: dropping the model does
+        the same; the next compiled step retraces."""
+        self._compiled_decode.clear()
 
     @property
     def layers(self):
@@ -1936,7 +1980,7 @@ class TextModel(nn.Module):
             self._gather_ngrams(np.asarray(inputs).astype(np.int64), ctx, cache, h.dtype)
         h = mx.tile(h, (1, 1, self.args.hc_count))
         for layer, c in zip(self.model.layers, cache):
-            h = layer(h, ctx, c, compile_decode=self.compile_decode)
+            h = layer(h, ctx, c, self._compiled_decode if self.compile_decode else None)
         h = self.model.hyper_connection_mixer(h)
         if self.args.tie_word_embeddings:
             return self.model.embed_tokens.as_linear(h)

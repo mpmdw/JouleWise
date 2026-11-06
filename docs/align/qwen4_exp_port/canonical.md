@@ -280,7 +280,7 @@ Four seats validated the PR head `ce911c6e7` (module sha256 `55aecaea…b11a37f`
 
 ## Pin
 
-`joulewise/align/models/qwen4_exp.py` sha256 `027dc03a36cff5455a436bc609537e72643b727f04b1eff93198721f36849564` after the MISSING-11 review fixes (it was `af26a5a5bf15a6c475f21637989c5f03c6f8bd3a3e0b8824ac99765a99f7f95f` at the unreviewed MISSING-11 head `0715fdf74`, `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 and `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
+`joulewise/align/models/qwen4_exp.py` sha256 `ce0800b90be398d49b5561539e987d347ae05a11b2ae3cef7f05ba6c612081d6` after the MISSING-11 memory fix (it was `027dc03a36cff5455a436bc609537e72643b727f04b1eff93198721f36849564` after the MISSING-11 review fixes, `af26a5a5bf15a6c475f21637989c5f03c6f8bd3a3e0b8824ac99765a99f7f95f` at the unreviewed MISSING-11 head `0715fdf74`, `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37` after validation round 1 and `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
 - `MODULE_SHA256` in `scripts/align_convert_qwen4_exp.py`, the module `load_verified_model` runs by default. The suite checks it against the file (`test_r1_load_verified_model_requires_both_pins` fails if it is stale).
 - this section, which is a record and is not checked.
 
@@ -309,6 +309,21 @@ Batch-one, single-token calls after the initial token compile with
   (`EXACT_F32`, `inputs=EXACT_F32`). mlx 0.31.2 inlines a scalar constant into
   fused kernel source with 7 significant digits, a different fp32 value: one
   ulp on most outputs, 1e-6 on the logits.
+- Each compiled piece captures its layer's whole array tree as compile
+  inputs (`inputs=[EXACT_F32, layer]`), so no weight is a closure constant of
+  a cached trace, and the compiled functions are owned by the `TextModel`
+  (`_compiled_decode`, layer index -> function), never by the layer. With the
+  weights as constants and the function on its own layer, 12 load / prefill /
+  decode / delete cycles of the tiny fp32 fixture kept 9.8 MB of old weights
+  alive (0.4-2 MB at random cycles; eager: 12 B per cycle). The compiled
+  functions were freed; which mlx 0.31.2 path retained the tape constants was
+  not isolated. Now: under 1 KB over the 12 cycles, and the model is freed by
+  reference counting alone, so the compile-cache entries are erased on the
+  thread that drops it (mlx's compile cache is thread-local; a cycle collected
+  on another thread would erase nothing). Cost: flattening a layer's arrays
+  per call, +1.5 us for the fixture's 24. `release_compiled_decode()` drops
+  the functions explicitly; a weight update after the first trace is seen by
+  the next step.
 
 Multi-token prefill, batched calls and the first token remain uncompiled.
 `compile_decode: false` in `config.json` (or the `model_config` override) is

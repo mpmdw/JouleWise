@@ -53,3 +53,32 @@ The unreviewed head `0715fdf74` had never run natively. On mlx 0.31.2 / Metal:
 Tests: the identity test now also runs the gather path, asserts one trace per
 layer piece, and a new test covers a left-padded single row and a prefill
 shorter than one QSA block. Both fail on `0715fdf74`.
+
+## Memory fix (2026-11-06, native M4 Air, tiny fixtures only)
+
+Verified MEDIUM from the review of `d1f176e41`: repeated load / prefill /
+decode / delete cycles leaked MLX memory. Reproduced: 12 cycles of the tiny
+fp32 fixture (19.4 MB of weights) grew active memory by 9.8 MB, in 0.4-2 MB
+steps at random cycles; eager decode grew 12 B per cycle. Bisected: only the
+compiled linear-attention layers; the leak persisted with a weakref
+trampoline instead of a bound method, without `inputs=`, and with automatic
+GC disabled, and the compiled functions were freed every cycle. Recompiling
+on one model leaked nothing; refreshing that model's weights between
+recompiles did, so the retained buffers were old weights held as constants
+of a compiled tape. Passing the layer's arrays as captured compile inputs
+removed it (the residue is a few trace-local scalars).
+
+Fix (`_compile_decode_piece`): each compiled piece captures
+`[EXACT_F32, layer]`; the `TextModel` owns the functions in
+`_compiled_decode`, so no reference cycle runs through a compiled function
+and the model is freed by reference counting (mlx's compile cache is
+thread-local: a cycle collected by the GC on another thread erases nothing).
+`release_compiled_decode()` drops them explicitly. Module pin
+`ce0800b90be398d49b5561539e987d347ae05a11b2ae3cef7f05ba6c612081d6`.
+
+New test `test_compiled_decode_load_decode_delete_cycles_release_memory`: 12
+cycles through `load_verified_model`, 8-token prefill and 6 compiled decode
+steps; the model must be freed with the GC disabled, and active memory may
+grow at most 32 KiB from cycle 1 to 12 (measured: 596 B; before the fix
+9.8 MB). The 64-step bitwise identity tests are unchanged and pass. Canonical
+module natively: 34 tests OK, zero skips.

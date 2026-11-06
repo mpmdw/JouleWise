@@ -856,9 +856,9 @@ class CanonicalParityTest(unittest.TestCase):
         """A model of its own (the override keys a separate fixture entry), so
         the compiled traces counted here start from nothing."""
         model = self.fx.model("fp32", compile_decode=True, **overrides)
+        self.assertEqual(model.language_model._compiled_decode, {}, "fresh model expected")
         traces = {}
         for i, layer in enumerate(model.layers):
-            self.assertIsNone(layer._compiled_decode, "fresh model expected")
             for name in ("_decode_arrays",) if layer.is_linear else ("_qsa_pre", "_qsa_post"):
                 def counted(*a, _f=getattr(layer, name), _k=(i, name)):
                     traces[_k] = traces.get(_k, 0) + 1
@@ -936,6 +936,48 @@ class CanonicalParityTest(unittest.TestCase):
         self._compiled_vs_eager(model, [[EOS, EOS, EOS] + self.fx.seqs["seq_a"][:3]], 24, left_padding=[3])
         self._compiled_vs_eager(model, [self.fx.seqs["seq_a"][:2]], 24)
         self.assertTrue(traces)
+
+    def test_compiled_decode_load_decode_delete_cycles_release_memory(self):
+        """12 cycles of load / prefill / compiled decode / delete keep mlx's
+        active memory flat. With the weights as closure constants of the
+        compiled layers, 0.4-2 MB of old weights stayed alive at random cycles
+        (9.8 MB over 12 cycles of the 19 MB fp32 fixture; eager: 12 B per
+        cycle). The compiled functions capture the layer's arrays as inputs
+        and are owned by the TextModel, so the model is freed by reference
+        counting alone (no garbage-collector cycle, which could run on another
+        thread than mlx's thread-local compile cache)."""
+        import gc
+        import weakref
+        import mlx.core as mx
+        fx = self.fx
+        path, pin, conv = fx.converted("fp32"), fx.manifest_pin("fp32"), fx.converter()
+        prompt = fx.seqs["seq_a"][:8]
+        active = []
+        for cycle in range(12):
+            model, _ = conv.load_verified_model(path, pin, model_config={"compile_decode": True})
+            model.eval()
+            cache = model.make_cache()
+            run(model, [prompt], cache)
+            for step in range(6):
+                run(model, [[5 + step]], cache)
+            self.assertEqual(sorted(model.language_model._compiled_decode), list(range(N_LAYERS)))
+            if cycle == 11:
+                model.language_model.release_compiled_decode()
+                self.assertEqual(model.language_model._compiled_decode, {})
+                run(model, [[7]], cache)  # retraces
+                self.assertEqual(len(model.language_model._compiled_decode), N_LAYERS)
+            ref = weakref.ref(model)
+            gc.disable()
+            try:
+                del model, cache, _
+                self.assertIsNone(ref(), "model must be freed by reference counting")
+            finally:
+                gc.enable()
+            gc.collect()
+            active.append(mx.get_active_memory())
+        growth = active[-1] - active[0]
+        fx.record("compiled_decode_cycles_active_memory", dict(active=active, growth_bytes=growth))
+        self.assertLessEqual(growth, 32 * 1024, active)
 
     def test_greedy_32_tokens_identical_to_fp32_reference(self):
         fx = self.fx
