@@ -1702,7 +1702,7 @@ class StreamingFusedSwitchGLU(nn.Module):
         for group, expert in enumerate(unique):
             pos = np.flatnonzero(inverse == group)
             gu, down = self.stream.get(int(expert))
-            gate, up = mx.split(mx.matmul(mx.take(flat_x, pos, axis=0), gu.T), 2, axis=-1)
+            gate, up = mx.split(mx.matmul(mx.take(flat_x, mx.array(pos), axis=0), gu.T), 2, axis=-1)
             groups.append(mx.matmul(silu_once(gate) * up, down.T))
             positions.append(pos)
         # Expert-major batching above is undone without materialising a full
@@ -1710,7 +1710,7 @@ class StreamingFusedSwitchGLU(nn.Module):
         # layer's distinct experts plus the configured LRU cache.
         rows = mx.concatenate(groups, axis=0)
         order = np.argsort(np.concatenate(positions))
-        return mx.take(rows, order, axis=0).reshape(*shape, -1)
+        return mx.take(rows, mx.array(order), axis=0).reshape(*shape, -1)
 
 
 class FusedSwitchGLU(nn.Module):

@@ -280,7 +280,7 @@ Four seats validated the PR head `ce911c6e7` (module sha256 `55aecaea…b11a37f`
 
 ## Pin
 
-`joulewise/align/models/qwen4_exp.py` sha256 `305b31a7f334690e96f5e2cd99a9f92674b05085dbb2f8a818533311e45065f8` after the P10 expert-streaming review fixes (the default resident path remains the validation-round-1 path; the initial P10 pin was `cba1bda13b3890fc1609b118c791e207b0cd7db33a02efca59f4f1028a4efc61`, and its preceding pin was `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37`) (it was `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
+`joulewise/align/models/qwen4_exp.py` sha256 `4ed29b5ad536c89cc48e6732b6dbe738d741e1aff23e5c4b6e671f556ab532df` after the P10 expert-streaming review round-2 fixes (the round-1 pin was `305b31a7f334690e96f5e2cd99a9f92674b05085dbb2f8a818533311e45065f8`; the default resident path remains the validation-round-1 path; the initial P10 pin was `cba1bda13b3890fc1609b118c791e207b0cd7db33a02efca59f4f1028a4efc61`, and its preceding pin was `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37`) (it was `55aecaeac2e72518957e72a33aaf2b0a470e865e9bec7961e30870d93b11a37f` at the round-0 head `ce911c6e7`). It is pinned in two places:
 - `MODULE_SHA256` in `scripts/align_convert_qwen4_exp.py`, the module `load_verified_model` runs by default. The suite checks it against the file (`test_r1_load_verified_model_requires_both_pins` fails if it is stale).
 - this section, which is a record and is not checked.
 
@@ -295,6 +295,15 @@ OMP_NUM_THREADS=2 TMPDIR=/private/tmp/jwcanon JW_CANON_WORK=/private/tmp/jwcanon
 ```
 
 Every measured number is written to `$JW_CANON_WORK/ref-<hash>/results.json`.
+
+The P10 lane additionally requires its native streaming gate (it is not an
+optional bare-CI check):
+
+```
+OMP_NUM_THREADS=2 TMPDIR=/private/tmp/jwcanon JW_CANON_WORK=/private/tmp/jwcanon/work \
+  nice -n 20 taskpolicy -b /private/tmp/jwsol/venv-both/bin/python -m unittest -v \
+  tests.align.test_qwen4_exp_expert_streaming.ExpertStreamingMetalTest
+```
 
 ## Follow-ups
 

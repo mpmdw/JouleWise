@@ -29,6 +29,34 @@ class _FakeMX:
     def eval(*_values): return None
 
 
+class _ForwardArray(np.ndarray if np is not None else object):
+    """NumPy-backed array whose type distinguishes mx.array indices."""
+
+    def __new__(cls, value):
+        return np.asarray(value).view(cls)
+
+
+class _ForwardMX:
+    """Strict subset of MLX used by StreamingFusedSwitchGLU."""
+
+    @staticmethod
+    def array(value): return _ForwardArray(value)
+    @staticmethod
+    def repeat(*args, **kwargs): return _ForwardArray(np.repeat(*args, **kwargs))
+    @staticmethod
+    def split(*args, **kwargs): return [_ForwardArray(v) for v in np.split(*args, **kwargs)]
+    @staticmethod
+    def matmul(a, b): return _ForwardArray(np.matmul(a, b))
+    @staticmethod
+    def concatenate(*args, **kwargs): return _ForwardArray(np.concatenate(*args, **kwargs))
+
+    @staticmethod
+    def take(a, indices, axis=None):
+        if not isinstance(indices, _ForwardArray):
+            raise TypeError("take(): indices must be an mlx array, not ndarray")
+        return _ForwardArray(np.take(a, indices, axis=axis))
+
+
 def _production_store_class():
     """Execute just the host-side production class; MLX is Metal-only."""
     tree = ast.parse(MODULE.read_text())
@@ -38,6 +66,18 @@ def _production_store_class():
                  "threading": threading}
     exec(compile(ast.Module([node], []), str(MODULE), "exec"), namespace)
     return namespace["ExpertStream"]
+
+
+def _production_forward_class():
+    """Execute the production streaming forward against a strict NumPy mx."""
+    tree = ast.parse(MODULE.read_text())
+    node = next(n for n in tree.body
+                if isinstance(n, ast.ClassDef) and n.name == "StreamingFusedSwitchGLU")
+    fake_nn = type("FakeNN", (), {"Module": object})
+    namespace = {"np": np, "mx": _ForwardMX, "nn": fake_nn,
+                 "silu_once": lambda z: _ForwardArray(z / (1 + np.exp(-z)))}
+    exec(compile(ast.Module([node], []), str(MODULE), "exec"), namespace)
+    return namespace["StreamingFusedSwitchGLU"]
 
 
 def _bf16(values):
@@ -130,13 +170,14 @@ class ExpertStreamingCpuTest(unittest.TestCase):
         per_row_cache = MissCountingCache(values)
         expected = np.stack([apply(x[p:p + 1], e, per_row_cache)[0]
                              for p, e in enumerate(indices)])
-        unique, inverse = np.unique(indices, return_inverse=True)
-        dedup_cache, groups, positions = MissCountingCache(values), [], []
-        for group, expert in enumerate(unique):
-            pos = np.flatnonzero(inverse == group)
-            groups.append(apply(x[pos], expert, dedup_cache))
-            positions.append(pos)
-        actual = np.concatenate(groups)[np.argsort(np.concatenate(positions))]
+        unique = np.unique(indices)
+        dedup_cache = MissCountingCache(values)
+        dedup_cache.record_call = lambda *_args, **_kwargs: None
+        forward_class = _production_forward_class()
+        layer = forward_class.__new__(forward_class)
+        layer.stream = dedup_cache
+        actual = np.asarray(layer(_ForwardArray(x[:, None, :]),
+                                  _ForwardArray(indices[:, None])))[:, 0]
         self.assertEqual(dedup_cache.loads, len(unique))
         self.assertEqual(per_row_cache.loads, len(indices))
         np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
@@ -162,8 +203,6 @@ class ExpertStreamingMetalTest(unittest.TestCase):
         """Real conversion/load: prefill, decode, padding, eviction, and memory."""
         import importlib.util
         import mlx.core as mx
-        import threading
-        import time
 
         path = ROOT / "tests/align/test_qwen4_exp_canonical.py"
         spec = importlib.util.spec_from_file_location("qwen4_exp_canonical_streaming", path)
@@ -212,27 +251,14 @@ class ExpertStreamingMetalTest(unittest.TestCase):
 
         def measured_peak(model):
             mx.clear_cache()
-            baseline, samples, done = mx.get_active_memory(), [], threading.Event()
+            mx.reset_peak_memory()
+            canonical.run(model, [fx.seqs["long"][:256]])
+            return mx.get_peak_memory()
 
-            def sample():
-                while not done.is_set():
-                    samples.append(mx.get_active_memory())
-                    time.sleep(.001)
-
-            monitor = threading.Thread(target=sample, daemon=True)
-            monitor.start()
-            try:
-                canonical.run(model, [fx.seqs["long"][:256]])
-            finally:
-                samples.append(mx.get_active_memory())
-                done.set()
-                monitor.join()
-            return max(samples) - baseline
-
-        resident_growth = measured_peak(resident)
-        peak_delta = measured_peak(streamed)
+        resident_peak = measured_peak(resident)
+        streamed_peak = measured_peak(streamed)
         distinct_layer_bound = canonical.TEXT["num_experts"] * per_expert
-        self.assertLessEqual(peak_delta - resident_growth,
+        self.assertLessEqual(streamed_peak - resident_peak,
                              int(cache_gb * 2**30) + distinct_layer_bound)
 
 
