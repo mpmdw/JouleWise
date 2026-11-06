@@ -382,7 +382,110 @@ def ready_inputs(i_d=300.0, tail=20.0):
         'R1': {'B_D': 8192, 'I_D': i_d, 'T_dead': t_dead, 'thermal_policy': policy},
         'WP15': {'runtime_entrypoint': 'scripts/align_v4_launch.py'},
     }
-    return inputs, {'ac_powermode': 0, 'max_r1_tail_s': tail}
+    return inputs, r1_record(i_d, tail)
+
+
+def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
+    """The fields require_ready binds from an R1 driver r1_slots record."""
+    return {'schema': kit.R1_SLOTS_SCHEMA, 'source': source, 'ac_powermode': ac_powermode,
+            'max_r1_tail_s': tail, 'slots': {'I_D': i_d, 'T_dead': 1451.0},
+            'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
+            'u5': {'verdict': 'pass', 'c': 1.0},
+            'deadman_budget': [{'phases_s': {'tail': tail}}, {'phases_s': {'tail': tail / 2}}],
+            'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
+            'duty_bar': {'pass': True}}
+
+
+class FakeArmHost:
+    """pmset, the narrow restore rule, mount and diskutil; nothing real runs."""
+
+    def __init__(self, mode, ssd=False):
+        self.mode, self.ssd = mode, ssd
+
+    def __call__(self, argv):
+        import plistlib
+        argv = tuple(argv)
+        if argv == ('/usr/bin/pmset', '-g', 'custom'):
+            out = f'Battery Power:\n powermode 0\nAC Power:\n lowpowermode 0\n powermode {self.mode}\n'
+            return subprocess.CompletedProcess(argv, 0, out, '')
+        if argv == ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '0'):
+            self.mode = 0
+            return subprocess.CompletedProcess(argv, 0, '', '')
+        if argv == ('/sbin/mount',):
+            out = '/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)\n'
+            if self.ssd:
+                out += '/dev/disk6s1 on /Volumes/JW-EXT (apfs, local, nodev, nosuid, journaled)\n'
+            return subprocess.CompletedProcess(argv, 0, out, '')
+        if argv[:3] == ('/usr/sbin/diskutil', 'info', '-plist'):
+            external = argv[3].startswith('/dev/disk6')
+            out = plistlib.dumps({'Internal': not external, 'BusProtocol': 'USB' if external else 'Apple Fabric',
+                                  'FilesystemType': 'apfs', 'WritableVolume': True}).decode()
+            return subprocess.CompletedProcess(argv, 0, out, '')
+        raise AssertionError(f'unexpected command {argv}')
+
+
+class R1EvidenceBindingTests(unittest.TestCase):
+    """Executing review MEDIUM-3: r1_slots must be R1's own evidence."""
+
+    def test_driver_shaped_hardware_record_admits(self):
+        kit.require_ready(*ready_inputs())
+
+    def test_synthetic_source_refuses_unless_the_harness_asks(self):
+        inputs, slots = ready_inputs()
+        for source in (kit.R1_SYNTHETIC_SOURCE, 'SYNTHETIC_WP22_DRY_RUN', 'PENDING_R1_REHEARSAL', None):
+            with self.subTest(source=source), self.assertRaisesRegex(ValueError, 'source must be'):
+                kit.require_ready(inputs, dict(slots, source=source))
+        kit.require_ready(inputs, dict(slots, source=kit.R1_SYNTHETIC_SOURCE), synthetic=True)
+
+    def test_wp22_stand_in_without_slots_refuses(self):
+        inputs, _ = ready_inputs()
+        with self.assertRaisesRegex(ValueError, 'r1_slots'):
+            kit.require_ready(inputs, {'ac_powermode': 0, 'max_r1_tail_s': 20.0})
+
+    def test_inputs_i_d_must_equal_the_r1_step_d_i_d(self):
+        inputs, slots = ready_inputs(300.0)
+        slots['slots']['I_D'] = 301.0
+        with self.assertRaisesRegex(ValueError, 'differs from r1_slots.slots.I_D'):
+            kit.require_ready(inputs, slots)
+
+    def test_failed_duty_bar_needs_a_recorded_lead_fallback_step(self):
+        inputs, slots = ready_inputs()
+        slots['duty_bar'] = {'pass': False}
+        with self.assertRaisesRegex(ValueError, 'no lead fallback step'):
+            kit.require_ready(inputs, slots)
+        slots['duty_bar']['lead_fallback'] = {'step': 5, 'authority': 'x'}
+        with self.assertRaisesRegex(ValueError, 'no lead fallback step'):
+            kit.require_ready(inputs, slots)
+        slots['duty_bar']['lead_fallback'] = {'step': 1, 'authority': 'LEAD-RULINGS-2 F1'}
+        kit.require_ready(inputs, slots)
+
+    def test_powermode_must_follow_the_aba_verdict(self):
+        inputs, slots = ready_inputs()
+        slots['ac_powermode'] = 2  # but the A-B-A did not adopt
+        with self.assertRaisesRegex(ValueError, 'disagrees with the A-B-A verdict'):
+            kit.require_ready(inputs, slots)
+        del slots['high_power']
+        with self.assertRaisesRegex(ValueError, 'A-B-A verdict'):
+            kit.require_ready(inputs, slots)
+
+    def test_u5_tail_and_volume_fields_are_checked(self):
+        inputs, slots = ready_inputs()
+        for change, message in ((dict(u5={'verdict': 'pass', 'c': 2.0}), 'U5 verdict'),
+                                (dict(u5=None), 'U5 verdict'),
+                                (dict(deadman_budget=[{'phases_s': {'tail': 5.0}}]), 'largest gated-run tail'),
+                                (dict(external_volumes=[{'verdict': 'REFUSE'}]), 'external-volume'),
+                                (dict(external_volumes=[]), 'external-volume')):
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, message):
+                kit.require_ready(inputs, dict(slots, **change))
+
+    def test_powermode_members_refuse_an_unfrozen_series_value(self):
+        # Cold pass LOW 1: expected None and observed None used to match.
+        plan = {'members': [{'run_id': 'a', 'ac_powermode': None}, {'run_id': 'b', 'ac_powermode': 0}]}
+        verdict = kit.validate_powermode_members(plan, {'a': None, 'b': 0})
+        self.assertFalse(verdict['instrument_ok'])
+        self.assertEqual([m['run_id'] for m in verdict['powermode_mismatches']], ['a'])
+        with self.assertRaisesRegex(ValueError, 'freezes no series value'):
+            kit.arm_powermode_check({'runtime_requirements': {'ac_powermode': None}}, None)
 
 
 class L1Tests(unittest.TestCase):
@@ -450,25 +553,80 @@ class SessionParameterTests(unittest.TestCase):
                 session.install('synthetic-session')
             install.assert_not_called()
 
+    def _arm_fixture(self, tmp, mode_expected=2):
+        measurement = Path(tmp) / 'measurement'
+        session_root = Path(tmp) / 'session'
+        session_root.mkdir()
+        plan = json.loads((ROOT / kit.KIT / 'collection_plan.json').read_text())
+        plan['runtime_requirements']['ac_powermode'] = mode_expected
+        (measurement / kit.KIT / 'registration').mkdir(parents=True)
+        (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
+        (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': mode_expected}))
+        pilot.h.write(session_root / 'session.json', {'measurement_root': str(measurement)})
+        return measurement, session_root
+
     def test_v4_install_reads_measurement_r1_slots_and_refuses_powermode_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
-            measurement = Path(tmp)
-            plan = json.loads((ROOT / kit.KIT / 'collection_plan.json').read_text())
-            plan['runtime_requirements']['ac_powermode'] = 2
-            (measurement / kit.KIT / 'registration').mkdir(parents=True)
-            (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
-            (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': 2}))
+            measurement, session_root = self._arm_fixture(tmp)
+            host = FakeArmHost(mode=0)
             seen = []
-            with patch.object(pilot.h, 'read', return_value={'measurement_root': str(measurement)}), \
-                    patch.object(kit, 'read_inputs', return_value={}), \
+            with patch.object(kit, 'read_inputs', return_value={}), \
                     patch.object(kit, 'require_ready', side_effect=lambda i, s: seen.append(s)), \
                     patch.object(pilot, 'install') as install:
-                with self.assertRaisesRegex(ValueError, 'AC powermode mismatch'):
-                    session.install('synthetic-session', observe_powermode=lambda: 0)
+                with self.assertRaisesRegex(ValueError, 'AC powermode 0 != expected 2'):
+                    session.install(session_root, runner=host, volume_runner=host)
                 install.assert_not_called()
                 self.assertEqual(seen, [{'ac_powermode': 2}])
-                session.install('synthetic-session', observe_powermode=lambda: 2)
+                host.mode = 2
+                session.install(session_root, runner=host, volume_runner=host)
                 install.assert_called_once()
+
+    def test_v4_arm_records_observed_powermode_pmset_text_and_volume_census(self):
+        # Cold pass MEDIUM-5 (ruling 7): every arm records the observed value.
+        with tempfile.TemporaryDirectory() as tmp:
+            measurement, session_root = self._arm_fixture(tmp, mode_expected=0)
+            host = FakeArmHost(mode=0)
+            with patch.object(kit, 'read_inputs', return_value={}), \
+                    patch.object(kit, 'require_ready'), patch.object(pilot, 'install'):
+                session.install(session_root, runner=host, volume_runner=host)
+            record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
+            self.assertTrue(record['admitted'])
+            self.assertEqual(record['ac_powermode']['observed'], 0)
+            self.assertIn('AC Power:', record['ac_powermode']['pmset_text'])
+            self.assertEqual(record['external_volumes']['verdict'], 'PASS')
+            self.assertIn('/', [m['mount_point'] for m in record['external_volumes']['mounts']])
+            state = pilot.h.read(session_root / 'session.json')
+            self.assertEqual(state['v4_arm_records'][0]['ac_powermode'], 0)
+
+    def test_v4_arm_refuses_any_mounted_external_volume_and_records_it(self):
+        # Ruling 20: no external volume mounted at W1/D arm (status "off").
+        with tempfile.TemporaryDirectory() as tmp:
+            measurement, session_root = self._arm_fixture(tmp, mode_expected=0)
+            host = FakeArmHost(mode=0, ssd=True)
+            with patch.object(kit, 'read_inputs', return_value={}), \
+                    patch.object(kit, 'require_ready'), patch.object(pilot, 'install') as install:
+                with self.assertRaisesRegex(ValueError, 'external_volume_mounted:/Volumes/JW-EXT'):
+                    session.install(session_root, runner=host, volume_runner=host)
+                install.assert_not_called()
+            record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
+            self.assertFalse(record['admitted'])
+            self.assertEqual(record['external_volumes']['external'][0]['mount_point'], '/Volumes/JW-EXT')
+
+    def test_v4_arm_restores_an_r1_high_power_marker_then_rechecks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            measurement, session_root = self._arm_fixture(tmp, mode_expected=0)
+            marker = measurement / '.align-r1-high-power'
+            marker.write_text('high-power restoration required\n')
+            host = FakeArmHost(mode=2)
+            with patch.object(kit, 'read_inputs', return_value={}), \
+                    patch.object(kit, 'require_ready'), patch.object(pilot, 'install') as install:
+                session.install(session_root, runner=host, volume_runner=host)
+                install.assert_called_once()
+            self.assertEqual(host.mode, 0)
+            self.assertFalse(marker.exists())
+            record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
+            self.assertTrue(record['ac_powermode']['marker_present'])
+            self.assertEqual([o['value'] for o in record['ac_powermode']['observations']], [2, 0])
 
     def test_every_member_spec_runs_its_roster_task_pair(self):
         files = kit.build_files(ROOT)
