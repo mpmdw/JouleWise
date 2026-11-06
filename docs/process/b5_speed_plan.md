@@ -208,6 +208,7 @@ or creates/opens `restricted/`. Git observations are the documented
 | 3b — independent pack brackets | 180.781 / 89.707 | 50.4% | All 277 registered files, 5 accumulated records and all archive censuses in the joined prefix match exactly |
 | 10 — isolated issuer/opener packs | 433.000 / 205.929 | 52.4%, **cold restart only** | All 442 registered files, 14 accumulated records and all archive censuses match exactly |
 | 11 — independent sensitivity pack derivations | 2752.383 / 2607.381 | 5.3%, single retained-prefix pair | All 449 registered files, 15 accumulated records and all archive censuses match exactly, including sensitivity, disclosures and fill |
+| 5 — authenticated producer preparation | 1467.026 / 1348.711 | 8.1%, single rebuilt-prefix pair | All 288 registered files, 8 accumulated records and all archive censuses match exactly; all four composition/bootstrap worker results succeeded and were consumed |
 
 These are single paired synthetic observations under the concurrent job, not
 production forecasts. **Step 10 has no demonstrated warm pipeline gain:** an
@@ -229,6 +230,7 @@ archive censuses. The detailed method, refusal regressions and limitations are
 in the [stage-2 report](../run_reports/2026-11-05-b5-speed-plan-stage2.md);
 the [3b ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-3b.json) and
 [step-10 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-10.json), plus the
-[step-11 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-11.json), preserve
+[step-11 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-11.json) and
+[step-5 ledger](../run_reports/2026-11-05-b5-speed-plan-stage2-5.json), preserve
 the matching commitments and per-file hashes. Full joined production promotion
 still needs the authorized blinded equivalence gate.
