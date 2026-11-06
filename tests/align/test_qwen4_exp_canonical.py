@@ -1316,6 +1316,34 @@ class CanonicalParityTest(unittest.TestCase):
         profile was listed as delivered without test evidence)."""
         self._expert_quantized_bound("maxfit5", 5)
 
+    def test_f_maxfit4_quantized_within_bound(self):
+        """maxfit4 is the later-day 4-bit contingency: routed experts only,
+        group 64, with every other weight and the PLE table kept in bf16."""
+        self._expert_quantized_bound("maxfit4", 4)
+
+    def test_f_maxfit4_policy_conversion_and_verified_load(self):
+        """The contingency is selectable end to end, without broadening the
+        quantized set or changing the bf16 PLE representation."""
+        fx = self.fx
+        model = fx.model("maxfit4")
+        policy = g(model, "quantization_for")
+        self.assertEqual(policy("language_model.model.layers.0.mlp.switch_mlp.down_proj",
+                                (TEXT["num_experts"], TEXT["hidden_size"],
+                                 TEXT["moe_intermediate_size"]), "maxfit4"),
+                         {"group_size": 64, "bits": 4, "mode": "affine"})
+        self.assertIsNone(policy("language_model.model.layers.0.mlp.shared_expert.down_proj",
+                                 (TEXT["hidden_size"], TEXT["shared_expert_intermediate_size"]),
+                                 "maxfit4"))
+        artifact = fx.converted("maxfit4")
+        manifest = json.loads((artifact / "manifest.json").read_text())
+        config = json.loads((artifact / "config.json").read_text())
+        self.assertEqual((manifest["profile"], manifest["ngram_storage"]), ("maxfit4", "bf16"))
+        self.assertEqual(config["quantization"]["bits"], 4)
+        loaded, _ = fx.converter().load_verified_model(
+            artifact, fx.manifest_pin("maxfit4"))
+        self.assertEqual(type(loaded.language_model.model.layers[0].mlp.switch_mlp.down_proj).__name__,
+                         "QuantizedSwitchLinear")
+
     def test_f_mixed_profile_layout_codec_and_sanity(self):
         """``mixed``: experts 4-bit, other wide linears 8-bit, selection-
         critical and small modules float, q4 n-gram records. A lossy recipe
