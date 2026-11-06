@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 import copy
 import io
 from pathlib import Path
+import re
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -12,6 +13,16 @@ from joulewise import arm_readiness as readiness, v5_qualification as q
 from scripts import harvest_v5_qualification as h
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle, fixture_replay
 from tests.test_v5_block4_x7 import bind_history_fixture, put
+
+
+def forbidden_public_tokens(body, forbidden):
+    """Return secrets that occur outside an enclosing hexadecimal field."""
+
+    return [
+        token
+        for token in forbidden
+        if re.search(rb"(?<![0-9a-fA-F])" + re.escape(token) + rb"(?![0-9a-fA-F])", body)
+    ]
 
 
 def verdict(status="PASS"):
@@ -170,7 +181,16 @@ class QualificationHarvestTests(unittest.TestCase):
                 body = path.read_bytes()
                 for forbidden in (b"mtime_ns", b'"size"', b"gross_energy_j", b"power_w", b"duration_s",
                                   b"314159", b"271828", b"161803"):
-                    self.assertNotIn(forbidden, body, str(path))
+                    self.assertEqual(forbidden_public_tokens(body, (forbidden,)), [], str(path))
+
+    def test_blind_scan_ignores_decimal_digits_inside_hex_digest(self):
+        digest = b"a" * 12 + b"271828" + b"f" * 46
+        self.assertEqual(len(digest), 64)
+        self.assertEqual(forbidden_public_tokens(digest + b"  SHA256SUMS\n", (b"271828",)), [])
+
+    def test_blind_scan_still_finds_decimal_leak(self):
+        body = b'{"power_w": 271828}\n'
+        self.assertEqual(forbidden_public_tokens(body, (b"271828",)), [b"271828"])
 
     def test_reharvest_requires_same_bytes_and_new_archive(self):
         with mock.patch.object(h.t0_rehearsal, "evaluate_qualification", side_effect=RuntimeError("fixture fault")):
