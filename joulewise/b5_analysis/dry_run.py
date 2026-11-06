@@ -1154,11 +1154,8 @@ def _step_4_parallel(s,r,packs):
     try:
         for i,(pack,output,res) in enumerate(zip(packs,paths,results)):
             if i:
-                try:
-                    require_primary_context(s.contexts)
-                    s.rehash()
-                except AnalysisRefusal:
-                    _stop_at(r,base,results,i-1,paths);raise
+                require_primary_context(s.contexts)
+                s.rehash()
             consumed=i+1
             _consumed_result(r,res)
             # As StepState.invoke: register the output when present, then classify.
@@ -1174,6 +1171,11 @@ def _step_4_parallel(s,r,packs):
                 _stop_at(r,base,results,i,paths)
                 break
         return records
+    except BaseException:
+        # Registration, token reading and classification can also raise. Only
+        # this prefix would have started serially; later children are speculative.
+        _stop_at(r,base,results,consumed-1,paths)
+        raise
     finally:
         _account_deadlines(s,results[:consumed])
 
