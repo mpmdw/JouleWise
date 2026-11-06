@@ -257,15 +257,17 @@ def convert(args):
     if verify_source(source, receipt["metadata"]) != receipt["sha256"]:
         raise ValueError("source differs from download receipt")
     artifact = external(args.artifact)
-    if artifact.exists():
+    if artifact.exists() and not args.resume:
         raise ValueError("conversion output must be new; preserve failed attempts")
+    if args.resume and not artifact.exists():
+        raise ValueError("--resume requires an interrupted conversion artifact")
     need = 240e9 if args.profile == "maxfit" else 225e9
     st = os.statvfs(VOLUME)
     if st.f_bavail * st.f_frsize < need:
         raise ValueError("insufficient free external disk space for this build")
     progress_path = args.out.parent / "convert.progress.jsonl"
     converter.convert(source, artifact, profile=args.profile, group_size=64, ple_storage="bf16",
-                      progress_path=progress_path)
+                      progress_path=progress_path, resume_from=artifact if args.resume else None)
     # Plain sha256 sidecar lives OUTSIDE strict converter inventory. Converter
     # manifest v2 uses SHA256(concat(chunk SHA256s)) for files >256 MiB.
     sums = Path(str(args.out) + ".SHA256SUMS")
@@ -320,7 +322,9 @@ def progress(args):
             if lines:
                 latest = json.loads(lines[-1]); elapsed = latest.get("monotonic_elapsed", 0)
                 done, total = latest.get("bytes_written", 0), latest.get("bytes_total_expected", 0)
-                eta = (total - done) * elapsed / done if done else None
+                # A resumed conversion starts with verified bytes it did not write.
+                fresh = done - latest.get("bytes_resumed", 0)
+                eta = (total - done) * elapsed / fresh if fresh > 0 and elapsed else None
                 row.update(phase="convert", convert=latest, eta_seconds=eta)
         past = False
         if args.cutoff and eta is not None:
@@ -785,6 +789,7 @@ def parse_args(argv=None):
     p.add_argument("--manifest-sha256")
     p.add_argument("--source-receipt", type=Path)
     p.add_argument("--profile", choices=("maxfit", "maxfit5"), default="maxfit")
+    p.add_argument("--resume", action="store_true", help="resume an interrupted conversion; failed attempts need a new artifact name")
     p.add_argument("--contexts", type=int, nargs="+", default=list(CONTEXTS))
     p.add_argument("--decode-tokens", type=int, default=64)
     p.add_argument("--prefill-step", type=int, choices=(512, 2048), default=512)

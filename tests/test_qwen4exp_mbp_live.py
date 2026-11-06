@@ -165,10 +165,36 @@ class SourceTests(unittest.TestCase):
                 result = live.convert(args)
             converter.convert.assert_called_once_with(snapshot, artifact, profile="maxfit", group_size=64,
                                                       ple_storage="bf16",
-                                                      progress_path=base / "convert.progress.jsonl")
+                                                      progress_path=base / "convert.progress.jsonl", resume_from=None)
             self.assertEqual(result["manifest_sha256"], live.raw_sha256(artifact / "manifest.json"))
             self.assertEqual(list(artifact.iterdir()), [artifact / "manifest.json"])
             self.assertTrue(Path(result["plain_sha256s"]).read_text().endswith("  manifest.json\n"))
+
+    def test_conversion_resume_uses_existing_interrupted_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            snapshot, artifact = base / "source", base / "maxfit"
+            snapshot.mkdir()
+            metadata = self.make_snapshot(snapshot)
+            receipt = base / "source.json"
+            receipt.write_text(json.dumps(dict(revision=live.REVISION, repo=live.REPO_ID,
+                                               snapshot=str(snapshot), metadata=metadata, sha256={"a": "b"})))
+            artifact.mkdir()
+            (artifact / ".conversion-progress.json").write_text("{}")
+            def convert(source, output, **kwargs):
+                (output / ".conversion-progress.json").unlink()
+                (output / "manifest.json").write_text('{"tiny":true}')
+            converter = types.SimpleNamespace(convert=Mock(side_effect=convert), MODULE_SHA256="a" * 64)
+            args = live.parse_args(["convert", "--resume", "--source-receipt", str(receipt),
+                                    "--artifact", str(artifact), "--out", str(base / "convert.json")])
+            with patch.dict(sys.modules, {"align_convert_qwen4_exp": converter}), \
+                 patch.object(live, "external", side_effect=Path), \
+                 patch.object(live, "verify_source", return_value={"a": "b"}), \
+                 patch.object(os, "statvfs", return_value=types.SimpleNamespace(f_bavail=10**12, f_frsize=1)):
+                live.convert(args)
+            converter.convert.assert_called_once_with(snapshot, artifact, profile="maxfit", group_size=64,
+                                                      ple_storage="bf16", resume_from=artifact,
+                                                      progress_path=base / "convert.progress.jsonl")
 
     def test_download_free_space_credits_cached_blobs_for_resume(self):
         metadata = {"model-00001-of-00131.safetensors": {"size": 300 * 10**9},

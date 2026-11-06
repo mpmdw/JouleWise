@@ -342,11 +342,25 @@ large-file digests are **SHA256 of concatenated 256 MiB chunk digests**, not
 ordinary file SHA-256. `manifest.json` itself is small and its pin is ordinary
 SHA-256. The wrapper additionally writes ordinary `convert.json.SHA256SUMS`
 **outside** the strict artifact directory. Never add reports or sidecars
-inside the artifact. On interruption preserve the partial directory, choose
-a new artifact/output name and restart conversion; conversion is not resumable.
+inside the artifact. On interruption preserve the partial directory and resume
+the same artifact name (the evidence output name must still be new):
+
+```sh
+"$PY" -B scripts/qwen4exp_mbp_live.py convert --resume --validation-only \
+  --source-receipt "$SOURCE_RECEIPT" --artifact "$ARTIFACT" --profile "$PROFILE" \
+  --out "$RUN/convert-resumed.json"
+```
+
+Resume re-authenticates the source receipt, module and converter pins and every
+completed shard/PLE span before writing. A normal conversion error marks the
+attempt failed; do **not** pass `--resume` then—preserve it and choose a new
+artifact name. A changed profile, module, converter, pinned stack, source
+receipt, grouping, PLE format, or shard plan is never resumable.
 Conversion progress is appended outside the artifact at
-`$RUN/convert.progress.jsonl`. The converter script SHA-256 for this kit is
-`736cfce348fa27696ccbdf97f7fcfca3c28251d7079586d0621fa84e04f045fb`.
+`$RUN/convert.progress.jsonl` (a resumed run appends to the same file and
+reports carried-over verified bytes as `bytes_resumed`). The converter script
+SHA-256 for this kit is
+`6dd944e39094071db281497be4caa7b10dae9cf63d52e3a5cea38ea5624b2be9`.
 
 Each native invocation below hashes the artifact once through the canonical
 `load_verified_model` gate, pins the module and 0.31.x stack, then uses the

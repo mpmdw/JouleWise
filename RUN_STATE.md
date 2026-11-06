@@ -1,5 +1,10 @@
 # JouleWise Run State
 
+**2026-11-06 bounded Saturday-kit update:** MISSING-9 resumable canonical
+Qwen4-exp conversion is implemented from `97d780d59`; see
+`docs/run_reports/2026-11-06-qwen4exp-resumable-conversion.md`. Native MLX
+resume-boundary verification remains for the lead on the pinned M3 Max kit.
+
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;
