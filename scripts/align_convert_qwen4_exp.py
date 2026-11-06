@@ -50,7 +50,7 @@ PINS = {"mlx": "0.31.2", "mlx-lm": "0.31.3"}
 # sha256 of joulewise/align/models/qwen4_exp.py that load_verified_model runs by
 # default. Rebind it with every module change (the canonical test checks it
 # against the file; canonical.md records it under "Pin").
-MODULE_SHA256 = "f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37"
+MODULE_SHA256 = "cba1bda13b3890fc1609b118c791e207b0cd7db33a02efca59f4f1028a4efc61"
 EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
 DTYPES = {"BF16": "<u2", "F32": "<f4", "F16": "<f2", "I64": "<i8"}
@@ -482,7 +482,7 @@ def expected_parameters(rules, text_config):
 
 
 def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=None, ngram_group_size=32,
-            module_file=MODULE_FILE, shard_bytes=SHARD_BYTES):
+            module_file=MODULE_FILE, shard_bytes=SHARD_BYTES, expert_streaming_cache_gb=0.0):
     import numpy as np
     rules = load_rules(module_file)
     ple_storage = rules.ple_storage_for(profile, ple_storage, group_size)
@@ -522,6 +522,9 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
             raise ValueError(f"conversion requires the pinned stack: {package} {version}")
     import mlx.core as mx
     output.mkdir(parents=True)
+    streaming = float(expert_streaming_cache_gb) > 0
+    if streaming and profile not in ("bf16",):
+        raise ValueError("expert streaming currently stores bf16 experts; use --profile bf16")
     dtype_name = "F32" if profile == "fp32" else "BF16"
     out_np = np.dtype("<f4") if profile == "fp32" else np.dtype("<u2")
     weight_map, quant_cfg, ngram_layers, ngram_manifest = {}, {}, {}, {}
@@ -530,6 +533,8 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
     # load_model until the first eval; validation round 1).
     plan = []
     for key, entries in sorted(inventory.items()):
+        if streaming and ".mlp.switch_mlp." in key:
+            continue
         shape, quant = expected[key], quantizers.get(key)
         tensors = {key: (shape, dtype_name)}
         if quant:
@@ -570,6 +575,26 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
             for tensor in tensors:
                 weight_map[tensor] = name
         writer.close()
+    expert_layers = {}
+    if streaming:
+        # One fixed-size record per expert: gate, up, then down, all raw bf16.
+        # Fixed offsets make a miss one pread and avoid parsing 48 headers.
+        for layer in range(targs.num_hidden_layers):
+            prefix = f"language_model.model.layers.{layer}.mlp.switch_mlp."
+            gu = inventory[prefix + "gate_up_proj.weight"]
+            down = inventory[prefix + "down_proj.weight"]
+            name = f"experts-layer-{layer:02d}.bf16"
+            with (output / name).open("xb") as stream:
+                for expert in range(targs.num_experts):
+                    for entry in (gu[2 * expert], gu[2 * expert + 1], down[expert]):
+                        for chunk in tensor_chunks([entry], raw_bf16=True):
+                            if chunk.dtype != np.dtype("<u2"):
+                                chunk = rules._f32_to_bf16_bits(chunk)
+                            stream.write(chunk.tobytes())
+            expert_layers[str(layer)] = dict(file=name, dims=targs.hidden_size,
+                                             hidden=targs.moe_intermediate_size,
+                                             experts=targs.num_experts,
+                                             size_bytes=(output / name).stat().st_size)
     for layer, entries in sorted(tables.items()):
         ngram_layers[str(layer)], ngram_manifest[str(layer)] = write_ngram_table(
             rules, output, layer, entries, specs[layer], ple_storage, ngram_group_size)
@@ -578,6 +603,10 @@ def convert(checkpoint, output, profile="maxfit", group_size=64, ple_storage=Non
                       model_file="qwen4_exp.py", jw_format=FORMAT, text_config=c,
                       ngram_tables=dict(dir=".", io="mmap", layers=ngram_layers),
                       eos_token_id=c.get("eos_token_id"), tie_word_embeddings=bool(c.get("tie_word_embeddings")))
+    if streaming:
+        config_out["expert_streaming"] = dict(enabled=True, dir=".", format="bf16",
+                                               cache_gb=float(expert_streaming_cache_gb),
+                                               layers=expert_layers)
     if quant_cfg:
         first = next(iter(quant_cfg.values()))
         config_out["quantization"] = dict(group_size=group_size, bits=first["bits"], mode="affine", **quant_cfg)
@@ -614,9 +643,12 @@ def main():
                    help="q8/q4 n-gram record group size (must divide the n-gram head dim)")
     p.add_argument("--shard-gb", type=float, default=SHARD_BYTES / 2 ** 30,
                    help="maximum weight shard size in GiB (a larger single tensor gets its own shard)")
+    p.add_argument("--expert-streaming-cache-gb", type=float, default=0.0,
+                   help="store routed experts on disk and bound their per-layer LRU (off at 0)")
     a = p.parse_args()
     manifest = convert(a.checkpoint, a.output, a.profile, a.group_size, a.ple_storage, a.ngram_group_size,
-                       shard_bytes=int(a.shard_gb * 2 ** 30))
+                       shard_bytes=int(a.shard_gb * 2 ** 30),
+                       expert_streaming_cache_gb=a.expert_streaming_cache_gb)
     print(json.dumps(dict(output=str(a.output), payload_files=len(manifest["files"]),
                           manifest_sha256=sha256(a.output / "manifest.json"))))
 

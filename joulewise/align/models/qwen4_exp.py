@@ -51,6 +51,7 @@ import mmap
 import os
 import resource
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -239,6 +240,7 @@ class ModelArgs(BaseModelArgs):
     model_type: str
     text_config: dict
     ngram_tables: dict = field(default_factory=dict)
+    expert_streaming: dict = field(default_factory=dict)
     qsa_sparse_prefill_min_kv: int = QSA_SPARSE_PREFILL_MIN_KV
     qsa_sparse_decode_min_kv: int = QSA_SPARSE_DECODE_MIN_KV
 
@@ -249,6 +251,7 @@ class ModelArgs(BaseModelArgs):
             model_type=params["model_type"],
             text_config=dict(text),
             ngram_tables=dict(params.get("ngram_tables") or {}),
+            expert_streaming=dict(params.get("expert_streaming") or {}),
             qsa_sparse_prefill_min_kv=int(params.get("qsa_sparse_prefill_min_kv", QSA_SPARSE_PREFILL_MIN_KV)),
             qsa_sparse_decode_min_kv=int(params.get("qsa_sparse_decode_min_kv", QSA_SPARSE_DECODE_MIN_KV)),
         )
@@ -1583,6 +1586,80 @@ class MLP(nn.Module):
         return self.down_proj(silu_once(self.gate_proj(x)) * self.up_proj(x))
 
 
+class ExpertStream:
+    """Bounded, per-layer LRU for routed experts stored as raw bf16 records.
+
+    This intentionally uses ``pread`` rather than an MLX lazy safetensor: a
+    cache eviction must release the only array which owns those bytes.  The
+    cache and counters are host-side objects and therefore are not parameters.
+    """
+
+    def __init__(self, meta: dict, layer: int):
+        self.meta = meta
+        self.layer = layer
+        entry = meta["layers"][str(layer)]
+        root = Path(meta.get("dir", "."))
+        if not root.is_absolute():
+            root = Path(__file__).resolve().parent / root
+        self.fd = os.open(root / entry["file"], os.O_RDONLY)
+        self.dims = int(entry["dims"])
+        self.hidden = int(entry["hidden"])
+        self.bytes_per_expert = 2 * (2 * self.hidden * self.dims + self.dims * self.hidden)
+        per_layer = int(float(meta["cache_gb"]) * 2 ** 30) // max(1, len(meta["layers"]))
+        self.limit = max(self.bytes_per_expert, per_layer)
+        self.cache = OrderedDict()
+        self.cache_bytes = 0
+        self.hits = self.misses = self.bytes_read = 0
+
+    def get(self, expert: int):
+        expert = int(expert)
+        if expert in self.cache:
+            self.hits += 1
+            value = self.cache.pop(expert)
+            self.cache[expert] = value
+            return value
+        self.misses += 1
+        raw = os.pread(self.fd, self.bytes_per_expert, expert * self.bytes_per_expert)
+        if len(raw) != self.bytes_per_expert:
+            raise IOError(f"short expert read: layer {self.layer}, expert {expert}")
+        self.bytes_read += len(raw)
+        words = np.frombuffer(raw, dtype="<u2")
+        floats = (words.astype(np.uint32) << 16).view(np.float32)
+        cut = 2 * self.hidden * self.dims
+        value = (mx.array(floats[:cut].reshape(2 * self.hidden, self.dims)).astype(mx.bfloat16),
+                 mx.array(floats[cut:].reshape(self.dims, self.hidden)).astype(mx.bfloat16))
+        mx.eval(*value)
+        while self.cache and self.cache_bytes + self.bytes_per_expert > self.limit:
+            self.cache.popitem(last=False)
+            self.cache_bytes -= self.bytes_per_expert
+        self.cache[expert] = value
+        self.cache_bytes += self.bytes_per_expert
+        return value
+
+    def counters(self):
+        return {"hits": self.hits, "misses": self.misses, "bytes_read": self.bytes_read}
+
+
+class StreamingFusedSwitchGLU(nn.Module):
+    """Slow, exact-quality expert path used only by the streaming reference."""
+
+    def __init__(self, dims, hidden, meta, layer):
+        super().__init__()
+        self.stream = ExpertStream(meta, layer)
+
+    def __call__(self, x, indices):
+        shape = indices.shape
+        k = indices.shape[-1]
+        flat_x = mx.repeat(x.reshape(-1, x.shape[-1]), k, axis=0)
+        flat_i = np.asarray(indices).reshape(-1)
+        rows = []
+        for pos, expert in enumerate(flat_i):
+            gu, down = self.stream.get(int(expert))
+            gate, up = mx.split(mx.matmul(flat_x[pos], gu.T), 2, axis=-1)
+            rows.append(mx.matmul(silu_once(gate) * up, down.T))
+        return mx.stack(rows).reshape(*shape, -1)
+
+
 class FusedSwitchGLU(nn.Module):
     """Routed experts with HF's fused ``gate_up_proj`` [E, 2I, H] (gate rows
     first; P:814-861): one ``gather_mm``/``gather_qmm`` for gate+up, then
@@ -1622,12 +1699,15 @@ class SparseMoeBlock(nn.Module):
     weighted rows summed in fp32 and rounded once, as the reference's default
     ``grouped_mm`` experts path (transformers moe.py; T:1195, D6)."""
 
-    def __init__(self, args: TextModelArgs):
+    def __init__(self, args: TextModelArgs, streaming=None, layer_idx=None):
         super().__init__()
         self.top_k = args.num_experts_per_tok
         self.norm_topk_prob = args.norm_topk_prob
         self.gate = nn.Linear(args.hidden_size, args.num_experts, bias=False)
-        self.switch_mlp = FusedSwitchGLU(args.hidden_size, args.moe_intermediate_size, args.num_experts)
+        self.switch_mlp = (StreamingFusedSwitchGLU(args.hidden_size, args.moe_intermediate_size,
+                                                   streaming, layer_idx)
+                           if streaming and streaming.get("enabled") else
+                           FusedSwitchGLU(args.hidden_size, args.moe_intermediate_size, args.num_experts))
         self.shared_expert = MLP(args.hidden_size, args.shared_expert_intermediate_size)
         self.shared_expert_gate = nn.Linear(args.hidden_size, 1, bias=False)
 
@@ -1700,7 +1780,7 @@ class PLELayer(nn.Module):
 class DecoderLayer(nn.Module):
     """[HF Qwen4ExpTextDecoderLayer:1252-1304]"""
 
-    def __init__(self, args: TextModelArgs, layer_idx: int):
+    def __init__(self, args: TextModelArgs, layer_idx: int, streaming=None):
         super().__init__()
         self.layer_idx = layer_idx
         self.is_linear = args.layer_types[layer_idx] == "linear_attention"
@@ -1708,7 +1788,7 @@ class DecoderLayer(nn.Module):
             self.linear_attn = GatedDeltaNet(args)
         else:
             self.self_attn = QSAAttention(args)
-        self.mlp = SparseMoeBlock(args)
+        self.mlp = SparseMoeBlock(args, streaming, layer_idx)
         self.has_ple = (layer_idx + 1) in args.ple_layer_ids
         if self.has_ple:
             self.ple = PLELayer(args)
@@ -1726,11 +1806,11 @@ class DecoderLayer(nn.Module):
 
 
 class Qwen4ExpTextModel(nn.Module):
-    def __init__(self, args: TextModelArgs):
+    def __init__(self, args: TextModelArgs, streaming=None):
         super().__init__()
         self.args = args
         self.embed_tokens = nn.Embedding(args.vocab_size, args.hidden_size)
-        self.layers = [DecoderLayer(args, i) for i in range(args.num_hidden_layers)]
+        self.layers = [DecoderLayer(args, i, streaming) for i in range(args.num_hidden_layers)]
         self.hyper_connection_mixer = GatedResidual(args, use_combine=False)
 
 
@@ -1772,7 +1852,7 @@ class TextModel(nn.Module):
         super().__init__()
         self.args = args
         self.model_type = args.model_type
-        self.model = Qwen4ExpTextModel(args)
+        self.model = Qwen4ExpTextModel(args, runtime.expert_streaming if runtime else None)
         if not args.tie_word_embeddings:
             self.lm_head = nn.Linear(args.hidden_size, args.vocab_size, bias=False)
         self._inv_freq = rope_inv_freq(args)
@@ -1981,6 +2061,15 @@ class Model(nn.Module):
         for lid in rt.specs:
             rt.table(lid)
         return rt.tables
+
+    def expert_streaming_counters(self):
+        """Per-layer cumulative LRU counters (empty on the default path)."""
+        answer = {}
+        for layer in self.layers:
+            stream = getattr(layer.mlp.switch_mlp, "stream", None)
+            if stream is not None:
+                answer[str(layer.layer_idx)] = stream.counters()
+        return answer
 
     def sanitize(self, weights: Dict[str, mx.array]) -> Dict[str, mx.array]:
         """HF/reference names -> port names; idempotent on converted weights.
