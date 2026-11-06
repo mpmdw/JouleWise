@@ -1,0 +1,25 @@
+language_model.model.layers.0.input_layernorm.weight                   D mean +0.9666  U mean -0.0334  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.0.post_attention_layernorm.weight          D mean +0.7827  U mean -0.2173  max|D-U| 1.002  max|D-(U+1)| 0.00293
+language_model.model.layers.0.linear_attn.norm.weight                  D mean +0.8686  U mean +0.8686  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.0.linear_attn.A_log                        D mean -3.5617  U mean -3.5617  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.0.linear_attn.dt_bias                      D mean +2.7949  U mean +2.7949  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.0.linear_attn.conv1d.weight shape (10240, 4, 1) (10240, 1, 4)
+language_model.model.layers.0.linear_attn.conv1d.weight                D mean +0.0001  U mean +0.0001  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.3.input_layernorm.weight                   D mean +1.2492  U mean +0.2493  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.3.post_attention_layernorm.weight          D mean +0.8927  U mean -0.1073  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.3.self_attn.q_norm.weight                  D mean +1.2301  U mean +0.2304  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.3.self_attn.k_norm.weight                  D mean +1.2202  U mean +0.2203  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.30.input_layernorm.weight                  D mean +0.9869  U mean -0.0131  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.30.post_attention_layernorm.weight         D mean +0.9724  U mean -0.0276  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.30.linear_attn.norm.weight                 D mean +0.9647  U mean +0.9647  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.30.linear_attn.A_log                       D mean -0.1934  U mean -0.1934  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.30.linear_attn.dt_bias                     D mean -3.7962  U mean -3.7962  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.30.linear_attn.conv1d.weight shape (10240, 4, 1) (10240, 1, 4)
+language_model.model.layers.30.linear_attn.conv1d.weight               D mean +0.0001  U mean +0.0001  max|D-U| 0  max|D-(U+1)| 1
+language_model.model.layers.63.input_layernorm.weight                  D mean +1.1251  U mean +0.1252  max|D-U| 1.004  max|D-(U+1)| 0.007812
+language_model.model.layers.63.post_attention_layernorm.weight         D mean +1.2196  U mean +0.2197  max|D-U| 1.004  max|D-(U+1)| 0.003906
+language_model.model.layers.63.self_attn.q_norm.weight                 D mean +1.5002  U mean +0.5001  max|D-U| 1.008  max|D-(U+1)| 0.007812
+language_model.model.layers.63.self_attn.k_norm.weight                 D mean +1.4888  U mean +0.4886  max|D-U| 1.004  max|D-(U+1)| 0.007812
+language_model.model.norm.weight                                       D mean +1.9441  U mean +0.9441  max|D-U| 1.008  max|D-(U+1)| 0.007812
+
+[exited with code 0]

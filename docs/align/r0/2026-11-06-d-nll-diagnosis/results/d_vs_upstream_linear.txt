@@ -1,0 +1,12 @@
+layers.0.linear_attn.in_proj_qkv         shape (10240, 5120) rel_err 0.0071 row_rel_err max 0.0102 p99 0.0078
+layers.0.linear_attn.in_proj_z           shape (6144, 5120) rel_err 0.0072 row_rel_err max 0.0121 p99 0.0079
+layers.0.linear_attn.in_proj_a           shape (48, 5120) rel_err 0.0071 row_rel_err max 0.0077 p99 0.0077
+layers.0.linear_attn.in_proj_b           shape (48, 5120) rel_err 0.0070 row_rel_err max 0.0077 p99 0.0076
+layers.0.linear_attn.out_proj            shape (5120, 6144) rel_err 0.0075 row_rel_err max 0.0130 p99 0.0084
+layers.3.self_attn.q_proj                shape (12288, 5120) rel_err 0.0071 row_rel_err max 0.0110 p99 0.0087
+layers.3.self_attn.k_proj                shape (1024, 5120) rel_err 0.0074 row_rel_err max 0.0099 p99 0.0087
+layers.3.self_attn.v_proj                shape (1024, 5120) rel_err 0.0072 row_rel_err max 0.0109 p99 0.0094
+layers.3.self_attn.o_proj                shape (5120, 6144) rel_err 0.0074 row_rel_err max 0.0109 p99 0.0080
+layers.0.mlp.down_proj                   shape (5120, 17408) rel_err 0.0068 row_rel_err max 0.0093 p99 0.0080
+
+[exited with code 0]

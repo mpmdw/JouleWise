@@ -1,0 +1,130 @@
+{
+ "start_0/hf32": {
+  "0-900": {
+   "copyable_n": 432,
+   "copyable_mean": 12.032,
+   "novel_n": 468,
+   "novel_mean": 4.537,
+   "copyable_frac_gt5nats": 0.713
+  },
+  "900-2048": {
+   "copyable_n": 938,
+   "copyable_mean": 14.991,
+   "novel_n": 210,
+   "novel_mean": 6.082,
+   "copyable_frac_gt5nats": 0.808
+  }
+ },
+ "start_0/mlx16": {
+  "0-900": {
+   "copyable_n": 432,
+   "copyable_mean": 11.992,
+   "novel_n": 468,
+   "novel_mean": 4.541,
+   "copyable_frac_gt5nats": 0.706
+  },
+  "900-2048": {
+   "copyable_n": 938,
+   "copyable_mean": 14.955,
+   "novel_n": 210,
+   "novel_mean": 6.111,
+   "copyable_frac_gt5nats": 0.81
+  }
+ },
+ "start_0/mlxq8": {
+  "0-900": {
+   "copyable_n": 432,
+   "copyable_mean": 12.021,
+   "novel_n": 468,
+   "novel_mean": 4.555,
+   "copyable_frac_gt5nats": 0.704
+  },
+  "900-2048": {
+   "copyable_n": 938,
+   "copyable_mean": 14.928,
+   "novel_n": 210,
+   "novel_mean": 6.065,
+   "copyable_frac_gt5nats": 0.808
+  }
+ },
+ "start_0/mlxD": {
+  "0-900": {
+   "copyable_n": 432,
+   "copyable_mean": 12.021,
+   "novel_n": 468,
+   "novel_mean": 4.555,
+   "copyable_frac_gt5nats": 0.704
+  },
+  "900-2048": {
+   "copyable_n": 938,
+   "copyable_mean": 14.928,
+   "novel_n": 210,
+   "novel_mean": 6.065,
+   "copyable_frac_gt5nats": 0.808
+  }
+ },
+ "start_nothink/hf32": {
+  "0-900": {
+   "copyable_n": 460,
+   "copyable_mean": 7.587,
+   "novel_n": 440,
+   "novel_mean": 2.446,
+   "copyable_frac_gt5nats": 0.493
+  },
+  "900-2010": {
+   "copyable_n": 910,
+   "copyable_mean": 10.025,
+   "novel_n": 200,
+   "novel_mean": 3.878,
+   "copyable_frac_gt5nats": 0.586
+  }
+ },
+ "start_nothink/mlx16": {
+  "0-900": {
+   "copyable_n": 460,
+   "copyable_mean": 7.63,
+   "novel_n": 440,
+   "novel_mean": 2.477,
+   "copyable_frac_gt5nats": 0.502
+  },
+  "900-2010": {
+   "copyable_n": 910,
+   "copyable_mean": 10.075,
+   "novel_n": 200,
+   "novel_mean": 3.916,
+   "copyable_frac_gt5nats": 0.589
+  }
+ },
+ "start_nothink/mlxq8": {
+  "0-900": {
+   "copyable_n": 460,
+   "copyable_mean": 7.638,
+   "novel_n": 440,
+   "novel_mean": 2.435,
+   "copyable_frac_gt5nats": 0.496
+  },
+  "900-2010": {
+   "copyable_n": 910,
+   "copyable_mean": 10.075,
+   "novel_n": 200,
+   "novel_mean": 3.867,
+   "copyable_frac_gt5nats": 0.595
+  }
+ },
+ "start_nothink/mlxD": {
+  "0-900": {
+   "copyable_n": 460,
+   "copyable_mean": 7.638,
+   "novel_n": 440,
+   "novel_mean": 2.435,
+   "copyable_frac_gt5nats": 0.496
+  },
+  "900-2010": {
+   "copyable_n": 910,
+   "copyable_mean": 10.075,
+   "novel_n": 200,
+   "novel_mean": 3.867,
+   "copyable_frac_gt5nats": 0.595
+  }
+ }
+}
