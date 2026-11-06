@@ -363,7 +363,6 @@ class MlxEndpoint:
         deadman=None,
         enforce_turn_cap: bool = False,
         thermal=None,
-        reasoning_effort: str | None = None,
         hybrid_checkpoint_limit: int | None = None,
     ) -> None:
         self.runtime = runtime
@@ -375,9 +374,6 @@ class MlxEndpoint:
         self.deadman = deadman
         self.enforce_turn_cap = enforce_turn_cap
         self.thermal = thermal
-        if reasoning_effort not in (None, "xhigh", "medium", "low"):
-            raise ValueError("unknown reasoning effort")
-        self.reasoning_effort = reasoning_effort
         from joulewise.align.apple.sampling import validate_policy
         self.sampler = validate_policy(dict(sampler)) if sampler is not None else None
         if prompt_cache not in (None, "episode_prefix"):
@@ -485,8 +481,7 @@ class MlxEndpoint:
 
     def _template_kwargs(self):
         return {**self.chat_template_kwargs,
-                **({"enable_thinking": self.enable_thinking} if self.enable_thinking is not None else {}),
-                **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort is not None else {})}
+                **({"enable_thinking": self.enable_thinking} if self.enable_thinking is not None else {})}
 
     def _render_xml_prompt(self, messages, tools, *, add_generation_prompt=True):
         history = []

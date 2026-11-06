@@ -6,20 +6,26 @@ an arm authorization. Authority: council `219fb1515`, FINAL-DESIGN §§2.1, 2.2,
 2.8 plus Amendment 1: **D only**; Qwen3-Next is dropped and Flash-Next is later.
 Keep the pinned stack: Python measurement venv, mlx 0.31.2, mlx-lm 0.31.3,
 transformers 5.12.1. Stage-1 B1/B2 from `d01288e25` is imported in this fix round;
-the production endpoint also accepts `reasoning_effort`. Review that integration
-and integrate the SMC lane before live R0. Do not run these commands from an
+reasoning effort uses `chat_template_kwargs={"reasoning_effort": ...}` on the
+production endpoint and is included in its hashed template policy. Review the
+integration before live R0. Do not run these commands from an
 agent session. Full Amendment 1 was verified at `6eb1ff5be` in local Git objects.
 The [2026-11-05 laptop-lead ruling](r0_step_test_ruling.md) replaces Amendment 1's
 60 s SMC load with **300 s idle, 900 s load, 600 s recovery** (30 min).
-The #658 capture lane still needs integration before live R0.
+The integrated #658 capture source is `58525031a`.
+The v4 headless LaunchAgent and watchdog fence are WP10/WP11 integration work;
+the Terminal launch example below does not satisfy that headless gate.
 
 1. In Terminal at the integrated checkout, set the interpreter and config.
    The paths below are **examples to edit**, never auto-discovered. Model
-   sources must be complete, materialized directories (no symlinks); revision
-   pins are built in. Prepare/download/hash the pinned mirrors separately;
+   sources must be complete local directories; revision pins are built in.
+   Materialized mirrors and HF hub `models--*/snapshots/<revision>` roots are
+   supported. Snapshot file links must resolve to regular `models--*/blobs/*`
+   targets inside the same hub root; directory links and escapes refuse.
+   Prepare/download/hash the pinned mirrors separately;
    this script never downloads. SHADE must already have its pinned cache.
 
-   Set `anchor_source` to the materialized 30B anchor mirror at revision
+   Set `anchor_source` to the 30B anchor mirror or HF snapshot at revision
    `d388dead1515f5e085ef7a0431dd8fadf0886c57`; it is inventoried alongside D.
 
    Set `measurement_hw_model` to the lead-verified measurement Mac's exact
@@ -39,8 +45,9 @@ The #658 capture lane still needs integration before live R0.
    ```
 
    Set the local D model source, SHADE cache parent, the measurement filesystem
-   `disk_path`, any **additional measurement custody parents**, and verified pilot8/9
-   offload destinations. `disk_path` must be on the measurement volume, not
+   `disk_path` and any **additional measurement custody parents**. R0 needs no
+   offloads (`offloads: []`); configured offload labels apply only to the separate
+   W1 arm gate. `disk_path` must be on the measurement volume, not
    the offload volume. D revision is `815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9`.
 
    The real shared custody parent is `$JOULEWISE_CUSTODY_PARENT`, defaulting to
@@ -49,7 +56,7 @@ The #658 capture lane still needs integration before live R0.
    All resolved roots must exist as directories; missing/typo roots refuse the
    run and are recorded. Do not point this command at blinded study data.
 
-2. Before the independently managed offload, save each source inventory to
+2. For W1 only, before an independently managed offload, save each source inventory to
    its configured inventory path. Set the four variables to the actual paths.
    Retain these JSON files outside the roots being offloaded. Offload/copy and
    any deletion remain the lead's verified-offload workflow.
@@ -59,9 +66,23 @@ The #658 capture lane still needs integration before live R0.
    "$PY" -B scripts/align_r0_checks.py --config .desk/align-r0/config.json --inventory "$PILOT9_SOURCE" --output "$PILOT9_INVENTORY"
    ```
 
-3. Start the unattended desk run after the offloads and model preparation.
-   Use a new record directory for every attempt; budget approximately 5.5–6.5 h,
-   including the 30 min SMC profile, potentially longer for long-decode retries.
+   Configure each W1 receipt as `{"label": "pilot10", "inventory": "/absolute/manifest.json",
+   "destination": "/absolute/offload"}` in `offloads`. Labels are unique nonempty
+   strings supplied by config; every configured receipt must match at W1 arm.
+   The lead's W1 arm path must call
+   `joulewise.align.r0_host.w1_disk_gate(validated_config)` after R0 and require
+   `status == "pass"`; this is a storage gate, not an arm authorization.
+
+3. Start the unattended desk run after model preparation.
+   Use a new record directory for every attempt; expect approximately **3–4 h
+   when all checks pass**, including the 30 min SMC profile. This is a planning
+   estimate, not a measured guarantee. A worst-case token-budget estimate at
+   10 decode tok/s is **about 7.3 h plus prefill, inventory and setup overhead**:
+   12 generated turns × 4,096 tokens, six ladder episodes × 16,384, two long
+   decodes × 38,912, memory's 6,144 and load's three × 4,096, plus 30 min SMC.
+   This assumes every rung fails and both decode attempts run. Slower hosts or
+   raised timeouts can take longer; native signal delivery can also delay a
+   deadline. There is no fixed total-run deadline.
    AC power, Automatic initially.
 
    ```sh
@@ -70,11 +91,24 @@ The #658 capture lane still needs integration before live R0.
    ```
 
    Every check can run separately with the same command plus, for example,
-   `--checks template --models D`. Available checks: `host,disk,smc,load,template,generated,ladder,long-decode,memory`.
+   `--checks template --models D`. Available checks, in execution order:
+   `host,disk,load,template,generated,memory,smc,ladder,long-decode`.
+   The host identity and model-load gates precede model checks. A comma-separated
+   subset always follows this order. The model is unloaded before SMC and
+   reloaded afterward for any remaining generations, preserving SMC's unloaded
+   baseline. A failed check stops the run after saving its report; use
+   `--keep-going` for diagnostic continuation. Prerequisite failures still block
+   dependent checks, and census refusals always stop. Diagnostic template/disk
+   results, checkpoint `required` and ladder `fallback` do not trigger a stop;
+   inconclusive checks do.
    A subset does not complete R0. The timeout is 7,200 s per long-decode
    **attempt**, ladder **episode**, generated **turn**, or other check. D's
    38,912-token decode at 10 tok/s takes about 3,891 s per attempt; two attempts
-   get separate deadlines. A slow D host can use `--timeout 14400`. Native
+   get separate deadlines. The default runs one attempt and retries with metadata
+   evaluation only after a failed verdict; `--long-decode-attempts 1` disables
+   that retry (`2` is the default maximum). Exceptions and timeouts fail the
+   check immediately, retaining the existing behavior. A slow D host can use
+   `--timeout 14400`. Native
    calls can delay signal delivery. A timeout fails the current check while
    retaining completed attempts/rungs/turns and sampled in-flight evidence.
    JSON/Markdown are saved at each progress boundary, including memory samples.
@@ -84,7 +118,9 @@ The #658 capture lane still needs integration before live R0.
 
 4. Read `report.md` and its full `report.json`. Exit 0 means the selected
    checks passed; **`complete_r0: true` requires every check for D**.
-   Both files are updated at progress boundaries. Preserve failed/partial attempts.
+   Both files are updated at progress boundaries, with each phase's measured
+   `check_seconds` and the run's `total_seconds` (also shown in Markdown).
+   Preserve failed/partial attempts.
    Checkpoint `required` and ladder `fallback` are valid selection outcomes;
    `decisions_pending_lead_action` must be resolved before R1. Template is
    diagnostic-only. Inconclusive results prevent R0 completion.
@@ -94,7 +130,7 @@ The #658 capture lane still needs integration before live R0.
    --load-seconds 900 --recovery-seconds 600`, with a 2,400 s timeout (configured
    phase total plus 600 s). Raise `--timeout` too if a longer configured profile
    would exceed the per-check deadline.
-   #658 (`274fec2cb`) emits schema `joulewise.align_smc_r0.v1` with keys under
+   #658 (`58525031a`) emits schema `joulewise.align_smc_r0.v1` with keys under
    `response.s_fast`/`response.s_slow`. Exit 0 alone is insufficient. R0 verifies
    its `samples.jsonl` SHA-256 and phase durations, then re-ranks from that
    journal: **S_fast tau <30 s from the first 120 s of load; S_slow tau in
@@ -104,7 +140,8 @@ The #658 capture lane still needs integration before live R0.
    uses that same R2 bar against the fixed load-fit prediction.
    The adapter also checks selected keys and 1 Hz / >99% successful slots over
    at least 600 s. Missing roles or failed confirmation remain inconclusive;
-   sensor locations remain PROVISIONAL. The source #658 response is retained
+   R0's own role selections and sensor locations remain PROVISIONAL pending the
+   v4 sensor-policy ruling. The source #658 response is retained
    alongside the R0 ruling's response for review.
 
 Interpretation: NLL uses the first 2,049 rendered benign SHADE IDs (2,048 next-token
@@ -112,7 +149,8 @@ targets), ≤3.0 nats/token. Synthetic rewrite tables diagnose templates; **gene
 transitions decide B7 (≥12 eligible transitions; any closed-reasoning rewind).
 Insufficient transitions are inconclusive. Coherence and echo are diagnostics;
 NLL is the load bar. D tries default xhigh, medium, low, stopping at the first
-pass. Episodes use spam/bank, indices 91–92, ≤6 turns/16,384 tokens. Screens
+pass; skipped rungs record "not run: higher rung passed". Episodes use spam/bank,
+indices 91–92, ≤6 turns/16,384 tokens. Screens
 admit only full-cap turns that fit this total. D envelopes must parse ≥95%
 with no unsupported-format flags. Reasoning quotes are excluded, capped
 incomplete envelopes are reported separately, and tool replies/errors are saved.
@@ -128,13 +166,14 @@ evaluated no arrays is inconclusive; it cannot set `metadata_eval_required`.
 Even evaluated-array success needs Stage-3/R1 production-boundary qualification.
 
 Memory uses full context, D floor budget 6,144, guess bar 45 decimal GB, no swap
-growth. Disk requires ≥80 decimal GB plus the SMC journal allowance free after
-present weights, and both offload hash matches. At the default 1 Hz / 1,800 s
-profile, the planning allowance is 1,800 × 16 KiB = 29,491,200 bytes, so the
-pre-R0 free-space bar is 80,029,491,200 bytes. This row-size estimate is not a
-measured bound: check actual journal size after enumeration and retain ≥80 GB
-before W1. Configured phase durations scale the allowance and capture time in
-both disk receipts and the runner's `smc_step_budget`.
+growth. The R0 disk check is **report-only**: 66 decimal GB free and no offloads
+do not block completion. It still hashes the present D and anchor files, and
+does not read configured W1 offload receipts or destinations. W1 separately
+requires ≥80 decimal GB free **after R0** and all configured offload hash matches.
+At the default 1 Hz / 1,800 s profile, the R0 journal planning estimate is
+1,800 × 16 KiB = 29,491,200 bytes. This is not a measured bound or an R0 gate:
+check actual journal size after enumeration. Configured durations scale the
+estimate and capture time in the R0 disk receipt and the runner's `smc_step_budget`.
 Amendment 1 estimates 37.4 GB for two W1 copies and 52.9 GB for D windows.
 The current whole-download total is not a pinned weight-file manifest; the
 lead must authenticate the revision before live qualification.

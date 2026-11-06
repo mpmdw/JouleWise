@@ -215,7 +215,7 @@ def ladder(backend, tag, *, progress=lambda data: None, run_unit=lambda fn: fn()
     progress({"rungs": rungs, "selected": None})
     choices = (("xhigh", None, 4096), ("medium", "medium", 4096), ("low", "low", 4096)) if tag == "D" else (
         ("4096", None, 4096), ("8192", None, 8192))
-    for label, effort, cap in choices:
+    for index, (label, effort, cap) in enumerate(choices):
         episodes = []
         rung = {"rung": label, "template_kwargs": {} if effort is None else {"reasoning_effort": effort},
                 "cap": cap, "episodes": episodes, "status": "running"}
@@ -239,6 +239,11 @@ def ladder(backend, tag, *, progress=lambda data: None, run_unit=lambda fn: fn()
         rung.update(bad_cap_fraction=fraction, median_reasoning_tokens=median, status="pass" if ok else "fail")
         progress({"rungs": rungs})
         if ok:
+            for skipped_label, skipped_effort, skipped_cap in (choices[index + 1:] if tag == "D" else ()):
+                rungs.append({"rung": skipped_label,
+                              "template_kwargs": {} if skipped_effort is None else {"reasoning_effort": skipped_effort},
+                              "cap": skipped_cap, "episodes": [], "status": "not_run",
+                              "reason": "not run: higher rung passed"})
             return {"status": "pass", "selected": label, "rungs": rungs}
     return {"status": "fallback", "selected": None, "rungs": rungs,
             "consequence": "D screen-only" if tag == "D" else "N falls back to Instruct-4bit; no reasoning-omission estimand"}
@@ -292,9 +297,12 @@ def long_decode_verdict(result):
             "growth_limit_bytes_per_10k": 2_000_000_000}
 
 
-def long_decode(backend, *, progress=lambda data: None, run_unit=lambda fn: fn()):
+def long_decode(backend, *, max_attempts=2, progress=lambda data: None, run_unit=lambda fn: fn()):
+    """One normal probe; at most one metadata-evaluation retry on failure."""
+    if max_attempts not in (1, 2):
+        raise ValueError("max_attempts must be 1 or 2")
     attempts = []
-    for evaluate in (False, True):
+    for evaluate in (False, True)[:max_attempts]:
         attempt = {"status": "running", "eval_metadata": evaluate, "positions": 0, "memory_samples": []}
         attempts.append(attempt)
         def probe_progress(data):
@@ -334,9 +342,10 @@ def memory_peak(backend, tag):
 def markdown(report):
     lines = ["# ALIGN R0 desk checks", "", f"Status: **{report['status']}**. Selection data; no R1/hardware-control claim.",
              f"Complete R0: **{report.get('complete_r0', False)}**. Evidence: {report.get('evidence_kind', 'unspecified')}.",
-             "", "| Check | Model | Status |", "|---|---|---|"]
+             f"Total wall duration: {report.get('total_seconds', 0):.3f} seconds.",
+             "", "| Check | Model | Status | Wall seconds |", "|---|---|---|---|"]
     for row in report["checks"]:
-        lines.append(f"| {row['check']} | {row.get('model', 'host')} | {row['status']} |")
+        lines.append(f"| {row['check']} | {row.get('model', 'host')} | {row['status']} | {row.get('check_seconds', 0):.3f} |")
     for row in report["checks"]:
         lines.extend(["", f"## {row['check']} ({row.get('model', 'host')})", ""])
         if row["check"] in ("template", "generated") and "transitions" in row:
@@ -348,6 +357,8 @@ def markdown(report):
         elif row["check"] == "ladder" and "rungs" in row:
             lines.extend(["| Rung | Pair | Turn | Tokens | Reasoning tokens | Seconds |", "|---|---|---|---|---|---|"])
             for rung in row["rungs"]:
+                if rung["status"] == "not_run":
+                    lines.append(f"| {rung['rung']} | {rung['reason']} | — | — | — | — |")
                 for ep in rung["episodes"]:
                     lines.extend(f"| {rung['rung']} | {ep['pair']} | {t.get('turn')} | {t.get('tokens')} | {t.get('reasoning_tokens')} | {t.get('seconds', 0):.3f} |"
                                  for t in ep["turns"])
@@ -359,13 +370,13 @@ def markdown(report):
                          for a in row["attempts"])
             lines.append(f"Metadata evaluation required: {row['metadata_eval_required']}. See JSON for all memory samples.")
         elif row["check"] == "disk" and "models" in row:
-            lines.extend([f"Free after present weights: {row['free_bytes_after_present_weights']} bytes; required ≥{row['required_free_bytes_after_weights']} (80 GB plus SMC journal allowance).",
+            lines.extend([f"Free after present weights: {row['free_bytes_after_present_weights']} bytes (R0 report-only; no free-space or offload gate).",
+                          f"W1 arm gate, evaluated separately after R0: ≥{row['w1_required_free_bytes_after_r0']} bytes and configured offload hash matches.",
                           f"SMC capture: {row['smc_step_budget']['capture_seconds']} s; journal estimate: {row['smc_step_budget']['journal_bytes_estimate']} bytes.",
                           "", "| Model | Observed bytes | Design download bytes | Difference |", "|---|---|---|---|"])
             lines.extend(f"| {tag} | {m['bytes']} | {m['design_download_bytes']} | {m['difference_bytes']} |"
                          for tag, m in row["models"].items())
-            lines.extend(["", "| Offload | Hash comparison passed |", "|---|---|"])
-            lines.extend(f"| {o['label']} | {o['pass']} |" for o in row["offloads"])
+            lines.append(f"Configured W1 offloads (not verified during R0): {row['configured_w1_offload_labels']}.")
             lines.append("W1 two copies: 37.4 GB; D windows two copies: 52.9 GB (rounded planning estimates). D and 30B anchor file hashes are in JSON.")
         else:
             # Large token arrays and file inventories live in the companion JSON.

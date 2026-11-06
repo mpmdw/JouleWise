@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.align.r0 import PINS
-from joulewise.align.r0_host import QuietGuard, Refused, disk_census, host_snapshot, host_identity, inventory, smc_enumeration, swap_bytes
+from joulewise.align.r0_host import QuietGuard, Refused, disk_census, w1_disk_gate, host_snapshot, host_identity, inventory, smc_enumeration, swap_bytes
 from joulewise.measurement_liveness import Census
 from tests.align.test_r0_checks import config_at
 from tests.align.test_r0_step import write_capture
@@ -130,7 +130,66 @@ class R0HostTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 inventory(root)
 
-    def test_disk_requires_both_verified_offloads_and_80_decimal_gb(self):
+    def snapshot(self, root):
+        cache = root / "hub/models--synthetic--model"
+        snapshot = cache / "snapshots" / ("a" * 40)
+        snapshot.mkdir(parents=True)
+        blobs = cache / "blobs"
+        blobs.mkdir()
+        return snapshot, blobs
+
+    def test_inventory_hashes_resolved_hf_blob_under_snapshot_filename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, blobs = self.snapshot(Path(tmp))
+            blob = blobs / "hash"
+            blob.write_bytes(b"abc")
+            for target in (Path("../../blobs/hash"), blob):
+                with self.subTest(target=target):
+                    link = snapshot / "model.safetensors"
+                    link.symlink_to(target)
+                    rows = inventory(snapshot)
+                    self.assertEqual(rows, [{"path": "model.safetensors", "bytes": 3,
+                                            "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"}])
+                    link.unlink()
+
+    def test_inventory_refuses_hub_escape_before_opening_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            snapshot, blobs = self.snapshot(root)
+            outside = root / "outside"
+            outside.write_bytes(b"not a hub blob")
+            for target in (outside, Path("../../../../outside")):
+                with self.subTest(target=target):
+                    link = snapshot / "model.safetensors"
+                    link.symlink_to(target)
+                    with patch.object(Path, "open", side_effect=AssertionError("must not open escaped bytes")):
+                        with self.assertRaisesRegex(ValueError, "escapes hub root"):
+                            inventory(snapshot)
+                    link.unlink()
+            # An apparently confined blob link must not hide another escape.
+            (blobs / "indirect").symlink_to(outside)
+            (snapshot / "model.safetensors").symlink_to("../../blobs/indirect")
+            with self.assertRaisesRegex(ValueError, "escapes hub root"):
+                inventory(snapshot)
+
+    def test_inventory_refuses_nonblob_broken_loop_and_restricted_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot, blobs = self.snapshot(Path(tmp))
+            (snapshot / "config.json").write_text("{}")
+            (blobs / "loop").symlink_to("loop")
+            # Synthetic restricted path only; no study data.
+            for target in ("config.json", "../../blobs/missing", "../../blobs/loop", "../../restricted/blob"):
+                with self.subTest(target=target):
+                    link = snapshot / "model.safetensors"
+                    link.symlink_to(target)
+                    with self.assertRaises(ValueError):
+                        inventory(snapshot)
+                    link.unlink()
+            (snapshot / "directory-link").symlink_to(blobs, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                inventory(snapshot)
+
+    def test_r0_disk_reports_66_gb_and_does_not_read_w1_offloads(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = config_at(root)
@@ -138,24 +197,47 @@ class R0HostTest(unittest.TestCase):
                 folder = root / tag
                 folder.mkdir()
                 (folder / "model").write_text("tiny fake weight")
-            for label in ("pilot8", "pilot9"):
+            config["offloads"] = [{"label": "pilot10", "inventory": str(root / "absent.json"),
+                                   "destination": str(root / "not-offloaded")}]
+            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=66_000_000_000)):
+                result = disk_census(config, PINS)
+            self.assertEqual(result["status"], "diagnostic")
+            self.assertEqual(result["free_bytes_after_present_weights"], 66_000_000_000)
+            self.assertEqual(result["configured_w1_offload_labels"], ["pilot10"])
+            self.assertEqual(result["offloads"], [])
+            self.assertTrue(result["anchor"]["files"])
+            self.assertEqual(result["design"]["W1_two_copies_bytes"], 37_400_000_000)
+            self.assertEqual(result["smc_step_budget"]["capture_seconds"], 1800)
+
+    def test_w1_requires_configured_verified_offloads_and_80_decimal_gb(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = config_at(root)
+            for tag in ("D", "anchor"):
+                folder = root / tag
+                folder.mkdir()
+                (folder / "model").write_text("tiny fake weight")
+            for label in ("pilot8", "pilot10"):
                 folder = root / label
                 folder.mkdir()
                 (folder / "file").write_text("synthetic offload")
                 manifest = root / (label + ".json")
                 manifest.write_text(json.dumps(inventory(folder)))
                 config["offloads"].append({"label": label, "inventory": str(manifest), "destination": str(folder)})
-            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_029_491_200)):
-                result = disk_census(config, PINS)
+            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_000_000_000)):
+                result = w1_disk_gate(config)
                 self.assertEqual(result["status"], "pass")
-                self.assertTrue(result["anchor"]["files"])
-                self.assertEqual(result["design"]["W1_two_copies_bytes"], 37_400_000_000)
-                self.assertEqual(result["smc_step_budget"]["capture_seconds"], 1800)
-                self.assertEqual(result["required_free_bytes_after_weights"], 80_029_491_200)
-                (root / "pilot9" / "file").write_text("changed")
-                self.assertEqual(disk_census(config, PINS)["status"], "fail")
-            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_029_491_199)):
-                self.assertEqual(disk_census(config, PINS)["status"], "fail")
+                self.assertEqual(result["required_offload_labels"], ["pilot8", "pilot10"])
+                self.assertEqual(result["required_free_bytes_after_r0"], 80_000_000_000)
+            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=79_999_999_999)):
+                self.assertEqual(w1_disk_gate(config)["status"], "fail")
+            with patch("shutil.disk_usage", return_value=SimpleNamespace(free=80_000_000_000)):
+                (root / "pilot10" / "file").write_text("changed")
+                self.assertEqual(w1_disk_gate(config)["status"], "fail")
+                (root / "pilot10.json").write_text("not JSON")
+                self.assertEqual(w1_disk_gate(config)["status"], "fail")
+                (root / "pilot10.json").unlink()
+                self.assertEqual(w1_disk_gate(config)["status"], "fail")
 
     def test_swap_parse_and_missing_value(self):
         self.assertEqual(swap_bytes(lambda argv: "total = 0.00M used = 1.50M free = 1M"), 1572864)
@@ -201,6 +283,9 @@ class R0HostTest(unittest.TestCase):
                 result = smc_enumeration(root, output)
                 self.assertEqual(result["selection"], {"s_fast": "TC0P", "s_slow": "TH0P"})
                 self.assertEqual(result["status"], "pass")
+                self.assertEqual(result["smc_source_commit"], "58525031a")
+                self.assertEqual(result["selection_status"], "PROVISIONAL")
+                self.assertEqual(result["response"]["selection_status"], "PROVISIONAL")
                 payload["coverage"]["per_key"]["TH0P"]["valid_samples"] = 0
                 (output / "r0.json").write_text(json.dumps(payload))
                 self.assertEqual(smc_enumeration(root, output)["status"], "inconclusive")

@@ -106,45 +106,94 @@ class QuietGuard:
             raise Refused(self.failure) from exc
 
 
-def inventory(root, tick=lambda: None):
-    """Hash regular files only; refuse symlinks and restricted subdirectories.
+def _hub_blob(path, hub_root):
+    """Resolve each link inside the hub before inspecting its target."""
+    pending = list(path.relative_to(hub_root).parts)
+    resolved, links = hub_root, 0
+    while pending:
+        part, *pending = pending
+        if part == "restricted":
+            raise ValueError(f"refusing restricted target: {path}")
+        if part == "..":
+            if resolved == hub_root:
+                raise ValueError(f"symlink escapes hub root: {path}")
+            resolved = resolved.parent
+            continue
+        candidate = resolved / part
+        if candidate.is_symlink():
+            links += 1
+            if links > 40:
+                raise ValueError(f"symlink loop: {path}")
+            target = Path(os.readlink(candidate))
+            if target.is_absolute():
+                if not target.is_relative_to(hub_root):
+                    raise ValueError(f"symlink escapes hub root: {path}")
+                resolved = hub_root
+                target = target.relative_to(hub_root)
+            pending = list(target.parts) + pending
+        else:
+            resolved = candidate
+    relative = resolved.relative_to(hub_root)
+    if (len(relative.parts) != 3 or not relative.parts[0].startswith("models--")
+            or relative.parts[1] != "blobs" or not resolved.is_file()):
+        raise ValueError(f"not a regular HF hub blob: {path}")
+    return resolved
 
-    Operators supply a materialized local model mirror, rather than an HF cache
-    with links to another tree. This makes the hashed read boundary explicit.
+
+def inventory(root, tick=lambda: None):
+    """Hash local files, including confined HF snapshot-to-blob links.
+
+    Only a models--*/snapshots/<revision> root enables file links. Each must
+    resolve to a regular models--*/blobs/<file> within that same hub directory.
+    Directory links, escaping links and restricted components always refuse.
     """
     root = Path(root)
     if "restricted" in root.parts or root.is_symlink() or not root.is_dir():
         raise ValueError(f"not a materialized unrestricted directory: {root}")
+    root = root.resolve()
+    if "restricted" in root.parts:
+        raise ValueError(f"refusing restricted directory: {root}")
+    hub_root = (root.parent.parent.parent if root.parent.name == "snapshots"
+                and root.parent.parent.name.startswith("models--") else None)
     rows = []
-    def walk_error(exc):
-        raise exc
-    for directory, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
-        for name in dirs:
-            path = Path(directory) / name
-            if name == "restricted" or path.is_symlink():
-                raise ValueError(f"refusing directory: {path}")
-        for name in sorted(files):
+    def walk(directory):
+        # os.walk classifies links with a target stat before yielding them.
+        # Inspect links first so escapes refuse before any target access.
+        with os.scandir(directory) as stream:
+            entries = sorted(stream, key=lambda entry: entry.name)
+        for entry in entries:
             tick()
-            path = Path(directory) / name
-            if path.is_symlink() or not path.is_file():
+            path = Path(entry.path)
+            if entry.name == "restricted":
+                raise ValueError(f"refusing restricted path: {path}")
+            if entry.is_symlink():
+                if hub_root is None:
+                    raise ValueError(f"not an HF snapshot link: {path}")
+                yield path, _hub_blob(path, hub_root)
+            elif entry.is_dir(follow_symlinks=False):
+                yield from walk(path)
+            elif entry.is_file(follow_symlinks=False):
+                yield path, path
+            else:
                 raise ValueError(f"not a regular materialized file: {path}")
-            digest = hashlib.sha256()
-            size = 0
-            with path.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
-                    tick()
-                    digest.update(chunk)
-                    size += len(chunk)
-            rows.append({"path": path.relative_to(root).as_posix(),
-                         "bytes": size, "sha256": digest.hexdigest()})
+    for path, target in walk(root):
+        digest = hashlib.sha256()
+        size = 0
+        with target.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+                tick()
+                digest.update(chunk)
+                size += len(chunk)
+        rows.append({"path": path.relative_to(root).as_posix(),
+                     "bytes": size, "sha256": digest.hexdigest()})
     if not rows:
         raise ValueError(f"empty inventory: {root}")
     return sorted(rows, key=lambda row: row["path"])
 
 
 def disk_census(config, pins, tick=lambda: None):
+    """Report R0 storage and local model hashes; no W1 arm gates or offloads."""
     budget = step_budget(config.get("smc_step"))
-    required = 80_000_000_000 + budget["journal_bytes_estimate"]
     free = shutil.disk_usage(config["disk_path"]).free
     anchor_files = inventory(config["anchor_source"], tick)
     models = {}
@@ -156,28 +205,43 @@ def disk_census(config, pins, tick=lambda: None):
                        "difference_bytes": total - pins[tag]["bytes"],
                        "revision": pins[tag]["revision"],
                        "identity_note": "Local hashes; revision is configured, not independently authenticated."}
-    offloads = []
-    for item in config.get("offloads", []):
-        # A source inventory saved BEFORE offload allows the local root to have
-        # been removed. No copying or deletion is performed here.
-        import json
-        expected = json.loads(Path(item["inventory"]).read_text())
-        actual = inventory(item["destination"], tick)
-        ok = (isinstance(expected, list) and bool(expected) and expected == actual)
-        offloads.append({"label": item["label"], "pass": ok,
-                         "inventory": item["inventory"], "destination": item["destination"],
-                         "observed": actual})
-    covered = {row["label"] for row in offloads if row["pass"]}
-    return {"status": "pass" if free >= required and {"pilot8", "pilot9"} <= covered else "fail",
-            "free_bytes_after_present_weights": free, "required_free_bytes_after_weights": required,
-            "required_free_bytes_after_r0": 80_000_000_000, "smc_step_budget": budget,
+    return {"status": "diagnostic", "purpose": "r0_report_only",
+            "free_bytes_after_present_weights": free, "smc_step_budget": budget,
+            "w1_required_free_bytes_after_r0": 80_000_000_000,
             "design": {"W1_bytes_per_copy": 18_710_000_000, "W1_two_copies_bytes": 37_400_000_000,
                        "D_two_copies_bytes": 52_900_000_000, "disk_figures_are_rounded_planning_estimates": True},
             "anchor": {"files": anchor_files, "bytes": sum(r["bytes"] for r in anchor_files),
                        "revision": "d388dead1515f5e085ef7a0431dd8fadf0886c57",
                        "identity_note": "Local hashes; remote revision not independently authenticated."},
-            "models": models, "offloads": offloads,
-            "note": "Download totals are diagnostics (mirror metadata can differ); free-space and offload hashes are gates."}
+            "models": models, "offloads": [],
+            "configured_w1_offload_labels": [item["label"] for item in config.get("offloads", [])],
+            "note": "R0 disk check is report-only. Free space and configured offload hashes gate W1 via w1_disk_gate."}
+
+
+def w1_disk_gate(config, tick=lambda: None):
+    """Require 80 decimal GB after R0 and verify every configured offload.
+
+    Call at W1 arm time, after R0's journal has been written. This read-only
+    check neither performs offloads nor grants an arm authorization.
+    """
+    free = shutil.disk_usage(config["disk_path"]).free
+    offloads = []
+    for item in config.get("offloads", []):
+        tick()
+        row = {"label": item["label"], "pass": False,
+               "inventory": item["inventory"], "destination": item["destination"]}
+        offloads.append(row)
+        try:
+            # Saved BEFORE offload; the source need not remain on local disk.
+            expected = json.loads(Path(item["inventory"]).read_text())
+            actual = inventory(item["destination"], tick)
+            row.update(observed=actual, **{"pass": isinstance(expected, list) and bool(expected) and expected == actual})
+        except (OSError, ValueError) as exc:
+            row["error"] = f"{type(exc).__name__}: {exc}"
+    return {"status": "pass" if free >= 80_000_000_000 and all(row["pass"] for row in offloads) else "fail",
+            "purpose": "w1_arm_gate", "free_bytes_after_present_weights": free,
+            "required_free_bytes_after_r0": 80_000_000_000, "offloads": offloads,
+            "required_offload_labels": [row["label"] for row in offloads]}
 
 
 def swap_bytes(run=command):
@@ -247,7 +311,8 @@ def smc_enumeration(repo, output, step=None):
                "argv": argv, "exit_code": result.returncode, "smc_step_budget": budget,
                "timeout_seconds": budget["timeout_seconds"],
                "stdout": result.stdout, "stderr": result.stderr,
-               "smc_source_commit": "274fec2cb2fcc301798c91140e51c244c2469988",
+               "smc_source_commit": "58525031a",
+               "selection_status": "PROVISIONAL",
                "step_ruling": "docs/align/r0_step_test_ruling.md",
                "note": "Idle plus load-step selection; R1 still owns thermal-control qualification."}
     if result.returncode:
