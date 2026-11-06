@@ -49,13 +49,14 @@ Why, in numbers:
    window to a forgotten eject.
 4. **The bars are tight but reachable.** On the 30B (the smallest s_r, 19 J per pair), an episode bias of
    ≤ 0.05·s_r is about 4 mW of GPU-rail power over a 234 s episode. The protocol (§6) resolves that at idle, where
-   GPU-rail noise is a few mW. Under decode it resolves about ±14 mW (expected) against a 24 mW variance bar. B needs
-   only the presence and operational criteria (Q1, Q5); A also needs the write criteria (Q2, Q3).
+   GPU-rail noise is a few mW. Under decode it resolves about ±14 mW (expected) against a 24 mW mean-effect bar. B
+   needs only the presence and operational criteria (Q1, Q5); A also needs the write criteria (Q2, Q3) and a
+   write-variability criterion still to be defined.
 
 **What would change the recommendation.**
 - Q1 or Q5 fails (presence moves decode GPU power by more than 0.25 %, the drive drops, or metadata daemons wake): C.
 - Ed cannot lend the drive for the whole series: C. Removing the drive mid-series is a configuration break.
-- The disk still binds after the offloads, and Q2 and Q3 pass: A-lite, which writes the backup copy to the SSD between
+- The disk still binds after the offloads, Q2 and Q3 pass, and a write-variability criterion is added and passes: A-lite, which writes the backup copy to the SSD between
   members, as a separate lead ruling.
 
 ---
@@ -388,11 +389,18 @@ Each criterion is PASS, FAIL or INCONCLUSIVE:
 - **INCONCLUSIVE:** otherwise.
 
 `strongest_option_allowed` is mechanical:
-- **A / A-lite:** Q1, Q2, Q3 and Q5 all PASS.
 - **B:** Q1 and Q5 PASS.
 - **C:** anything else.
+- **A / A-lite:** not available from `evaluate`. Q2 and Q3 bound only the mean write effect, so A/A-lite also need a
+  write-variability criterion that does not exist yet. `write_criteria_pass_print_only` reports whether Q2 and Q3 both
+  passed.
 
-An INCONCLUSIVE Q3 does not block B, because B writes nothing in windows. It does block A.
+A FAIL or INCONCLUSIVE in Q2 or Q3 does not block B, because B writes nothing in windows.
+
+Q1 returns INCONCLUSIVE (fail closed) when fewer than four blocks have usable quiet decode segments, when any block
+kept fewer than half the quiet segments of the fullest block (the equal-weight block-mean fit is then not valid), or
+when the residual df is 0. All rows use one time basis: epoch stamps if every row has one, else the planned ordinal
+clock. A missing S_slow reading in any quiet idle segment fails Q5.
 
 **Expected precision (guesses, to be replaced by the data).**
 - Idle: pair-difference SD about 3 mW, 18 attached-block pairs, so a nominal independent-pair 90 % half-width of

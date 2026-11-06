@@ -147,12 +147,61 @@ class ExtractTests(unittest.TestCase):
 
 
 class EvaluateTests(unittest.TestCase):
-    def test_null_world_allows_a(self):
+    def test_null_world_allows_b_and_a_stays_capped(self):
         verdict = q.evaluate(world(), ops=GOOD_OPS)
         self.assertEqual(verdict["criteria"]["Q2_write_idle"], q.PASS, verdict["estimates_w"]["write_idle"])
         self.assertEqual(verdict["criteria"]["Q3_write_decode"], q.PASS)
         self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.PASS)
-        self.assertEqual(verdict["strongest_option_allowed"], "A")
+        self.assertTrue(verdict["write_criteria_pass_print_only"])
+        # Q3 bounds only the mean write effect; A/A-lite wait for a variability criterion.
+        self.assertEqual(verdict["strongest_option_allowed"], "B")
+
+    def test_unbalanced_blocks_make_q1_inconclusive(self):
+        rows, seen = [], {}
+        for row in world():
+            if row["load"] == "decode" and row["condition"] == "quiet" and row["presence"] == "detached":
+                seen[row["block"]] = seen.get(row["block"], 0) + 1
+                if seen[row["block"]] > 2:  # 2 of 6 kept, under half the fullest block
+                    continue
+            rows.append(row)
+        self.assertIsNone(q.presence_offset(rows, load="decode"))
+        verdict = q.evaluate(rows, ops=GOOD_OPS)
+        self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.INCONCLUSIVE)
+        self.assertEqual(verdict["strongest_option_allowed"], "C")
+        mild, seen = [], {}
+        for row in world():
+            if row["load"] == "decode" and row["condition"] == "quiet" and row["presence"] == "detached":
+                seen[row["block"]] = seen.get(row["block"], 0) + 1
+                if seen[row["block"]] > 3:  # half kept is still admissible
+                    continue
+            mild.append(row)
+        self.assertEqual(q.presence_offset(mild, load="decode")["quiet_segments_per_block"]["2-detached"], 3)
+
+    def test_time_basis_is_never_mixed(self):
+        rows = [{**row, "start_epoch_s": 1.8e9 + row["ordinal"] * 180} for row in world()]
+        self.assertEqual(q.presence_offset(rows, load="decode")["time_basis"], "epoch")
+        del rows[next(i for i, r in enumerate(rows) if r["load"] == "decode" and r["condition"] == "quiet")
+                 ]["start_epoch_s"]
+        mixed = q.presence_offset(rows, load="decode")
+        self.assertEqual(mixed["time_basis"], "ordinal")
+        self.assertAlmostEqual(mixed["mean"], q.presence_offset(world(), load="decode")["mean"], places=9)
+
+    def test_cli_evaluate_serializes_an_inconclusive_q1(self):
+        from contextlib import redirect_stdout
+        import io
+        from scripts import align_ssd_qualification as cli
+        rows = world(schedule=q.plan(blocks=("attached", "detached", "attached")))
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "rows.json").write_text(json.dumps(rows), encoding="utf-8")
+            (tmp / "journal.jsonl").write_text("", encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                code = cli.main(["evaluate", "--rows", str(tmp / "rows.json"), "--journal",
+                                 str(tmp / "journal.jsonl"), "--out", str(tmp / "verdict.json")])
+            verdict = json.loads((tmp / "verdict.json").read_text(encoding="utf-8"))
+        self.assertEqual(code, 0)
+        self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.INCONCLUSIVE)
+        self.assertIsNone(verdict["margins_w"]["q1_presence_decode_w"])
 
     def test_margins_follow_s_r(self):
         margins = q.criteria_margins(s_r_min_j=19.0, t_episode_s=234.5)
@@ -224,6 +273,10 @@ class OpsTests(unittest.TestCase):
         self.assertEqual(q.operational(ops)["verdict"], q.PASS, ops)
         self.assertAlmostEqual(ops["s_slow_presence_offset_c"], 0.2)
         ops = q.summarize_ops(journal)
+        self.assertIsNone(ops["s_slow_presence_offset_c"])
+        self.assertEqual(q.operational(ops)["verdict"], q.FAIL)
+        hot = {**seg, "presence": "attached", "smc_means": {"B0AC": -20.0}}  # S_slow reading missing
+        ops = q.summarize_ops(journal[:-1] + [hot, journal[-1]], s_slow_key="TS0P")
         self.assertIsNone(ops["s_slow_presence_offset_c"])
         self.assertEqual(q.operational(ops)["verdict"], q.FAIL)
 

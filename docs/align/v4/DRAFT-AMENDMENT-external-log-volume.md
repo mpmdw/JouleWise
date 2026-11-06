@@ -70,7 +70,7 @@ PASS, 3 REFUSE). It runs at the arm and its JSON verdict is kept in custody. Wir
 - **`internal` (adopted with this amendment; Option B).** Every window path stays on the internal disk: runs parent,
   claim and bound backups, custody root, `TMPDIR` (where the powermetrics capture streams). Nothing is written to the
   external volume between the quiet-period start (A5) and the window's end.
-- **`backup` (Option A-lite).** Not adopted here. It needs Q2 and Q3 to PASS and a separate lead ruling. Per-member
+- **`backup` (Option A-lite).** Not adopted here. It needs Q2 and Q3 to PASS, a write-variability criterion not yet defined, and a separate lead ruling. Per-member
   backups go to the volume between members. `RouteGuard` reroutes them internal for the rest of the window if the
   volume is lost.
 - **`direct` (Option A).** Not adopted.
@@ -110,11 +110,12 @@ power.
 ## A8. Qualification gate
 
 Q1-Q3 and Q5 are as in the study, §6 (there is no Q4). The mechanical option mapping (`ssd_qualification.evaluate`):
-- **B** requires Q1 PASS and Q5 PASS.
-- **A-lite** requires Q1, Q2, Q3 and Q5 PASS.
+- **B** requires Q1 PASS and Q5 PASS. Q2 and Q3 do not bear on B (B writes nothing in windows).
+- **A-lite** would require Q1, Q2, Q3 and Q5 PASS and a write-variability criterion that is not yet defined (Q3
+  bounds only the mean write effect), so `evaluate` caps at B.
 - **A** is not adopted.
 
-A FAIL anywhere leaves Option C. An INCONCLUSIVE may be re-run with more pairs; a margin is never loosened.
+A FAIL or INCONCLUSIVE in Q1 or Q5 leaves Option C. An INCONCLUSIVE may be re-run with more pairs; a margin is never loosened.
 
 ## A9. Rollback
 

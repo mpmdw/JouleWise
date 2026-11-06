@@ -23,7 +23,8 @@ Four parts, all standard library:
   the existing ``joulewise.adapters.powermetrics`` parser, unchanged).
 * ``evaluate``: the presence offset and the write effects with 90 % t
   intervals, the criteria Q1-Q3 against the design's s_r, the operational
-  criterion Q5, and the strongest option (A, A-lite, B or C) they allow.
+  criterion Q5, and the strongest option (B or C) they allow; A and A-lite
+  wait for a write-variability criterion.
 
 Units: power in W, energy in J, time in s.
 """
@@ -341,20 +342,28 @@ def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str
     not turn every segment in that block into an independent presence trial.
     """
 
-    picked = []
+    kept = []
     for row in rows:
         if row.get("load") != load or row.get("condition") != "quiet" or row.get("extract_flags"):
             continue
         value = _gpu(row)
-        if value is None:
-            continue
-        t = row.get("start_epoch_s")
-        t = float(t) / 3600 if isinstance(t, (int, float)) else float(row["ordinal"]) * 180 / 3600
-        picked.append((t, 1.0 if row["presence"] == "attached" else 0.0, value, row["block"]))
+        if value is not None:
+            kept.append((row, value))
+    # One time basis for every row: epoch stamps when all rows have them,
+    # otherwise the planned ordinal clock for all (never a mix of the two).
+    epoch = all(isinstance(row.get("start_epoch_s"), (int, float)) for row, _v in kept)
+    picked = [(float(row["start_epoch_s"]) / 3600 if epoch else float(row["ordinal"]) * 180 / 3600,
+               1.0 if row["presence"] == "attached" else 0.0, value, row["block"]) for row, value in kept]
     grouped: dict[str, list[tuple[float, float, float]]] = {}
     for t, attached, value, block in picked:
         grouped.setdefault(block, []).append((t, attached, value))
     if len(grouped) < 4:
+        return None
+    # The fit weights block means equally, which is valid while their
+    # segment-noise shares are similar. Fail closed (INCONCLUSIVE) when a block
+    # kept fewer than half the quiet segments of the fullest block.
+    counts = {block: len(members) for block, members in grouped.items()}
+    if 2 * min(counts.values()) < max(counts.values()):
         return None
     block_rows = [(block, statistics.fmean(t for t, _a, _v in members), members[0][1],
                    statistics.fmean(v for _t, _a, v in members))
@@ -377,6 +386,7 @@ def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str
                     for (block, _time, _attached, value), xr in zip(block_rows, x_rows)}
     return {"mean": beta[2], "se": se, "df": df, "lo": beta[2] - t * se, "hi": beta[2] + t * se,
             "drift_w_per_h": beta[1], "reference_power_w": statistics.fmean(y),
+            "quiet_segments_per_block": counts, "time_basis": "epoch" if epoch else "ordinal",
             "block_mean_minus_fit_w_print_only": nonlinearity}
 
 
@@ -422,21 +432,20 @@ def evaluate(rows: Sequence[Mapping[str, Any]], *, ops: Mapping[str, Any],
     }
     q5 = operational(ops)
     q["Q5_operational"] = q5["verdict"]
-    if q["Q1_presence_decode"] == PASS and q5["verdict"] == PASS:
-        allowed = "B"
-        if q["Q2_write_idle"] == PASS and q["Q3_write_decode"] == PASS:
-            allowed = "A"  # A-lite needs the same evidence and carries less risk
-    else:
-        allowed = "C"
+    # A and A-lite are capped off: Q3 bounds only the mean write effect, and
+    # no variability criterion exists yet (study section 6). Q2/Q3 still print.
+    allowed = "B" if q["Q1_presence_decode"] == PASS and q5["verdict"] == PASS else "C"
     return {"schema": SCHEMA + ".verdict", "criteria": q, "strongest_option_allowed": allowed,
-            "margins_w": {"q1_presence_decode_w": q1_margin, **margins},
+            "write_criteria_pass_print_only": q["Q2_write_idle"] == PASS and q["Q3_write_decode"] == PASS,
+            "margins_w": {"q1_presence_decode_w": q1_margin if math.isfinite(q1_margin) else None, **margins},
             "inputs": {"s_r_min_j": s_r_min_j, "t_episode_s": t_episode_s},
             "estimates_w": {"presence_decode": presence, "presence_idle_print_only": presence_idle,
                             "write_idle": write_idle, "write_decode": write_decode,
                             "internal_write_control_idle_print_only": control_idle,
                             "internal_write_control_decode_print_only": control_decode},
             "operational": q5,
-            "note": "Option A and A-lite need Q1, Q2, Q3 and Q5; B needs Q1 and Q5; otherwise C. "
+            "note": "B needs Q1 and Q5 PASS; otherwise C. A and A-lite are not available from this "
+                    "verdict until a write-variability criterion exists (Q3 tests the mean only). "
                     "The council and Ed decide; this verdict only states what the data allow."}
 
 
@@ -517,8 +526,9 @@ def summarize_ops(journal: Sequence[Mapping[str, Any]], *, s_slow_key: str | Non
         def mean_for(kind):
             values = [(r.get("smc_means") or {}).get(s_slow_key) for r in segments
                       if r.get("presence") == kind and r.get("load") == "idle" and r.get("condition") == "quiet"]
-            values = [v for v in values if isinstance(v, (int, float))]
-            return statistics.fmean(values) if values else None
+            if not values or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in values):
+                return None  # a missing reading is missing evidence: Q5 fails
+            return statistics.fmean(values)
         a, d = mean_for("attached"), mean_for("detached")
         offset = a - d if a is not None and d is not None else None
     return {"arm_check_start": arm[0].get("verdict") if arm else None,

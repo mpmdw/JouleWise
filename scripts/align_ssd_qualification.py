@@ -6,7 +6,7 @@
   run        execute a schedule: idle and fixed-work decode segments, write pattern,
              teardown bursts, 1 Hz SMC, metadata-daemon CPU; journal on internal disk
   extract    mean rail power per segment from one continuous powermetrics capture
-  evaluate   Q1-Q3, Q5 (there is no Q4) and the strongest option (A / A-lite / B / C) the data allow
+  evaluate   Q1-Q3, Q5 (there is no Q4) and the strongest option (B / C) the data allow
   write-pattern
              replay the window write pattern alone into a directory (e.g. during R1)
 
