@@ -72,13 +72,19 @@ def end_state(episode, turn_rows=()):
         flags.extend(row.get('flags', ()))
     intervals = episode.hardware.get('thermal', {}).get('intervals', ())
     stop = primary_stop(flags, thermal_intervals=intervals, default='')
-    if stop:
+    # Turn-count and per-turn token-budget flags are not episode stops in the
+    # desk presentation: a cut on an earlier turn does not end the episode, and
+    # a turn-count stop keeps its historical 'episode.max_turns' label. Those
+    # cases fall through to the v0 presentation rules below.
+    if stop and stop not in ('turn_token_budget_reached', 'turn_budget_reached'):
         if stop == 'episode.deadman':
             return next(f for f in flags if f.startswith('episode.deadman:'))
         if stop in ('episode.decode_budget', 'episode.context_limit', 'episode.time_guard',
-                    'episode.end_task', 'turn_token_budget_reached'):
+                    'episode.end_task'):
             return next(f for f in reversed(flags) if f.startswith(stop + ':'))
         return stop
+    if 'turn_budget_reached' in flags or 'episode.max_turns' in flags:
+        return 'episode.max_turns'
     # v0-only presentation rules follow the governed stop classifier.
     cuts = [f for f in flags if f.startswith(('turn_token_budget_reached:', 'episode.turn_token_budget_reached:'))
             and episode.turns and f.rsplit(':', 1)[-1] == str(episode.turns[-1].index)]
