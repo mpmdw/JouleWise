@@ -2438,6 +2438,14 @@ class VerifiedStore:
         if self._served.get(key):
             self._defect("poisoned_after_serving")
 
+    def discard_entries(self, selector: Callable[[str, Entry], bool]) -> None:
+        """Evict expired cache values without clearing poison, defects or counters."""
+        with self._lock:
+            expired = [key for key, entry in self._entries.items() if selector(key, entry)]
+            for key in expired:
+                del self._entries[key]
+                self._new.discard(key)
+
     def export_entries(self, selector: Callable[[str, Entry], bool] | None = None,
                        *, new_only: bool = False) -> dict[str, Any]:
         """A picklable payload for SHIP: entries (optionally only new ones), poison and defects."""

@@ -6,6 +6,7 @@ handled by the frozen evaluator (and by finalization), never by B_max.
 from __future__ import annotations
 
 import dataclasses
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -180,6 +181,20 @@ def _seed_copy(target: Path, digests: Mapping[str, str]) -> None:
         vdl.seed_verified(target, digests, content_only=True)
     except Exception:  # noqa: BLE001 - a seed is only a hashing shortcut, never a decision input
         pass
+
+
+@contextmanager
+def _temporary_members():
+    """Keep path-bound reductions no longer than the copies they describe."""
+    with tempfile.TemporaryDirectory(prefix="l9-bracket-members-") as directory:
+        root = Path(os.path.realpath(directory))
+        store = vdl.active_store()
+        try:
+            yield root
+        finally:
+            if store is not None:
+                store.discard_entries(lambda _key, entry: entry.leaf_id == "L3_reduce_dict" and any(
+                    Path(identity.rsplit("\0", 1)[-1]).is_relative_to(root) for identity, _ in entry.trees))
 
 
 def _servable(assessment: Any, reasons: Any) -> bool:
@@ -465,8 +480,8 @@ def evaluate_window_bracket(archive: ArchiveHandle, *, repo_root: Path) -> Windo
     # using the wrapper, including its registered-valid anti-withholding check.
     if acceptance != calibration.load_calibration_acceptance_bound():
         raise AnalysisRefusal("window_bracket_not_passed")
-    with tempfile.TemporaryDirectory(prefix="l9-bracket-members-") as directory:
-        paths = _window_inputs(archive, inputs, Path(directory))
+    with _temporary_members() as directory:
+        paths = _window_inputs(archive, inputs, directory)
         assessment, reasons = _calibration_assessment(
             archive.window.claim_runs_root, paths, policy, mode="issuing",
             ledger_snapshot=snapshot, bracket_binding=binding,
