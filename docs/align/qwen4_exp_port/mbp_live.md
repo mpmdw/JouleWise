@@ -35,12 +35,88 @@ internal-slot specification, so first-pass PLE gathers can bound decode.
 Do not reformat, wipe, offload or delete study data. This external-storage
 plan supersedes the old internal-SSD/offload logistics for this run only.
 
+### Saturday order with offload run A (same SSD, same day)
+
+PR #665's copy-only offload run A (`docs/align/mbp_offload_and_gold_setup.md`
+§15 on `lane/2026-11-05-mbp-offload-runbook`) uses the same enclosure and must
+record its bus baseline **before the SSD is ever plugged in**. Its step
+`step2-pause` also boots out every `com.joulewise.*` launchd job, which is the
+"lead's procedure" this kit's agent guard expects. Order:
+
+1. SSD unplugged: offload driver A1 (steps 1, 2, 2-pause, 2b bus baseline).
+   Meanwhile this runbook's step 0 internal checks and native tiny tests.
+2. Plug in. Settle the volume name/format (next subsection) **before**
+   offload `step9a-identify`, because 9a enrolls the VolumeUUID and mount.
+   Use `JW_EXTERNAL=/Volumes/JW-EXT` for the offload so both jobs share one
+   enrolled volume.
+3. Offload driver A2 (pilot 8-10 copies, 7a rows, eject, ejected census),
+   unplug, driver A3 (unplugged census must pass).
+4. Plug in again; offload `jw_external_check` from its external-env; then
+   this runbook from step 0's JW-EXT part through step 7.
+5. Step 7 ends with offload `step13-eject.zsh`, `step13-ejected-census.zsh`,
+   physical unplug and `step13-unplugged-census.zsh` (offload §15 "each day
+   the SSD is used"). The operation STOP stays; restoring the magistrate for
+   ALIGN R1 is Ed's separate go (offload §13).
+
+The Flash-Next probes take 7-20 h after the download starts. If ALIGN v4 R1
+must run Saturday night, stop at a clean command boundary (memory gate first),
+do step 7's evidence copy and eject/census, and resume the remaining native
+commands another daytime slot: each native command re-verifies the artifact
+by its recorded `PIN`, so a later resume is sound. Never leave JW-EXT attached
+into a window.
+
+### Volume name and format (before anything is written)
+
+The scripts hard-require the mounted **APFS** volume at exactly
+`/Volumes/JW-EXT` (`diskutil info` MountPoint and FilesystemType). Inspect
+first, read-only:
+
+```sh
+diskutil list external physical   # the SN7100 whole disk and its partitions
+diskutil list external            # includes the APFS synthesized container, if any
+ls /Volumes
+export OLDVOL="/Volumes/WD_BLACK" # replace with the SSD's actual mount, if mounted
+diskutil info "$OLDVOL" | grep -E 'Volume Name|File System Personality|Mount Point|Volume UUID|Volume Free Space'
+```
+
+- **APFS volume already named JW-EXT:** proceed.
+- **APFS, other name** (e.g. `/Volumes/WD_BLACK`), non-destructive. To keep
+  the lender's files separate, add a new volume in the same container; free
+  space is shared, so confirm `df -h` afterwards (needs >=650 GB, >=800 GB
+  for the maxfit5 fallback):
+  ```sh
+  diskutil apfs addVolume "$(diskutil info -plist "$OLDVOL" | plutil -extract APFSContainerReference raw -o - -)" APFS JW-EXT
+  ```
+  Or, if the lender agrees the volume itself may hold this work,
+  `diskutil rename "$OLDVOL" JW-EXT` (keeps data and VolumeUUID).
+- **Mac OS Extended (HFS+):** `diskutil apfs convert <its diskNsM>` converts
+  in place, then rename as above. Copy anything the lender needs first.
+- **exFAT, MS-DOS/FAT, NTFS, unformatted or "not readable":** the kit
+  refuses. The only supported path is erasing the **whole** disk, which
+  **destroys every file on it**. Ed only, and only with the lender's explicit
+  consent. Identify the enclosure's physical whole disk (about 2.0 TB,
+  external, USB, the SN7100 media name) and re-check it immediately before:
+  ```sh
+  diskutil list external physical
+  export EXTDISK=disk4                # the SN7100 whole disk; NEVER disk0
+  diskutil info "$EXTDISK" | grep -E 'Device / Media Name|Disk Size|Protocol|Internal|Removable'
+  diskutil eraseDisk APFS JW-EXT GPT "$EXTDISK"   # DESTROYS ALL DATA on $EXTDISK
+  diskutil info /Volumes/JW-EXT | grep -E 'File System Personality|Mount Point'
+  ```
+  Use plain `APFS` (not case-sensitive, not encrypted, so no password prompt
+  blocks a remount). If it mounts as `/Volumes/JW-EXT 1`, a stale name
+  exists; eject and resolve that before continuing, since the kit refuses it.
+
 Source: `Qwen/Qwen3.8-Flash-Next` at
 `de4b8e4d43b917e7706784d8bb445c9af86a3540`, 131 bf16 shards, about 360 GB.
 The source snapshot is a set of HF-cache symlinks to the external blob store,
 not a second 360 GB copy. Allow at least **650 GB free initially**: source
-360 + maxfit about 211 + temp/headroom. Keeping maxfit5 as well requires
-another roughly 200 GB; check actual free space before starting it. The
+360 + maxfit about 211 + temp/headroom (the download refuses below it). A
+resumed download is credited the source blobs already cached, so an
+interrupted transfer restarts with the same command. Keeping maxfit5 as well
+requires another roughly 200 GB: its convert refuses below 225 GB free, so
+the fallback path needs about **800 GB free initially** (650 GB leaves about
+80 GB after maxfit). Check `df -h /Volumes/JW-EXT` before starting it. The
 source stays intact for retry and reproducibility. No automatic deletion.
 
 `maxfit`: routed experts 6-bit/group-64; every other weight bf16; the entire
@@ -129,11 +205,13 @@ memory_pressure -Q | tail -1 # expect well above 10% on an idle Mac
 launchctl list | grep -E 'com\.joulewise\.(night|b6loop|b6wake|magistrate)' || echo 'no joulewise agents loaded'
 git rev-parse HEAD
 git status --short --branch
+sysctl -n hw.model hw.memsize  # expect Mac15,9 and 137438953472
 diskutil list external physical
 diskutil info /Volumes/JW-EXT
 df -h /Volumes/JW-EXT
 mdutil -s /Volumes/JW-EXT
-tmutil isexcluded /Volumes/JW-EXT
+sudo tmutil addexclusion -p /Volumes/JW-EXT  # already done if offload 9a enrolled this volume
+tmutil isexcluded /Volumes/JW-EXT            # expect [Excluded]
 ```
 
 Before any write, add JW-EXT to Spotlight Privacy (System Settings) and
@@ -146,7 +224,8 @@ the space above. Set `DISK` to its **physical whole disk**, not the APFS
 synthesized disk; the paging script validates the APFS ancestry.
 
 ```sh
-export DISK=disk4  # replace with the inventory's actual physical diskN
+export DISK="$(diskutil info -plist /Volumes/JW-EXT | plutil -extract APFSPhysicalStores.0.APFSPhysicalStore raw -o - - | sed -E 's/s[0-9]+$//')"
+diskutil info "$DISK" | grep -E 'Device / Media Name|Protocol|Internal|Disk Size'  # SN7100, USB, Internal: No
 export BASE=/Volumes/JW-EXT/flashnext
 export RUN="$BASE/evidence/20261107-maxfit"
 export ARTIFACT="$BASE/models/maxfit"
@@ -169,6 +248,13 @@ done
 "$PY" -B scripts/qwen4exp_mbp_report.py --dry-run
 ```
 
+If this shell is lost later (closed Terminal, logout), open a new one in the
+repository, re-run the `PY`/`JW_REPO_ROOT` and JW-EXT `export` lines above
+(not `mkdir`/`caffeinate` if caffeinate is still running), then re-derive
+`SOURCE_RECEIPT`, `SOURCE`, `CONVERT_RECEIPT` and `PIN` with the commands in
+step 1 from the receipts already written. Never re-run a completed command
+with the same `--out`; it refuses.
+
 Dry runs make no requests, read no artifacts, import no MLX and write no
 results. They are command-plan checks, not validation evidence. Native tiny
 tests below must run **outside the Codex sandbox** on the Mac. Run modules
@@ -182,7 +268,7 @@ one at a time; no full suite while sharing this machine.
 
 Expected, as run natively on the M4 Air on 2026-11-05 (mlx 0.31.2, mlx-lm
 0.31.3, transformers 5.22.1, torch 2.15.0, Metal): `test_qwen4exp_mbp_live`
-30 tests OK, 0 skips; `test_qwen4exp_e2e_eval` 37 OK, 1 skip (item rebuild
+32 tests OK, 0 skips (30 on 11-05 plus the two 11-06 download-resume tests); `test_qwen4exp_e2e_eval` 37 OK, 1 skip (item rebuild
 needs `QWEN4EXP_ITEM_SOURCES`, fetched public sources; acceptable);
 `test_qwen4exp_hosted_reference` 13 OK, 0 skips. Any other skip is OPEN.
 
@@ -435,8 +521,18 @@ run `purge`, clear caches in an energy window, or claim a cold run from timing.
 ```sh
 "$PY" -B scripts/qwen4exp_mbp_report.py --run-dir "$RUN" --out "$RUN/results.md"
 git rev-parse HEAD > "$RUN/code-commit.txt"
-(cd "$RUN" && shasum -a 256 *.json *.jsonl *.log *.md code-commit.txt > EVIDENCE.SHA256SUMS)
+(cd "$RUN" && find . -maxdepth 1 -type f ! -name EVIDENCE.SHA256SUMS -print0 | sort -z \
+  | xargs -0 shasum -a 256 > EVIDENCE.SHA256SUMS)
+# Copy the small evidence (never weights) to the internal disk before eject;
+# the borrowed SSD leaves the Mac. Include a maxfit run dir if maxfit5 ran.
+export EVIDENCE_COPY=/Users/edr/code/flashnext-evidence-20261107
+mkdir -p "$EVIDENCE_COPY"
+ditto "$BASE/evidence" "$EVIDENCE_COPY/evidence"
+(cd "$EVIDENCE_COPY/evidence/$(basename "$RUN")" && shasum -a 256 -c EVIDENCE.SHA256SUMS)
 ```
+
+The `find` form avoids zsh's "no matches found" abort and also hashes the
+`convert.json.SHA256SUMS` and `paging.json.iostat-*` sidecars.
 
 The report fills [the results template](mbp_live_results_template.md) from
 fixed evidence filenames. Missing checks stay PENDING; no GOAL is auto-closed.
@@ -449,15 +545,27 @@ after the lead reviews actual outputs. Keep GOAL 11 full gold evidence separate.
 ```sh
 # All Python workers, shell CWDs and file viewers must have released JW-EXT.
 cd "$JW_REPO_ROOT"
+kill "$JW_CAFFEINATE_PID"
 sync
 lsof +f -- /Volumes/JW-EXT   # must print nothing; close any holder first
-diskutil eject /Volumes/JW-EXT
-kill "$JW_CAFFEINATE_PID"
 ```
 
-Confirm successful eject, then close this shell: it still exports `TMPDIR`
-and `HF_*` paths on the removed volume. **Physically unplug** the enclosure,
-`df` must no longer list JW-EXT, then hand the
+Then close this shell (it still exports `TMPDIR` and `HF_*` paths on JW-EXT)
+and, in a **new** shell, eject through the offload operation so the census
+evidence is recorded (offload §15 "each day the SSD is used"):
+
+```sh
+export JW_OP=/Users/edr/night-archive/mbp-offload-20261107
+export JW_STEPS=/EXACT/REVIEWED/STEPS/DIR   # the same directory used for run A
+zsh -f -euo pipefail "$JW_STEPS/step13-eject.zsh"
+zsh -f -euo pipefail "$JW_STEPS/step13-ejected-census.zsh"   # must report bus-layer refusal
+# Now PHYSICALLY UNPLUG the enclosure and its cable.
+zsh -f -euo pipefail "$JW_STEPS/step13-unplugged-census.zsh" # must pass
+df -h | grep JW-EXT || echo 'JW-EXT gone'
+```
+
+Without an offload operation, use `diskutil eject /Volumes/JW-EXT`, unplug,
+and confirm `df` no longer lists it. Then hand the
 Mac back to the lead's clean measurement-window procedure. No measurement
 starts until validation has ended, agents are gone, and normal quiet-machine
 checks pass. No result in this bundle is an energy measurement.

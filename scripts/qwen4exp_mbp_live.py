@@ -18,6 +18,7 @@ from pathlib import Path
 import plistlib
 import re
 import resource
+import stat
 import subprocess
 import sys
 import time
@@ -143,6 +144,27 @@ def verify_source(snapshot, metadata, *, expected_shards=131):
     return result
 
 
+SOURCE_BUDGET = 650e9  # source ~360 + maxfit ~211 + hashing/conversion headroom
+
+
+def download_free_space_need(metadata, blobs):
+    """Free bytes the download requires: 650 GB, less allocated cached blobs.
+
+    An interrupted 3-5 h transfer must be able to resume: its partial blobs
+    already occupy part of the 650 GB budget. Credit is allocated blocks of
+    regular files in this repo's external blob store (sparse or partial files
+    count only what they hold), capped at the pinned source size.
+    """
+    total = sum(int(m["size"]) for m in metadata.values())
+    held = 0
+    if blobs.is_dir():
+        for path in blobs.iterdir():
+            info = path.lstat()
+            if stat.S_ISREG(info.st_mode):
+                held += info.st_blocks * 512
+    return SOURCE_BUDGET - min(held, total)
+
+
 def download(args):
     from huggingface_hub import HfApi, snapshot_download
     info = HfApi().model_info(REPO_ID, revision=REVISION, files_metadata=True)
@@ -154,10 +176,14 @@ def download(args):
         if name in SMALL_FILES or re.fullmatch(r"model-\d{5}-of-00131\.safetensors", name):
             metadata[name] = {"size": item.size, "blob_id": item.blob_id,
                               "sha256": item.lfs.sha256 if item.lfs else None}
-    # Keep checkpoint + one ~211 GB build + hashing/conversion headroom.
-    stat = os.statvfs(VOLUME)
-    if stat.f_bavail * stat.f_frsize < 650e9:
-        raise ValueError("need >=650 GB free on JW-EXT for source + maxfit + headroom")
+    # Keep checkpoint + one ~211 GB build + hashing/conversion headroom. A
+    # resumed transfer is credited the source bytes already in the cache.
+    blobs = Path(os.environ["HF_HUB_CACHE"]) / ("models--" + REPO_ID.replace("/", "--")) / "blobs"
+    need = download_free_space_need(metadata, external(blobs))
+    st = os.statvfs(VOLUME)
+    if st.f_bavail * st.f_frsize < need:
+        raise ValueError(f"need >={need / 1e9:.1f} GB free on JW-EXT for source + maxfit + headroom "
+                         f"({SOURCE_BUDGET / 1e9:.0f} GB on a fresh start, less source bytes already cached)")
     snapshot = external(snapshot_download(REPO_ID, revision=REVISION, allow_patterns=list(metadata),
                                           cache_dir=os.environ["HF_HUB_CACHE"], max_workers=2))
     for name in metadata:

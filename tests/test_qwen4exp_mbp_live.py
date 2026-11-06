@@ -168,6 +168,45 @@ class SourceTests(unittest.TestCase):
             self.assertEqual(list(artifact.iterdir()), [artifact / "manifest.json"])
             self.assertTrue(Path(result["plain_sha256s"]).read_text().endswith("  manifest.json\n"))
 
+    def test_download_free_space_credits_cached_blobs_for_resume(self):
+        metadata = {"model-00001-of-00131.safetensors": {"size": 300 * 10**9},
+                    "config.json": {"size": 10}}
+        with tempfile.TemporaryDirectory() as tmp:
+            blobs = Path(tmp) / "blobs"
+            self.assertEqual(live.download_free_space_need(metadata, blobs), live.SOURCE_BUDGET)
+            blobs.mkdir()
+            partial = blobs / "abc.incomplete"
+            partial.write_bytes(b"x" * (1 << 20))
+            (blobs / "link").symlink_to(partial)  # symlinks are never credited
+            held = partial.stat().st_blocks * 512
+            self.assertGreater(held, 0)
+            self.assertEqual(live.download_free_space_need(metadata, blobs), live.SOURCE_BUDGET - held)
+            # Credit never exceeds the pinned source size.
+            capped = {"config.json": {"size": 10}}
+            self.assertEqual(live.download_free_space_need(capped, blobs), live.SOURCE_BUDGET - 10)
+
+    def test_resumed_download_is_admitted_with_less_than_fresh_budget(self):
+        info = types.SimpleNamespace(sha=live.REVISION, siblings=[
+            types.SimpleNamespace(rfilename="config.json", size=2, blob_id="b",
+                                  lfs=None)])
+        hub = types.SimpleNamespace(HfApi=Mock(return_value=Mock(model_info=Mock(return_value=info))),
+                                    snapshot_download=Mock(side_effect=AssertionError("admitted")))
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.dict(sys.modules, {"huggingface_hub": hub}), \
+             patch.dict(os.environ, {"HF_HUB_CACHE": tmp}), \
+             patch.object(live, "external", side_effect=Path), \
+             patch.object(live, "download_free_space_need", return_value=100e9), \
+             patch.object(os, "statvfs", return_value=types.SimpleNamespace(f_bavail=200 * 10**9, f_frsize=1)):
+            with self.assertRaisesRegex(AssertionError, "admitted"):
+                live.download(None)
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.dict(sys.modules, {"huggingface_hub": hub}), \
+             patch.dict(os.environ, {"HF_HUB_CACHE": tmp}), \
+             patch.object(live, "external", side_effect=Path), \
+             patch.object(os, "statvfs", return_value=types.SimpleNamespace(f_bavail=200 * 10**9, f_frsize=1)):
+            with self.assertRaisesRegex(ValueError, "650 GB on a fresh start"):
+                live.download(None)
+
     def test_live_external_boundary_rejects_before_following_restricted(self):
         with patch.object(Path, "resolve", side_effect=AssertionError("followed forbidden path")):
             with self.assertRaisesRegex(ValueError, "restricted"):
