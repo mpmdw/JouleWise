@@ -1049,6 +1049,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - (e) Launch: `--output /Users/edr/night-align/r0-v4-20261106T1705Z`, `--deadline 1794020855` (launch + about 10 h), `--magistrate-pid 90365`, `--custody-root /Users/edr/night-custody/magistrate`, config `configs/align/v4/r0_desk.json`. The session's own Codex MCP adapter is stopped before launch. Launch files: `/Users/edr/night-custody/magistrate/r0-launches/<id>/`. Ed told on thread `1a198fafa8fc12ba`.
 - **Next activation:** item 179 (2) on the record above (D-pin ruling of item 179 applies). If the record directory is absent or has no `report.json`, read `r0-launches/<id>/stdout.log`/`stderr.log` and the guard receipt, mail Ed what failed on thread `1a198fafa8fc12ba`, and do not relaunch R0.
 
+180. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 09:10 PST: standing delegation. The magistrate owns measurement orchestration on the MacBook Pro.** Ed: "you should not be orchestrating the measurements, that responsibility should largely be in the hands of the magistrate of that machine, unless research plans change significantly". Item 176 (2)'s and item 178 (1)'s "the laptop lead decides" re-run holds were the lead over-reaching. They are withdrawn.
+- **The magistrate decides** when and whether to run, re-run, schedule and arm R0, R1, W1 and the calibration windows (D1-D3), using the approved design: FINAL-DESIGN with its amendments, the council CHAIR rulings and LEAD-RULINGS-1, the merged kit's own fail-closed checks, and the readiness and stop rules the kit and the design already contain.
+  - That includes re-running after a failure that is infrastructure, not science, once the fix is merged and reviewed under the usual gates. The magistrate may fix and merge such defects itself, as it did with #684. Each failure is recorded.
+  - Measurement-window rules still bind: the quiet machine, no external volume mounted, power mode restored, deadman.
+- **The laptop lead's role** is to deliver reviewed code and kits onto the measurement lane and to say, in an item, when a kit is merged and what it contains. The lead does not schedule runs.
+- **Escalate to Ed (mail, and wait)** only for:
+  - a change to the research plan or design: registered constants, the deciding contrast, the model, or the exclusion rules;
+  - a result that the design does not cover;
+  - a third consecutive failure of the same check;
+  - anything irreversible to data.
+- Every other hold in earlier items about scheduling or re-running measurements is superseded by this item. Custody, blinding and retention rules are unchanged.
+
 179. **Laptop lead (interactive session 359dce51, Opus 5.5), 2026-11-06 about 08:55 PST: re-run ALIGN v4 R0 headless once, today, now that #684 is merged.** Item 178's cause (the launcher resolved `--python-bin` to the bare Homebrew interpreter, which has no mlx) was a launcher defect, not a measurement result. The fix is on canonical main at `cdf61b3ad`, and the launcher runs from the canonical repo, so the measurement checkout needs no change. The kit is the item 176 kit, unchanged.
 - **D-pin verifier ruling (lead, for this re-run only).** `align_v4_verify_d_pins.py` reported FAIL only on 41 extra files under `.cache/huggingface/` (hf `--local-dir` lock and metadata, 5,782 bytes), while the revision, every pinned size and every LFS sha256 matched. For item 176 (2) as applied to this re-run, the verifier passes if it prints PASS, or if every failing line names a path under `.cache/huggingface/` and every other check passes. Record the extra-file count. Do not delete those files. The verifier will skip `.cache/` on the R1 integration lane, so no code change is needed here.
 
