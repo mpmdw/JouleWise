@@ -61,12 +61,48 @@ def _window(report, monitor, clock):
     return (min(values) if values else now - 300, max(values) if values else now)
 
 
+# The worker dies between the last two monitor samples; jetsam is logged then.
+KERNEL_LOOKBACK_SECONDS = 600
+# ReportCrash writes the .ips after the supervisor's final sample.
+IPS_GRACE_SECONDS = 600
+# `log show` accepts "YYYY-MM-DD HH:MM:SSZZZZZ", not ISO 8601 with "T" (exit 64).
+LOG_TIME_FORMAT = "%Y-%m-%d %H:%M:%S%z"
+# Kill lines name the victim's p_comm, e.g. "memorystatus: killing_top_process
+# pid 123 [Python] ...". Other memorystatus lines (dirty tracking, idle kills
+# of daemons) are routine and must not turn a SIGKILL into JETSAM_KILL.
+JETSAM_KILL_RE = re.compile(r"memorystatus:.*\bkill\w*\b.*\bpid \d+ \[python[^\]]*\]", re.I)
+
+
 def _log_show(start, end, runner):
-    fmt = lambda value: dt.datetime.fromtimestamp(value).astimezone().isoformat(timespec="seconds")
-    argv = ["log", "show", "--style", "ndjson", "--start", fmt(start), "--end", fmt(end),
+    start = max(start, end - KERNEL_LOOKBACK_SECONDS)
+    fmt = lambda value: dt.datetime.fromtimestamp(value).astimezone().strftime(LOG_TIME_FORMAT)
+    argv = ["log", "show", "--style", "ndjson", "--start", fmt(start), "--end", fmt(end + 5),
             "--predicate", 'process == "kernel" AND eventMessage CONTAINS[c] "memorystatus"']
-    result = runner(argv, capture_output=True, text=True, timeout=30)
-    return result.stdout if result.returncode == 0 else ""
+    try:
+        result = runner(argv, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _jetsam_kills(kernel):
+    kills = []
+    for line in kernel.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and JETSAM_KILL_RE.search(str(event.get("eventMessage", ""))):
+            kills.append(event)
+    return kills
+
+
+def _swap_used_bytes(runner=subprocess.run):
+    out = runner(["sysctl", "-n", "vm.swapusage"], capture_output=True, text=True, timeout=10).stdout
+    used = re.search(r"used\s*=\s*([\d.]+)([MG])", out)
+    if not used:
+        raise ValueError("cannot parse vm.swapusage")
+    return float(used[1]) * (2**20 if used[2] == "M" else 2**30)
 
 
 def _exception(log_text):
@@ -83,12 +119,13 @@ def _exception(log_text):
 
 
 def classify(report, worker, log_text, monitor, rungs, *, log_runner=subprocess.run,
-             ips_reader=None, clock=time.time):
+             ips_reader=None, clock=time.time, swap_reader=_swap_used_bytes):
     """Return the classification receipt; dependencies are injectable for tests."""
     def diagnostic_reports():
         directory = Path.home() / "Library/Logs/DiagnosticReports"
-        return [p for p in directory.glob("Python*.ips")
-                if not p.is_symlink() and p.resolve().parent == directory.resolve()]
+        return [p for p in directory.glob("*.ips")
+                if p.name.lower().startswith("python") and not p.is_symlink()
+                and p.resolve().parent == directory.resolve()]
     ips_reader = ips_reader or diagnostic_reports
     reason = str(report.get("abort") or "")
     combined = "\n".join((log_text, reason, json.dumps(worker or {})))
@@ -98,9 +135,16 @@ def classify(report, worker, log_text, monitor, rungs, *, log_runner=subprocess.
     details = {}
 
     # Specific signatures beat generic Python exceptions and return codes.
-    if "command buffer execution failed" in low or "kiogpucommandbuffercallbackerror" in low:
+    if not report and not log_text and not monitor and not worker:
+        # supervise() raises "preflight: ..." before creating ANY evidence file;
+        # main() prints it to the operator's terminal only. Re-sample swap.
+        swap_now = swap_reader()
+        kind = "PREFLIGHT_SWAP" if swap_now > 0 else "REFUSED"
+        details = {"no_evidence": True, "swap_used_bytes_at_triage": swap_now}
+    elif "command buffer execution failed" in low or "kiogpucommandbuffercallbackerror" in low:
         kind = "METAL_ERROR"
-    elif "preflight" in low and ("swap" in low or initial_swap > 0):
+    elif ((reason.lower().startswith("preflight") and "swap" in reason.lower())
+          or initial_swap > 0 or "refused: preflight: swap" in low):
         kind = "PREFLIGHT_SWAP"
     elif reason and ("swap present" in reason.lower() or "swapout" in reason.lower()):
         kind = "ABORT_SWAP"
@@ -122,10 +166,12 @@ def classify(report, worker, log_text, monitor, rungs, *, log_runner=subprocess.
     elif rc == -9 and not reason:
         start, end = _window(report, monitor, clock)
         kernel = _log_show(start, end, log_runner)
-        if "memorystatus" in kernel.lower():
-            kind, details = "JETSAM_KILL", {"kernel_memorystatus": [json.loads(x) for x in kernel.splitlines() if x.strip()]}
+        kills = _jetsam_kills(kernel or "")
+        if kills:
+            kind, details = "JETSAM_KILL", {"kernel_memorystatus": kills}
         else:
             kind = "SIGNAL_CRASH"
+            details = {"kernel_log": "unavailable" if kernel is None else "no python jetsam kill"}
     elif (exc := _exception(log_text)) is not None:
         kind, details = "PY_EXCEPTION", {"exception": exc}
     elif "refused:" in low:
@@ -144,7 +190,7 @@ def classify(report, worker, log_text, monitor, rungs, *, log_runner=subprocess.
         candidates = []
         for path in ips_reader():
             stamp = path.stat().st_mtime
-            if start <= stamp <= end:
+            if start <= stamp <= end + IPS_GRACE_SECONDS:
                 candidates.append((stamp, path))
         receipt["ips_source"] = str(max(candidates)[1]) if candidates else None
     return receipt
