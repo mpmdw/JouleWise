@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import struct
 import unittest
 from unittest import mock
 
@@ -33,6 +34,17 @@ class MemoTests(unittest.TestCase):
             self.assertEqual(verify.call_count, 2)
             self.assertEqual(other, 0.25)
             self.assertEqual(len(caches.memos[cb.CANDIDATE_PHYSICS_MEMO]), 2)
+
+    def test_memo_hit_is_binary64_byte_equal_to_the_cold_refit(self):
+        expected = float.fromhex("0x1.23456789abcdep-7")
+        with arc.analysis_run_caches({}) as caches:
+            caches.deadline = Deadline()
+            with mock.patch.object(cb, 'verify_stored_evidence_physics', return_value=expected) as verify:
+                cold = self.call()
+                remembered = self.call()
+        self.assertEqual(struct.pack('>d', cold), struct.pack('>d', remembered))
+        self.assertEqual(struct.pack('>d', remembered), struct.pack('>d', expected))
+        self.assertEqual(verify.call_count, 1)
 
     def test_firings_refusals_and_missing_observer_are_never_remembered(self):
         with arc.analysis_run_caches({}) as caches:
