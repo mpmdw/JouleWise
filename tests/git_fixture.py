@@ -35,3 +35,29 @@ def init_git_fixture(repository: Path, *init_arguments: str) -> None:
             capture_output=True,
             text=True,
         )
+
+
+def clone_git_fixture(source: Path, destination: Path, *clone_arguments: str) -> None:
+    """Clone a disposable repository with detached writers disabled.
+
+    The same race as ``init_git_fixture``: a commit in the clone may start a
+    detached ``git maintenance run --auto`` whose writes outlive the commit and
+    race the enclosing temporary-directory cleanup.  Hosted run 42000523184
+    (job 127154452928) failed that way in
+    tests/test_receipt_histsem.py with ``[Errno 39] Directory not empty``
+    on the clone's root after a commit.
+    """
+
+    subprocess.run(
+        ("git", "clone", *clone_arguments, str(source), str(destination)),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for key, value in GIT_MAINTENANCE_CONTROLS:
+        subprocess.run(
+            ("git", "-C", str(destination), "config", "--local", key, value),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
