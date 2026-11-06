@@ -707,17 +707,20 @@ class R1Tests(unittest.TestCase):
             self.assertIn("output directory already exists", result["error"])
 
     def test_batch_window_is_pacific_wall_time_across_a_dst_change(self):
-        # Cold pass LOW 8: from 23:00 PDT on 2026-10-31 a 14.5 h segment would
-        # end inside 2026-11-01's 11:45-13:15 PST window. A fixed -07:00 offset
-        # put that window at 10:45-12:15 PST and started the segment at 12:15.
+        # Cold pass LOW 8. From 23:00 PST on 2027-03-13 (a fixed -08:00 offset,
+        # as datetime.now().astimezone() gave), a 12 h segment ends at 12:00
+        # PDT on 2027-03-14, inside that day's 11:45-13:15 window. The fixed
+        # offset put the window at 12:45-14:15 PDT, so the segment started at
+        # once and ran into the batch window.
         from datetime import timezone
         utc = timezone.utc
-        moments = [r1.datetime(2026, 10, 31, 23, 0, tzinfo=timezone(r1.timedelta(hours=-7)))]
+        moments = [r1.datetime(2027, 3, 13, 23, 0, tzinfo=timezone(r1.timedelta(hours=-8)))]
 
         def sleep(seconds):
             moments.append((moments[-1].astimezone(utc) + r1.timedelta(seconds=seconds)).astimezone(PACIFIC))
-        r1.wait_outside_os_batch(14.5 * 3600, now=lambda: moments[-1], sleep=sleep)
-        self.assertEqual(moments[-1].astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z"), "2026-11-01 13:15 PST")
+        waited = r1.wait_outside_os_batch(12 * 3600, now=lambda: moments[-1], sleep=sleep)
+        self.assertGreater(waited, 0)
+        self.assertEqual(moments[-1].astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z"), "2027-03-14 13:15 PDT")
         self.assertEqual(r1._now_local().tzinfo, PACIFIC)
 
     def test_plan_pins_durations_and_gated_held_members(self):
