@@ -10,7 +10,7 @@ at `4383e89d7`) and MISSING-12 maxfit4 contingency profile
 
 ## The Saturday pin stays
 
-`lane/2026-11-06-sat-kit-integrated` (checked at `32392612d`) pins the
+`lane/2026-11-06-sat-kit-integrated` (checked at `32392612d` and again at `bb921a127`) pins the
 round-1 module, sha256
 `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37`, in three
 places: the file itself, `MODULE_SHA256` in
