@@ -182,6 +182,13 @@ class W1PlanTests(unittest.TestCase):
         candidate["align_v4"]["max_r1_tail_s"] = "PENDING_R1"
         with self.assertRaisesRegex(ValueError, "PENDING_R1"):
             check(candidate)
+        # L1 can go non-positive (I_D + max_r1_tail_s + 10 >= 1800): the T_dead
+        # equality alone would accept it; the kit's member-fit assertion must refuse.
+        no_room = filled_template()
+        no_room["align_v4"].update(I_D=1700, max_r1_tail_s=95.0,
+                                   T_dead=(1800 - 1700 - 95 - 10) / 1.13544)
+        with self.assertRaisesRegex(ValueError, "L1: .*member cap"):
+            check(no_room)
 
     def test_thermal_policy_uses_the_canonical_gate_validator(self):
         candidate = filled_template()
