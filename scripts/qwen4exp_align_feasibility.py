@@ -66,14 +66,24 @@ def load_budget_source(source: Path) -> tuple[dict[str, Any], str]:
 
 
 def load_performance(paths: list[Path]) -> dict[tuple[str, int], dict[str, float]]:
+    """Medians from supervisor reports; the worker's rows live under ``results``."""
     cells: dict[tuple[str, int], dict[str, float]] = {}
+    profiles = set()
     for path in paths:
         report = _object(path)
         if report.get("schema") != "qwen4exp-mbp-live/v1" or report.get("command") != "performance":
             raise ValueError(f"{path}: not a qwen4exp performance report")
-        if report.get("verdict") != "completed":
+        results = report.get("results")
+        if (report.get("verdict") != "completed" or not isinstance(results, dict)
+                or results.get("verdict") != "completed"):
             raise ValueError(f"{path}: performance report is not completed")
-        for row in report.get("medians", []):
+        medians = results.get("medians")
+        if not isinstance(medians, list) or not medians:
+            raise ValueError(f"{path}: performance report has no median rows")
+        profiles.add(report.get("profile"))
+        if len(profiles) > 1:
+            raise ValueError(f"{path}: performance reports mix artifact profiles {sorted(map(str, profiles))}")
+        for row in medians:
             try:
                 key = (str(row["reasoning_effort"]), int(row["context"]))
                 value = {"prefill_tps": float(row["prefill_tps"]),
@@ -101,6 +111,13 @@ def _rung(tokens: int) -> int:
     raise ValueError(f"prompt growth {tokens} exceeds measured 40,960-token context")
 
 
+def _cell(rates, effort, rung):
+    try:
+        return rates[(effort, rung)]
+    except KeyError as exc:
+        raise ValueError(f"missing measured median for {effort} at context {rung}") from exc
+
+
 def calculate(policy: dict[str, Any], rates: dict[tuple[str, int], dict[str, float]]) -> dict[str, Any]:
     limits, window = policy["limits"], policy["window"]
     if not isinstance(limits, dict) or not isinstance(window, dict) or not isinstance(policy["efforts"], dict):
@@ -124,19 +141,21 @@ def calculate(policy: dict[str, Any], rates: dict[tuple[str, int], dict[str, flo
             reasoning = _positive_int(turn["reasoning_tokens"], "reasoning_tokens", allow_zero=True)
             answer = _positive_int(turn["answer_tokens"], "answer_tokens", allow_zero=True)
             decode = reasoning + answer
-            rung = _rung(prompt)
-            try:
-                cell = rates[(effort, rung)]
-            except KeyError as exc:
-                raise ValueError(f"missing measured median for {effort} at context {rung}") from exc
-            prefill_s += prompt / cell["prefill_tps"]
-            decode_s += decode / cell["decode_tps"]
+            # Prefill at the prompt's rung; decode at the rung of the context it
+            # reaches (conservative), and never past the measured 40,960.
+            prefill_cell = _cell(rates, effort, _rung(prompt))
+            decode_cell = _cell(rates, effort, _rung(prompt + decode))
+            prefill_s += prompt / prefill_cell["prefill_tps"]
+            decode_s += decode / decode_cell["decode_tps"]
             prompt += decode
         wall = prefill_s + decode_s
         share = wall / deadman
-        verdict = "INFEASIBLE" if wall > min(episode_limit, deadman) else ("MARGINAL" if share > .70 else "FEASIBLE")
+        per_window = math.floor(window_s / wall)
+        # The planned window must hold its planned episodes, not just one.
+        verdict = ("INFEASIBLE" if wall > min(episode_limit, deadman) or per_window < episode_count
+                   else ("MARGINAL" if share > .70 else "FEASIBLE"))
         rows.append({"effort": effort, "prefill_seconds": prefill_s, "decode_seconds": decode_s,
-                     "episode_wall_seconds": wall, "episodes_per_window": math.floor(window_s / wall),
+                     "episode_wall_seconds": wall, "episodes_per_window": per_window,
                      "planned_episodes": episode_count, "deadman_share": share, "verdict": verdict})
     return {"label": "PLANNING ESTIMATE — NOT ENERGY EVIDENCE", "rows": rows,
             "episode_time_limit_s": episode_limit, "deadman_limit_s": deadman,
