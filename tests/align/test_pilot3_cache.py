@@ -253,6 +253,17 @@ class CacheTests(unittest.TestCase):
             self.assertEqual(metadata['workload_provenance']['cache_policy'], 'episode_prefix')
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
+    def test_campaign_does_not_match_across_checkpoint_policies(self):
+        from joulewise.align.apple.campaign import _counterbalanced
+        benign = replace(episode_spec(hidden=False), hybrid_checkpoint_limit=None)
+        for limit in (0, 3):
+            with self.subTest(limit=limit):
+                ordered, flags = _counterbalanced((
+                    benign, replace(benign, condition='sabotage', hybrid_checkpoint_limit=limit)))
+                self.assertEqual(len(ordered), 2)
+                self.assertIn('unmatched_condition_cells_retained', flags)
+        self.assertEqual(_counterbalanced((benign, replace(benign, condition='sabotage')))[1], ())
+
     def test_campaign_does_not_match_across_cache_policies(self):
         from joulewise.align.apple.campaign import _counterbalanced
         spec = episode_spec(hidden=False)

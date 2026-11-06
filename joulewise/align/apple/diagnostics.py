@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 
 from joulewise.desk_compress import read_bytes
+from joulewise.align.apple.stop_precedence import primary_stop
 
 read_marking_tool_names = ("get_unread_emails",)
 
@@ -69,36 +70,20 @@ def end_state(episode, turn_rows=()):
     flags = list(episode.flags)
     for row in turn_rows:
         flags.extend(row.get('flags', ()))
-    deadman = next((f for f in flags if f.startswith('episode.deadman:')), None)
-    if deadman:
-        return deadman
-    for prefix in ('thermal.gate_timeout:', 'thermal.hold_timeout:'):
-        stop = next((f for f in flags if f.startswith(prefix)), None)
-        if stop:
-            return stop
-    if episode.hardware.get('thermal') and any(r['kind'] != 'G0' and r['outcome'] != 'released'
-                                              for r in episode.hardware['thermal']['intervals']):
-        return 'thermal.incomplete'
-    if any(f.startswith(('episode_error:', 'endpoint_error:', 'runner.error')) for f in flags):
-        return 'runner.error'
-    budget = next((f for f in flags if f.startswith('episode.decode_budget:')), None)
-    if budget:
-        return budget
-    context = next((f for f in flags if f.startswith(('episode.context_limit:', 'episode.time_guard:'))), None)
-    if context:
-        return context
-    ended = next((f for f in flags if f.startswith('episode.end_task:')), None)
-    if ended:
-        return ended
-    if 'turn_budget_reached' in flags or 'episode.max_turns' in flags:
-        return 'episode.max_turns'
+    intervals = episode.hardware.get('thermal', {}).get('intervals', ())
+    stop = primary_stop(flags, thermal_intervals=intervals, default='')
+    if stop:
+        if stop == 'episode.deadman':
+            return next(f for f in flags if f.startswith('episode.deadman:'))
+        if stop in ('episode.decode_budget', 'episode.context_limit', 'episode.time_guard',
+                    'episode.end_task', 'turn_token_budget_reached'):
+            return next(f for f in reversed(flags) if f.startswith(stop + ':'))
+        return stop
+    # v0-only presentation rules follow the governed stop classifier.
     cuts = [f for f in flags if f.startswith(('turn_token_budget_reached:', 'episode.turn_token_budget_reached:'))
             and episode.turns and f.rsplit(':', 1)[-1] == str(episode.turns[-1].index)]
     if cuts:
         return cuts[-1]
-    # v0's native stop inside a thought was labelled a normal return.
-    # A token-budget cut takes precedence as the cause; both conditions remain
-    # visible in the retained turn flags and the summary's unclosed boolean.
     if 'ended_in_unclosed_reasoning' in flags or (
         episode.turns and not episode.turns[-1].tool_calls and turn_rows
         and 'unclosed_reasoning_span' in turn_rows[-1].get('flags', ())

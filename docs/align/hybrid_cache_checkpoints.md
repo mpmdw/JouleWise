@@ -40,6 +40,16 @@ No extra sampler draws occur. Full prompt and fed-token
 counts continue to include the manually prefetched prefix. A checkpoint is
 never taken after generation in the hope of rewinding recurrent state later.
 
+The prefill callback is ALIGN-local in `apple/endpoint.py`'s stream observer.
+`apple/generation.py` passes an explicit runtime view to the unchanged core
+generation method; it does not replace methods or swap the prepared runtime's
+native module. The view retains the full delta for core accounting while the
+observer feeds only its remaining suffix to the native stream. Per the ALIGN
+v4 plan ruling 4, the complete `joulewise/adapters/mlx_runtime.py` file is restored
+to pilot-10 `83e2dac59`; no new pinned-core rebind is needed. Boundary tests pin
+that complete file and compare disabled-checkpoint output/event/provenance
+bytes with the prior dispatch for both `None` and `0`.
+
 Each checkpoint retains an offset for every attention layer and deep-copies
 the Python containers of **each entire ArraysCache object**, including auxiliary
 metadata. In MLX 0.31.2, `deepcopy(mx.array)` retains the underlying buffer by
@@ -52,10 +62,11 @@ Native offsets must agree with the token ledger before
 and after restoration. A partial or failed operation invalidates the episode
 cache through the existing endpoint error path.
 
-`EpisodeSpec.hybrid_checkpoint_limit` defaults to **0**, preserving rebuild-only
-behavior. A positive integer explicitly enables that many retained checkpoints;
-`None` omits the field from serialized specs and execution policy and also
-disables checkpointing. Legacy specs lacking the field retain that omission.
+`EpisodeSpec.hybrid_checkpoint_limit` defaults to **None**, preserving legacy
+serialized bytes and rebuild-only behavior. A positive integer explicitly
+enables that many retained checkpoints; `None` omits the field from serialized
+specs and execution policy and also disables checkpointing. The v4 kit must
+set **0** explicitly for Qwen3.8; legacy specs retain their omission.
 An explicit value is hashed in `execution_policy.hybrid_checkpoint_limit`;
 enabled hybrid models also record the resolved checkpoint policy. Choose and
 fix the value per model for the **whole series before its first measured window**.
@@ -104,8 +115,8 @@ excluded. Creating a checkpoint can temporarily retain N+1 snapshots before
 eviction; active recurrence can later allocate new storage. Shared buffers make
 logical payload totals different from incremental allocator bytes. No energy-model term,
 predictor, exclusion rule or stopping rule changes. Legacy specs omitting the
-new field retain their execution-policy identity. Newly authored specs include
-the explicit limit (including zero) in identity for every model. Disabled and
+new field retain their execution-policy identity. Specs with an explicit limit
+(including zero) include it in identity for every model. Disabled and
 non-hybrid runtime record/event bytes retain the existing cache behavior.
 
 ## Config-derived memory

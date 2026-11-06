@@ -130,9 +130,9 @@ class AdmissionTests(unittest.TestCase):
                     self.assertTrue(any(f.startswith('endpoint_error:') for f in ep.flags))
                     if budget is not None:
                         self.assertIn('episode.decode_budget:1', ep.flags)
-                        self.assertTrue(ep.hardware['token_budget']['stop_reason'].startswith('endpoint_error:'))
+                        self.assertEqual(ep.hardware['token_budget']['stop_reason'], 'runner.error')
                         failure = read(bundle / 'outputs/align_failure.json')
-                        self.assertEqual(failure['episode_outcome']['stop_condition'], 'endpoint_error')
+                        self.assertEqual(failure['episode_outcome']['stop_condition'], 'runner.error')
                     self.assertEqual(end_state(ep), 'runner.error')
                     summary = episode_summary(bundle)
                     self.assertEqual(summary['end_state'], 'runner.error')

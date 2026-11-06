@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.align.apple.endpoint import MlxEndpoint
+from joulewise.align.apple.generation import generate_turn
 from joulewise.align.apple.workload import EpisodeRuntimeAdapter, EpisodeSpec
 from joulewise.align.apple.prompt_cache import (
     EpisodePromptCache, checkpoint_size_from_config, hybrid_checkpoint_policy,
@@ -187,6 +188,14 @@ class CheckpointTests(unittest.TestCase):
         for config, limit, expected in ((cfg, 2, 2), (cfg, 0, 0), (cfg, None, 0),
                                         ({'model_type': 'lfm2'}, 2, 0), (None, 2, 0)):
             with self.subTest(config=config and config.get('model_type'), limit=limit):
+                if config is cfg:
+                    # #659 M1: reserve F's XML template is unverified, so the
+                    # endpoint refuses it before any cache work; identity
+                    # still projects the shared checkpoint policy.
+                    with self.assertRaisesRegex(ValueError, 'unverified_xml_template:qwen3_5_moe'):
+                        hybrid_endpoint(config, limit)
+                    self.assertEqual((hybrid_checkpoint_policy(cfg, limit) or {}).get('limit', 0), expected)
+                    continue
                 endpoint, fed = hybrid_endpoint(config, limit)
                 spec = replace(episode_spec(hidden=False), prompt_cache='episode_prefix', hybrid_checkpoint_limit=limit)
                 adapter = EpisodeRuntimeAdapter(endpoint.runtime, endpoint.clock)
@@ -324,22 +333,25 @@ class CheckpointTests(unittest.TestCase):
         runtime._model, runtime._tokenizer = HybridModel(clock), Tokenizer()
         runtime._model_config = {'model_type': 'qwen3_next'}
         records = []
-        generate = runtime._generate
 
         def capture_record(*args, **kwargs):
-            record = generate(*args, **kwargs)
+            record = generate_turn(*args, **kwargs)
             records.append(record)
             return record
 
-        runtime._generate = capture_record
+        capture = patch('joulewise.align.apple.endpoint.generate_turn', side_effect=capture_record)
+        capture.start()
+        self.addCleanup(capture.stop)
 
         def stream_generate(model, tokenizer, prompt, *, prompt_cache, **kwargs):
+            self.assertIs(runtime._mlx_lm, native)
             model([prompt], cache=prompt_cache)
             for token in (7, 0):
                 model([[token]], cache=prompt_cache)
                 yield SimpleNamespace(token=token, text='', finish_reason='stop' if token == 0 else None)
 
-        runtime._mlx_lm = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
+        native = SimpleNamespace(stream_generate=stream_generate, make_sampler=lambda temp: object())
+        runtime._mlx_lm = native
         config = base_config()
         config = replace(config, hardware_target=replace(config.hardware_target, runtime_backend=RuntimeBackend.MLX))
         endpoint = MlxEndpoint(runtime, config, clock, episode_domain='synthetic', prompt_cache='episode_prefix',
@@ -362,8 +374,9 @@ class CheckpointTests(unittest.TestCase):
 
 class CompatibilityAndSizingTests(unittest.TestCase):
     def test_checkpoint_limit_is_explicit_validated_and_part_of_identity(self):
-        spec = episode_spec(hidden=False)
-        self.assertEqual(spec.hybrid_checkpoint_limit, 0)
+        # Omission (None) is the legacy v3 identity; v4 specs set 0 explicitly.
+        self.assertIsNone(episode_spec(hidden=False).hybrid_checkpoint_limit)
+        spec = replace(episode_spec(hidden=False), hybrid_checkpoint_limit=0)
         self.assertEqual(EpisodeSpec.from_text(spec.to_text()).hybrid_checkpoint_limit, 0)
         runtime = SimpleNamespace(name='synthetic', _model_config={'model_type': 'qwen3_next'})
         adapter = EpisodeRuntimeAdapter(runtime, FakeClock())

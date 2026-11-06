@@ -343,7 +343,7 @@ class AppleCampaignTests(unittest.TestCase):
             )
             self.assertEqual(summary.status.value, "failed", summary)
             self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
-            self.assertIn('"stop_condition": "endpoint_error"', summary.failure_message)
+            self.assertIn('"stop_condition": "runner.error"', summary.failure_message)
             self.assertIn("endpoint_error:ValueError:", summary.failure_message)
             episode = read_episode_bundle(bundle)
             self.assertEqual(episode.turns[0].decode_tokens, COMPLETIONS[0])
@@ -357,7 +357,7 @@ class AppleCampaignTests(unittest.TestCase):
             # no reduced gross metric. This retains the old measured-work check.
             self.assertGreater(_integrate(reader.summed_curve(), window.start_s, window.end_s), 1.0)
             failure = json.loads((bundle / "outputs/align_failure.json").read_text())
-            self.assertEqual(failure["episode_outcome"]["stop_condition"], "endpoint_error")
+            self.assertEqual(failure["episode_outcome"]["stop_condition"], "runner.error")
             self.assertEqual(failure["episode_outcome"]["emitted_tokens"], COMPLETIONS[0])
 
     def test_flag_paths_succeed_with_measured_energy(self) -> None:

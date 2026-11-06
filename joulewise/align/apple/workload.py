@@ -22,6 +22,7 @@ from joulewise.align.apple.endpoint import MlxEndpoint
 from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman, budget_record
 from joulewise.align.apple.endpoint import MlxEndpoint, template_execution_policy
 from joulewise.align.apple.xml_tool_calls import validate_model_family
+from joulewise.align.apple.stop_precedence import has_fault, primary_stop
 from joulewise.align.apple.sampler import (
     NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping, _stamp_record, _restore_stamp,
 )
@@ -70,7 +71,17 @@ class EpisodeSpec:
     chat_template_kwargs: Mapping[str, Any] | None = None
     # Fix per model before its first measured window; splitting the prefill
     # changes every hybrid turn's computation schedule and token trajectory.
-    hybrid_checkpoint_limit: int | None = 0
+    hybrid_checkpoint_limit: int | None = None
+
+    def execution_policy_projection(self) -> dict[str, Any]:
+        """Canonical measured execution controls, retaining omission semantics."""
+        keys = (
+            "max_turns", "max_tokens", "temperature", "enable_thinking",
+            "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds",
+            "max_episode_decode_tokens", "deadman_s", "thermal", "warmup_condition",
+            "assistant_history", "chat_template_kwargs", "hybrid_checkpoint_limit",
+        )
+        return {key: getattr(self, key) for key in keys if getattr(self, key) is not None}
 
     def to_text(self) -> str:
         value = asdict(self)
@@ -623,27 +634,8 @@ class EpisodeRuntimeAdapter:
         flags.append("single_request_summary_fields_not_episode_metrics:ttft_s,decode_latency_s,energy_token_j")
         flags.append("power_trace_join_in_run_bundle")
         flags.append("episode_interval_excludes_scoring_and_serialization_tail")
-        stop = "episode_returned"
-        if any(flag.startswith("turn_token_budget_reached:") for flag in flags):
-            stop = "turn_token_budget_reached"
-        if "turn_budget_reached" in flags:
-            stop = "turn_budget_reached"
-        if any(flag.startswith("episode.context_limit:") for flag in flags):
-            stop = "episode.context_limit"
-        if any(flag.startswith("episode.time_guard:") for flag in flags):
-            stop = "episode.time_guard"
-        if any(flag.startswith("episode.end_task:") for flag in flags):
-            stop = "episode.end_task"
-        if any(flag.startswith("episode.decode_budget:") for flag in flags):
-            stop = "episode.decode_budget"
-        if any(flag.startswith("episode_error:") for flag in flags):
-            stop = "episode_error"
-        if any(flag.startswith("endpoint_error:") for flag in flags):
-            stop = "endpoint_error"
-        if any(flag.startswith("episode.deadman:") for flag in flags):
-            stop = "episode.deadman"
-        if self.thermal is not None and incomplete and stop != 'episode.deadman':
-            stop = 'thermal.incomplete'
+        thermal_intervals = self.thermal.intervals if self.thermal is not None else ()
+        stop = primary_stop(flags, thermal_intervals=thermal_intervals)
         reason = next((f for f in reversed(flags) if f.startswith(stop + ":")), stop)
         token_details = budget_record(spec, turns, reason, incomplete=incomplete,
                                       effective_context_cap=self.prepared.get("max_context_tokens"))
@@ -724,7 +716,7 @@ class EpisodeRuntimeAdapter:
             metadata={"align_episode": {"id": episode_id, "flags": list(episode.flags), **outcome}},
         )
 
-        if stop in ("endpoint_error", "episode_error", "episode.deadman"):
+        if stop == "episode.deadman" or has_fault(flags):
             # Runtime faults and deadman aborts are failed executions. Keep
             # partial evidence until the controller stops sampling and invokes
             # EvidenceCustodyProvider; the deadman retains its distinct code.
@@ -732,7 +724,7 @@ class EpisodeRuntimeAdapter:
             raise AdapterFailure(
                 FailureReason.UNKNOWN_ERROR,
                 "align_episode:" + json.dumps(outcome, sort_keys=True) + "; "
-                + "; ".join(flag for flag in flags if flag.startswith(("endpoint_error:", "episode_error:", "episode.deadman:"))),
+                + "; ".join(flag for flag in flags if flag.startswith(("runner.error", "endpoint_error:", "episode_error:", "episode.deadman:"))),
             )
         return runtime_result
 

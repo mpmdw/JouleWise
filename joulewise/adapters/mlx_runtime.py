@@ -768,7 +768,6 @@ class MlxRuntimeAdapter:
         cache_accounting: bool = False,
         setup_metadata: dict[str, Any] | None = None,
         reconcile_prompt: Any | None = None,
-        prefill_prompt: Any | None = None,
         sampler_policy: dict[str, Any] | None = None,
         per_turn_seed: int | None = None,
     ) -> _GenerationRecord:
@@ -831,7 +830,6 @@ class MlxRuntimeAdapter:
         }
         if cache_accounting:
             prefill_metadata.update(cached_tokens=prompt_tokens - len(prompt), prefill_tokens=len(prompt))
-        fed_prompt_tokens = len(prompt) if cache_accounting else None
         if item_id is not None:
             prefill_metadata.update(
                 {"item_id": item_id, "item_index": item_index, "position": position}
@@ -852,10 +850,6 @@ class MlxRuntimeAdapter:
             sampler, sampler_provenance = self._sampler_for_generation()
 
         try:
-            if prefill_prompt is not None:
-                # Boundary prefill and state copies belong to the same measured
-                # phase as native prefill. Counts above include both portions.
-                prompt = prefill_prompt(prompt)
             stream_kwargs: dict[str, Any] = dict(stream_options or {})
             stream_kwargs["max_tokens"] = max_tokens
             if sampler is not None:
@@ -1004,7 +998,7 @@ class MlxRuntimeAdapter:
             prompt_token_ids=prompt_token_ids,
             prompt_text=prompt_text,
             output_token_ids=output_token_ids,
-            prefill_tokens=fed_prompt_tokens,
+            prefill_tokens=len(prompt) if cache_accounting else None,
         )
 
     def cleanup(
