@@ -39,7 +39,7 @@ from tests.test_arm_readiness_evidence_author import (
 )
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 from tests.test_arm_readiness_lifecycle import commit_u11_projection
-from tests.git_fixture import init_git_fixture
+from tests.git_fixture import clone_git_fixture, init_git_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -471,11 +471,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
     def test_coherent_legacy_tamper_control_accepts_but_histsem_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             clone = Path(temporary) / "repo"
-            subprocess.run(
-                ("git", "clone", "-q", "--shared", str(ROOT), str(clone)),
-                check=True,
-                capture_output=True,
-            )
+            clone_git_fixture(ROOT, clone, "-q", "--shared")
             git(clone, "config", "user.email", "tests@joulewise.invalid")
             git(clone, "config", "user.name", "JouleWise tests")
             clone_pinset = clone / PINSET.relative_to(ROOT)
@@ -554,11 +550,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
     def test_twelfth_unreferenced_legacy_receipt_cannot_bypass_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             clone = Path(temporary) / "repo"
-            subprocess.run(
-                ("git", "clone", "-q", "--shared", str(ROOT), str(clone)),
-                check=True,
-                capture_output=True,
-            )
+            clone_git_fixture(ROOT, clone, "-q", "--shared")
             git(clone, "config", "user.email", "tests@joulewise.invalid")
             git(clone, "config", "user.name", "JouleWise tests")
             pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
@@ -613,15 +605,9 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
     def test_symlinked_predecessor_alias_engages_histsem_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             clone = Path(temporary) / "repo"
-            subprocess.run(
-                ("git", "clone", "-q", "--shared", str(ROOT), str(clone)),
-                check=True,
-                capture_output=True,
-            )
+            clone_git_fixture(ROOT, clone, "-q", "--shared")
             git(clone, "config", "user.email", "tests@joulewise.invalid")
             git(clone, "config", "user.name", "JouleWise tests")
-            git(clone, "config", "gc.auto", "0")
-            git(clone, "config", "maintenance.auto", "false")
             pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
             alias = pack.parent / "governed-pack-predecessor-alias"
             alias.symlink_to(pack, target_is_directory=True)
@@ -643,17 +629,12 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
     def test_committed_pinset_deletion_gate_returns_normally(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             clone = Path(temporary) / "repo"
-            subprocess.run(
-                ("git", "clone", "-q", "--shared", str(ROOT), str(clone)),
-                check=True,
-                capture_output=True,
-            )
+            # clone_git_fixture disables detached auto-maintenance: the removal
+            # commit below could otherwise start it and race the tempdir
+            # teardown on CI (ENOTEMPTY).
+            clone_git_fixture(ROOT, clone, "-q", "--shared")
             git(clone, "config", "user.email", "tests@joulewise.invalid")
             git(clone, "config", "user.name", "JouleWise tests")
-            # The removal commit below can trigger detached git auto-maintenance,
-            # which races Python 3.11's tempdir teardown on CI (ENOTEMPTY).
-            git(clone, "config", "gc.auto", "0")
-            git(clone, "config", "maintenance.auto", "false")
             pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
             self.assertTrue(list((pack / "arm_readiness.evidence").glob("*.json")))
             pinset = clone / PINSET.relative_to(ROOT)
@@ -902,15 +883,9 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="joulewise-histsem-refresh-")
         self.addCleanup(temporary.cleanup)
         repository = Path(temporary.name) / "repository"
-        subprocess.run(
-            ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
-            check=True,
-            capture_output=True,
-        )
+        clone_git_fixture(ROOT, repository, "-q", "--shared")
         git(repository, "config", "user.email", "histsem-refresh@invalid")
         git(repository, "config", "user.name", "histsem refresh test")
-        git(repository, "config", "gc.auto", "0")
-        git(repository, "config", "maintenance.auto", "false")
         # Published state, set the way the other histsem tests set it: a PR
         # checkout (CI) has no origin/main of its own to inherit via --shared.
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
@@ -2343,11 +2318,7 @@ class PackAuthenticationRegenerationTests(unittest.TestCase):
         pack_relative = "configs/campaigns/d117_floor_qwen25_1p5b_v1"
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary) / "repository"
-            subprocess.run(
-                ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
-                check=True,
-                capture_output=True,
-            )
+            clone_git_fixture(ROOT, repository, "-q", "--shared")
             git(repository, "config", "user.email", "histsem@invalid")
             git(repository, "config", "user.name", "histsem test")
             current_pack = repository / pack_relative
@@ -2576,11 +2547,7 @@ class PackAuthenticationRegenerationTests(unittest.TestCase):
     def test_recorded_anchor_replay_refuses_historical_science_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary) / "repository"
-            subprocess.run(
-                ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
-                check=True,
-                capture_output=True,
-            )
+            clone_git_fixture(ROOT, repository, "-q", "--shared")
             git(repository, "config", "user.email", "histsem@invalid")
             git(repository, "config", "user.name", "histsem test")
             current_pack = repository / REPRESENTATIVE_PACK.relative_to(ROOT)
@@ -2619,11 +2586,7 @@ class PackAuthenticationRegenerationTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary) / "repository"
-            subprocess.run(
-                ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
-                check=True,
-                capture_output=True,
-            )
+            clone_git_fixture(ROOT, repository, "-q", "--shared")
             git(repository, "config", "user.email", "histsem@invalid")
             git(repository, "config", "user.name", "histsem test")
             pack = repository / REPRESENTATIVE_PACK.relative_to(ROOT)
