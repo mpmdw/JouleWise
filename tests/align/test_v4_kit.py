@@ -133,10 +133,11 @@ class KitTests(unittest.TestCase):
             self.assertEqual(config['model'], old['model'])
             self.assertEqual(config['quantization'], old['quantization'])
             old_spec = json.loads(old['workload_profile']['prompt_text'])
-            preserved = {k: v for k, v in m['spec'].items() if k not in ('thermal', 'warmup_condition', 'max_turns')}
+            preserved = {k: v for k, v in m['spec'].items()
+                         if k not in ('thermal', 'warmup_condition', 'max_turns', 'deadman_s')}
             self.assertEqual(preserved, {k: v for k, v in old_spec.items() if k not in ('max_turns', 'max_episode_seconds')})
             self.assertNotIn('max_episode_decode_tokens', m['spec'])
-            self.assertNotIn('deadman_s', m['spec'])
+            self.assertEqual(m['spec']['deadman_s'], 330)
             self.assertIsNone(m['spec']['max_turns'])  # WP18; never the configured 12-turn fallback.
             policy = m['spec']['thermal']
             self.assertIs(policy['heavy'], False)
@@ -170,12 +171,22 @@ class KitTests(unittest.TestCase):
 
     def test_d_replay_and_reference_origin_are_preserved(self):
         early, late = self.members[4], self.members[17]
-        self.assertEqual(early['spec'], late['spec'])
+        def without_reference(spec):
+            value = json.loads(json.dumps(spec))
+            value['thermal'].pop('window_reference')
+            return value
+        self.assertEqual(without_reference(early['spec']), without_reference(late['spec']))
         self.assertEqual(late['replay_of'], early['run_id'])
         self.assertEqual(early['window_reference_role'], 'capture_last_60s_idle_before_warmup')
         self.assertTrue(all(m['window_reference_role'] == 'consume_member_5_custody_via_WP15'
                             for m in self.members[5:]))
-        self.assertTrue(all('window_reference' not in m['spec'].get('thermal', {}) for m in self.members))
+        self.assertEqual(early['spec']['thermal']['window_reference'], {'role': 'capture'})
+        source_config = BenchmarkConfig.from_mapping(json.loads(self.files[Path(early['config_path'])]))
+        digest = hashlib.sha256(kit.bundle_config_bytes(source_config)).hexdigest()
+        for member in self.members[5:]:
+            self.assertEqual(member['spec']['thermal']['window_reference'], {
+                'role': 'consume', 'source_run_id': early['run_id'],
+                'source_config_sha256': digest})
 
     def test_midpoint_after_nine_and_scaffold_inputs_unchanged(self):
         stages = self.tree['stage_graph']

@@ -99,6 +99,19 @@ class R1Tests(unittest.TestCase):
         with self.assertRaisesRegex(r1.Refusal, "sudo_rule_missing"):
             guard.__enter__()
 
+    def test_persistent_marker_recovers_prior_sigkill_with_fake_pmset_and_sudo(self):
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td)/'high.marker'
+            marker.write_text('previous run died\n')
+            world = FakeWorld()
+            guard = r1.PowerModeGuard(world, marker)
+            with guard:
+                self.assertFalse(marker.exists())  # startup restoration
+                guard.high()
+                self.assertTrue(marker.exists())
+            self.assertFalse(marker.exists())
+            self.assertEqual(world.mode, 0)
+
     def test_refuses_missing_or_nonfinite_slots(self):
         values = {name: 1.0 for name in r1.SLOT_NAMES[:-1]}
         values["class"] = "heavy"

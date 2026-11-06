@@ -41,8 +41,9 @@ class PowerModeGuard(AbstractContextManager):
     LIST = ("sudo", "-n", "-l")
     QUERY = ("/usr/bin/pmset", "-g", "custom")
 
-    def __init__(self, runner: Callable = _run):
+    def __init__(self, runner: Callable = _run, marker: Path | None = None):
         self.runner = runner
+        self.marker = marker
         self.records: list[dict] = []
         self.armed = False
 
@@ -62,6 +63,8 @@ class PowerModeGuard(AbstractContextManager):
         self.records.append({"point": "restore_automatic", "exit_code": result.returncode,
                              "stdout": result.stdout, "stderr": result.stderr})
         self.armed = False
+        if result.returncode == 0 and self.marker is not None:
+            self.marker.unlink(missing_ok=True)
         return result.returncode == 0
 
     def __enter__(self):
@@ -79,6 +82,9 @@ class PowerModeGuard(AbstractContextManager):
     def high(self):
         self.query("before_high")
         self._must(self.HIGH, "high_failed")
+        if self.marker is not None:
+            self.marker.parent.mkdir(parents=True, exist_ok=True)
+            self.marker.write_text("high-power restoration required\n")
         self.query("after_high")
 
     def automatic(self, label="after_automatic"):
@@ -141,13 +147,15 @@ def derive_slots(observations):
 
 
 def run(args):
+    marker = getattr(args, 'power_marker', None) or (args.output.parent / '.align-r1-high-power')
+    marker = Path(marker).resolve()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     record = {"schema": SCHEMA, "status": "running", "phases": [], "powermode": []}
     slots_evidence = None
     # Resolve the runner at call time so synthetic rehearsals can replace the
     # complete command boundary (runtime, SMC journal, sudo and pmset).
-    guard = PowerModeGuard(_run)
+    guard = PowerModeGuard(_run, marker)
     old_handlers = {}
 
     def stop(signum, _frame):
@@ -203,12 +211,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--registration", type=Path,
-                        default=Path("configs/campaigns/align_v4/registration/r1_slots.json"))
+                        help="default: <output>/r1_slots.json")
+    parser.add_argument("--power-marker", type=Path,
+                        help="persistent SIGKILL recovery marker (default: beside output)")
     parser.add_argument("--runtime", nargs="+", required=True,
                         help="WP15 runtime argv; receives --r1-kind/--output")
     parser.add_argument("--include-4bit", action="store_true")
     parser.add_argument("--synthetic", action="store_true")
-    return run(parser.parse_args(argv))
+    args = parser.parse_args(argv)
+    if args.registration is None:
+        args.registration = args.output / "r1_slots.json"
+    return run(args)
 
 
 if __name__ == "__main__":

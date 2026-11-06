@@ -47,7 +47,8 @@ class PlacementTests(unittest.TestCase):
         runtime = mock.Mock()
         runtime.prepare.return_value = AdapterResult(ok=True)
         for slot in (POLICY, policy()):
-            spec = replace(episode_spec(hidden=False), thermal=slot, warmup_condition='benign')
+            spec = replace(episode_spec(hidden=False), thermal=slot, warmup_condition='benign',
+                           deadman_s=330 if 'sensors' in slot else None)
             config = replace(base_config(), workload_profile=replace(base_config().workload_profile,
                                                                      prompt_text=spec.to_text()))
             with self.subTest(slot=slot), mock.patch.object(thermal, 'Sidecar') as collector:
@@ -60,7 +61,8 @@ class PlacementTests(unittest.TestCase):
 
     def test_gate_collector_survives_native_cleanup_and_closes_on_prepare_failure(self):
         from tests.align.test_thermal_gate import policy
-        spec = replace(episode_spec(hidden=False), thermal=policy(), warmup_condition='benign')
+        spec = replace(episode_spec(hidden=False), thermal=policy(), warmup_condition='benign',
+                       deadman_s=330)
         config = replace(base_config(), workload_profile=replace(base_config().workload_profile,
                                                                  prompt_text=spec.to_text()))
         for prepare_ok in (False, True):

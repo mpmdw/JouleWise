@@ -431,6 +431,10 @@ class ThermalSession:
         try:
             with deadman.guard() if deadman is not None else nullcontext():
                 while True:
+                    thread = self.sidecar._thread
+                    if (thread is not None and hasattr(thread, 'is_alive')
+                            and not thread.is_alive()):
+                        raise RuntimeError('thermal.collector_thread_dead')
                     now = monotonic_ns(self.clock.stamp())
                     rows = self.rows
                     latest = rows[-1] if rows else None

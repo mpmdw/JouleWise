@@ -85,7 +85,8 @@ def pending_inputs(inputs):
     }
     pending = []
     def visit(value, path):
-        if value is None or value == '' or value == {} or value == []:
+        # Empty fan_keys is a valid policy choice (no fan telemetry selected).
+        if value is None or value == '' or value == {} or (value == [] and not path.endswith('.fan_keys')):
             pending.append(path)
         elif isinstance(value, dict):
             for key, item in value.items():
@@ -119,9 +120,13 @@ def require_ready(inputs):
             slots['T_dead'], (1750 - slots['I_D']) / 1.13544, rel_tol=1e-9):
         raise ValueError('R1.T_dead must equal (1750 - I_D) / 1.13544')
     from joulewise.align.apple.thermal_gates import validate_gate_policy
-    policy = validate_gate_policy(slots['thermal_policy'])
-    if not policy['heavy'] or not policy['per_turn'] or 'window_reference' in policy:
-        raise ValueError('D requires heavy/G1/holds; window R is captured by member 5')
+    policy_input = deepcopy(slots['thermal_policy'])
+    # R1 supplies the numeric/sensor template.  Custody roles and the source
+    # bundle digest are deterministically installed per member below.
+    policy_input['window_reference'] = {'role': 'capture'}
+    policy = validate_gate_policy(policy_input)
+    if not policy['heavy'] or not policy['per_turn']:
+        raise ValueError('D requires heavy/G1/holds')
     unit = inputs['WP11']['identity_unit']
     if (unit.get('model_source') != D_SOURCE or unit.get('model_revision') != D_REVISION
             or not valid_digest(unit.get('model_artifact_sha256'))):
@@ -134,6 +139,11 @@ def valid_digest(value):
 
 def finite(value):
     return type(value) in (int, float) and math.isfinite(value)
+
+
+def bundle_config_bytes(config):
+    """Serialize a normalized config exactly as RunBundleWriter.create does."""
+    return (json.dumps(config.to_dict(), indent=2, sort_keys=True) + '\n').encode('utf-8')
 
 
 def validate_budget(budget):
@@ -181,14 +191,13 @@ def _rewrite(value):
     return value
 
 
-def thermal_policy(inputs, *, heavy, per_turn):
+def thermal_policy(inputs, *, heavy, per_turn, window_reference):
     value = deepcopy(inputs['R1']['thermal_policy'])
     if value is None:
         value = dict(sensors=None, delta_fast_c=None, delta_slow_c=None,
                      turn_cap_s=None, chunk_tokens=None)
     value.update(heavy=heavy, per_turn=per_turn)
-    # WP15 owns the runtime custody mechanism. Never synthesize a temperature.
-    value.pop('window_reference', None)
+    value['window_reference'] = window_reference
     return value
 
 
@@ -203,6 +212,8 @@ def build_files(root=ROOT):
     members = []
     source_receipts = []
     anchor_configs = []
+    capture_run_id = None
+    capture_config_sha256 = None
     for ordinal, (name, pair, condition, seed_index) in enumerate(ROSTER, 1):
         half = 0 if ordinal <= 9 else 1
         stage = stages[half]
@@ -229,13 +240,23 @@ def build_files(root=ROOT):
                 config['model'].update(name='Qwen3.8-27B-8bit', family='qwen3_5',
                                        source=D_SOURCE, revision=D_REVISION)
                 config['quantization'] = {'name': 'int8', 'bits': 8, 'group_size': 64}
+                reference = ({'role': 'capture'} if ordinal == 5 else
+                             {'role': 'consume', 'source_run_id': capture_run_id,
+                              'source_config_sha256': capture_config_sha256})
                 spec.update(sampler=D_SAMPLER, temperature=1.0, assistant_history='reasoning_content',
                             chat_template_kwargs={'reasoning_effort': inputs['R0']['reasoning_effort']},
                             max_episode_decode_tokens=inputs['R1']['B_D'], deadman_s=inputs['R1']['T_dead'],
-                            hybrid_checkpoint_limit=0, thermal=thermal_policy(inputs, heavy=True, per_turn=True))
+                            hybrid_checkpoint_limit=0, thermal=thermal_policy(
+                                inputs, heavy=True, per_turn=True, window_reference=reference))
             else:
+                reference = {'role': 'consume', 'source_run_id': capture_run_id,
+                             'source_config_sha256': capture_config_sha256}
                 spec.update(max_turns=inputs['WP18'][name[0]]['max_turns'],
-                            thermal=thermal_policy(inputs, heavy=False, per_turn=name.endswith('G')))
+                            # The gate cap is 300 s; 30 s permits cleanup and
+                            # propagation while bounding a dead collector.
+                            deadman_s=330,
+                            thermal=thermal_policy(inputs, heavy=False, per_turn=name.endswith('G'),
+                                                   window_reference=reference))
             config['workload_profile']['prompt_text'] = json.dumps(spec, sort_keys=True, separators=(',', ':'), allow_nan=False)
             model_id = D_TAG if name == 'D' else 'qwen3-30b-a3b'
             config['run_metadata']['tags'] = [PACK_ID, 'non-claim', 'launch_lineage_required', 'align', 'align_episode',
@@ -243,6 +264,10 @@ def build_files(root=ROOT):
                 'align-repeat=' + ('2' if ordinal in (12, 13, 15, 16, 18) else '1'),
                 'align-stage=episodes-' + ('a' if half == 0 else 'b')]
             raw = raw_json(config)
+            if ordinal == 5:
+                from joulewise.schemas import BenchmarkConfig
+                capture_run_id = config['run_id']
+                capture_config_sha256 = sha(bundle_config_bytes(BenchmarkConfig.from_mapping(config)))
             filename = config['run_id'] + '.json'
         spec = json.loads(config['workload_profile']['prompt_text'])
         path = directory / filename

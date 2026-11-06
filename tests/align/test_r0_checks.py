@@ -361,6 +361,10 @@ class R0ChecksTest(unittest.TestCase):
 
     def test_mocked_full_r0_completes_at_66_gb_without_offloads(self):
         from joulewise.align.r0_mlx import MlxBackend
+        class SyntheticMlxBackend:
+            __module__ = MlxBackend.__module__
+            def __new__(cls, *args, **kwargs):
+                return FakeBackend()
         # Exercise the production completion decision with a mocked constructor.
         # All probes and generation here are synthetic, never native evidence.
         with tempfile.TemporaryDirectory() as tmp:
@@ -370,11 +374,11 @@ class R0ChecksTest(unittest.TestCase):
                 folder = root / tag
                 folder.mkdir()
                 (folder / "model").write_text("synthetic model")
-            with patch.object(MlxBackend, "__new__", return_value=FakeBackend()), \
-                    patch("joulewise.align.r0_runner.host_snapshot", return_value={"status": "pass", "fake": True}), \
-                    patch("joulewise.align.r0_runner.smc_enumeration", return_value={"status": "pass", "fake": True}), \
-                    patch("shutil.disk_usage", return_value=SimpleNamespace(free=66_000_000_000)):
-                report = execute(config, root, list(CHECKS), ["D"], guard=FakeGuard(), backend_factory=MlxBackend)
+            with patch("joulewise.align.r0_runner.host_snapshot", return_value={"status": "pass", "fake": True}), \
+                        patch("joulewise.align.r0_runner.smc_enumeration", return_value={"status": "pass", "fake": True}), \
+                        patch("shutil.disk_usage", return_value=SimpleNamespace(free=66_000_000_000)):
+                report = execute(config, root, list(CHECKS), ["D"], guard=FakeGuard(),
+                                 backend_factory=SyntheticMlxBackend)
             self.assertEqual(report["status"], "pass")
             self.assertTrue(report["complete_r0"])
             disk = next(row for row in report["checks"] if row["check"] == "disk")

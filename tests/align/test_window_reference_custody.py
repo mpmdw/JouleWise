@@ -5,12 +5,16 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.apple.thermal_gates import (ThermalSession, WindowReferenceRefused,
     load_window_reference, validate_gate_policy)
 from tests.align.test_thermal_gate import Transport, policy
 from joulewise.align.apple.smc_reader import Reader
 from joulewise.clock import FakeClock
+from joulewise.bundle import RunBundleWriter
+from joulewise.schemas import BenchmarkConfig
+from scripts import align_v4_kit as kit
 
 
 class WindowReferenceCustodyTests(unittest.TestCase):
@@ -40,6 +44,7 @@ class WindowReferenceCustodyTests(unittest.TestCase):
             obj.reference = None
             with self.assertRaisesRegex(WindowReferenceRefused, 'write_failed'):
                 obj.capture_reference('source')
+            obj.close()
 
     def test_policy_requires_role_forms(self):
         base = policy()
@@ -62,6 +67,43 @@ class WindowReferenceCustodyTests(unittest.TestCase):
                 consume['window_reference']['source_run_id'] = source
                 with self.assertRaisesRegex(WindowReferenceRefused, 'path_refused'):
                     load_window_reference(validate_gate_policy(consume), context)
+
+    def test_kit_capture_bundle_bytes_bind_consumer_and_refuse_tampering(self):
+        """Exercise the frozen-kit digest through the production bundle writer."""
+        files = kit.build_files()
+        plan = json.loads(files[kit.KIT/'collection_plan.json'])
+        capture = plan['members'][4]
+        consumer = plan['members'][5]
+        config = BenchmarkConfig.from_mapping(json.loads(files[Path(capture['config_path'])]))
+        with tempfile.TemporaryDirectory() as tmp:
+            clock = FakeClock()
+            # Launch-lineage admission is tested separately; this test needs
+            # the real writer's config serialization and immutable layout.
+            with patch('joulewise.bundle._writer_launch_lineage', return_value=None):
+                writer = RunBundleWriter.create(Path(tmp), config, clock)
+            source_context = SimpleNamespace(run_id=writer.run_id, bundle_path=writer.path,
+                                             outputs_dir=writer.path/'outputs')
+            capture_policy = policy(window_reference={'role': 'capture'})
+            obj = ThermalSession(capture_policy, clock, source_context,
+                                 reader=Reader(Transport(clock)))
+            obj.start()
+            for _ in range(60):
+                clock.sleep(1); obj.sample()
+            obj.capture_reference(writer.run_id)
+            obj.close()
+
+            consumer_path = Path(tmp)/consumer['run_id']
+            (consumer_path/'outputs').mkdir(parents=True)
+            context = SimpleNamespace(run_id=consumer['run_id'], bundle_path=consumer_path,
+                                      outputs_dir=consumer_path/'outputs')
+            policy_value = validate_gate_policy(policy(
+                window_reference=consumer['spec']['thermal']['window_reference']))
+            reference, _ = load_window_reference(policy_value, context)
+            self.assertIsNotNone(reference)
+
+            writer.path.joinpath('config.json').write_bytes(b'{}\n')
+            with self.assertRaisesRegex(WindowReferenceRefused, 'binding_mismatch'):
+                load_window_reference(policy_value, context)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,13 @@ set -euo pipefail
 restore_automatic() {
   sudo -n /usr/bin/pmset -c powermode 0
 }
-trap 'restore_automatic' EXIT HUP INT TERM
+on_signal() {
+  trap - EXIT HUP INT TERM
+  restore_automatic || true
+  exit 130
+}
+trap 'restore_automatic' EXIT
+trap 'on_signal' HUP INT TERM
 
 # Refuse before model/runtime work unless the exact two commands are visible
 # and Automatic can actually be restored. Broader sudo access is not consumed.
@@ -19,10 +25,18 @@ restore_automatic
 : "${ALIGN_R1_RUNTIME:?WP15 runtime argv is required}"
 REPO="${0:A:h:h:h}"
 PY="${PY:-$REPO/.venv/bin/python}"
-REGISTRATION="${ALIGN_R1_REGISTRATION:-$REPO/configs/campaigns/align_v4/registration/r1_slots.json}"
+REGISTRATION="${ALIGN_R1_REGISTRATION:-$NIGHT_DIR/align-r1/r1_slots.json}"
+POWER_MARKER="$NIGHT_DIR/.align-r1-high-power"
+
+# A prior SIGKILL cannot run traps.  The persistent marker makes startup
+# perform another restore before any runtime work and is cleared by the driver.
+if [[ -e "$POWER_MARKER" ]]; then
+  restore_automatic
+fi
 
 # ALIGN_R1_RUNTIME is an operator-pinned executable path, not shell text.
-exec "$PY" -B "$REPO/scripts/align_r1_rehearsal.py" \
+"$PY" -B "$REPO/scripts/align_r1_rehearsal.py" \
   --output "$NIGHT_DIR/align-r1" \
   --registration "$REGISTRATION" \
+  --power-marker "$POWER_MARKER" \
   --runtime "$ALIGN_R1_RUNTIME"

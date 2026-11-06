@@ -170,10 +170,15 @@ class EpisodeSpec:
                 validate_gate_policy(spec.thermal)
                 if spec.warmup_condition != 'benign' or spec.max_episode_seconds is not None:
                     raise ValueError('thermal cells require neutral warmup and no legacy wall guard')
+                if spec.deadman_s is None:
+                    raise ValueError('thermal gate cells require a finite deadman_s')
             else:
                 validate_policy(spec.thermal)
-        if (spec.max_episode_decode_tokens is None) != (spec.deadman_s is None):
-            raise ValueError("max_episode_decode_tokens and deadman_s must be set together")
+        gate_deadman_only = (spec.max_episode_decode_tokens is None and spec.deadman_s is not None
+                             and spec.thermal is not None and 'sensors' in spec.thermal)
+        if ((spec.max_episode_decode_tokens is None) != (spec.deadman_s is None)
+                and not gate_deadman_only):
+            raise ValueError("max_episode_decode_tokens and deadman_s must be set together except for thermal gates")
         return spec
 
 
@@ -398,6 +403,9 @@ class EpisodeRuntimeAdapter:
             if isinstance(exc, WindowReferenceRefused):
                 return AdapterResult(ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
                                      message=exc.code, metadata={"flags": list(self.flags)})
+            return AdapterResult(ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                                 message=f"warmup failed: {type(exc).__name__}: {exc}",
+                                 metadata={"flags": list(self.flags)})
         return AdapterResult(ok=True, metadata={"flags": list(self.flags)})
 
     def run_workload(
