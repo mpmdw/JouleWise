@@ -1124,5 +1124,47 @@
    "paper": "/Users/edr/night-archive/seats-caa9ff66/p2therm-rev/opus-REPORT.md"
   }
  ]
+},
+{
+ "commit": "dc2204dba1e0512e17ff264be4f2498b04d0cbb0",
+ "number_bearing_paths": [
+  "joulewise/adapters/mlx_runtime.py"
+ ],
+ "change": "ALIGN pilot 3 build: opt-in per-episode prompt-cache hooks in mlx_runtime._generate (Sol 6.1); retroactive review",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, retroactive executing review (non-author; original papers on measurement Mac unreachable), 2026-11-05",
+   "covered": "8510e77b2..dc2204dba (joulewise/adapters/mlx_runtime.py hunks); legacy differential re-run at integration c8ef6b2f6; ADMIT; paper sha256 2a48c3036b997fb0f92383b9a6e5c0a0bede7aec3aa248c1313045b6cfd8e924",
+   "paper": "docs/align/reviews/2026-11-05-retro-executing-review-dc2204dba.md"
+  }
+ ]
+},
+{
+ "commit": "b29c25c59ad57787faae4e939578dea01c5682a6",
+ "number_bearing_paths": [
+  "joulewise/adapters/mlx_runtime.py"
+ ],
+ "change": "ALIGN pilot 4 build: opt-in seeded categorical sampling in pinned MLX adapter (Sol 6.1); retroactive review",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, retroactive executing review (non-author), 2026-11-05",
+   "covered": "b29c25c59^..b29c25c59 (joulewise/adapters/mlx_runtime.py hunks), re-executed at lane/2026-11-05-align-v4-integration c8ef6b2f6; ADMIT; paper sha256 3fe4cba22070c2be54d7e96059ced00069f53f6ac403412ba465a900a187b75f",
+   "paper": "docs/align/reviews/2026-11-05-retro-executing-review-b29c25c59.md"
+  }
+ ]
+},
+{
+ "commit": "0ba413d40fbadeac03d619cda7c030a11eb24394",
+ "number_bearing_paths": [
+  "joulewise/adapters/mlx_runtime.py"
+ ],
+ "change": "ALIGN #657 hybrid prompt-cache checkpoint: keyword-only prefill_prompt hook and pre-hook prefill_tokens in MlxRuntimeAdapter._generate (retroactive)",
+ "executing_reviews": [
+  {
+   "reviewer": "Opus 5.5, retroactive executing review (non-author; original papers unreachable on measurement Mac)",
+   "covered": "0ba413d40 mlx_runtime.py hunks (blob 7487a42ce, byte-identical at integration c8ef6b2f6 and v4-trial b49bace62); ADMIT_WITH_FIXES: admitted for hybrid_checkpoint_limit None or 0; legacy path byte- and native-bitwise identical to parent; F2 deadman coverage of opt-in boundary prefill must be fixed before any limit>0 cell; paper sha256 759eb902a5932c3233ed2b1c7fd33bc18d171f0d1b70d87b867f6e98928d7ffd",
+   "paper": "docs/align/reviews/2026-11-05-retro-executing-review-0ba413d40.md"
+  }
+ ]
 }
 ]

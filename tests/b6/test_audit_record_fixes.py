@@ -88,8 +88,22 @@ class AuditRecordTests(unittest.TestCase):
         self.assertEqual(len({row['commit'] for row in rows}), len(rows))
         for row in rows[len(before):]:
             self.assertTrue(row['executing_reviews'])
-            self.assertTrue(all(review['paper'].startswith('/Users/edr/night-archive/')
-                                for review in row['executing_reviews']))
+            for review in row['executing_reviews']:
+                paper = review['paper']
+                if paper.startswith('/Users/edr/night-archive/'):
+                    # Historical archive citations remain text-only here.
+                    continue
+                relative = Path(paper)
+                self.assertFalse(relative.is_absolute())
+                self.assertNotIn('..', relative.parts)
+                self.assertEqual(relative.parent, Path('docs/align/reviews'))
+                self.assertEqual(relative.suffix, '.md')
+                path = support.ROOT / relative
+                self.assertFalse(path.is_symlink())
+                self.assertEqual(path.resolve().parent,
+                                 support.ROOT.resolve() / 'docs/align/reviews')
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                self.assertIn('paper sha256 ' + digest, review['covered'])
         registered = json.loads((support.ROOT / 'configs/b6/registration/acceptance.json').read_bytes())
         self.assertEqual(len(registered['number_bearing_paths']), 16)
         # F8's verdict/calibration list is broader than registration's 16
