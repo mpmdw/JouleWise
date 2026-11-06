@@ -72,6 +72,18 @@ class ShardPartitionInvariantTests(unittest.TestCase):
                 self.assertEqual(len(flattened), len(self.discover_set))
                 self.assertEqual(len(flattened), len(set(flattened)))
 
+    def test_every_discovered_module_has_timing_or_documented_exemption(self):
+        payload = shard_tests._load_timings_payload(shard_tests.DEFAULT_TIMINGS_PATH)
+        exemptions = payload.get("timing_exemptions", {})
+        self.assertIsInstance(exemptions, dict)
+        for module, reason in exemptions.items():
+            with self.subTest(module=module):
+                self.assertIsInstance(reason, str)
+                self.assertTrue(reason.strip())
+                self.assertNotIn(module, self.timings)
+        uncovered = set(self.modules) - set(self.timings) - set(exemptions)
+        self.assertEqual(uncovered, set())
+
     def test_partition_is_deterministic(self):
         for shard_count in (1, 2, 4, 8):
             with self.subTest(shards=shard_count):
