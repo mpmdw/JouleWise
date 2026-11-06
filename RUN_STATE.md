@@ -8056,3 +8056,7 @@ work. The generated region controls task selection.
 - Git author identity on this machine auto-selected as
   `Ed R <edr@Eds-MacBook-Pro.local>`. Amend future commits if a
   different identity is needed.
+<!-- 2026-11-06 comparator audit: the fixed-blind B5 bars and all skip/unmapped
+paths were audited in docs/run_reports/sol-burn/comparator-audit.md. Finite
+runtime bar/difference overflow now fails closed; synthetic comparator checks
+pass. No experiment data was accessed. -->

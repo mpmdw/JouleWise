@@ -190,7 +190,14 @@ def bar_for(spec, reference):
     parts = [spec.get("absolute", 0.0), spec.get("relative", 0.0) * abs(reference)]
     if "printed_decimals" in spec:
         parts.append(0.5 * 10.0 ** -spec["printed_decimals"])
-    return max(parts)
+    bar = max(parts)
+    # A finite config can still overflow when its relative term is applied to
+    # an adversarially large finite input.  Infinity is not a permissive bar:
+    # abs(ours - l9) <= inf would otherwise silently agree with every finite
+    # value (and could put Infinity in the restricted JSON difference).
+    if not finite(bar):
+        raise Refusal("bar_nonfinite_at_runtime")
+    return bar
 
 
 class Comparison:
@@ -215,9 +222,14 @@ class Comparison:
             raise Refusal("bars_family_missing:" + family)
         row = {"family": family, "key": key, "l9": l9, "recompute": ours}
         if finite(l9) and finite(ours):
-            row["difference"] = ours - l9
+            difference = ours - l9
+            # Two finite binary64 inputs can have an infinite subtraction.
+            # Keep the restricted result valid strict JSON and fail closed.
+            row["difference"] = difference if finite(difference) else None
             row["bar"] = bar_for(family_spec(self.bars["families"][family], key), l9)
-            row["verdict"] = "AGREE" if abs(ours - l9) <= row["bar"] else "DISAGREE"
+            row["verdict"] = "AGREE" if finite(difference) and abs(difference) <= row["bar"] else "DISAGREE"
+            if not finite(difference):
+                row["reason"] = "difference_nonfinite"
         else:
             row["verdict"], row["reason"] = "DISAGREE", "missing_or_null"
         return self.add(row)

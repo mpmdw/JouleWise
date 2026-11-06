@@ -1353,3 +1353,6 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+<!-- 2026-11-06 ad-hoc user request complete: B5 comparator bars, unmapped keys,
+and silent skip/pass paths audited; overflow holes fixed and regression-pinned.
+Report: docs/run_reports/sol-burn/comparator-audit.md. -->
