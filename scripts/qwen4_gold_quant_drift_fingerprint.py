@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Argument front-end for Qwen4 gold parity and optional drift measurement.
+"""Fingerprint front-end for optional Qwen4 gold quantization-drift requests.
+
+(Not ``run_qwen4_gold_parity.py``: that path is the gold lane's real parity
+runner entry point.)
 
 The complete streamed runner may import :func:`apply_quant_drift_flag`; this
 small front-end also makes the request/fingerprint contract independently
@@ -14,7 +17,7 @@ from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from joulewise.align.qwen4_gold.canonical_adapter import GoldRequest, with_quant_drift
+from joulewise.align.qwen4_gold.quant_drift import GoldRequest, with_quant_drift
 
 
 def apply_quant_drift_flag(request: GoldRequest, bits: int | None) -> GoldRequest:

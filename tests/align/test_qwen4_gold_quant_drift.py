@@ -1,6 +1,11 @@
 import unittest
 
-from joulewise.align.qwen4_gold.canonical_adapter import GoldRequest, drift_metrics, quant_drift_record
+from pathlib import Path
+
+from joulewise.align.qwen4_gold.quant_drift import (GoldRequest, drift_metrics, quant_drift_record,
+                                                    quantized_gather_qmm)
+
+REPO = Path(__file__).resolve().parents[2]
 
 try:
     import mlx.core as mx
@@ -41,6 +46,38 @@ class QuantDriftContractTests(unittest.TestCase):
         error = mx.abs(restored - weight)
         self.assertGreater(float(mx.max(error).item()), 0.0)
         self.assertLess(float(mx.max(error).item()), 0.02)
+
+    @unittest.skipUnless(mx is not None, "MLX/Metal is available only on the native Mac")
+    def test_quantized_gather_qmm_routes_selected_experts(self):
+        # Tiny synthetic stacked experts [experts, out, in]; never real weights.
+        mx.random.seed(0)
+        weight = mx.random.normal((4, 8, 64)) / 8
+        x = mx.random.normal((3, 1, 64))
+        indices = mx.array([0, 2, 3], dtype=mx.uint32)
+        path = "language_model.model.layers.0.mlp.switch_mlp.up_proj.weight"
+        out = quantized_gather_qmm(x, weight, indices, path=path, bits=6)
+        exact = mx.stack([x[i] @ weight[int(indices[i])].T for i in range(3)])
+        mx.eval(out, exact)
+        self.assertEqual(tuple(out.shape), (3, 1, 8))
+        error = float(mx.max(mx.abs(out - exact)).item())
+        self.assertGreater(error, 0.0)
+        self.assertLess(error, 0.1)
+        with self.assertRaises(ValueError):  # not a routed expert under maxfit
+            quantized_gather_qmm(x, weight, indices, path="model.layers.0.self_attn.q_proj.weight", bits=6)
+
+
+class GoldLanePathOwnershipTests(unittest.TestCase):
+    """These helpers must not occupy paths the gold adapter lane owns."""
+
+    def test_gold_lane_paths_are_not_shadowed(self):
+        adapter = REPO / "joulewise/align/qwen4_gold/canonical_adapter.py"
+        if adapter.exists():
+            self.assertNotIn("class GoldRequest", adapter.read_text())
+        runner = REPO / "scripts/run_qwen4_gold_parity.py"
+        if runner.exists():
+            self.assertIn("qwen4_gold.runner", runner.read_text())
+        init = REPO / "joulewise/align/qwen4_gold/__init__.py"
+        self.assertEqual(init.read_bytes(), b"")  # byte-identical to the gold lane's
 
 
 if __name__ == "__main__":

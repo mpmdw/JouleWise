@@ -1,4 +1,7 @@
-"""Quantization-drift extension points for the canonical Qwen4 gold adapter.
+"""Quantization-drift helpers for the Qwen4 gold stream (measurement only).
+
+Named ``quant_drift`` so it never collides with the gold lane's
+``qwen4_gold/canonical_adapter.py`` (the gold/v1 MLX adapter).
 
 Quantization drift is descriptive evidence, never a parity verdict.  Keeping
 its identity in a separate fingerprint is important: adding this optional
@@ -64,8 +67,10 @@ def quantized_gather_qmm(x: Any, weight: Any, indices: Any, *, path: str, bits: 
     """Apply the converter's exact expert recipe, then MLX ``gather_qmm``.
 
     Imports stay lazy so documentation, comparison, and unit tests work on
-    non-Apple hosts.  The caller supplies one routed expert matrix as read by
-    the streaming adapter and the already-selected expert indices.
+    non-Apple hosts.  The caller supplies the stacked routed-expert weight
+    ``[experts, out, in]`` as read by the streaming adapter and the
+    already-selected expert indices (flat indices into the expert axis,
+    broadcast against ``x``'s batch dimensions, as in ``SwitchGLU``).
     """
     if bits not in (5, 6):
         raise ValueError("expert drift supports only 5 or 6 bits")
@@ -76,7 +81,7 @@ def quantized_gather_qmm(x: Any, weight: Any, indices: Any, *, path: str, bits: 
     if quant is None or quant["bits"] != bits:
         raise ValueError(f"matrix is not a routed expert under {profile}: {path}")
     packed, scales, biases = mx.quantize(weight, group_size=64, bits=bits)
-    return mx.gather_qmm(x, packed, scales, biases, indices=indices, transpose=True,
+    return mx.gather_qmm(x, packed, scales, biases, rhs_indices=indices, transpose=True,
                          group_size=64, bits=bits, mode="affine")
 
 
