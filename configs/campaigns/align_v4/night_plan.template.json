@@ -176,9 +176,10 @@
     },
     "window": 1
   },
+  "night_plan_schema": "joulewise.night_plan.v5",
+  "night_plan_schema_version": 5,
   "plan_id": "align-v4-w1-PENDING_R1",
   "receipt_class": "HAZARD_PACK",
-  "schema": "joulewise.night_plan.v5",
-  "schema_version": 5,
+  "schema": "joulewise.align_v4.w1_plan_template.v1",
   "window_max_s": "PENDING_R1"
 }

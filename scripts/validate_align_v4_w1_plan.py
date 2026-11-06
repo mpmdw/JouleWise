@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Validate the fail-closed ALIGN v4 window-1 night-plan template.
+"""Validate the fail-closed ALIGN v4 window-1 plan template (a planning sheet).
 
 This is a desk validator only.  It neither writes custody nor invokes any arm
-or installation code.
+or installation code.  The template is *not* a ``run_night`` plan: the real
+night plan (schema ``joulewise.night_plan.v5``, receipt class HAZARD_PACK) is
+written by ``align_v4_session.py prepare`` from the kit and its sizing.  The
+template therefore carries its own schema and only names the night-plan family
+it targets, so no tool can mistake it for a runnable plan.  Its R0/R1 values
+must equal ``registration/inputs.json``, which is what the kit installs.
 """
 from __future__ import annotations
 
@@ -14,12 +19,18 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PLAN = ROOT / "configs/campaigns/align_v4/night_plan.template.json"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from joulewise.b5 import plan as night_plan  # noqa: E402  (window-maximum constants)
+
 PLACEHOLDER = "PENDING_R1"
+TEMPLATE_SCHEMA = "joulewise.align_v4.w1_plan_template.v1"
+INPUTS = ROOT / "configs/campaigns/align_v4/registration/inputs.json"
 SPAN_CAP_S = 26_940
 WINDOW_CAP_S = 44_640
-T0_STAGE_CAP_S = 3_300
-PAUSE_LIMIT_S = 7_200
-SESSION_WAIT_BUDGET_S = 7_200
+T0_STAGE_CAP_S = night_plan.T0_STAGE_CAP_S
+PAUSE_LIMIT_S = night_plan.PAUSE_LIMIT_S
+SESSION_WAIT_BUDGET_S = night_plan.SESSION_WAIT_BUDGET_S
 
 
 def _fail(message: str) -> None:
@@ -43,12 +54,18 @@ def _finite(value, label: str) -> float:
     return float(value)
 
 
-def validate(value: dict) -> dict:
+def _read_inputs() -> dict:
+    return json.loads(INPUTS.read_text(encoding="utf-8"))
+
+
+def validate(value: dict, inputs: dict | None = None) -> dict:
     pending = list(_placeholder_paths(value))
     if pending:
         _fail("refused PENDING_R1 placeholder(s): " + ", ".join(pending))
-    if value.get("schema") != "joulewise.night_plan.v5" or value.get("schema_version") != 5:
-        _fail("window 1 must use the pilot night-plan v5 schema")
+    if value.get("schema") != TEMPLATE_SCHEMA:
+        _fail(f"template schema must be {TEMPLATE_SCHEMA}; it is not a run_night plan")
+    if value.get("night_plan_schema") != "joulewise.night_plan.v5" or value.get("night_plan_schema_version") != 5:
+        _fail("window 1 targets the pilot night-plan v5 family")
     if value.get("receipt_class") != "HAZARD_PACK":
         _fail("window 1 receipt_class must be HAZARD_PACK")
 
@@ -74,6 +91,23 @@ def validate(value: dict) -> dict:
         _fail("thermal_policy and thermal_policy.sensors must be objects")
     if set(policy["sensors"]) != sensor_keys:
         _fail("thermal_policy.sensors must explicitly contain " + ", ".join(sorted(sensor_keys)))
+    # The same canonical gate-policy validation the kit applies to D members.
+    from joulewise.align.apple.thermal_gates import validate_gate_policy
+    validate_gate_policy({**policy, "heavy": True, "per_turn": True, "window_reference": {"role": "capture"}})
+
+    # The template is a second copy of values the kit installs from
+    # registration/inputs.json; refuse any disagreement.
+    inputs = _read_inputs() if inputs is None else inputs
+    r1 = (inputs or {}).get("R1") or {}
+    bound = {"B_D": r1.get("B_D"), "I_D": r1.get("I_D"), "T_dead": r1.get("T_dead"),
+             "thermal_policy": r1.get("thermal_policy"),
+             "effort": ((inputs or {}).get("R0") or {}).get("reasoning_effort")}
+    unfilled = sorted(k for k, v in bound.items() if v is None)
+    if unfilled:
+        _fail("registration/inputs.json is still pending for: " + ", ".join(unfilled))
+    mismatched = sorted(k for k, v in bound.items() if align.get(k) != v)
+    if mismatched:
+        _fail("template disagrees with registration/inputs.json on: " + ", ".join(mismatched))
 
     members = align.get("members")
     if not isinstance(members, list) or len(members) != 18:
@@ -125,9 +159,12 @@ def validate(value: dict) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("plan", nargs="?", type=Path, default=DEFAULT_PLAN)
+    parser.add_argument("--inputs", type=Path, default=INPUTS,
+                        help="registration/inputs.json the kit installs (default: this checkout's)")
     args = parser.parse_args(argv)
     try:
-        result = validate(json.loads(args.plan.read_text(encoding="utf-8")))
+        inputs = json.loads(args.inputs.read_text(encoding="utf-8"))
+        result = validate(json.loads(args.plan.read_text(encoding="utf-8")), inputs)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2

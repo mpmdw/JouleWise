@@ -404,12 +404,14 @@ The additive align_v4_session.py refuses prepare/install while inputs are pendin
 Its desk is the parameterized pilot instrument desk; WP21 owns full U4–U6,
 K-session and contrast reporting. This kit grants no arm or hardware approval.
 
-`night_plan.template.json` is the fail-closed Window-1 planning template in
-the pilot night-plan v5 shape. Every R1 value, including every member cost,
-is an explicit `PENDING_R1` value. Validate a separately filled copy with
+`night_plan.template.json` is the fail-closed Window-1 planning sheet for the
+pilot night-plan v5 family; it is not itself a run_night plan (prepare writes
+that). Every R1 value, including every member cost, is an explicit
+`PENDING_R1` value. Validate a separately filled copy with
 `python3 -B scripts/validate_align_v4_w1_plan.py <copy>`; the command refuses
-any placeholder and recomputes both the 26,940 s span cap and 44,640 s window
-maximum. The template is not custody, an arm receipt, or an installation.
+any placeholder or disagreement with registration/inputs.json and recomputes
+both the 26,940 s span cap and 44,640 s window maximum. The template is not
+custody, an arm receipt, or an installation.
 """
 
 
