@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections import defaultdict
 import math
 from statistics import fmean, stdev
+import json
+from pathlib import Path
 
 from joulewise.align.attribution import attribute_episode
 from joulewise.align.apple import thermal as temperature
@@ -387,6 +389,63 @@ def cross_window(windows, reference_j, *, anchor_sessions=None):
     """U4 is conjunctive: sentinel equivalence AND the 30B anchor moment bar."""
     return _combined_u4({'anchors': _anchor_moments(anchor_sessions),
                          'sentinels': _sentinel_equivalence(windows, reference_j)})
+
+
+def session_desk_evidence(pilot_paths, *, adapter=None):
+    """Read desk-only U4--U6 evidence from K ``PILOT.json`` files.
+
+    ``adapter`` is the deliberately narrow seam for the off-repository
+    ``k_sessions.py`` reader.  It receives the decoded PILOT objects and must
+    return the same mapping as the portable ``v4_desk_evidence`` object used
+    by fixtures: ``anchors``, ``sentinels``, ``u5`` and ``u6``.  No path from
+    a PILOT file is followed here.
+    """
+    paths = [Path(p) for p in pilot_paths]
+    pilots = [json.loads(p.read_text()) for p in paths]
+    if adapter is not None:
+        evidence = adapter(pilots)
+    else:
+        parts = [p.get('v4_desk_evidence') for p in pilots]
+        if not parts or any(not isinstance(p, dict) for p in parts):
+            return {'status': 'inconclusive', 'reason':
+                    'PILOT lacks v4_desk_evidence; connect off-repo k_sessions.py at adapter'}
+        anchors, sentinels = {}, {}
+        u5, u6, u5_inputs, u6_inputs = {}, {}, {}, {}
+        reference = None
+        for i, part in enumerate(parts):
+            session = str(part.get('session_id', pilots[i].get('session_id', paths[i].stem)))
+            if isinstance(part.get('anchors'), dict):
+                anchors[session] = part['anchors']
+            if isinstance(part.get('sentinel_energies_j'), dict):
+                for model, values in part['sentinel_energies_j'].items():
+                    sentinels.setdefault(model, {})[session] = values
+            reference = part.get('sentinel_reference_j', reference)
+            if isinstance(part.get('u5'), dict):
+                u5.update(part['u5'])
+            if isinstance(part.get('u6'), dict):
+                u6.update(part['u6'])
+            if isinstance(part.get('u5_inputs'), dict):
+                u5_inputs.update(part['u5_inputs'])
+            if isinstance(part.get('u6_inputs'), dict):
+                for model, raw in part['u6_inputs'].items():
+                    target = u6_inputs.setdefault(model, {k: v for k, v in raw.items() if k != 'benign'})
+                    target.setdefault('benign', []).extend(raw.get('benign', []))
+        for model, raw in u5_inputs.items():
+            u5[model] = state_sensitivity(**raw)
+        for model, raw in u6_inputs.items():
+            u6[model] = monitoring_stability(**raw)
+        evidence = {'anchors': anchors, 'sentinels': sentinels,
+                    'sentinel_reference_j': reference, 'u5': u5, 'u6': u6}
+    if not isinstance(evidence, dict):
+        return {'status': 'inconclusive', 'reason': 'K-session adapter returned no evidence'}
+    anchors = evidence.get('anchors')
+    models = set(evidence.get('sentinels', {})) | set(evidence.get('u5', {})) | set(evidence.get('u6', {}))
+    cross = {model: cross_window(evidence.get('sentinels', {}).get(model, {}),
+                                 evidence.get('sentinel_reference_j'), anchor_sessions=anchors)
+             for model in models}
+    return {'status': 'pass', 'K': len(pilots), 'cross_windows': cross,
+            'sensitivity': evidence.get('u5', {}), 'monitoring': evidence.get('u6', {}),
+            'adapter': 'external' if adapter is not None else 'portable-v4_desk_evidence'}
 
 
 def state_sensitivity(*, heavy, smaller_pair_sr_j, mean_energy_j, mean_30b_energy_j=None,
