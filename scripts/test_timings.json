@@ -5,6 +5,7 @@
   "_zero_observation_floor": "Hosted medians that round to 0.000 s are floored to 0.001 s for load_timing_map positivity: ['tests.test_audit_clock', 'tests.test_audit_report', 'tests.test_midcampaign_cure_generation_docs', 'tests.test_scored_packer_fuzz'].",
   "_local_observations_2026_10_06_gate_prune": "ADDED 2026-10-06 for the gate-prune integration branch (feat/2026-10-05-gate-prune, merge of origin/main 7cd23b91 into 027fd793): the 52 modules new on that branch (block-4 v5-qualification lanes and gate-prune lanes L1-L8) had no hosted observation, so each carries ONE LOCAL observation instead: the 'MODULE PASS <module> ... seconds=S' line from scripts/shard_tests.run_shard, six concurrent processes of nine or eight modules, /opt/homebrew/bin/python3.13 (Python 3.13, no venv) on the Apple M3 Max MacBook Pro, JOULEWISE_FULL_CORPUS unset, all 52 passing. Local Mac seconds are not hosted medians and likely understate a hosted runner's cost; they are scheduling hints only, to be replaced by hosted medians at the next CI harvest. Modules: tests.flags.test_flags_catalog, tests.flags.test_flags_collect, tests.flags.test_flags_exclusions, tests.flags.test_flags_identity_pins, tests.flags.test_flags_import_graph, tests.flags.test_flags_review_regressions, tests.flags.test_flags_schema, tests.flags.test_flags_sink, tests.flags.test_number_coverage, tests.hazards.test_arm, tests.hazards.test_battery, tests.hazards.test_clock, tests.hazards.test_contention, tests.hazards.test_disk, tests.hazards.test_import_graph, tests.hazards.test_instrument, tests.hazards.test_monitor, tests.hazards.test_physics_coverage, tests.hazards.test_thermal, tests.test_b5_chain, tests.test_b5_driver, tests.test_b5_plan, tests.test_capture_t0_anchor_positive_control, tests.test_capture_t0_anchor_positive_control_g10, tests.test_digest_pin_census, tests.test_g10_clock_step_control, tests.test_gate_prune_integration, tests.test_harvest_b5_window, tests.test_harvest_v5_g2b_window, tests.test_harvest_v5_qualification, tests.test_kernel_clock, tests.test_repin, tests.test_t0_anchor_positive_control, tests.test_v5_arm_abort, tests.test_v5_block4_clock, tests.test_v5_block4_composed, tests.test_v5_block4_replay, tests.test_v5_block4_x1, tests.test_v5_block4_x10, tests.test_v5_block4_x12a, tests.test_v5_block4_x12b, tests.test_v5_block4_x16, tests.test_v5_block4_x2, tests.test_v5_block4_x4, tests.test_v5_block4_x6, tests.test_v5_block4_x7, tests.test_v5_block4_x9, tests.test_v5_pack_rehearsal, tests.test_v5_qualification_plan, tests.test_v5_s1_desk_closeout, tests.test_v5_s1_qualification, tests.test_window_lineage.",
   "_hosted_observations_2026_10_30": "ADDED 2026-10-30 (PR #607): 111 discovered modules had no weight, so each was packed at the 26.98 s unknown weight; tests.b5_analysis.test_sources_replay alone runs about 1,300 s, and the misweighted packing pushed ordinary shard 9 past its 30-minute ceiling on PRs #604 and #607. Each added module carries ONE hosted observation: its 'MODULE PASS|FAIL <module> ... seconds=S' line from hosted ci.yml run 41018218994 (PR #607 head 01ad9e3c1, ubuntu-latest, Python 3.13). Single observations, not medians; scheduling hints only, to be replaced at the next CI harvest. Modules: tests.b5_analysis.test_analysed_windows_index, tests.b5_analysis.test_archive, tests.b5_analysis.test_attempt_record, tests.b5_analysis.test_bracket, tests.b5_analysis.test_census_path_token, tests.b5_analysis.test_chain_fixture, tests.b5_analysis.test_claim_gate_kept_quads, tests.b5_analysis.test_claim_replay, tests.b5_analysis.test_context, tests.b5_analysis.test_deadline_observer, tests.b5_analysis.test_deadline_tripwire, tests.b5_analysis.test_disclosures, tests.b5_analysis.test_dry_run, tests.b5_analysis.test_fill_adapter, tests.b5_analysis.test_finalization_block5, tests.b5_analysis.test_fixture_shapes, tests.b5_analysis.test_floor_kept_units, tests.b5_analysis.test_frozen_files, tests.b5_analysis.test_gamma_flags, tests.b5_analysis.test_issuer, tests.b5_analysis.test_joined_probes, tests.b5_analysis.test_kept_units, tests.b5_analysis.test_launch_lineage, tests.b5_analysis.test_mint_kept_units, tests.b5_analysis.test_neg8_parity, tests.b5_analysis.test_neg8_predicate, tests.b5_analysis.test_release_equality, tests.b5_analysis.test_removed_member_preparation, tests.b5_analysis.test_reported_cell, tests.b5_analysis.test_row_selection_context, tests.b5_analysis.test_runtime_identity_cells, tests.b5_analysis.test_s10_chain_defects, tests.b5_analysis.test_sensitivity, tests.b5_analysis.test_sensitivity_guard, tests.b5_analysis.test_shared_physics_cache, tests.b5_analysis.test_sibling_pinset, tests.b5_analysis.test_sources_replay, tests.b5_analysis.test_step4_exit_classes, tests.b5_analysis.test_tripwires, tests.b5_analysis.test_validator_context, tests.b5_analysis.test_windows, tests.external.test_km003c_monitor, tests.external.test_km003c_parse, tests.flags.test_flags_core, tests.flags.test_flags_fx_regressions, tests.hazards.test_arm_dwell_clean_run, tests.hazards.test_arm_identity, tests.hazards.test_monitor_p2, tests.hazards.test_refusal_allowlist, tests.hazards.test_smc, tests.independent_recompute.test_archives, tests.independent_recompute.test_auditfix, tests.independent_recompute.test_comparator, tests.independent_recompute.test_comparator_meter, tests.independent_recompute.test_examples, tests.independent_recompute.test_hygiene, tests.independent_recompute.test_input_gate, tests.independent_recompute.test_meter, tests.independent_recompute.test_meter_fit, tests.independent_recompute.test_rc_cmp10, tests.independent_recompute.test_rc_cmp11, tests.independent_recompute.test_rc_cmp7, tests.independent_recompute.test_rc_cmp8, tests.independent_recompute.test_rc_cmp9, tests.independent_recompute.test_reconcile, tests.independent_recompute.test_rehearsals, tests.independent_recompute.test_review_fixes, tests.independent_recompute.test_review_probes_meter, tests.independent_recompute.test_round3, tests.independent_recompute.test_structural_rules, tests.test_agent_identity, tests.test_b5_chain_prune2, tests.test_b5_chain_static_check, tests.test_b5_driver_lineage_real, tests.test_b5_driver_p2, tests.test_b5_driver_p3, tests.test_b5_seal_landing, tests.test_bench_replay_entrypoint, tests.test_calibration_ledger_historical_custody_report, tests.test_ci_docs_only, tests.test_codex_mcp_server, tests.test_controller_hazard_flags, tests.test_custody_durability, tests.test_epoch_continuation_stale_pin, tests.test_harvest_b5_p3harv, tests.test_harvest_b5_rehearsal_compare, tests.test_harvest_b5_sources, tests.test_harvest_b5_trigger_scope, tests.test_hazard_neg8_mint_verdicts, tests.test_hazard_whole_window_verdict, tests.test_live_hw_optin, tests.test_magistrate_watchdog_b6, tests.test_magistrate_watchdog_yield, tests.test_neg8_corpus_cap, tests.test_neg8_survivors, tests.test_p2_ctl_calibration, tests.test_p2_ctl_cli, tests.test_p2_ctl_guard_probe, tests.test_reserve_calibration_hazard, tests.test_run_campaign_hazard_flags, tests.test_run_campaign_p2_rc, tests.test_run_d165_closeout_from_custody, tests.test_size_b5_window, tests.test_validate_powermetrics_fiducial_hazard, tests.test_validate_powermetrics_fiducial_p2_vpf, tests.test_whole_window_parallel_strict, tests.test_write_b5_identity_pins, tests.twins.test_engine_twin, tests.twins.test_engine_twin_comparison, tests.twins.test_harvest_twin, tests.twins.test_harvest_twin_comparison",
+  "_hosted_observations_2026_11_05_post_release": "ADDED 2026-11-06 (lane/2026-11-06-sol-ci-flaky-timings): 36 discovered modules had no weight and were packed at the 26.98 s unknown weight. Each carries ONE hosted observation: its 'MODULE PASS <module> ... seconds=S' line from hosted ci.yml run 42000523184 (PR head a33860c4d of lane/2026-11-05-b5-post-release-fixes, ubuntu-latest, Python 3.13); every listed module passed with its full test count there. These replace a first draft that used invented per-method estimates (20 s per test method, 120 s floor) totalling 14,280 s against 1,800 s observed, which packed a true slowest ordinary shard of about 2,320 s instead of about 1,400 s. Single observations, not medians; scheduling hints only, to be replaced at the next CI harvest. Modules: tests.b5_analysis.test_analysis_work_counts, tests.b5_analysis.test_auth_capability_bridge, tests.b5_analysis.test_auth_recorder_and_verdict_memo, tests.b5_analysis.test_environment_admission_memo_first, tests.b5_analysis.test_leaf_bracket, tests.b5_analysis.test_leaf_cli, tests.b5_analysis.test_leaf_whole_window, tests.b5_analysis.test_member_pool, tests.b5_analysis.test_parallel_steps, tests.b5_analysis.test_phase_timing, tests.b5_analysis.test_postrelease_bracket_copies, tests.b5_analysis.test_postrelease_bracket_snapshot, tests.b5_analysis.test_postrelease_g9, tests.b5_analysis.test_postrelease_step11_codes, tests.b5_analysis.test_postrelease_step4, tests.b5_analysis.test_result_equivalence, tests.b5_analysis.test_run_caches, tests.b5_analysis.test_small_fixes, tests.b5_analysis.test_step11_null_outcomes, tests.b5_analysis.test_step4_member_codes, tests.b5_analysis.test_step4_reason_table, tests.b5_analysis.test_vdl_core, tests.b5_analysis.test_vdl_kernel_resolution, tests.b5_analysis.test_vdl_key_schema, tests.b5_analysis.test_vdl_shipping, tests.b5_analysis.test_vdl_sol_hunt, tests.b5_analysis.test_vdl_sol_hunt2, tests.b5_analysis.test_vdl_sol_hunt3, tests.b5_analysis.test_vdl_sol_w2, tests.test_arm_readiness_batch, tests.test_custody_isolation_guard, tests.test_harvest_b5_p2harv, tests.test_p2_ctl_auxiliary, tests.test_whole_window_analysis_clamp_flag, tests.test_whole_window_inverted_corner_clamp, tests.test_window_lineage_idempotent",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
       "seconds": 820.019,
@@ -60,11 +61,11 @@
   },
   "seconds_by_module": {
     "tests.b5_analysis.test_analysed_windows_index": 9.807,
-    "tests.b5_analysis.test_analysis_work_counts": 300.0,
+    "tests.b5_analysis.test_analysis_work_counts": 44.739,
     "tests.b5_analysis.test_archive": 1.529,
     "tests.b5_analysis.test_attempt_record": 3.392,
-    "tests.b5_analysis.test_auth_capability_bridge": 560.0,
-    "tests.b5_analysis.test_auth_recorder_and_verdict_memo": 680.0,
+    "tests.b5_analysis.test_auth_capability_bridge": 281.988,
+    "tests.b5_analysis.test_auth_recorder_and_verdict_memo": 0.241,
     "tests.b5_analysis.test_bracket": 274.346,
     "tests.b5_analysis.test_census_path_token": 30.492,
     "tests.b5_analysis.test_chain_fixture": 1.6,
@@ -75,7 +76,7 @@
     "tests.b5_analysis.test_deadline_tripwire": 131.801,
     "tests.b5_analysis.test_disclosures": 4.682,
     "tests.b5_analysis.test_dry_run": 262.577,
-    "tests.b5_analysis.test_environment_admission_memo_first": 120.0,
+    "tests.b5_analysis.test_environment_admission_memo_first": 3.45,
     "tests.b5_analysis.test_fill_adapter": 0.729,
     "tests.b5_analysis.test_finalization_block5": 102.206,
     "tests.b5_analysis.test_fixture_shapes": 187.081,
@@ -86,48 +87,48 @@
     "tests.b5_analysis.test_joined_probes": 0.001,
     "tests.b5_analysis.test_kept_units": 19.29,
     "tests.b5_analysis.test_launch_lineage": 65.276,
-    "tests.b5_analysis.test_leaf_bracket": 400.0,
-    "tests.b5_analysis.test_leaf_cli": 380.0,
-    "tests.b5_analysis.test_leaf_whole_window": 440.0,
-    "tests.b5_analysis.test_member_pool": 280.0,
+    "tests.b5_analysis.test_leaf_bracket": 254.894,
+    "tests.b5_analysis.test_leaf_cli": 147.81,
+    "tests.b5_analysis.test_leaf_whole_window": 49.879,
+    "tests.b5_analysis.test_member_pool": 18.252,
     "tests.b5_analysis.test_mint_kept_units": 119.314,
     "tests.b5_analysis.test_neg8_parity": 1.049,
     "tests.b5_analysis.test_neg8_predicate": 0.294,
-    "tests.b5_analysis.test_parallel_steps": 480.0,
-    "tests.b5_analysis.test_phase_timing": 680.0,
-    "tests.b5_analysis.test_postrelease_bracket_copies": 120.0,
-    "tests.b5_analysis.test_postrelease_bracket_snapshot": 120.0,
-    "tests.b5_analysis.test_postrelease_g9": 120.0,
-    "tests.b5_analysis.test_postrelease_step11_codes": 140.0,
-    "tests.b5_analysis.test_postrelease_step4": 120.0,
+    "tests.b5_analysis.test_parallel_steps": 352.974,
+    "tests.b5_analysis.test_phase_timing": 0.758,
+    "tests.b5_analysis.test_postrelease_bracket_copies": 0.002,
+    "tests.b5_analysis.test_postrelease_bracket_snapshot": 0.008,
+    "tests.b5_analysis.test_postrelease_g9": 0.003,
+    "tests.b5_analysis.test_postrelease_step11_codes": 0.056,
+    "tests.b5_analysis.test_postrelease_step4": 0.015,
     "tests.b5_analysis.test_release_equality": 1.315,
     "tests.b5_analysis.test_removed_member_preparation": 2.438,
     "tests.b5_analysis.test_reported_cell": 0.093,
-    "tests.b5_analysis.test_result_equivalence": 1960.0,
+    "tests.b5_analysis.test_result_equivalence": 28.732,
     "tests.b5_analysis.test_row_selection_context": 50.42,
-    "tests.b5_analysis.test_run_caches": 300.0,
+    "tests.b5_analysis.test_run_caches": 47.478,
     "tests.b5_analysis.test_runtime_identity_cells": 2.697,
     "tests.b5_analysis.test_s10_chain_defects": 8.199,
     "tests.b5_analysis.test_sensitivity": 202.366,
     "tests.b5_analysis.test_sensitivity_guard": 28.516,
     "tests.b5_analysis.test_shared_physics_cache": 281.073,
     "tests.b5_analysis.test_sibling_pinset": 2.978,
-    "tests.b5_analysis.test_small_fixes": 660.0,
+    "tests.b5_analysis.test_small_fixes": 4.299,
     "tests.b5_analysis.test_sources_replay": 1310.988,
-    "tests.b5_analysis.test_step11_null_outcomes": 180.0,
+    "tests.b5_analysis.test_step11_null_outcomes": 0.554,
     "tests.b5_analysis.test_step4_exit_classes": 0.006,
-    "tests.b5_analysis.test_step4_member_codes": 120.0,
-    "tests.b5_analysis.test_step4_reason_table": 160.0,
+    "tests.b5_analysis.test_step4_member_codes": 0.493,
+    "tests.b5_analysis.test_step4_reason_table": 5.735,
     "tests.b5_analysis.test_tripwires": 67.486,
     "tests.b5_analysis.test_validator_context": 203.478,
-    "tests.b5_analysis.test_vdl_core": 1260.0,
-    "tests.b5_analysis.test_vdl_kernel_resolution": 200.0,
-    "tests.b5_analysis.test_vdl_key_schema": 160.0,
-    "tests.b5_analysis.test_vdl_shipping": 640.0,
-    "tests.b5_analysis.test_vdl_sol_hunt": 260.0,
-    "tests.b5_analysis.test_vdl_sol_hunt2": 300.0,
-    "tests.b5_analysis.test_vdl_sol_hunt3": 300.0,
-    "tests.b5_analysis.test_vdl_sol_w2": 400.0,
+    "tests.b5_analysis.test_vdl_core": 50.899,
+    "tests.b5_analysis.test_vdl_kernel_resolution": 81.708,
+    "tests.b5_analysis.test_vdl_key_schema": 0.696,
+    "tests.b5_analysis.test_vdl_shipping": 6.264,
+    "tests.b5_analysis.test_vdl_sol_hunt": 2.917,
+    "tests.b5_analysis.test_vdl_sol_hunt2": 34.307,
+    "tests.b5_analysis.test_vdl_sol_hunt3": 33.964,
+    "tests.b5_analysis.test_vdl_sol_w2": 16.72,
     "tests.b5_analysis.test_windows": 1.607,
     "tests.external.test_km003c_monitor": 0.383,
     "tests.external.test_km003c_parse": 0.196,
@@ -198,7 +199,7 @@
     "tests.test_analysis_ratio_integration": 0.03,
     "tests.test_arm_census": 0.144,
     "tests.test_arm_readiness": 8.067,
-    "tests.test_arm_readiness_batch": 160.0,
+    "tests.test_arm_readiness_batch": 0.443,
     "tests.test_arm_readiness_dry_run": 47.561,
     "tests.test_arm_readiness_evidence": 7.072,
     "tests.test_arm_readiness_evidence_author": 58.349,
@@ -290,7 +291,7 @@
     "tests.test_corecaptured_loop": 0.001,
     "tests.test_corpus_strict_validation": 0.287,
     "tests.test_custody_durability": 0.038,
-    "tests.test_custody_isolation_guard": 120.0,
+    "tests.test_custody_isolation_guard": 1.456,
     "tests.test_custody_mode_inventory": 88.499,
     "tests.test_d078_reason_registry": 0.144,
     "tests.test_d117_contrast_v5_pack": 31.063,
@@ -346,7 +347,7 @@
     "tests.test_gensuite": 15.732,
     "tests.test_git_fixture_hygiene": 0.019,
     "tests.test_git_fixture_maintenance": 21.156,
-    "tests.test_harvest_b5_p2harv": 960.0,
+    "tests.test_harvest_b5_p2harv": 142.899,
     "tests.test_harvest_b5_p3harv": 49.48,
     "tests.test_harvest_b5_rehearsal_compare": 0.001,
     "tests.test_harvest_b5_sources": 2.445,
@@ -410,7 +411,7 @@
     "tests.test_nvidia_node_integration": 14.842,
     "tests.test_nvidia_smi": 0.013,
     "tests.test_p2038_production_path": 493.167,
-    "tests.test_p2_ctl_auxiliary": 120.0,
+    "tests.test_p2_ctl_auxiliary": 0.95,
     "tests.test_p2_ctl_calibration": 83.071,
     "tests.test_p2_ctl_cli": 5.427,
     "tests.test_p2_ctl_guard_probe": 48.615,
@@ -532,14 +533,14 @@
     "tests.test_validate_powermetrics_fiducial_p2_vpf": 319.818,
     "tests.test_vllm_runtime": 0.013,
     "tests.test_whole_window": 0.327,
-    "tests.test_whole_window_analysis_clamp_flag": 280.0,
-    "tests.test_whole_window_inverted_corner_clamp": 680.0,
+    "tests.test_whole_window_analysis_clamp_flag": 78.09,
+    "tests.test_whole_window_inverted_corner_clamp": 104.692,
     "tests.test_whole_window_parallel_strict": 0.101,
     "tests.test_whole_window_selection": 203.331,
     "tests.test_window_duration_margins": 19.589,
     "tests.test_window_env_allowlist": 0.023,
     "tests.test_window_lineage": 52.155,
-    "tests.test_window_lineage_idempotent": 120.0,
+    "tests.test_window_lineage_idempotent": 1.184,
     "tests.test_window_status_guard": 0.94,
     "tests.test_workload_profile": 0.003,
     "tests.test_workload_sizing": 0.001,
@@ -551,152 +552,6 @@
     "tests.twins.test_engine_twin_comparison": 0.658,
     "tests.twins.test_harvest_twin": 0.004,
     "tests.twins.test_harvest_twin_comparison": 7.145
-  },
-  "_estimated_observations_2026_11_06": {
-    "tests.b5_analysis.test_analysis_work_counts": {
-      "seconds": 300.0,
-      "basis": "Conservative local estimate: an interrupted isolated run exceeded 108 s; rounded up to 300 s."
-    },
-    "tests.b5_analysis.test_auth_capability_bridge": {
-      "seconds": 560.0,
-      "basis": "Conservative source estimate: 28 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_auth_recorder_and_verdict_memo": {
-      "seconds": 680.0,
-      "basis": "Conservative source estimate: 34 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_environment_admission_memo_first": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 6 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_leaf_bracket": {
-      "seconds": 400.0,
-      "basis": "Conservative source estimate: 20 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_leaf_cli": {
-      "seconds": 380.0,
-      "basis": "Conservative source estimate: 19 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_leaf_whole_window": {
-      "seconds": 440.0,
-      "basis": "Conservative source estimate: 22 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_member_pool": {
-      "seconds": 280.0,
-      "basis": "Conservative source estimate: 14 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_parallel_steps": {
-      "seconds": 480.0,
-      "basis": "Conservative source estimate: 24 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_phase_timing": {
-      "seconds": 680.0,
-      "basis": "Conservative source estimate: 34 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_postrelease_bracket_copies": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 2 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_postrelease_bracket_snapshot": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 5 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_postrelease_g9": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 2 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_postrelease_step11_codes": {
-      "seconds": 140.0,
-      "basis": "Conservative source estimate: 7 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_postrelease_step4": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 5 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_result_equivalence": {
-      "seconds": 1960.0,
-      "basis": "Conservative source estimate: 98 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_run_caches": {
-      "seconds": 300.0,
-      "basis": "Conservative source estimate: 15 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_small_fixes": {
-      "seconds": 660.0,
-      "basis": "Conservative source estimate: 33 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_step11_null_outcomes": {
-      "seconds": 180.0,
-      "basis": "Conservative source estimate: 9 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_step4_member_codes": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 6 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_step4_reason_table": {
-      "seconds": 160.0,
-      "basis": "Conservative source estimate: 8 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_core": {
-      "seconds": 1260.0,
-      "basis": "Conservative source estimate: 63 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_kernel_resolution": {
-      "seconds": 200.0,
-      "basis": "Conservative source estimate: 10 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_key_schema": {
-      "seconds": 160.0,
-      "basis": "Conservative source estimate: 8 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_shipping": {
-      "seconds": 640.0,
-      "basis": "Conservative source estimate: 32 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_sol_hunt": {
-      "seconds": 260.0,
-      "basis": "Conservative source estimate: 13 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_sol_hunt2": {
-      "seconds": 300.0,
-      "basis": "Conservative source estimate: 15 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_sol_hunt3": {
-      "seconds": 300.0,
-      "basis": "Conservative source estimate: 15 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.b5_analysis.test_vdl_sol_w2": {
-      "seconds": 400.0,
-      "basis": "Conservative source estimate: 20 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.test_arm_readiness_batch": {
-      "seconds": 160.0,
-      "basis": "Conservative source estimate: 8 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.test_custody_isolation_guard": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 6 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.test_harvest_b5_p2harv": {
-      "seconds": 960.0,
-      "basis": "Conservative source estimate: 48 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.test_p2_ctl_auxiliary": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 2 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.test_whole_window_analysis_clamp_flag": {
-      "seconds": 280.0,
-      "basis": "Conservative source estimate: 14 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.test_whole_window_inverted_corner_clamp": {
-      "seconds": 680.0,
-      "basis": "Conservative source estimate: 34 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    },
-    "tests.test_window_lineage_idempotent": {
-      "seconds": 120.0,
-      "basis": "Conservative source estimate: 5 test methods at 20 s each, with a 120 s minimum; replace with hosted MODULE timing."
-    }
   },
   "timing_exemptions": {}
 }
