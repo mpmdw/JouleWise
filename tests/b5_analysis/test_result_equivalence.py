@@ -1028,9 +1028,23 @@ class RunnerTracebackTest(unittest.TestCase):
         for cls, name in (('RunnerResult', 'token'), ('RunState', 'invoke')):
             self.assertEqual(_method_source(r1, cls, name), _method_source(source, cls, name), name)
         # Review 3: the strict reads and the single-program rows (_single_program_row).
-        for name in ('_internal_step', 'step_0', 'step_3', 'step_3b', 'step_5', 'step_6', 'step_8', 'step_9b',
-                     'step_10'):
+        for name in ('_internal_step', 'step_0', 'step_3', 'step_3b', 'step_5', 'step_6', 'step_8', 'step_9b'):
             self.assertEqual(_function_source(r1, name), _function_source(source, name), name)
+        # Step 10 (speed plan, 3ba677116): r1's per-pack loop body moved verbatim into
+        # _reported_one, which both the serial loop and the staged pack workers call.
+        r1_step, one = _function_node(r1, 'step_10'), _function_node(source, '_reported_one')
+        loop = next(n for n in r1_step.body if isinstance(n, ast.For))
+        dump = lambda nodes: [ast.dump(n, include_attributes=False) for n in nodes]
+        self.assertEqual(dump(r1_step.body[:1]), dump(one.body[:1]))
+        self.assertEqual(dump(loop.body[:3]), dump(one.body[1:4]))
+        appended = loop.body[3].value
+        self.assertEqual((appended.func.value.id, appended.func.attr), ('records', 'append'))
+        self.assertIsInstance(one.body[4], ast.Return)
+        self.assertEqual(dump(appended.args), dump([one.body[4].value]))
+        self.assertEqual(len(one.body), 5)
+        serial = next(n for n in _function_node(source, 'step_10').body if isinstance(n, ast.For))
+        self.assertEqual(dump([serial.target, serial.iter]), dump([loop.target, loop.iter]))
+        self.assertEqual(dump(serial.body[1:]), dump(loop.body[4:]))
         for name in ('guarded', 'prepare_finalization'):
             self.assertEqual(_method_source(r1, 'RunState', name), _method_source(source, 'RunState', name), name)
 
@@ -1048,10 +1062,13 @@ def _git_show(rev, path):
     return proc.stdout if proc.returncode == 0 else None
 
 
-def _function_source(source, name):
+def _function_node(source, name):
     tree = ast.parse(source)
-    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
-    return ast.dump(node, include_attributes=False)
+    return next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+
+
+def _function_source(source, name):
+    return ast.dump(_function_node(source, name), include_attributes=False)
 
 
 def _method_source(source, cls, name):
