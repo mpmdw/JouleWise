@@ -429,7 +429,13 @@ class EpisodeRuntimeAdapter:
         gate_deadman = (EpisodeDeadman(self.clock, self.clock.stamp(), self.spec.deadman_s)
                         if self.thermal is not None and self.spec.deadman_s is not None else None)
         if self.thermal is not None:
-            self.thermal.wait('G0', deadman=gate_deadman)
+            from joulewise.align.apple.thermal_gates import ThermalFault
+            try:
+                self.thermal.wait('G0', deadman=gate_deadman)
+            except ThermalFault as exc:
+                # A dead collector or missing status source fails the member
+                # at G0 entry instead of burning the gate cap (WP8 F2/F5).
+                raise AdapterFailure(FailureReason.UNKNOWN_ERROR, str(exc)) from exc
         powermode = self._observe_ac_powermode()
         start = self.clock.stamp()
         episode_id = context.run_id if context is not None else config.run_id or "align_episode"

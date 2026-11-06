@@ -53,11 +53,12 @@ class Transport:
         self.closed = True
 
 
-def session(*, values=None, config=None):
+def session(*, values=None, config=None, no_status=False):
     clock = FakeClock()
     transport = Transport(clock, values)
     obj = ThermalSession(config or policy(), clock, reader=Reader(transport),
-                         status_reader=lambda: {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': round(obj.clock.now()*NS)})
+                         status_reader=None if no_status else
+                         lambda: {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': round(obj.clock.now()*NS)})
     obj.start()
     for _ in range(60):
         clock.sleep(1)
@@ -180,8 +181,81 @@ class GateTests(unittest.TestCase):
         gate = obj.wait('G0')
         self.assertEqual(gate['duration_s'], 600)
         self.assertEqual(gate['outcome'], 'timeout')
-        self.assertEqual(obj.episode_reference['fast_c'], 45)
+        # WP8 F6: a hot sample after a timeout is never the episode reference.
+        self.assertIsNone(obj.episode_reference)
+        self.assertEqual(gate['release'], {'fast_c': 45., 'slow_c': 40.})
         self.assertIn('thermal.start_gate_timeout', obj.flags)
+
+    def test_g0_timeout_leaves_later_gates_unreferenced_not_released(self):
+        # WP8 F6: with the hot sample as reference G1 released at once and
+        # looked journal-verified. Now G1 is an honest unobserved timed wait,
+        # flagged apart from X4 so the member stays in the observed U1 set.
+        obj, _ = session()
+        obj.reader._transport.values = lambda t: (45, 45)
+        self.assertEqual(obj.wait('G0')['outcome'], 'timeout')
+        gate = obj.wait('G1', turn=1)
+        self.assertEqual(gate['outcome'], 'unobserved')
+        self.assertIsNone(gate['reference'])
+        self.assertEqual(gate['duration_s'], 30)
+        self.assertIn('thermal.episode_reference_unobserved', obj.flags)
+        self.assertNotIn('thermal.state_unobserved', obj.flags)
+        self.assertTrue(obj.holds_suppressed)
+
+    def test_g0_without_status_source_fails_at_entry(self):
+        # WP8 F5: no status source means G0 can never release; fail at once.
+        obj, clock = session(no_status=True)
+        self.addCleanup(obj.close)
+        from joulewise.align.apple.thermal_gates import ThermalFault
+        with self.assertRaisesRegex(ThermalFault, 'thermal.status_source_missing'):
+            obj.wait('G0')
+        self.assertLess(clock.now(), 61)
+        self.assertIn('thermal.status_source_missing', obj.flags)
+        self.assertEqual(obj.intervals, [])
+
+    def test_g0_status_error_rows_alone_also_fail_but_one_good_row_suffices(self):
+        from joulewise.align.apple.thermal_gates import ThermalFault
+        obj, clock = session()
+        good = obj.status_reader
+        def broken():
+            raise OSError('notify gone')
+        obj.status_reader = broken
+        for _ in range(3):
+            clock.sleep(1)
+            obj.sample()
+        # A good row within the last 10 s still proves a bound source.
+        self.assertEqual(obj.wait('G0')['outcome'], 'timeout')
+        clock.sleep(11)
+        obj.sample()
+        with self.assertRaisesRegex(ThermalFault, 'thermal.status_source_missing'):
+            obj.wait('G0')
+        obj.status_reader = good
+
+    def test_dead_collector_fails_the_gate_without_waiting_for_the_cap(self):
+        # WP8 F2: the collector recorded its error and stopped, but the thread
+        # has not exited yet (the window the is_alive check alone misses).
+        from joulewise.align.apple.thermal_gates import ThermalFault
+        obj, clock = session()
+        self.assertEqual(obj.wait('G0')['outcome'], 'released')
+        obj.sidecar._thread = SimpleNamespace(is_alive=lambda: True)
+        obj.sidecar._error = OSError(28, 'No space left on device')
+        obj.sidecar._stop.set()
+        before = clock.now()
+        for kind in ('G1', 'H'):
+            with self.assertRaisesRegex(ThermalFault, 'thermal.collector_failed'):
+                obj.wait(kind, turn=1)
+        self.assertEqual(clock.now(), before)
+        self.assertIn('thermal.collector_failed', obj.flags)
+        obj.sidecar._thread = None
+        obj.sidecar._error = None
+
+    def test_stopped_collector_without_error_also_fails_fast(self):
+        from joulewise.align.apple.thermal_gates import ThermalFault
+        obj, clock = session()
+        obj.sidecar._thread = SimpleNamespace(is_alive=lambda: True)
+        obj.sidecar._stop.set()
+        with self.assertRaisesRegex(ThermalFault, 'collector_stopped'):
+            obj.wait('G0')
+        obj.sidecar._thread = None
 
     def test_unsettled_slope_prevents_g0_release(self):
         obj, clock = session(values=lambda t: (40, 38 + .01*t))
@@ -249,6 +323,34 @@ class HoldTests(unittest.TestCase):
         self.assertFalse(observation.thermal_aborted)
         self.assertIn('thermal.state_unobserved', obj.flags)
         self.assertEqual(obj.intervals[-1]['outcome'], 'unobserved')
+
+    def test_no_further_holds_after_state_unobserved(self):
+        # WP8 F2: each blind hold waited turn_cap_s for a member that is
+        # already excluded; only the hold that latched X4 is scheduled.
+        obj, clock = session(config=policy(heavy=True))
+        obj.wait('G0')
+        obj.reader._transport.values = lambda t: (None, 40)
+        for _ in range(7):
+            clock.sleep(1)
+            obj.sample()
+        observation = _StreamObservation(SimpleNamespace(stream_generate=lambda: self.stream(1100, clock)),
+                                         max_tokens=1100, thermal=obj)
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', lambda stream: None):
+            self.assertEqual(len(list(observation.stream_generate())), 1100)
+        holds = [r for r in obj.intervals if r['kind'] == 'H']
+        self.assertEqual([(h['token_count'], h['outcome']) for h in holds], [(256, 'unobserved')])
+        self.assertIn('thermal.state_unobserved', obj.flags)
+        self.assertLess(clock.now(), 60 + 9 + 7 + 30 + 5)
+
+    def test_no_holds_after_a_g0_that_did_not_release(self):
+        obj, clock = session(config=policy(heavy=True))
+        obj.reader._transport.values = lambda t: (60, 60)
+        self.assertEqual(obj.wait('G0')['outcome'], 'timeout')
+        observation = _StreamObservation(SimpleNamespace(stream_generate=lambda: self.stream(600, clock)),
+                                         max_tokens=600, thermal=obj)
+        with patch('joulewise.align.apple.thermal_gates.drain_decode', lambda stream: None):
+            self.assertEqual(len(list(observation.stream_generate())), 600)
+        self.assertEqual([r['kind'] for r in obj.intervals], ['G0'])
 
     def stream(self, n, clock):
         for i in range(n):
@@ -392,7 +494,8 @@ class HoldTests(unittest.TestCase):
 
 
 class WorkloadTests(unittest.TestCase):
-    def run_episode(self, *, fail_g1=False, g0_hot=False, long_episode=False, deadman_s=1000, dropout=False):
+    def run_episode(self, *, fail_g1=False, g0_hot=False, long_episode=False, deadman_s=1000, dropout=False,
+                    no_status=False):
         class SamplingClock(FakeClock):
             observer = None
             def sleep(self, seconds):
@@ -405,7 +508,7 @@ class WorkloadTests(unittest.TestCase):
         clock = SamplingClock()
         holders = []
         def factory(p, c, context):
-            obj, _ = session(config=p)
+            obj, _ = session(config=p, no_status=no_status)
             # Rebase clock and seed a 60 s baseline before adapter prepare.
             obj.clock = c
             obj.reader._transport.clock = c
@@ -463,6 +566,11 @@ class WorkloadTests(unittest.TestCase):
         artifact = from_json(Episode, result.output_artifacts['align_episode.json'])
         self.assertEqual(end_state(artifact), 'returned_without_tool_call')
         self.assertIsNotNone(ep.main_task_score)
+
+    def test_g0_missing_status_source_fails_member_before_any_turn(self):
+        from joulewise.interfaces import AdapterFailure
+        with self.assertRaisesRegex(AdapterFailure, 'thermal.status_source_missing'):
+            self.run_episode(no_status=True)
 
     def test_g0_timeout_proceeds_with_calibration_exclusion(self):
         ep, _ = self.run_episode(g0_hot=True)

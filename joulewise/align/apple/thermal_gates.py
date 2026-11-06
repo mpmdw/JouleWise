@@ -28,6 +28,22 @@ class WindowReferenceRefused(RuntimeError):
         super().__init__(code)
 
 
+class ThermalFault(RuntimeError):
+    """A gate cannot be evaluated at all; the member fails instead of waiting.
+
+    Raised for a dead collector (WP8 F2) or a missing status source at G0
+    (WP8 F5). The matching flag is also left on the session.
+    """
+    def __init__(self, code, detail=None):
+        self.code = code
+        super().__init__(code if detail is None else f'{code}: {detail}')
+
+
+def _status_observed(status):
+    """A bound status source always reports os_level and/or pm_observed_ns keys."""
+    return isinstance(status, Mapping) and ('os_level' in status or 'pm_observed_ns' in status)
+
+
 def _canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True,
                       allow_nan=False).encode()
@@ -344,6 +360,33 @@ class ThermalSession:
         """Deterministic seam: the sole collector owns the read and journal."""
         return sample_rows([self.sidecar.tick()])[0]
 
+    def _collector_fault(self):
+        """A dead or stopped 1 Hz collector can never satisfy any gate (WP8 F2)."""
+        sidecar = self.sidecar
+        if sidecar._error is not None:
+            return f'{type(sidecar._error).__name__}:{sidecar._error}'
+        if sidecar._closed:
+            return 'collector_closed'
+        thread = sidecar._thread
+        if thread is not None:
+            if sidecar._stop.is_set():
+                return 'collector_stopped'
+            if hasattr(thread, 'is_alive') and not thread.is_alive():
+                return 'collector_thread_dead'
+        return None
+
+    @property
+    def holds_suppressed(self):
+        """No further hold once the member is certain to be thermally excluded.
+
+        After thermal.state_unobserved, or after a G0 that did not release (no
+        episode reference), every hold could only be a full-cap blind wait for
+        a member the desk already excludes (WP8 F2).
+        """
+        return ('thermal.state_unobserved' in self.flags
+                or (self.episode_reference is None
+                    and any(r['kind'] == 'G0' for r in self.intervals)))
+
     def capture_reference(self, member):
         """Called at warmup entry: the final 60 s of first member's idle."""
         if self.policy['window_reference']['role'] != 'capture' or self.reference is not None:
@@ -415,6 +458,19 @@ class ThermalSession:
         if kind not in ('G0', 'G1', 'H'):
             raise ValueError('unknown thermal gate')
         entry = self.clock.stamp()
+        fault = self._collector_fault()
+        if fault is not None:
+            self.flags.append('thermal.collector_failed')
+            raise ThermalFault('thermal.collector_failed', fault)
+        if kind == 'G0':
+            # Without a bound status source G0 can never release; fail the
+            # member now rather than after a 600 s timeout (WP8 F5). Judge
+            # only recent rows; a coverage gap is left to the X4 path.
+            entry_ns = monotonic_ns(entry)
+            recent = [r for r in self.rows if 0 <= entry_ns - r['monotonic_ns'] <= 10 * NS]
+            if recent and not any(_status_observed(r.get('status')) for r in recent):
+                self.flags.append('thermal.status_source_missing')
+                raise ThermalFault('thermal.status_source_missing')
         self.sidecar.event('align_thermal_hold' if kind == 'H' else 'align_thermal_gate',
                            {'state': 'begin', 'gate_kind': kind, 'turn': turn, 'token_count': token_count,
                             'entry_stamp': _stamp_record(entry)})
@@ -424,6 +480,8 @@ class ThermalSession:
         reference = self.reference if kind == 'G0' else self.episode_reference
         required = 10 if kind == 'G0' else 5
         fast, slow = (self.policy['sensors'][k] for k in ('s_fast', 's_slow'))
+        # G1/H without an episode reference: G0 did not release (WP8 F6).
+        unreferenced = kind != 'G0' and reference is None
         consecutive, last_ns, unobserved = 0, None, reference is None
         release = None
         reason = 'timeout'
@@ -431,10 +489,10 @@ class ThermalSession:
         try:
             with deadman.guard() if deadman is not None else nullcontext():
                 while True:
-                    thread = self.sidecar._thread
-                    if (thread is not None and hasattr(thread, 'is_alive')
-                            and not thread.is_alive()):
-                        raise RuntimeError('thermal.collector_thread_dead')
+                    fault = self._collector_fault()
+                    if fault is not None:
+                        self.flags.append('thermal.collector_failed')
+                        raise ThermalFault('thermal.collector_failed', fault)
                     now = monotonic_ns(self.clock.stamp())
                     rows = self.rows
                     latest = rows[-1] if rows else None
@@ -442,6 +500,7 @@ class ThermalSession:
                     fraction = _window_coverage(rows, now, (fast, slow))['sample_fraction']
                     if fraction is None or fraction < .9:
                         unobserved = True
+                        unreferenced = False
                     slope = slow_slope(rows, now, slow)
                     # Consume every queued observation in order. Checking only
                     # the last row can hide an intervening out-of-band sample.
@@ -488,7 +547,12 @@ class ThermalSession:
         except DeadmanExpired:
             reason = 'deadman'
         exit_stamp = self.clock.stamp()
-        if unobserved:
+        if unobserved and unreferenced:
+            # Sensors were observed; the member is already excluded by its G0
+            # flag. Keep it in the desk's observed set (U1 coverage/G0 counts).
+            if 'thermal.episode_reference_unobserved' not in self.flags:
+                self.flags.append('thermal.episode_reference_unobserved')
+        elif unobserved:
             if 'thermal.state_unobserved' not in self.flags:
                 self.flags.append('thermal.state_unobserved')
         elif reason == 'timeout':
@@ -500,7 +564,10 @@ class ThermalSession:
         release_values = ({'fast_c': values['sensors'].get(fast), 'slow_c': values['sensors'].get(slow)}
                           if values else {'fast_c': None, 'slow_c': None})
         if kind == 'G0':
-            self.episode_reference = release_values if all(v is not None for v in release_values.values()) else None
+            # Only a released G0 defines the episode reference; a hot sample
+            # after a timeout/unobserved/deadman exit never does (WP8 F6).
+            self.episode_reference = (release_values if reason == 'released'
+                                      and all(v is not None for v in release_values.values()) else None)
         row = {'kind': kind, 'turn': turn, 'token_count': token_count,
                'start_ns': start, 'end_ns': monotonic_ns(exit_stamp),
                'entry_stamp': _stamp_record(entry), 'exit_stamp': _stamp_record(exit_stamp),
