@@ -43,13 +43,17 @@ class ProgressTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             class Backend(FakeBackend):
-                def chat(self, *args, **kwargs):
-                    result = super().chat(*args, **kwargs)
-                    if len(args[0]) > 1:
-                        from dataclasses import replace
-                        from joulewise.align.interfaces import ToolCallRequest
-                        result = replace(result, tool_calls=(ToolCallRequest("bad", "bad", "{}"),))
-                    return result
+                # A fault after the second turn is recorded (an off-spec echo call no
+                # longer raises; see test_generated_rewrites_survives_one_off_spec_echo_call).
+                def __init__(self, *args):
+                    super().__init__(*args)
+                    history, seen = self.endpoint.assistant_history_message, []
+                    def flaky(result):
+                        seen.append(result)
+                        if len(seen) == 2:
+                            raise RuntimeError("endpoint fault")
+                        return history(result)
+                    self.endpoint.assistant_history_message = flaky
             result = execute(config_at(root), root, ["generated"], ["D"],
                              guard=FakeGuard(), backend_factory=Backend)
             row = next(r for r in result["checks"] if r["check"] == "generated")

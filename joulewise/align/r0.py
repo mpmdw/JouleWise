@@ -162,15 +162,20 @@ def generated_rewrites(backend, *, transitions=12, progress=lambda data: None, r
         row = turn_row(backend, result, 4096)
         turns.append(row)
         progress({"turns": turns})
-        replies = append_result(backend, messages, result, EchoTask(), strict=True)
+        # Non-strict: D samples at T=1.0, so one off-spec echo call is expected noise.
+        # It gets production's error round trip and is flagged; the prefix-rewrite
+        # measurement depends only on how the template re-renders the assistant turn.
+        replies = append_result(backend, messages, result, EchoTask())
         if not replies:
             break
         following = backend.render(messages, ECHO_TOOLS)
         rows.append({"turn": index, "closed_reasoning": row["closed_reasoning"],
+                     "off_spec_echo": any(r.startswith('{"error"') for r in replies),
                      **rewrite(row["prompt_token_ids"], row["output_token_ids"], following)})
         progress({"transitions": rows})
     return {"status": "pass" if len(rows) >= transitions else "inconclusive",
-            "evidence": "real_generated_turns", "transitions": rows, "turns": turns}
+            "evidence": "real_generated_turns", "transitions": rows, "turns": turns,
+            "off_spec_echo_turns": sum(r["off_spec_echo"] for r in rows)}
 
 
 def checkpoint_verdict(tag, evidence):

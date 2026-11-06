@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import fcntl
 from types import SimpleNamespace
 import json
@@ -119,6 +120,24 @@ class R0ChecksTest(unittest.TestCase):
         self.assertEqual(synthetic["status"], "diagnostic")
         self.assertEqual(generated["status"], "pass")
         self.assertNotEqual(synthetic["evidence"], generated["evidence"])
+
+    def test_generated_rewrites_survives_one_off_spec_echo_call(self):
+        backend = FakeBackend()
+        chat = backend.chat
+        calls = {"n": 0}
+        def flaky(messages, tools, max_tokens, seed):
+            result = chat(messages, tools, max_tokens, seed)
+            calls["n"] += 1
+            if calls["n"] == 3:
+                bad = (ToolCallRequest("echo", "r0_echo", '{"value":"desk-chek"}'),)
+                result = replace(result, tool_calls=bad)
+            return result
+        backend.chat = flaky
+        generated = r0.generated_rewrites(backend)
+        self.assertEqual(generated["status"], "pass")
+        self.assertEqual(len(generated["transitions"]), 12)
+        self.assertEqual(generated["off_spec_echo_turns"], 1)
+        self.assertTrue(generated["transitions"][2]["off_spec_echo"])
 
     def test_checkpoint_sample_floor_closed_reasoning_and_threshold(self):
         rows = [{"closed_reasoning": True, "rewritten_prefix_tokens": 0} for _ in range(12)]
