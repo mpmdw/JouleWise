@@ -1,0 +1,23 @@
+{
+  "align_members": 18,
+  "fit_rule": [
+    "drop ordinal 17",
+    "lower B_D by 1024 to 6144",
+    "return to lead"
+  ],
+  "member_seconds": {
+    "D": 1800,
+    "G": 1150,
+    "S": 850,
+    "anchor": 782.8175
+  },
+  "non_claim": true,
+  "note": "R1 must replace guesses, requalify budget, derive sizing_b5.json and disk before prepare.",
+  "planning_align_s": 21931.27,
+  "planning_span_s": 26927,
+  "planning_two_copy_GB": 37.4,
+  "planning_window_max_s": 44640,
+  "scaffold_s": 4995,
+  "span_limit_s": 26940,
+  "status": "PROVISIONAL_NOT_ARM_SIZING"
+}

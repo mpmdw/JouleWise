@@ -1,0 +1,16 @@
+{
+  "schema_version": "joulewise.align_v4_inputs.v1",
+  "status": "PROVISIONAL_PLACEHOLDERS_NOT_EXECUTABLE",
+  "WP11": {
+    "identity_unit": null,
+    "artifact_inventory": null,
+    "local_file_verification": null
+  },
+  "WP18": {
+    "X": {"max_turns": null, "token_fixture_sha256": null},
+    "Y": {"max_turns": null, "token_fixture_sha256": null}
+  },
+  "R0": {"reasoning_effort": null},
+  "R1": {"B_D": null, "I_D": null, "T_dead": null, "thermal_policy": null},
+  "WP15": {"runtime_entrypoint": null}
+}
