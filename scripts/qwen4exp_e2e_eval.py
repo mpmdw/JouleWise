@@ -208,6 +208,9 @@ class Scored:
     argmax_ids: list[int]
     top_logprobs: list[list[tuple[int, float]]] | None = None
     query_logprobs: list[dict[int, float]] | None = None
+    # Raw-logit full-vocabulary normalizer at each scored position.  Optional
+    # for legacy/scripted adapters; gold-stream capture requires it.
+    logsumexp: list[float] | None = None
 
 
 class AdapterContract:
@@ -1287,14 +1290,17 @@ class MlxAdapter:
         argmax: list[int] = []
         tops: list[list[tuple[int, float]]] = []
         queries: list[dict[int, float]] = []
+        normalizers: list[float] = []
         for start in range(0, len(inputs), self.score_chunk):
             logits = self.model(mx.array(inputs[start:start + self.score_chunk])[None], cache=cache)[0]
             rows = logits.astype(mx.float32)
-            rows = rows - mx.logsumexp(rows, axis=-1, keepdims=True)
+            norms = mx.logsumexp(rows, axis=-1)
+            rows = rows - norms[:, None]
             chunk_targets = mx.array(targets[start:start + self.score_chunk])
             picked = mx.take_along_axis(rows, chunk_targets[:, None], axis=-1)[:, 0]
             best = mx.argmax(rows, axis=-1)
-            mx.eval(rows, picked, best)
+            mx.eval(rows, picked, best, norms)
+            normalizers.extend(float(x) for x in norms.tolist())
             chosen.extend(float(x) for x in picked.tolist())
             argmax.extend(int(x) for x in best.tolist())
             for offset in range(rows.shape[0]):
@@ -1304,7 +1310,8 @@ class MlxAdapter:
                     wanted = [int(i) for i in query_ids[start + offset]]
                     values = rows[offset][mx.array(wanted)].tolist() if wanted else []
                     queries.append(dict(zip(wanted, (float(v) for v in values))))
-        return Scored(chosen, argmax, tops if top_k else None, queries if query_ids is not None else None)
+        return Scored(chosen, argmax, tops if top_k else None,
+                      queries if query_ids is not None else None, normalizers)
 
 
 class TransformersAdapter:
@@ -1378,9 +1385,12 @@ class TransformersAdapter:
         argmax: list[int] = []
         tops: list[list[tuple[int, float]]] = []
         queries: list[dict[int, float]] = []
+        normalizers: list[float] = []
         for start in range(0, len(inputs), self.score_chunk):
             logits, cache = self._step(inputs[start:start + self.score_chunk], cache)
+            norms = logits.float().logsumexp(-1)
             rows = logits.log_softmax(-1)
+            normalizers.extend(float(value) for value in norms.tolist())
             for offset in range(rows.shape[0]):
                 row, target = rows[offset], targets[start + offset]
                 chosen.append(float(row[target]))
@@ -1389,7 +1399,8 @@ class TransformersAdapter:
                     tops.append(self._topk(row, top_k))
                 if query_ids is not None:
                     queries.append({int(q): float(row[int(q)]) for q in query_ids[start + offset]})
-        return Scored(chosen, argmax, tops if top_k else None, queries if query_ids is not None else None)
+        return Scored(chosen, argmax, tops if top_k else None,
+                      queries if query_ids is not None else None, normalizers)
 
 
 class ScriptedAdapter:
