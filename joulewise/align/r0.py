@@ -359,13 +359,13 @@ def markdown(report):
                          for a in row["attempts"])
             lines.append(f"Metadata evaluation required: {row['metadata_eval_required']}. See JSON for all memory samples.")
         elif row["check"] == "disk" and "models" in row:
-            lines.extend([f"Free after present weights: {row['free_bytes_after_present_weights']} bytes; required ≥{row['required_free_bytes_after_weights']} (80 GB plus SMC journal allowance).",
+            lines.extend([f"Free after present weights: {row['free_bytes_after_present_weights']} bytes (R0 report-only; no free-space or offload gate).",
+                          f"W1 arm gate, evaluated separately after R0: ≥{row['w1_required_free_bytes_after_r0']} bytes and configured offload hash matches.",
                           f"SMC capture: {row['smc_step_budget']['capture_seconds']} s; journal estimate: {row['smc_step_budget']['journal_bytes_estimate']} bytes.",
                           "", "| Model | Observed bytes | Design download bytes | Difference |", "|---|---|---|---|"])
             lines.extend(f"| {tag} | {m['bytes']} | {m['design_download_bytes']} | {m['difference_bytes']} |"
                          for tag, m in row["models"].items())
-            lines.extend(["", "| Offload | Hash comparison passed |", "|---|---|"])
-            lines.extend(f"| {o['label']} | {o['pass']} |" for o in row["offloads"])
+            lines.append(f"Configured W1 offloads (not verified during R0): {row['configured_w1_offload_labels']}.")
             lines.append("W1 two copies: 37.4 GB; D windows two copies: 52.9 GB (rounded planning estimates). D and 30B anchor file hashes are in JSON.")
         else:
             # Large token arrays and file inventories live in the companion JSON.

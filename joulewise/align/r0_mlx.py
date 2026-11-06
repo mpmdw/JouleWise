@@ -40,7 +40,7 @@ class MlxBackend:
         # B1/B2 belong to Stage 1. Fail explicitly instead of shadowing them in
         # desk-only code and thereby certifying a different production path.
         if (not callable(getattr(MlxEndpoint, "assistant_history_message", None))
-                or "reasoning_effort" not in inspect.signature(MlxEndpoint).parameters):
+                or "chat_template_kwargs" not in inspect.signature(MlxEndpoint).parameters):
             raise RuntimeError("Stage-1 B2 history/effort API missing; integrate before live R0")
         for dist, expected in (("mlx", "0.31.2"), ("mlx-lm", "0.31.3"), ("transformers", "5.12.1")):
             if version(dist) != expected:
@@ -91,7 +91,7 @@ class MlxBackend:
             self.runtime, self.config, self.clock, episode_domain="align-r0",
             prepare_metadata=self.prepared, enable_thinking=True, prompt_cache="episode_prefix",
             sampler={"temperature": 1.0 if self.tag == "D" else 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0},
-            reasoning_effort=effort,
+            chat_template_kwargs=None if effort is None else {"reasoning_effort": effort},
         )
 
     def encode(self, text):

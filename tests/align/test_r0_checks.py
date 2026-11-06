@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import fcntl
 from types import SimpleNamespace
 import json
 from pathlib import Path
@@ -12,7 +13,7 @@ from unittest.mock import Mock, patch
 from joulewise.align import r0
 from joulewise.align.interfaces import ChatResult, ToolCallRequest
 from joulewise.align.r0_host import Refused
-from joulewise.align.r0_runner import DeadlineExpired, execute, main, validate_config
+from joulewise.align.r0_runner import CHECKS, DeadlineExpired, execute, main, validate_config
 
 
 class FakeGuard:
@@ -330,13 +331,62 @@ class R0ChecksTest(unittest.TestCase):
             config.write_text(json.dumps(config_at(root)))
             out = root / "output"
             code = main(["--config", str(config), "--output", str(out), "--models", "D", "--checks",
-                         "load,template,generated,ladder,long-decode,memory"], backend_factory=FakeBackend, guard_factory=FakeGuard)
+                         "load,template,generated,ladder,long-decode,memory"], backend_factory=FakeBackend, guard_factory=FakeGuard,
+                         lock_path=out.parent / "r0.lock")
             result = json.loads((out / "report.json").read_text())
             self.assertEqual(code, 0)
             self.assertFalse(result["complete_r0"])
             self.assertEqual(result["evidence_kind"], "injected_backend")
             self.assertIn("Rewritten prefix tokens", (out / "report.md").read_text())
             self.assertIn("Reasoning tokens", (out / "report.md").read_text())
+
+    def test_mocked_full_r0_completes_at_66_gb_without_offloads(self):
+        from joulewise.align.r0_mlx import MlxBackend
+        # Exercise the production completion decision with a mocked constructor.
+        # All probes and generation here are synthetic, never native evidence.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = config_at(root)
+            for tag in ("D", "anchor"):
+                folder = root / tag
+                folder.mkdir()
+                (folder / "model").write_text("synthetic model")
+            with patch.object(MlxBackend, "__new__", return_value=FakeBackend()), \
+                    patch("joulewise.align.r0_runner.host_snapshot", return_value={"status": "pass", "fake": True}), \
+                    patch("joulewise.align.r0_runner.smc_enumeration", return_value={"status": "pass", "fake": True}), \
+                    patch("shutil.disk_usage", return_value=SimpleNamespace(free=66_000_000_000)):
+                report = execute(config, root, list(CHECKS), ["D"], guard=FakeGuard(), backend_factory=MlxBackend)
+            self.assertEqual(report["status"], "pass")
+            self.assertTrue(report["complete_r0"])
+            disk = next(row for row in report["checks"] if row["check"] == "disk")
+            self.assertEqual(disk["status"], "diagnostic")
+            self.assertEqual(disk["free_bytes_after_present_weights"], 66_000_000_000)
+            self.assertEqual(disk["offloads"], [])
+            self.assertIn("R0 report-only", (root / "report.md").read_text())
+
+    def test_injected_machine_lock_refuses_a_second_runner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.json"
+            config.write_text(json.dumps(config_at(root)))
+            lock_path = root / "r0.lock"
+            out = root / "output"
+            with lock_path.open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaises(SystemExit) as exc:
+                    main(["--config", str(config), "--output", str(out)],
+                         backend_factory=FakeBackend, guard_factory=FakeGuard, lock_path=lock_path)
+            self.assertEqual(exc.exception.code, 2)
+            self.assertFalse(out.exists())
+
+    def test_config_offload_labels_are_configured_and_unique(self):
+        config = config_at(Path("/tmp/fake"))
+        row = {"label": "pilot10", "inventory": "/tmp/fake/manifest.json", "destination": "/tmp/fake/offload"}
+        config["offloads"] = [row]
+        validate_config(config)
+        for labels in (["pilot10", "pilot10"], [""], [None], [5], [[]]):
+            with self.subTest(labels=labels), self.assertRaises(ValueError):
+                validate_config({**config, "offloads": [{**row, "label": label} for label in labels]})
 
     def test_config_pins_cannot_be_overridden(self):
         config = config_at(Path("/tmp/fake"))

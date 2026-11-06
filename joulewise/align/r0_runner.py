@@ -51,10 +51,13 @@ def validate_config(config):
         raise ValueError("custody_parents must list any extras to the shared default parents")
     for path in config["custody_parents"]:
         _path(path)
+    if not isinstance(config.get("offloads", []), list):
+        raise ValueError("offloads must list configured W1 offload receipts")
     labels = set()
     for row in config.get("offloads", []):
-        if set(row) != {"label", "inventory", "destination"} or row["label"] not in {"pilot8", "pilot9"} or row["label"] in labels:
-            raise ValueError("offloads require unique pilot8/pilot9 labels, inventory and destination")
+        if (not isinstance(row, dict) or set(row) != {"label", "inventory", "destination"}
+                or not isinstance(row["label"], str) or not row["label"].strip() or row["label"] in labels):
+            raise ValueError("offloads require unique nonempty labels, inventory and destination")
         labels.add(row["label"])
         _path(row["inventory"])
         _path(row["destination"])
@@ -198,7 +201,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                 if backend is not None:
                     backend.close()
         outcomes = {"checkpoint": {"required", "not_required"}, "ladder": {"pass", "fallback"},
-                    "template": {"diagnostic"}}
+                    "template": {"diagnostic"}, "disk": {"diagnostic"}}
         bad = [r for r in report["checks"] if r["status"] not in outcomes.get(r["check"], {"pass"})]
         report["status"] = "fail" if bad else "pass"
         report["complete_r0"] = (set(checks) == set(CHECKS) and set(models) == {"D"}
@@ -219,7 +222,10 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     return report
 
 
-def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard):
+MACHINE_LOCK = Path("/private/tmp/joulewise-align-r0.lock")
+
+
+def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="new exclusive record directory")
@@ -240,7 +246,7 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard):
     guard = guard_factory(config["custody_parents"])
     # One per-machine lock, not per output directory. An agent ancestor still
     # refuses: the lock never grants a census exemption.
-    lock_path = Path("/private/tmp/joulewise-align-r0.lock")
+    lock_path = MACHINE_LOCK if lock_path is None else Path(lock_path)
     with lock_path.open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

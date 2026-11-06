@@ -55,8 +55,8 @@ class ShimTest(unittest.TestCase):
                                   prepare=lambda config: SimpleNamespace(ok=True, metadata={}),
                                   cleanup=lambda config: None)
         class Endpoint:
-            def __init__(self, *args, reasoning_effort=None, **kwargs):
-                self.effort = reasoning_effort
+            def __init__(self, *args, chat_template_kwargs=None, **kwargs):
+                self.template_kwargs = chat_template_kwargs
             def assistant_history_message(self, result):
                 return result
         versions = {"mlx": "0.31.2", "mlx-lm": "0.31.3", "transformers": "5.12.1"}
@@ -68,9 +68,9 @@ class ShimTest(unittest.TestCase):
                 patch.dict("sys.modules", {"mlx": SimpleNamespace(core=mx), "mlx.core": mx}):
             backend = MlxBackend("D", tmp, str(Path(tmp) / "shade"), FakeGuard())
             self.assertEqual(backend.config.model.context_window, 40960)
-            self.assertIsNone(backend.endpoint.effort)
+            self.assertIsNone(backend.endpoint.template_kwargs)
             backend.new_session("medium")
-            self.assertEqual(backend.endpoint.effort, "medium")
+            self.assertEqual(backend.endpoint.template_kwargs, {"reasoning_effort": "medium"})
             upstream.assert_called_once_with(cache_dir=str(Path(tmp) / "shade"), allow_fetch=False)
             backend.close()
 

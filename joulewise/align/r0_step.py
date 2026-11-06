@@ -151,5 +151,6 @@ def rank_response(capture, samples, value=None):
 
     fast, slow = choose("fast", "fast_load_fit"), choose("slow", "load_fit")
     return {"status": "pass" if fast and slow and fast != slow else "inconclusive",
+            "selection_status": "PROVISIONAL",
             "s_fast": fast, "s_slow": slow, "ranking": rows,
             "rule": "S_fast: tau <30 s from first 120 s load; S_slow: 120 <tau <900 s from load, confirmed on recovery; locations PROVISIONAL."}

@@ -18,6 +18,12 @@ class DocumentationTest(unittest.TestCase):
         for term in ("metadata_absent_single_stream", "median", "synchronize", "KV", "--gpu-step"):
             self.assertTrue(term in book, f"operator guidance must explain: {term}")
 
+    def test_runbook_separates_r0_disk_report_from_w1_storage_gate(self):
+        book = (ROOT / "docs/align/r0_desk_runbook.md").read_text()
+        for term in ("report-only", "66 decimal GB", "w1_disk_gate", "chat_template_kwargs",
+                     "58525031a", "inside the same hub root", "selections and sensor locations remain PROVISIONAL"):
+            self.assertIn(term, book)
+
 
 if __name__ == "__main__":
     unittest.main()
