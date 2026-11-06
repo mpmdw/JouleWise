@@ -784,8 +784,16 @@ class RunState:
         return 0
 
     def prepare_brackets(self, argv):
-        from .bracket import evaluate_window_bracket, block_b_max_for_archives, b_sens
-        self.brackets={p:evaluate_window_bracket(a,repo_root=self.repo_root) for p,a in self.archives.items()}
+        from .bracket import block_b_max_for_archives, b_sens
+        from .pack_parallel import bracket_pack, consume, merge_census, pack_map
+        items = list(self.archives.items())
+        outcomes = pack_map(bracket_pack, [((a, self.repo_root), {}) for _, a in items])
+        brackets = {}
+        for (pack, archive), outcome in zip(items, outcomes or [None] * len(items)):
+            bracket, census = consume(outcome, lambda: bracket_pack(archive, self.repo_root))
+            merge_census(archive, census)
+            brackets[pack] = replace(bracket, window=archive.window)
+        self.brackets = brackets
         self.b_max=block_b_max_for_archives(list(self.archives.values()))
         self.contexts=primary_contexts(self.archives,self.kept,self.brackets,self.rows,synthetic=self.pack_table is not None)
         for pack,bracket in self.brackets.items():
