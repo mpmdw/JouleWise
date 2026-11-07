@@ -158,6 +158,27 @@ class MemberPoolTests(unittest.TestCase):
             self.assertEqual(multiprocessing.active_children(), [])
             self.assertEqual(threading.active_count(), threads)
 
+    def test_workers_leave_the_parents_atexit_held_temporary_directories_alone(self):
+        # CI shard 11 on PR #688: a TemporaryDirectory kept alive only by atexit (tests/b5_analysis/fixtures_s8)
+        # was freed in each forked worker, whose finalizer then deleted the parent's live tree.
+        import atexit
+        import gc
+        held = tempfile.TemporaryDirectory(prefix="pool-atexit-held-", dir=self.root)
+        atexit.register(held.cleanup)
+        (Path(held.name) / "live.txt").write_text("kept")
+        name = held.name
+        del held
+        gc.collect()
+        pool = recompute.MemberPool(3)
+        try:
+            for i in range(6):
+                pool.prefetch("ALPHA", self.root / "nowhere", f"missing-r{i:03}", .045, "science")
+            for i in range(6):
+                pool.take("ALPHA", self.root / "nowhere", f"missing-r{i:03}", .045, "science")
+        finally:
+            pool.close()
+        self.assertTrue((Path(name) / "live.txt").is_file())
+
     def test_workers_must_be_positive(self):
         for value in ("0", "-1", "x"):
             with self.subTest(value=value), contextlib.redirect_stderr(io.StringIO()), \

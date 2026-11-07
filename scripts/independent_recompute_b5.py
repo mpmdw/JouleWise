@@ -26,6 +26,7 @@ import json
 import math
 import multiprocessing
 import multiprocessing.connection
+import os
 from pathlib import Path
 import pickle
 import platform
@@ -34,6 +35,7 @@ import re
 import statistics
 import struct
 import sys
+import weakref
 from xml.parsers.expat import ExpatError
 
 SCHEMA = "joulewise.independent_recompute_b5.v1"
@@ -559,6 +561,24 @@ def _member_worker(index, channels):
         results.send_bytes(payload)
 
 
+# Set only while MemberPool forks its workers (see _disarm_inherited_finalizers).
+_POOL_FORKING = False
+_AT_FORK_HOOK = False
+
+
+def _disarm_inherited_finalizers():
+    """At-fork hook (child side), active only for a member-pool worker.
+
+    multiprocessing's fork child clears the inherited atexit callbacks before the worker runs. An object the parent
+    kept alive only through atexit (for example a TemporaryDirectory whose cleanup was registered there) is then
+    freed in the child, and its weakref.finalize would delete the parent's still-live files. Dropping the child's
+    copy of the finalize registry first turns every such inherited finalizer into a no-op in the worker; the parent
+    is unaffected. The worker needs no finalizer of its own.
+    """
+    if _POOL_FORKING:
+        weakref.finalize._registry.clear()
+
+
 class MemberPool:
     """Build members in worker processes; the serial code consumes them in its own order (--workers N > 1).
 
@@ -591,10 +611,18 @@ class MemberPool:
         context = multiprocessing.get_context("fork")
         channels = [(context.Pipe(duplex=False), context.Pipe(duplex=False)) for _ in range(self.workers)]
         self.procs = []
-        for index in range(self.workers):
-            process = context.Process(target=_member_worker, args=(index, channels), daemon=True)
-            process.start()
-            self.procs.append(process)
+        global _POOL_FORKING, _AT_FORK_HOOK
+        if not _AT_FORK_HOOK:
+            os.register_at_fork(after_in_child=_disarm_inherited_finalizers)
+            _AT_FORK_HOOK = True
+        _POOL_FORKING = True
+        try:
+            for index in range(self.workers):
+                process = context.Process(target=_member_worker, args=(index, channels), daemon=True)
+                process.start()
+                self.procs.append(process)
+        finally:
+            _POOL_FORKING = False
         for (task_reader, _), (_, result_writer) in channels:
             task_reader.close()
             result_writer.close()

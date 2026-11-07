@@ -190,6 +190,11 @@ becomes production for block 6 (DLE-2).
   - a comparator exit 0 whose output lacks the coverage lists, or compared nothing, gave agree; it is now
     `comparison_output_unreadable` or `comparison_vacuous`;
   - a non-boolean `comparison_stopped` reached the verdict as written; only a boolean, or null, is printed.
+  - CI (shard 11): in-process callers (the test suite) lost files to the pool. multiprocessing's fork child clears the
+    inherited atexit callbacks, so an object the parent held only through atexit (a test fixture's
+    TemporaryDirectory) was freed in each worker and its finalizer deleted the parent's live tree. An at-fork hook
+    now disarms inherited `weakref.finalize` callbacks in pool workers only. The release runs the recompute as a
+    fresh subprocess and was not exposed.
 - **Rejected, with reasons:** census rows of a non-analysed pack (refuse as a difference, as L9's positional
   comparison would; not reachable with the block-5 index); plan-tree binding rows not re-hashed (L9's own release
   copies them unchanged); census inputs followed through symbolic links (L9's census hash does the same); prefetch
