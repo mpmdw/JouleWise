@@ -242,6 +242,35 @@ class AliasGroupTests(unittest.TestCase):
         body = {k: v for k, v in result.items() if k != "classification_sha256"}
         self.assertEqual(result["classification_sha256"], hashlib.sha256(rt.canonical(body).encode()).hexdigest())
 
+    def test_one_alias_definition_with_the_pr692_classifier(self):
+        """Integration of PR #692: the R1 groups use rank's selected_key_aliases
+        signature, (value, error) in every row; a pick's group is its aliases."""
+        from joulewise.align.apple.smc_enumeration import rank
+        from tests.align.test_smc_selection import capture
+        data = capture({"TB00": (3, 25, 18, .02), "TA00": (3, 25, 18, .02), "THEA": (60, 90, 8, .02)})
+        ranked = rank(data, stage="r1")
+        groups = rt.alias_groups([item["key"] for item in data["inventory"]["keys"]], data["samples"])
+        for key, aliases in ranked["selected_key_aliases"].items():
+            group = next((g for g in groups if key in g), [key])
+            self.assertEqual(sorted(k for k in group if k != key), aliases, key)
+        self.assertEqual(groups, [["TA00", "TB00"]])
+        # Equal values but different failed-read errors: not one sensor under
+        # either definition (rank compares errors too).
+        series = {"TCMb": [40.0, None, 42.0], "TVD0": [40.0, None, 42.0], "TVV0": [40.0, None, 42.0]}
+        rows = self.rows(series)
+        rows[1]["values"]["errors"] = {"TCMb": "kIOReturnTimeout", "TVD0": "kIOReturnTimeout",
+                                       "TVV0": "kSMCKeyNotFound"}
+        self.assertEqual(rt.alias_groups(sorted(series), rows), [["TCMb", "TVD0"]])
+
+    def test_r1_g0_timeout_matches_the_classifier_settle_rule(self):
+        """R7-2's 1,200 s R1 G0 timeout is the #692 D3 adaptive-idle cap, and
+        G0's slope bar, window and count are D3's settle constants."""
+        from joulewise.align.apple import smc_enumeration as smc
+        config = json.loads((ROOT / "configs/align/v4/r1_runtime.json").read_text())
+        self.assertEqual(rt.g0_timeout_s(config), smc.IDLE_MAX_S)
+        self.assertEqual(thermal_gates.G0_CAP_MAX_S, smc.IDLE_MAX_S)
+        self.assertEqual((smc.SETTLE_SLOPE_C_MIN, smc.IDLE_WINDOW_S, smc.SETTLE_COUNT), (.2, 60, 10))
+
     def test_the_driver_registers_the_alias_groups(self):
         self.assertIn("thermometry.alias_groups", contract.required_fields("step-d", quiet=True))
         with tempfile.TemporaryDirectory() as td:

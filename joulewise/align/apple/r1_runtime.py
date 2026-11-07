@@ -302,8 +302,9 @@ def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, r
                   # one thermometer; the kit refuses a policy that gates on two
                   # keys of one group.
                   alias_groups=alias_groups([item["key"] for item in inventory.get("keys", ())], rows),
-                  alias_rule=("keys whose 1 Hz series are identical in every row of the classification "
-                              "journal are one sensor (LEAD-RULINGS-2 R7-13)"))
+                  alias_rule=("keys whose 1 Hz (value, error) series are identical in every row of the "
+                              "classification journal are one sensor (LEAD-RULINGS-2 R7-13; the "
+                              "signature of smc_enumeration.rank selected_key_aliases, PR #692)"))
     stamps = [row["started"]["monotonic_ns"] for row in rows]
     if not stamps or min(stamps) > origin:
         result.update(status="fail", reason="quiet_not_observed")
@@ -437,17 +438,21 @@ def g0_wait_fields(g0, cap_s):
 
 def alias_groups(keys, rows):
     """LEAD-RULINGS-2 R7-13: SMC keys whose 1 Hz series are identical in every
-    journal row (the same reading, value for value, failed reads included) are
-    one sensor under several keys, never independent thermometers. Keys with
-    no valid reading at all are left out (they are no thermometer). Returns
-    sorted groups of two or more keys."""
+    journal row are one sensor under several keys, never independent
+    thermometers. One alias definition (integration of PR #692): two keys are
+    aliases when their (value, error) pair is equal in every row, the same
+    signature ``smc_enumeration.rank`` uses for ``selected_key_aliases``
+    (every recorded value and error, holes included). Keys with no reading at
+    all are left out (every value null: no thermometer). Returns sorted groups
+    of two or more keys; for a pick, its group's other members are exactly the
+    classifier's ``selected_key_aliases`` among the degC keys."""
     series = {}
     for key in keys:
-        values = tuple(json.dumps((row.get("values") or {}).get("sensors", {}).get(key), allow_nan=True)
-                       for row in rows)
-        if all(value == "null" for value in values):
+        pairs = [(((row.get("values") or {}).get("sensors") or {}).get(key),
+                  ((row.get("values") or {}).get("errors") or {}).get(key)) for row in rows]
+        if all(value is None for value, _ in pairs):
             continue
-        series.setdefault(values, []).append(key)
+        series.setdefault(tuple(json.dumps(pair, allow_nan=True) for pair in pairs), []).append(key)
     return sorted(sorted(group) for group in series.values() if len(group) > 1)
 
 
