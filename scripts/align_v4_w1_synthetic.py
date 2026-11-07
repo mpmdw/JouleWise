@@ -40,17 +40,19 @@ I_D = 516.575
 SYN_PHASES = {'G0': 60.0, 'G1': 30.0, 'H': 30.0, 'decode': 200.0, 'prefill': 60.0, 'tool': 5.0}
 SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE,
                 'ac_powermode': 0, 'slots_ac_powermode': 0,
-                'thermometry': {'bar': 'pass', 'D': {'die_candidates': [syn.FAST], 'heatsink_candidates': [syn.SLOW],
+                'thermometry': {'bar': 'pass', 'D': {'s_fast': syn.FAST, 's_slow': syn.SLOW,
+                                                     'die_candidates': [syn.FAST], 'heatsink_candidates': [syn.SLOW],
                                                      'sensor_pick_changed': False}},
                 'max_r1_tail_s': 30.0,
                 # Lead ruling R5-4: B_D, N_chunk, S5/S6 and S7 bind the inputs below.
-                'slots': {'I_D': I_D, 'B_D': 6144, 'N_chunk': 2048, 'S5': 1.0, 'S6': 1.0, 'S7': 120.0},
+                'slots': {'I_D': I_D, 'B_D': 6144, 'N_chunk': 2048, 'S5_fast': 1.5, 'S5': 1.0, 'S6': 1.0, 'S7': 120.0},
                 'high_power': {'verdict': 'not_adopted'}, 'u5': {'verdict': 'pass', 'c': 1.0},
-                'deadman_budget': [{'run': name, 'phases_s': dict(SYN_PHASES, tail=tail)}
+                'deadman_budget': [{'run': name, 'phases_s': dict(SYN_PHASES, tail=tail),
+                                    'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'turn_cap_tokens': 4096},
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
-                'duty_bar': {'pass': True}, 'status_note': 'SYNTHETIC_WP22_DRY_RUN'}
+                'duty_bar': {'pass': True, 'verdict': 'pass'}, 'status_note': 'SYNTHETIC_WP22_DRY_RUN'}
 SYN_INPUTS = {
     'schema_version': 'joulewise.align_v4_inputs.v1',
     'status': 'SYNTHETIC_WP22_DRY_RUN',

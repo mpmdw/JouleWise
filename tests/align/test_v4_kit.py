@@ -5,6 +5,7 @@ from contextlib import redirect_stderr
 import hashlib
 import io
 import json
+import os
 import math
 from pathlib import Path
 import subprocess
@@ -404,17 +405,19 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
     """The fields require_ready binds from an R1 driver r1_slots record."""
     return {'schema': kit.R1_SLOTS_SCHEMA, 'source': source, 'ac_powermode': ac_powermode,
             'slots_ac_powermode': ac_powermode,
-            'thermometry': {'bar': 'pass', 'D': {'die_candidates': ['TC0P'], 'heatsink_candidates': ['TG0P'],
+            'thermometry': {'bar': 'pass', 'D': {'s_fast': 'TC0P', 's_slow': 'TG0P',
+                                                 'die_candidates': ['TC0P'], 'heatsink_candidates': ['TG0P'],
                                                  'sensor_pick_changed': False}},
             'max_r1_tail_s': tail,
-            'slots': {'I_D': i_d, 'T_dead': 1451.0, 'B_D': 8192, 'N_chunk': 512, 'S5': 1.5, 'S6': 1.5, 'S7': 120.0},
+            'slots': {'I_D': i_d, 'T_dead': 1451.0, 'B_D': 8192, 'N_chunk': 512, 'S5_fast': 8.0, 'S5': 1.5, 'S6': 1.5, 'S7': 120.0},
             'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
             'u5': {'verdict': 'pass', 'c': 1.0},
-            'deadman_budget': [{'run': name, 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2)}
+            'deadman_budget': [{'run': name, 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2),
+                                'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
             'budget_fit_inputs': {'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 4096},
             'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
-            'duty_bar': {'pass': True}}
+            'duty_bar': {'pass': True, 'verdict': 'pass'}}
 
 
 class FakeArmHost:
@@ -481,7 +484,8 @@ class R1EvidenceBindingTests(unittest.TestCase):
 
     def test_failed_duty_bar_needs_a_recorded_lead_fallback_step(self):
         inputs, slots = ready_inputs()
-        slots['duty_bar'] = {'pass': False}
+        slots['duty_bar'] = {'pass': False, 'verdict': 'fail'}
+        slots['deadman_budget'][0]['duty_bar'] = {'pass': False, 'verdict': 'fail'}
         with self.assertRaisesRegex(ValueError, 'no lead fallback step'):
             kit.require_ready(inputs, slots)
         slots['duty_bar']['lead_fallback'] = {'step': 5, 'authority': 'x'}
@@ -682,6 +686,16 @@ class L1Tests(unittest.TestCase):
 
 
 class SessionParameterTests(unittest.TestCase):
+
+    def setUp(self):
+        # Lead ruling R6-7: a private host-level High Power state per test.
+        from joulewise.align.apple import powermode
+        host = tempfile.TemporaryDirectory()
+        self.addCleanup(host.cleanup)
+        env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_v3_defaults_and_v4_prepare_parameters(self):
         with patch.object(pilot.h, 'prepare', return_value='prepared') as prepare:
             self.assertEqual(pilot.prepare(ROOT, 'synthetic-session'), 'prepared')
@@ -748,7 +762,7 @@ class SessionParameterTests(unittest.TestCase):
             with patch.object(kit, 'read_inputs', return_value={}), \
                     patch.object(kit, 'require_w1_ready', side_effect=seen.append), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
-                    patch.object(pilot, 'install') as install:
+                    patch.object(pilot, 'install', return_value={'exit_code': 0}) as install:
                 with self.assertRaisesRegex(ValueError, 'set High Power failed.*AC powermode 0 != expected 2'):
                     session.install(session_root, runner=host, volume_runner=host)
                 install.assert_not_called()
@@ -795,6 +809,8 @@ class SessionParameterTests(unittest.TestCase):
             self.assertEqual(record['external_volumes']['external'][0]['mount_point'], '/Volumes/JW-EXT')
 
     def test_v4_arm_restores_an_r1_high_power_marker_then_rechecks(self):
+        # Lead ruling R6-7: the owed restore now runs at the session start
+        # (before the arm), which reads the mode back; the arm then sees 0.
         with tempfile.TemporaryDirectory() as tmp:
             measurement, session_root = self._arm_fixture(tmp, mode_expected=0)
             marker = measurement / '.align-r1-high-power'
@@ -808,9 +824,11 @@ class SessionParameterTests(unittest.TestCase):
                 install.assert_called_once()
             self.assertEqual(host.mode, 0)
             self.assertFalse(marker.exists())
+            [start] = (session_root / 'staging').glob('v4-session-start-restore-*.json')
+            start = json.loads(start.read_text())
+            self.assertEqual((start['action'], start['restore']['observed']), ('restored', 0))
             record = json.loads((session_root / 'staging/v4-arm-001.json').read_text())
-            self.assertTrue(record['ac_powermode']['marker_present'])
-            self.assertEqual([o['value'] for o in record['ac_powermode']['observations']], [2, 0])
+            self.assertEqual([o['value'] for o in record['ac_powermode']['observations']], [0])
 
     def test_every_member_spec_runs_its_roster_task_pair(self):
         files = kit.build_files(ROOT)
@@ -1053,7 +1071,9 @@ class WP18FixtureBindingTests(unittest.TestCase):
         for name, (run_id, _, _, _) in tool.ARMS.items():
             fixture = {'schema': kit.WP18_FIXTURE_SCHEMA, 'arm': name, 'run_id': run_id,
                        'max_turns': inputs['WP18'][name]['max_turns'],
-                       'turns': [{'turn': i} for i in range(inputs['WP18'][name]['max_turns'])]}
+                       'turns': [{'turn': i, 'prompt_token_ids': [1], 'output_token_ids': [2]}
+                                 for i in range(inputs['WP18'][name]['max_turns'])],
+                       'sources': {'align_turns_jsonl_sha256': 'a' * 64, 'p7_pilot_json_sha256': 'b' * 64}}
             raw = (json.dumps(fixture, sort_keys=True) + '\n').encode()
             path = root / kit.WP18_FIXTURES[name]
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1091,18 +1111,31 @@ class WP18FixtureBindingTests(unittest.TestCase):
 class W1HighPowerTests(unittest.TestCase):
     """Lead ruling R5-6: W1 under an adopted High Power, end to end with fake sudo/pmset."""
 
+    def setUp(self):
+        # Lead ruling R6-7: the marker is host-level; a private host per test.
+        from joulewise.align.apple import powermode
+        host = tempfile.TemporaryDirectory()
+        self.addCleanup(host.cleanup)
+        env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
+        env.start()
+        self.addCleanup(env.stop)
+
     def install(self, tmp, ac_powermode, *, gate_status='pass', start_mode=0):
+        from joulewise.align.apple import powermode
         measurement = Path(tmp) / 'm'
         (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
             {'runtime_requirements': {'ac_powermode': ac_powermode}}))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
-        (session_root / 'session.json').write_text(json.dumps({'measurement_root': str(measurement)}))
-        self.marker = measurement / '.align-r1-high-power'
+        (session_root / 'session.json').write_text(json.dumps(
+            {'measurement_root': str(measurement), 'inputs': {'custody_root': str(Path(tmp) / 'custody')},
+             'plan_path': str(Path(tmp) / 'custody/night_plan.json')}))
+        self.marker = Path(powermode.host_marker_path())
         self.host = FakeArmHost(mode=start_mode, marker=self.marker)
         config = W1DiskGateTests.config(self, tmp)
-        with patch.object(kit, 'require_w1_ready'), patch.object(pilot, 'install') as install:
+        with patch.object(kit, 'require_w1_ready'), \
+                patch.object(pilot, 'install', return_value={'exit_code': 0}) as install:
             try:
                 session.install(session_root, runner=self.host, volume_runner=self.host, w1_disk_config=config,
                                 disk_gate=lambda c: {'status': gate_status, 'offloads': []})

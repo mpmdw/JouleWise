@@ -37,6 +37,9 @@ from tests import battery_float_fixture
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Lead ruling R6-7: the host-level High Power marker and night lock never
+# touch the real host path from a test process.
+os.environ.setdefault("JOULEWISE_HOST_STATE_DIR", tempfile.mkdtemp(prefix="jw-host-power-"))
 SCRIPT_PATH = REPO_ROOT / "scripts" / "run_night.py"
 HEAD = "f" * 40
 BOOT_UUID = "12345678-1234-5678-9234-567812345678"
@@ -432,6 +435,10 @@ class NightDriverTests(unittest.TestCase):
         self.addCleanup(identity_patch.stop)
         self.custody = self.root / "custody"
         self.custody.mkdir()
+        # Lead ruling R6-7: a private host-level High Power state per test.
+        host_state = mock.patch.dict(os.environ, {"JOULEWISE_HOST_STATE_DIR": str(self.root / "host-power")})
+        host_state.start()
+        self.addCleanup(host_state.stop)
         self.chain = self.root / "chain.zsh"
         self.chain.write_text("export NIGHT_PROGRAMMED_SPAN_S=1\necho chain\n", encoding="utf-8")
         self.sidecar = self.root / "chain.zsh.sha256"
@@ -875,6 +882,169 @@ runpy.run_path(script, run_name='__main__')
             exit_code, calls = self._run_night()
         self.assertEqual((exit_code, calls), (0, [["/bin/zsh", str(self.chain)]]))
         self.assertIn("ac powermode close", (self.custody / "night.log").read_text())
+
+    # --- Lead ruling R6-7: host-level High Power marker on every exit path ---
+
+    def _declare_high_power(self) -> None:
+        mapping = json.loads(self.plan_path.read_text())
+        mapping["ac_powermode"] = 2
+        self.plan_path.write_text(json.dumps(mapping))
+
+    def _w1_host_marker(self, *, custody_root=None, plan_path=None) -> Path:
+        from joulewise.align.apple import powermode
+        marker = Path(powermode.host_marker_path())
+        powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG,
+                                    owner={"custody_root": custody_root, "plan_path": plan_path})
+        return marker
+
+    def _other_night_holds_the_lock(self):
+        from joulewise.align.apple import powermode
+        other = powermode.HostLock(role="another measuring night")
+        self.assertTrue(other.acquire())
+        self.addCleanup(other.release)
+        return other
+
+    def test_host_marker_from_a_killed_w1_night_is_restored_by_any_later_night(self) -> None:
+        # R6-7 (SIGKILL case): the W1 marker is host-level, so a later night
+        # with a different measurement root still restores before admitting.
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.root / "an-earlier-session" / "custody")
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (0, [["/bin/zsh", str(self.chain)]]))
+        self.assertEqual(host.calls, ["read", "restore", "read"])
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+
+    def test_admission_never_restores_while_a_measuring_night_holds_the_lock(self) -> None:
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.root / "measuring" / "custody")
+        self._other_night_holds_the_lock()
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertNotIn("restore", host.calls)
+        self.assertEqual(host.mode, 2)
+        self.assertTrue(marker.exists())
+        refusal = json.loads((self.custody / "night/refusal.json").read_text())["refusal"]
+        self.assertIn("holds the host night lock", refusal["detail"])
+
+    def test_launch_abandoned_exit_restores_the_marker_this_plan_owns(self) -> None:
+        # Round-5 executing review MEDIUM-4: the J4 exit returned with the host at 2.
+        self._declare_high_power()
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.custody, plan_path=self.plan_path)
+        night = self.custody / "night"
+        night.mkdir(parents=True, exist_ok=True)
+        (night / "launch_abandoned.json").write_text("{}")
+        with mock.patch.object(self.driver, "_existing_record", return_value=night / "launch_abandoned.json"):
+            exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+        self.assertIn("ac powermode exit restore (launch_abandoned)", (self.custody / "night.log").read_text())
+
+    def test_launch_abandoned_exit_leaves_another_plans_marker_alone(self) -> None:
+        # A late launchd fire of a released plan must not undo a retried
+        # night's High Power (the retry's session owns the marker).
+        self._declare_high_power()
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.root / "retry" / "custody")
+        night = self.custody / "night"
+        night.mkdir(parents=True, exist_ok=True)
+        with mock.patch.object(self.driver, "_existing_record", return_value=night / "launch_abandoned.json"):
+            exit_code, _calls = self._run_night()
+        self.assertEqual(exit_code, 3)
+        self.assertNotIn("restore", host.calls)
+        self.assertEqual(host.mode, 2)
+        self.assertTrue(marker.exists())
+
+    def test_exit_restore_waits_for_no_measuring_night(self) -> None:
+        # R6-7: never restore while a measuring night holds the night lock,
+        # even for this plan's own marker (a rerun during its own night).
+        self._declare_high_power()
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.custody)
+        self._other_night_holds_the_lock()
+        night = self.custody / "night"
+        night.mkdir(parents=True, exist_ok=True)
+        (night / "receipt.json").write_text("{}")
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertNotIn("restore", host.calls)
+        self.assertTrue(marker.exists())
+
+    def test_rerun_exit_restores_the_marker_this_plan_owns(self) -> None:
+        self._declare_high_power()
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.custody)
+        night = self.custody / "night"
+        night.mkdir(parents=True, exist_ok=True)
+        (night / "receipt.json").write_text("{}")
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertEqual(host.calls[:2], ["restore", "read"])
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+
+    def test_malformed_plan_exit_restores_the_marker_this_plan_owns(self) -> None:
+        host = self._power_host(2)
+        marker = self._w1_host_marker(plan_path=self.plan_path)
+        self.plan_path.write_text("{not json")
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+
+    def test_declared_high_power_refused_at_admission_restores_automatic(self) -> None:
+        # Cold pass MEDIUM-2: a failed pmset read (and any other admission
+        # refusal) of a W1 High Power night left the host at 2.
+        self._declare_high_power()
+        host = self._power_host(2, failed_reads=2)
+        marker = self._w1_host_marker(custody_root=self.custody)
+        exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertIn("restore", host.calls)
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+        from joulewise.align.apple import powermode
+        free = powermode.HostLock()
+        self.assertTrue(free.acquire())
+        free.release()
+
+    def test_declared_high_power_night_measures_holding_the_night_lock(self) -> None:
+        from joulewise.align.apple import powermode
+        self._declare_high_power()
+        host = self._power_host(2)
+        marker = self._w1_host_marker(custody_root=self.custody)
+        during = []
+        calls, spawn = self._popen_recorder()
+
+        def spawn_and_probe(argv, *args, **kwargs):
+            probe = powermode.HostLock(role="late launchd fire")
+            during.append(probe.acquire())
+            probe.release()
+            return spawn(argv, *args, **kwargs)
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn_and_probe):
+            exit_code = self.driver.run_night(self.plan_path)
+        self.assertEqual((exit_code, calls), (0, [["/bin/zsh", str(self.chain)]]))
+        self.assertEqual(during, [False])
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+        after = powermode.HostLock()
+        self.assertTrue(after.acquire())
+        after.release()
+
+    def test_declared_high_power_refuses_while_another_night_holds_the_lock(self) -> None:
+        from joulewise.align.apple import powermode
+        self._declare_high_power()
+        host = self._power_host(2)
+        self._w1_host_marker(custody_root=self.custody)
+        self._other_night_holds_the_lock()
+        with mock.patch.object(powermode, "NIGHT_LOCK_WAIT_S", 0.0):
+            exit_code, calls = self._run_night()
+        self.assertEqual((exit_code, calls), (3, []))
+        self.assertNotIn("restore", host.calls)
+        refusal = json.loads((self.custody / "night/refusal.json").read_text())["refusal"]
+        self.assertIn("host night lock", refusal["detail"])
 
     def test_automatic_plan_never_runs_the_close_restore(self) -> None:
         host = self._power_host(0)

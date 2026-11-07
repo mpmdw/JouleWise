@@ -108,6 +108,51 @@ def incomplete_member_reasons(member):
     return reasons
 
 
+def only_g0_unreleased(incomplete, g0_outcome):
+    """Round-5 executing review LOW-2 (lead ruling R6-8): True only when every
+    incomplete reason is one an unreleased own G0 produces by itself (the stop
+    before turn 0, no turn, and the G0's own timeout or deadman flag). Any
+    other reason (a collector, custody or member failure) still refuses."""
+    allowed = {"episode.g0_unreleased:0", "turns:0"}
+    allowed |= {"timeout": {"thermal.start_gate_timeout"}, "deadman": {"episode.deadman:0"}}.get(g0_outcome, set())
+    return "episode.g0_unreleased:0" in incomplete and set(incomplete) <= allowed
+
+
+DEFERRED_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+
+
+def close_managed_session(managed, after=None):
+    """Round-5 executing review LOW-3 (lead ruling R6-8): close one managed
+    session with TERM/INT/HUP held back until the close returns, so a first
+    signal cannot land between the powermetrics adapter dropping its process
+    handle and stopping the process. A signal that arrives meanwhile is
+    re-raised to the previous handler once the close has finished (or
+    failed). Python handlers run on the main thread, so the deferral swaps
+    the handlers there (whichever thread the kernel delivers to); off the
+    main thread the close runs as before. ``after`` runs once the close has
+    returned, before a held signal is delivered."""
+    if threading.current_thread() is not threading.main_thread():
+        managed.close()
+        if after is not None:
+            after()
+        return
+    pending, previous = [], {}
+
+    def hold(signum, _frame):
+        pending.append(signum)
+    try:
+        for sig in DEFERRED_SIGNALS:
+            previous[sig] = signal.signal(sig, hold)
+        managed.close()
+        if after is not None:
+            after()
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        for signum in dict.fromkeys(pending):
+            signal.raise_signal(signum)
+
+
 class Refused(RuntimeError):
     """Fail closed: an input is pending or invalid (exit 2)."""
 
@@ -639,7 +684,7 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
     planning_turn_s = prefill_s + 4096 / r_decode
     fast, slow = responses["s_fast"], responses["s_slow"]
     slots = {"S1": fast["delta_t_c"], "S2": fast["t63_s"], "S3": slow["delta_t_c"], "S4": slow["tau_s"],
-             "S5": bands["delta_slow_c"], "S6": bands["delta_slow_c"], "S7": g_turn, "S8": float(n_chunk),
+             "S5": bands["delta_slow_c"], "S5_fast": bands["delta_fast_c"], "S6": bands["delta_slow_c"], "S7": g_turn, "S8": float(n_chunk),
              "S9": t_dec, "B_D": b_d, "I_D": i_d, "T_dead": t_dead, "N_chunk": n_chunk,
              "t_decline": t_dec, "class": d_class}
     detail = {
@@ -1139,7 +1184,7 @@ class Segment:
             errors.append(error)
         while self.open_sessions:
             try:
-                self.open_sessions.pop().close()
+                close_managed_session(self.open_sessions.pop())
             except BaseException as error:  # noqa: BLE001
                 errors.append(error)
         if self._stop_ticker is not None:
@@ -1203,8 +1248,9 @@ class Segment:
         return managed
 
     def close_session(self, managed):
-        self.open_sessions.remove(managed)
-        managed.close()
+        # Exec LOW-3 (R6-8): the session leaves open_sessions only once its
+        # close returned, so a failed close is retried by Segment.close.
+        close_managed_session(managed, after=lambda: self.open_sessions.remove(managed))
 
     def latest(self, session, key):
         rows = valid_series(session.rows[-5:], key)
@@ -1370,7 +1416,7 @@ class Segment:
         # valid read (Sol critique of round 5).
         end = (rows[-1]["monotonic_ns"] - t0) / NS if rows else 0.0
         return {"sensor_series_c": series, "sensor_series_t_s": times, "sensor_series_end_t_s": end,
-                "sensor_series_failed_reads": failed,
+                "sensor_series_failed_reads": failed, "sensor_roles": self.sensors,
                 "sensor_series_note": ("valid 1 Hz reads in order with their times (s from the first journal "
                                        "row); a failed read is dropped, never interpolated"),
                 "duration_s": seconds}
@@ -1416,7 +1462,7 @@ class Segment:
         thermal = ep.hardware.get("thermal") or {}
         g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
         incomplete = incomplete_member_reasons(member)
-        if leg and g0 is not None and g0["outcome"] != "released":
+        if leg and g0 is not None and g0["outcome"] != "released" and only_g0_unreleased(incomplete, g0["outcome"]):
             # LEAD-RULINGS-2 R5-3 (ruling 16): an A-B-A leg whose own G0 did not
             # release has no turn and no t_decline. It is INCONCLUSIVE, not a
             # refusal of the R1 night; t_decline_s is null here only beside

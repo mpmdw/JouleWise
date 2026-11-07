@@ -6,11 +6,15 @@ sizing_b5.json, WP18 fixtures) and writes the frozen series AC powermode into
 the night plan. install additionally requires the AC powermode to equal the
 frozen series value and the R0 host's w1_disk_gate to pass. Under an adopted
 High Power (r1_slots ac_powermode 2, lead ruling R5-6) install sets
-powermode 2 through the narrow sudo rule after writing the High Power marker,
-and restores Automatic if the arm then refuses; run_night admits 2 only for a
-plan that declares 2 and restores Automatic when that night closes.
+powermode 2 through the narrow sudo rule after writing the host-level High
+Power marker (lead ruling R6-7), and restores Automatic if the arm refuses or
+the installer installs nothing; run_night admits 2 only for a plan that
+declares 2 and restores Automatic when that night closes. Every session start
+(prepare, install) first restores a marker it does not own, never while a
+measuring night holds the host night lock.
 """
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -30,7 +34,12 @@ def series_ac_powermode(measurement_root):
     return value
 
 
-def prepare(measurement_root, session_root, **kwargs):
+def prepare(measurement_root, session_root, *, power_runner=None, **kwargs):
+    # Lead ruling R6-7: at every session start a host-level High Power marker
+    # means an Automatic restore is owed. Restore it first (never under a
+    # measuring night, which holds the host night lock and restores at its own
+    # close) and refuse the session if the restore fails its read-back.
+    start = session_start_restore(measurement_root, runner=power_runner)
     kit.generate(measurement_root, check=True, source_root=measurement_root)
     # Lead ruling R5-6: the night plan declares the frozen series powermode, so
     # run_night admits a High Power host only for a W1 that adopted it.
@@ -38,7 +47,37 @@ def prepare(measurement_root, session_root, **kwargs):
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
-    return pilot.prepare(measurement_root, session_root, **kwargs)
+    state = pilot.prepare(measurement_root, session_root, **kwargs)
+    if start['action'] != 'none':
+        try:
+            pilot.h.write(Path(session_root) / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
+        except Exception:  # noqa: BLE001 - the restore itself is what matters
+            pass
+    return state
+
+
+def _power_markers(measurement_root):
+    """The host-level marker (lead ruling R6-7) and the R1 chain's own
+    ``$MEASUREMENT_ROOT`` marker."""
+    from joulewise.align.apple import powermode
+    return [Path(powermode.host_marker_path()), Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER]
+
+
+def session_start_restore(measurement_root, *, runner=None, lock=None, keep_owner=None):
+    """Lead ruling R6-7: restore Automatic for any High Power marker at a
+    session start (except one this session itself owns, ``keep_owner``), then
+    re-check the mode (``restore_automatic`` reads it back). A measuring night
+    holding the host night lock defers it: that night restores at its close.
+    Raises ValueError when a restore ran and did not read back 0."""
+    from joulewise.align.apple import powermode
+    markers = [m for m in _power_markers(measurement_root)
+               if os.path.lexists(m) and not (keep_owner and powermode.owned_by(m, **keep_owner))]
+    record = powermode.restore_owed(markers, runner=runner, lock=lock, reason='session_start')
+    if record['action'] in ('restore_failed', 'error'):
+        raise ValueError('v4 session start refused: a High Power marker is present and the Automatic restore '
+                         'failed: ' + json.dumps(record.get('restore') or record.get('error'), sort_keys=True,
+                                                 default=str))
+    return record
 
 
 def observe_ac_powermode(runner=None):
@@ -77,7 +116,7 @@ def desk(session_root, **kwargs):
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
 
 
-def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None):
+def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     Ruling 7: the AC-profile powermode must equal the plan's frozen series
@@ -91,7 +130,8 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None):
     from joulewise.align.apple import external_volume, powermode
     expected = (plan.get('runtime_requirements') or {}).get('ac_powermode')
     marker = Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER
-    power = powermode.admit_ac_powermode(expected, marker=marker, runner=runner)
+    power = powermode.admit_ac_powermode(expected, marker=marker, markers=(powermode.host_marker_path(),),
+                                         runner=runner, lock=lock)
     reasons = [] if power['admitted'] else ['ac_powermode: ' + str(power['reason'])]
     run = volume_runner or external_volume.run_command
     try:
@@ -144,40 +184,67 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
     from joulewise.align.apple import powermode
     high = None
-    marker = Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER
+    # Lead ruling R6-7: the High Power marker is host-level, so every later
+    # session, night and the watchdog see it; it names this session as owner.
+    marker = Path(powermode.host_marker_path())
     custody_root = (state.get('inputs') or {}).get('custody_root')
     if custody_root and (Path(custody_root) / 'night/result.json').is_file():
         # A terminal session has no night left to restore Automatic (Sol
         # critique of R5-6): never change the power mode for it.
         raise ValueError('v4 install refused: the session is terminal (night/result.json exists)')
-    already = (state.get('install') or {}).get('exit_code') == 0
-    entering = (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2 and not already
+    owner = {'custody_root': custody_root, 'plan_path': state.get('plan_path')}
+    # R6-7: the install holds the host night lock throughout, so no restore by
+    # a late launchd fire interleaves with it and it never changes the mode
+    # under a measuring night.
+    lock = powermode.HostLock(role='v4-install')
+    if not lock.acquire():
+        raise ValueError('v4 install refused: a measuring night holds the host night lock '
+                         f'({powermode.night_lock_path()})')
     try:
-        if entering:
-            # Lead ruling R5-6: W1 under an adopted High Power. The marker comes
-            # first (powermode.enter_high_power), so any later crash leaves the
-            # restore owed to the next night that expects Automatic. Inside the
-            # try (round-5 executing review): a signal during the entry itself,
-            # after pmset applied 2, still restores Automatic below.
-            high = powermode.enter_high_power(marker, runner=runner)
-        return _arm_and_install(session, state, measurement_root, plan, high, runner=runner,
-                                volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
-                                disk_gate=disk_gate, **kwargs)
-    except BaseException:
-        if entering:
-            # The arm did not hand off: leave the host Automatic (R5-6), on
-            # every failure from the mode change on.
-            restore = powermode.restore_automatic(marker, runner=runner)
-            try:
-                pilot.h.write(session / f'staging/v4-arm-restore-{time.time_ns()}.json', restore)
-            except Exception:  # noqa: BLE001 - the restore itself is what matters
-                pass
-        raise
+        # R6-7 session start: any marker this session does not own is a
+        # restore owed (an R1 crash, an abandoned or killed W1 night).
+        start = session_start_restore(measurement_root, runner=runner, lock=lock,
+                                      keep_owner={'custody_root': custody_root})
+        if start['action'] != 'none':
+            pilot.h.write(session / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
+        already = (state.get('install') or {}).get('exit_code') == 0
+        entering = (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2 and not already
+        try:
+            if entering:
+                # Lead ruling R5-6: W1 under an adopted High Power. The marker
+                # comes first (powermode.enter_high_power), so any later crash
+                # leaves the restore owed. Inside the try (round-5 executing
+                # review): a signal during the entry itself, after pmset
+                # applied 2, still restores Automatic below.
+                high = powermode.enter_high_power(marker, runner=runner, owner=owner)
+            result = _arm_and_install(session, state, measurement_root, plan, high, runner=runner,
+                                      volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
+                                      disk_gate=disk_gate, lock=lock, **kwargs)
+            if entering and not (isinstance(result, dict) and result.get('exit_code') == 0):
+                # Round-5 cold pass MEDIUM-1 (R6-7): the shared installer
+                # returned without installing (launchd already holds a night
+                # job). No night of this session will close the High Power
+                # span, so it is not an arm: restore below and refuse.
+                raise ValueError('v4 install did not install the night job (installer not called); '
+                                 'Automatic restored')
+            return result
+        except BaseException:
+            if entering:
+                # The arm did not hand off: leave the host Automatic (R5-6), on
+                # every failure from the mode change on.
+                restore = powermode.restore_automatic(marker, runner=runner)
+                try:
+                    pilot.h.write(session / f'staging/v4-arm-restore-{time.time_ns()}.json', restore)
+                except Exception:  # noqa: BLE001 - the restore itself is what matters
+                    pass
+            raise
+    finally:
+        lock.release()
 
 
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
-                     w1_disk_config, disk_gate, **kwargs):
-    record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner)
+                     w1_disk_config, disk_gate, lock=None, **kwargs):
+    record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner, lock=lock)
     if high is not None:
         record['high_power_enter'] = high
         if not high['ok']:

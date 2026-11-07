@@ -114,7 +114,7 @@ class FakeWorld:
             return completed(argv, code=9, err="synthetic runtime failure")
         slots = {f"S{i}": float(i) for i in range(1, 10)}
         # S5 = S6 = delta_slow and S7 = G_turn, as the runtime derives them.
-        slots.update(S5=1.0, S6=1.0, S7=120.0, B_D=self.b_d, I_D=101.5, T_dead=1451.018, N_chunk=256,
+        slots.update(S5_fast=8.0, S5=1.0, S6=1.0, S7=120.0, B_D=self.b_d, I_D=101.5, T_dead=1451.018, N_chunk=256,
                      t_decline=23.0, **{"class": "heavy"})
         slots.update(self.slot_changes)
         offset = int(kind.rsplit("-", 1)[-1][:-1]) if kind.startswith("d-planning-turn") else 0
@@ -130,6 +130,7 @@ class FakeWorld:
                    "census": [{"pid": 1, "name": "launchd"}],
                    "slots": slots if kind == "step-d" else {}}
         if kind == "idle":
+            payload['sensor_roles'] = {'s_slow': 's_slow'}
             slope = 0.5 / 60 if self.unsettled_soak_once else 0.0
             self.unsettled_soak_once = False
             # Valid 1 Hz reads with their times; failed reads leave gaps in the
