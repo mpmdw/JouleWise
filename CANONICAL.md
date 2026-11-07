@@ -40,7 +40,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 | Job | Canonical | Replaced |
 |---|---|---|
 | Registered plan | `configs/campaigns/v5_claim_25g83/analysis_plan_block5.md` (sealed, pinned in `configs/analysis/b5/seal_pins.json`) and `registration_block5.md` | — |
-| **Production numbers** | **`scripts/independent_recompute_b5.py`** (standard library only, minutes) **+ `scripts/compare_b5_recompute.py`** (agreement with the heavy pipeline; bars in `configs/analysis/b5/recompute_bars.json`) | The heavy L9 pipeline as the production path. Per the care audit (`lane/2026-11-06-b5-care-audit`, `docs/run_reports/2026-11-06-b5-care-audit.md`): DLE-1, the release is "verify dry-run digests + recompute + comparator" instead of a second heavy run; DLE-2, the recompute is the production program for blocks 6+ |
+| **Production numbers** | **`scripts/independent_recompute_b5.py`** (standard library only, minutes) **+ `scripts/compare_b5_recompute.py`** (agreement with the heavy pipeline; bars in `configs/analysis/b5/recompute_bars.json`) | The heavy L9 pipeline as the production path. Per the care audit (`docs/run_reports/2026-11-06-b5-care-audit.md` on branch `lane/2026-11-06-b5-care-audit`, not on `main` yet): DLE-1, the release is "verify dry-run digests + recompute + comparator" instead of a second heavy run; DLE-2, the recompute is the production program for blocks 6+ |
 | Audit run (heavy) | `scripts/run_b5_analysis.py` (`--mode blind-dry-run`, then `--mode release`) over `joulewise/b5_analysis/**`, configs in `configs/analysis/b5/**` | Earlier per-step L9 drivers and `analysis_manifest_v2` (deleted; v3 is `joulewise/analysis_manifest_v3.py`) |
 | Accepting a restructured heavy pipeline | `tools/b5_equivalence/compare_b5_results.py` (D-188 result-equivalence comparator, `--mode blinded` by default) | Byte-for-byte replays of the old pipeline |
 | Release (unblinding) | DLE-1 path above; the release event itself follows the plan's release section and `RUN_STATE.md` | A full second heavy re-run (now optional audit work) |
@@ -57,7 +57,7 @@ The magistrate on the MacBook Pro owns running, re-running and arming windows
 
 | Job | Canonical | Replaced |
 |---|---|---|
-| Test suite | `.github/workflows/ci.yml` (full suite on every PR); locally `python3 scripts/quick_suite.py` for the quick tier | Running the full suite on the analysis or measurement Mac |
+| Test suite | `.github/workflows/ci.yml` (full suite on every PR that changes code; docs-only ranges report success without running tests); locally `python3 scripts/quick_suite.py` for the quick tier | Running the full suite on the analysis or measurement Mac |
 | Gate ledger | `.github/workflows/gate-ledger.yml` + `scripts/check_gate_ledger.py` | — |
 | Pins | `python3 scripts/repin.py --check` (all families); `--write registry` after deleting or adding pinned files | Hand repins |
 | State kernel | `python3 scripts/gen_state.py --check` | — |

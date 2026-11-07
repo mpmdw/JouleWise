@@ -98,6 +98,12 @@ this base. Those items cite no removed path.
   - `RUN_STATE.md` (left untouched).
   - About 550 plain-text path citations in kept docs, which are history. `docs/ARCHIVE.md`
     explains how to resolve them.
+- Executing review (`docs/run_reports/2026-11-06-repo-prune-executing-review.md`) restored
+  `configs/suite_manifests/jw_{mixed,sentinel}_v1_qwen25_15b_annotations.json` and re-ran
+  `repin.py --write registry` (their rows return byte-identical to `main`).
+  `scripts/run_campaign.py:2471` builds `<manifest stem>_annotations.json` at run time and
+  uses it for the prompt-hash check of every config that names the kept manifests (54 kept
+  `p2_015_floors` configs name the sentinel manifest). Net removal is 8,109 files.
 - `scripts/test_timings.json` still lists 23 removed test modules under `seconds_by_module`.
   Those entries are scheduling hints only; the CI shard planner ignores modules it does not
   discover. They were left alone to avoid a conflict with the `ci-timings` lanes.
