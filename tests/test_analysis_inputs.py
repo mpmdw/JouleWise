@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, Mapping
 from unittest import mock
 
-from joulewise import arm_readiness, identity_pins
-from joulewise.arm_readiness import committed_pack_tree_sha256
+from joulewise import receipt_readers as arm_readiness; from joulewise import identity_pins
+from joulewise.receipt_readers import committed_pack_tree_sha256
 from joulewise.analysis_engine import _resolve_contrast_floor
 from joulewise.analysis_engine.inputs import (
     AuthenticatedFloorArtifact,

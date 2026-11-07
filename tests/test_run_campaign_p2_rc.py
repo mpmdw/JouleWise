@@ -88,7 +88,7 @@ PRELUDE = textwrap.dedent(
     if "lineage" in _rid:
         _ordered()
         print("Traceback (most recent call last):", file=_sys.stderr)
-        print("joulewise.arm_readiness.LaunchLineageError: launch_consumption_missing: "
+        print("joulewise.receipt_readers.LaunchLineageError: launch_consumption_missing: "
               "no consumption record for window 42", file=_sys.stderr)
         raise SystemExit(1)
     """

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import copy
 import hashlib
@@ -326,7 +327,7 @@ class D117GammaD139A2FamiliesTests(unittest.TestCase):
         previous = sys.dont_write_bytecode
         sys.dont_write_bytecode = True
         try:
-            spec.loader.exec_module(module)
+            exec_archived_generator(spec.loader, module)
         finally:
             sys.dont_write_bytecode = previous
         with tempfile.TemporaryDirectory(prefix="d117-floor-selector-") as temporary:

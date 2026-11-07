@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from joulewise import detection_floor, floor_extraction
-from joulewise.arm_readiness import ArmReadinessError, LaunchLineageError
+from joulewise.receipt_readers import ArmReadinessError, LaunchLineageError
 from joulewise.authentication_io import active_v2_authentication_session
 from joulewise.calibration_bracketing import (
     acceptance_allowance_rule,

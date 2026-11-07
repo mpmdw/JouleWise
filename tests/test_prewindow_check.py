@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from joulewise import prewindow, dwell
+from joulewise import prewindow; from joulewise.hazards import dwell as dwell
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]

@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 from joulewise import whole_window as ww
-from joulewise import arm_readiness
+from joulewise import receipt_readers as arm_readiness
 from tests import test_whole_window as support
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 from tests.b5_analysis import fixtures_s3 as fx

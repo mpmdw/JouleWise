@@ -1,28 +1,26 @@
-#!/usr/bin/env python3
-"""Judge an already-recorded supervised T-0 rehearsal custody tree."""
-
+"""Read one stored supervised-rehearsal custody bundle without issuing a verdict."""
 from __future__ import annotations
 
-import argparse
 import os
-import sys
 from pathlib import Path, PurePosixPath
-from typing import BinaryIO, Mapping, Sequence
+from typing import Mapping
 
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from joulewise import arm_readiness as readiness  # noqa: E402
-from joulewise import t0_rehearsal  # noqa: E402
-from joulewise.arm_readiness import _production_inventory as _read_production_inventory  # noqa: E402
-
+from joulewise import receipt_readers as readiness
+from joulewise import rehearsal_readers as t0_rehearsal
+from joulewise.receipt_readers import _production_inventory as _read_production_inventory
 
 MANIFEST_NAME = "t0-rehearsal-bundle.json"
+
+
 MANIFEST_SCHEMA = "joulewise.t0_unattended_rehearsal_bundle.v1"
+
+
 QUALIFICATION_MANIFEST_NAME = "s1-qualification-bundle.json"
+
+
 QUALIFICATION_MANIFEST_SCHEMA = "joulewise.v5_s1_qualification_bundle.v1"
+
+
 RECORD_NAMES = frozenset(
     {
         "execution",
@@ -36,6 +34,8 @@ RECORD_NAMES = frozenset(
         "positive_control",
     }
 )
+
+
 _MANIFEST_KEYS = {
     "schema_version",
     "t0_namespace",
@@ -250,53 +250,3 @@ def load_evidence_bundle(root: Path | str, *, home=None, inventory=None,
         production_roots=tuple(production_roots),
         load_issues=tuple(load_issues),
     )
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    roots = parser.add_mutually_exclusive_group(required=True)
-    roots.add_argument(
-        "--fixture-root",
-        type=Path,
-        help="read a synthesized custody tree; the CLI still invents no evidence",
-    )
-    roots.add_argument(
-        "--custody-root",
-        type=Path,
-        help="read a real supervised-rehearsal custody tree",
-    )
-    return parser
-
-
-def main(
-    argv: Sequence[str] | None = None,
-    *,
-    stdout: BinaryIO | None = None,
-    home=None, inventory=None,
-) -> int:
-    args = _parser().parse_args(argv)
-    root = args.fixture_root if args.fixture_root is not None else args.custody_root
-    try:
-        bundle = load_evidence_bundle(root, home=home, inventory=inventory,
-                                      require_observed=args.custody_root is not None)
-        verdict = t0_rehearsal.evaluate_rehearsal(bundle)
-    except BundleLoadError as exc:
-        verdict = {
-            "schema_version": "joulewise.t0_unattended_rehearsal_verdict.v1",
-            "overall_verdict": "FAIL",
-            "gate_counts": {"PASS": 0, "FAIL": 1, "UNRULED": 0},
-            "gates": [],
-            "load_issues": [str(exc)],
-        }
-    verdict["proof_scope"] = "DESK_FIXTURE_MAPPING_ONLY" if args.fixture_root is not None else "OBSERVED_REHEARSAL"
-    output = sys.stdout.buffer if stdout is None else stdout
-    output.write(readiness.render_json(verdict))
-    if verdict["overall_verdict"] == "PASS":
-        return 0
-    if verdict["overall_verdict"] == "INCOMPLETE":
-        return 3
-    return 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

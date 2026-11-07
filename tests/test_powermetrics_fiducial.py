@@ -1388,7 +1388,7 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
     def setUp(self) -> None:
         assert stage1_test_module is not None
         self.stage1 = stage1_test_module.LaunchConsumptionV2Tests(
-            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            methodName="runTest"
         )
         self.stage1.setUp()
         self.addCleanup(self.stage1.doCleanups)
@@ -1555,7 +1555,7 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
         self.stage1._settle()
         assert stage1_test_module is not None
         second = stage1_test_module.LaunchConsumptionV2Tests(
-            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            methodName="runTest"
         )
         second.setUp()
         try:

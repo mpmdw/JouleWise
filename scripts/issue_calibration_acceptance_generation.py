@@ -95,7 +95,7 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import battery_float, network_time_off  # noqa: E402
+from joulewise import battery_float; from joulewise.hazards import network_time as network_time_off  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     ACTIVE_ACCEPTANCE_ID,
     ENVELOPE_MINIMUM_CORPUS_N,

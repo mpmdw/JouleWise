@@ -57,7 +57,7 @@ from joulewise.measurement_liveness import (  # noqa: E402
     observe_identity, publish_campaign, remove_campaign,
 )
 from joulewise.bundle import sanitize_id_component  # noqa: E402
-from joulewise.arm_readiness import (  # noqa: E402
+from joulewise.receipt_readers import (  # noqa: E402
     LaunchLineageError,
     authenticate_campaign_launch_lineage,
     launch_lineage_required,
@@ -4157,7 +4157,7 @@ def _hazard_child_refusal(raw: bytes) -> str | None:
     if not lines:
         return None
     try:
-        from joulewise.arm_readiness import LAUNCH_LINEAGE_REASON_CODES as codes
+        from joulewise.receipt_readers import LAUNCH_LINEAGE_REASON_CODES as codes
     except Exception:  # noqa: BLE001 - the redacted line still names the refusal
         codes = frozenset()
     lineage_lines = [lines[-1]] + [line for line in reversed(lines) if "LaunchLineageError" in line]

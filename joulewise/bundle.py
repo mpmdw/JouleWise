@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import joulewise
-from joulewise.arm_readiness import (
+from joulewise.receipt_readers import (
     LaunchLineageError,
     authenticate_campaign_launch_lineage,
     launch_lineage_required,

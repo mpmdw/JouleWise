@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from joulewise import adapters, arm_readiness, battery_float, calibration_ledger as ledger, controller
+from joulewise import adapters; from joulewise import receipt_readers as arm_readiness; from joulewise import battery_float; from joulewise import calibration_ledger as ledger; from joulewise import controller
 from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH
 from joulewise.clock import FakeClock
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy, RunStatus

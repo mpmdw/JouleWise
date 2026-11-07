@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, t0_rehearsal as rehearsal
-from scripts import rehearse_t0_unattended as cli
+from joulewise import receipt_readers as readiness; from joulewise import rehearsal_readers as rehearsal
+from scripts import rehearsal_bundle as cli
 from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle, fixture_inventory, _write_json
 from tests.git_fixture import init_git_fixture
 
@@ -92,7 +92,7 @@ class ProductionCensusLoaderTests(unittest.TestCase):
         reviewed = commit("reviewed inventory")
         plan = {"repo_head": reviewed, "measurement_head": reviewed, "measurement_root": str(repo)}
         original = path.read_bytes()
-        with mock.patch.object(readiness, "__file__", str(repo / "joulewise/arm_readiness.py")):
+        with mock.patch.object(readiness, "__file__", str(repo / "joulewise/receipt_readers.py")):
             self.assertEqual(inventory, readiness._production_inventory(plan))
             _write_json(path, inventory[:1])
             local = commit("delete deployment locally")

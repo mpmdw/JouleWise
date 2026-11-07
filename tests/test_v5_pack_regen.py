@@ -6,6 +6,7 @@ cadence. Before it, the packs set idle_seconds 75.0 (750 records, about 98 s).
 """
 
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import hashlib
 import json
@@ -212,7 +213,7 @@ class V5PackRegenerationTests(unittest.TestCase):
         generator = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = generator
         self.addCleanup(sys.modules.pop, spec.name, None)
-        spec.loader.exec_module(generator)
+        exec_archived_generator(spec.loader, generator)
         self.assertEqual(set(generator.interior_reference_inputs()),
                          {"gamma-reference-decode-midpoint", "gamma-reference-prefill-midpoint"})
         with tempfile.TemporaryDirectory(prefix="v5-interior-") as temporary:

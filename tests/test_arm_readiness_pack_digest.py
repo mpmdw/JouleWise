@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
-from joulewise.arm_readiness import (
+import joulewise.receipt_readers as readiness
+from joulewise.receipt_readers import (
     PACK_DIGEST_DOMAIN,
     ArmReadinessError,
     committed_pack_tree_sha256,

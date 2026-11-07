@@ -126,10 +126,10 @@ def scope_problems(document: dict, root: Path = ROOT) -> list[str]:
             problems.append(f"not_scanned {module}: reason {reason!r} is not in not_scanned_reasons")
         if module in scan["modules"]:
             problems.append(f"{module} is both scanned and not_scanned")
-        if not (root / module).is_file():
+        if not census.source_path(module, root).is_file():
             problems.append(f"not_scanned {module} does not exist")
     for module in scan["modules"]:
-        if not (root / module).is_file():
+        if not census.source_path(module, root).is_file():
             problems.append(f"scanned module {module} does not exist")
     return problems
 
@@ -204,6 +204,22 @@ class RefusalAllowlistTests(unittest.TestCase):
 
     def test_every_entry_names_what_it_protects(self):
         self.assertEqual(entry_problems(self.document), [])
+
+    def test_stage2_overlay_preserves_the_sealed_inventory_and_unique_sources(self):
+        from tests.hazards import refusal_prune_s2 as overlay
+        self.assertEqual(hashlib.sha256(census.ALLOWLIST.read_bytes()).hexdigest(),
+                         overlay.FROZEN_INVENTORY_SHA256)
+        paths = [census.source_path(file) for file in self.document["scan"]["modules"]]
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertTrue(all(path.is_file() for path in paths))
+        original = json.loads(census.ALLOWLIST.read_bytes())
+        changed = copy.deepcopy(original)
+        first = overlay.REMOVED_SITES[0]
+        row = next(row for row in changed["sites"] if all(row[key] == first[key]
+                   for key in ("file", "function", "kind", "detail")))
+        row["count"] += 1
+        with self.assertRaises(ValueError):
+            overlay.current_view(changed)
 
     def test_the_baseline_is_frozen(self):
         self.assertEqual(hashlib.sha256(FROZEN_BASELINE.read_bytes()).hexdigest(), FROZEN_BASELINE_SHA256,
@@ -288,8 +304,8 @@ class RefusalAllowlistTests(unittest.TestCase):
 
     def test_an_unscanned_import_fails(self):
         broken = copy.deepcopy(self.document)
-        broken["scan"]["not_scanned"].pop("joulewise/t0_rehearsal.py")
-        self.assertTrue(any("joulewise/t0_rehearsal.py" in problem for problem in scope_problems(broken)))
+        broken["scan"]["modules"].remove("joulewise/process_observer.py")
+        self.assertTrue(any("joulewise/process_observer.py" in problem for problem in scope_problems(broken)))
 
 
 class CensusScannerTests(unittest.TestCase):
@@ -464,13 +480,13 @@ class ReviewMutationTests(unittest.TestCase):
         cls.document = census.load_allowlist()
 
     def mutated(self, file: str, old: str, new: str) -> dict:
-        source = (ROOT / file).read_text(encoding="utf-8")
+        source = census.source_path(file).read_text(encoding="utf-8")
         self.assertIn(old, source, f"{file} no longer contains the mutation anchor; pick another")
         changed = new if old == source else source.replace(old, new, 1)
         real = Path.read_text
 
         def read_text(path, *args, **kwargs):
-            return changed if Path(path) == ROOT / file else real(path, *args, **kwargs)
+            return changed if Path(path) == census.source_path(file) else real(path, *args, **kwargs)
 
         with patch.object(Path, "read_text", read_text):
             result = census.differences(self.document)
@@ -478,7 +494,7 @@ class ReviewMutationTests(unittest.TestCase):
         return result
 
     def appended(self, file: str, text: str) -> dict:
-        source = (ROOT / file).read_text(encoding="utf-8")
+        source = census.source_path(file).read_text(encoding="utf-8")
         return self.mutated(file, source, source + text)
 
     def test_widening_an_existing_refusal_condition_is_seen(self):
@@ -486,6 +502,20 @@ class ReviewMutationTests(unittest.TestCase):
                               'or pre is None or pre.disposition != "valid" '
                               'or config.run_id != config.run_id.lower()')
         self.assertTrue(result["guard_changed"], result)
+
+    def test_replacement_reader_mutation_keeps_the_original_site_identity(self):
+        source = census.source_path("joulewise/arm_readiness.py").read_text()
+        old = "if not isinstance(value, str) or _LOWER_GIT_OID_RE.fullmatch(value) is None:"
+        self.assertTrue(old in source, "moved-reader mutation anchor is present")
+        result = self.mutated("joulewise/arm_readiness.py", old, "if True:")
+        self.assertTrue(result["guard_changed"], result)
+        self.assertTrue(any(row["file"] == "joulewise/arm_readiness.py"
+                            for row in result["guard_changed"]))
+
+    def test_new_observer_guard_widening_cannot_become_baseline(self):
+        result = self.mutated("joulewise/process_observer.py",
+                              "if not self._journal.observe_only:", "if True:")
+        self.assertTrue(result["guard_changed"] or result["unlisted"], result)
 
     def test_setting_a_verdict_field_false_is_seen(self):
         result = self.appended("joulewise/b5/driver.py",

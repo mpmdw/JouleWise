@@ -24,8 +24,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import arm_readiness as readiness
-from joulewise import night_gate, kernel_clock, t0_rehearsal, v5_qualification as q
+from joulewise import receipt_readers as readiness
+from joulewise import night_gate; from joulewise import kernel_clock; from joulewise import rehearsal_readers as t0_rehearsal; from tests import qualification_factory as q
 from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 
 INPUT_SCHEMA = "joulewise.v5_qualification_inputs.v1"
@@ -457,7 +457,7 @@ def prerequisites(occurrence, references, head, t0_sequence_start, custody, *, c
                 {"a1_control", "a2_control", "observation_producers", "g10_control", "g10_artifacts"})
     exact(references, expected, "prerequisites")
     if occurrence in {"s1", "s2"}:
-        from joulewise import t0_rehearsal as t0
+        from joulewise import rehearsal_readers as t0
         exact(references["observation_producers"], {"driver", "bundle", "evaluator"}, "observation_producers")
         for name, suffix in (("driver", "scripts/run_night.py"), ("bundle", "scripts/produce_t0_rehearsal_bundle.py"),
                              ("evaluator", "joulewise/t0_rehearsal.py")):
@@ -720,53 +720,3 @@ def write_qualification(occurrence, inputs, output, *, g10_inputs=False):
         "pack_root": str(root), "pack_sha256": digest})
     return {"status": "STAGED", "occurrence": "g10-inputs" if g10_inputs else occurrence, "output": locator(output),
             "kernel_frequency_margin_ms": gate["margin_ms"]}
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="occurrence", required=True)
-    for name in ("a1", "a2", "s1", "s2", "g10-inputs"):
-        command = commands.add_parser(name)
-        command.add_argument("--inputs", type=Path, required=True)
-        command.add_argument("--output", type=Path, required=True)
-    render = commands.add_parser("render-chain")
-    render.add_argument("--occurrence", dest="render_occurrence", choices=("s1", "s2"), required=True)
-    render.add_argument("--template", type=Path, required=True)
-    render.add_argument("--sizing", type=Path, required=True)
-    render.add_argument("--pack-root", type=Path, required=True)
-    render.add_argument("--t0-epoch-s", type=float, required=True)
-    render.add_argument("--output", type=Path, required=True)
-    render.add_argument("--arm-context", type=Path, required=True)
-    args = parser.parse_args(argv)
-    try:
-        if args.occurrence == "render-chain":
-            result = render_qualification_chain(args.render_occurrence, args.template,
-                read_object(args.sizing), args.pack_root, args.t0_epoch_s, args.output,
-                arm_context=read_object(args.arm_context))
-        else:
-            result = write_qualification("a1" if args.occurrence == "g10-inputs" else args.occurrence,
-                read_object(args.inputs), args.output, g10_inputs=args.occurrence == "g10-inputs")
-    except QualificationError as exc:
-        result = {"status": "REFUSED", "reason_code": "qualification_inputs_invalid"}
-        if hasattr(exc, "kernel_frequency_gate"):
-            result.update(reason_code="kernel_frequency_gate_exceeded",
-                          kernel_frequency_margin_ms=exc.kernel_frequency_gate["margin_ms"],
-                          kernel_frequency_gate=exc.kernel_frequency_gate)
-        code = 2
-    except q.HarvestRefusal as exc:
-        result = {"status": "REFUSED", "reason_code": "qualification_inputs_invalid"}
-        if str(exc) == "same_refusal_twice_consult_required" and hasattr(exc, "refusal_codes"):
-            result.update(reason_code="same_refusal_twice", cause_codes=exc.refusal_codes)
-        code = 2
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        # Input text, validator details and inference logs are never public.
-        result = {"status": "REFUSED", "reason_code": "qualification_inputs_invalid"}
-        code = 2
-    else:
-        code = 0
-    sys.stdout.buffer.write(readiness.render_json(result))
-    return code
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -1691,7 +1691,7 @@ class PromptRealizationProjectionTests(unittest.TestCase):
                 # The arm mapper (arm_readiness._run_identity_arm_reverification)
                 # must surface the same code, not a generic dirty/unreadable
                 # substitute (luna delta re-audit F2).
-                from joulewise import arm_readiness
+                from joulewise import receipt_readers as arm_readiness
 
                 item, pseudo_receipt, reasons = (
                     arm_readiness._run_identity_arm_reverification(

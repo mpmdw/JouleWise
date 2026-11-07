@@ -150,11 +150,11 @@ class ImportGraphTests(unittest.TestCase):
                        "joulewise.quiet_admission", "joulewise.prewindow"):
             self.assertIn(reused, paths)
 
-    def test_the_analyzer_sees_the_measurement_core_reach_arm_readiness(self):
-        # Positive control: bundle.py imports arm_readiness at module level, so a
-        # hazard module importing the core directly would be caught.
-        paths = reachable(["joulewise.bundle"], own_functions=set())
-        self.assertIn("joulewise.arm_readiness", paths)
+    def test_measurement_core_reaches_shared_readers_without_retired_modules(self):
+        paths = reachable(["joulewise.bundle"], own_functions={"joulewise.bundle"})
+        self.assertIn("joulewise.receipt_readers", paths)
+        self.assertFalse(any(is_retired(name) for name in paths))
+        # The cadence adapter is still confined to its bounded child process.
         paths = reachable(["joulewise.hazards.instrument"], own_functions={"joulewise.hazards.instrument"})
         self.assertNotIn("joulewise.adapters.powermetrics", paths)
         child = imports("joulewise.hazards.instrument", functions=True)
@@ -207,14 +207,14 @@ instance = mac.monitor()
 instance.open_session()
 instance.run(max_seconds=120)
 instance.close_session("done")
-print(json.dumps({"decision": result.decision, "modules": sorted(sys.modules)}))
+print(json.dumps({"decision": result.decision, "reasons": result.reasons, "modules": sorted(sys.modules)}))
 """
         env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         completed = subprocess.run([sys.executable, "-B", "-c", script, str(ROOT)], cwd=str(ROOT),
                                    capture_output=True, text=True, timeout=300, env=env)
         self.assertEqual(completed.returncode, 0, completed.stderr[-3000:])
         report = json.loads(completed.stdout.strip().splitlines()[-1])
-        self.assertEqual(report["decision"], "GO")
+        self.assertEqual(report["decision"], "GO", {key: value for key, value in report.items() if key != "modules"})
         loaded = [name for name in report["modules"] if is_retired(name)
                   or any(name == item or name.startswith(item + ".") for item in FLAG_CODE)]
         self.assertEqual(loaded, [])

@@ -29,7 +29,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from joulewise import arm_readiness, window_lineage
+from joulewise import receipt_readers as arm_readiness; from joulewise import window_lineage
 from joulewise.b5 import driver as b5_driver
 from tests import test_window_lineage as fixture
 

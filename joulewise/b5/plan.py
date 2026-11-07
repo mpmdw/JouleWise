@@ -882,7 +882,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     pack_sha256, pack_digest_error = None, None
     try:
         if pack_digest is None:
-            from joulewise.arm_readiness import committed_pack_tree_sha256 as pack_digest
+            from joulewise.receipt_readers import committed_pack_tree_sha256 as pack_digest
         pack_sha256 = pack_digest(pack_root)
         if not isinstance(pack_sha256, str) or _SHA256_RE.fullmatch(pack_sha256) is None:
             pack_digest_error, pack_sha256 = f"unexpected digest {pack_sha256!r}", None

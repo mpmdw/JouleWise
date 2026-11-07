@@ -958,12 +958,12 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
         (self.canonical / "joulewise").mkdir()
         (self.canonical / "joulewise/__init__.py").write_text("")
-        for name in ("night_gate.py", "agent_identity.py", "battery_float.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
+        for name in ("night_gate.py", "agent_identity.py", "battery_float.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "window_policy.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
         if clone_route:
-            retry = self.canonical / "joulewise/arm_retry.py"
+            retry = self.canonical / "joulewise/window_policy.py"
             retry.write_text(retry.read_text() + f"\ndef classify_abort(cause):\n    return {clone_route!r}\n")
         if self._testMethodName == "test_b6_clone_old_census_literal_is_reported":
             gate = self.canonical / "joulewise/night_gate.py"
@@ -1912,7 +1912,7 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(record["checks"]["retry"]["inventory"][0]["route"], "retry" if passing else "cold_gate")
 
     def assert_clone_retry_route(self, cause, route):
-        from joulewise.arm_retry import classify_abort
+        from joulewise.window_policy import classify_abort
         self.assertNotEqual(classify_abort(cause), route)
         path = self.stage / "lifecycle/arm-attempts/000001/install.json"
         path.parent.mkdir(parents=True)

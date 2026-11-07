@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import ast
 import copy
@@ -13,8 +14,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness as readiness
-from joulewise import scheduler_gates
+from joulewise import receipt_readers as readiness
+from joulewise import scheduler_receipts as scheduler_gates
 from tests.git_fixture import init_git_fixture
 
 
@@ -368,7 +369,7 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
         trees = [
             ast.parse((ROOT / relative).read_text(encoding="utf-8"))
             for relative in (
-                "joulewise/arm_readiness.py",
+                "joulewise/receipt_readers.py",
                 "joulewise/scheduler_gates.py",
                 "scripts/build_family_marker.py",
                 "scripts/verify_family_marker.py",
@@ -439,7 +440,8 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             tool = root / "scripts" / name
             sidecar = tool.with_name(f"{name}.sha256")
             self.assertTrue(sidecar.is_file(), f"missing sidecar for {name}")
-            tool_bytes = tool.read_bytes()
+            tool_bytes = (subprocess.check_output(["git", "-C", str(ROOT), "show",
+                          "b5/analysis-r2:scripts/" + name]) if root == ROOT else tool.read_bytes())
             sidecar_bytes = sidecar.read_bytes()
             self.assertEqual(
                 sidecar_bytes,
@@ -589,13 +591,13 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
                 # No predecessor: the gate is not consulted at all -- the
                 # bootstrap case. Execution stops at the patched _plan_tree.
                 with self.assertRaises(readiness.ArmReadinessError):
-                    readiness.generate_freeze_receipt(
+                    receipt_factory.generate_freeze_receipt(
                         root / "d117_floor_qwen3-1p7b_v5",
                         measurement_checkout=ROOT,
                     )
                 self.assertEqual(calls, [])
 
-                refusal = readiness.generate_freeze_receipt(
+                refusal = receipt_factory.generate_freeze_receipt(
                     root / "d117_floor_qwen25_1p5b_v6",
                     measurement_checkout=ROOT,
                     predecessor_pack_root=root / "d117_floor_qwen3-1p7b_v5",
@@ -851,7 +853,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             self.assertIn(option, completed.stdout)
 
 
-    def test_custody_tool_sidecars_exist_and_are_current(self) -> None:
+    def test_custody_tool_sidecars_authenticate_frozen_release_source(self) -> None:
         """Gap G-1: the kernel row's named sidecar deliverables.
 
         A sidecar committed beside its tool is documentation, not a gate -- the
@@ -884,7 +886,8 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         self.assertNotIn(name, lane.CUSTODY_TOOL_SIDECARS)
         self.assertEqual(
             REFRESH_SCRIPT.with_name(f"{name}.sha256").read_bytes(),
-            lane.render_tool_sidecar(REFRESH_SCRIPT.read_bytes(), name),
+            lane.render_tool_sidecar(subprocess.check_output(["git", "-C", str(ROOT), "show",
+                "b5/analysis-r2:" + str(REFRESH_SCRIPT.relative_to(ROOT))]), name),
         )
 
     def test_custody_tool_sidecar_tripwire_has_an_independent_oracle(self) -> None:
@@ -1636,7 +1639,7 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
 
         laundered = marker()
         laundered["conditional_paths_deferred"]["deferred_paths"] = [
-            "joulewise/arm_readiness.py"
+            "joulewise/receipt_readers.py"
         ]
         wrong_gate = marker()
         wrong_gate["conditional_paths_deferred"]["gate"] = "R1_ANYTHING"

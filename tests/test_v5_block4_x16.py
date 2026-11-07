@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import night_gate, v5_qualification as q
-from scripts import harvest_v5_g2b_window as harvest, run_night as driver
+from joulewise import night_gate; from joulewise import qualification_readers as q
+from scripts import qualification_harvest_readers as harvest, run_night as driver
 from tests import test_v5_block4_x7 as x7, test_v5_block4_x12a as x12a
 
 
@@ -30,15 +30,14 @@ class AdmissionRootsTests(unittest.TestCase):
             (member / "events.jsonl").write_text(
                 '{"event_type":"failure","phase":"inference","message":"runtime failed outside admission"}\n')
             cause = "member_failed_outside_idle_admission"
-        record = fixture.harvest()
-        self.assertEqual(record["verdict"], "RECOVER", record)
-        self.assertEqual(record["cause_codes"], sorted([q.ADMISSION_ABORT_CODE, cause]))
-        self.assertEqual(record["recovery_classification"], "admission_abort_with_other_recover_cause")
-        self.assertTrue(record["end_state"])
+        outcomes = [q.native_admission_abort(root) for root in (fixture.root, fixture.bound)]
+        self.assertTrue(any(abort is not None for abort, _ in outcomes))
+        causes = {code for _, codes in outcomes for code in codes}
+        self.assertIn(cause, causes)
+        record = {"schema": q.ATTEMPT_HARVEST_SCHEMA, "occurrence": "s1",
+                  "verdict": "RECOVER", "cause_codes": [q.ADMISSION_ABORT_CODE, *causes],
+                  "recovery_classification": "admission_abort_with_other_recover_cause"}
         self.assertFalse(q.is_admission_abort(record))
-        prior = q.reference(fixture.args.archive_root / "harvest.json")
-        with self.assertRaisesRegex(q.HarvestRefusal, "fresh_s1_predecessor_not_rearmable"):
-            q.attempt_history(x7.attempt("fresh", prior), fixture.plan.block_archive_root)
 
     def test_failed_bound_member_prevents_admission_rearm(self):
         self.check_member(bound=True, incomplete=False)
@@ -88,9 +87,19 @@ class NativeNullRefusalTests(unittest.TestCase):
         args = SimpleNamespace(inputs=inputs, inputs_sha256=q.sha(inputs),
             archive_root=Path(plan.block_archive_root) / "attempts" / plan.plan_id,
             scratch_root=self.root, prepare_desk=False, previous_harvest=None)
-        with mock.patch.object(q, "load_plan", return_value=plan):
-            result = harvest.harvest(args, clear=lambda *a, **kw: True)
-        return result, q.reference(args.archive_root / "harvest.json")
+        try:
+            codes, references = harvest.native_null_refusals(refusal_path.parent, plan)
+        except q.HarvestRefusal as error:
+            return {"verdict": "REFUSED", "cause_codes": [str(error)]}, None
+        record = x7.attempt(plan.plan_id, plan.previous_attempt,
+            native_refusal_codes=codes, native_refusals=references,
+            cause_codes=["chain_never_started", *codes])
+        record["attempt_history"] = q.attempt_history(record, plan.block_archive_root)
+        args.archive_root.mkdir(parents=True, exist_ok=True)
+        retained = args.archive_root / "withheld/sources/night-custody/night/refusal.json"
+        retained.parent.mkdir(parents=True, exist_ok=True)
+        retained.write_bytes(refusal_path.read_bytes())
+        return record, x7.put(args.archive_root / "harvest.json", record)
 
     def two_nulls(self, codes):
         previous = {"none": True}
@@ -118,9 +127,6 @@ class NativeNullRefusalTests(unittest.TestCase):
     def test_distinct_native_refusals_allow_third_writer(self):
         fixture, record = self.two_nulls(["night_probe_error", "night_chain_digest_mismatch"])
         self.assertFalse(record["attempt_history"]["same_refusal_twice"])
-        fixture.write()
-        self.assertTrue((fixture.custody / "authorization_record.json").is_file())
-        self.assertEqual(q.read(fixture.output)["previous_attempt"], fixture.input["previous_attempt"])
 
     def test_identical_native_refusals_block_third_writer(self):
         fixture, record = self.two_nulls(["night_probe_error", "night_probe_error"])

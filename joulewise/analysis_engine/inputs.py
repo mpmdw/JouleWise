@@ -37,7 +37,7 @@ from joulewise.analysis_manifest_v3 import (
     validate_analysis_manifest_v3,
     validate_finalized_analysis_manifest_v3,
 )
-from joulewise.arm_readiness import (
+from joulewise.receipt_readers import (
     ArmReadinessError,
     LaunchLineageError,
     authenticate_bundle_launch_lineage,

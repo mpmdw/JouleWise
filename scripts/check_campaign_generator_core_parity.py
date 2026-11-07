@@ -50,7 +50,9 @@ def load_worktree(name: str, path: Path):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load generator: {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    from joulewise.stored_generator import historical_reader_imports
+    with historical_reader_imports():
+        spec.loader.exec_module(module)
     return module
 
 

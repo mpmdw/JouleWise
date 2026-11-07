@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import joulewise.arm_readiness as arm_readiness
+import joulewise.receipt_readers as arm_readiness
 from joulewise.adapters.powermetrics import (
     RAW_IDLE_NAME,
     RAW_SAMPLES_NAME,

@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 
 from joulewise import window_lineage
-from joulewise.arm_readiness import LAUNCH_LINEAGE_LOCATOR_SCHEMA
+from joulewise.receipt_readers import LAUNCH_LINEAGE_LOCATOR_SCHEMA
 from joulewise.flags import core as flags_core
 from joulewise.flags.catalog import (
     DISCLOSE,

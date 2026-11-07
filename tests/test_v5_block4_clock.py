@@ -4,7 +4,7 @@ from fractions import Fraction
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as arm, arm_readiness_evidence_t0 as author
+from joulewise import receipt_readers as arm; from joulewise import physical_checks as author
 from joulewise import clock_reference, kernel_clock
 from tests.test_kernel_clock import frequency_probe
 from tests import test_v5_qualification_plan as sizing_fixture

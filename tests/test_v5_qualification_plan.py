@@ -11,9 +11,10 @@ import tempfile
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, night_gate
+from joulewise import qualification_readers as sizing_readers
+from joulewise import receipt_readers as readiness; from joulewise import night_gate
 from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
-from scripts import write_v5_qualification_plan as writer
+from tests import qualification_plan_factory as writer
 from tests.test_kernel_clock import frequency_probe
 from tests.test_arm_readiness_schemas import arm_context
 from tests.git_fixture import init_git_fixture
@@ -331,6 +332,7 @@ class PlanWriterTests(SizingTests):
             (writer, "g2b_body", mock.Mock(return_value="echo fixture\n")),
             (writer, "prerequisites", mock.Mock()),
             (writer, "pack_roster", mock.Mock(return_value=([], [], ["calibration-pre", "calibration-post"], []))),
+            (sizing_readers, "pack_roster", mock.Mock(return_value=([], [], ["calibration-pre", "calibration-post"], []))),
             (readiness, "_pack_record", mock.Mock(return_value={"plan_id": self.custody.name, "window_id": self.custody.name})),
             (writer, "authenticate_frozen_pack", mock.Mock(return_value={"path": "/fixture/freeze.json", "sha256": "0" * 64})),
             (readiness, "_authenticate_confirmation_table", mock.Mock()),
@@ -358,244 +360,21 @@ class PlanWriterTests(SizingTests):
         Path(self.input["plan"]["chain_sha256_path"]).write_bytes(
             readiness.gnu_sidecar(self.input["authorization"]["permitted_chain_sha256"], self.chain.name))
 
-    def test_kernel_frequency_gate_persists_margin_and_rejects_twelve_ppm(self):
-        self.input["sizing"]["streams"] = {name: self.allow(320)
-            for name in ("calibration-pre", "calibration-post")}
-        self.input["kernel_frequency"] = frequency_probe(12 * 65536)
-        with self.assertRaisesRegex(ValueError, "kernel_frequency_gate_exceeded") as caught:
-            self.write()
-        self.assertAlmostEqual(caught.exception.kernel_frequency_gate["margin_ms"], -2.62)
-        self.assertFalse(self.output.exists())
-        self.input["kernel_frequency"] = frequency_probe(-207749)
-        result = self.write()
-        gate_path = self.custody / self.pack.name / "arm_readiness.t0.inputs/kernel-frequency-gate.json"
-        from joulewise import kernel_clock
-        gate = kernel_clock.validate_gate(writer.read_object(gate_path))
-        self.assertEqual(gate["t_stream_max_s"], 320.)
-        self.assertEqual(result["kernel_frequency_margin_ms"], gate["margin_ms"])
-        self.assertEqual(writer.read_object(self.custody / "qualification-plan-record.json")["sizing"]["kernel_frequency_gate"], gate)
 
-    def test_missing_or_failed_kernel_frequency_probe_refuses(self):
-        for probe in (None, frequency_probe(call_status=-1, errno=1)):
-            self.input["kernel_frequency"] = probe
-            with self.assertRaises(ValueError):
-                self.write()
-            self.assertFalse(self.output.exists())
 
-    def test_canonical_create_once_records_and_run_command(self):
-        self.write()
-        plan = night_gate.NightPlan.from_mapping(json.loads(self.output.read_bytes()))
-        self.assertEqual(night_plan_mapping(plan), json.loads(self.output.read_bytes()))
-        record = json.loads((self.custody / "qualification-plan-record.json").read_bytes())
-        self.assertEqual(record["terminal_boundary_path"],
-                         str(self.custody / "night/transcript/post-bracket-terminal-boundary.json"))
-        self.assertIn("run", record["driver_argv"])
-        self.assertNotIn("rehearse", record["driver_argv"])
-        self.assertEqual(2, plan.pack_night["attempt_ordinal"])
-        native = self.custody / self.pack.name / "arm_readiness.t0.inputs/arm-context.json"
-        self.assertEqual(native.read_bytes(), readiness.render_json(self.input["arm_context"]))
-        self.assertEqual(night_gate.authenticate_arm_context(plan), self.input["arm_context"])
-        self.assertEqual(record["t0_capture_recipe"]["steps"], [
-            "clock-reference", "clock-disable", "quiet-mac-prep", "prewindow-check",
-            "ledger-readiness", "ledger-reservation"])
-        self.assertEqual(record["t0_capture_recipe"]["stage"], "before_ARM")
-        for key in ("authorization_record", "confirmation_record"):
-            ref = plan.pack_night[key]
-            self.assertEqual(ref, writer.locator(ref["path"]))
-            self.assertEqual(0o600, Path(ref["path"]).stat().st_mode & 0o777)
-        before = self.output.read_bytes()
-        with self.assertRaises(ValueError):
-            self.write()
-        self.assertEqual(before, self.output.read_bytes())
-        with self.assertRaises(FileExistsError):
-            write_night_plan(self.output, plan, create_once=True)
 
-    def test_s1_plan_names_independent_backups_and_desk_recipe(self):
-        self.write()
-        record = writer.read_object(self.custody / "qualification-plan-record.json")
-        self.assertEqual(record["backup_destinations"], writer.backup_destinations(self.input["arm_context"]))
-        self.assertTrue(record["observation_recipe"]["desk_closeout_after_quiet_window"])
-        self.assertIn("v5_s1_desk_closeout.py", " ".join(record["observation_recipe"]["desk_closeout_argv"]))
-        from scripts.produce_t0_rehearsal_bundle import parser
-        for name in ("standdown_argv", "supervised_driver_argv"):
-            parser().parse_args(record["observation_recipe"][name][2:])
 
-    def test_backup_destination_cannot_nest_in_separate_plan_custody(self):
-        context = self.input["arm_context"]
-        context["claim_backup_destination"] = str(self.custody / "backup")
-        old = re.search(r"NIGHT_ARM_CONTEXT_SHA256=([0-9a-f]{64})", self.chain.read_text()).group(1)
-        self.chain.write_text(self.chain.read_text().replace(
-            old, readiness.sha256_bytes(readiness.render_json(context))))
-        self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
-        self.input["authorization"]["permitted_chain_sha256"] = writer.locator(self.chain)["sha256"]
-        with self.assertRaisesRegex(ValueError, "backup_plan_custody_overlap"):
-            self.write()
 
-    def test_reviewed_body_opts_into_v5_references_when_generator_supports_it(self):
-        from scripts import gen_g2_phase_d as generator
-        import shutil
-        runbook = self.repo / "docs/phase_2/window_runbook.md"
-        runbook.parent.mkdir(parents=True)
-        shutil.copyfile(writer.REPO_ROOT / "docs/phase_2/window_runbook.md", runbook)
-        real_render = generator.render_generated_region
-        calls = []
-        def supported_render(text, *, v5_references=False):
-            calls.append(v5_references)
-            return real_render(text)
-        with mock.patch.object(generator, "render_generated_region", supported_render):
-            REAL_G2B_BODY(self.repo)
-        self.assertEqual(calls, [True])
 
-    def test_specialized_reviewed_body_is_accepted_before_plan_hashing(self):
-        from scripts import capture_t0_step as capture
-        from tests.test_arm_readiness_evidence_t0 import make_t0_fixture, TEST_BOOT_SESSION_ID
-        import shutil
-        runbook = self.repo / "docs/phase_2/window_runbook.md"; runbook.parent.mkdir(parents=True)
-        shutil.copyfile(writer.REPO_ROOT / "docs/phase_2/window_runbook.md", runbook)
-        body = REAL_G2B_BODY(self.repo)
-        self.assertIn('REPO="' + str(self.repo) + '"\n', body)
-        header = self.chain.read_text().replace("echo fixture\n", "")
-        self.chain.write_text(header + body)
-        self.sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(self.chain)["sha256"], self.chain.name))
-        self.input["authorization"]["permitted_chain_sha256"] = writer.locator(self.chain)["sha256"]
-        with mock.patch.object(writer, "g2b_body", REAL_G2B_BODY):
-            self.write()
-        self.assertEqual(writer.read_object(self.output)["chain_path"], str(self.chain))
-        # End the writer-only frozen-input fixture before building the capture
-        # fixture; its parser and freeze author must see production functions.
-        self.doCleanups()
-        temporary, repository, pack, custody, _, _ = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        runbook = repository / "docs/phase_2/window_runbook.md"; runbook.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(writer.REPO_ROOT / "docs/phase_2/window_runbook.md", runbook)
-        # Adding the reviewed source changes the fixture's reviewed tree. Issue
-        # the same terminal-review proof for that tree, without mocking review.
-        from tests.test_arm_readiness_evidence_t0 import git
-        git(repository, "add", ".")
-        tree_oid = subprocess.check_output(["git", "-C", str(repository), "write-tree"], text=True).strip()
-        pack_sha = readiness.committed_pack_tree_sha256(pack)
-        if subprocess.run(["git", "-C", str(repository), "diff", "--cached", "--quiet"]).returncode:
-            git(repository, "commit", "-qm", "terminal review\n\nJouleWise-Terminal-Review: PASS\n"
-                + "JouleWise-Terminal-Review-Tree-Oid: " + tree_oid + "\n"
-                + "JouleWise-Terminal-Review-Pack-Sha256: " + pack_sha)
-        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
-        (custody / "window-plan/window-chain.zsh").write_text(REAL_G2B_BODY(repository))
-        with mock.patch.object(capture, "REPO_ROOT", repository), mock.patch.object(capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID):
-            self.assertEqual(capture._load_context(pack, custody, custody / "window-plan").repository, repository)
 
-    def test_equal_or_nested_backup_destinations_refuse_before_write(self):
-        context = self.input["arm_context"]
-        for bound in (context["claim_backup_destination"], context["claim_backup_destination"] + "/nested"):
-            context["bound_backup_destination"] = bound
-            with self.assertRaisesRegex(ValueError, "backup_destinations_overlap|arm_context.pin"):
-                self.write()
-            self.assertFalse(self.output.exists())
 
-    def test_wrong_head_purpose_claim_eligibility_and_partial_pack_refuse(self):
-        for group, key, value in (("plan", "repo_head", "0" * 40),
-                                  ("authorization", "purpose", "CAMPAIGN_TRANSACTION"),
-                                  ("authorization", "claim_eligible", True),
-                                  ("pack", "sha256", "0" * 64),
-                                  ("authorization", "permitted_blocks", 2)):
-            with self.subTest(key=key):
-                original = self.input[group][key]
-                self.input[group][key] = value
-                with self.assertRaises(ValueError):
-                    self.write()
-                self.input[group][key] = original
-                self.assertFalse(self.output.exists())
 
-    def test_custody_overlap_symlink_fill_and_environment_digest_refuse(self):
-        self.input["other_custody_roots"] = [str(self.custody / "nested")]
-        with self.assertRaisesRegex(ValueError, "custody_overlap"):
-            self.write()
-        self.input["other_custody_roots"] = []
-        self.chain.write_text(self.chain.read_text() + "export EXPECTED_CONFIRMATION_DIGEST=abc\n")
-        with self.assertRaisesRegex(ValueError, "confirmation_environment_route"):
-            self.write()
 
-    def test_confirmation_uses_prior_digest_and_transcript_not_current_self_hash(self):
-        self.input["confirmation"]["expected_confirmation_digest"] = "0" * 64
-        with self.assertRaisesRegex(ValueError, "independent_confirmation_digest"):
-            self.write()
 
-    def test_confirmation_digest_cannot_be_embedded_in_chain(self):
-        digest = self.input["confirmation"]["expected_confirmation_digest"]
-        self.chain.write_text(self.chain.read_text() + "# " + digest + "\n")
-        with self.assertRaisesRegex(ValueError, "confirmation_chain_literal"):
-            self.write()
 
-    def test_runtime_gate_checks_latest_start_before_arm_verification(self):
-        self.write()
-        plan = night_gate.NightPlan.from_mapping(writer.read_object(self.output))
-        prepared = night_gate._authenticate_pack_records(plan)
-        probes = mock.Mock(now_epoch_s=lambda: 4309.)
-        with mock.patch.object(night_gate, "_authenticate_pack_records", return_value=prepared), \
-             mock.patch.object(readiness, "_verify_arm_receipt") as verify:
-            with self.assertRaises(night_gate.PlanError) as error:
-                night_gate._evaluate_pack_conditions(plan, probes, {}, None)
-            self.assertEqual("night_window_expired", error.exception.reason)
-            verify.assert_not_called()
 
-    def test_qualification_marker_cannot_authorize_a_claim_purpose(self):
-        self.write()
-        plan = night_gate.NightPlan.from_mapping(writer.read_object(self.output))
-        text = self.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=s1", "V5_QUALIFICATION_OCCURRENCE=s1")
-        with self.assertRaisesRegex(ValueError, "non-claim purpose"):
-            night_gate.qualification_start_deadline(plan, text, "CAMPAIGN_TRANSACTION")
 
-    def test_render_chain_emits_span_and_deadline_without_modifying_template(self):
-        template = self.root / "template.zsh"
-        template.write_text("#!/bin/zsh\necho fixture\n")
-        output = self.root / "rendered-chain.zsh"
-        with mock.patch.object(writer, "pack_roster", return_value=(
-                [{"config_path": "science/member.json"}], [], [], [])), mock.patch.object(writer, "size_window",
-                return_value={"programmed_span_s": 40, "window_max_s": 3360, "longest_sampler_stream_s": 100.,
-                              "t0_stage_cap_s": 3300., "pack_t0_s": 8.}):
-            result = writer.render_qualification_chain("s1", template, self.input["sizing"], self.pack, 1000., output)
-        self.assertEqual(40, result["programmed_span_s"])
-        self.assertEqual("40", night_gate.chain_literal(output.read_text(), "NIGHT_PROGRAMMED_SPAN_S"))
-        self.assertEqual("4308", night_gate.chain_literal(output.read_text(), "NIGHT_LATEST_CHAIN_START_EPOCH_S"))
-        self.assertEqual("#!/bin/zsh\necho fixture\n", template.read_text())
-        self.assertEqual(writer.locator(output)["sha256"], Path(str(output) + ".sha256").read_text().split()[0])
 
-    def test_a1_is_context_only_and_s1_is_a_canonical_run_plan(self):
-        for occurrence in ("a1", "a2", "s1"):
-            with self.subTest(occurrence=occurrence):
-                inputs = copy.deepcopy(self.input)
-                if occurrence in {"a1", "a2"}:
-                    inputs.pop("previous_attempt")
-                    inputs.pop("block_archive_root")
-                custody = self.root / (occurrence + "-context-fixture")
-                custody.mkdir()
-                inputs["plan"].update(plan_id=custody.name, custody_root=str(custody))
-                inputs["sizing"]["fixed"] = {key: self.allow(8) for key in writer.FIXED_COMPONENTS["s1"]}
-                inputs["sizing"]["fixed"]["t0_stage_cap"] = self.allow(3300)
-                inputs["authorization"].update(purpose="G2B_SHAKEDOWN", authority="D-171 §3", attempt_id=custody.name + "/2")
-                chain = self.root / (occurrence + "-chain.zsh")
-                chain.write_text(self.chain.read_text().replace("V5_QUALIFICATION_OCCURRENCE=s1", "V5_QUALIFICATION_OCCURRENCE=s1"))
-                sidecar = self.root / (occurrence + "-chain.sha256")
-                sidecar.write_bytes(readiness.gnu_sidecar(writer.locator(chain)["sha256"], chain.name))
-                inputs["plan"].update(chain_path=str(chain), chain_sha256_path=str(sidecar))
-                inputs["authorization"]["permitted_chain_sha256"] = writer.locator(chain)["sha256"]
-                output = custody / ("arm-only-context.json" if occurrence in {"a1", "a2"} else "night_plan.json")
-                with mock.patch.object(writer, "g2b_body", return_value="echo fixture\n"), \
-                     mock.patch.object(readiness, "_pack_record", return_value={"plan_id": custody.name, "window_id": custody.name}), \
-                     mock.patch.object(writer, "prerequisites"):
-                    writer.write_qualification(occurrence, inputs, output)
-                value = writer.read_object(output)
-                if occurrence in {"a1", "a2"}:
-                    self.assertEqual(writer.ARM_ONLY_SCHEMA, value["schema_version"])
-                    self.assertNotIn("driver_argv", value)
-                    self.assertFalse((custody / "night_plan.json").exists())
-                    with self.assertRaises(night_gate.PlanError):
-                        night_gate.NightPlan.from_mapping(value)
-                else:
-                    self.assertEqual("TRANSACTION_PACK", night_gate.NightPlan.from_mapping(value).receipt_class)
-                from joulewise.v5_qualification import authenticated_clock_budget
-                maximum, _refs = authenticated_clock_budget(
-                    custody / self.pack.name / "arm_readiness.t0.inputs", self.pack)
-                self.assertEqual(maximum, 100.)
 
 
 class PrerequisiteTests(unittest.TestCase):
@@ -612,7 +391,7 @@ class PrerequisiteTests(unittest.TestCase):
         self.head = "a" * 40
         self.refs = {}
         self.controls = {}
-        from joulewise import t0_rehearsal as t0
+        from joulewise import rehearsal_readers as t0
         from scripts.check_v5_arm_abort import ABSENCE_KEYS, CONTROL_SCHEMA
         for label, at in (("a1", 1000), ("a2", 2000)):
             root = self.root / label; root.mkdir()
@@ -643,42 +422,8 @@ class PrerequisiteTests(unittest.TestCase):
         self.refs.update(observation_producers=producers, g10_control=writer.locator(positive),
                          g10_artifacts=[writer.locator(positive)])
 
-    def test_fold_has_no_r1_and_requires_a1_a2_g10_and_source_pins(self):
-        writer.prerequisites("a1", {}, self.head, 500, self.custody)
-        writer.prerequisites("a2", {"a1_control": self.refs["a1_control"]}, self.head, 1500, self.custody)
-        # This older fixture supplied its positive-control record as its own
-        # support. It now refuses; full physical custody is tested in X1.
-        with self.assertRaisesRegex(ValueError, "g10_custody_locator"):
-            writer.prerequisites("s1", self.refs, self.head, 3000, self.custody)
-        for key in self.refs:
-            changed = dict(self.refs); changed.pop(key)
-            with self.subTest(key=key), self.assertRaises(ValueError):
-                writer.prerequisites("s1", changed, self.head, 3000, self.custody)
-        with self.assertRaises(ValueError):
-            writer.prerequisites("s1", dict(self.refs, r1_bundle=self.refs["g10_control"]), self.head, 3000, self.custody)
 
-    def test_each_control_must_expire_without_launch_before_s1_t0(self):
-        for label in ("a1", "a2"):
-            path, control = self.controls[label]
-            for defect in ("late", "wrong_refusal", "launch"):
-                candidate = copy.deepcopy(control)
-                if defect == "late": candidate["checked_epoch_s"] = 3000
-                elif defect == "wrong_refusal": candidate["refusal_reason_code"] = "different"
-                else: candidate["absence"]["chain_started_absent"] = False
-                path.write_bytes(readiness.render_json(candidate))
-                refs = dict(self.refs, **{label + "_control": writer.locator(path)})
-                with self.subTest(label=label, defect=defect), self.assertRaises(ValueError):
-                    writer.prerequisites("s1", refs, self.head, 3000, self.custody)
-                path.write_bytes(readiness.render_json(control))
 
-    def test_a2_t0_must_follow_a1_expiry(self):
-        path, control = self.controls["a1"]
-        control["checked_monotonic_ns"] = 1900
-        path.write_bytes(readiness.render_json(control))
-        refs = dict(self.refs, a1_control=writer.locator(path))
-        with mock.patch("scripts.ed_session.capture_t0_anchor_positive_control.verify_g10_custody"), \
-             self.assertRaisesRegex(ValueError, "a1_before_a2"):
-            writer.prerequisites("s1", refs, self.head, 3000, self.custody)
 
 
 class PackRosterTests(unittest.TestCase):

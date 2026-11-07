@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import network_time_off
+from joulewise.hazards import network_time as network_time_off
 from scripts import bench_replay_start_drift as bench
 
 

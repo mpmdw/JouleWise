@@ -34,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
+from joulewise.receipt_readers import EXPECTED_NETWORK_TIME_OFF_STDOUT
 from scripts.sample_quiet_predicate_evidence import REPLAY_ENV
 
 # Keep an ON response for the accepted ``on`` argument; the bench uses ``off``.

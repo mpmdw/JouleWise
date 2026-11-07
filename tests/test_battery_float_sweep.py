@@ -106,7 +106,7 @@ READERS = {
     "scripts/check_paper_round7_artifacts.py": ("historical", "committed paper artifacts only"),
     "scripts/sim_acc_25g83_rev5.py": ("synthetic", "opens no file"),
     "joulewise/receipt_oracle.py": ("synthetic", "constant lexeme in a fixture receipt"),
-    "joulewise/arm_readiness.py": ("synthetic", "constant lexeme in a rehearsal lifecycle"),
+    "joulewise/receipt_readers.py": ("synthetic", "constant lexeme in a rehearsal lifecycle"),
 }
 
 # file -> the runner each `battery_float.observe(` call there uses.
@@ -121,7 +121,7 @@ OBSERVE_CALLERS = {
     "joulewise/evidence_night.py": ["arm_check: probe_command (bytes for the ioreg argv)",
                                     "publish_install: probe_command (bytes for the ioreg argv)"],
     "joulewise/night_agent_install.py": ["validate_install: observe's own bytes subprocess.run"],
-    "joulewise/arm_readiness_evidence_t0.py": ["t0_power_row: _execute_probe stdout_bytes"],
+    "joulewise/physical_checks.py": ["t0_power_row: _execute_probe stdout_bytes"],
     "scripts/validate_powermetrics_fiducial.py": ["slot_pre/slot_post: observe's own bytes subprocess.run"],
 }
 

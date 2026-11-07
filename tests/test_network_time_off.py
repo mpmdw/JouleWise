@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from joulewise import network_time_off as nt
+from joulewise.hazards import network_time as nt
 
 
 def receipt(**changes):
@@ -118,30 +118,7 @@ class WiredAdmissionTests(unittest.TestCase):
         launch.assert_not_called()
         fixture.off_admission_mock.assert_called_once()
 
-    def test_pack_admission_requires_saved_receipt(self):
-        from scripts import run_night
-        from types import SimpleNamespace
-        with tempfile.TemporaryDirectory() as root, mock.patch.object(run_night.subprocess, "Popen") as launch:
-            plan = SimpleNamespace(receipt_class="TRANSACTION_PACK", pack_night={"pack_id": "pack"})
-            with self.assertRaises(FileNotFoundError):
-                run_night._admit_network_time_off(plan, Path(root) / "night")
-            launch.assert_not_called()
 
-    def test_claim_reservation_requires_saved_settled_receipt(self):
-        from scripts import capture_t0_step as capture
-        from types import SimpleNamespace
-        with tempfile.TemporaryDirectory() as root:
-            context = SimpleNamespace(input_root=Path(root), repository=Path(root),
-                boot_session_id="boot", plan_id="plan", assignments={"WINDOW_ID": "window"})
-            execute = mock.Mock()
-            with mock.patch.object(capture, "_load_context", return_value=context), \
-                    mock.patch.object(capture, "_prepare_derived_inputs", return_value=[]), \
-                    mock.patch.object(capture, "_require_sequence"), \
-                    mock.patch.object(capture, "_command_for_step", return_value=("capture",)), \
-                    mock.patch.object(capture, "_current_boot_session_id", return_value="boot"):
-                with self.assertRaises(capture.CaptureT0Error):
-                    capture._capture_step_for_test("ledger-reservation", root, root, root, execute=execute)
-            execute.assert_not_called()
 
 
 class ArmResyncTests(unittest.TestCase):
@@ -158,48 +135,7 @@ class ArmResyncTests(unittest.TestCase):
             boot_session_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             assignments={**paths, "WINDOW_ID": "window"})
 
-    def test_resync_reference_then_off_before_dwell_and_no_retry_after_receipt(self):
-        from scripts import capture_t0_step as capture
-        from tests.test_arm_readiness_evidence_t0 import _clock_reference_value, _sntp_line
-        from joulewise import clock_reference
-        with tempfile.TemporaryDirectory() as tmp:
-            context = self.context(Path(tmp))
-            readings = [1000_000_000_000]
-            calls, references = [], []
-            def execute(argv, *, cwd):
-                calls.append(tuple(argv))
-                readings[0] += 1_000_000_000
-                if tuple(argv) == nt.OFF_ARGV:
-                    return subprocess.CompletedProcess(argv, 0, nt.EXPECTED_STDOUT, "Error:-99\n")
-                if argv[-1] == "on":
-                    return subprocess.CompletedProcess(argv, 0, "setUsingNetworkTime: On\n", "")
-                offset = "+0.700000" if not references else "+0.010000"
-                references.append(offset)
-                value = _clock_reference_value(boot_session_id=context.boot_session_id,
-                    anchor_monotonic_raw_ns=readings[0], legs={server: (0, _sntp_line(server, offset=offset))
-                        for server in clock_reference.SERVER_ROSTER})
-                return subprocess.CompletedProcess(argv, 0, json.dumps(value), "")
-            with mock.patch.object(capture, "_current_boot_session_id", return_value=context.boot_session_id), \
-                    mock.patch.object(capture.time, "sleep", side_effect=lambda seconds:
-                        readings.__setitem__(0, readings[0] + round(seconds * 1e9))):
-                _completed, finished = capture._arm_reference(context, execute, lambda: readings[0])
-                off = nt.read_receipt(context.input_root / nt.RECEIPT_BASENAME)
-                self.assertGreater(off["monotonic_s"], finished / 1e9)
-                self.assertEqual([argv[-1] for argv in calls if "-setusingnetworktime" in argv], ["on", "off"])
-                before = len(calls)
-                with self.assertRaises(capture.CaptureT0Error):
-                    capture._arm_reference(context, execute, lambda: readings[0])
-                self.assertEqual(len(calls), before)
 
-    def test_nonempty_capture_root_prevents_any_on(self):
-        from scripts import capture_t0_step as capture
-        with tempfile.TemporaryDirectory() as tmp:
-            context = self.context(Path(tmp))
-            (Path(context.assignments["RUNS_ROOT"]) / "first-capture").write_text("saved")
-            execute = mock.Mock()
-            with self.assertRaises(capture.CaptureT0Error):
-                capture._arm_reference(context, execute, lambda: 1)
-            execute.assert_not_called()
 
 
 class SingleComparatorGuardTests(unittest.TestCase):

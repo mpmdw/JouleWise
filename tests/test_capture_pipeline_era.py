@@ -264,7 +264,7 @@ class CapturePipelineEraTests(unittest.TestCase):
         )
 
     def test_arm_readiness_recognizes_the_rev6_block1_acceptance_generation(self) -> None:
-        from joulewise.arm_readiness import _issued_d079
+        from joulewise.receipt_readers import _issued_d079
 
         policy = {
             "selection": "issued_d116_artifact_only",

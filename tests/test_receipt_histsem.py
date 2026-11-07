@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
+from tests import evidence_factory
 
 import copy
 import hashlib
@@ -16,23 +18,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as evidence_author
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as evidence_author
 import joulewise.identity_pins as identity_pins
-from joulewise.arm_readiness import (
-    HISTSEM_REASON_CODES,
-    READINESS_REASON_CODES,
-    HistoricalSemanticsError,
-    _authenticate_generic_evidence_item,
-    committed_pack_tree_sha256,
-    generate_arm_receipt,
-    generate_freeze_receipt,
-    gnu_sidecar,
-    historical_pack_tree_sha256,
-    render_json,
-    verify_all_receipt_histsem,
-    verify_receipt_histsem_pack,
-)
+from joulewise.receipt_readers import HISTSEM_REASON_CODES, READINESS_REASON_CODES, HistoricalSemanticsError, _authenticate_generic_evidence_item, committed_pack_tree_sha256, gnu_sidecar, historical_pack_tree_sha256, render_json, verify_all_receipt_histsem, verify_receipt_histsem_pack; from tests.receipt_factory import generate_arm_receipt, generate_freeze_receipt
 from tests.test_arm_readiness_evidence_author import (
     make_author_fixture,
     passing_suites,
@@ -977,7 +966,7 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         if spec is None or spec.loader is None:
             raise AssertionError("cannot load refresh lane")
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        exec_archived_generator(spec.loader, module)
         return module
 
     def test_refresh_lane_interface_is_exact_and_has_no_network_or_git_writes(
@@ -2035,7 +2024,7 @@ def load_v4_builder():
         "build_v4_histsem_pinset", ROOT / "scripts/build_v4_histsem_pinset.py"
     )
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    exec_archived_generator(spec.loader, module)
     return module
 
 
@@ -2536,7 +2525,7 @@ class PackAuthenticationRegenerationTests(unittest.TestCase):
                 side_effect=lambda repo, test_ids: passing_suites(repo, test_ids),
             ),
         ):
-            authored = evidence_author.author_arm_readiness_evidence(pack)
+            authored = evidence_factory.author_arm_readiness_evidence(pack)
             self.assertEqual(authored["status"], "PASS")
             git(repository, "add", "-A")
             git(repository, "commit", "-qm", "author projected evidence")

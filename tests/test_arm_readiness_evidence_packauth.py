@@ -38,8 +38,8 @@ if str(ROOT) not in sys.path:
 if str(ROOT / "tests") not in sys.path:
     sys.path.insert(0, str(ROOT / "tests"))
 
-import joulewise.arm_readiness as readiness  # noqa: E402
-import joulewise.arm_readiness_evidence as evidence  # noqa: E402
+import joulewise.receipt_readers as readiness  # noqa: E402
+import joulewise.evidence_replay as evidence  # noqa: E402
 from joulewise import identity_pins  # noqa: E402
 from test_arm_readiness_evidence_author import (  # noqa: E402
     commit_u11_projection,

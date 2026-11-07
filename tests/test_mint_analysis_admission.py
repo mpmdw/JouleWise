@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import copy
 import hashlib
@@ -9,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
+import joulewise.receipt_readers as readiness
 from joulewise.analysis_manifest_v3 import (
     EXACT_STACK_RULE_ID,
     FINALIZATION_CONTRACT_ID,
@@ -355,7 +356,7 @@ class MintAnalysisAdmissionTests(unittest.TestCase):
             # admission runs, so the fixture must declare the repository this
             # pack actually lives in or the gate refuses first and these tests
             # never reach the seam they exist to pin.
-            return readiness.generate_freeze_receipt(
+            return receipt_factory.generate_freeze_receipt(
                 pack,
                 measurement_checkout=readiness._repo_for_pack(pack).resolve(),
             )

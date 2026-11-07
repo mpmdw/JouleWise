@@ -434,10 +434,16 @@ def scan_source(file: str, source: str) -> list[tuple[str, str, str, str, int, s
     return visitor.sites
 
 
+def source_path(file: str, root: Path = ROOT) -> Path:
+    from tests.hazards.refusal_prune_s2 import SOURCE_PATHS
+    direct = root / file
+    return direct if direct.is_file() else root / SOURCE_PATHS.get(file, file)
+
+
 def scan(files: Iterable[str], root: Path = ROOT) -> list[tuple[str, str, str, str, int, str]]:
     sites = []
     for file in files:
-        sites.extend(scan_source(file, (root / file).read_text(encoding="utf-8")))
+        sites.extend(scan_source(file, source_path(file, root).read_text(encoding="utf-8")))
     return sites
 
 
@@ -460,8 +466,11 @@ def site_guards(sites: Iterable[tuple]) -> dict[tuple, str]:
 def _resolve(name: str, root: Path) -> str | None:
     for candidate in (root / (name.replace(".", "/") + ".py"),
                       root / name.replace(".", "/") / "__init__.py"):
-        if candidate.is_file():
-            return str(candidate.relative_to(root))
+        from tests.hazards.refusal_prune_s2 import SOURCE_PATHS
+        logical = str(candidate.relative_to(root))
+        if source_path(logical, root).is_file():
+            reverse = {value: key for key, value in SOURCE_PATHS.items()}
+            return reverse.get(logical, logical)
     return None
 
 
@@ -476,7 +485,7 @@ def dependencies(file: str, root: Path = ROOT) -> tuple[set[str], list[str]]:
 
     if not file.endswith(".py"):
         return set(), []
-    tree = ast.parse((root / file).read_text(encoding="utf-8"))
+    tree = ast.parse(source_path(file, root).read_text(encoding="utf-8"))
     package = file.replace("/", ".").removesuffix(".py").removesuffix(".__init__")
     found: set[str] = set()
     dynamic: list[str] = []
@@ -519,7 +528,11 @@ def direct_imports(file: str, root: Path = ROOT) -> set[str]:
 
 
 def load_allowlist(path: Path = ALLOWLIST) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if path == ALLOWLIST:
+        from tests.hazards.refusal_prune_s2 import current_view
+        return current_view(document)
+    return document
 
 
 def allowlist_counts(document: dict) -> Counter:

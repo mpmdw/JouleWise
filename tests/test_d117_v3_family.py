@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from joulewise.arm_readiness import committed_pack_tree_sha256
+from joulewise.receipt_readers import committed_pack_tree_sha256
 from joulewise.calibration_bracketing import acceptance_allowance_rule
 from tests.test_campaign_generator_core import generation_repository
 

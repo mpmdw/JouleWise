@@ -83,7 +83,7 @@ def commit_fixture(source, message):
 # Manifest files the archived base commit H predates; the fixture supplies the
 # current bytes (agent_identity: the census identity matcher, in
 # quiet_predicate_campaign.MANIFEST_PATHS since 2026-10-07).
-SUPPLIED_AFTER_BASE = ("joulewise/night_kinds.py", "joulewise/network_time_off.py", "joulewise/agent_identity.py")
+SUPPLIED_AFTER_BASE = ("joulewise/night_kinds.py", "joulewise/hazards/network_time.py", "joulewise/agent_identity.py")
 
 
 def render_fixture():

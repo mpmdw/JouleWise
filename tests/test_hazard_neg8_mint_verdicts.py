@@ -23,7 +23,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-from joulewise import arm_readiness, whole_window
+from joulewise import receipt_readers as arm_readiness; from joulewise import whole_window
 from joulewise.b5 import harvest
 from tests.test_window_lineage import _SentinelMixin, build_window
 

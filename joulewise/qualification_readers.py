@@ -1,29 +1,14 @@
-"""Shared custody and structural-output boundaries for block-4 harvests.
-
-Collected bytes are never edited. Replay uses original absolute locators;
-copies, diagnostics and transcripts live behind a mode-0700 custody directory.
-This module owns no G-gate, calibration, battery or reduction acceptance rule.
-"""
+"""Historical qualification sizing authentication and stored-input readers."""
 from __future__ import annotations
-
-import contextlib
-import io
-import os
-from pathlib import Path
+import math
+import shlex
 import re
-import subprocess
-import tempfile
-import time
+from fractions import Fraction
+from pathlib import Path
+from joulewise import receipt_readers as readiness, night_gate
 
-from joulewise import arm_readiness as readiness, night_gate
-from joulewise.measurement_liveness import pending_launch_closed, observe_identity, _start_token
-from scripts.harvest_g2a_window import archive, sha
-from scripts.harvest_window import inventory
-
-
-BATTERY_BOUNDARY_PHASES = {"arm": "arm_check", "publication": "publish_install", "t0": "t0"}
-ATTEMPT_HARVEST_SCHEMA = "joulewise.harvest_v5_g2b_window.v1"
-ADMISSION_ABORT_CODE = "guard_attested_idle_admission_abort"
+def sha(path):
+    return readiness.sha256_bytes(Path(path).read_bytes())
 
 
 class HarvestRefusal(ValueError):
@@ -35,13 +20,6 @@ def read(path):
     if any(p.is_symlink() for p in (path, *path.parents)) or not path.is_file():
         raise HarvestRefusal("input_not_regular")
     return readiness.parse_json_bytes(path.read_bytes())
-
-
-def write(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("xb") as stream:
-        stream.write(readiness.render_json(value))
 
 
 def identifier(value):
@@ -65,6 +43,395 @@ def reference(path):
     return {"path": str(path), "sha256": sha(path)}
 
 
+def authenticated_clock_budget(input_root, pack_root):
+    """Replay sizing against the chain pinned by the occurrence's authority.
+
+    A self-consistent gate is not authority for its stream maximum. Both the
+    source allowances and the computed maximum are pinned in the permitted
+    chain before the authorization record is made.
+    """
+    from joulewise import kernel_clock
+    input_root, pack_root = Path(input_root), Path(pack_root)
+    binding_path = input_root / "kernel-frequency-binding.json"
+    binding = read(binding_path)
+    if (set(binding) != {"schema", "occurrence", "plan", "sizing", "plan_id", "pack_root", "pack_sha256"}
+            or binding["schema"] != "joulewise.v5_qualification_clock_binding.v1"
+            or binding["occurrence"] not in {"a1", "a2", "s1", "s2"}
+            or binding["pack_root"] != str(pack_root)):
+        raise HarvestRefusal("clock_sizing_binding_invalid")
+    plan_path = authenticated_reference(binding["plan"])
+    plan_record = read(plan_path)
+    if binding["occurrence"] in {"a1", "a2"}:
+        if (plan_record.get("schema_version") != ARM_ONLY_SCHEMA
+                or plan_record.get("mode") not in {"ARM_ONLY_NO_LAUNCH", "G10_INPUT_CAPTURE_NO_LAUNCH"}
+                or plan_record.get("occurrence") != binding["occurrence"]):
+            raise HarvestRefusal("clock_sizing_plan_invalid")
+        plan_record = plan_record["plan_binding"]
+    plan = night_gate.NightPlan.from_mapping(plan_record)
+    if (plan.plan_id != binding["plan_id"] or plan.pack_night["pack_root"] != str(pack_root)
+            or plan.pack_night["pack_sha256"] != binding["pack_sha256"]
+            or input_root != Path(plan.custody_root) / pack_root.name / "arm_readiness.t0.inputs"):
+        raise HarvestRefusal("clock_sizing_plan_mismatch")
+    night_gate._authenticate_pack_records(plan)
+    chain = Path(plan.chain_path)
+    if sha(chain) != Path(plan.chain_sha256_path).read_text().split()[0]:
+        raise HarvestRefusal("clock_sizing_chain_mismatch")
+    sizing_path = authenticated_reference(binding["sizing"])
+    sizing = read(sizing_path)
+    text = chain.read_text()
+    if night_gate.chain_literal(text, "NIGHT_CLOCK_SIZING_SHA256") != sha(sizing_path):
+        raise HarvestRefusal("clock_sizing_source_mismatch")
+    roster, auxiliary, brackets, nonsampling = pack_roster(pack_root, binding["occurrence"])
+    computed = size_window(binding["occurrence"], sizing, roster=roster,
+        auxiliary=auxiliary, brackets=brackets, nonsampling=nonsampling)["longest_sampler_stream_s"]
+    gate_path = input_root / "kernel-frequency-gate.json"
+    gate = kernel_clock.validate_gate(read(gate_path))
+    if (night_gate.chain_literal(text, "NIGHT_CLOCK_STREAM_MAX_S") != str(computed)
+            or gate["t_stream_max_s"] != computed):
+        raise HarvestRefusal("clock_stream_maximum_mismatch")
+    return computed, tuple(reference(p) for p in (binding_path, plan_path, sizing_path, gate_path, chain))
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+ARM_ONLY_SCHEMA = "joulewise.v5_qualification_arm_only.v1"
+
+
+class QualificationError(ValueError):
+    pass
+
+
+def require(condition, field):
+    if not condition:
+        raise QualificationError(field)
+
+
+def exact(value, keys, field):
+    require(isinstance(value, dict) and set(value) == set(keys), field + ".keys")
+    return value
+
+
+def safe_path(value, *, exists=True):
+    require(isinstance(value, (str, Path)), "path.type")
+    path = Path(value)
+    require(path.is_absolute() and ".." not in path.parts, "path.absolute")
+    require(not any(p.is_symlink() for p in (path, *path.parents)), "path.symlink")
+    require(path.resolve(strict=exists) == path, "path.lexical")
+    return path
+
+
+def read_locator(value):
+    exact(value, {"path", "sha256"}, "locator")
+    path = Path(value["path"])
+    if not path.is_absolute():
+        require(".." not in path.parts, "locator.relative_escape")
+        path = REPO_ROOT / path
+    path = safe_path(path)
+    raw = night_gate._pack_bytes(path, "qualification_input", value["sha256"])
+    return path, raw
+
+
+def number(value, field):
+    require(type(value) in (float, int) and math.isfinite(value) and value >= 0, field)
+    return Fraction(value)
+
+
+def allowance(value):
+    exact(value, {"seconds", "source", "source_pointer"}, "allowance")
+    _, raw = read_locator(value["source"])
+    source = readiness.parse_json_bytes(raw)
+    pointer = value["source_pointer"]
+    require(isinstance(pointer, str) and pointer.startswith("/"), "allowance.source_pointer")
+    for part in pointer[1:].split("/"):
+        part = part.replace("~1", "/").replace("~0", "~")
+        source = source[int(part)] if isinstance(source, list) else source[part]
+    require(type(source) in (int, float) and source == value["seconds"], "allowance.source_value")
+    return number(value["seconds"], "allowance.seconds")
+
+
+def sizing_adapter(value):
+    """Read the durable sizing-seat adapter without charging desk controls to the night."""
+    if value.get("schema_version") != "joulewise.v5_qualification_sizing_allowances.v1":
+        return value
+    exact(value, {"schema_version", "sizing", "totals", "controls"}, "sizing_adapter")
+    for group in ("totals", "controls"):
+        require(isinstance(value[group], dict) and bool(value[group]), "sizing_adapter." + group)
+        for item in value[group].values():
+            allowance(item)
+    return value["sizing"]
+
+
+def size_window(occurrence, sizing, *, roster=(), auxiliary=(), brackets=(), nonsampling=()):
+    """Component arithmetic follows block-3's prospective allowance method.
+
+    Require every component, including model load/admission and every auxiliary
+    stage. This does not assert a hard latency bound for unbounded inference.
+    """
+    require(occurrence in {"a1", "a2", "s1", "s2"}, "occurrence_retired_or_invalid")
+    source_stream_max = (allowance(sizing["totals"]["T_stream_max"])
+                         if sizing.get("schema_version") == "joulewise.v5_qualification_sizing_allowances.v1"
+                         else Fraction())
+    sizing = sizing_adapter(sizing)
+    occurrence = "s1"
+    exact(sizing, {"fixed", "members", "auxiliary", "streams", "clock"}, "sizing")
+    exact(sizing["fixed"], FIXED_COMPONENTS[occurrence] | {"t0_stage_cap"}, "fixed")
+    stage_cap = allowance(sizing["fixed"]["t0_stage_cap"])
+    require(3180 <= stage_cap <= 3480, "t0_stage_cap_band")
+    # The six captures (including the one dwell) precede the programmed chain;
+    # pack_t0 covers only post-stage authoring, verification and consuming start.
+    total = sum((allowance(v) for key, v in sizing["fixed"].items()
+                 if key != "t0_stage_cap"), Fraction())
+    members = sizing["members"]
+    require(isinstance(members, dict), "members")
+    require(set(members) == {r["run_id"] for r in roster}, "member_inventory")
+    for value in members.values():
+        exact(value, MEMBER_COMPONENTS, "member_components")
+        total += sum((allowance(v) for v in value.values()), Fraction())
+    require(isinstance(sizing["auxiliary"], dict), "auxiliary")
+    require(set(sizing["auxiliary"]) == set(auxiliary), "auxiliary_inventory")
+    total += sum((allowance(v) for v in sizing["auxiliary"].values()), Fraction())
+    span = math.ceil(total)
+    require(span > 0, "programmed_span")
+    window = 60 * math.ceil((span + stage_cap) / 60)
+    clock = exact(sizing["clock"], {"diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s", "source", "observed_max_effective_bound"}, "clock")
+    _, clock_raw = read_locator(clock["source"])
+    clock_source = readiness.parse_json_bytes(clock_raw)
+    # Raw sizing inputs retain the same production maximum through their
+    # authenticated clock source, even without the outer allowance adapter.
+    source_stream_max = max(source_stream_max, number(
+        clock_source.get("totals", {}).get("T_stream_max", 0), "clock.source_stream_max"))
+    require(all(clock_source[key] == clock[key] for key in (
+        "diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s")), "clock.source_values")
+    from joulewise.uncertainty_evidence import NUMERIC_PADDING_S, _round_outward_up
+    # v3 effective = anchor-only + stamp resolution + numeric padding + offset
+    # span. rho*T estimates that span ONCE. It is not added again to an already
+    # effective bound; exact Fractions/outward rounding match the estimator.
+    placement = (number(clock["diagnostic_anchor_half_width_s"], "clock.h")
+                 + number(clock["stamp_resolution_s"], "clock.resolution")
+                 + Fraction(NUMERIC_PADDING_S))
+    rho = number(clock["rho_per_s"], "clock.rho")
+    streams = sizing["streams"]
+    require(isinstance(streams, dict), "streams")
+    # nonsampling names whole auxiliary stages without a clock anchor (bound
+    # derivation). Cooldown subwindows and the post-run sentinel are helpers
+    # inside a member, not extra anchor-bearing roster entries.
+    require(set(nonsampling) <= set(auxiliary), "nonsampling_inventory")
+    sampled_auxiliary = set(auxiliary) - set(nonsampling)
+    require(set(streams) == (set(members) | sampled_auxiliary | set(brackets)), "stream_inventory")
+    stream_seconds = {name: allowance(v) for name, v in streams.items()}
+    require(all(seconds >= 60 for seconds in stream_seconds.values()), "anchor_stream_minimum")
+    longest = max(stream_seconds.values(), default=Fraction())
+    require(longest >= source_stream_max, "source_stream_maximum_omitted")
+    for member_id, components in members.items():
+        # Load precedes startup. The main sampler stops at
+        # joulewise/controller.py:1607; cooldown runs on its own sampler.
+        # Admission guards/retry remain covered by the anchor-bearing stream.
+        sampled = sum((allowance(v) for key, v in components.items()
+                       if key not in {"load", "cooldown"}), Fraction())
+        require(stream_seconds[member_id] >= sampled, "stream_omits_guard_or_retry")
+    # Bracket protocol spans are already included in pre_post_calibration;
+    # their continuous sampler streams still need the independent clock check.
+    effective = _round_outward_up(placement + rho * longest)
+    observed = allowance(clock["observed_max_effective_bound"])
+    require(observed <= Fraction(0.005), "clock_bound_exceeded")
+    return {"programmed_span_s": span, "window_max_s": window,
+            "t0_stage_cap_s": float(stage_cap),
+            "pack_t0_s": float(allowance(sizing["fixed"]["pack_t0"])),
+            "remaining_chain_span_s": float(span - allowance(sizing["fixed"]["pack_t0"])),
+            "clean_dwell_cap_s": DWELL_CAP_S,
+            "longest_sampler_stream_s": float(longest),
+            "worst_case_effective_clock_bound_s": effective,
+            "observed_max_effective_clock_bound_s": float(observed),
+            "clock_admission_limit_s": 0.005,
+            "clock_design_margin_s": float(Fraction(0.005) - observed),
+            "clock": {key: clock[key] for key in (
+                "diagnostic_anchor_half_width_s", "stamp_resolution_s", "rho_per_s", "source", "observed_max_effective_bound")},
+            "numeric_padding_s": NUMERIC_PADDING_S,
+            "estimate_only": True}
+
+
+def pack_roster(root, occurrence):
+    tree, _ = readiness._plan_tree(root)
+    no_fill(tree)
+    inventory = readiness._authenticated_pack_config_inventory(root)
+    for relative, digest in inventory.items():
+        night_gate._pack_bytes(safe_path(root / relative), "config_inventory", digest)
+    require(root.name == GAMMA, "real_gamma_required")
+    science = tree.get("science")
+    require(isinstance(science, list) and len(science) == 80, "partial_gamma_pack")
+    first = science[:4]
+    require([r.get("position") for r in first] == ["A1", "B1", "B2", "A2"], "first_abba")
+    require([r.get("arm") for r in first] == ["A", "B", "B", "A"], "first_abba")
+    require(len({r.get("stage_id") for r in first}) == 1 and len({r.get("block_id") for r in first}) == 1, "first_block")
+    stage = safe_path(root / first[0]["config_path"]).parent
+    from scripts.run_campaign import load_order_entries, apply_order_manifest, discover_configs
+    entries, warning = load_order_entries(stage)
+    require(warning is None and len(entries) == 20, "authentic_first_stage")
+    ordered = apply_order_manifest(discover_configs(stage), entries)
+    require([p.relative_to(root).as_posix() for p in ordered[:4]] == [r["config_path"] for r in first], "first_stage_order")
+    for row in science:
+        require(inventory.get(row["config_path"]) == row["config_sha256"], "science_config_inventory")
+    graph = tree.get("stage_graph")
+    require(isinstance(graph, list) and graph, "stage_graph")
+    dispatched = dispatched_stages(root, graph, first[0]["stage_id"])
+    auxiliary = [r["stage_id"] for r in dispatched if r["stage_id"] != first[0]["stage_id"]
+                 and r.get("kind") in {"campaign_collection", "bound_derivation"}]
+    require(auxiliary and len(auxiliary) == len(set(auxiliary)), "auxiliary_roster")
+    brackets = [r["stage_id"] for r in dispatched if r.get("kind") == "calibration_capture"]
+    require(len(brackets) == 2 and len(set(brackets)) == 2, "bracket_stream_roster")
+    nonsampling = [r["stage_id"] for r in dispatched if r.get("kind") == "bound_derivation"]
+    return [{k: r[k] for k in ("run_id", "config_path", "config_sha256", "stage_id", "block_id", "position", "arm")} for r in first], auxiliary, brackets, nonsampling
+
+
+
+GAMMA = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+
+
+DWELL_CAP_S = 2700
+
+
+FIXED_COMPONENTS = {
+    "s1": {"pack_t0", "fixed_settles", "pre_post_calibration", "stage_custody", "terminal_shutdown"},
+}
+
+
+MEMBER_COMPONENTS = {"load", "warmup", "prefill", "forced_decode", "cooldown", "idle_admission"}
+
+
+def no_fill(value):
+    if isinstance(value, str):
+        require("FILL" not in value, "unresolved_fill")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            no_fill(key)
+            no_fill(item)
+    elif isinstance(value, list):
+        for item in value:
+            no_fill(item)
+
+
+def dispatched_stages(root, graph, science_stage):
+    """Resolve dispatches in the rendered one-block chain against the frozen graph.
+
+    Repeated reference paths resolve in graph order: only the first midpoint is
+    dispatched. An unused graph row does not contribute a sizing allowance.
+    """
+    body = g2b_body(readiness._repo_for_pack(root))
+    logical = body.replace("\\\n", " ")
+    bindings = {"REPO": ""}
+    for name, value in re.findall(r'^(?:export )?([A-Z_]+)="([^"\n]+)"$', logical, re.M):
+        if name == "REPO":
+            continue  # dispatch graph paths are repository-relative
+        for key, bound in bindings.items():
+            value = value.replace("$" + key, bound)
+        bindings[name] = value
+    dispatches = []
+    require(logical.count('\ncd "$REPO"\n') == 1, "g2b_dispatch_start")
+    for line in logical.split('\ncd "$REPO"\n', 1)[1].splitlines():
+        line = line.strip()
+        if line.startswith('run_stage '):
+            argv = shlex.split(line)
+            config = argv[3]
+            if config == "$REPO/$stage":
+                require("--max-blocks 1" in line and 'before_midpoint_stages.txt' in body
+                        and '  break\n' in body, "one_block_dispatch")
+                dispatches.append(("science", science_stage))
+            else:
+                for key, value in bindings.items():
+                    config = config.replace("$" + key, value)
+                require("$" not in config, "unresolved_dispatch_path")
+                dispatches.append(("config", config.lstrip("/")))
+        elif line.startswith('"$PY" "$REPO/scripts/run_campaign.py"') and '--derive-neg8-drift-bound' in line:
+            dispatches.append(("kind", "bound_derivation"))
+        elif re.match(r'^(PRE|POST)_CAL_CUSTODY=', line):
+            slot = re.search(r'calibrate_slot (pre|post) ', line)
+            require(slot is not None, "calibration_dispatch")
+            dispatches.append(("slot", slot[1] + "_attempt_id"))
+    require(len(dispatches) == 8, "g2b_dispatch_inventory")
+    selected, cursor = [], 0
+    for kind, value in dispatches:
+        matches = []
+        for index, row in enumerate(graph[cursor:], cursor):
+            paths = [arg.get("value") for command in row.get("launch", {}).get("commands", [])
+                     for arg in command.get("argv_template", {}).get("arguments", [])
+                     if arg.get("kind") == "repo_path"]
+            # GAMMA-INTERIOR-REFERENCES-01 (lane L10): GAMMA's first interior reference stage now
+            # launches a run-id-only copy of the shared midpoint config (gamma_interior_references_v5/),
+            # and the shared midpoint runs at the arm boundary. The one-block chain's midpoint dispatch
+            # still sits after block 1, so it resolves to that first interior stage by stage id; its
+            # member is the same config and class, so the sizing is unchanged.
+            match = (row.get("stage_id") == value if kind == "science" else
+                     (value in paths or (value.endswith("/midpoint")
+                                         and row.get("stage_id") == "gamma-reference-decode-midpoint"))
+                     if kind == "config" else
+                     row.get("kind") == value if kind == "kind" else
+                     row.get("kind") == "calibration_capture" and row.get("input_ref", {}).get("slot") == value)
+            if match:
+                matches.append((index, row))
+        require(bool(matches), "dispatched_stage_missing")
+        index, row = matches[0]
+        require(row["stage_id"] not in {"gamma-reference-arm-boundary", "gamma-reference-prefill-midpoint"},
+                "dispatched_stage_missing")
+        if kind == "config" and value.endswith("/midpoint"):
+            require(not any(item.get("input_ref", {}).get("kind") == "pack_manifest"
+                            for item in graph[cursor:index]), "dispatched_stage_missing")
+        selected.append(row)
+        cursor = index + 1
+    return selected
+
+
+
+def g2b_body(measurement):
+    from scripts.gen_g2_phase_d import render_generated_region, END_MARKER
+    import inspect
+    options = ({"v5_references": True} if "v5_references" in
+               inspect.signature(render_generated_region).parameters else {})
+    generated = render_generated_region((measurement / "docs/phase_2/window_runbook.md").read_text(), **options)
+    body = generated.split("<!-- GENERATED by scripts/gen_g2_phase_d.py from the pinned runbook chain. -->\n", 1)[1].split(END_MARKER)[0]
+    require(body.startswith("```zsh\n") and body.endswith("```\n"), "g2b_source_fences")
+    body = body[len("```zsh\n"):-len("```\n")]
+    # The authenticated v3 consumption is the child authority. The generator's
+    # explicit flags assume inherited confirmation variables, which the D-176
+    # environment rule forbids. Its child already supports omission of the pair.
+    old = ('  --lifecycle-event start \\\n'
+           '  --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \\\n'
+           '  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"\n')
+    require(body.count(old) == 1, "g2b_consumption_interface_drift")
+    # One reviewed specialization, before canonical-body validation and hashing.
+    # Capture and the evidence author require the executing checkout's literal.
+    repo_binding = "REPO=/Users/edr/JouleWise-measurement-20260813\n"
+    require(body.count(repo_binding) == 1, "g2b_repo_binding_drift")
+    repository = str(measurement.resolve())
+    status_call = '"$REPO/scripts/recover_calibration_ledger.py" session-status \\\n'
+    require(body.count(status_call) == 1, "g2b_ledger_binding_drift")
+    body = body.replace(status_call, '"$REPO/scripts/recover_calibration_ledger.py" \\\n'
+                        '    --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" session-status \\\n')
+    require(not any(char in repository for char in "\n\r\"$`\\"), "g2b_repo_binding_invalid")
+    return body.replace(old, "  --lifecycle-event start\n").replace(repo_binding, 'REPO="' + repository + '"\n')
+
+# Stored block-4 qualification/restore readers. These retain receipt identities,
+# admission-abort arithmetic, original archive links and native ledger grammar.
+import os
+import time
+import subprocess
+from decimal import Decimal
+from joulewise import calibration_ledger as ledger
+from joulewise.authentication_io import read_authentication_input
+from joulewise.measurement_liveness import pending_launch_closed, observe_identity, _start_token
+from joulewise.receipt_formats import _COMMAND_SCHEMA as COMMAND_CAPTURE_SCHEMA
+from scripts.harvest_window import inventory
+
+ATTEMPT_HARVEST_SCHEMA = "joulewise.harvest_v5_g2b_window.v1"
+ADMISSION_ABORT_CODE = "guard_attested_idle_admission_abort"
+BATTERY_BOUNDARY_PHASES = {"arm": "arm_check", "publication": "publish_install", "t0": "t0"}
+NULL_RESTORE_SCHEMA = "joulewise.v5_null_reservation_restore.v1"
+REFUSAL = "evidence_author_t0_clock_attestation_underivable"
+ANCHOR_DETAIL = "R0-to-author RAW anchor delta exceeds 5000000 ns"
+from joulewise.hazards.network_time import OFF_ARGV as _OFF_ARGV
+ON_ARGV = (*_OFF_ARGV[:-1], "on")
+
+
 def previous_attempt(value):
     """Validate the mandatory pointer; absence is never a first-attempt default."""
     if isinstance(value, dict) and set(value) == {"none"} and value["none"] is True:
@@ -78,6 +445,7 @@ def previous_attempt(value):
     if path.name != "harvest.json":
         raise HarvestRefusal("previous_attempt_not_harvest")
     return path
+
 
 
 def admission_abort_evidence(value):
@@ -157,6 +525,7 @@ def admission_abort_evidence(value):
     return value
 
 
+
 def native_admission_abort(runs):
     """Locate native aborts; the harvester also assesses successful members."""
     candidates, other_causes = [], []
@@ -184,6 +553,7 @@ def native_admission_abort(runs):
     return (candidates[0] if candidates else None), sorted(set(other_causes))
 
 
+
 def is_admission_abort(record):
     if record.get("recovery_classification") != "admission_abort":
         return False
@@ -193,6 +563,7 @@ def is_admission_abort(record):
         raise HarvestRefusal("admission_abort_has_other_recover_cause")
     admission_abort_evidence(record.get("admission_abort"))
     return True
+
 
 
 def tooling_s2_predecessor(record):
@@ -209,6 +580,7 @@ def tooling_s2_predecessor(record):
     return record
 
 
+
 def authenticate_s2_authority(reference, plan_id, previous):
     authority = read(authenticated_reference(reference))
     prior_reference, prior = nearest_counted_predecessor(previous)
@@ -222,6 +594,7 @@ def authenticate_s2_authority(reference, plan_id, previous):
     authenticated_reference(authority.get("r3_cure"))
     authenticated_reference(authority.get("head_coverage"))
     return authority
+
 
 
 def authenticate_reharvest(record, destination, original, original_path):
@@ -260,6 +633,7 @@ def authenticate_reharvest(record, destination, original, original_path):
     return record
 
 
+
 def counted_attempt(record, original_path, *, pending=None):
     """Keep the original pointer and count the first non-REFUSED verdict."""
     if record.get("verdict") != "REFUSED":
@@ -285,6 +659,7 @@ def counted_attempt(record, original_path, *, pending=None):
     return counted
 
 
+
 def nearest_counted_predecessor(previous):
     """Resolve NULL links and REFUSED re-harvests without changing pointers."""
     seen = set()
@@ -300,6 +675,7 @@ def nearest_counted_predecessor(previous):
             return previous, record
         previous = original["previous_attempt"]
     raise HarvestRefusal("s2_not_after_named_tooling_recover")
+
 
 
 def attempt_history(current, archive_root, *, current_harvest=None, reharvest=None):
@@ -422,6 +798,7 @@ def attempt_history(current, archive_root, *, current_harvest=None, reharvest=No
             "same_refusal_codes": repeated_null_codes}
 
 
+
 def authenticate_attempt_record(record, root):
     """A harvest's self-reported predecessor is checked against its authority."""
     path = authenticated_reference(record.get("plan"))
@@ -464,6 +841,7 @@ def authenticate_attempt_record(record, root):
     return plan
 
 
+
 def verify_attempt_restore(plan, *, writer=False):
     previous = previous_attempt(plan.previous_attempt)
     restore_ref = plan.null_reservation_restore
@@ -481,11 +859,10 @@ def verify_attempt_restore(plan, *, writer=False):
     if capture.exists() and restore_ref is None:
         raise HarvestRefusal("null_reservation_restore_required")
     if restore_ref is not None:
-        from scripts.restore_v5_null_reservation import verify_restore
         record = read(authenticated_reference(restore_ref))
         environment = Path(plan.chain_path).parent / "window.env"
         if environment.is_file():
-            from joulewise import arm_readiness_evidence_t0 as author
+            from joulewise import receipt_formats as author
             from joulewise.authentication_io import read_authentication_input
             values = author.parse_window_environment(read_authentication_input(
                 environment, grammar="raw", label="NULL rearm planned ledger bindings"))
@@ -497,12 +874,12 @@ def verify_attempt_restore(plan, *, writer=False):
             raise HarvestRefusal("null_restore_next_ledger_binding_mismatch")
         capture = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/ledger-reservation.json" if hasattr(plan, "pack_night") else None
         if not writer and capture is not None and capture.exists():
-            from scripts.restore_v5_null_reservation import flag
             argv = read(capture)["argv"]
             if any(flag(argv, "--" + name) != values[key] for name, key in (("ledger", "CALIBRATION_LEDGER"), ("head-pin", "LEDGER_HEAD_PIN"))):
                 raise HarvestRefusal("null_restore_next_reservation_binding_mismatch")
         verify_restore(restore_ref, plan.previous_attempt,
                        restored_ledger=record["restored_ledger"] if writer else None)
+
 
 
 def attempt_record(plan, plan_path, occurrence, **extra):
@@ -511,6 +888,7 @@ def attempt_record(plan, plan_path, occurrence, **extra):
             "plan": reference(plan_path), "plan_sha256": sha(plan_path),
             "previous_attempt": plan.previous_attempt, "block_archive_root": plan.block_archive_root,
             "occurrence": occurrence, **extra}
+
 
 
 def attempt_destination(plan, destination, *, qualification=False, replay=None):
@@ -537,6 +915,7 @@ def attempt_destination(plan, destination, *, qualification=False, replay=None):
     return attempt
 
 
+
 def checked_history(record, plan, *, replay=False, reharvest=None):
     path = Path(plan.block_archive_root) / "attempts" / plan.plan_id / "harvest.json"
     if replay:
@@ -551,6 +930,7 @@ def checked_history(record, plan, *, replay=False, reharvest=None):
     return attempt_history(record, plan.block_archive_root)
 
 
+
 def admission_abort_disposition(record, history):
     if not is_admission_abort(record):
         raise HarvestRefusal("admission_abort_not_guard_attested")
@@ -560,59 +940,10 @@ def admission_abort_disposition(record, history):
                          "fresh_s1_plan_authorization_t0_after_admission_cause_removed"}
 
 
-def authenticated_clock_budget(input_root, pack_root):
-    """Replay sizing against the chain pinned by the occurrence's authority.
-
-    A self-consistent gate is not authority for its stream maximum. Both the
-    source allowances and the computed maximum are pinned in the permitted
-    chain before the authorization record is made.
-    """
-    from scripts import write_v5_qualification_plan as writer
-    from joulewise import kernel_clock
-    input_root, pack_root = Path(input_root), Path(pack_root)
-    binding_path = input_root / "kernel-frequency-binding.json"
-    binding = read(binding_path)
-    if (set(binding) != {"schema", "occurrence", "plan", "sizing", "plan_id", "pack_root", "pack_sha256"}
-            or binding["schema"] != "joulewise.v5_qualification_clock_binding.v1"
-            or binding["occurrence"] not in {"a1", "a2", "s1", "s2"}
-            or binding["pack_root"] != str(pack_root)):
-        raise HarvestRefusal("clock_sizing_binding_invalid")
-    plan_path = authenticated_reference(binding["plan"])
-    plan_record = read(plan_path)
-    if binding["occurrence"] in {"a1", "a2"}:
-        if (plan_record.get("schema_version") != writer.ARM_ONLY_SCHEMA
-                or plan_record.get("mode") not in {"ARM_ONLY_NO_LAUNCH", "G10_INPUT_CAPTURE_NO_LAUNCH"}
-                or plan_record.get("occurrence") != binding["occurrence"]):
-            raise HarvestRefusal("clock_sizing_plan_invalid")
-        plan_record = plan_record["plan_binding"]
-    plan = night_gate.NightPlan.from_mapping(plan_record)
-    if (plan.plan_id != binding["plan_id"] or plan.pack_night["pack_root"] != str(pack_root)
-            or plan.pack_night["pack_sha256"] != binding["pack_sha256"]
-            or input_root != Path(plan.custody_root) / pack_root.name / "arm_readiness.t0.inputs"):
-        raise HarvestRefusal("clock_sizing_plan_mismatch")
-    night_gate._authenticate_pack_records(plan)
-    chain = Path(plan.chain_path)
-    if sha(chain) != Path(plan.chain_sha256_path).read_text().split()[0]:
-        raise HarvestRefusal("clock_sizing_chain_mismatch")
-    sizing_path = authenticated_reference(binding["sizing"])
-    sizing = read(sizing_path)
-    text = chain.read_text()
-    if night_gate.chain_literal(text, "NIGHT_CLOCK_SIZING_SHA256") != sha(sizing_path):
-        raise HarvestRefusal("clock_sizing_source_mismatch")
-    roster, auxiliary, brackets, nonsampling = writer.pack_roster(pack_root, binding["occurrence"])
-    computed = writer.size_window(binding["occurrence"], sizing, roster=roster,
-        auxiliary=auxiliary, brackets=brackets, nonsampling=nonsampling)["longest_sampler_stream_s"]
-    gate_path = input_root / "kernel-frequency-gate.json"
-    gate = kernel_clock.validate_gate(read(gate_path))
-    if (night_gate.chain_literal(text, "NIGHT_CLOCK_STREAM_MAX_S") != str(computed)
-            or gate["t_stream_max_s"] != computed):
-        raise HarvestRefusal("clock_stream_maximum_mismatch")
-    return computed, tuple(reference(p) for p in (binding_path, plan_path, sizing_path, gate_path, chain))
-
 
 def s1_desk_records(bundle):
     """Require the four post-STOP observations, each bound by its lifecycle hash."""
-    from joulewise import t0_rehearsal as t0
+    from joulewise import rehearsal_readers as t0
     lifecycle = bundle.record("lifecycle")
     if lifecycle is None or not isinstance(lifecycle.value, dict):
         raise HarvestRefusal("s1_desk_lifecycle_missing")
@@ -631,6 +962,7 @@ def s1_desk_records(bundle):
             raise HarvestRefusal("s1_desk_stage_schema_invalid")
         result[name] = {"path": str(artifact.path), "sha256": artifact.sha256}
     return result
+
 
 
 def group_clear(night, *, killpg=os.killpg, plan_id=None, observer=None):
@@ -678,6 +1010,7 @@ def group_clear(night, *, killpg=os.killpg, plan_id=None, observer=None):
     return False
 
 
+
 def g10_sources(custody):
     """Preserve the complete original physical-control tree for harvest replay."""
     record_path = Path(custody) / "qualification-plan-record.json"
@@ -694,9 +1027,9 @@ def g10_sources(custody):
     return {"g10-custody": manifest.parent}
 
 
+
 def replay_g10_custody(custody, positive, *, bundle=None):
     """Re-run G10's native verifier with the registered head/boot/order bounds."""
-    from scripts.ed_session.capture_t0_anchor_positive_control import verify_g10_custody
     record = read(Path(custody) / "qualification-plan-record.json")
     prereqs = record["prerequisites"]
     positive_path = authenticated_reference(prereqs["g10_control"])
@@ -706,14 +1039,14 @@ def replay_g10_custody(custody, positive, *, bundle=None):
     first = read(authenticated_reference(prereqs["a1_control"]))
     second = read(authenticated_reference(prereqs["a2_control"]))
     plan = read(authenticated_reference(record["plan"]))
-    from joulewise import arm_readiness_evidence_t0 as author
+    from joulewise import receipt_formats as author
     input_root = Path(custody) / plan["pack_night"]["pack_id"] / author._INPUT_DIRECTORY
     captures = []
     for filename in author._CAPTURE_FILES.values():
         path = input_root / filename
         capture = read(path)
         if bundle is not None:
-            from joulewise.t0_rehearsal import _artifact_for_path
+            from joulewise.rehearsal_readers import _artifact_for_path
             artifact = _artifact_for_path(bundle, str(path))
             if artifact is None or artifact.sha256 != sha(path) or artifact.value != capture:
                 raise HarvestRefusal("g10_s1_boundary_custody")
@@ -736,6 +1069,7 @@ def replay_g10_custody(custody, positive, *, bundle=None):
     return {"path": str(manifest_path), "sha256": sha(manifest_path)}
 
 
+
 def require_terminal_boundary(plan, terminal):
     """The chain writes STOP at one plan-bound path, never a supplied substitute."""
     expected = Path(plan.custody_root) / "night/transcript/post-bracket-terminal-boundary.json"
@@ -745,14 +1079,6 @@ def require_terminal_boundary(plan, terminal):
     if list(Path(plan.custody_root).rglob("post-bracket-terminal-boundary.json")) != [expected]:
         raise HarvestRefusal("terminal_boundary_census_invalid")
 
-
-def off_receipt_path(plan, night_dir=None):
-    """Match capture_t0_step's pack custody and the diagnostic night layout."""
-    from joulewise import network_time_off
-    night = Path(night_dir) if night_dir is not None else Path(plan.custody_root) / "night"
-    if plan.receipt_class == "TRANSACTION_PACK":
-        return night.parent / identifier(plan.pack_night["pack_id"]) / "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME
-    return night / network_time_off.RECEIPT_BASENAME
 
 
 def pin_only_head_extension(repository, armed_head, head):
@@ -786,6 +1112,7 @@ def pin_only_head_extension(repository, armed_head, head):
             "terminal_head_pin": pin}
 
 
+
 def load_plan(path, purpose, *, now=time.time, clear=group_clear):
     from scripts.run_night import WINDOW_SHUTDOWN_GRACE_S
     plan = night_gate.NightPlan.from_mapping(read(path))
@@ -812,6 +1139,7 @@ def load_plan(path, purpose, *, now=time.time, clear=group_clear):
     return plan
 
 
+
 def census_sources(sources):
     result = {}
     for name, path in sources.items():
@@ -825,6 +1153,7 @@ def census_sources(sources):
     return result
 
 
+
 def tree_hash(root):
     import hashlib
     rows = census_sources({"tree": root})["tree"]
@@ -832,59 +1161,11 @@ def tree_hash(root):
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def archive_sources(sources, destination, *, previous=None, added=()):
-    destination = Path(destination).absolute()
-    if destination.exists() or any(destination == Path(p) or Path(p) in destination.parents
-                                   or destination in Path(p).parents for p in sources.values()):
-        raise HarvestRefusal("archive_exists_or_overlaps_source")
-    original = census_sources(sources)
-    if previous is not None:
-        old = read(Path(previous) / "withheld/replay-locators.json")
-        expected = {row["name"]: row for row in old["sources"]}
-        current_names = set(sources) - set(added)
-        if current_names != set(expected):
-            raise HarvestRefusal("reharvest_source_census_changed")
-        for name in current_names:
-            if (str(sources[name]) != expected[name]["original_path"]
-                    or original[name] != expected[name]["inventory"]):
-                raise HarvestRefusal("reharvest_source_bytes_changed")
-    destination.mkdir(parents=True)
-    restricted = destination / "withheld"
-    restricted.mkdir(mode=0o700)
-    archived = archive(sources, restricted / "sources")
-    locators = {"schema": "joulewise.v5_qualification_replay_locators.v1", "sources": [
-        {"name": name, "original_path": str(path), "archived_path": str(restricted / "sources" / name),
-         "inventory": archived[name]} for name, path in sorted(sources.items())]}
-    write(restricted / "replay-locators.json", locators)
-    public = {**locators, "sources": [
-        {**row, "inventory": {path: {"sha256": item["sha256"]} for path, item in row["inventory"].items()
-                              if "sha256" in item}}
-        for row in locators["sources"]]}
-    write(destination / "replay-locators.json", public)
-    # Hash/path census is public; source bytes stay in restricted custody.
-    sums = (restricted / "sources/SHA256SUMS").read_text()
-    (destination / "SHA256SUMS").write_text("".join(
-        f"{digest}  withheld/sources/{name}\n"
-        for digest, name in (line.split("  ", 1) for line in sums.splitlines())))
-    return original
-
 
 def unchanged(sources, original):
     if census_sources(sources) != original:
         raise HarvestRefusal("source_tree_mutated")
 
-
-def captured_call(function, transcript, *args, **kwargs):
-    """Never echo validator messages, nested diagnostics or unfiltered log tails."""
-    out, err = io.StringIO(), io.StringIO()
-    try:
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            return function(*args, **kwargs)
-    finally:
-        Path(transcript).parent.mkdir(parents=True, exist_ok=True)
-        with Path(transcript).open("x") as stream:
-            stream.write(out.getvalue())
-            stream.write(err.getvalue())
 
 
 def captured_battery_observation(path):
@@ -907,23 +1188,6 @@ def captured_battery_observation(path):
         raise HarvestRefusal("t0_battery_raw_mismatch")
     return observation, raw
 
-
-def persist_battery_observation(directory, name, observation, raw):
-    """Retain the exact observed stdout even when the predicate refuses."""
-    if not isinstance(raw, bytes) or readiness.sha256_bytes(raw) != observation.get("raw_stdout_sha256"):
-        raise HarvestRefusal("battery_boundary_raw_mismatch")
-    directory = Path(directory)
-    if any(path.is_symlink() for path in (directory, *directory.parents)):
-        raise HarvestRefusal("battery_boundary_directory_symlink")
-    directory.mkdir(parents=True, exist_ok=True)
-    raw_path, record_path = directory / (name + ".ioreg"), directory / (name + ".json")
-    for path, body in ((raw_path, raw), (record_path, readiness.render_json(observation))):
-        with path.open("xb") as stream:
-            os.chmod(path, 0o600)
-            stream.write(body)
-            stream.flush()
-            os.fsync(stream.fileno())
-    return {"record": reference(record_path.absolute()), "raw": reference(raw_path.absolute())}
 
 
 def battery_boundaries(path, digest, plan_id, *, plan_path=None):
@@ -964,6 +1228,7 @@ def battery_boundaries(path, digest, plan_id, *, plan_path=None):
         passed = passed and parsed["passed"]
     authenticate_battery_lifecycle(value, observed, plan_path=plan_path)
     return passed
+
 
 
 def authenticate_battery_lifecycle(value, observations, *, plan_path=None):
@@ -1034,6 +1299,7 @@ def authenticate_battery_lifecycle(value, observations, *, plan_path=None):
         raise HarvestRefusal("battery_boundary_order_or_timing_invalid")
 
 
+
 def disposition(occurrence, verdict, cause_classes, majority=None):
     # A RECOVER without an already reviewed named cure is END STATE. A later
     # explicit lead authority binds the one allowed s2; no automatic retry.
@@ -1046,33 +1312,11 @@ def disposition(occurrence, verdict, cause_classes, majority=None):
                           "fresh_plan_after_cause_removed" if verdict == "NULL" else "lead_ratification")}
 
 
-def publish(destination, record):
-    """Record is constructed field-by-field; never merge an evaluator document."""
-    write(Path(destination) / "harvest.json", record)
-    return record
-
-
-def public_print(record):
-    print(f"verdict={record['verdict']}")
-
-
-def preflight_refusal(schema, scratch=Path("/tmp/dd5-fold")):
-    """G2-a's safe fallback: never write into an unsafe archive coordinate."""
-    scratch = Path(scratch).resolve()
-    scratch.mkdir(parents=True, exist_ok=True)
-    destination = Path(tempfile.mkdtemp(prefix="v5-harvest-refusal-", dir=scratch))
-    record = {"schema": schema, "verdict": "REFUSED", "cause_classes": ["tooling"],
-              "cause_codes": ["completion_ownership_archive_or_authentication_fault"],
-              "s2_eligible": False, "end_state": False, "next_step": "r3_identical_byte_reharvest"}
-    publish(destination, record)
-    public_print(record)
-    print(f"harvest={destination / 'harvest.json'} sha256={sha(destination / 'harvest.json')}")
-    return record
-
 
 def release_metrics(*args, **kwargs):
     # Qualification PASS is deliberately incapable of releasing measurements.
     raise HarvestRefusal("claim_plan_seal_and_lead_release_required")
+
 
 
 def boundary_sources(path):
@@ -1088,3 +1332,347 @@ def boundary_sources(path):
     for name, ref in (value.get("lifecycle") or {}).items():
         sources[f"battery-lifecycle-{identifier(name)}"] = authenticated_reference(ref)
     return sources
+
+
+
+def regular_bytes(path, grammar):
+    path = Path(path)
+    if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)) or not path.is_file():
+        raise HarvestRefusal("null_restore_input_not_regular")
+    return read_authentication_input(path, grammar=grammar, label="block-4 NULL reservation restore")
+
+
+
+def validate_tail(seed, attempted, pin, reservation):
+    """Use the existing ledger parser and shape; never redefine ledger rows."""
+    pin_head = ledger._head_pin(pin)
+    receipts, reasons = ledger._parse_ledger(seed)
+    seed_head = (len(receipts), receipts[-1]["receipt_digest"] if receipts else ledger.GENESIS_DIGEST)
+    if reasons or pin_head is None or pin_head != seed_head:
+        raise HarvestRefusal("null_restore_seed_not_pinned_head")
+    if not attempted.startswith(seed):
+        raise HarvestRefusal("null_restore_seed_not_exact_prefix")
+    tail = attempted[len(seed):]
+    lines = tail.splitlines(keepends=True)
+    if len(lines) != 2 or any(not line.endswith(b"\n") for line in lines):
+        raise HarvestRefusal("null_restore_tail_not_one_reservation_unit")
+    intent, row = (readiness.parse_json_bytes(line) for line in lines)
+    if (not isinstance(row, dict) or row != reservation
+            or row.get("event") != ledger.BRACKET_SESSION_OPEN_EVENT
+            or not ledger._valid_session_receipt_shape(row)
+            or row.get("sequence") != seed_head[0] + 2
+            or intent.get("event") != ledger.APPEND_INTENT_EVENT
+            or intent.get("sequence") != seed_head[0] + 1
+            or intent.get("predecessor_digest") != seed_head[1]
+            or row.get("predecessor_digest") != intent.get("receipt_digest")
+            or intent.get("target_core") != ledger._target_core(row)
+            or any(intent["target_core"].get(key) != row.get(key) for key in ("session_id", "plan_id"))):
+        raise HarvestRefusal("null_restore_tail_not_attempt_reservation")
+    complete, reasons = ledger._parse_ledger(attempted)
+    if reasons or len(complete) != len(receipts) + 2:
+        raise HarvestRefusal("null_restore_ledger_chain_invalid")
+    return row
+
+
+
+def require_null(harvest, plan, plan_digest):
+    if (harvest.get("schema") != ATTEMPT_HARVEST_SCHEMA
+            or harvest.get("verdict") != "NULL"
+            or harvest.get("plan_id") != plan.plan_id or harvest.get("plan_sha256") != plan_digest):
+        raise HarvestRefusal("null_restore_requires_attempt_null_harvest")
+    started = Path(plan.custody_root) / "night/chain.started"
+    if started.exists() or started.is_symlink():
+        raise HarvestRefusal("null_restore_chain_started")
+
+
+
+def flag(argv, name):
+    if not isinstance(argv, list) or argv.count(name) != 1:
+        raise HarvestRefusal("null_restore_reservation_argv_invalid")
+    index = argv.index(name)
+    if index + 1 >= len(argv):
+        raise HarvestRefusal("null_restore_reservation_argv_invalid")
+    return argv[index + 1]
+
+
+
+def reservation_binding(plan, capture, row):
+    """Bind the dropped row to the actual T-0 command and frozen ARM identity."""
+    if (capture.get("schema_version") != COMMAND_CAPTURE_SCHEMA
+            or capture.get("step_id") != "ledger-reservation" or capture.get("exit_code") != 0):
+        raise HarvestRefusal("null_restore_reservation_capture_invalid")
+    argv = capture.get("argv")
+    expected_script = str(Path(plan.measurement_root) / "scripts/reserve_calibration_window_bracket.py")
+    if (not isinstance(argv, list) or len(argv) < 2 or argv[1] != expected_script
+            or "--execute" not in argv):
+        raise HarvestRefusal("null_restore_reservation_argv_invalid")
+    result = readiness.parse_json_bytes(capture.get("stdout", "").encode())
+    if result.get("status") != "reserved" or result.get("receipt") != row:
+        raise HarvestRefusal("null_restore_reservation_receipt_mismatch")
+    pack = Path(plan.pack_night["pack_root"])
+    frozen = read(pack / "calibration_plan.json")
+    record = read(Path(plan.custody_root) / "qualification-plan-record.json")
+    context = read(authenticated_reference(record["arm_context"]))
+    for name, value in {"session-id": context["bracket_session_id"],
+                        "plan-id": frozen["plan_id"], "plan-sha256": sha(pack / "calibration_plan.json"),
+                        "runs-root": context["claim_runs_root"],
+                        "pre-attempt-id": context["pre_attempt_id"],
+                        "post-attempt-id": context["post_attempt_id"]}.items():
+        if flag(argv, "--" + name) != value:
+            raise HarvestRefusal("null_restore_reservation_identity_mismatch")
+    for name in ("session_id", "window_id", "plan_id", "plan_sha256", "evidence_root_id", "runs_root"):
+        if row[name] != flag(argv, "--" + name.replace("_", "-")):
+            raise HarvestRefusal("null_restore_reservation_identity_mismatch")
+    return Path(flag(argv, "--ledger")), Path(flag(argv, "--head-pin"))
+
+
+
+def verify_restore(reference, previous_harvest, *, restored_ledger=None):
+    """Replay saved attempted bytes and bind the next attempt to its NULL prior."""
+    record = read(authenticated_reference(reference))
+    expected = {"schema", "plan_id", "plan", "harvest", "seed", "reservation", "attempt_ledger",
+                "restored_ledger", "head_pin", "head_pin_copy", "dropped_receipt_sha256"}
+    if set(record) != expected or record["schema"] != NULL_RESTORE_SCHEMA or record["harvest"] != previous_harvest:
+        raise HarvestRefusal("null_restore_record_identity_mismatch")
+    plan_path = authenticated_reference(record["plan"])
+    plan = night_gate.NightPlan.from_mapping(read(plan_path))
+    harvest_path = authenticated_reference(record["harvest"])
+    harvest = counted_attempt(read(harvest_path), harvest_path)
+    require_null(harvest, plan, record["plan"]["sha256"])
+    if record["plan_id"] != plan.plan_id or Path(reference["path"]) != Path(plan.custody_root) / "null-reservation-restore.json":
+        raise HarvestRefusal("null_restore_record_identity_mismatch")
+    if (Path(record["attempt_ledger"]["path"]) != Path(plan.custody_root) / "null-reservation-ledger.jsonl"
+            or Path(record["reservation"]["path"]) != Path(plan.custody_root) / plan.pack_night["pack_id"] /
+               "arm_readiness.t0.inputs/ledger-reservation.json"):
+        raise HarvestRefusal("null_restore_custody_path_mismatch")
+    seed = regular_bytes(authenticated_reference(record["seed"]), "jsonl")
+    attempted = regular_bytes(authenticated_reference(record["attempt_ledger"]), "jsonl")
+    capture = read(authenticated_reference(record["reservation"]))
+    row = readiness.parse_json_bytes(capture["stdout"].encode())["receipt"]
+    live, pin = reservation_binding(plan, capture, row)
+    # The live pin may advance after this restore. Authenticate its retained
+    # bytes against the path/digest recorded while the native lease was held.
+    pin_path = authenticated_reference(record["head_pin_copy"])
+    if (pin_path != Path(plan.custody_root) / "null-reservation-head-pin.json"
+            or record["head_pin"] != {"path": str(pin), "sha256": record["head_pin_copy"]["sha256"]}
+            or record["restored_ledger"] != {"path": str(live), "sha256": record["seed"]["sha256"]}):
+        raise HarvestRefusal("null_restore_ledger_binding_mismatch")
+    validate_tail(seed, attempted, read(pin_path), row)
+    if row["receipt_digest"] != record["dropped_receipt_sha256"]:
+        raise HarvestRefusal("null_restore_dropped_row_mismatch")
+    # Writer verification checks the live seed. A later harvester replays the
+    # retained pre-reservation seed, since its own reservation extended live.
+    if restored_ledger is not None:
+        path = authenticated_reference(restored_ledger)
+        if restored_ledger["sha256"] != record["seed"]["sha256"] or regular_bytes(path, "jsonl") != seed:
+            raise HarvestRefusal("null_restore_next_seed_mismatch")
+    return record
+
+
+
+def preflight_argv(repository):
+    repository = Path(repository)
+    return (str(repository / ".venv/bin/python"),
+            str(repository / "scripts/collect_clock_reference.py"))
+
+
+class NotDischarged(ValueError):
+    pass
+
+
+
+def read_json(path):
+    if path.is_symlink():
+        raise NotDischarged("symlink_in_custody")
+    return readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
+
+
+
+def anchor(value):
+    return value["realtime_ns"] - value["monotonic_raw_ns"]
+
+
+
+def residual_between(before, after, frequency):
+    from joulewise import kernel_clock
+    return kernel_clock.anchor_residual_ns(anchor(after) - anchor(before),
+        after["monotonic_raw_ns"] - before["monotonic_raw_ns"], frequency)
+
+
+
+def r0_residual(r0, stamp):
+    from joulewise import kernel_clock
+    return kernel_clock.anchor_residual_ns(
+        anchor(stamp) - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"]),
+        stamp["monotonic_raw_ns"] - r0["anchor_monotonic_raw_ns"], r0["kernel_frequency"])
+
+
+
+def movement_record(before, after, frequency):
+    from joulewise import kernel_clock
+    return {"anchor_check_version": kernel_clock.ANCHOR_CHECK_VERSION,
+            "absolute_movement_ns": abs(anchor(after) - anchor(before)),
+            "residual_movement_ns": float(residual_between(before, after, frequency))}
+
+
+
+def preflight_measurement(command, boot, *, repository=None):
+    from joulewise import rehearsal_readers as author
+    if (command["argv"] != list(preflight_argv(REPO_ROOT if repository is None else repository))
+            or command["exit_code"] != 0):
+        raise NotDischarged("g10_preflight_command_invalid")
+    value = readiness.parse_json_bytes(command["stdout"].encode(), require_canonical=True)
+    legs = author._validate_reference_object(value, kind="CLOCK_ATTESTATION",
+        label="G10 preflight", boot_session_id=boot)
+    started, finished = command["started"], command["finished"]
+    if (any(s["boot_id"] != boot or not 0 <= s["read_skew_ns"] <= 1_000_000
+            for s in (started, finished))
+            or not started["monotonic_ns"] <= finished["monotonic_ns"]
+            or not started["monotonic_raw_ns"] <= value["anchor_monotonic_raw_ns"]
+                <= value["batch_finished_monotonic_raw_ns"] <= finished["monotonic_raw_ns"]):
+        raise NotDischarged("g10_preflight_boot_or_order")
+    if value["anchor_read_skew_ns"] > 1_000_000:
+        raise NotDischarged("g10_preflight_read_skew")
+    try:
+        agreement = author._reference_agreement(legs, kind="CLOCK_ATTESTATION", label="G10 preflight")
+        midpoint, bound = agreement.midpoint, agreement.bound
+    except author.T0EvidenceAuthoringError as exc:
+        if str(exc) != "G10 preflight bound exceeds 0.5 seconds":
+            raise
+        # The shared helper refuses above 0.5 s. Retain its same arithmetic
+        # for that rejected measurement too; never admit it or resync it.
+        lower = max(parsed.offset_s - parsed.uncertainty_s for _, parsed in legs)
+        upper = min(parsed.offset_s + parsed.uncertainty_s for _, parsed in legs)
+        midpoint = (lower + upper) / Decimal(2)
+        bound = abs(midpoint) + (upper - lower) / Decimal(2)
+    status = ("g10_preflight_offset_too_large" if bound > Decimal("0.400") else
+              "g10_preflight_offset_too_small" if abs(midpoint) < Decimal("0.020") else "PASS")
+    return {"midpoint_s": str(midpoint), "bound_s": str(bound), "status": status}
+
+
+
+def verify_g10_custody(positive_path, manifest_path, *, code_root, head,
+                       before_monotonic_ns, boot_id, after_monotonic_ns=None):
+    """Replay the physical control's complete support census, never a locator alone."""
+    positive_path, manifest_path = Path(positive_path), Path(manifest_path)
+    root = manifest_path.parent
+    if (manifest_path.name != "custody-manifest.json" or positive_path != root / "positive-control.json"
+            or not root.is_absolute() or any(p.is_symlink() for p in (root, *root.parents))):
+        raise NotDischarged("g10_custody_locator")
+    manifest = read_json(manifest_path)
+    if set(manifest) != {"files"} or not isinstance(manifest["files"], dict):
+        raise NotDischarged("g10_manifest_schema")
+    observed = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise NotDischarged("g10_custody_symlink")
+        if path.is_file() and path != manifest_path:
+            observed[path.relative_to(root).as_posix()] = readiness.sha256_bytes(path.read_bytes())
+    if manifest["files"] != observed:
+        raise NotDischarged("g10_custody_hash_or_census")
+    from joulewise import rehearsal_readers as author, rehearsal_readers as t0_rehearsal
+    from joulewise import kernel_clock
+    from joulewise.hazards import network_time as network_time_off
+    preflight = read_json(root / "commands/preflight.json")
+    measurement = preflight_measurement(preflight, boot_id, repository=code_root)
+    if measurement["status"] != "PASS" or read_json(root / "preflight.json") != measurement:
+        raise NotDischarged("g10_preflight_measurement")
+    before, after = read_json(root / "before.json"), read_json(root / "after.json")
+    positive = read_json(positive_path)
+    movement = read_json(root / "anchor-movement.json")
+    residual_version = "anchor_check_version" in movement
+    if residual_version:
+        frequency = kernel_clock.validate_probe(before.get("kernel_frequency"))
+        kernel_clock.validate_probe(after.get("kernel_frequency"))
+        expected_movement = movement_record(before, after, frequency)
+        control_moved = residual_between(before, after, frequency) > 5_000_000
+    else:
+        expected_movement = {"absolute_movement_ns": abs(anchor(after) - anchor(before))}
+        control_moved = abs(anchor(after) - anchor(before)) > 5_000_000
+    if (set(positive) != t0_rehearsal._POSITIVE_CONTROL_KEYS
+            or positive["schema_version"] != t0_rehearsal.POSITIVE_CONTROL_SCHEMA
+            or positive["performed_by"] != "Ed"
+            or any(positive[key] is not True for key in
+                   ("outside_t0_sequence", "network_time_reenabled", "forced_resync"))
+            or positive["anchor_before_ns"] != anchor(before)
+            or positive["anchor_after_ns"] != anchor(after)
+            or not control_moved
+            or positive["author_refusal_reason_code"] != REFUSAL
+            or movement != expected_movement):
+        raise NotDischarged("g10_anchor_or_record")
+    on, execution = read_json(root / "commands/on.json"), read_json(root / "author-execution.json")
+    response = read_json(root / "author.stdout.json")
+    lineage = read_json(root / "author-input-lineage.json")
+    r0_capture = read_json(root / "author-custody" / Path(lineage["pack_root"]).name /
+                           author._INPUT_DIRECTORY / "clock-reference.json")
+    r0 = readiness.parse_json_bytes(r0_capture["stdout"].encode())
+    if residual_version:
+        r0["kernel_frequency"] = kernel_clock.validate_probe(r0_capture.get("kernel_frequency"))
+        if (frequency["raw_word"] != r0["kernel_frequency"]["raw_word"]
+                or r0_residual(r0, before) > 5_000_000 or r0_residual(r0, after) <= 5_000_000):
+            raise NotDischarged("g10_r0_binding")
+        stream_max = r0_capture.get("t_stream_max_s")
+        if stream_max is not None and not kernel_clock.frequency_gate(frequency, stream_max)["passes"]:
+            raise NotDischarged("g10_frequency_gate")
+        kernel_clock.validate_probe(read_json(root / "kernel-frequency-after-off.json"))
+    r0_anchor = r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"]
+    if (lineage["r0_anchor_ns"] != r0_anchor or r0["boot_session_id"].lower() != boot_id
+            or (not residual_version and (abs(r0_anchor - anchor(before)) > 5_000_000
+                or abs(r0_anchor - anchor(after)) <= 5_000_000))):
+        raise NotDischarged("g10_r0_binding")
+    if (on["argv"] != list(ON_ARGV) or on["exit_code"] != 0
+            or " ".join(on["stdout"].split()).lower().rstrip(".") not in
+               {"setusingnetworktime: on", "network time is already on"}
+            or execution["exit_code"] != 2 or execution["present_namespaces"] != []
+            or response.get("status") != "REFUSE" or response.get("kind") != "CLOCK_ATTESTATION"
+            or response.get("reason_codes") != [REFUSAL] or response.get("detail") != ANCHOR_DETAIL
+            or Path(execution["argv"][1]) != Path(code_root) / "scripts/author_arm_evidence_t0.py"
+            or execution["argv"][2:] != ["--pack-root", lineage["pack_root"],
+                "--custody-root", str(root / "author-custody")]):
+        raise NotDischarged("g10_on_or_author_refusal")
+    for label, command in (("preflight", preflight), ("on", on)):
+        directory = root / "commands" / label
+        if (read_json(directory / "started.json") != command["started"]
+                or read_json(directory / "finished.json") != command["finished"]
+                or (directory / "stdout.txt").read_bytes() != command["stdout"].encode()
+                or (directory / "stderr.txt").read_bytes() != command["stderr"].encode()):
+            raise NotDischarged("g10_command_support")
+    off = network_time_off.read_receipt(root / network_time_off.RECEIPT_BASENAME,
+                                       plan_id=root.name, window_id=root.name)
+    polls = [read_json(path) for path in sorted((root / "polls").glob("*.json"))]
+    if not polls or polls[-1] != after:
+        raise NotDischarged("g10_poll_support")
+    stamps = [preflight["started"], preflight["finished"], before, on["started"], on["finished"],
+              *polls, after, execution["started"], execution["finished"]]
+    times = [value["monotonic_ns"] for value in stamps]
+    if (any(value["boot_id"] != boot_id or value["read_skew_ns"] > 1_000_000 for value in stamps)
+            or times != sorted(times) or off["boot_id"] != boot_id
+            or not times[-1] <= round(off["monotonic_s"] * 1e9) < before_monotonic_ns
+            or (after_monotonic_ns is not None and not after_monotonic_ns < times[0])
+            or lineage["boot_id"] != boot_id):
+        raise NotDischarged("g10_boot_or_order")
+    expected_codes = {"scripts/author_arm_evidence_t0.py", "joulewise/arm_readiness_evidence_t0.py",
+                      "scripts/capture_t0_step.py", "scripts/collect_clock_reference.py", "joulewise/clock_reference.py"}
+    if residual_version:
+        expected_codes.add("joulewise/kernel_clock.py")
+    if set(lineage["author_code_sha256"]) != expected_codes:
+        raise NotDischarged("g10_code_inventory")
+    for relative, digest in lineage["author_code_sha256"].items():
+        raw = subprocess.check_output(["git", "-C", str(code_root), "show", f"{head}:{relative}"])
+        if readiness.sha256_bytes(raw) != digest:
+            raise NotDischarged("g10_code_pin")
+    if read_json(root / "commands/off.json") != off:
+        raise NotDischarged("g10_off_support")
+    if ((root / "commands/off/stdout.txt").read_bytes() != off["stdout"].encode()
+            or (root / "commands/off/stderr.txt").read_bytes() != off["stderr"].encode()):
+        raise NotDischarged("g10_off_streams")
+    outcome = read_json(root / "outcome.json")
+    if outcome != {"status": "DISCHARGED", "positive_control_path": str(positive_path)}:
+        raise NotDischarged("g10_outcome")
+    return positive
+
+
+
+def off_receipt_path(plan, night_dir=None):
+    from joulewise.battery_records import off_receipt_path as locate
+    return locate(plan, night_dir)

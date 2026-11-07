@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import PropertyMock, patch
 
-from joulewise import adapters, arm_readiness, battery_float, controller
+from joulewise import adapters; from joulewise import receipt_readers as arm_readiness; from joulewise import battery_float; from joulewise import controller
 from joulewise import calibration_ledger as ledger
 from joulewise.clock import FakeClock
 from joulewise.environment import evaluate_environment_policy

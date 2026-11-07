@@ -27,7 +27,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-import joulewise.arm_readiness as arm_readiness
+import joulewise.receipt_readers as arm_readiness
 from joulewise.authentication_io import (
     V2_AUTHENTICATION_INPUT_CHANGED,
     V2AuthenticationInputError,

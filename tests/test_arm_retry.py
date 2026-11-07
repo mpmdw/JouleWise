@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from joulewise import arm_retry, night_gate
+from joulewise import window_policy as arm_retry; from joulewise import night_gate
 from scripts import run_night
 
 
@@ -460,7 +460,7 @@ class ArmRetryTests(unittest.TestCase):
                     self.assertFalse(any(alias.name == "arm_retry" for alias in node.names), path)
 
     def test_module_uses_only_stdlib_and_python39_syntax(self):
-        tree = ast.parse((ROOT / "joulewise/arm_retry.py").read_text(), feature_version=(3, 9))
+        tree = ast.parse((ROOT / "joulewise/window_policy.py").read_text(), feature_version=(3, 9))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 self.assertTrue(all(alias.name in {"hashlib", "json", "math", "re"} for alias in node.names))

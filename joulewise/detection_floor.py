@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
-from joulewise.arm_readiness import LAUNCH_LINEAGE_SCHEMA
+from joulewise.receipt_readers import LAUNCH_LINEAGE_SCHEMA
 from joulewise.authentication_io import (
     read_authentication_input,
     sha256_authentication_input,

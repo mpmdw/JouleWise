@@ -1,6 +1,7 @@
 """Production-pack preparation coverage for D-117 CONTRAST v5."""
 
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import copy
 import hashlib
@@ -16,15 +17,7 @@ from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from unittest import mock
 
-from joulewise import (
-    arm_readiness,
-    arm_readiness_evidence,
-    calibration_bracketing,
-    detection_floor,
-    dominance_closeout,
-    floor_mint_estimator,
-    identity_pins,
-)
+from joulewise import receipt_readers as arm_readiness; from joulewise import evidence_replay as arm_readiness_evidence; from joulewise import calibration_bracketing; from joulewise import detection_floor; from joulewise import dominance_closeout; from joulewise import floor_mint_estimator; from joulewise import identity_pins
 from joulewise.analysis_manifest_v3 import (
     DOMINANCE_REPLAY_SIDECAR_ROLE,
     analysis_semantics_sha256_v1,
@@ -126,7 +119,7 @@ def load_generator():
     spec = importlib.util.spec_from_file_location("d117_contrast_v5_pack", GENERATOR)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    exec_archived_generator(spec.loader, module)
     return module
 
 

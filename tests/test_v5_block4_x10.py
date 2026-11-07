@@ -8,12 +8,13 @@ import unittest
 from unittest import mock
 
 from joulewise import kernel_clock, night_gate
-from scripts import run_night, write_v5_qualification_plan as writer
+from scripts import run_night; from tests import qualification_plan_factory as writer
 from tests import test_v5_qualification_plan as fixtures
 from tests.test_kernel_clock import frequency_probe
 
 
 class StageAndStreamSizingTests(unittest.TestCase):
+    pass
     def setUp(self):
         self.f = fixtures.SizingTests()
         self.f.setUp()
@@ -114,32 +115,10 @@ class StageAndStreamSizingTests(unittest.TestCase):
             self.assertEqual(writer.deadlines(plan, sized['programmed_span_s'], bounds), bounds)
             self.assertEqual(run_night.deadman_epoch(plan), deadman)
 
-    def test_prerequisite_boundary_and_capture_share_authenticated_stage_cap(self):
-        from joulewise import v5_qualification
-        from scripts import capture_t0_step
-        fixture = fixtures.PlanWriterTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
-        fixture.write()
-        self.assertEqual(writer.prerequisites.call_args.args[3], 1000 - 3300)
-        plan = night_gate.NightPlan.from_mapping(writer.read_object(fixture.output))
-        inputs = fixture.custody / fixture.pack.name / 'arm_readiness.t0.inputs'
-        maximum, _ = v5_qualification.authenticated_clock_budget(inputs, fixture.pack)
-        self.assertEqual(maximum, 100.)
-        (fixture.custody / 'night').mkdir()
-        def complete(argv, **kwargs):
-            import subprocess
-            self.assertEqual(kwargs['timeout'], 3300)
-            for name in capture_t0_step.STEP_FILENAMES.values():
-                (inputs / name).write_bytes(b'{}\n')
-            return subprocess.CompletedProcess(argv, 0, b'{}', b'')
-        with mock.patch.object(run_night, '_chain_environment', return_value={}), \
-             mock.patch.object(run_night.t0_rehearsal, 'observed_run', side_effect=complete) as run:
-            run_night._capture_qualification_t0(plan)
-        run.assert_called_once()
 
 
 class WindowValidatorTests(unittest.TestCase):
+    pass
     def setUp(self):
         from dataclasses import replace
         self.replace = replace
@@ -154,7 +133,7 @@ class WindowValidatorTests(unittest.TestCase):
         self.path.parent.mkdir(parents=True)
 
     def chain(self, sizing, *, window=None, marker='s1', qualification=True):
-        from joulewise import arm_readiness as readiness
+        from joulewise import receipt_readers as readiness
         window = self.plan.window_max_s if window is None else window
         fixed = sizing.get('fixed', {})
         latest = (1000 + fixed['t0_stage_cap']['seconds'] + fixed['pack_t0']['seconds']
@@ -165,7 +144,7 @@ class WindowValidatorTests(unittest.TestCase):
                 f'export NIGHT_CLOCK_SIZING_SHA256={readiness.sha256_bytes(readiness.render_json(sizing))}\n')
 
     def publish(self, sizing):
-        from joulewise import arm_readiness as readiness
+        from joulewise import receipt_readers as readiness
         self.path.write_bytes(readiness.render_json(sizing))
 
     def test_initial_and_runtime_validation_use_the_same_authenticated_cap(self):
@@ -237,7 +216,7 @@ class WindowValidatorTests(unittest.TestCase):
             plan, self.chain({}, window=3600), 'G2B_SHAKEDOWN'), 3740)
 
     def test_runtime_uses_authenticated_bytes_after_detection_not_an_untrusted_preview(self):
-        from joulewise import arm_readiness as readiness
+        from joulewise import receipt_readers as readiness
         self.publish(self.f.sizing)
         preview = copy.deepcopy(self.f.sizing)
         preview['fixed']['t0_stage_cap'] = self.f.allow(3480)

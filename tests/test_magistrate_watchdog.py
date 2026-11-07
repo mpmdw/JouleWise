@@ -3208,7 +3208,7 @@ class TerminalWindowReleasePredicateTests(unittest.TestCase):
     """Pure custody-file half of the release (joulewise.arm_retry)."""
 
     def setUp(self) -> None:
-        from joulewise import arm_retry
+        from joulewise import window_policy as arm_retry
         self.check = arm_retry.terminal_window_release
         self.result = {"plan_id": "p", "receipt_class": "HAZARD_PACK", "verdict": "GO",
                        "ended_epoch_s": 100.0, "chain_exit_code": 0, "chain_sha256": "c" * 64}
@@ -3220,7 +3220,7 @@ class TerminalWindowReleasePredicateTests(unittest.TestCase):
         return self.check(self.result if result is None else result, **kwargs)
 
     def test_class_literal_matches_night_gate(self) -> None:
-        from joulewise import arm_retry
+        from joulewise import window_policy as arm_retry
         from joulewise.night_gate import HAZARD_PACK
         self.assertEqual(HAZARD_PACK, arm_retry.HAZARD_PACK_CLASS)
 

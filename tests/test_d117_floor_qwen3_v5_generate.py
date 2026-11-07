@@ -1,6 +1,7 @@
 """Generation and consumer-linkage coverage for the D-117 Qwen3 v5 floors."""
 
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import ast
 import hashlib
@@ -14,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise import arm_readiness, calibration_bracketing, identity_pins
+from joulewise import receipt_readers as arm_readiness; from joulewise import calibration_bracketing; from joulewise import identity_pins
 from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.paper_reported_energy import _validate_registered_spec, registration_sha256
@@ -59,7 +60,7 @@ def load_generator(pack_id: str, *, repository: Path = ROOT):
     spec = importlib.util.spec_from_file_location(f"{pack_id}_generator", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    exec_archived_generator(spec.loader, module)
     return module
 
 

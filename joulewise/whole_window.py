@@ -32,7 +32,7 @@ from joulewise.authentication_io import (
     read_authentication_text,
     sha256_authentication_input,
 )
-from joulewise.arm_readiness import (
+from joulewise.receipt_readers import (
     ArmReadinessError,
     LaunchLineageError,
     authenticate_bundle_launch_lineage,

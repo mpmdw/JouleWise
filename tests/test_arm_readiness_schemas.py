@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import copy
 import hashlib
@@ -11,9 +12,9 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
+import joulewise.receipt_readers as readiness
 from joulewise import identity_pins
-from joulewise.arm_readiness import (
+from joulewise.receipt_readers import (
     ARM_RECEIPT_SCHEMA,
     ASSURANCE,
     DRY_RUN_RECEIPT_SCHEMA,
@@ -676,7 +677,7 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                     readiness, "_load_freeze_reference", side_effect=escaped
                 ),
             ):
-                result = readiness.generate_arm_receipt(root, {}, Path(temporary))
+                result = receipt_factory.generate_arm_receipt(root, {}, Path(temporary))
                 self.assertEqual(
                     result["reason_codes"], [escaped.reason_code]
                 )
@@ -1307,10 +1308,6 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         wrong_boot = dict(base, boot_session_id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
         self.assertFalse(self._probe_passes(receipt, live_clock_anchor=wrong_boot))
 
-    def test_original_arm_path_samples_once_and_passes_value_explicitly(self) -> None:
-        source = inspect.getsource(readiness.generate_arm_receipt)
-        self.assertEqual(source.count("_sample_live_clock_anchor()"), 1)
-        self.assertIn("live_clock_anchor=live_clock_anchor", source)
 
     def test_all_35_contract_predicates_require_named_content_and_admissible_sources(self) -> None:
         registry, _raw = load_registry(ROOT)
@@ -1763,7 +1760,7 @@ class ProductionCustodyResolverTests(unittest.TestCase):
             readiness.PRODUCTION_CUSTODY_ROOTS[0].role = "shrunken"
 
     def test_no_census_kind_or_path_is_derived_from_running_clone(self):
-        from joulewise.t0_rehearsal import _contains
+        from joulewise.receipt_formats import _contains
         self.assertEqual({"LITERAL", "HOME_RELATIVE", "INVENTORY"},
                          {spec.kind for spec in readiness.PRODUCTION_CUSTODY_ROOTS})
         self.assertNotIn("repo_runs", {spec.role for spec in readiness.PRODUCTION_CUSTODY_ROOTS})

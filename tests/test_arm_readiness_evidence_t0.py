@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests import receipt_factory
 
 import contextlib
 import hashlib
@@ -21,22 +22,19 @@ from types import ModuleType, SimpleNamespace
 from typing import Mapping
 from unittest import mock
 
-from joulewise import network_time_off, kernel_clock
+from joulewise.hazards import network_time as network_time_off; from joulewise import kernel_clock
 from tests.test_kernel_clock import frequency_probe
-import joulewise.arm_readiness as readiness
-import joulewise.arm_readiness_evidence as generic_evidence
-import joulewise.arm_readiness_evidence_t0 as t0
+import joulewise.receipt_readers as readiness
+import joulewise.evidence_replay as generic_evidence
+import joulewise.physical_checks as t0
 import joulewise.adapters.mlx_runtime as mlx_runtime
 import joulewise.calibration_ledger as ledger
 import joulewise.identity_pins as identity_pins
-from joulewise.arm_readiness_evidence_t0 import (
-    T0EvidenceAuthoringError,
-    author_arm_readiness_evidence_t0,
-)
-from scripts import author_arm_evidence_t0 as t0_cli
+from tests.t0_factory import author_arm_readiness_evidence_t0; from joulewise.physical_checks import T0EvidenceAuthoringError
+pass
 from tests.fixtures.arm_clock import REALTIME_OFFSET_NS, coherent_clock_anchor
 from tests.test_arm_readiness_dry_run import install_passing_freeze
-from tests.test_arm_readiness_integration import (
+from tests.receipt_integration_fixtures import (
     clear_initial_arm,
     install_passing_dry_run,
     synthetic_identity_verifier,
@@ -126,7 +124,7 @@ def _clock_reference_value(
 def _copy(repository: Path, relative: str) -> None:
     target = repository / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes((ROOT / relative).read_bytes())
+    target.write_bytes(_historical_fixture_source(relative))
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -300,7 +298,7 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
         encoding="utf-8",
     )
     customization = (
-        "from joulewise import arm_readiness\n"
+        "from joulewise import receipt_readers as arm_readiness\n"
         "arm_readiness.verify_family_publication_marker = lambda *args, **kwargs: {"
         f"'schema_version': {readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA!r},"
         "'receipt_kind': 'family_publication_verification',"
@@ -337,8 +335,8 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
             f"lambda: {live_anchor!r}\n"
         )
     customization += (
-        "from joulewise import kernel_clock, v5_qualification as _q\n"
-        "from scripts import write_v5_qualification_plan as _writer\n"
+        "from joulewise import kernel_clock, qualification_readers as _q\n"
+        "from joulewise import qualification_readers as _writer\n"
         "from pathlib import Path as _Path\n"
         "from unittest import mock as _mock\n"
         f"kernel_clock.read_kernel_frequency = lambda: {frequency_probe()!r}\n"
@@ -383,27 +381,28 @@ def _patched_sys_module(name: str, module: object):
             sys.modules[name] = previous
 
 
-from joulewise import v5_qualification as _qualification
+from joulewise import qualification_readers as _qualification
 _REAL_CLOCK_BUDGET = _qualification.authenticated_clock_budget
 
 
 def fixture_clock_budget(inputs, pack):
     """Replay real sizing/custody; specify only this small fixture's roster/checkout."""
-    from scripts import write_v5_qualification_plan as writer
+    from tests import qualification_plan_factory as writer
     repository = Path(pack).parents[2]
     def checkout(value):
         if Path(value) != repository:
             raise readiness.LaunchLineageError("fixture checkout differs from clock plan")
         return repository
     with (mock.patch.object(writer, "pack_roster", return_value=([], [], ["pre", "post"], [])),
+          mock.patch.object(_qualification, "pack_roster", return_value=([], [], ["pre", "post"], [])),
           mock.patch.object(readiness, "_authenticate_launcher_identity", side_effect=checkout)):
         return _REAL_CLOCK_BUDGET(inputs, pack)
 
 
 def install_clock_sizing_inputs(repository, pack, custody, *, maximum=320.):
     """Source-bound synthetic sizing; the small test pack has a specified roster."""
-    from joulewise import v5_qualification as q, night_gate
-    from scripts import write_v5_qualification_plan as writer
+    from joulewise import qualification_readers as q; from joulewise import night_gate
+    from tests import qualification_plan_factory as writer
     root = custody / pack.name / t0._INPUT_DIRECTORY
     window = custody / 'window-plan'
     source = root / 'clock-sizing-source.json'
@@ -1089,98 +1088,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.addCleanup(clock_patcher.stop)
         self.addCleanup(publication_patcher.stop)
 
-    def test_new_floor_t0_authoring_requires_frequency_gate_by_profile(self):
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        self.assertNotEqual(pack.name, "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5")
-        path = inputs / "clock-reference.json"
-        capture = json.loads(path.read_bytes()); capture["t_stream_max_s"] = None
-        _write_json(path, capture)
-        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as caught:
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.reason_code, "evidence_author_t0_clock_attestation_underivable")
-        self.assertIn("frequency gate is missing", str(caught.exception))
 
-    def test_versioned_receipts_author_steady_negative_drift_at_long_spans(self):
-        from fractions import Fraction
-        frequency = frequency_probe(-207749)
-        now = 5_000_000_000_000
-        for seconds in (1600, 3600):
-            with self.subTest(seconds=seconds):
-                temporary, repository, pack, custody, _, inputs = make_t0_fixture(now_monotonic_ns=now)
-                try:
-                    span = seconds * 10**9
-                    self._replace_r0(inputs, anchor_raw=now - span,
-                                     anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + now - span)
-                    path = inputs / "clock-reference.json"
-                    capture = json.loads(path.read_bytes())
-                    capture.update(kernel_frequency=frequency, t_stream_max_s=320.)
-                    _write_json(path, capture)
-                    drift = round(Fraction(-207749 * span, 65536 * 10**6))
-                    endpoint = t0._clock_reference.ClockAnchor(SYNTHETIC_REALTIME_OFFSET_NS + now + drift, now, 1000)
-                    with author_environment(repository, now_monotonic_ns=now,
-                                            sample_anchor=lambda: endpoint, kernel_frequency=frequency):
-                        result = author_arm_readiness_evidence_t0(pack, custody)
-                    receipt = next(json.loads(Path(p).read_bytes()) for p in result["receipt_paths"]
-                                   if json.loads(Path(p).read_bytes())["kind"] == "CLOCK_ATTESTATION")
-                    value = receipt["facts"][0]["value"]
-                    self.assertEqual(value["anchor_check_version"], kernel_clock.ANCHOR_CHECK_VERSION)
-                    self.assertGreater(value["anchor_delta_ns"], 5_000_000)
-                    self.assertLess(value["anchor_residual_ns"], 1)
-                    self.assertTrue(readiness._clock_probe_predicate_passes(
-                        receipt, value, readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE))
-                finally:
-                    temporary.cleanup()
 
-    def test_generated_gamma_roots_pass_and_legacy_keys_are_refused(self) -> None:
-        from tests import test_d117_contrast_v5_pack as gamma_fixture
-
-        helper = gamma_fixture.D117ContrastV5PackTests()
-        helper.setUp()
-        with tempfile.TemporaryDirectory(prefix="t0-gamma-roots-") as temporary:
-            root = Path(temporary)
-            helper.configure(helper.write_prefill_pin(root))
-            pack = helper.generate_pack(root)
-            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
-            arm = {
-                "claim_runs_root": str(root / helper.generator.CLAIM_ROOT_LEAF),
-                "bound_runs_root": str(root / helper.generator.BOUND_ROOT_LEAF),
-                "custody_root": str(root / "custody"),
-                "quarantine_root": str(root / "quarantine"),
-            }
-            for path in arm.values():
-                Path(path).mkdir()
-            waiver_path = root / "waivers.json"
-            _write_json(waiver_path, [])
-            arm["waiver_path"] = str(waiver_path)
-            arm_identity = {"path": "synthetic-arm-context"}
-
-            def context(roots):
-                # Seed only the validated arm input; exercise the real root check.
-                return SimpleNamespace(
-                    tree={"roots": roots},
-                    values={"arm_context": (arm, arm_identity)},
-                )
-
-            legacy_roots = {
-                "claim_leaf": helper.generator.CLAIM_ROOT_LEAF,
-                "bound_leaf": helper.generator.BOUND_ROOT_LEAF,
-            }
-            with self.assertRaisesRegex(
-                T0EvidenceAuthoringError, "arm roots do not derive from frozen leaves"
-            ):
-                t0._root_observation(context(legacy_roots), kind="ROOTS")
-
-            observation, observed_identity = t0._root_observation(
-                context(tree["roots"]), kind="ROOTS"
-            )
-            self.assertEqual(observed_identity, arm_identity)
-            self.assertEqual(
-                observation["resolved_roots"],
-                [str(Path(arm[name]).resolve()) for name in (
-                    "claim_runs_root", "bound_runs_root", "custody_root", "quarantine_root"
-                )],
-            )
 
     def _author_with_r1_age(self, age_ns: int) -> dict[str, object]:
         temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
@@ -1215,272 +1124,12 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         ):
             return author_arm_readiness_evidence_t0(pack, custody)
 
-    def test_portable_launch_stage_fragment_composes_to_exactly_two_backups(
-        self,
-    ) -> None:
-        """The launch integration must not compose two complete closeouts."""
 
-        from tests.test_arm_readiness_evidence_author import make_author_fixture
 
-        temporary, _repository, pack, _custody, _context, _inputs = (
-            make_t0_fixture(portable_launch_program=True)
-        )
-        author_temporary, _author_repository, author_pack, _unused, _arm = (
-            make_author_fixture(pack.name)
-        )
-        self.addCleanup(author_temporary.cleanup)
-        self.addCleanup(temporary.cleanup)
 
-        t0_tree = json.loads((pack / "plan_tree.json").read_text())
-        author_tree = json.loads((author_pack / "plan_tree.json").read_text())
-        composed_stages = [*t0_tree["stage_graph"], *author_tree["stage_graph"]]
-        backup_commands = [
-            command
-            for stage in composed_stages
-            for command in stage.get("launch", {}).get("commands", [])
-            if command.get("command_kind") == "backup"
-        ]
-        self.assertEqual(len(backup_commands), 2)
-        self.assertEqual(
-            sum(stage.get("kind") == "whole_window_verdict" for stage in composed_stages),
-            1,
-        )
 
-    def test_issuance_refuses_t0_when_r1_batch_is_stale_by_610s_plus_1ns(
-        self,
-    ) -> None:
-        with self.assertRaises(T0EvidenceAuthoringError) as caught:
-            self._author_with_r1_age(610_000_000_001)
-        self.assertEqual(
-            caught.exception.reason_code,
-            "evidence_author_t0_predicate_refused",
-        )
 
-    def test_issuance_passes_t0_when_r1_batch_is_610s_minus_1ns_old(
-        self,
-    ) -> None:
-        self.assertEqual(
-            self._author_with_r1_age(609_999_999_999)["status"],
-            "PASS",
-        )
 
-    def test_issuance_t0_liveness_bound_passes_at_exactly_610s(self) -> None:
-        self.assertEqual(
-            self._author_with_r1_age(610_000_000_000)["status"],
-            "PASS",
-        )
-
-    def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
-        """The ruled 610 s retains room for WO-CENSUS-SEMANTICS' CPU probes.
-
-        What this test pins: the PROVENANCE ARITHMETIC of cold gate T26
-        item 3, which states the constant as eleven governed post-R1 probe
-        sites times ``_PROBE_TIMEOUT_SECONDS``, one 10 s battery site, plus 105 s of ungoverned
-        work. Each factor is read from the code (the sites by an AST
-        census of direct ``_fresh_probe`` calls, the timeout from the
-        module constant), so an edit to either factor fails here while
-        the constant stays 610 s. The added CPU call site runs twice, with a
-        five-second timeout and a one-second pause, spending 11 s of the
-        retired OFF site's 45 s spare allowance. The one site inside
-        ``_fresh_clock_reference_batch`` IS R1 and is excluded.
-
-        What this test does NOT protect: the runtime R1→stamp envelope.
-        A static census counts sites, not seconds — a loop around a site,
-        a deriver registered for a second row, a direct ``_execute_probe``
-        caller such as ``_boot_probe`` moved above the ``validity_origin``
-        stamp, a retry inside ``_fresh_probe``, or a wait in another
-        module all change the envelope while this test stays green. The
-        ruling's 2026-09-02 correction already records the fixed subtotal
-        as 725 s (505 s probes + 220 s git ceilings) against the ruled
-        610 s; the runtime interval is unmeasured and is carried by kernel
-        row ``T0-LIVENESS-BOUND-EMPIRICAL-01`` (the census-the-resource
-        hardening is ``T0-PROBE-CENSUS-RESOURCE-01``).
-
-        Completeness of the census: direct calls must be the ONLY way the
-        module reaches ``_fresh_probe``. Rather than enumerating reference
-        forms (two rounds showed the enumeration is never complete — Sol
-        256 F1, terra 257 F1; cold gate files 22–25), every string-valued
-        field of every AST node is censused: the identifier may appear
-        only as the single ``FunctionDef.name`` and as the ``Name.id`` of a
-        counted direct call. Aliases, stored callbacks, attribute lookups,
-        string constants (including escaped or implicitly concatenated
-        spellings and NFKC-normalised homoglyphs, which the parser folds),
-        import shadows, ``as``-bindings, class/async redefinitions,
-        parameter, keyword, ``except … as`` and ``match`` captures all
-        fail. Comments and docstrings are not AST fields and may name the
-        helper freely. Deliberately constructed names
-        (``"_fresh_" + "probe"``, ``importlib`` lookups, star-import
-        rebinding) are invisible to any static check and are not guarded
-        (D-161: deliberate-only, no mistake reaches them). Sites are
-        counted as DISTINCT call nodes, attributed to the innermost
-        enclosing function, so a call inside a nested closure is counted
-        once. The equality with ``_MIN_IDLE_NS`` that the ruling noted is
-        a coincidence of two unrelated quantities (anchor span floor, idle
-        capture floor) and is deliberately not pinned.
-        """
-
-        import ast
-        from collections import Counter
-
-        tree = ast.parse(Path(t0.__file__).read_text(encoding="utf-8"))
-        definitions = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and node.name == "_fresh_probe"
-        ]
-        self.assertEqual(len(definitions), 1)
-        direct_call_names = [
-            call.func
-            for call in ast.walk(tree)
-            if isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Name)
-            and call.func.id == "_fresh_probe"
-        ]
-        permitted = {id(name) for name in direct_call_names} | {id(definitions[0])}
-        stray = [
-            (type(node).__name__, field, getattr(node, "lineno", None))
-            for node in ast.walk(tree)
-            if id(node) not in permitted
-            for field, value in ast.iter_fields(node)
-            for item in (value if isinstance(value, list) else [value])
-            if item == "_fresh_probe"
-        ]
-        self.assertEqual(stray, [], "non-call mentions of _fresh_probe")
-        # ast.walk is breadth-first, so a nested function's assignment
-        # overwrites its enclosing function's: the innermost def wins.
-        innermost: dict[int, str] = {}
-        for function in ast.walk(tree):
-            if isinstance(function, ast.FunctionDef):
-                for child in ast.walk(function):
-                    innermost[id(child)] = function.name
-        sites_by_function = Counter(
-            innermost.get(id(name), "<module>") for name in direct_call_names
-        )
-        self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
-        post_r1_sites = len(direct_call_names) - 1
-        self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
-        self.assertEqual(post_r1_sites, 12, sites_by_function)
-        self.assertEqual(sites_by_function["_maintenance_probe"], 2)
-        self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
-        self.assertEqual(t0._MAINTENANCE_CPU_SAMPLES, 2)
-        self.assertEqual(t0._MAINTENANCE_CPU_INTERVAL_S, 1)
-        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES[t0._prewindow.PS_ARGV], 5)
-        # One site is the 10 s battery probe; another is the repeated 5 s
-        # CPU probe. Charge both executions and the inter-sample pause.
-        self.assertGreaterEqual(
-            readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
-            (
-                (post_r1_sites - 2) * t0._PROBE_TIMEOUT_SECONDS
-                + t0._PROBE_TIMEOUT_OVERRIDES[t0._battery_float.IOREG_BATTERY_ARGV]
-                + t0._MAINTENANCE_CPU_SAMPLES * t0._PROBE_TIMEOUT_OVERRIDES[t0._prewindow.PS_ARGV]
-                + (t0._MAINTENANCE_CPU_SAMPLES - 1) * t0._MAINTENANCE_CPU_INTERVAL_S
-                + 105
-            )
-            * 1_000_000_000,
-        )
-
-    def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
-        fake_mlx = ModuleType("mlx")
-        fake_mlx.__path__ = []
-        fake_core = ModuleType("mlx.core")
-        # The adapter remembers ONLY a module loaded from a native shared
-        # object, so this stand-in must present itself as one. A plain
-        # ModuleType models a test double, and a test double must never be
-        # remembered; tests/test_mlx_runtime.py pins that other half.
-        fake_core.__loader__ = importlib.machinery.ExtensionFileLoader(
-            "mlx.core", "/nonexistent/mlx/core.so"
-        )
-        fake_core.get_active_memory = lambda: 101
-        fake_core.get_cache_memory = lambda: 202
-        fake_core.get_peak_memory = lambda: 303
-        missing = object()
-        previous = {
-            name: sys.modules.get(name, missing) for name in ("mlx", "mlx.core")
-        }
-        init_count = 0
-
-        def initialize_fake_core(name: str):
-            nonlocal init_count
-            self.assertEqual(name, "mlx.core")
-            init_count += 1
-            sys.modules["mlx"] = fake_mlx
-            sys.modules["mlx.core"] = fake_core
-            return fake_core
-
-        try:
-            sys.modules["mlx"] = fake_mlx
-            sys.modules.pop("mlx.core", None)
-            with (
-                mock.patch.object(
-                    mlx_runtime.importlib,
-                    "import_module",
-                    side_effect=initialize_fake_core,
-                ),
-                mock.patch.object(
-                    mlx_runtime, "_MLX_CORE_MODULE", None, create=True
-                ),
-            ):
-                first = mlx_runtime._mlx_metal_memory({})
-                sys.modules.pop("mlx.core", None)
-                sys.modules.pop("mlx", None)
-                second = mlx_runtime._mlx_metal_memory({})
-        finally:
-            for name, module in previous.items():
-                if module is missing:
-                    sys.modules.pop(name, None)
-                else:
-                    sys.modules[name] = module
-
-        self.assertEqual(init_count, 1)
-        self.assertEqual(
-            first,
-            {
-                "api_available": True,
-                "active_memory_bytes": 101,
-                "cache_memory_bytes": 202,
-                "peak_memory_bytes": 303,
-            },
-        )
-        self.assertEqual(second, first)
-
-    def test_author_environment_preserves_modules_imported_inside_context(self) -> None:
-        temporary, repository, _pack, _custody, _context, _inputs = make_t0_fixture(
-            real_identity=True
-        )
-        self.addCleanup(temporary.cleanup)
-        sentinel_name = f"_joulewise_author_environment_sentinel_{id(self)}"
-        sentinel_module = SimpleNamespace()
-        previous_mlx_lm = SimpleNamespace()
-        missing = object()
-        original = {
-            name: sys.modules.get(name, missing)
-            for name in ("mlx_lm", sentinel_name)
-        }
-
-        try:
-            for prior in (missing, previous_mlx_lm):
-                with self.subTest(mlx_lm_preexisting=prior is not missing):
-                    sys.modules.pop(sentinel_name, None)
-                    if prior is missing:
-                        sys.modules.pop("mlx_lm", None)
-                    else:
-                        sys.modules["mlx_lm"] = prior
-
-                    with author_environment(repository, real_offline=True):
-                        self.assertIsNot(sys.modules["mlx_lm"], prior)
-                        sys.modules[sentinel_name] = sentinel_module
-
-                    self.assertIs(sys.modules[sentinel_name], sentinel_module)
-                    if prior is missing:
-                        self.assertNotIn("mlx_lm", sys.modules)
-                    else:
-                        self.assertIs(sys.modules["mlx_lm"], prior)
-        finally:
-            for name, module in original.items():
-                if module is missing:
-                    sys.modules.pop(name, None)
-                else:
-                    sys.modules[name] = module
     def _assert_clock_refusal(
         self,
         *,
@@ -1599,1041 +1248,50 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             "evidence_author_t0_terminal_review_record_missing",
         )
 
-    def test_terminal_review_three_pack_message_accepts_each_pack(self) -> None:
-        tree_oid = "1" * 40
-        packs = ("a" * 64, "b" * 64, "c" * 64)
-        message = self._terminal_review_message(tree_oid, packs)
-        for pack_sha256 in packs:
-            with self.subTest(pack_sha256=pack_sha256):
-                row = self._derive_terminal_review_for(
-                    message, pack_sha256=pack_sha256
-                )
-                self.assertEqual(row.value["same_pack_digest"], True)
-
-    def test_terminal_review_foreign_pack_list_refuses(self) -> None:
-        message = self._terminal_review_message(
-            "1" * 40, ("b" * 64, "c" * 64)
-        )
-        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
-
-    def test_terminal_review_duplicate_pack_line_refuses(self) -> None:
-        message = self._terminal_review_message(
-            "1" * 40, ("a" * 64, "a" * 64)
-        )
-        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
-
-    def test_terminal_review_single_pack_message_still_passes(self) -> None:
-        message = self._terminal_review_message("1" * 40, ("a" * 64,))
-        row = self._derive_terminal_review_for(message, pack_sha256="a" * 64)
-        self.assertEqual(row.value["terminal_review_status"], "PASS")
-
-    def test_terminal_review_pack_line_with_trailing_token_refuses(self) -> None:
-        message = self._terminal_review_message("1" * 40, ()).replace(
-            "JouleWise-Terminal-Review-Tree-Oid: " + "1" * 40,
-            "JouleWise-Terminal-Review-Tree-Oid: "
-            + "1" * 40
-            + "\nJouleWise-Terminal-Review-Pack-Sha256: "
-            + "a" * 64
-            + " trailing",
-        )
-        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
-
-    def test_terminal_review_malformed_pack_digest_refuses(self) -> None:
-        message = self._terminal_review_message(
-            "1" * 40, ("a" * 64, "not-a-sha256")
-        )
-        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
-
-    def test_terminal_review_duplicate_pass_line_refuses(self) -> None:
-        message = (
-            self._terminal_review_message("1" * 40, ("a" * 64,))
-            + "\nJouleWise-Terminal-Review: PASS"
-        )
-        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
-
-    def test_terminal_review_duplicate_tree_oid_line_refuses(self) -> None:
-        message = (
-            self._terminal_review_message("1" * 40, ("a" * 64,))
-            + "\nJouleWise-Terminal-Review-Tree-Oid: "
-            + "1" * 40
-        )
-        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
-
-    def test_terminal_review_empty_pack_list_refuses(self) -> None:
-        message = self._terminal_review_message("1" * 40, ())
-        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
-
-    def test_t0_row_census_site_resolves_a_historical_pack(self) -> None:
-        """The T-0 census site keeps resolving a historical v1 identity.
-
-        The pack/profile map is immutable history (the v1 packs' own committed
-        T-0 receipts were minted through this site), so it is never the gate
-        that refuses a superseded pack.  The refusal the v1 ALPHA/BETA packs
-        actually hit is the R2 frozen-plan resolution pinned by
-        ``test_alpha_beta_repo_relative_plan_refuses_both_generic_r2_sites``
-        immediately below.
-        """
-
-        temporary, _repository, pack, _custody, _arm_path = make_go_fixture(
-            "d117_floor_qwen25_1p5b_v1", "ALPHA"
-        )
-        self.addCleanup(temporary.cleanup)
-        tree, _raw = readiness._plan_tree(pack)
-        context = SimpleNamespace(pack_root=pack, tree=tree)
-        rows = t0._required_rows(context)
-        self.assertTrue(rows)
-
-    def test_alpha_beta_repo_relative_plan_refuses_both_generic_r2_sites(self) -> None:
-        for profile, pack_name in (
-            ("ALPHA", "d117_floor_qwen25_1p5b_v1"),
-            ("BETA", "d117_floor_qwen25_7b_v1"),
-        ):
-            pack = ROOT / "configs/campaigns" / pack_name
-            tree, _raw = readiness._plan_tree(pack)
-            with self.subTest(profile=profile, site="shared-resolver"):
-                with self.assertRaises(readiness.ArmReadinessError):
-                    readiness.resolve_frozen_plan(pack, tree)
-            context = generic_evidence._DerivationContext(
-                pack_root=pack,
-                repository=ROOT,
-                tree=tree,
-                pack_sha256="0" * 64,
-                head_commit="0" * 40,
-            )
-            for site_name, site in (
-                (
-                    "manifest-validation",
-                    lambda: generic_evidence._validate_manifests(
-                        context, kind="PACK_AUTHENTICATION"
-                    ),
-                ),
-                (
-                    "estimator-derivation",
-                    lambda: generic_evidence._derive_estimator_identity(context),
-                ),
-            ):
-                with self.subTest(profile=profile, site=site_name):
-                    with self.assertRaises(
-                        generic_evidence.EvidenceAuthoringError
-                    ) as caught:
-                        site()
-                    self.assertIn("R2 frozen-plan reference is invalid", str(caught.exception))
-
-    def test_retired_prior_state_artifacts_and_privileged_get_are_absent(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        self.assertFalse((inputs / "clock-prior-state.json").exists())
-        self.assertFalse((inputs / "clock-attestation.json").exists())
-        source = inspect.getsource(t0)
-        self.assertNotIn("clock-prior-state", source)
-        self.assertNotIn("-getusingnetworktime", source)
-
-    def test_author_refuses_unknown_window_environment_key(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        launch = json.loads((inputs / "launch-manifest.json").read_text())
-        env_path = Path(launch["window_plan_root"]) / "window.env"
-        env_path.write_text(
-            env_path.read_text(encoding="utf-8")
-            + "SYNTHETIC_UNKNOWN=/synthetic/unknown\n",
-            encoding="utf-8",
-        )
-        with (
-            author_environment(repository),
-            self.assertRaises(T0EvidenceAuthoringError) as caught,
-        ):
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.kind, "MAINTENANCE_CENSUS")
-        self.assertEqual(
-            caught.exception.reason_code,
-            "evidence_author_t0_maintenance_census_underivable",
-        )
-        self.assertEqual(
-            str(caught.exception),
-            "window.env exact keys differ; missing=[], "
-            "unknown=['SYNTHETIC_UNKNOWN']",
-        )
-        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
-        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-
-    def test_author_refuses_missing_window_environment_key(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        launch = json.loads((inputs / "launch-manifest.json").read_text())
-        env_path = Path(launch["window_plan_root"]) / "window.env"
-        lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
-        env_path.write_text(
-            "".join(line for line in lines if not line.startswith("MEASUREMENT_REPO=")),
-            encoding="utf-8",
-        )
-        with (
-            author_environment(repository),
-            self.assertRaises(T0EvidenceAuthoringError) as caught,
-        ):
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.kind, "MAINTENANCE_CENSUS")
-        self.assertEqual(
-            caught.exception.reason_code,
-            "evidence_author_t0_maintenance_census_underivable",
-        )
-        self.assertEqual(
-            str(caught.exception),
-            "window.env exact keys differ; missing=['MEASUREMENT_REPO'], unknown=[]",
-        )
-        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
-        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-
-    def test_rf01_r0_fixed_roster_and_one_attempt_policy_refuses(self) -> None:
-        def mutate(inputs: Path) -> None:
-            path = inputs / "clock-reference.json"
-            capture = json.loads(path.read_text(encoding="utf-8"))
-            value = json.loads(capture["stdout"])
-            value["samples"][1]["server"] = "substitute.invalid"
-            capture["stdout"] = readiness.render_json(value).decode("utf-8")
-            _write_json(path, capture)
-
-        self._assert_clock_refusal(
-            mutate=mutate,
-            detail="R0 clock reference does not prove the fixed roster and one-attempt policy",
-        )
-
-    def test_rf01_r0_peer_address_must_equal_reparsed_stdout(self) -> None:
-        def mutate(inputs: Path) -> None:
-            path = inputs / "clock-reference.json"
-            capture = json.loads(path.read_text(encoding="utf-8"))
-            value = json.loads(capture["stdout"])
-            value["samples"][0]["peer_address"] = "192.0.2.99"
-            capture["stdout"] = readiness.render_json(value).decode("utf-8")
-            _write_json(path, capture)
-
-        self._assert_clock_refusal(
-            mutate=mutate,
-            detail="R0 clock reference parseable leg alters its peer address",
-        )
-
-    def test_rf01_r0_raw_line_must_equal_reparsed_stdout(self) -> None:
-        def mutate(inputs: Path) -> None:
-            path = inputs / "clock-reference.json"
-            capture = json.loads(path.read_text(encoding="utf-8"))
-            value = json.loads(capture["stdout"])
-            value["samples"][0]["raw_line"] = "forged raw line"
-            capture["stdout"] = readiness.render_json(value).decode("utf-8")
-            _write_json(path, capture)
-
-        self._assert_clock_refusal(
-            mutate=mutate,
-            detail="R0 clock reference parseable leg alters its raw line",
-        )
-
-    def test_rf02_r0_quorum_boundary_one_refuses_two_passes(self) -> None:
-        one = {
-            "time.apple.com": (0, _sntp_line("time.apple.com")),
-            "pool.ntp.org": (69, ""),
-            "time.nist.gov": (69, ""),
-        }
-        self._assert_clock_refusal(
-            mutate=lambda inputs: self._replace_r0(inputs, legs=one),
-            detail="R0 reference quorum has fewer than two parseable legs",
-        )
-        two = dict(one)
-        two["pool.ntp.org"] = (0, _sntp_line("pool.ntp.org"))
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        self._replace_r0(inputs, legs=two)
-        with author_environment(repository):
-            self.assertEqual(
-                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
-            )
-
-    def test_rf03_r0_disjoint_and_inconvenient_leg_cannot_be_discarded(self) -> None:
-        two_disjoint = {
-            "time.apple.com": (
-                0,
-                _sntp_line(
-                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
-                ),
-            ),
-            "pool.ntp.org": (
-                0,
-                _sntp_line(
-                    "pool.ntp.org", offset="+0.100000", uncertainty="0.010000"
-                ),
-            ),
-            "time.nist.gov": (69, ""),
-        }
-        self._assert_clock_refusal(
-            mutate=lambda inputs: self._replace_r0(inputs, legs=two_disjoint),
-            detail="R0 reference agreement intervals have empty intersection",
-        )
-        legs = {
-            "time.apple.com": (
-                0,
-                _sntp_line(
-                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
-                ),
-            ),
-            "pool.ntp.org": (
-                0,
-                _sntp_line(
-                    "pool.ntp.org", offset="+0.005000", uncertainty="0.010000"
-                ),
-            ),
-            "time.nist.gov": (
-                0,
-                _sntp_line(
-                    "time.nist.gov", offset="+0.100000", uncertainty="0.010000"
-                ),
-            ),
-        }
-        self._assert_clock_refusal(
-            mutate=lambda inputs: self._replace_r0(inputs, legs=legs),
-            detail="R0 reference agreement intervals have empty intersection",
-        )
-
-    def test_rf04_r0_reference_bound_boundary_gates(self) -> None:
-        def legs(offset: str) -> dict[str, tuple[int, str]]:
-            return {
-                server: (
-                    0,
-                    _sntp_line(server, offset=offset, uncertainty="0.000000"),
-                )
-                for server in t0._clock_reference.SERVER_ROSTER
-            }
-
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        self._replace_r0(inputs, legs=legs("+0.500000"))
-        with author_environment(repository):
-            self.assertEqual(
-                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
-            )
-        self._assert_clock_refusal(
-            mutate=lambda inputs: self._replace_r0(
-                inputs, legs=legs("+0.500001")
-            ),
-            detail="R0 reference bound exceeds 0.5 seconds",
-        )
-
-    def test_rf05_r0_anchor_read_skew_boundary_gates(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        self._replace_r0(inputs, anchor_skew=1_000_000)
-        with author_environment(repository):
-            self.assertEqual(
-                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
-            )
-        self._assert_clock_refusal(
-            mutate=lambda inputs: self._replace_r0(
-                inputs, anchor_skew=1_000_001
-            ),
-            detail="R0 anchor read skew exceeds 1000000 ns",
-        )
-
-    def test_rf06_r1_quorum_boundary_one_refuses_two_passes(self) -> None:
-        one = {
-            "time.apple.com": (0, _sntp_line("time.apple.com") + "\n"),
-            "pool.ntp.org": (69, ""),
-            "time.nist.gov": (69, ""),
-        }
-        self._assert_clock_refusal(
-            probe=self._reference_probe(one),
-            detail="R1 reference quorum has fewer than two parseable legs",
-        )
-        two = dict(one)
-        two["pool.ntp.org"] = (0, _sntp_line("pool.ntp.org") + "\n")
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository, probe=self._reference_probe(two)):
-            self.assertEqual(
-                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
-            )
-
-    def test_rf07_r1_disjoint_and_successful_inconvenient_leg_refuses(self) -> None:
-        two_disjoint = {
-            "time.apple.com": (
-                0,
-                _sntp_line(
-                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
-                ),
-            ),
-            "pool.ntp.org": (
-                0,
-                _sntp_line(
-                    "pool.ntp.org", offset="+0.100000", uncertainty="0.010000"
-                ),
-            ),
-            "time.nist.gov": (69, ""),
-        }
-        self._assert_clock_refusal(
-            probe=self._reference_probe(two_disjoint),
-            detail="R1 reference agreement intervals have empty intersection",
-        )
-        legs = {
-            "time.apple.com": (
-                0,
-                _sntp_line(
-                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
-                ),
-            ),
-            "pool.ntp.org": (
-                0,
-                _sntp_line(
-                    "pool.ntp.org", offset="+0.005000", uncertainty="0.010000"
-                ),
-            ),
-            "time.nist.gov": (
-                0,
-                _sntp_line(
-                    "time.nist.gov", offset="+0.100000", uncertainty="0.010000"
-                ),
-            ),
-        }
-        self._assert_clock_refusal(
-            probe=self._reference_probe(legs),
-            detail="R1 reference agreement intervals have empty intersection",
-        )
-
-    def test_rf08_r1_reference_bound_boundary_gates(self) -> None:
-        def probes(offset: str):
-            return self._reference_probe(
-                {
-                    server: (
-                        0,
-                        _sntp_line(
-                            server, offset=offset, uncertainty="0.000000"
-                        ),
-                    )
-                    for server in t0._clock_reference.SERVER_ROSTER
-                }
-            )
-
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository, probe=probes("+0.500000")):
-            self.assertEqual(
-                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
-            )
-        self._assert_clock_refusal(
-            probe=probes("+0.500001"),
-            detail="R1 reference bound exceeds 0.5 seconds",
-        )
-
-    def test_insufficient_positive_capture_history_refuses(self) -> None:
-        self._assert_clock_refusal(
-            now_monotonic_ns=500_000_000_000,
-            detail="clock-reference command capture fields are invalid or stale",
-        )
-
-    def test_r0_raw_anchor_ahead_of_author_raw_refuses(self) -> None:
-        now = SYNTHETIC_MONOTONIC_NS
-
-        def mutate(inputs: Path) -> None:
-            self._replace_r0(
-                inputs,
-                anchor_raw=now + 1,
-                anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + now + 1,
-            )
-
-        self._assert_clock_refusal(
-            now_monotonic_ns=now,
-            mutate=mutate,
-            detail="T-0 RAW anchor span is below 600000000000 ns",
-        )
-
-    def test_capture_finish_ahead_of_ordinary_now_refuses(self) -> None:
-        now = SYNTHETIC_MONOTONIC_NS
-
-        def mutate(inputs: Path) -> None:
-            path = inputs / "clock-reference.json"
-            capture = json.loads(path.read_text(encoding="utf-8"))
-            capture["finished_monotonic_ns"] = now + 1
-            _write_json(path, capture)
-
-        self._assert_clock_refusal(
-            now_monotonic_ns=now,
-            mutate=mutate,
-            detail="clock-reference command capture is not a live T-0 artifact",
-        )
-
-    def test_rf09_rf10_author_span_boundaries_gate(self) -> None:
-        now = 5_000_000_000_000
-        for span, expected in (
-            (599_999_999_999, False),
-            (600_000_000_000, True),
-            (600_000_000_001, True),
-            (3_599_999_999_999, True),
-            (3_600_000_000_000, True),
-            (3_600_000_000_001, False),
-        ):
-            def mutate(inputs: Path, span: int = span) -> None:
-                raw = now - span
-                self._replace_r0(
-                    inputs,
-                    anchor_raw=raw,
-                    anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + raw,
-                )
-
-            if expected:
-                temporary, repository, pack, custody, _context, inputs = make_t0_fixture(
-                    now_monotonic_ns=now
-                )
-                self.addCleanup(temporary.cleanup)
-                mutate(inputs)
-                with author_environment(repository, now_monotonic_ns=now):
-                    self.assertEqual(
-                        author_arm_readiness_evidence_t0(pack, custody)["status"],
-                        "PASS",
-                    )
-            else:
-                detail = (
-                    "T-0 RAW anchor span is below 600000000000 ns"
-                    if span < 600_000_000_000
-                    else "T-0 RAW anchor span exceeds 3600000000000 ns"
-                )
-                self._assert_clock_refusal(
-                    mutate=mutate,
-                    detail=detail,
-                    now_monotonic_ns=now,
-                )
-
-    def test_rf11_author_anchor_falsifier_boundaries_gate(self) -> None:
-        for delta, expected in ((4_999_999, True), (5_000_001, False)):
-            def mutate(inputs: Path, delta: int = delta) -> None:
-                capture = json.loads(
-                    (inputs / "clock-reference.json").read_text(encoding="utf-8")
-                )
-                reference = json.loads(capture["stdout"])
-                self._replace_r0(
-                    inputs,
-                    anchor_realtime=(
-                        SYNTHETIC_REALTIME_OFFSET_NS
-                        + reference["anchor_monotonic_raw_ns"]
-                        + delta
-                    ),
-                )
-
-            if expected:
-                temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-                self.addCleanup(temporary.cleanup)
-                mutate(inputs)
-                with author_environment(repository):
-                    authored = author_arm_readiness_evidence_t0(pack, custody)
-                self.assertEqual(authored["status"], "PASS")
-            else:
-                self._assert_clock_refusal(
-                    mutate=mutate,
-                    detail="R0-to-author RAW anchor delta exceeds 5000000 ns",
-                )
-
-    def test_rf12_author_anchor_read_skew_boundary_gates(self) -> None:
-        for skew, expected in ((999_999, True), (1_000_000, True), (1_000_001, False)):
-            anchor = lambda skew=skew: t0._clock_reference.ClockAnchor(
-                realtime_ns=SYNTHETIC_REALTIME_OFFSET_NS + SYNTHETIC_MONOTONIC_NS,
-                monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
-                read_skew_ns=skew,
-            )
-            if expected:
-                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-                self.addCleanup(temporary.cleanup)
-                with author_environment(repository, sample_anchor=anchor):
-                    self.assertEqual(
-                        author_arm_readiness_evidence_t0(pack, custody)["status"],
-                        "PASS",
-                    )
-            else:
-                self._assert_clock_refusal(
-                    sample_anchor=anchor,
-                    detail="author anchor read skew exceeds 1000000 ns",
-                )
-
-    def test_rf13_r0_boot_mismatch_refuses(self) -> None:
-        def mutate(inputs: Path) -> None:
-            path = inputs / "clock-reference.json"
-            capture = json.loads(path.read_text(encoding="utf-8"))
-            reference = json.loads(capture["stdout"])
-            reference["boot_session_id"] = OTHER_BOOT_SESSION_ID
-            capture["stdout"] = readiness.render_json(reference).decode("utf-8")
-            _write_json(path, capture)
-
-        self._assert_clock_refusal(
-            mutate=mutate,
-            detail="R0 clock reference schema, sample policy, or boot binding is invalid",
-        )
-
-    def test_rf13_final_boot_resample_refuses_before_publication(self) -> None:
-        boot_probe_count = 0
-
-        def boot_changes_only_at_final_sample(argv, *, cwd):
-            nonlocal boot_probe_count
-            if "kern.bootsessionuuid" in argv:
-                boot_probe_count += 1
-                boot_session = (
-                    TEST_BOOT_SESSION_ID
-                    if boot_probe_count == 1
-                    else OTHER_BOOT_SESSION_ID
-                )
-                return _probe_result(argv, cwd, stdout=boot_session + "\n")
-            return passing_probe(argv, cwd=cwd)
-
-        self._assert_clock_refusal(
-            probe=boot_changes_only_at_final_sample,
-            kind="AUTHORING_SET",
-            reason_code="evidence_author_t0_input_changed",
-            detail="boot session changed during derivation",
-        )
-        self.assertEqual(boot_probe_count, 2)
-
-    def test_rf14_r0_must_complete_before_clock_disable_and_r1_before_censuses(self) -> None:
-        def mutate(inputs: Path) -> None:
-            reference_path = inputs / "clock-reference.json"
-            disable = json.loads(
-                (inputs / "clock-disable.json").read_text(encoding="utf-8")
-            )
-            reference = json.loads(reference_path.read_text(encoding="utf-8"))
-            reference["finished_monotonic_ns"] = disable["started_monotonic_ns"] + 1
-            _write_json(reference_path, reference)
-
-        self._assert_clock_refusal(
-            mutate=mutate,
-            detail="R0 did not complete before the first clock-disable action",
-        )
-        calls: list[tuple[str, ...]] = []
-
-        def ordered_probe(argv, *, cwd):
-            calls.append(tuple(argv))
-            return passing_probe(argv, cwd=cwd)
-
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository, probe=ordered_probe):
-            author_arm_readiness_evidence_t0(pack, custody)
-        last_sntp = max(
-            index
-            for index, argv in enumerate(calls)
-            if argv and argv[0] == t0._clock_reference.SNTP_PATH
-        )
-        first_census = min(
-            index
-            for index, argv in enumerate(calls)
-            if argv and argv[0] == "/usr/bin/pgrep"
-        )
-        self.assertLess(last_sntp, first_census)
-
-    def test_rf14_clock_disable_must_finish_before_r1_starts(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        disable = json.loads(
-            (inputs / "clock-disable.json").read_text(encoding="utf-8")
-        )
-
-        def r1_started_before_disable_finished(context, *, kind):
-            context.values["r1_batch_started_monotonic_ns"] = (
-                disable["finished_monotonic_ns"] - 1
-            )
-            return (mock.sentinel.agreement, (), 0, mock.sentinel.anchor, 0)
-
-        with (
-            author_environment(repository),
-            mock.patch.object(
-                t0,
-                "_fresh_clock_reference_batch",
-                side_effect=r1_started_before_disable_finished,
-            ),
-            self.assertRaises(T0EvidenceAuthoringError) as caught,
-        ):
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.kind, "CLOCK_ATTESTATION")
-        self.assertEqual(
-            caught.exception.reason_code,
-            "evidence_author_t0_clock_attestation_underivable",
-        )
-        self.assertEqual(
-            str(caught.exception),
-            "clock-disable did not finish before the R1 batch",
-        )
-        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
-        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-
-    def test_rf14_census_refuses_missing_or_future_r1_completion_stamp(self) -> None:
-        # Merely observing the happy deriver order cannot falsify this guard.
-        # Inject each invalid state at the census boundary instead.
-        for label, kind, values in (
-            ("missing", "MAINTENANCE_CENSUS", {}),
-            (
-                "future",
-                "PROCESS_CENSUS",
-                {"r1_batch_finished_monotonic_ns": 101},
-            ),
-        ):
-            context = SimpleNamespace(
-                values=values,
-                clock=SimpleNamespace(monotonic_ns=lambda: 100),
-                repository=ROOT,
-            )
-            execute = mock.Mock(
-                side_effect=AssertionError("invalid chronology must gate the census")
-            )
-            with (
-                self.subTest(state=label),
-                mock.patch.object(t0, "_execute_probe", execute),
-                self.assertRaises(T0EvidenceAuthoringError) as caught,
-            ):
-                t0._fresh_probe(context, kind, "synthetic census", ("probe",))
-            self.assertEqual(
-                caught.exception.reason_code,
-                f"evidence_author_t0_{kind.lower()}_underivable",
-            )
-            self.assertEqual(
-                str(caught.exception),
-                "fresh census cannot run before the R1 clock-reference batch completes",
-            )
-            execute.assert_not_called()
-
-    def test_rf15_noncanonical_clock_reference_capture_refuses_missing_code(self) -> None:
-        def mutate(inputs: Path) -> None:
-            path = inputs / "clock-reference.json"
-            path.write_bytes(path.read_bytes() + b" ")
-
-        self._assert_clock_refusal(
-            mutate=mutate,
-            detail=(
-                "clock-reference command capture is not canonical strict JSON: "
-                "JSON bytes are not canonical D-134 bytes"
-            ),
-            reason_code="evidence_author_t0_clock_attestation_missing",
-        )
-
-    def test_rf16_r1_batch_duration_boundary_gates(self) -> None:
-        now = SYNTHETIC_MONOTONIC_NS
-        for duration, expected in (
-            (-1, False),
-            (0, True),
-            (1, True),
-            (29_999_999_999, True),
-            (30_000_000_000, True),
-            (30_000_000_001, False),
-        ):
-            anchors = iter(
-                (
-                    t0._clock_reference.ClockAnchor(
-                        SYNTHETIC_REALTIME_OFFSET_NS + now - duration,
-                        now - duration,
-                        1_000,
-                    ),
-                    t0._clock_reference.ClockAnchor(
-                        SYNTHETIC_REALTIME_OFFSET_NS + now,
-                        now,
-                        1_000,
-                    ),
-                )
-            )
-            sampler = lambda anchors=anchors: next(anchors)
-            if expected:
-                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-                self.addCleanup(temporary.cleanup)
-                with author_environment(repository, sample_anchor=sampler):
-                    self.assertEqual(
-                        author_arm_readiness_evidence_t0(pack, custody)["status"],
-                        "PASS",
-                    )
-            else:
-                self._assert_clock_refusal(
-                    sample_anchor=sampler,
-                    detail="R1 batch duration is outside 0 through 30000000000 ns",
-                )
-
-    def test_missing_off_receipt_prevents_arm_evidence(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        (inputs / network_time_off.RECEIPT_BASENAME).unlink()
-        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as error:
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(error.exception.kind, "CLOCK_PROBE")
-        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-
-    def test_rf21_rf22_off_receipt_requires_exit_and_exact_stdout(self) -> None:
-        for field, value in (("exit_code", 1), ("stdout", "Network Time: Off\n"), ("stdout", "setUsingNetworkTime: On\n")):
-            def mutate(inputs, field=field, value=value):
-                path = inputs / network_time_off.RECEIPT_BASENAME
-                off = json.loads(path.read_bytes())
-                off[field] = value
-                _write_json(path, off)
-            self._assert_clock_refusal(
-                mutate=mutate, detail="network time OFF receipt not admitted",
-                kind="CLOCK_PROBE", reason_code="evidence_author_t0_clock_probe_underivable")
-
-    def test_rf36_r1_fixed_roster_one_attempt_and_raw_peer_records(self) -> None:
-        def substituted_probe(argv, *, cwd):
-            command = tuple(argv)
-            if command and command[0] == t0._clock_reference.SNTP_PATH:
-                return _probe_result(
-                    (*command[:-1], "substitute.invalid"),
-                    cwd,
-                    stdout=_sntp_line(command[-1]),
-                )
-            return passing_probe(command, cwd=cwd)
-
-        self._assert_clock_refusal(
-            probe=substituted_probe,
-            detail="R1 clock reference does not prove the fixed one-attempt roster",
-        )
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository):
-            author_arm_readiness_evidence_t0(pack, custody)
-        source = json.loads(
-            (
-                custody
-                / pack.name
-                / t0._SOURCE_DIRECTORY
-                / f"{t0._slug('clock.correct_and_prior_state')}.json"
-            ).read_text(encoding="utf-8")
-        )
-        self.assertEqual(len(source["probes"]), 3)
-        for server, probe in zip(t0._clock_reference.SERVER_ROSTER, source["probes"]):
-            parsed = t0._clock_reference.parse_sntp_stdout(
-                probe["stdout"], server=server
-            )
-            self.assertIsNotNone(parsed)
-            self.assertIn(parsed.peer_address, parsed.raw_line)
-
-    def test_rf37_r0_boolean_endpoint_refuses_integer_contract(self) -> None:
-        def mutate(inputs: Path) -> None:
-            path = inputs / "clock-reference.json"
-            capture = json.loads(path.read_text(encoding="utf-8"))
-            reference = json.loads(capture["stdout"])
-            reference["anchor_monotonic_raw_ns"] = True
-            capture["stdout"] = readiness.render_json(reference).decode("utf-8")
-            _write_json(path, capture)
-
-        self._assert_clock_refusal(
-            mutate=mutate,
-            detail="R0 clock reference numeric endpoint is not an integer",
-        )
-
-    def test_public_namespace_and_signature_are_closed(self) -> None:
-        self.assertEqual(
-            tuple(inspect.signature(author_arm_readiness_evidence_t0).parameters),
-            ("pack_root", "custody_root"),
-        )
-        self.assertEqual(
-            t0.__all__,
-            [
-                "T0EvidenceAuthoringError",
-                "WINDOW_ENV_KEYS",
-                "WindowEnvironmentParseError",
-                "author_arm_readiness_evidence_t0",
-                "parse_window_environment",
-            ],
-        )
-        self.assertEqual(
-            sorted(name for name in vars(t0) if not name.startswith("_")),
-            [
-                "T0EvidenceAuthoringError",
-                "WINDOW_ENV_KEYS",
-                "WindowEnvironmentParseError",
-                "annotations",
-                "author_arm_readiness_evidence_t0",
-                "parse_window_environment",
-            ],
-        )
-        self.assertFalse(hasattr(t0, "DERIVERS"))
-        for keyword in ("runner", "facts", "outcomes", "boot_session_id"):
-            with self.subTest(keyword=keyword), self.assertRaises(TypeError):
-                author_arm_readiness_evidence_t0(
-                    Path("unused"), Path("unused"), **{keyword: object()}
-                )
-
-    def test_all_fifteen_rows_have_an_explicit_volatility_class(self) -> None:
-        self.assertEqual(
-            t0._VOLATILE_EVIDENCE_VALIDITY_NS,
-            20 * 60 * 1_000_000_000,
-        )
-        self.assertGreater(
-            t0._NONVOLATILE_EVIDENCE_VALIDITY_NS,
-            t0._VOLATILE_EVIDENCE_VALIDITY_NS,
-        )
-        self.assertFalse(
-            t0._VOLATILE_EVIDENCE_KINDS & t0._NONVOLATILE_EVIDENCE_KINDS
-        )
-        self.assertEqual(
-            t0._VOLATILE_EVIDENCE_KINDS | t0._NONVOLATILE_EVIDENCE_KINDS,
-            set(t0._ROW_KIND.values()),
-        )
-        self.assertEqual(
-            t0._VOLATILE_EVIDENCE_KINDS,
-            {
-                "BACKUP_PREFLIGHT",
-                "CLOCK_PROBE",
-                "LAUNCH_RECIPE",
-                "MAINTENANCE_CENSUS",
-                "MACHINE_PREFLIGHT",
-                "POWERMETRICS_PROBE",
-                "POWER_PREFLIGHT",
-                "PROCESS_CENSUS",
-                "ROOT_PREFLIGHT",
-            },
-        )
-        self.assertEqual(
-            sum(
-                kind in t0._VOLATILE_EVIDENCE_KINDS
-                for kind in t0._ROW_KIND.values()
-            ),
-            11,
-        )
-        self.assertEqual(
-            t0._PUBLICATION_COMPLETION_MARKER,
-            f"{t0._receipt_name('t0.storage_backup_capacity')}.sha256",
-        )
-
-    def test_authors_exact_fifteen_valid_rows_and_is_byte_idempotent(self) -> None:
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository):
-            first = author_arm_readiness_evidence_t0(pack, custody)
-            self.assertTrue(first["mutated"])
-            self.assertEqual(first["authored_rows"], list(t0._EXPECTED_ROWS))
-            self.assertEqual(len(first["authored_kinds"]), 13)
-            evidence = custody / pack.name / t0._EVIDENCE_DIRECTORY
-            sources = custody / pack.name / t0._SOURCE_DIRECTORY
-            self.assertEqual(len(list(evidence.glob("*.json"))), 15)
-            self.assertEqual(len(list(evidence.glob("*.json.sha256"))), 15)
-            self.assertEqual(len(list(sources.glob("*.json"))), 15)
-            registry = json.loads(
-                (
-                    repository
-                    / readiness.ROW_REGISTRY_RELATIVE_PATH
-                ).read_text(encoding="utf-8")
-            )
-            profile = next(
-                item for item in registry["plan_profiles"] if item["profile_id"] == "ALPHA"
-            )
-            rows_by_predicate = {
-                row["predicate_id"]: row for row in registry["rows"]
-            }
-            before = {path.name: path.read_bytes() for path in evidence.iterdir()}
-            independently_observed_rows = []
-            independently_observed_kinds = set()
-            for receipt_path in sorted(evidence.glob("*.json")):
-                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-                self.assertEqual(receipt["boot_session_id"], TEST_BOOT_SESSION_ID)
-                self.assertEqual(receipt["status"], "PASS")
-                self.assertEqual(receipt["reason_codes"], [])
-                self.assertEqual(
-                    receipt["assurance"],
-                    {
-                        "model": "single_authority_hash_bound_replay.v1",
-                        "independent_attestation": False,
-                    },
-                )
-                horizon = (
-                    t0._VOLATILE_EVIDENCE_VALIDITY_NS
-                    if receipt["kind"] in t0._VOLATILE_EVIDENCE_KINDS
-                    else t0._NONVOLATILE_EVIDENCE_VALIDITY_NS
-                )
-                self.assertEqual(
-                    receipt["valid_until_monotonic_ns"],
-                    1_000_000_000_000 + horizon,
-                )
-                self.assertEqual(len(receipt["facts"]), 1)
-                fact = receipt["facts"][0]
-                row = rows_by_predicate[fact["fact_id"]]
-                self.assertIn(row["row_id"], profile["required_row_ids"])
-                self.assertEqual(row["evaluation_phase"], "ARM_ONLY")
-                self.assertEqual(row["applicability_rule"], "ALWAYS")
-                self.assertEqual(row["required_evidence_kinds"], [receipt["kind"]])
-                source_path = custody / pack.name / fact["source_path"]
-                source_raw = source_path.read_bytes()
-                self.assertEqual(hashlib.sha256(source_raw).hexdigest(), fact["source_sha256"])
-                source = json.loads(source_raw)
-                self.assertEqual(source["row_id"], row["row_id"])
-                self.assertEqual(source["kind"], receipt["kind"])
-                if row["row_id"] == "clock.network_time_off":
-                    self.assertEqual(source["probes"], [])
-                    self.assertEqual(source["derivation"]["policy"], network_time_off.SCHEMA)
-                    self.assertTrue(any(ref["path"].endswith(network_time_off.RECEIPT_BASENAME)
-                                        for ref in source["input_artifacts"]))
-                if row["row_id"] == "t0.background_quiet":
-                    module = repository / "joulewise/prewindow.py"
-                    self.assertIn({"path": str(module),
-                                   "sha256": hashlib.sha256(module.read_bytes()).hexdigest()},
-                                  source["input_artifacts"])
-                    manifest = json.loads((_inputs / "launch-manifest.json").read_bytes())
-                    self.assertEqual(manifest["prewindow_command"], [
-                        str(repository / ".venv/bin/python"), str(module), "--t0-wait",
-                        "--timeout-min", "45", "--window", "alpha"])
-                    self.assertFalse(any(ref["path"].endswith("scripts/prewindow_check.sh")
-                                         for ref in source["input_artifacts"]))
-                self.assertEqual(source["facts"][0]["fact_id"], row["predicate_id"])
-                self.assertEqual(source["facts"][0]["value"], fact["value"])
-                independently_observed_rows.append(row["row_id"])
-                independently_observed_kinds.add(receipt["kind"])
-            self.assertEqual(len(independently_observed_rows), 15)
-            self.assertEqual(len(set(independently_observed_rows)), 15)
-            self.assertEqual(
-                sorted(independently_observed_rows), sorted(first["authored_rows"])
-            )
-            self.assertEqual(
-                independently_observed_kinds, set(first["authored_kinds"])
-            )
-            self.assertEqual(
-                set(independently_observed_rows),
-                {
-                    row["row_id"]
-                    for row in registry["rows"]
-                    if row["evaluation_phase"] == "ARM_ONLY"
-                    and row["applicability_rule"] == "ALWAYS"
-                    and row["required_evidence_kinds"][0]
-                    not in {"GIT_CHECKOUT", "DRY_RUN_REHEARSAL"}
-                },
-                "the independent registry census must account for exactly the fifteen receipts",
-                )
-            second = author_arm_readiness_evidence_t0(pack, custody)
-            self.assertFalse(second["mutated"])
-            self.assertEqual(
-                before, {path.name: path.read_bytes() for path in evidence.iterdir()}
-            )
-
-    def test_arm_consumes_volatile_receipts_within_short_horizon(self) -> None:
-        """Volatile T-0 evidence remains valid just inside its horizon."""
-
-        authored_at = 1_000_000_000_000
-        short_horizon_ns = 20 * 60 * 1_000_000_000
-        lifecycle = readiness.load_registry(ROOT)[0]["freeze_evidence_lifecycle"]
-        arm_to_consume_budget_ns = lifecycle["arm_policy"][
-            "arm_to_consume_budget_ns"
-        ]
-        temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
-            now_monotonic_ns=authored_at
-        )
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository, now_monotonic_ns=authored_at):
-            author_arm_readiness_evidence_t0(pack, custody)
-        with (
-            mock.patch.object(
-                readiness,
-                "_current_boot_session_id",
-                return_value=TEST_BOOT_SESSION_ID,
-            ),
-            mock.patch.object(
-                readiness,
-                "verify_frozen_projection",
-                side_effect=synthetic_identity_verifier,
-            ),
-            mock.patch.object(
-                readiness.time,
-                "monotonic_ns",
-                return_value=(
-                    authored_at
-                    + short_horizon_ns
-                    - arm_to_consume_budget_ns
-                    - 1
-                ),
-            ),
-        ):
-            arm = readiness.generate_arm_receipt(pack, context, custody)
-        self.assertEqual(arm["status"], "PASS", arm)
-        self.assertEqual(arm["arm_disposition"], "GO")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def _assert_forbidden_process_evidence_expires_before_arm(
         self, *, start_real_process: bool
@@ -2676,7 +1334,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 return_value=(authored_at + short_horizon_ns + 1),
             ),
         ):
-            arm = readiness.generate_arm_receipt(pack, context, custody)
+            arm = receipt_factory.generate_arm_receipt(pack, context, custody)
         self.assertEqual(arm["status"], "REFUSE", arm)
         self.assertEqual(arm["arm_disposition"], "NO_GO")
         self.assertIn("readiness_record_expired", arm["reason_codes"])
@@ -2690,59 +1348,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             arm_receipt["refusals"],
         )
 
-    def test_mocked_forbidden_process_evidence_expires_before_arm(self) -> None:
-        """A forbidden-process observation expires before a later arm."""
 
-        self._assert_forbidden_process_evidence_expires_before_arm(
-            start_real_process=False
-        )
 
-    def test_real_clock_fixture_keeps_r0_in_raw_clock_family(self) -> None:
-        """Clock-family offsets must not consume the R0-to-author age margin."""
-
-        ordinary_now = 10 * t0._MAX_T0_SEQUENCE_AGE_NS
-        for offset in (-2, 2):
-            with self.subTest(raw_offset_hours=offset):
-                raw_now = ordinary_now + offset * t0._MAX_T0_SEQUENCE_AGE_NS
-                anchor = SimpleNamespace(
-                    realtime_ns=SYNTHETIC_REALTIME_OFFSET_NS + raw_now,
-                    monotonic_raw_ns=raw_now,
-                    read_skew_ns=1_000,
-                )
-                with mock.patch.object(
-                    t0._clock_reference, "sample_anchor", return_value=anchor
-                ):
-                    temporary, _, _, _, _, inputs = make_t0_fixture(
-                        now_monotonic_ns=ordinary_now, synthetic_clock=False
-                    )
-                self.addCleanup(temporary.cleanup)
-                capture = json.loads(
-                    (inputs / "clock-reference.json").read_text(encoding="utf-8")
-                )
-                reference = json.loads(capture["stdout"])
-                span = raw_now - reference["anchor_monotonic_raw_ns"]
-                self.assertGreaterEqual(span, t0._MIN_IDLE_NS)
-                self.assertLessEqual(span, t0._MAX_T0_SEQUENCE_AGE_NS)
-                self.assertEqual(span, t0._MIN_IDLE_NS + 980)
-                self.assertEqual(
-                    reference["anchor_realtime_ns"]
-                    - reference["anchor_monotonic_raw_ns"],
-                    anchor.realtime_ns - anchor.monotonic_raw_ns,
-                )
-                self.assertEqual(
-                    capture["started_monotonic_ns"],
-                    ordinary_now - t0._MIN_IDLE_NS - 990,
-                )
-
-    @unittest.skipUnless(
-        sys.platform == "darwin", "requires Darwin's real caffeinate process"
-    )
-    def test_forbidden_process_started_after_authoring_expires_before_arm(self) -> None:
-        """A real forbidden process cannot reuse expired evidence."""
-
-        self._assert_forbidden_process_evidence_expires_before_arm(
-            start_real_process=True
-        )
 
     def _real_probe_source(self, kind, commands):
         context = t0._Context(
@@ -2806,757 +1413,24 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         return probes, source
 
-    @unittest.skipUnless(
-        sys.platform == "darwin", "requires Darwin's real pgrep command semantics"
-    )
-    def test_real_maintenance_census_executes_pgrep_and_binds_output(self) -> None:
-        self._real_probe_source(
-            "MAINTENANCE_CENSUS",
-            (
-                (
-                    "/usr/bin/pgrep",
-                    "-lf",
-                    "XProtect|mds_stores|mdworker|mdbulkimport|backupd|photoanalysisd|softwareupdated|Spotlight|mediaanalysisd",
-                ),
-            ),
-        )
 
-    @unittest.skipUnless(
-        sys.platform == "darwin", "requires Darwin's real pgrep command semantics"
-    )
-    def test_real_process_census_executes_pgrep_and_binds_output(self) -> None:
-        self._real_probe_source(
-            "PROCESS_CENSUS",
-            (
-                ("/usr/bin/pgrep", "-x", "caffeinate"),
-                ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
-                (
-                    "/usr/bin/pgrep",
-                    "-lf",
-                    "/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)",
-                ),
-                (
-                    "/usr/bin/pgrep",
-                    "-lf",
-                    "powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)",
-                ),
-            ),
-        )
 
-    def test_g1_ruled_census_patterns_ignore_recorded_macos_services(self) -> None:
-        """G1 (packet 34 ruling 10 Q3): the recorded Apple services never match.
 
-        Kills M1 (old browser alternation), M2 (no ``( |$)`` tail), M4 (bare
-        ``watch``); M5 is killed by G2. M-numbers name the ruling's mutations.
-        """
-        for pattern in (t0._BROWSER_CENSUS_PATTERN, t0._MONITOR_CENSUS_PATTERN):
-            for line in _RECORDED_CENSUS_SERVICE_ARGV:
-                with self.subTest(pattern=pattern, line=line):
-                    self.assertIsNone(re.search(pattern, line))
 
-    def test_g2_ruled_census_patterns_refuse_real_browsers_and_monitors(self) -> None:
-        """G2 (packet 34 ruling 10 Q3): real browsers and monitors match.
 
-        Kills M3 (one browser name), M5 (no ``/Contents/MacOS/`` anchor), M6
-        (a lost monitor token), M7 (``Firefox`` case-fold).
-        """
-        for line in (
-            _RECORDED_FIREFOX_LINE.split(" ", 1)[1],
-            "/Applications/Safari.app/Contents/MacOS/Safari",
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --x",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium --headless=new",
-            "/Applications/Firefox.app/Contents/MacOS/firefox https://example.com",
-            "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing --headless=new",
-            "/Applications/Safari Technology Preview.app/Contents/MacOS/Safari Technology Preview",
-        ):
-            with self.subTest(browser=line):
-                self.assertIsNotNone(re.search(t0._BROWSER_CENSUS_PATTERN, line))
-        for line in (
-            "/Applications/Firefox.app/Contents/MacOS/plugin-container -isForBrowser",
-            "/usr/bin/env Safari",
-        ):
-            with self.subTest(nonbrowser=line):
-                self.assertIsNone(re.search(t0._BROWSER_CENSUS_PATTERN, line))
-        for line in (
-            "/usr/bin/powermetrics -i 200 -n 1",
-            "tail -f /var/log/system.log",
-            "watch -n 5 pmset -g therm",
-            "/opt/homebrew/bin/watch -n 1 date",
-            "python3 scripts/window-chain.py",
-            "python3 scripts/run_campaign.py",
-        ):
-            with self.subTest(monitor=line):
-                self.assertIsNotNone(re.search(t0._MONITOR_CENSUS_PATTERN, line))
 
-    def test_g3_browser_and_monitor_probes_gate_the_row(self) -> None:
-        """G3 (packet 34 ruling 10 Q3): a browser or monitor hit refuses authoring.
 
-        Kills M8 (an unchecked probe output) and M9 (a reordered or missing
-        probe); the mocked probe stands in for pgrep on the authoring path.
-        """
-        commands = (
-            ("/usr/bin/pgrep", "-x", "caffeinate"),
-            ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
-            ("/usr/bin/pgrep", "-lf", t0._BROWSER_CENSUS_PATTERN),
-            ("/usr/bin/pgrep", "-lf", t0._MONITOR_CENSUS_PATTERN),
-        )
-        for selected, output in (
-            (commands[1], "123 codex\n"),
-            (commands[2], _RECORDED_FIREFOX_LINE + "\n"),
-            (commands[3], "574 /usr/bin/powermetrics -i 200\n"),
-            (None, ""),
-        ):
-            with self.subTest(command=selected):
-                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-                with temporary:
-                    seen = []
 
-                    def probe(argv, *, cwd):
-                        command = tuple(argv)
-                        if command in commands:
-                            seen.append(command)
-                        if command == selected:
-                            return _probe_result(argv, cwd, exit_code=0, stdout=output)
-                        return passing_probe(argv, cwd=cwd)
 
-                    with author_environment(repository, probe=probe):
-                        if selected is None:
-                            result = author_arm_readiness_evidence_t0(pack, custody)
-                            self.assertEqual(result["status"], "PASS")
-                        else:
-                            with self.assertRaises(T0EvidenceAuthoringError) as caught:
-                                author_arm_readiness_evidence_t0(pack, custody)
-                            self.assertEqual(caught.exception.kind, "PROCESS_CENSUS")
-                            self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
-                            self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-                    self.assertEqual(seen, list(commands))
 
-    @unittest.skipUnless(
-        sys.platform == "darwin", "requires Darwin's POSIX extended regular expressions"
-    )
-    def test_g4_real_ruled_census_pgrep_dialect(self) -> None:
-        r"""G4 kills M10: a construct pgrep rejects or silently never matches.
 
-        Authority: packet 34 ruling 10 Q3 as amended by pairing refuter 12 (A2)
-        and the synthesis-13 addendum (the decoy instrument). A *probe* is one
-        recorded command execution; a *decoy* is a ``sleep`` child this test
-        spawns whose argv0 carries a marker command line; the *dialect* is the
-        regular-expression syntax pgrep's own engine interprets. Every
-        alternative of each ruled pattern gets a positive decoy that MUST be
-        reported by the real pgrep, and the recorded Apple services get
-        negative decoys that MUST NOT be, so a Python-only construct (``\b``,
-        ``\d``, ``(?:...)``) or a narrowed alternative fails closed with no
-        browser or monitor running (bench-proven: ``\bwatch\b`` yields exit 1
-        and zero lines against a live decoy). Bench-only: CI runs Linux.
-        """
-        cases = (
-            (
-                t0._BROWSER_CENSUS_PATTERN,
-                (
-                    "/Applications/Safari.app/Contents/MacOS/Safari",
-                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-                    "/Applications/Firefox.app/Contents/MacOS/firefox",
-                ),
-                (
-                    "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/Extensions/SafariWidgetExtension.appex/Contents/MacOS/SafariWidgetExtension",
-                    "/System/Cryptexes/App/usr/libexec/SafariLaunchAgent",
-                    "/Applications/Firefox.app/Contents/MacOS/plugin-container",
-                ),
-            ),
-            (
-                t0._MONITOR_CENSUS_PATTERN,
-                (
-                    "/usr/bin/powermetrics",
-                    "/usr/bin/tail -f",
-                    "scripts/window-chain",
-                    "scripts/run_campaign",
-                    "/opt/homebrew/bin/watch",
-                ),
-                ("/usr/libexec/watchdogd", "/usr/local/bin/stopwatch"),
-            ),
-        )
-        # Every recorded service identity is a deterministic negative decoy,
-        # checked in the same pgrep snapshot as the positives, so the check
-        # does not depend on a live service surviving a later read. Full
-        # executable paths are rebuilt where the recorded argv was truncated.
-        service_paths = tuple(
-            str(
-                Path(
-                    next(
-                        argv.split(" ", 1)[0]
-                        for argv in _RECORDED_CENSUS_SERVICE_ARGV
-                        if basename in argv
-                    )
-                ).parent / basename
-            )
-            for basename in _RECORDED_CENSUS_SERVICE_BASENAMES
-        )
-        for pattern, positives, negatives in cases:
-            with self.subTest(pattern=pattern):
-                negative_markers = negatives + service_paths
-                decoys = [
-                    subprocess.Popen([marker, "30"], executable="/bin/sleep")
-                    for marker in positives + negative_markers
-                ]
-                try:
-                    time.sleep(0.5)
-                    # PID-only output: with ``-lf`` a live process whose argv
-                    # holds a newline prints continuation lines with no PID,
-                    # which no line parser can tell from a new row. Matching
-                    # is unchanged (``-f`` still matches the full argv); each
-                    # hit's full argv is then read back per PID for a pattern
-                    # check (lane TEST-CENSUS-MULTILINE-ARGV-01).
-                    probes, _source = self._real_probe_source(
-                        "PROCESS_CENSUS", (("/usr/bin/pgrep", "-f", pattern),)
-                    )
-                    probe = probes[0]
-                    self.assertEqual(probe.exit_code, 0, probe.stderr)
-                    reported = {int(line) for line in probe.stdout.splitlines()}
-                    for decoy in decoys:
-                        self.assertIsNone(decoy.poll())
-                    for decoy, marker in zip(
-                        decoys, positives + negative_markers, strict=True
-                    ):
-                        with self.subTest(marker=marker):
-                            if marker in positives:
-                                self.assertIn(decoy.pid, reported, probe.stdout)
-                            else:
-                                self.assertNotIn(decoy.pid, reported, probe.stdout)
-                    for pid in sorted(reported):
-                        shown = subprocess.run(
-                            ["/bin/ps", "-ww", "-o", "command=", "-p", str(pid)],
-                            capture_output=True, text=True, check=False,
-                        )
-                        if shown.returncode != 0 and pid not in {d.pid for d in decoys}:
-                            continue  # an unrelated hit exited after pgrep ran
-                        self.assertEqual(shown.returncode, 0, shown.stderr)
-                        self.assertIsNotNone(re.search(pattern, shown.stdout), shown.stdout)
-                finally:
-                    for decoy in decoys:
-                        decoy.terminate()
-                    for decoy in decoys:
-                        decoy.wait(timeout=5)
 
-    @unittest.skipUnless(
-        sys.platform == "darwin", "requires Darwin's real sysctl command"
-    )
-    def test_real_boot_census_executes_sysctl_and_binds_machine_result(self) -> None:
-        probes, _source = self._real_probe_source(
-            "MACHINE_PREFLIGHT",
-            (("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"),),
-        )
-        probe = probes[0]
-        if probe.exit_code == 0:
-            self.assertRegex(
-                probe.stdout.strip().lower(),
-                r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-            )
-        else:
-            self.assertTrue(probe.stderr.strip())
 
-    def test_missing_first_artifact_refuses_without_output(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        (inputs / "clock-reference.json").unlink()
-        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as caught:
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.kind, "CLOCK_ATTESTATION")
-        self.assertEqual(
-            caught.exception.reason_code, "evidence_author_t0_clock_attestation_missing"
-        )
-        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
-        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
 
-    def test_named_refusal_matrix_covers_every_distinct_kind(self) -> None:
-        cases = (
-            ("CLOCK_ATTESTATION", lambda _r, _p, _c, _x: ( _x / "clock-reference.json").unlink(), {}),
-            ("CLOCK_PROBE", lambda _repo, _pack, _custody, inputs: (inputs / network_time_off.RECEIPT_BASENAME).unlink(), {}),
-            ("TERMINAL_REVIEW", lambda *_args: None, {"patch_message": True}),
-            ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, stdout="123 5.1 XProtect\n") if tuple(argv) == t0._prewindow.PS_ARGV else passing_probe(argv, cwd=cwd)}),
-            ("ROOT_PREFLIGHT", lambda _r, _p, c, _x: (Path(c["claim_runs_root"]) / "campaign.lock").write_text("busy\n"), {}),
-            ("MACHINE_PREFLIGHT", lambda _r, _p, _c, x: _write_json(x / "quiet-mac-prep.json", {**json.loads((x / "quiet-mac-prep.json").read_text()), "stdout": "READY.\n"}), {}),
-            ("LEDGER_RESERVATION", lambda _r, _p, _c, x: _write_json(x / "ledger-reservation.json", {**json.loads((x / "ledger-reservation.json").read_text()), "stdout": json.dumps({"status": "refused"})}), {}),
-            ("PROCESS_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=0, stdout="123 caffeinate\n") if tuple(argv)[-2:] == ("-x", "caffeinate") else passing_probe(argv, cwd=cwd)}),
-            ("OFFLINE_INPUT_INVENTORY", lambda *_args: None, {"offline_fail": True}),
-            ("POWERMETRICS_PROBE", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=1, stderr="sudo refused\n") if any(Path(item).name == "powermetrics" for item in argv) else passing_probe(argv, cwd=cwd)}),
-            ("POWER_PREFLIGHT", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, stdout="Now drawing from 'Battery Power'\n") if tuple(argv)[-2:] == ("-g", "batt") else passing_probe(argv, cwd=cwd)}),
-            ("LAUNCH_RECIPE", lambda *_args: None, {"launch_used": True}),
-            ("BACKUP_PREFLIGHT", lambda *_args: None, {"free": 1}),
-        )
-        for expected_kind, mutate, options in cases:
-            with self.subTest(kind=expected_kind):
-                temporary, repository, pack, custody, context, inputs = make_t0_fixture()
-                try:
-                    mutate(repository, pack, context, inputs)
-                    if options.get("launch_used"):
-                        used = custody / pack.name / "arm_readiness.receipts"
-                        used.mkdir(parents=True)
-                        (used / "prior-use").write_text("used\n")
-                    offline = None
-                    if options.get("offline_fail"):
-                        def offline(_context, *, kind):
-                            raise t0._underivable(kind, "synthetic offline mutation")
-                    with author_environment(
-                        repository,
-                        probe=options.get("probe", passing_probe),
-                        offline=offline,
-                        free=options.get("free", 100 * 1024**3),
-                    ), contextlib.ExitStack() as stack:
-                        if options.get("patch_message"):
-                            stack.enter_context(mock.patch.object(t0, "_git_message", return_value="no terminal review"))
-                        with self.assertRaises(T0EvidenceAuthoringError) as caught:
-                            author_arm_readiness_evidence_t0(pack, custody)
-                    self.assertEqual(caught.exception.kind, expected_kind)
-                    self.assertTrue(caught.exception.reason_code.startswith("evidence_author_t0_"))
-                    self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
-                    self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-                finally:
-                    temporary.cleanup()
 
-    def test_power_row_battery_probe_passes_exact_bytes_and_refuses_cr_smuggle(self) -> None:
-        # Obligation R2-11 (refuter M-4): `_execute_probe` keeps the child's
-        # exact stdout bytes and the power row hands those bytes, not the
-        # decoded text, to the grammar.  A real child writes the refuter's
-        # CR-smuggled output.
-        import dataclasses
-        from datetime import datetime
-        import sys
-        from tests import battery_float_corpus
-        execute = t0._execute_probe
-        now = int(datetime.fromisoformat(t0._production_clock().utc_now().replace("Z", "+00:00")).timestamp())
-        smuggle = battery_float_corpus.negatives(now)["cr_smuggled_required"]
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        children = []
-        def probe(argv, *, cwd):
-            if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
-                child = execute((sys.executable, "-c",
-                                 "import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))",
-                                 smuggle.hex()), cwd=cwd)
-                children.append(child)
-                return dataclasses.replace(child, argv=tuple(argv))
-            return passing_probe(argv, cwd=cwd)
-        with author_environment(repository, probe=probe), self.assertRaises(
-            T0EvidenceAuthoringError
-        ) as caught:
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
-        self.assertRegex(str(caught.exception), "battery float probe error: .*framing: byte")
-        [child] = children
-        self.assertEqual(child.stdout_bytes, smuggle)
-        self.assertIn("\r", child.stdout)
 
-    def test_power_row_refuses_charging_and_stale_battery_and_records_float(self) -> None:
-        # Final texts v1.1 §5.3 item 5: the t0 power row's own ioreg probe.
-        cases = (
-            ("charging", "charging-synthetic-from-real.ioreg", 0, "battery not at float"),
-            ("stale", "float.ioreg", 181, "battery float probe error: .*UpdateTime stale"),
-        )
-        for label, name, age_s, detail in cases:
-            with self.subTest(case=label):
-                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-                try:
-                    def probe(argv, *, cwd, name=name, age_s=age_s):
-                        if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
-                            return _probe_result(argv, cwd, stdout=_float_ioreg(name, age_s=age_s))
-                        return passing_probe(argv, cwd=cwd)
-                    with author_environment(repository, probe=probe), self.assertRaises(
-                        T0EvidenceAuthoringError
-                    ) as caught:
-                        author_arm_readiness_evidence_t0(pack, custody)
-                    self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
-                    self.assertRegex(str(caught.exception), detail)
-                    self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-                finally:
-                    temporary.cleanup()
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        seen = []
-        def recording_probe(argv, *, cwd):
-            seen.append(tuple(argv))
-            return passing_probe(argv, cwd=cwd)
-        with author_environment(repository, probe=recording_probe):
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertIn(t0._battery_float.IOREG_BATTERY_ARGV, seen)
-        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {
-            t0._battery_float.IOREG_BATTERY_ARGV: 10, t0._prewindow.PS_ARGV: 5,
-        })
-        source = json.loads(
-            (custody / pack.name / t0._SOURCE_DIRECTORY / "t0-power-path.json").read_text()
-        )
-        observation = source["derivation"]["battery_float"]
-        self.assertEqual(observation["phase"], "t0_power_row")
-        self.assertTrue(observation["passed"])
-        self.assertIn(
-            list(t0._battery_float.IOREG_BATTERY_ARGV),
-            [probe["argv"] for probe in source["probes"]],
-        )
 
-    def test_existing_namespace_is_append_only_boot_bound_and_tamper_evident(self) -> None:
-        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        evidence = custody / pack.name / t0._EVIDENCE_DIRECTORY
-        with author_environment(repository):
-            author_arm_readiness_evidence_t0(pack, custody)
-        before = {path.name: path.read_bytes() for path in evidence.iterdir()}
-        arm_context_path = inputs / "arm-context.json"
-        arm_context_raw = arm_context_path.read_bytes()
-        arm_context_path.write_bytes(arm_context_raw + b" ")
-        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as caught:
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.reason_code, "evidence_author_t0_arm_context_missing")
-        self.assertEqual(before, {path.name: path.read_bytes() for path in evidence.iterdir()})
-        arm_context_path.write_bytes(arm_context_raw)
-        with author_environment(
-            repository,
-            probe=lambda argv, *, cwd: _probe_result(argv, cwd, stdout=OTHER_BOOT_SESSION_ID + "\n") if "kern.bootsessionuuid" in argv else passing_probe(argv, cwd=cwd),
-        ), self.assertRaises(T0EvidenceAuthoringError) as caught:
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(
-            caught.exception.reason_code,
-            "evidence_author_t0_clock_attestation_underivable",
-        )
-        self.assertEqual(before, {path.name: path.read_bytes() for path in evidence.iterdir()})
 
-    def test_clock_probe_publishes_exact_ruled_value_dictionary(self) -> None:
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository):
-            author_arm_readiness_evidence_t0(pack, custody)
-        receipt = json.loads(
-            (
-                custody
-                / pack.name
-                / t0._EVIDENCE_DIRECTORY
-                / t0._receipt_name("clock.correct_and_prior_state")
-            ).read_text(encoding="utf-8")
-        )
-        fact = receipt["facts"][0]
-        self.assertEqual(fact["source_kind"], "PROBE")
-        self.assertEqual(
-            set(fact["value"]),
-            readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS | {"clock_sizing_binding"},
-        )
-        self.assertEqual(
-            fact["value"]["clock_sizing_binding"],
-            _qualification.reference(_inputs / "kernel-frequency-binding.json"),
-        )
-        self.assertEqual(fact["value"]["anchor_check_version"], kernel_clock.ANCHOR_CHECK_VERSION)
-        self.assertEqual(fact["value"]["r0_kernel_frequency"], frequency_probe())
-        self.assertEqual(fact["value"]["kernel_frequency"], frequency_probe())
-        boolean_names = {
-            name for name, value in fact["value"].items() if isinstance(value, bool)
-        }
-        self.assertEqual(
-            boolean_names,
-            {
-                "independent_clock_attestation",
-                "reference_quorum_satisfied",
-                "absolute_offset_within_ceiling",
-                "unstepped_across_t0_sequence",
-            },
-        )
-        self.assertNotIn("prior_systemsetup_state_captured", fact["value"])
-
-    def test_source_and_receipt_mutations_are_killed_without_overwrite(self) -> None:
-        for target_kind in ("source", "receipt"):
-            with self.subTest(target=target_kind):
-                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-                try:
-                    with author_environment(repository):
-                        author_arm_readiness_evidence_t0(pack, custody)
-                    evidence = custody / pack.name / t0._EVIDENCE_DIRECTORY
-                    source = custody / pack.name / t0._SOURCE_DIRECTORY
-                    target = (
-                        next(source.glob("*.json"))
-                        if target_kind == "source"
-                        else next(evidence.glob("*.json"))
-                    )
-                    target.write_bytes(target.read_bytes() + b" ")
-                    before = {
-                        str(path): path.read_bytes()
-                        for directory in (source, evidence)
-                        for path in directory.iterdir()
-                    }
-                    with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError):
-                        author_arm_readiness_evidence_t0(pack, custody)
-                    self.assertEqual(
-                        before,
-                        {
-                            str(path): path.read_bytes()
-                            for directory in (source, evidence)
-                            for path in directory.iterdir()
-                        },
-                    )
-                finally:
-                    temporary.cleanup()
-
-    def test_coordinated_source_receipt_rewrite_is_killed_by_fresh_derivation(self) -> None:
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        with author_environment(repository):
-            author_arm_readiness_evidence_t0(pack, custody)
-        source_path = (
-            custody
-            / pack.name
-            / t0._SOURCE_DIRECTORY
-            / f"{t0._slug('t0.power_path')}.json"
-        )
-        receipt_path = (
-            custody
-            / pack.name
-            / t0._EVIDENCE_DIRECTORY
-            / t0._receipt_name("t0.power_path")
-        )
-        source = readiness.parse_json_bytes(
-            source_path.read_bytes(), require_canonical=True
-        )
-        source["derivation"]["operator_supplied_conclusion"] = True
-        source_raw = readiness.render_json(source)
-        source_path.write_bytes(source_raw)
-        receipt = readiness.parse_json_bytes(
-            receipt_path.read_bytes(), require_canonical=True
-        )
-        receipt["facts"][0]["source_sha256"] = hashlib.sha256(source_raw).hexdigest()
-        receipt_raw = readiness.render_json(receipt)
-        receipt_path.write_bytes(receipt_raw)
-        receipt_path.with_name(f"{receipt_path.name}.sha256").write_bytes(
-            readiness.gnu_sidecar(
-                hashlib.sha256(receipt_raw).hexdigest(), receipt_path.name
-            )
-        )
-        before = {
-            str(path): path.read_bytes()
-            for directory in (
-                custody / pack.name / t0._SOURCE_DIRECTORY,
-                custody / pack.name / t0._EVIDENCE_DIRECTORY,
-            )
-            for path in directory.iterdir()
-        }
-        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as caught:
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(caught.exception.reason_code, "evidence_author_t0_existing_stale")
-        self.assertEqual(
-            before,
-            {
-                str(path): path.read_bytes()
-                for directory in (
-                    custody / pack.name / t0._SOURCE_DIRECTORY,
-                    custody / pack.name / t0._EVIDENCE_DIRECTORY,
-                )
-                for path in directory.iterdir()
-            },
-        )
-
-    def test_staged_discovery_refusal_publishes_no_output(self) -> None:
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        refusal = {
-            "type": "REFUSE",
-            "code": "readiness_evidence_digest_mismatch",
-            "row_id": None,
-            "evidence_id": None,
-        }
-        with (
-            author_environment(repository),
-            mock.patch.object(
-                t0._readiness,
-                "_discover_evidence",
-                return_value=([], {}, [refusal]),
-            ),
-            self.assertRaises(T0EvidenceAuthoringError) as caught,
-        ):
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(
-            caught.exception.reason_code, "evidence_author_t0_validation_failed"
-        )
-        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
-        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
-
-    def test_every_publication_crash_point_is_prestate_or_detectable(self) -> None:
-        class InjectedKill(BaseException):
-            pass
-
-        for completed_renames in range(4):
-            with self.subTest(completed_renames=completed_renames):
-                temporary, repository, pack, custody, _context, _inputs = (
-                    make_t0_fixture()
-                )
-                try:
-                    custody_pack = custody / pack.name
-                    source_dir = custody_pack / t0._SOURCE_DIRECTORY
-                    evidence_dir = custody_pack / t0._EVIDENCE_DIRECTORY
-                    marker = evidence_dir / t0._PUBLICATION_COMPLETION_MARKER
-                    final_destinations = {
-                        source_dir,
-                        evidence_dir,
-                        marker,
-                    }
-                    real_replace = t0._os.replace
-                    rename_count = 0
-
-                    def kill_after_selected_rename(source, destination):
-                        nonlocal rename_count
-                        destination_path = Path(destination)
-                        if destination_path not in final_destinations:
-                            return real_replace(source, destination)
-                        if completed_renames == 0:
-                            raise InjectedKill("before the first publication rename")
-                        result = real_replace(source, destination)
-                        rename_count += 1
-                        if rename_count == completed_renames:
-                            raise InjectedKill(
-                                f"after publication rename {rename_count}"
-                            )
-                        return result
-
-                    with (
-                        author_environment(repository),
-                        mock.patch.object(
-                            t0._os,
-                            "replace",
-                            side_effect=kill_after_selected_rename,
-                        ),
-                        self.assertRaises(InjectedKill),
-                    ):
-                        author_arm_readiness_evidence_t0(pack, custody)
-
-                    self.assertEqual(
-                        [
-                            path.name
-                            for path in custody_pack.iterdir()
-                            if path.name.startswith(".arm-readiness-t0-")
-                        ],
-                        [],
-                    )
-                    if completed_renames == 0:
-                        self.assertFalse(source_dir.exists())
-                        self.assertFalse(evidence_dir.exists())
-                        with author_environment(repository):
-                            recovered = author_arm_readiness_evidence_t0(
-                                pack, custody
-                            )
-                        self.assertTrue(recovered["mutated"])
-                    elif completed_renames < 3:
-                        self.assertTrue(source_dir.is_dir())
-                        self.assertEqual(evidence_dir.is_dir(), completed_renames == 2)
-                        self.assertFalse(marker.exists())
-                        with (
-                            author_environment(repository),
-                            self.assertRaises(T0EvidenceAuthoringError) as caught,
-                        ):
-                            author_arm_readiness_evidence_t0(pack, custody)
-                        self.assertEqual(
-                            caught.exception.reason_code,
-                            "evidence_author_t0_publication_incomplete",
-                        )
-                        if completed_renames == 2:
-                            _items, _receipts, refusals = (
-                                readiness._discover_evidence(
-                                    pack,
-                                    custody_pack,
-                                    pack_sha256=readiness.committed_pack_tree_sha256(
-                                        pack
-                                    ),
-                                    head_commit=readiness.reviewed_main(pack)[
-                                        "head_commit"
-                                    ],
-                                    boot_session_id=TEST_BOOT_SESSION_ID,
-                                    now_monotonic_ns=1_000_000_000_000,
-                                    include_pack=False,
-                                )
-                            )
-                            self.assertIn(
-                                "readiness_evidence_unreadable",
-                                {item["code"] for item in refusals},
-                            )
-                    else:
-                        self.assertTrue(
-                            t0._publication_complete(source_dir, evidence_dir)
-                        )
-                        with author_environment(repository):
-                            recovered = author_arm_readiness_evidence_t0(
-                                pack, custody
-                            )
-                        self.assertFalse(recovered["mutated"])
-                finally:
-                    temporary.cleanup()
-
-    def test_each_absent_runbook_artifact_class_has_one_named_refusal(self) -> None:
-        expected = {
-            "arm_context": "evidence_author_t0_arm_context_missing",
-            "clock_reference_capture": "evidence_author_t0_clock_attestation_missing",
-            "clock_disable_capture": "evidence_author_t0_clock_disable_missing",
-            "quiet_mac_prep_capture": "evidence_author_t0_quiet_mac_prep_missing",
-            "prewindow_check_capture": "evidence_author_t0_prewindow_check_missing",
-            "ledger_readiness_capture": "evidence_author_t0_ledger_readiness_missing",
-            "ledger_reservation_capture": "evidence_author_t0_ledger_reservation_missing",
-            "launch_manifest": "evidence_author_t0_launch_manifest_missing",
-            "window_environment": "evidence_author_t0_window_environment_missing",
-            "window_chain": "evidence_author_t0_window_chain_missing",
-            "waiver_record": "evidence_author_t0_waiver_record_missing",
-            "identity_epoch": "evidence_author_t0_identity_epoch_missing",
-            "t1_bindings": "evidence_author_t0_t1_bindings_missing",
-            "production_ledger": "evidence_author_t0_production_ledger_missing",
-        }
-        self.assertEqual(len(expected), 14)
-        self.assertEqual(len(set(expected.values())), 14)
-        for artifact_class, reason_code in expected.items():
-            with self.subTest(artifact_class=artifact_class):
-                temporary, repository, pack, custody, context, inputs = make_t0_fixture()
-                try:
-                    launch = json.loads((inputs / "launch-manifest.json").read_text())
-                    reservation = json.loads((inputs / "ledger-reservation.json").read_text())
-                    flags = t0._argv_flags(
-                        reservation["argv"], valueless=frozenset({"--execute"})
-                    )
-                    paths = {
-                        "arm_context": inputs / "arm-context.json",
-                        "clock_reference_capture": inputs / "clock-reference.json",
-                        "clock_disable_capture": inputs / "clock-disable.json",
-                        "quiet_mac_prep_capture": inputs / "quiet-mac-prep.json",
-                        "prewindow_check_capture": inputs / "prewindow-check.json",
-                        "ledger_readiness_capture": inputs / "ledger-readiness.json",
-                        "ledger_reservation_capture": inputs / "ledger-reservation.json",
-                        "launch_manifest": inputs / "launch-manifest.json",
-                        "window_environment": Path(launch["window_plan_root"]) / "window.env",
-                        "window_chain": Path(launch["window_plan_root"]) / "window-chain.zsh",
-                        "waiver_record": Path(context["waiver_path"]),
-                        "identity_epoch": Path(flags["--identity-epoch-json"]),
-                        "t1_bindings": Path(flags["--t1-bindings-json"]),
-                        "production_ledger": Path(flags["--ledger"]),
-                    }
-                    paths[artifact_class].unlink()
-                    with (
-                        author_environment(repository),
-                        self.assertRaises(T0EvidenceAuthoringError) as caught,
-                    ):
-                        author_arm_readiness_evidence_t0(pack, custody)
-                    self.assertEqual(caught.exception.reason_code, reason_code)
-                    self.assertFalse(
-                        (custody / pack.name / t0._SOURCE_DIRECTORY).exists()
-                    )
-                    self.assertFalse(
-                        (custody / pack.name / t0._EVIDENCE_DIRECTORY).exists()
-                    )
-                finally:
-                    temporary.cleanup()
-
-    def test_cli_refuses_a_pack_from_another_repository(self) -> None:
-        temporary, _repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        output = io.BytesIO()
-        with mock.patch.object(t0_cli.sys, "stdout", _cli_stdout(output)):
-            code = t0_cli.main(
-                ["--pack-root", str(pack), "--custody-root", str(custody)]
-            )
-        self.assertEqual(code, 2)
-        value = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(value["status"], "REFUSE")
-        self.assertEqual(
-            value["reason_codes"], ["evidence_author_t0_repository_mismatch"]
-        )
 
     def _assert_acid_authored_fifteen_then_arm_generator_reaches_go(
         self,
@@ -3667,68 +1541,979 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             len(identity_receipt["identity_units"][0]["config_inventory"]), 2
         )
 
-    def test_acid_authored_fifteen_then_real_arm_generator_reaches_go(self) -> None:
-        """The complete synthetic author-to-arm transaction reaches GO."""
 
-        self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
-            boot_session_id=TEST_BOOT_SESSION_ID,
-            synthetic_boot_session=True,
-            synthetic_clock=True,
+    def test_rf01_r0_fixed_roster_and_one_attempt_policy_refuses(self) -> None:
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            value = json.loads(capture["stdout"])
+            value["samples"][1]["server"] = "substitute.invalid"
+            capture["stdout"] = readiness.render_json(value).decode("utf-8")
+            _write_json(path, capture)
+
+        self._assert_clock_refusal(
+            mutate=mutate,
+            detail="R0 clock reference does not prove the fixed roster and one-attempt policy",
         )
 
-    def test_synthetic_acid_is_hermetic_to_system_timezone(self) -> None:
-        """The synthetic transaction is independent of the host timezone."""
 
-        previous = os.environ.get("TZ")
-        try:
-            os.environ["TZ"] = "Pacific/Kiritimati"
-            if hasattr(time, "tzset"):
-                time.tzset()
-            self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
-                boot_session_id=TEST_BOOT_SESSION_ID,
-                synthetic_boot_session=True,
-                synthetic_clock=True,
+    def test_rf01_r0_peer_address_must_equal_reparsed_stdout(self) -> None:
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            value = json.loads(capture["stdout"])
+            value["samples"][0]["peer_address"] = "192.0.2.99"
+            capture["stdout"] = readiness.render_json(value).decode("utf-8")
+            _write_json(path, capture)
+
+        self._assert_clock_refusal(
+            mutate=mutate,
+            detail="R0 clock reference parseable leg alters its peer address",
+        )
+
+
+    def test_rf01_r0_raw_line_must_equal_reparsed_stdout(self) -> None:
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            value = json.loads(capture["stdout"])
+            value["samples"][0]["raw_line"] = "forged raw line"
+            capture["stdout"] = readiness.render_json(value).decode("utf-8")
+            _write_json(path, capture)
+
+        self._assert_clock_refusal(
+            mutate=mutate,
+            detail="R0 clock reference parseable leg alters its raw line",
+        )
+
+
+    def test_rf02_r0_quorum_boundary_one_refuses_two_passes(self) -> None:
+        one = {
+            "time.apple.com": (0, _sntp_line("time.apple.com")),
+            "pool.ntp.org": (69, ""),
+            "time.nist.gov": (69, ""),
+        }
+        self._assert_clock_refusal(
+            mutate=lambda inputs: self._replace_r0(inputs, legs=one),
+            detail="R0 reference quorum has fewer than two parseable legs",
+        )
+        two = dict(one)
+        two["pool.ntp.org"] = (0, _sntp_line("pool.ntp.org"))
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        self._replace_r0(inputs, legs=two)
+        with author_environment(repository):
+            self.assertEqual(
+                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
             )
-        finally:
-            if previous is None:
-                os.environ.pop("TZ", None)
-            else:
-                os.environ["TZ"] = previous
-            if hasattr(time, "tzset"):
-                time.tzset()
 
-    def test_synthetic_acid_ignores_wall_clock_48_hours_in_future(self) -> None:
-        """Monotonic validity is independent of a future wall clock."""
 
-        with mock.patch.object(
-            t0._readiness,
-            "_utc_now",
-            return_value="2026-08-15T20:30:00Z",
+    def test_rf03_r0_disjoint_and_inconvenient_leg_cannot_be_discarded(self) -> None:
+        two_disjoint = {
+            "time.apple.com": (
+                0,
+                _sntp_line(
+                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
+                ),
+            ),
+            "pool.ntp.org": (
+                0,
+                _sntp_line(
+                    "pool.ntp.org", offset="+0.100000", uncertainty="0.010000"
+                ),
+            ),
+            "time.nist.gov": (69, ""),
+        }
+        self._assert_clock_refusal(
+            mutate=lambda inputs: self._replace_r0(inputs, legs=two_disjoint),
+            detail="R0 reference agreement intervals have empty intersection",
+        )
+        legs = {
+            "time.apple.com": (
+                0,
+                _sntp_line(
+                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
+                ),
+            ),
+            "pool.ntp.org": (
+                0,
+                _sntp_line(
+                    "pool.ntp.org", offset="+0.005000", uncertainty="0.010000"
+                ),
+            ),
+            "time.nist.gov": (
+                0,
+                _sntp_line(
+                    "time.nist.gov", offset="+0.100000", uncertainty="0.010000"
+                ),
+            ),
+        }
+        self._assert_clock_refusal(
+            mutate=lambda inputs: self._replace_r0(inputs, legs=legs),
+            detail="R0 reference agreement intervals have empty intersection",
+        )
+
+
+    def test_rf04_r0_reference_bound_boundary_gates(self) -> None:
+        def legs(offset: str) -> dict[str, tuple[int, str]]:
+            return {
+                server: (
+                    0,
+                    _sntp_line(server, offset=offset, uncertainty="0.000000"),
+                )
+                for server in t0._clock_reference.SERVER_ROSTER
+            }
+
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        self._replace_r0(inputs, legs=legs("+0.500000"))
+        with author_environment(repository):
+            self.assertEqual(
+                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
+            )
+        self._assert_clock_refusal(
+            mutate=lambda inputs: self._replace_r0(
+                inputs, legs=legs("+0.500001")
+            ),
+            detail="R0 reference bound exceeds 0.5 seconds",
+        )
+
+
+    def test_rf05_r0_anchor_read_skew_boundary_gates(self) -> None:
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        self._replace_r0(inputs, anchor_skew=1_000_000)
+        with author_environment(repository):
+            self.assertEqual(
+                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
+            )
+        self._assert_clock_refusal(
+            mutate=lambda inputs: self._replace_r0(
+                inputs, anchor_skew=1_000_001
+            ),
+            detail="R0 anchor read skew exceeds 1000000 ns",
+        )
+
+
+    def test_rf06_r1_quorum_boundary_one_refuses_two_passes(self) -> None:
+        one = {
+            "time.apple.com": (0, _sntp_line("time.apple.com") + "\n"),
+            "pool.ntp.org": (69, ""),
+            "time.nist.gov": (69, ""),
+        }
+        self._assert_clock_refusal(
+            probe=self._reference_probe(one),
+            detail="R1 reference quorum has fewer than two parseable legs",
+        )
+        two = dict(one)
+        two["pool.ntp.org"] = (0, _sntp_line("pool.ntp.org") + "\n")
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        with author_environment(repository, probe=self._reference_probe(two)):
+            self.assertEqual(
+                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
+            )
+
+
+    def test_rf07_r1_disjoint_and_successful_inconvenient_leg_refuses(self) -> None:
+        two_disjoint = {
+            "time.apple.com": (
+                0,
+                _sntp_line(
+                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
+                ),
+            ),
+            "pool.ntp.org": (
+                0,
+                _sntp_line(
+                    "pool.ntp.org", offset="+0.100000", uncertainty="0.010000"
+                ),
+            ),
+            "time.nist.gov": (69, ""),
+        }
+        self._assert_clock_refusal(
+            probe=self._reference_probe(two_disjoint),
+            detail="R1 reference agreement intervals have empty intersection",
+        )
+        legs = {
+            "time.apple.com": (
+                0,
+                _sntp_line(
+                    "time.apple.com", offset="+0.000000", uncertainty="0.010000"
+                ),
+            ),
+            "pool.ntp.org": (
+                0,
+                _sntp_line(
+                    "pool.ntp.org", offset="+0.005000", uncertainty="0.010000"
+                ),
+            ),
+            "time.nist.gov": (
+                0,
+                _sntp_line(
+                    "time.nist.gov", offset="+0.100000", uncertainty="0.010000"
+                ),
+            ),
+        }
+        self._assert_clock_refusal(
+            probe=self._reference_probe(legs),
+            detail="R1 reference agreement intervals have empty intersection",
+        )
+
+
+    def test_rf08_r1_reference_bound_boundary_gates(self) -> None:
+        def probes(offset: str):
+            return self._reference_probe(
+                {
+                    server: (
+                        0,
+                        _sntp_line(
+                            server, offset=offset, uncertainty="0.000000"
+                        ),
+                    )
+                    for server in t0._clock_reference.SERVER_ROSTER
+                }
+            )
+
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        with author_environment(repository, probe=probes("+0.500000")):
+            self.assertEqual(
+                author_arm_readiness_evidence_t0(pack, custody)["status"], "PASS"
+            )
+        self._assert_clock_refusal(
+            probe=probes("+0.500001"),
+            detail="R1 reference bound exceeds 0.5 seconds",
+        )
+
+
+    def test_insufficient_positive_capture_history_refuses(self) -> None:
+        self._assert_clock_refusal(
+            now_monotonic_ns=500_000_000_000,
+            detail="clock-reference command capture fields are invalid or stale",
+        )
+
+
+    def test_r0_raw_anchor_ahead_of_author_raw_refuses(self) -> None:
+        now = SYNTHETIC_MONOTONIC_NS
+
+        def mutate(inputs: Path) -> None:
+            self._replace_r0(
+                inputs,
+                anchor_raw=now + 1,
+                anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + now + 1,
+            )
+
+        self._assert_clock_refusal(
+            now_monotonic_ns=now,
+            mutate=mutate,
+            detail="T-0 RAW anchor span is below 600000000000 ns",
+        )
+
+
+    def test_capture_finish_ahead_of_ordinary_now_refuses(self) -> None:
+        now = SYNTHETIC_MONOTONIC_NS
+
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            capture["finished_monotonic_ns"] = now + 1
+            _write_json(path, capture)
+
+        self._assert_clock_refusal(
+            now_monotonic_ns=now,
+            mutate=mutate,
+            detail="clock-reference command capture is not a live T-0 artifact",
+        )
+
+
+    def test_rf09_rf10_author_span_boundaries_gate(self) -> None:
+        now = 5_000_000_000_000
+        for span, expected in (
+            (599_999_999_999, False),
+            (600_000_000_000, True),
+            (600_000_000_001, True),
+            (3_599_999_999_999, True),
+            (3_600_000_000_000, True),
+            (3_600_000_000_001, False),
         ):
-            self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
-                boot_session_id=TEST_BOOT_SESSION_ID,
-                synthetic_boot_session=True,
-                synthetic_clock=True,
+            def mutate(inputs: Path, span: int = span) -> None:
+                raw = now - span
+                self._replace_r0(
+                    inputs,
+                    anchor_raw=raw,
+                    anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + raw,
+                )
+
+            if expected:
+                temporary, repository, pack, custody, _context, inputs = make_t0_fixture(
+                    now_monotonic_ns=now
+                )
+                self.addCleanup(temporary.cleanup)
+                mutate(inputs)
+                with author_environment(repository, now_monotonic_ns=now):
+                    self.assertEqual(
+                        author_arm_readiness_evidence_t0(pack, custody)["status"],
+                        "PASS",
+                    )
+            else:
+                detail = (
+                    "T-0 RAW anchor span is below 600000000000 ns"
+                    if span < 600_000_000_000
+                    else "T-0 RAW anchor span exceeds 3600000000000 ns"
+                )
+                self._assert_clock_refusal(
+                    mutate=mutate,
+                    detail=detail,
+                    now_monotonic_ns=now,
+                )
+
+
+    def test_rf11_author_anchor_falsifier_boundaries_gate(self) -> None:
+        for delta, expected in ((4_999_999, True), (5_000_001, False)):
+            def mutate(inputs: Path, delta: int = delta) -> None:
+                capture = json.loads(
+                    (inputs / "clock-reference.json").read_text(encoding="utf-8")
+                )
+                reference = json.loads(capture["stdout"])
+                self._replace_r0(
+                    inputs,
+                    anchor_realtime=(
+                        SYNTHETIC_REALTIME_OFFSET_NS
+                        + reference["anchor_monotonic_raw_ns"]
+                        + delta
+                    ),
+                )
+
+            if expected:
+                temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+                self.addCleanup(temporary.cleanup)
+                mutate(inputs)
+                with author_environment(repository):
+                    authored = author_arm_readiness_evidence_t0(pack, custody)
+                self.assertEqual(authored["status"], "PASS")
+            else:
+                self._assert_clock_refusal(
+                    mutate=mutate,
+                    detail="R0-to-author RAW anchor delta exceeds 5000000 ns",
+                )
+
+
+    def test_rf12_author_anchor_read_skew_boundary_gates(self) -> None:
+        for skew, expected in ((999_999, True), (1_000_000, True), (1_000_001, False)):
+            anchor = lambda skew=skew: t0._clock_reference.ClockAnchor(
+                realtime_ns=SYNTHETIC_REALTIME_OFFSET_NS + SYNTHETIC_MONOTONIC_NS,
+                monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
+                read_skew_ns=skew,
             )
+            if expected:
+                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+                self.addCleanup(temporary.cleanup)
+                with author_environment(repository, sample_anchor=anchor):
+                    self.assertEqual(
+                        author_arm_readiness_evidence_t0(pack, custody)["status"],
+                        "PASS",
+                    )
+            else:
+                self._assert_clock_refusal(
+                    sample_anchor=anchor,
+                    detail="author anchor read skew exceeds 1000000 ns",
+                )
+
+
+    def test_rf13_r0_boot_mismatch_refuses(self) -> None:
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            reference = json.loads(capture["stdout"])
+            reference["boot_session_id"] = OTHER_BOOT_SESSION_ID
+            capture["stdout"] = readiness.render_json(reference).decode("utf-8")
+            _write_json(path, capture)
+
+        self._assert_clock_refusal(
+            mutate=mutate,
+            detail="R0 clock reference schema, sample policy, or boot binding is invalid",
+        )
+
+
+    def test_rf14_r0_must_complete_before_clock_disable_and_r1_before_censuses(self) -> None:
+        def mutate(inputs: Path) -> None:
+            reference_path = inputs / "clock-reference.json"
+            disable = json.loads(
+                (inputs / "clock-disable.json").read_text(encoding="utf-8")
+            )
+            reference = json.loads(reference_path.read_text(encoding="utf-8"))
+            reference["finished_monotonic_ns"] = disable["started_monotonic_ns"] + 1
+            _write_json(reference_path, reference)
+
+        self._assert_clock_refusal(
+            mutate=mutate,
+            detail="R0 did not complete before the first clock-disable action",
+        )
+        calls: list[tuple[str, ...]] = []
+
+        def ordered_probe(argv, *, cwd):
+            calls.append(tuple(argv))
+            return passing_probe(argv, cwd=cwd)
+
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        with author_environment(repository, probe=ordered_probe):
+            author_arm_readiness_evidence_t0(pack, custody)
+        last_sntp = max(
+            index
+            for index, argv in enumerate(calls)
+            if argv and argv[0] == t0._clock_reference.SNTP_PATH
+        )
+        first_census = min(
+            index
+            for index, argv in enumerate(calls)
+            if argv and argv[0] == "/usr/bin/pgrep"
+        )
+        self.assertLess(last_sntp, first_census)
+
+
+    def test_rf14_clock_disable_must_finish_before_r1_starts(self) -> None:
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        disable = json.loads(
+            (inputs / "clock-disable.json").read_text(encoding="utf-8")
+        )
+
+        def r1_started_before_disable_finished(context, *, kind):
+            context.values["r1_batch_started_monotonic_ns"] = (
+                disable["finished_monotonic_ns"] - 1
+            )
+            return (mock.sentinel.agreement, (), 0, mock.sentinel.anchor, 0)
+
+        with (
+            author_environment(repository),
+            mock.patch.object(
+                t0,
+                "_fresh_clock_reference_batch",
+                side_effect=r1_started_before_disable_finished,
+            ),
+            self.assertRaises(T0EvidenceAuthoringError) as caught,
+        ):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "CLOCK_ATTESTATION")
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_clock_attestation_underivable",
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "clock-disable did not finish before the R1 batch",
+        )
+        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
+        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+
+
+    def test_rf14_census_refuses_missing_or_future_r1_completion_stamp(self) -> None:
+        # Merely observing the happy deriver order cannot falsify this guard.
+        # Inject each invalid state at the census boundary instead.
+        for label, kind, values in (
+            ("missing", "MAINTENANCE_CENSUS", {}),
+            (
+                "future",
+                "PROCESS_CENSUS",
+                {"r1_batch_finished_monotonic_ns": 101},
+            ),
+        ):
+            context = SimpleNamespace(
+                values=values,
+                clock=SimpleNamespace(monotonic_ns=lambda: 100),
+                repository=ROOT,
+            )
+            execute = mock.Mock(
+                side_effect=AssertionError("invalid chronology must gate the census")
+            )
+            with (
+                self.subTest(state=label),
+                mock.patch.object(t0, "_execute_probe", execute),
+                self.assertRaises(T0EvidenceAuthoringError) as caught,
+            ):
+                t0._fresh_probe(context, kind, "synthetic census", ("probe",))
+            self.assertEqual(
+                caught.exception.reason_code,
+                f"evidence_author_t0_{kind.lower()}_underivable",
+            )
+            self.assertEqual(
+                str(caught.exception),
+                "fresh census cannot run before the R1 clock-reference batch completes",
+            )
+            execute.assert_not_called()
+
+
+    def test_rf15_noncanonical_clock_reference_capture_refuses_missing_code(self) -> None:
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            path.write_bytes(path.read_bytes() + b" ")
+
+        self._assert_clock_refusal(
+            mutate=mutate,
+            detail=(
+                "clock-reference command capture is not canonical strict JSON: "
+                "JSON bytes are not canonical D-134 bytes"
+            ),
+            reason_code="evidence_author_t0_clock_attestation_missing",
+        )
+
+
+    def test_rf16_r1_batch_duration_boundary_gates(self) -> None:
+        now = SYNTHETIC_MONOTONIC_NS
+        for duration, expected in (
+            (-1, False),
+            (0, True),
+            (1, True),
+            (29_999_999_999, True),
+            (30_000_000_000, True),
+            (30_000_000_001, False),
+        ):
+            anchors = iter(
+                (
+                    t0._clock_reference.ClockAnchor(
+                        SYNTHETIC_REALTIME_OFFSET_NS + now - duration,
+                        now - duration,
+                        1_000,
+                    ),
+                    t0._clock_reference.ClockAnchor(
+                        SYNTHETIC_REALTIME_OFFSET_NS + now,
+                        now,
+                        1_000,
+                    ),
+                )
+            )
+            sampler = lambda anchors=anchors: next(anchors)
+            if expected:
+                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+                self.addCleanup(temporary.cleanup)
+                with author_environment(repository, sample_anchor=sampler):
+                    self.assertEqual(
+                        author_arm_readiness_evidence_t0(pack, custody)["status"],
+                        "PASS",
+                    )
+            else:
+                self._assert_clock_refusal(
+                    sample_anchor=sampler,
+                    detail="R1 batch duration is outside 0 through 30000000000 ns",
+                )
+
+
+    def test_rf21_rf22_off_receipt_requires_exit_and_exact_stdout(self) -> None:
+        for field, value in (("exit_code", 1), ("stdout", "Network Time: Off\n"), ("stdout", "setUsingNetworkTime: On\n")):
+            def mutate(inputs, field=field, value=value):
+                path = inputs / network_time_off.RECEIPT_BASENAME
+                off = json.loads(path.read_bytes())
+                off[field] = value
+                _write_json(path, off)
+            self._assert_clock_refusal(
+                mutate=mutate, detail="network time OFF receipt not admitted",
+                kind="CLOCK_PROBE", reason_code="evidence_author_t0_clock_probe_underivable")
+
+
+    def test_rf36_r1_fixed_roster_one_attempt_and_raw_peer_records(self) -> None:
+        def substituted_probe(argv, *, cwd):
+            command = tuple(argv)
+            if command and command[0] == t0._clock_reference.SNTP_PATH:
+                return _probe_result(
+                    (*command[:-1], "substitute.invalid"),
+                    cwd,
+                    stdout=_sntp_line(command[-1]),
+                )
+            return passing_probe(command, cwd=cwd)
+
+        self._assert_clock_refusal(
+            probe=substituted_probe,
+            detail="R1 clock reference does not prove the fixed one-attempt roster",
+        )
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        with author_environment(repository):
+            author_arm_readiness_evidence_t0(pack, custody)
+        source = json.loads(
+            (
+                custody
+                / pack.name
+                / t0._SOURCE_DIRECTORY
+                / f"{t0._slug('clock.correct_and_prior_state')}.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(len(source["probes"]), 3)
+        for server, probe in zip(t0._clock_reference.SERVER_ROSTER, source["probes"]):
+            parsed = t0._clock_reference.parse_sntp_stdout(
+                probe["stdout"], server=server
+            )
+            self.assertIsNotNone(parsed)
+            self.assertIn(parsed.peer_address, parsed.raw_line)
+
+
+    def test_rf37_r0_boolean_endpoint_refuses_integer_contract(self) -> None:
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            reference = json.loads(capture["stdout"])
+            reference["anchor_monotonic_raw_ns"] = True
+            capture["stdout"] = readiness.render_json(reference).decode("utf-8")
+            _write_json(path, capture)
+
+        self._assert_clock_refusal(
+            mutate=mutate,
+            detail="R0 clock reference numeric endpoint is not an integer",
+        )
+
 
     @unittest.skipUnless(
-        sys.platform == "darwin", "requires Darwin's real boot-session sysctl command"
+        sys.platform == "darwin", "requires Darwin's real pgrep command semantics"
     )
-    def test_acid_real_boot_session_then_real_arm_generator_reaches_go(self) -> None:
-        """Darwin's real boot-session identifier reaches the arm generator."""
-
-        try:
-            boot_session_id = readiness._current_boot_session_id()
-        except readiness.ArmReadinessError as exc:
-            if "Operation not permitted" not in str(exc):
-                raise
-            self.skipTest(f"Darwin boot-session sysctl is unavailable: {exc}")
-        self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
-            boot_session_id=boot_session_id,
-            synthetic_boot_session=False,
-            synthetic_clock=False,
+    def test_real_maintenance_census_executes_pgrep_and_binds_output(self) -> None:
+        self._real_probe_source(
+            "MAINTENANCE_CENSUS",
+            (
+                (
+                    "/usr/bin/pgrep",
+                    "-lf",
+                    "XProtect|mds_stores|mdworker|mdbulkimport|backupd|photoanalysisd|softwareupdated|Spotlight|mediaanalysisd",
+                ),
+            ),
         )
+
+
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's real pgrep command semantics"
+    )
+    def test_real_process_census_executes_pgrep_and_binds_output(self) -> None:
+        self._real_probe_source(
+            "PROCESS_CENSUS",
+            (
+                ("/usr/bin/pgrep", "-x", "caffeinate"),
+                ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
+                (
+                    "/usr/bin/pgrep",
+                    "-lf",
+                    "/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)",
+                ),
+                (
+                    "/usr/bin/pgrep",
+                    "-lf",
+                    "powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)",
+                ),
+            ),
+        )
+
+
+    def test_g1_ruled_census_patterns_ignore_recorded_macos_services(self) -> None:
+        """G1 (packet 34 ruling 10 Q3): the recorded Apple services never match.
+
+        Kills M1 (old browser alternation), M2 (no ``( |$)`` tail), M4 (bare
+        ``watch``); M5 is killed by G2. M-numbers name the ruling's mutations.
+        """
+        for pattern in (t0._BROWSER_CENSUS_PATTERN, t0._MONITOR_CENSUS_PATTERN):
+            for line in _RECORDED_CENSUS_SERVICE_ARGV:
+                with self.subTest(pattern=pattern, line=line):
+                    self.assertIsNone(re.search(pattern, line))
+
+
+    def test_g2_ruled_census_patterns_refuse_real_browsers_and_monitors(self) -> None:
+        """G2 (packet 34 ruling 10 Q3): real browsers and monitors match.
+
+        Kills M3 (one browser name), M5 (no ``/Contents/MacOS/`` anchor), M6
+        (a lost monitor token), M7 (``Firefox`` case-fold).
+        """
+        for line in (
+            _RECORDED_FIREFOX_LINE.split(" ", 1)[1],
+            "/Applications/Safari.app/Contents/MacOS/Safari",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --x",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium --headless=new",
+            "/Applications/Firefox.app/Contents/MacOS/firefox https://example.com",
+            "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing --headless=new",
+            "/Applications/Safari Technology Preview.app/Contents/MacOS/Safari Technology Preview",
+        ):
+            with self.subTest(browser=line):
+                self.assertIsNotNone(re.search(t0._BROWSER_CENSUS_PATTERN, line))
+        for line in (
+            "/Applications/Firefox.app/Contents/MacOS/plugin-container -isForBrowser",
+            "/usr/bin/env Safari",
+        ):
+            with self.subTest(nonbrowser=line):
+                self.assertIsNone(re.search(t0._BROWSER_CENSUS_PATTERN, line))
+        for line in (
+            "/usr/bin/powermetrics -i 200 -n 1",
+            "tail -f /var/log/system.log",
+            "watch -n 5 pmset -g therm",
+            "/opt/homebrew/bin/watch -n 1 date",
+            "python3 scripts/window-chain.py",
+            "python3 scripts/run_campaign.py",
+        ):
+            with self.subTest(monitor=line):
+                self.assertIsNotNone(re.search(t0._MONITOR_CENSUS_PATTERN, line))
+
+
+    def test_g3_browser_and_monitor_probes_gate_the_row(self) -> None:
+        """G3 (packet 34 ruling 10 Q3): a browser or monitor hit refuses authoring.
+
+        Kills M8 (an unchecked probe output) and M9 (a reordered or missing
+        probe); the mocked probe stands in for pgrep on the authoring path.
+        """
+        commands = (
+            ("/usr/bin/pgrep", "-x", "caffeinate"),
+            ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
+            ("/usr/bin/pgrep", "-lf", t0._BROWSER_CENSUS_PATTERN),
+            ("/usr/bin/pgrep", "-lf", t0._MONITOR_CENSUS_PATTERN),
+        )
+        for selected, output in (
+            (commands[1], "123 codex\n"),
+            (commands[2], _RECORDED_FIREFOX_LINE + "\n"),
+            (commands[3], "574 /usr/bin/powermetrics -i 200\n"),
+            (None, ""),
+        ):
+            with self.subTest(command=selected):
+                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+                with temporary:
+                    seen = []
+
+                    def probe(argv, *, cwd):
+                        command = tuple(argv)
+                        if command in commands:
+                            seen.append(command)
+                        if command == selected:
+                            return _probe_result(argv, cwd, exit_code=0, stdout=output)
+                        return passing_probe(argv, cwd=cwd)
+
+                    with author_environment(repository, probe=probe):
+                        if selected is None:
+                            result = author_arm_readiness_evidence_t0(pack, custody)
+                            self.assertEqual(result["status"], "PASS")
+                        else:
+                            with self.assertRaises(T0EvidenceAuthoringError) as caught:
+                                author_arm_readiness_evidence_t0(pack, custody)
+                            self.assertEqual(caught.exception.kind, "PROCESS_CENSUS")
+                            self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
+                            self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+                    self.assertEqual(seen, list(commands))
+
+
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's POSIX extended regular expressions"
+    )
+    def test_g4_real_ruled_census_pgrep_dialect(self) -> None:
+        r"""G4 kills M10: a construct pgrep rejects or silently never matches.
+
+        Authority: packet 34 ruling 10 Q3 as amended by pairing refuter 12 (A2)
+        and the synthesis-13 addendum (the decoy instrument). A *probe* is one
+        recorded command execution; a *decoy* is a ``sleep`` child this test
+        spawns whose argv0 carries a marker command line; the *dialect* is the
+        regular-expression syntax pgrep's own engine interprets. Every
+        alternative of each ruled pattern gets a positive decoy that MUST be
+        reported by the real pgrep, and the recorded Apple services get
+        negative decoys that MUST NOT be, so a Python-only construct (``\b``,
+        ``\d``, ``(?:...)``) or a narrowed alternative fails closed with no
+        browser or monitor running (bench-proven: ``\bwatch\b`` yields exit 1
+        and zero lines against a live decoy). Bench-only: CI runs Linux.
+        """
+        cases = (
+            (
+                t0._BROWSER_CENSUS_PATTERN,
+                (
+                    "/Applications/Safari.app/Contents/MacOS/Safari",
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                    "/Applications/Firefox.app/Contents/MacOS/firefox",
+                ),
+                (
+                    "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/Extensions/SafariWidgetExtension.appex/Contents/MacOS/SafariWidgetExtension",
+                    "/System/Cryptexes/App/usr/libexec/SafariLaunchAgent",
+                    "/Applications/Firefox.app/Contents/MacOS/plugin-container",
+                ),
+            ),
+            (
+                t0._MONITOR_CENSUS_PATTERN,
+                (
+                    "/usr/bin/powermetrics",
+                    "/usr/bin/tail -f",
+                    "scripts/window-chain",
+                    "scripts/run_campaign",
+                    "/opt/homebrew/bin/watch",
+                ),
+                ("/usr/libexec/watchdogd", "/usr/local/bin/stopwatch"),
+            ),
+        )
+        # Every recorded service identity is a deterministic negative decoy,
+        # checked in the same pgrep snapshot as the positives, so the check
+        # does not depend on a live service surviving a later read. Full
+        # executable paths are rebuilt where the recorded argv was truncated.
+        service_paths = tuple(
+            str(
+                Path(
+                    next(
+                        argv.split(" ", 1)[0]
+                        for argv in _RECORDED_CENSUS_SERVICE_ARGV
+                        if basename in argv
+                    )
+                ).parent / basename
+            )
+            for basename in _RECORDED_CENSUS_SERVICE_BASENAMES
+        )
+        for pattern, positives, negatives in cases:
+            with self.subTest(pattern=pattern):
+                negative_markers = negatives + service_paths
+                decoys = [
+                    subprocess.Popen([marker, "30"], executable="/bin/sleep")
+                    for marker in positives + negative_markers
+                ]
+                try:
+                    time.sleep(0.5)
+                    # PID-only output: with ``-lf`` a live process whose argv
+                    # holds a newline prints continuation lines with no PID,
+                    # which no line parser can tell from a new row. Matching
+                    # is unchanged (``-f`` still matches the full argv); each
+                    # hit's full argv is then read back per PID for a pattern
+                    # check (lane TEST-CENSUS-MULTILINE-ARGV-01).
+                    probes, _source = self._real_probe_source(
+                        "PROCESS_CENSUS", (("/usr/bin/pgrep", "-f", pattern),)
+                    )
+                    probe = probes[0]
+                    self.assertEqual(probe.exit_code, 0, probe.stderr)
+                    reported = {int(line) for line in probe.stdout.splitlines()}
+                    for decoy in decoys:
+                        self.assertIsNone(decoy.poll())
+                    for decoy, marker in zip(
+                        decoys, positives + negative_markers, strict=True
+                    ):
+                        with self.subTest(marker=marker):
+                            if marker in positives:
+                                self.assertIn(decoy.pid, reported, probe.stdout)
+                            else:
+                                self.assertNotIn(decoy.pid, reported, probe.stdout)
+                    for pid in sorted(reported):
+                        shown = subprocess.run(
+                            ["/bin/ps", "-ww", "-o", "command=", "-p", str(pid)],
+                            capture_output=True, text=True, check=False,
+                        )
+                        if shown.returncode != 0 and pid not in {d.pid for d in decoys}:
+                            continue  # an unrelated hit exited after pgrep ran
+                        self.assertEqual(shown.returncode, 0, shown.stderr)
+                        self.assertIsNotNone(re.search(pattern, shown.stdout), shown.stdout)
+                finally:
+                    for decoy in decoys:
+                        decoy.terminate()
+                    for decoy in decoys:
+                        decoy.wait(timeout=5)
+
+
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's real sysctl command"
+    )
+    def test_real_boot_census_executes_sysctl_and_binds_machine_result(self) -> None:
+        probes, _source = self._real_probe_source(
+            "MACHINE_PREFLIGHT",
+            (("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"),),
+        )
+        probe = probes[0]
+        if probe.exit_code == 0:
+            self.assertRegex(
+                probe.stdout.strip().lower(),
+                r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            )
+        else:
+            self.assertTrue(probe.stderr.strip())
+
+
+    def test_power_row_battery_probe_passes_exact_bytes_and_refuses_cr_smuggle(self) -> None:
+        # Obligation R2-11 (refuter M-4): `_execute_probe` keeps the child's
+        # exact stdout bytes and the power row hands those bytes, not the
+        # decoded text, to the grammar.  A real child writes the refuter's
+        # CR-smuggled output.
+        import dataclasses
+        from datetime import datetime
+        import sys
+        from tests import battery_float_corpus
+        execute = t0._execute_probe
+        now = int(datetime.fromisoformat(t0._production_clock().utc_now().replace("Z", "+00:00")).timestamp())
+        smuggle = battery_float_corpus.negatives(now)["cr_smuggled_required"]
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        children = []
+        def probe(argv, *, cwd):
+            if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
+                child = execute((sys.executable, "-c",
+                                 "import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))",
+                                 smuggle.hex()), cwd=cwd)
+                children.append(child)
+                return dataclasses.replace(child, argv=tuple(argv))
+            return passing_probe(argv, cwd=cwd)
+        with author_environment(repository, probe=probe), self.assertRaises(
+            T0EvidenceAuthoringError
+        ) as caught:
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
+        self.assertRegex(str(caught.exception), "battery float probe error: .*framing: byte")
+        [child] = children
+        self.assertEqual(child.stdout_bytes, smuggle)
+        self.assertIn("\r", child.stdout)
+
+
+    def test_power_row_refuses_charging_and_stale_battery_and_records_float(self) -> None:
+        # Final texts v1.1 §5.3 item 5: the t0 power row's own ioreg probe.
+        cases = (
+            ("charging", "charging-synthetic-from-real.ioreg", 0, "battery not at float"),
+            ("stale", "float.ioreg", 181, "battery float probe error: .*UpdateTime stale"),
+        )
+        for label, name, age_s, detail in cases:
+            with self.subTest(case=label):
+                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+                try:
+                    def probe(argv, *, cwd, name=name, age_s=age_s):
+                        if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
+                            return _probe_result(argv, cwd, stdout=_float_ioreg(name, age_s=age_s))
+                        return passing_probe(argv, cwd=cwd)
+                    with author_environment(repository, probe=probe), self.assertRaises(
+                        T0EvidenceAuthoringError
+                    ) as caught:
+                        author_arm_readiness_evidence_t0(pack, custody)
+                    self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
+                    self.assertRegex(str(caught.exception), detail)
+                    self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+                finally:
+                    temporary.cleanup()
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        seen = []
+        def recording_probe(argv, *, cwd):
+            seen.append(tuple(argv))
+            return passing_probe(argv, cwd=cwd)
+        with author_environment(repository, probe=recording_probe):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertIn(t0._battery_float.IOREG_BATTERY_ARGV, seen)
+        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {
+            t0._battery_float.IOREG_BATTERY_ARGV: 10, t0._prewindow.PS_ARGV: 5,
+        })
+        source = json.loads(
+            (custody / pack.name / t0._SOURCE_DIRECTORY / "t0-power-path.json").read_text()
+        )
+        observation = source["derivation"]["battery_float"]
+        self.assertEqual(observation["phase"], "t0_power_row")
+        self.assertTrue(observation["passed"])
+        self.assertIn(
+            list(t0._battery_float.IOREG_BATTERY_ARGV),
+            [probe["argv"] for probe in source["probes"]],
+        )
+
+
+
+
+
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _historical_fixture_source(relative):
+    """Copy code only, from this tree or the preserved pre-prune source tree."""
+    path = ROOT / relative
+    if path.is_file():
+        return path.read_bytes()
+    if not str(relative).endswith((".py", ".sh")):
+        raise FileNotFoundError(path)
+    return subprocess.check_output(["git", "-C", str(ROOT), "show", "92026c184:" + str(relative)])

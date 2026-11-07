@@ -1,3 +1,4 @@
+from tests import receipt_factory
 """Tests for the P2-039 detection-floor calculator (D-054 false-effect guard).
 
 Hand-computed fixtures come directly from the DRAFT spec
@@ -21,7 +22,7 @@ from fractions import Fraction
 from pathlib import Path
 from unittest.mock import patch
 
-import joulewise.arm_readiness as arm_readiness
+import joulewise.receipt_readers as arm_readiness
 import joulewise.detection_floor as detection_floor
 import joulewise.floor_extraction as floor_extraction
 from joulewise.analysis_engine.inputs import (
@@ -2396,7 +2397,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
             "_current_boot_session_id",
             return_value=TEST_BOOT_SESSION_ID,
         ):
-            arm_readiness.record_launch_lifecycle_event(
+            receipt_factory.record_launch_lifecycle_event(
                 launch.pack,
                 consumption_path,
                 "completion",

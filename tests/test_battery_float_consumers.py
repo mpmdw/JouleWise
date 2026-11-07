@@ -37,9 +37,9 @@ REPLACE_REASON = "predates PairVerdict (64e39bb9); cannot receive a PairVerdict"
 # (arm_readiness_evidence_t0._agent_lines_decided, census-ancestors lane
 # 2026-10-07: the t0 author's agent probe through the same matcher).
 REPLACE_CALL_ALLOWLIST = {
-    ("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
+    ("joulewise/physical_checks.py", "_derive_power",
      "_replace(battery, stdout=battery.stdout_bytes)"): REPLACE_REASON,
-    ("joulewise/arm_readiness_evidence_t0.py", "_agent_lines_decided",
+    ("joulewise/physical_checks.py", "_agent_lines_decided",
      "_replace(probe, exit_code=exit_code, stdout=decided.kept_text)"): REPLACE_REASON,
     ("joulewise/night_gate.py", "_check_machine.battery_runner",
      "replace(battery_result, stdout=battery_result.stdout_bytes)"): REPLACE_REASON,
@@ -84,8 +84,7 @@ ALLOWLIST = {
 # at its recorded wall time. They do not consume or synthesize a window verdict.
 # Register only the exact parser call, retaining the seven verdict-seam rows.
 RAW_BOUNDARY_PARSE_CALLS = {
-    ("joulewise/v5_qualification.py", "battery_boundaries", "battery_float.parse(raw, stored['wall_time_s'])"),
-    ("scripts/check_v5_arm_abort.py", "battery_sources", "battery_float.parse(raw, record['wall_time_s'])"),
+    ("joulewise/qualification_readers.py", "battery_boundaries", "battery_float.parse(raw, stored['wall_time_s'])"),
     # Gate prune L1: the battery hazard reads each captured ioreg document (arm
     # read, monitor poll) through the frozen grammar; it never forms a verdict.
     ("joulewise/hazards/battery.py", "_grammar", "battery_float.parse(raw, wall_time_s)"),
@@ -337,7 +336,7 @@ class ConsumerGuardTests(unittest.TestCase):
             self.assertEqual(violations(relative, source + call + "\n"), [])
             self.assertTrue(violations(relative, source + "battery_float.parse(raw, 0)\n"))
             self.assertTrue(violations(relative, source + "battery_float.validate_window(raw)\n"))
-        self.assertEqual(len(found), 3)
+        self.assertEqual(len(found), 2)
 
     def test_new_parse_reference_outside_pair_seam_is_flagged(self) -> None:
         source = "def new_reader(raw):\n    return parse(raw, 1)\n"

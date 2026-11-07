@@ -16,7 +16,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from joulewise import arm_readiness_evidence_t0 as t0_author
+from joulewise import physical_checks as t0_author
 from joulewise import night_gate
 from joulewise.b5 import chain as b5_chain
 from joulewise.b5 import plan as b5_plan

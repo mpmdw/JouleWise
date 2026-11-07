@@ -9,57 +9,18 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import arm_readiness as readiness, battery_float, v5_qualification as q
-from scripts import assemble_v5_battery_boundaries as assembler, harvest_v5_g2b_window as harvest
+from joulewise import receipt_readers as readiness; from joulewise import battery_float; from joulewise import qualification_readers as q
+from joulewise import battery_records as assembler; from scripts import qualification_harvest_readers as harvest
 from scripts import run_campaign, run_night
 
 
-class ConsumerTests(unittest.TestCase):
-    def test_selected_ledger_reaches_both_snapshot_arguments(self):
-        snapshot = SimpleNamespace(valid=False)
-        with mock.patch.object(run_campaign, 'load_calibration_ledger_snapshot', return_value=snapshot) as load, \
-             mock.patch.dict(os.environ, {'CALIBRATION_LEDGER': '/chosen/ledger', 'LEDGER_HEAD_PIN': '/chosen/pin'}):
-            self.assertIs(run_campaign._load_calibration_snapshot_for_evaluation(), snapshot)
-            self.assertEqual(load.call_args.kwargs['ledger_path'], Path('/chosen/ledger'))
-            self.assertEqual(load.call_args.kwargs['head_pin_path'], Path('/chosen/pin'))
-            args = run_campaign.parse_args(['--whole-window-verdict', '--calibration-ledger', '/explicit/ledger', '--head-pin', '/explicit/pin'])
-            run_campaign._load_calibration_snapshot_for_evaluation(ledger_path=args.calibration_ledger, head_pin_path=args.head_pin)
-            self.assertEqual(load.call_args.kwargs['ledger_path'], Path('/explicit/ledger'))
-            self.assertEqual(load.call_args.kwargs['head_pin_path'], Path('/explicit/pin'))
 
-    def test_chain_exports_native_selected_ledger_and_shared_off_path(self):
-        from joulewise.arm_readiness_evidence_t0 import WINDOW_ENV_KEYS
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            chain = root / 'chain.zsh'
-            chain.write_text('export V5_QUALIFICATION_OCCURRENCE=s1\n')
-            values = {key: '/fixture/' + key for key in WINDOW_ENV_KEYS}
-            (root / 'window.env').write_text(''.join(f'{key}={value}\n' for key, value in sorted(values.items())))
-            plan = SimpleNamespace(plan_id='occurrence', measurement_root='/fixture/code', measurement_head='a'*40,
-                custody_root=str(root), chain_path=str(chain), receipt_class='TRANSACTION_PACK', pack_night={'pack_id':'gamma'})
-            with mock.patch.dict(os.environ, {}, clear=True):
-                env = run_night._chain_environment(plan, root / 'night')
-            self.assertEqual(env['CALIBRATION_LEDGER'], values['CALIBRATION_LEDGER'])
-            self.assertEqual(env['LEDGER_HEAD_PIN'], values['LEDGER_HEAD_PIN'])
-            self.assertEqual(env['JOULEWISE_NETWORK_TIME_OFF_RECEIPT'], str(q.off_receipt_path(plan)))
 
-    def test_terminal_boundary_requires_exact_chain_path_and_unique_census(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            plan = SimpleNamespace(custody_root=str(root))
-            expected = root / 'night/transcript/post-bracket-terminal-boundary.json'
-            q.write(expected, {'fixture': 'STOP'})
-            q.write(root / 'qualification-plan-record.json', {'terminal_boundary_path': str(expected)})
-            q.require_terminal_boundary(plan, expected)
-            wrong = root / 'elsewhere/post-bracket-terminal-boundary.json'
-            q.write(wrong, {'fixture': 'STOP'})
-            with self.assertRaisesRegex(q.HarvestRefusal, 'path_mismatch'):
-                q.require_terminal_boundary(plan, wrong)
-            with self.assertRaisesRegex(q.HarvestRefusal, 'census_invalid'):
-                q.require_terminal_boundary(plan, expected)
 
 
 class ArchivedBatteryTests(unittest.TestCase):
+    pass
+    pass
     source = Path(__file__).parent / 'fixtures/v5_qualification_harvest/block3_battery'
 
     def test_real_block3_glob_skips_attached_copy_and_replays_capture_pairs(self):
@@ -83,122 +44,149 @@ class ArchivedBatteryTests(unittest.TestCase):
                 if path.parent.name == 'instrument_validation':
                     self.assertEqual(battery_float.authenticate_capture(path).status, 'pass')
 
-    def test_real_t0_capture_retains_exact_observation_and_raw_digest(self):
-        capture = self.source / 't0-receipt.json'
-        observed, raw = q.captured_battery_observation(capture)
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            locator = assembler.retain_t0_capture(capture, observed['plan_id'], root)
-            self.assertEqual(Path(locator['raw']['path']).read_bytes(), raw)
-            self.assertEqual(q.sha(Path(locator['raw']['path'])), observed['raw_stdout_sha256'])
-            self.assertEqual(q.read(locator['record']['path'])['source_capture'], q.reference(capture.absolute()))
-            with self.assertRaisesRegex(q.HarvestRefusal, 'identity_mismatch'):
-                assembler.retain_t0_capture(capture, 'wrong-occurrence', root)
-
-    def test_assembler_authenticates_native_phase_plan_and_raw_bytes(self):
-        capture = next((self.source / 'capture-tree/instrument_validation').iterdir())
-        original = q.read(capture / 'instrument_evidence.json')['battery_float']['pre']
-        raw = (capture / 'raw/battery_float.pre.ioreg').read_bytes()
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            from joulewise import night_gate
-            from joulewise.night_plan_writer import night_plan_mapping
-            from tests.test_night_gate import make_plan
-            from tests.test_v5_block4_x6 import put
-            wall = original['wall_time_s']
-            plan_path = root / 'night_plan.json'
-            plan = make_plan(plan_id='occurrence', custody_root=str(root),
-                             t0_epoch_s=wall + 100, authored_epoch_s=wall - 100,
-                             window_max_s=3600)
-            plan_ref = put(plan_path, night_plan_mapping(plan))
-            observations = {}
-            attempt = root / 'arm-attempts/000001'
-            for index, (role, phase) in enumerate(q.BATTERY_BOUNDARY_PHASES.items()):
-                # Only probe transport/identity are a fixture. The captured
-                # block-3 bytes, parser and all authenticators are real.
-                record, observed = battery_float.observe(phase=phase, plan_id='occurrence',
-                    wall_time_s=wall + index * 50, monotonic_ns=lambda: (index + 1) * 100,
-                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw, b''))
-                if role == 't0':
-                    record['raw_stdout'] = observed.decode()
-                    receipt_ref = put(root / 'night/receipt.json', {
-                        'schema': night_gate.SCHEMA, 'plan_id': 'occurrence',
-                        'authored_monotonic_ns': 310, 'conditions': [
-                            {'condition_id': 'C3', 'measured': {'battery_float': record}}]})
-                    observations[role] = assembler.retain_t0_capture(
-                        Path(receipt_ref['path']), 'occurrence', root)
-                else:
-                    directory = attempt if role == 'publication' else root
-                    name = 'battery-float-at-publication' if role == 'publication' else role
-                    observations[role] = q.persist_battery_observation(directory, name, record, observed)
-            prepare_ref = put(root / 'prepare.json', {
-                'schema': 'joulewise.evidence_prepare.v1', 'plan_id': 'occurrence',
-                'custody_root': str(root), 'plan_path': str(plan_path),
-                'digests': {str(plan_path): plan_ref['sha256']}})
-            arm_ref = put(root / 'lifecycle/check.json', {
-                'schema': 'joulewise.evidence_check.v1', 'prepare_sha256': prepare_ref['sha256'],
-                'started_epoch_s': wall - 1, 'finished_epoch_s': wall + 1,
-                'fake_launchctl': False, 'checks': {'battery_float': {
-                    **observations['arm'], 'observation': q.read(observations['arm']['record']['path'])}}})
-            publication_ref = put(attempt / 'install.json', {
-                'schema': 'joulewise.evidence_install.v1', 'plan_sha256': plan_ref['sha256'],
-                'published_plan': str(plan_path), 'attempt_path': str(attempt),
-                'fake_launchctl': False, 'outcome': 'installed',
-                'started_epoch_s': wall + 49, 'published_epoch_s': wall + 51})
-            lifecycle = {'plan': plan_ref, 'prepare': prepare_ref, 'arm_check': arm_ref,
-                         'publication': publication_ref, 't0_receipt': receipt_ref}
-            output = root / 'boundaries.json'
-            locator = assembler.assemble('occurrence', observations, output, lifecycle=lifecycle)
-            self.assertTrue(q.battery_boundaries(output, locator['sha256'], 'occurrence'))
-            from scripts.check_v5_arm_abort import battery_sources
-            sources = battery_sources(observations, SimpleNamespace(plan_id='occurrence'))
-            self.assertEqual(len(sources), 7)  # Six probe files plus the native T-0 receipt.
-            self.assertIn(receipt_ref, sources)
-            with self.assertRaisesRegex(q.HarvestRefusal, 'identity_mismatch'):
-                assembler.assemble('foreign', observations, root / 'foreign.json')
-            path = Path(observations['t0']['record']['path'])
-            record = q.read(path); record['phase'] = 'publish_install'
-            path.write_bytes(readiness.render_json(record))
-            observations['t0']['record'] = q.reference(path)
-            with self.assertRaisesRegex(q.HarvestRefusal, 'identity_mismatch'):
-                assembler.assemble('occurrence', observations, root / 'wrong-role.json')
 
 
-class G10CustodyTests(unittest.TestCase):
-    def test_real_g10_verifier_replays_retained_tree_and_refuses_support_mutation(self):
-        from tests.test_t0_anchor_positive_control import PositiveControlTests
-        from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
-        from joulewise import t0_rehearsal as t0, arm_readiness_evidence_t0 as author
-        control = PositiveControlTests(); control.setUp(); self.addCleanup(control.doCleanups)
-        self.assertEqual(control.run_control()['status'], 'DISCHARGED')
-        head = subprocess.check_output(['git', '-C', str(control.repository), 'rev-parse', 'HEAD'], text=True).strip()
-        root = FixtureBuilder(Path(control.temporary.name).resolve() / 'qualification').build()
-        boot = control.stamp()['boot_id']
-        plan = root / 'qualification-plan.json'; q.write(plan, {
-            'measurement_root':str(control.repository), 'pack_night':{'pack_id':control.pack.name}})
-        first = root / 'a1-control.json'; q.write(first, {
-            'checked_monotonic_ns':control.base_ns - 3 * 10**9, 'boot_session_id':boot})
-        second = root / 'a2-control.json'; q.write(second, {
-            'checked_monotonic_ns':control.base_ns - 10**9, 'boot_session_id':boot})
-        input_root = root / control.pack.name / author._INPUT_DIRECTORY
-        for index, filename in enumerate(author._CAPTURE_FILES.values()):
-            q.write(input_root / filename, {'started_monotonic_ns':control.base_ns + 2 * 10**9 + index,
-                                           'boot_session_id':boot})
-        q.write(root / 'qualification-plan-record.json', {'head':head, 'plan':q.reference(plan), 'prerequisites':{
-            'a1_control':q.reference(first), 'a2_control':q.reference(second),
-            'g10_control':q.reference(control.control / 'positive-control.json'),
-            'g10_artifacts':[q.reference(control.control / 'custody-manifest.json')]}})
-        shutil.copytree(control.control, root / 'records/g10-custody' / control.control.name)
-        shutil.copyfile(control.control / 'positive-control.json', root / 'records/positive-control.json')
-        self.assertEqual(q.g10_sources(root), {'g10-custody':control.control})
-        bundle = fixture_bundle(root)
-        bundle = replace(bundle, manifest=replace(bundle.manifest, value={'schema_version':'joulewise.v5_s1_qualification_bundle.v1'}))
-        self.assertEqual(t0.evaluate_g10(bundle).status, t0.GateStatus.PASS)
-        path = control.control / 'before.json'; path.write_bytes(path.read_bytes() + b' ')
-        result = t0.evaluate_g10(bundle)
-        self.assertEqual(result.status, t0.GateStatus.FAIL)
-        self.assertIn('g10_custody_hash_or_census', result.message)
+
 
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class G10CustodyTests(unittest.TestCase):
+    """Stored G10 support is synthetic; no control command is executed."""
+
+    def _stored_control(self):
+        from joulewise import clock_reference, receipt_readers as records
+        from joulewise.hazards import network_time
+        from tests.git_fixture import init_git_fixture
+        import os
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        base = Path(temporary.name).resolve()
+        repository, root = base / 'repository', base / 'control'
+        repository.mkdir()
+        root.mkdir()
+        boot = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        raw_origin, realtime_offset = 10**12, 2 * 10**18
+
+        def write(path, value):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(records.render_json(value))
+
+        def stamp(tick, movement=0):
+            return {'realtime_ns': realtime_offset + raw_origin + tick + movement,
+                    'monotonic_raw_ns': raw_origin + tick, 'read_skew_ns': 1000,
+                    'monotonic_ns': tick, 'boot_id': boot}
+
+        def reference_value():
+            samples = []
+            for index, server in enumerate(clock_reference.SERVER_ROSTER):
+                stdout = f'+0.020000 +/- 0.001000 {server} 192.0.2.{index + 1}\n'
+                parsed = clock_reference.parse_sntp_stdout(stdout, server=server)
+                self.assertIsNotNone(parsed)
+                samples.append({'server': server, 'argv': clock_reference.build_sntp_argv(server),
+                    'exit_code': 0, 'started_monotonic_raw_ns': raw_origin + 112 + index * 2,
+                    'finished_monotonic_raw_ns': raw_origin + 113 + index * 2,
+                    'stdout': stdout, 'stderr': '', 'parsed': True,
+                    'offset_s': float(parsed.offset_s), 'uncertainty_s': float(parsed.uncertainty_s),
+                    'peer_address': parsed.peer_address, 'raw_line': parsed.raw_line})
+            return {'schema_version': clock_reference.SCHEMA_VERSION,
+                    'sample_policy_id': clock_reference.SAMPLE_POLICY_ID,
+                    'boot_session_id': boot, 'anchor_realtime_ns': realtime_offset + raw_origin + 100,
+                    'anchor_monotonic_raw_ns': raw_origin + 100, 'anchor_read_skew_ns': 1000,
+                    'batch_started_monotonic_raw_ns': raw_origin + 110,
+                    'batch_finished_monotonic_raw_ns': raw_origin + 130, 'samples': samples}
+
+        expected_code = {'scripts/author_arm_evidence_t0.py',
+                         'joulewise/arm_readiness_evidence_t0.py', 'scripts/capture_t0_step.py',
+                         'scripts/collect_clock_reference.py', 'joulewise/clock_reference.py'}
+        for relative in sorted(expected_code):
+            path = repository / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'# inert synthetic code-pin fixture; never executed\n')
+        init_git_fixture(repository, '-q')
+        environment = {**os.environ, 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1'}
+        def git(*args):
+            return subprocess.check_output(['git', '-C', str(repository), *args], env=environment,
+                                           stderr=subprocess.PIPE)
+        git('add', '.')
+        git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+            '-c', 'commit.gpgsign=false', 'commit', '-qm', 'synthetic G10 code pins')
+        head = git('rev-parse', 'HEAD').decode().strip()
+        before, after = stamp(300), stamp(600, 6_000_000)
+        write(root / 'before.json', before)
+        write(root / 'after.json', after)
+        write(root / 'polls/0001.json', after)
+        raw_reference = records.render_json(reference_value()).decode()
+        preflight = {'argv': list(q.preflight_argv(repository)), 'exit_code': 0,
+                     'stdout': raw_reference, 'stderr': '', 'started': stamp(0), 'finished': stamp(200)}
+        on = {'argv': list(q.ON_ARGV), 'exit_code': 0, 'stdout': 'setUsingNetworkTime: On\n',
+              'stderr': '', 'started': stamp(400), 'finished': stamp(500)}
+        for label, command in [('preflight', preflight), ('on', on)]:
+            write(root / f'commands/{label}.json', command)
+            for endpoint in ('started', 'finished'):
+                write(root / f'commands/{label}/{endpoint}.json', command[endpoint])
+            for stream in ('stdout', 'stderr'):
+                (root / f'commands/{label}/{stream}.txt').write_bytes(command[stream].encode())
+        write(root / 'preflight.json', {'midpoint_s': '0.020000', 'bound_s': '0.021000', 'status': 'PASS'})
+        write(root / 'anchor-movement.json', {'absolute_movement_ns': 6_000_000})
+        positive = {'schema_version': 'joulewise.t0_unattended_anchor_positive_control.v1',
+                    'performed_by': 'Ed', 'outside_t0_sequence': True,
+                    'network_time_reenabled': True, 'forced_resync': True,
+                    'anchor_before_ns': realtime_offset, 'anchor_after_ns': realtime_offset + 6_000_000,
+                    'author_refusal_reason_code': q.REFUSAL}
+        positive_path = root / 'positive-control.json'
+        write(positive_path, positive)
+        pack = repository / 'pack'
+        pack.mkdir()
+        write(root / 'author-input-lineage.json', {'pack_root': str(pack),
+            'r0_anchor_ns': realtime_offset, 'boot_id': boot,
+            'author_code_sha256': {relative: q.sha(repository / relative) for relative in expected_code}})
+        write(root / 'author-custody/pack/arm_readiness.t0.inputs/clock-reference.json',
+              {'schema_version': 'joulewise.arm_readiness_t0_command_capture.v1',
+               'step_id': 'clock-reference', 'argv': list(q.preflight_argv(repository)),
+               'cwd': str(repository), 'exit_code': 0, 'stdout': raw_reference, 'stderr': '',
+               'started_monotonic_ns': 0, 'finished_monotonic_ns': 200, 'boot_session_id': boot})
+        write(root / 'author-execution.json', {'argv': [str(repository / '.venv/bin/python'),
+            str(repository / 'scripts/author_arm_evidence_t0.py'), '--pack-root', str(pack),
+            '--custody-root', str(root / 'author-custody')], 'exit_code': 2,
+            'present_namespaces': [], 'started': stamp(700, 6_000_000), 'finished': stamp(800, 6_000_000)})
+        write(root / 'author.stdout.json', {'status': 'REFUSE', 'kind': 'CLOCK_ATTESTATION',
+            'reason_codes': [q.REFUSAL], 'detail': q.ANCHOR_DETAIL})
+        off = {'schema': network_time.SCHEMA, 'argv': list(network_time.OFF_ARGV),
+               'exit_code': 0, 'stdout': network_time.EXPECTED_STDOUT, 'stderr': '', 'error': None,
+               'epoch_s': 1000., 'monotonic_s': 900 / 10**9, 'boot_id': boot,
+               'plan_id': root.name, 'window_id': root.name}
+        write(root / network_time.RECEIPT_BASENAME, off)
+        write(root / 'commands/off.json', off)
+        (root / 'commands/off').mkdir()
+        (root / 'commands/off/stdout.txt').write_bytes(off['stdout'].encode())
+        (root / 'commands/off/stderr.txt').write_bytes(b'')
+        write(root / 'outcome.json', {'status': 'DISCHARGED', 'positive_control_path': str(positive_path)})
+        manifest = root / 'custody-manifest.json'
+        def seal():
+            write(manifest, {'files': {path.relative_to(root).as_posix(): q.sha(path)
+                for path in sorted(root.rglob('*')) if path.is_file() and path != manifest}})
+        seal()
+        return root, positive, positive_path, manifest, repository, head, boot, write, seal
+
+    def test_real_g10_verifier_replays_retained_tree_and_refuses_support_mutation(self):
+        root, positive, path, manifest, repository, head, boot, write, seal = self._stored_control()
+        def verify():
+            return q.verify_g10_custody(path, manifest, code_root=repository, head=head,
+                                       before_monotonic_ns=1000, boot_id=boot)
+        self.assertEqual(verify(), positive)
+        before = root / 'before.json'
+        original = before.read_bytes()
+        before.write_bytes(original + b' ')
+        with self.assertRaisesRegex(q.NotDischarged, 'g10_custody_hash_or_census'):
+            verify()
+        before.write_bytes(original)
+        changed = q.read(before)
+        changed['realtime_ns'] += 1
+        write(before, changed)
+        seal()
+        with self.assertRaisesRegex(q.NotDischarged, 'g10_anchor_or_record'):
+            verify()

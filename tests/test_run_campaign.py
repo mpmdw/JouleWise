@@ -328,7 +328,7 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
 
     def test_consistent_locator_swap_after_outer_preflight_refuses(self) -> None:
         first = arm_readiness_tests.LaunchConsumptionV2Tests(
-            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            methodName="runTest"
         )
         first.setUp()
         try:
@@ -339,7 +339,7 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
             outer = first._authenticate_campaign(selector)
 
             second = arm_readiness_tests.LaunchConsumptionV2Tests(
-                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+                methodName="runTest"
             )
             second.setUp()
             try:

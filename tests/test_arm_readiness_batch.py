@@ -14,8 +14,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import joulewise.arm_readiness as readiness
-from joulewise.arm_readiness import ArmReadinessError, committed_pack_tree_sha256
+import joulewise.receipt_readers as readiness
+from joulewise.receipt_readers import ArmReadinessError, committed_pack_tree_sha256
 from tests.git_fixture import init_git_fixture
 
 

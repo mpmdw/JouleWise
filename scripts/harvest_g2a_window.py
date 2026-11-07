@@ -9,7 +9,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from joulewise import calibration_bracketing as brackets, network_time_off, night_gate
+from joulewise import calibration_bracketing as brackets; from joulewise.hazards import network_time as network_time_off; from joulewise import night_gate
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot, terminal_head_pin_for_session
 from joulewise.cli import validate_bundle
 from joulewise.schemas import AdmissionFailureAction, CampaignPolicy, CampaignPolicyProfile

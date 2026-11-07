@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import hashlib
 import importlib.util
@@ -45,7 +46,7 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 _PREVIOUS_DONT_WRITE_BYTECODE = sys.dont_write_bytecode
 sys.dont_write_bytecode = True
 try:
-    GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+    exec_archived_generator(GENERATOR_SPEC.loader, GENERATOR_MODULE)
 finally:
     sys.dont_write_bytecode = _PREVIOUS_DONT_WRITE_BYTECODE
 PLAN_ID = "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1"

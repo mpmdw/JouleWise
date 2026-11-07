@@ -1,80 +1,263 @@
-"""Mechanical judgment for historical T-0 rehearsal and s1 qualification.
+"""Read-only authentication of stored supervised-rehearsal evidence.
 
-A *rehearsal evidence bundle* is an immutable set of custodied artifacts plus
-their already-parsed values.  This module performs no collection and launches
-no rehearsal: callers supply the bytes that a supervisor and the production
-tools recorded.  Each ``evaluate_gN`` function rebuilds one row of the ruled
-ten-gate table and returns ``PASS``, ``FAIL``, or ``UNRULED`` with the evidence
-it used.  ``compose_overall_verdict`` is the sole composition rule: one FAIL
-makes the rehearsal FAIL; otherwise any UNRULED makes it INCOMPLETE; only ten
-PASS results can make it PASS.
-
-``evaluate_qualification`` uses the ruling-76 eight-gate subset and records
-G6/G7 as NOT_APPLICABLE. It does not change the historical verdict wire format.
-
-The terms used below are mechanical.  A *custody document* is a canonical JSON
-artifact found under the declared T-0 namespace.  A *RAW anchor* is
-``CLOCK_REALTIME - CLOCK_MONOTONIC_RAW``.  An *agreement interval* is the
-intersection of every successful parseable SNTP leg's
-``offset +/- uncertainty`` interval.  A *production root* is one of the
-production runs, custody, quarantine, backup, or ledger roots enumerated in
-the custodied bundle manifest.  The rehearsal root must not contain, or be
-contained by, any such root.
+G1–G9 re-read their original custody and arithmetic. This module issues no ARM,
+launch, rehearsal or qualification verdict, and executes no negative control.
+The historical ten-gate PASS entry point is retired rather than weakened to nine.
 """
-
 from __future__ import annotations
-import json
-import os
-import stat
-import subprocess
-import time
-import queue
-import threading
-import uuid
-from contextvars import ContextVar
-from contextlib import contextmanager
+
 import re
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Iterable, Mapping, Sequence
-from unittest import mock
 
-from joulewise import arm_readiness as readiness
-from joulewise import arm_readiness_evidence_t0 as t0_author
-from joulewise import kernel_clock
-from joulewise import clock_reference
-from joulewise import network_time_off
+from joulewise import receipt_readers as readiness
+from joulewise import battery_float, clock_reference, kernel_clock, prewindow
+from joulewise.hazards import network_time as network_time_off
+from joulewise.receipt_formats import (
+    ProductionRoot, _contains, REHEARSAL_RECEIPT_CLASS, REHEARSAL_WINDOW_PREFIX,
+    G7_CONTROL_SCHEMA, REHEARSAL_RECEIPT_SCHEMA, _REHEARSAL_RECEIPT_KEYS, _INPUT_DIRECTORY,
+)
+
+_BROWSER_CENSUS_PATTERN = r"/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)"
 
 
-REHEARSAL_RECEIPT_CLASS = "T0_UNATTENDED_SUPERVISED_REHEARSAL"
-REHEARSAL_WINDOW_PREFIX = "rehearsal-t0-unattended-"
-G7_CONTROL_SCHEMA = "joulewise.pack_night_g7_control.v1"
+_MONITOR_CENSUS_PATTERN = r"powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)"
+
+
+_CLOCK_REFERENCE_KEYS = {
+    "schema_version",
+    "sample_policy_id",
+    "boot_session_id",
+    "anchor_realtime_ns",
+    "anchor_monotonic_raw_ns",
+    "anchor_read_skew_ns",
+    "batch_started_monotonic_raw_ns",
+    "batch_finished_monotonic_raw_ns",
+    "samples",
+}
+
+
+_CLOCK_REFERENCE_SAMPLE_KEYS = {
+    "server",
+    "argv",
+    "exit_code",
+    "started_monotonic_raw_ns",
+    "finished_monotonic_raw_ns",
+    "stdout",
+    "stderr",
+    "parsed",
+    "offset_s",
+    "uncertainty_s",
+    "peer_address",
+    "raw_line",
+}
+
+
+class T0EvidenceAuthoringError(ValueError):
+    """A fail-closed refusal naming the affected row evidence kind."""
+
+    def __init__(self, kind: str, reason_code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.kind = kind
+        self.reason_code = reason_code
+
+
+def _refuse(kind: str, code: str, detail: str) -> T0EvidenceAuthoringError:
+    return T0EvidenceAuthoringError(kind, code, detail)
+
+
+def _underivable(kind: str, detail: str) -> T0EvidenceAuthoringError:
+    return _refuse(
+        kind,
+        f"evidence_author_t0_{kind.lower()}_underivable",
+        detail,
+    )
+
+
+@dataclass(frozen=True)
+class _ReferenceAgreement:
+    server_count: int
+    midpoint: Decimal
+    bound: Decimal
+
+
+def _validate_reference_object(
+    value: object,
+    *,
+    kind: str,
+    label: str,
+    boot_session_id: str,
+) -> list[tuple[str, clock_reference.ParsedSntpLine]]:
+    if (
+        not isinstance(value, Mapping)
+        or set(value) != _CLOCK_REFERENCE_KEYS
+        or value.get("schema_version") != clock_reference.SCHEMA_VERSION
+        or value.get("sample_policy_id") != clock_reference.SAMPLE_POLICY_ID
+        or value.get("boot_session_id") != boot_session_id
+    ):
+        raise _underivable(
+            kind, f"{label} schema, sample policy, or boot binding is invalid"
+        )
+    integer_names = (
+        "anchor_realtime_ns",
+        "anchor_monotonic_raw_ns",
+        "anchor_read_skew_ns",
+        "batch_started_monotonic_raw_ns",
+        "batch_finished_monotonic_raw_ns",
+    )
+    if any(not _real_int(value.get(name)) for name in integer_names):
+        raise _underivable(kind, f"{label} numeric endpoint is not an integer")
+    if not (
+        value["anchor_read_skew_ns"] >= 0
+        and value["anchor_monotonic_raw_ns"]
+        <= value["batch_started_monotonic_raw_ns"]
+        <= value["batch_finished_monotonic_raw_ns"]
+    ):
+        raise _underivable(kind, f"{label} RAW endpoint ordering is invalid")
+    samples = value.get("samples")
+    if not isinstance(samples, list) or len(samples) != len(
+        clock_reference.SERVER_ROSTER
+    ):
+        raise _underivable(
+            kind, f"{label} does not prove the fixed roster and one-attempt policy"
+        )
+    parsed_legs: list[tuple[str, clock_reference.ParsedSntpLine]] = []
+    previous_finish = value["batch_started_monotonic_raw_ns"]
+    for server, sample in zip(clock_reference.SERVER_ROSTER, samples):
+        if (
+            not isinstance(sample, Mapping)
+            or set(sample) != _CLOCK_REFERENCE_SAMPLE_KEYS
+            or sample.get("server") != server
+            or sample.get("argv") != clock_reference.build_sntp_argv(server)
+        ):
+            raise _underivable(
+                kind, f"{label} does not prove the fixed roster and one-attempt policy"
+            )
+        if any(
+            not _real_int(sample.get(name))
+            for name in (
+                "exit_code",
+                "started_monotonic_raw_ns",
+                "finished_monotonic_raw_ns",
+            )
+        ):
+            raise _underivable(kind, f"{label} leg endpoint is not an integer")
+        if (
+            not isinstance(sample.get("stdout"), str)
+            or not isinstance(sample.get("stderr"), str)
+            or not isinstance(sample.get("parsed"), bool)
+            or not previous_finish <= sample["started_monotonic_raw_ns"]
+            <= sample["finished_monotonic_raw_ns"]
+            <= value["batch_finished_monotonic_raw_ns"]
+        ):
+            raise _underivable(kind, f"{label} leg fields or ordering are invalid")
+        previous_finish = sample["finished_monotonic_raw_ns"]
+        # The JSON float values are reader aids.  Evidence arithmetic always
+        # reparses raw_line/stdout so Decimal retains the exact measured text.
+        parsed = (
+            clock_reference.parse_sntp_stdout(sample["stdout"], server=server)
+            if sample["exit_code"] == 0
+            else None
+        )
+        if parsed is None:
+            if sample["parsed"] is not False or any(
+                sample.get(name) is not None
+                for name in (
+                    "offset_s",
+                    "uncertainty_s",
+                    "peer_address",
+                    "raw_line",
+                )
+            ):
+                raise _underivable(kind, f"{label} unparseable leg fields disagree")
+            continue
+        if (
+            sample["parsed"] is not True
+            or not isinstance(sample.get("offset_s"), float)
+            or not isinstance(sample.get("uncertainty_s"), float)
+            or sample["offset_s"] != float(parsed.offset_s)
+            or sample["uncertainty_s"] != float(parsed.uncertainty_s)
+        ):
+            raise _underivable(
+                kind, f"{label} parseable leg omits or alters its numeric fields"
+            )
+        if sample.get("peer_address") != parsed.peer_address:
+            raise _underivable(kind, f"{label} parseable leg alters its peer address")
+        if sample.get("raw_line") != parsed.raw_line:
+            raise _underivable(kind, f"{label} parseable leg alters its raw line")
+        parsed_legs.append((server, parsed))
+    return parsed_legs
+
+
+def _reference_agreement(
+    legs: Sequence[tuple[str, clock_reference.ParsedSntpLine]],
+    *,
+    kind: str,
+    label: str,
+) -> _ReferenceAgreement:
+    if len(legs) < 2:
+        raise _underivable(kind, f"{label} quorum has fewer than two parseable legs")
+    lower = max(parsed.offset_s - parsed.uncertainty_s for _server, parsed in legs)
+    upper = min(parsed.offset_s + parsed.uncertainty_s for _server, parsed in legs)
+    if lower > upper:
+        raise _underivable(kind, f"{label} agreement intervals have empty intersection")
+    midpoint = (lower + upper) / Decimal(2)
+    halfwidth = (upper - lower) / Decimal(2)
+    bound = abs(midpoint) + halfwidth
+    if bound > Decimal("0.5"):
+        raise _underivable(kind, f"{label} bound exceeds 0.5 seconds")
+    return _ReferenceAgreement(len(legs), midpoint, bound)
+
+
+def _systemsetup_argv(argv: Sequence[str], operation: Sequence[str]) -> bool:
+    try:
+        system_index = next(index for index, item in enumerate(argv) if Path(item).name == "systemsetup")
+    except StopIteration:
+        return False
+    return list(argv[system_index + 1 :]) == list(operation) and any(
+        Path(item).name == "sudo" for item in argv[:system_index]
+    )
+
 
 EXECUTION_SCHEMA = "joulewise.t0_unattended_execution_record.v1"
+
+
 QUALIFICATION_EXECUTION_SCHEMA = "joulewise.v5_qualification_execution_record.v1"
+
+
 QUALIFICATION_STAGE_SCHEMA = "joulewise.v5_qualification_lifecycle_stage.v1"
+
+
 D149_SCHEMA = "joulewise.t0_unattended_d149_go_receipt.v1"
-REHEARSAL_RECEIPT_SCHEMA = "joulewise.t0_unattended_rehearsal_receipt.v1"
+
+
 PROCESS_LINEAGE_SCHEMA = "joulewise.t0_unattended_process_lineage.v1"
+
+
 LIFECYCLE_SCHEMA = "joulewise.t0_unattended_lifecycle.v1"
+
+
 QUALIFICATION_LIFECYCLE_SCHEMA = "joulewise.v5_qualification_lifecycle.v1"
+
+
 FALSIFIER_SCHEMA = "joulewise.t0_unattended_falsifier_controls.v1"
+
+
 POSITIVE_CONTROL_SCHEMA = "joulewise.t0_unattended_anchor_positive_control.v1"
 
+
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
 _HID_IDLE_RE = re.compile(r'^\s*"HIDIdleTime"\s*=\s*([0-9]+)\s*$')
-# T3 is no longer an agent (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out").
+
+
 _AGENT_TOKEN_RE = re.compile(r"(?:^|[/\s])(codex|claude)(?:[/\s]|$)", re.I)
-_CLOCK_ROW_DEFINITION = {
-    "applicability_rule": "ALWAYS",
-    "evaluation_phase": "ARM_ONLY",
-    "predicate_id": "clock.correct_and_prior_state.v1",
-    "required_evidence_kinds": ["CLOCK_ATTESTATION"],
-    "row_id": "clock.correct_and_prior_state",
-}
+
+
 _LIFECYCLE_STAGES = (
     "launch",
     "capability_consumption",
@@ -84,7 +267,11 @@ _LIFECYCLE_STAGES = (
     "close_out",
     "restore",
 )
+
+
 _EXECUTION_KEYS = {"schema_version", "sequence_completed", "processes"}
+
+
 _EXECUTION_PROCESS_KEYS = {
     "role",
     "pid",
@@ -96,14 +283,8 @@ _EXECUTION_PROCESS_KEYS = {
     "eof_refusal",
     "timed_out",
 }
-_REHEARSAL_RECEIPT_KEYS = {
-    "schema_version",
-    "receipt_class",
-    "claim_eligible",
-    "window_id",
-    "custody_root",
-    "acceptance_target",
-}
+
+
 _PROCESS_LINEAGE_KEYS = {
     "schema_version",
     "agent_pid",
@@ -113,45 +294,25 @@ _PROCESS_LINEAGE_KEYS = {
     "pre_launch_census",
     "capture_censuses",
 }
+
+
 _PROCESS_CENSUS_KEYS = {"processes"}
+
+
 _PROCESS_KEYS = {"pid", "argv"}
+
+
 _LIFECYCLE_KEYS = {
     "schema_version",
     "stages",
     "operator_actions_at_t0",
     "human_interventions",
 }
+
+
 _LIFECYCLE_STAGE_KEYS = {"stage_id", "status", "evidence"}
-_FALSIFIER_KEYS = {
-    "schema_version",
-    "author_inputs",
-    "author_cases",
-    "arm_cases",
-}
-_FALSIFIER_CASE_KEYS = {
-    "delta_ns",
-    "expected_status",
-    "expected_reason_code",
-    "pass_namespace_published",
-}
-_AUTHOR_INPUT_KEYS = {
-    "reference_server_count",
-    "reference_midpoint_seconds",
-    "reference_bound_seconds",
-    "r0_anchor_realtime_ns",
-    "r0_anchor_monotonic_raw_ns",
-    "r0_anchor_read_skew_ns",
-    "r0_batch_finished_monotonic_raw_ns",
-    "clock_reference_capture_finished_monotonic_ns",
-    "clock_disable_started_monotonic_ns",
-    "clock_disable_finished_monotonic_ns",
-    "r1_batch_started_monotonic_ns",
-    "r1_batch_started_monotonic_raw_ns",
-    "author_anchor_realtime_ns",
-    "author_anchor_monotonic_raw_ns",
-    "author_anchor_read_skew_ns",
-    "r1_batch_finished_monotonic_ns",
-}
+
+
 _POSITIVE_CONTROL_KEYS = {
     "schema_version",
     "performed_by",
@@ -162,219 +323,6 @@ _POSITIVE_CONTROL_KEYS = {
     "anchor_after_ns",
     "author_refusal_reason_code",
 }
-
-
-# An opt-in journal records observations at spawn/wait, never PASS labels.
-# Keep it in-process: an inherited shell variable cannot select fixture data.
-_PROCESS_JOURNAL = ContextVar("rehearsal_process_journal", default=None)
-PROCESS_EVENT_SCHEMA = "joulewise.t0_rehearsal_process_event.v1"
-
-
-def append_observation(path: Path, value: Mapping[str, Any]) -> None:
-    from joulewise.calibration_ledger import canonical_json_bytes
-    payload = canonical_json_bytes(value) + b"\n"
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
-    try:
-        if os.write(descriptor, payload) != len(payload):
-            raise OSError("short observation write")
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-class _ProcessJournal:
-    """A capped queue keeps custody I/O off the process supervision seams."""
-    def __init__(self, path, *, observe_only=False):
-        self.path = Path(path)
-        self.observe_only = observe_only
-        self.journal_id = str(uuid.uuid4())
-        self.pending = queue.Queue(maxsize=1024)
-        self.count = 0
-        self.error = None
-        self.writer = threading.Thread(target=self._write, daemon=True,
-                                       name="rehearsal-process-journal")
-        self.writer.start()
-
-    def _write(self):
-        try:
-            while True:
-                value = self.pending.get()
-                if value is None:
-                    append_observation(self.path, {
-                        "schema_version": PROCESS_EVENT_SCHEMA, "event": "seal",
-                        "journal_id": self.journal_id, "record_count": self.count})
-                    return
-                append_observation(self.path, value)
-                self.count += 1
-        except Exception as exc:
-            self.error = str(exc)
-
-    def emit(self, value):
-        value = dict(value, journal_id=self.journal_id)
-        try:
-            self.pending.put_nowait(value)
-        except queue.Full:
-            # Retain control of the child even if its observation was lost.
-            # This context can never seal successfully after overflow.
-            self.error = "process observation queue overflow"
-
-    def close(self):
-        try:
-            self.pending.put_nowait(None)
-        except queue.Full:
-            self.error = "process observation queue overflow"
-        self.writer.join(timeout=2)
-        if self.writer.is_alive() or self.error is not None:
-            if not self.observe_only:
-                raise ValueError("process observation journal incomplete: " + (self.error or "drain timed out"))
-            # Missing seal is itself fail-closed evidence even if this write fails.
-            try:
-                append_observation(self.path.with_name("producer-faults.jsonl"), {
-                    "schema_version": "joulewise.v5_qualification_producer_fault.v1",
-                    "producer": "process_journal", "status": "REFUSED"})
-            except Exception:
-                pass
-
-
-@contextmanager
-def process_journal(path: Path, *, observe_only=False):
-    journal = _ProcessJournal(path, observe_only=observe_only)
-    token = _PROCESS_JOURNAL.set(journal)
-    try:
-        yield journal
-    finally:
-        _PROCESS_JOURNAL.reset(token)
-        journal.close()
-
-
-class ObservedProcess(subprocess.Popen):
-    """Popen with retained DEVNULL descriptor custody and observed reaping.
-
-    fd0 is identified from the actual descriptor supplied to Popen, rather
-    than inferred later from argv. A non-DEVNULL launch is retained as such.
-    """
-    def __init__(self, args, **kwargs):
-        self._journal = _PROCESS_JOURNAL.get()
-        self._exit_recorded = False
-        self._timed_out = False
-        self._command = list(args) if not isinstance(args, str) else [args]
-        self._spawned_ns = time.monotonic_ns()
-        self._fd0 = "unobserved"
-        descriptor = None
-        if self._journal is not None and kwargs.get("stdin") == subprocess.DEVNULL:
-            try:
-                descriptor = os.open(os.devnull, os.O_RDONLY)
-                actual, expected = os.fstat(descriptor), os.stat(os.devnull)
-                if (stat.S_ISCHR(actual.st_mode) and
-                        (actual.st_dev, actual.st_ino, actual.st_rdev) ==
-                        (expected.st_dev, expected.st_ino, expected.st_rdev)):
-                    self._fd0 = "/dev/null"
-                kwargs["stdin"] = descriptor
-            except BaseException:
-                if not self._journal.observe_only:
-                    raise
-                self._journal.error = "fd0 observation fault"
-        try:
-            super().__init__(args, **kwargs)
-        finally:
-            if descriptor is not None:
-                try:
-                    os.close(descriptor)
-                except BaseException:
-                    if not self._journal.observe_only:
-                        raise
-                    self._journal.error = "fd0 observation close fault"
-        self._event("spawn", None)
-
-    def _event(self, event, exit_code):
-        if self._journal is not None:
-            try:
-                value = {
-                    "schema_version": PROCESS_EVENT_SCHEMA, "event": event,
-                    "pid": self.pid, "argv": self._command,
-                    "stdin_fd0_target": self._fd0, "exit_code": exit_code,
-                    "timed_out": self._timed_out,
-                    "monotonic_ns": time.monotonic_ns(),
-                    "spawned_monotonic_ns": self._spawned_ns,
-                }
-                self._journal.emit(value)
-            except BaseException:
-                if not self._journal.observe_only:
-                    raise
-                self._journal.error = "process event producer fault"
-
-    def communicate(self, *args, **kwargs):
-        stdout, stderr = super().communicate(*args, **kwargs)
-        self.observe_output(stdout)
-        return stdout, stderr
-
-    def observe_output(self, stdout):
-        if self._journal is not None and self._command[:1] == ["/usr/bin/pgrep"]:
-            try:
-                self._journal.emit({"schema_version": PROCESS_EVENT_SCHEMA,
-                    "event": "output", "pid": self.pid, "argv": self._command,
-                    "spawned_monotonic_ns": self._spawned_ns,
-                    "stdout": stdout.decode("utf-8", errors="replace") if isinstance(stdout, bytes) else stdout})
-            except BaseException:
-                if not self._journal.observe_only:
-                    raise
-                self._journal.error = "process output producer fault"
-
-    def _observe_exit(self, code):
-        if code is not None and not self._exit_recorded:
-            self._event("exit", code)
-            self._exit_recorded = True
-        return code
-
-    def wait(self, *args, **kwargs):
-        return self._observe_exit(super().wait(*args, **kwargs))
-
-    def poll(self):
-        return self._observe_exit(super().poll())
-
-
-def observed_process_type():
-    return subprocess.Popen if _PROCESS_JOURNAL.get() is None else ObservedProcess
-
-
-def observed_popen(args, **kwargs):
-    if _PROCESS_JOURNAL.get() is None:
-        return subprocess.Popen(args, **kwargs)
-    kwargs.setdefault("stdin", subprocess.DEVNULL)
-    return ObservedProcess(args, **kwargs)
-
-
-def observed_run(args, **kwargs):
-    """subprocess.run semantics with the same spawn/reap journal seam."""
-    if _PROCESS_JOURNAL.get() is None:
-        return subprocess.run(args, **kwargs)
-    input = kwargs.pop("input", None)
-    capture_output = kwargs.pop("capture_output", False)
-    timeout = kwargs.pop("timeout", None)
-    check = kwargs.pop("check", False)
-    if input is not None:
-        if "stdin" in kwargs:
-            raise ValueError("stdin and input arguments may not both be used")
-        kwargs["stdin"] = subprocess.PIPE
-    if capture_output:
-        if "stdout" in kwargs or "stderr" in kwargs:
-            raise ValueError("stdout/stderr with capture_output")
-        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if input is None:
-        kwargs.setdefault("stdin", subprocess.DEVNULL)
-    with ObservedProcess(args, **kwargs) as process:
-        process._timed_out = False
-        try:
-            stdout, stderr = process.communicate(input, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            process._timed_out = True
-            process.kill()
-            process.communicate()
-            raise
-        code = process.wait()
-        if check and code:
-            raise subprocess.CalledProcessError(code, args, output=stdout, stderr=stderr)
-        return subprocess.CompletedProcess(args, code, stdout, stderr)
 
 
 class GateStatus(str, Enum):
@@ -408,15 +356,6 @@ class EvidenceArtifact:
         if self.parse_error is not None:
             result["parse_error"] = self.parse_error
         return result
-
-
-@dataclass(frozen=True)
-class ProductionRoot:
-    """One role-labelled, resolved root used by production."""
-
-    role: str
-    path: Path
-    resolution_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -654,18 +593,26 @@ def _verify_artifact_reference(
     return artifact
 
 
-# Ruling 76 F.1: full argv, never the executable, selects census semantics.
-# Regex slots below are individual dynamic arguments; every literal argument
-# and the argv length must match. Sources are the consuming code, not a list
-# inferred from the executable. test_v5_block4_x12b inventories the call sites
-# and runs the entire real author roster through journal -> assembler -> G1.
 _ARG = re.compile(r"[\s\S]+")
+
+
 _IDS = re.compile(r"[1-9][0-9]*(?:,[1-9][0-9]*)*")
+
+
 _PYTHON = re.compile(r"(?:.*/)?python(?:3(?:\.[0-9]+)?)?")
+
+
 _REPO_SCRIPT = lambda name: re.compile(r".*/" + re.escape(name))
+
+
 _ZERO = {"exit_code": 0}
+
+
 _ABSENT = {"exit_code": 1, "stdout": ""}
+
+
 _CENSUS = {"exit_codes": [0, 1]}
+
 
 QUALIFICATION_PROCESS_OUTCOMES = (
     # Author and driver absence censuses; only these require empty stdout.
@@ -677,20 +624,20 @@ QUALIFICATION_PROCESS_OUTCOMES = (
     # recorded before that change still resolve to their registered outcome.
     (("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1849; joulewise/night_gate.py:736"),
     (("/usr/bin/pgrep", "-x", "caffeinate"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1848"),
-    (("/usr/bin/pgrep", "-lf", t0_author._BROWSER_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1850"),
-    (("/usr/bin/pgrep", "-lf", t0_author._MONITOR_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1851"),
-    (("/usr/bin/pgrep", "-lf", t0_author._prewindow.CONTAMINANTS), _CENSUS, "joulewise/arm_readiness_evidence_t0.py:1425"),
+    (("/usr/bin/pgrep", "-lf", _BROWSER_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1850"),
+    (("/usr/bin/pgrep", "-lf", _MONITOR_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1851"),
+    (("/usr/bin/pgrep", "-lf", prewindow.CONTAMINANTS), _CENSUS, "joulewise/arm_readiness_evidence_t0.py:1425"),
     # A live group is a normal intermediate poll, not a failed sequence.
     (("/usr/bin/pgrep", "-lf", "-g", _IDS, "."), _CENSUS, "scripts/run_night.py:4431; scripts/run_night.py:4486"),
     (("/bin/ps", "-o", "pgid=,pid=,command=", "-p", _IDS), _ZERO, "scripts/run_night.py:4515"),
-    (t0_author._prewindow.PS_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1434"),
+    (prewindow.PS_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1434"),
     (("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:530; joulewise/night_gate.py:1868"),
     (("/usr/bin/pmset", "-g", "therm"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1480; joulewise/night_gate.py:1745"),
     (("/usr/bin/pmset", "-g", "batt"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1961; joulewise/night_gate.py:1657"),
     (("/usr/bin/pmset", "-g", "custom"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1962"),
     (("/usr/bin/pmset", "-g"), _ZERO, "joulewise/night_gate.py:1698"),
     (("/usr/sbin/system_profiler", "SPPowerDataType", "-json"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1963"),
-    (t0_author._battery_float.IOREG_BATTERY_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1985; joulewise/night_gate.py:1684"),
+    (battery_float.IOREG_BATTERY_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1985; joulewise/night_gate.py:1684"),
     (("/usr/bin/sudo", "-n", "/usr/bin/powermetrics", "-i", "200", "-n", "1"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1932"),
     (("sudo", "-n", "/usr/bin/powermetrics", "-n", "300", "-b", "0", "-i", "100", "--samplers", "cpu_power,gpu_power,ane_power,thermal", "--format", "plist", "-o", _ARG), _ZERO, "scripts/run_night.py:4709"),
     (("/usr/bin/defaults", "-currentHost", "read", "com.apple.screensaver", "idleTime"), _ZERO, "joulewise/night_gate.py:1633"),
@@ -767,8 +714,6 @@ def qualification_process_completed(process):
             and process.get("timed_out") is False)
 
 
-# Shared by the plan writer, desk producer and G9. night_custody is the
-# plan's custody root; custody is the separate ARM context custody root.
 QUALIFICATION_BACKUP_SOURCE_FIELDS = {
     "custody": "custody_root", "claim_runs": "claim_runs_root",
     "bound_runs": "bound_runs_root", "night_custody": None,
@@ -897,7 +842,7 @@ def _real_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _recompute_r1_agreement(source: Mapping[str, Any]) -> t0_author._ReferenceAgreement:
+def _recompute_r1_agreement(source: Mapping[str, Any]) -> _ReferenceAgreement:
     probes = source.get("probes")
     if not isinstance(probes, list) or len(probes) != len(clock_reference.SERVER_ROSTER):
         raise ValueError("R1 source does not contain the fixed three-leg roster")
@@ -913,8 +858,8 @@ def _recompute_r1_agreement(source: Mapping[str, Any]) -> t0_author._ReferenceAg
         if parsed is not None:
             legs.append((server, parsed))
     try:
-        return t0_author._reference_agreement(legs, kind="CLOCK_ATTESTATION", label="R1 reference")
-    except t0_author.T0EvidenceAuthoringError as exc:
+        return _reference_agreement(legs, kind="CLOCK_ATTESTATION", label="R1 reference")
+    except T0EvidenceAuthoringError as exc:
         raise ValueError(str(exc)) from exc
 
 
@@ -966,13 +911,13 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
         if not isinstance(stdout, str):
             raise ValueError("R0 clock-reference stdout is absent")
         r0 = readiness.parse_json_bytes(stdout.encode("utf-8"), require_canonical=True)
-        legs = t0_author._validate_reference_object(
+        legs = _validate_reference_object(
             r0,
             kind="CLOCK_ATTESTATION",
             label="R0 clock reference",
             boot_session_id=str(receipt.get("boot_session_id")),
         )
-        r0_agreement = t0_author._reference_agreement(legs, kind="CLOCK_ATTESTATION", label="R0 reference")
+        r0_agreement = _reference_agreement(legs, kind="CLOCK_ATTESTATION", label="R0 reference")
         if r0["anchor_read_skew_ns"] > 1_000_000:
             raise ValueError("R0 anchor read skew exceeds 1000000 ns")
         for published_name, raw_name in (
@@ -1025,7 +970,7 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
             binding = value.get("clock_sizing_binding")
             required_binding = value.get("t_stream_max_s") is not None
             if binding is not None or required_binding:
-                from joulewise.v5_qualification import authenticated_clock_budget
+                from joulewise.qualification_readers import authenticated_clock_budget
                 bound = _verify_artifact_reference(bundle, binding, label="clock sizing binding")
                 maximum, refs = authenticated_clock_budget(bound.path.parent, Path(bound.value["pack_root"]))
                 for ref in refs:
@@ -1075,7 +1020,7 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
         if (
             first_off.get("exit_code") != 0
             or not isinstance(first_off.get("argv"), list)
-            or not t0_author._systemsetup_argv(first_off["argv"], ("-setusingnetworktime", "off"))
+            or not _systemsetup_argv(first_off["argv"], ("-setusingnetworktime", "off"))
             or not readiness.network_time_off_stdout_admitted(first_off.get("stdout"))
         ):
             raise ValueError("first exact-Off command result is not mechanically green")
@@ -1101,11 +1046,11 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
             if (
                 second.get("exit_code") != 0
                 or not isinstance(second.get("argv"), list)
-                or not t0_author._systemsetup_argv(second["argv"], ("-setusingnetworktime", "off"))
+                or not _systemsetup_argv(second["argv"], ("-setusingnetworktime", "off"))
                 or not readiness.network_time_off_stdout_admitted(second.get("stdout"))
             ):
                 raise ValueError("second exact-Off command result is not mechanically green")
-    except (ValueError, readiness.ArmReadinessError, t0_author.T0EvidenceAuthoringError) as exc:
+    except (ValueError, readiness.ArmReadinessError, T0EvidenceAuthoringError) as exc:
         return _result("G4", name, GateStatus.FAIL, str(exc), *evidence)
     return _result(
         "G4",
@@ -1179,14 +1124,6 @@ def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
         return _result("G5", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G5", name, GateStatus.PASS,
                    "pack GO C1–C5 recomputed from authenticated ARM, launch, census and one-use custody", *evidence)
-
-
-def _contains(parent: Path, child: Path) -> bool:
-    try:
-        child.relative_to(parent)
-    except ValueError:
-        return False
-    return True
 
 
 def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
@@ -1474,7 +1411,7 @@ def _qualified_desk_stage(bundle, facts, stage_id, evidence):
                 or any(line and not line.startswith("##") for line in assertions["git_status"].splitlines())):
             raise ValueError("s1 close-out Phase G assertions failed")
         if assertions.get("head") != record["head"]:
-            from joulewise.v5_qualification import pin_only_head_extension
+            from joulewise.qualification_readers import pin_only_head_extension
             extension = pin_only_head_extension(plan.value["measurement_root"], record["head"], assertions.get("head"))
             if extension is None or assertions.get("head_extension") != extension:
                 raise ValueError("s1 close-out head extension is not authenticated H_pin")
@@ -1648,361 +1585,3 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
     except (ValueError, OSError, TypeError, KeyError, readiness.ArmReadinessError) as exc:
         return _result("G9", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G9", name, GateStatus.PASS, "launch, capability consumption, capture, both backups, close-out, and restore are complete with zero human intervention", *evidence)
-
-
-def _run_real_author_boundary(
-    inputs: Mapping[str, Any], delta_ns: int
-) -> tuple[str, str | None, str]:
-    """Run the actual author clock derivation over injected boundary inputs."""
-
-    if set(inputs) != _AUTHOR_INPUT_KEYS:
-        raise ValueError("author_inputs keys are not exact")
-    integer_names = _AUTHOR_INPUT_KEYS - {
-        "reference_midpoint_seconds",
-        "reference_bound_seconds",
-    }
-    if any(not _real_int(inputs.get(name)) for name in integer_names):
-        raise ValueError("author_inputs numeric endpoint is not an integer")
-    try:
-        midpoint = Decimal(str(inputs["reference_midpoint_seconds"]))
-        bound = Decimal(str(inputs["reference_bound_seconds"]))
-    except Exception as exc:
-        raise ValueError("author_inputs reference arithmetic is invalid") from exc
-    r0_raw = inputs["r0_anchor_monotonic_raw_ns"]
-    author_raw = inputs["author_anchor_monotonic_raw_ns"]
-    agreement = t0_author._ReferenceAgreement(
-        inputs["reference_server_count"], midpoint, bound
-    )
-    r0 = {
-        "anchor_realtime_ns": inputs["r0_anchor_realtime_ns"],
-        "anchor_monotonic_raw_ns": r0_raw,
-        "anchor_read_skew_ns": inputs["r0_anchor_read_skew_ns"],
-        "batch_finished_monotonic_raw_ns": inputs[
-            "r0_batch_finished_monotonic_raw_ns"
-        ],
-    }
-    frequency = inputs.get("r0_kernel_frequency")
-    if frequency is None:
-        frequency = {"schema_version": kernel_clock.PROBE_SCHEMA, "modes": 0,
-                     "raw_word": 0, "ppm": 0.0, "call_status": 0,
-                     "timex_status": 0, "errno": 0, "raw_hex": bytes(kernel_clock.Timex()).hex()}
-    r0.update(kernel_frequency=frequency, t_stream_max_s=inputs.get("t_stream_max_s"))
-    disable = {
-        "exit_code": 0,
-        "argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off"],
-        "started_monotonic_ns": inputs["clock_disable_started_monotonic_ns"],
-        "finished_monotonic_ns": inputs["clock_disable_finished_monotonic_ns"],
-    }
-    context = SimpleNamespace(
-        captures={
-            "clock-reference": (
-                {
-                    "finished_monotonic_ns": inputs[
-                        "clock_reference_capture_finished_monotonic_ns"
-                    ]
-                },
-                {},
-            )
-        },
-        values={},
-        clock=SimpleNamespace(
-            monotonic_ns=lambda: inputs["r1_batch_started_monotonic_ns"]
-        ),
-    )
-
-    def fresh(selected: object, *, kind: str) -> tuple[object, ...]:
-        del kind
-        selected.values["r1_batch_started_monotonic_ns"] = inputs[
-            "r1_batch_started_monotonic_ns"
-        ]
-        return (
-            agreement,
-            (),
-            inputs["r1_batch_started_monotonic_raw_ns"],
-            clock_reference.ClockAnchor(
-                realtime_ns=inputs["author_anchor_realtime_ns"] + delta_ns,
-                monotonic_raw_ns=author_raw,
-                read_skew_ns=inputs["author_anchor_read_skew_ns"],
-            ),
-            inputs["r1_batch_finished_monotonic_ns"],
-        )
-
-    try:
-        with (
-            mock.patch.object(t0_author, "_captured_clock_reference", return_value=(r0, {"path": "r0", "sha256": "0" * 64}, agreement)),
-            mock.patch.object(t0_author, "_capture", return_value=(disable, {"path": "off", "sha256": "1" * 64})),
-            mock.patch.object(t0_author, "_fresh_clock_reference_batch", side_effect=fresh),
-            # This software-only numeric boundary has no plan custody. The
-            # native author/G10 compositions separately replay the binding.
-            mock.patch.object(t0_author, "_authenticate_clock_sizing"),
-            mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=frequency),
-        ):
-            t0_author._derive_clock_attestation(context)
-    except t0_author.T0EvidenceAuthoringError as exc:
-        return "REFUSE", exc.reason_code, str(exc)
-    return "PASS", None, "real author derivation passed"
-
-
-def _run_real_arm_boundary(
-    receipt: Mapping[str, Any], delta_ns: int
-) -> tuple[str, str | None]:
-    facts = receipt.get("facts")
-    if not isinstance(facts, list) or len(facts) != 1 or not isinstance(facts[0], Mapping):
-        return "REFUSE", "readiness_clock_preflight_refused"
-    value = facts[0].get("value")
-    if not isinstance(value, Mapping):
-        return "REFUSE", "readiness_clock_preflight_refused"
-    live = {
-        "boot_session_id": receipt.get("boot_session_id"),
-        "realtime_ns": value.get("anchor_realtime_ns") + delta_ns,
-        "monotonic_raw_ns": value.get("anchor_monotonic_raw_ns"),
-        "read_skew_ns": 1_000,
-    }
-    if value.get("anchor_check_version") == kernel_clock.ANCHOR_CHECK_VERSION:
-        live["kernel_frequency"] = value["kernel_frequency"]
-    rows, refusals = readiness._evaluate_rows(
-        [_CLOCK_ROW_DEFINITION],
-        {str(receipt.get("evidence_id")): receipt},
-        clock_route="MANUAL",
-        successor_acceptance=False,
-        live_clock_anchor=live,
-    )
-    if rows[0]["verdict"] == "PASS":
-        return "PASS", None
-    codes = [item.get("code") for item in refusals]
-    return "REFUSE", str(codes[0]) if len(codes) == 1 else None
-
-
-def _expected_cases(
-    value: Mapping[str, Any], key: str, *, refusal_code: str
-) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
-    cases = value.get(key)
-    if not isinstance(cases, list) or len(cases) != 2 or any(not isinstance(case, Mapping) for case in cases):
-        raise ValueError(f"{key} must contain the two software boundary cases")
-    by_delta = {case.get("delta_ns"): case for case in cases}
-    if any(set(case) != _FALSIFIER_CASE_KEYS for case in cases):
-        raise ValueError(f"{key} case keys are not exact")
-    if set(by_delta) != {4_999_999, 5_000_001}:
-        raise ValueError(f"{key} must contain exactly 5 ms - 1 ns and 5 ms + 1 ns")
-    below = by_delta[4_999_999]
-    above = by_delta[5_000_001]
-    if below.get("expected_status") != "PASS" or below.get("expected_reason_code") is not None:
-        raise ValueError(f"{key} 5 ms - 1 ns expected outcome is not PASS")
-    if above.get("expected_status") != "REFUSE" or above.get("expected_reason_code") != refusal_code:
-        raise ValueError(f"{key} 5 ms + 1 ns expected refusal/code is invalid")
-    return below, above
-
-
-def evaluate_g10(bundle: EvidenceBundle) -> GateResult:
-    """Run both real software boundary paths and check Ed's physical control."""
-
-    name = "FALSIFIER CONTROLS"
-    controls_artifact, controls, controls_error = _json_record(bundle, "falsifier_controls")
-    if controls_artifact is None or controls is None:
-        return _result("G10", name, GateStatus.FAIL, controls_error or "software falsifier-control record is absent")
-    evidence: list[Mapping[str, object]] = [controls_artifact.citation()]
-    try:
-        if set(controls) != _FALSIFIER_KEYS or controls.get("schema_version") != FALSIFIER_SCHEMA:
-            raise ValueError("software falsifier-control schema is invalid")
-        author_inputs = controls.get("author_inputs")
-        if not isinstance(author_inputs, Mapping):
-            raise ValueError("author_inputs record is absent")
-        author_below, author_above = _expected_cases(
-            controls,
-            "author_cases",
-            refusal_code="evidence_author_t0_clock_attestation_underivable",
-        )
-        arm_below, arm_above = _expected_cases(
-            controls,
-            "arm_cases",
-            refusal_code="readiness_clock_preflight_refused",
-        )
-        author_observations = []
-        for case in (author_below, author_above):
-            observed = _run_real_author_boundary(
-                author_inputs, int(case["delta_ns"])
-            )
-            author_observations.append({"delta_ns": case["delta_ns"], "status": observed[0], "reason_code": observed[1], "detail": observed[2]})
-            if observed[:2] != (case["expected_status"], case["expected_reason_code"]):
-                raise ValueError(f"real author path did not enforce {case['delta_ns']} ns boundary")
-        if author_above.get("pass_namespace_published") is not False:
-            raise ValueError("real-author +5 ms control does not record absence of a PASS namespace")
-
-        receipt_artifact, receipt, _fact = _clock_receipt(bundle)
-        evidence.append(receipt_artifact.citation())
-        arm_observations = []
-        for case in (arm_below, arm_above):
-            observed = _run_real_arm_boundary(receipt, int(case["delta_ns"]))
-            arm_observations.append({"delta_ns": case["delta_ns"], "status": observed[0], "reason_code": observed[1]})
-            if observed != (case["expected_status"], case["expected_reason_code"]):
-                raise ValueError(f"real arm-side predicate path did not enforce {case['delta_ns']} ns boundary")
-        evidence.extend(({"author_boundary_observations": author_observations}, {"arm_boundary_observations": arm_observations}))
-    except (TypeError, ValueError) as exc:
-        return _result("G10", name, GateStatus.FAIL, str(exc), *evidence)
-
-    positive_artifact, positive, positive_error = _json_record(bundle, "positive_control")
-    if positive_artifact is None or positive is None:
-        return _result(
-            "G10",
-            name,
-            GateStatus.FAIL,
-            "outstanding Ed-hands privileged anchor positive-control record is absent",
-            *evidence,
-        )
-    evidence.append(positive_artifact.citation())
-    try:
-        if set(positive) != _POSITIVE_CONTROL_KEYS or positive.get("schema_version") != POSITIVE_CONTROL_SCHEMA:
-            raise ValueError("Ed-hands privileged anchor positive-control schema is invalid")
-        if positive.get("performed_by") != "Ed" or positive.get("outside_t0_sequence") is not True:
-            raise ValueError("privileged anchor positive control was not recorded as Ed-hands outside T-0")
-        if positive.get("network_time_reenabled") is not True or positive.get("forced_resync") is not True:
-            raise ValueError("privileged anchor positive control lacks network-time re-enable/forced-resync evidence")
-        before = positive.get("anchor_before_ns")
-        after = positive.get("anchor_after_ns")
-        if not _real_int(before) or not _real_int(after):
-            raise ValueError("privileged anchor positive control endpoints are invalid")
-        support_root = positive_artifact.path.parent
-        movement_artifact = _artifact_for_path(bundle, str(support_root / "anchor-movement.json"))
-        if movement_artifact is None:
-            retained = [item for item in bundle.artifacts
-                        if item.path.name == "positive-control.json"
-                        and item.path.is_relative_to(bundle.custody_root / "records/g10-custody")
-                        and item.raw == positive_artifact.raw]
-            if len(retained) == 1:
-                support_root = retained[0].path.parent
-                movement_artifact = _artifact_for_path(bundle, str(support_root / "anchor-movement.json"))
-        movement = movement_artifact.value if movement_artifact is not None else None
-        if isinstance(movement, Mapping) and "anchor_check_version" in movement:
-            if movement["anchor_check_version"] != kernel_clock.ANCHOR_CHECK_VERSION:
-                raise ValueError("unsupported positive-control anchor semantics")
-            before_artifact = _artifact_for_path(bundle, str(support_root / "before.json"))
-            after_artifact = _artifact_for_path(bundle, str(support_root / "after.json"))
-            if before_artifact is None or after_artifact is None:
-                raise ValueError("positive-control residual stamps are absent")
-            stamps = (before_artifact.value, after_artifact.value)
-            frequency = kernel_clock.validate_probe(stamps[0].get("kernel_frequency"))
-            kernel_clock.validate_probe(stamps[1].get("kernel_frequency"))
-            if (stamps[0]["realtime_ns"] - stamps[0]["monotonic_raw_ns"] != before
-                    or stamps[1]["realtime_ns"] - stamps[1]["monotonic_raw_ns"] != after):
-                raise ValueError("positive-control endpoints differ from residual stamps")
-            residual = kernel_clock.anchor_residual_ns(after - before,
-                stamps[1]["monotonic_raw_ns"] - stamps[0]["monotonic_raw_ns"], frequency)
-            if (movement.get("absolute_movement_ns") != abs(after - before)
-                    or movement.get("residual_movement_ns") != float(residual)):
-                raise ValueError("positive-control residual differs from arithmetic")
-            moved = residual > 5_000_000
-        else:
-            moved = abs(after - before) > 5_000_000
-        if not moved:
-            raise ValueError("privileged anchor positive control did not visibly move the RAW anchor beyond 5 ms")
-        if positive.get("author_refusal_reason_code") != "evidence_author_t0_clock_attestation_underivable":
-            raise ValueError("privileged anchor positive control did not record the real author refusal code")
-        if bundle.manifest.value.get("schema_version") == "joulewise.v5_s1_qualification_bundle.v1":
-            from joulewise.v5_qualification import replay_g10_custody
-            evidence.append({"g10_custody": replay_g10_custody(bundle.custody_root, positive, bundle=bundle)})
-    except (ValueError, OSError, KeyError, TypeError) as exc:
-        return _result("G10", name, GateStatus.FAIL, str(exc), *evidence)
-    return _result("G10", name, GateStatus.PASS, "real author and arm paths enforce 5 ms +/- 1 ns, and Ed's adjacent privileged control visibly moved the RAW anchor", *evidence)
-
-
-GATE_EVALUATORS = (
-    evaluate_g1,
-    evaluate_g2,
-    evaluate_g3,
-    evaluate_g4,
-    evaluate_g5,
-    evaluate_g6,
-    evaluate_g7,
-    evaluate_g8,
-    evaluate_g9,
-    evaluate_g10,
-)
-
-
-def evaluate_rehearsal(bundle: EvidenceBundle) -> dict[str, object]:
-    """Evaluate all ten gates in ruled order and return a JSON-ready verdict."""
-
-    gates = tuple(evaluator(bundle) for evaluator in GATE_EVALUATORS)
-    overall = compose_overall_verdict(gate.status for gate in gates)
-    return {
-        "schema_version": "joulewise.t0_unattended_rehearsal_verdict.v1",
-        "overall_verdict": overall.value,
-        "gate_counts": {
-            status.value: sum(gate.status is status for gate in gates)
-            for status in GateStatus
-        },
-        "gates": [gate.to_dict() for gate in gates],
-        "load_issues": list(bundle.load_issues),
-    }
-
-
-def evaluate_qualification(bundle: EvidenceBundle, *, purpose="G2B_SHAKEDOWN") -> dict[str, object]:
-    """Ruling 76 subset, with retired gates recorded explicitly, never PASS.
-
-    The historical ten-gate entry point and its wire format are unchanged.
-    """
-    if purpose != "G2B_SHAKEDOWN":
-        raise ValueError("qualification requires G2B_SHAKEDOWN")
-    go = bundle.record("d149_go")
-    if (go is None or not isinstance(go.value, Mapping)
-            or go.value.get("purpose") != purpose
-            or go.value.get("authorization", {}).get("claim_eligible") is not False):
-        raise ValueError("qualification GO purpose/claim binding")
-    rows, live = [], []
-    for index, evaluator in enumerate(GATE_EVALUATORS, 1):
-        if index in (6, 7):
-            rows.append({"gate_id": f"G{index}", "name": "RETIRED LIVE GATE",
-                         "status": "NOT_APPLICABLE", "basis": "retired_by_ruling_76"})
-        else:
-            result = evaluator(bundle)
-            required_schema = {1: ("execution", QUALIFICATION_EXECUTION_SCHEMA),
-                               9: ("lifecycle", QUALIFICATION_LIFECYCLE_SCHEMA)}.get(index)
-            if required_schema:
-                record = bundle.record(required_schema[0])
-                if record is None or not isinstance(record.value, Mapping) or record.value.get("schema_version") != required_schema[1]:
-                    result = _result(f"G{index}", result.name, GateStatus.FAIL, "s1 qualification observation schema required")
-            live.append(result.status)
-            rows.append(result.to_dict())
-    return {"schema_version": "joulewise.v5_s1_qualification_verdict.v1",
-            "purpose": purpose, "overall_verdict": compose_overall_verdict(live).value,
-            "gate_counts": {status: sum(row["status"] == status for row in rows)
-                            for status in ("PASS", "FAIL", "UNRULED", "NOT_APPLICABLE")},
-            "gates": rows, "load_issues": list(bundle.load_issues)}
-
-
-__all__ = [
-    "D149_SCHEMA",
-    "EXECUTION_SCHEMA",
-    "EvidenceArtifact",
-    "EvidenceBundle",
-    "FALSIFIER_SCHEMA",
-    "G7_CONTROL_SCHEMA",
-    "GATE_EVALUATORS",
-    "GateResult",
-    "GateStatus",
-    "LIFECYCLE_SCHEMA",
-    "QUALIFICATION_EXECUTION_SCHEMA",
-    "QUALIFICATION_LIFECYCLE_SCHEMA",
-    "QUALIFICATION_STAGE_SCHEMA",
-    "OverallVerdict",
-    "POSITIVE_CONTROL_SCHEMA",
-    "PROCESS_LINEAGE_SCHEMA",
-    "ProductionRoot",
-    "REHEARSAL_RECEIPT_CLASS",
-    "REHEARSAL_RECEIPT_SCHEMA",
-    "REHEARSAL_WINDOW_PREFIX",
-    "compose_overall_verdict",
-    "evaluate_g1",
-    "evaluate_g2",
-    "evaluate_g3",
-    "evaluate_g4",
-    "evaluate_g5",
-    "evaluate_g6",
-    "evaluate_g7",
-    "evaluate_g8",
-    "evaluate_g9",
-    "evaluate_g10",
-    "evaluate_rehearsal",
-    "evaluate_qualification",
-    "parse_hid_idle_time",
-]

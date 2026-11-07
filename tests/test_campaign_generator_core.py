@@ -1,6 +1,7 @@
 """Counterfactual and parity checks for the shared campaign-generator core."""
 
 from __future__ import annotations
+from tests.receipt_imports import exec_archived_generator
 
 import hashlib
 import importlib.util
@@ -18,8 +19,11 @@ from scripts.check_campaign_generator_core_parity import (
     GENERATOR_CASES,
     configure_generator,
     generate,
-    load_source,
+    load_source as _load_source,
 )
+
+from tests.receipt_imports import historical_generator_call
+load_source = historical_generator_call(_load_source)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +68,11 @@ def generation_repository(case: unittest.TestCase, root: Path = ROOT, *, live_v5
     (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(head_bytes)
     for source in (root / "configs/campaigns").glob("d117_*/generate_configs.py"):
         shutil.copy2(source, repository / source.relative_to(root))
+    # A synthetic checkout can execute immutable archived generators against
+    # the extracted readers without installing a legacy path in the main tree.
+    (repository / "joulewise/arm_readiness.py").write_text(
+        "from joulewise import receipt_readers as _readers\n"
+        "def __getattr__(name): return getattr(_readers, name)\n")
     return repository
 
 D117_GENERATORS = tuple(
@@ -109,7 +118,7 @@ def load_generator(path: Path):
     old = sys.dont_write_bytecode
     try:
         sys.dont_write_bytecode = True
-        spec.loader.exec_module(module)
+        exec_archived_generator(spec.loader, module)
     finally:
         sys.dont_write_bytecode = old
     return module
