@@ -1042,6 +1042,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+201. **Magistrate activation 725916c8 (Opus 5.5, headless, 2026-11-07 from 15:53 PST): item 200's checks are done. Ed's visit turned Spotlight indexing and the Photos analysis agents off; the softwareupdated background scan is still on, so the 17:09 scan stays on the schedule. R0 re-run 8 launches at or after 17:15 PST.** No unread mail from Ed, no new directive.
+- **Launch notice.** The watchdog queued `transition-6447-launch_failure` ("session exit=143", 15:50:11 PST). The cause was deliberate: Ed's interactive session (9f46441a) sent SIGTERM to activation 2115b21f after Ed's `/login`, so that the headless magistrate restarts on the new Claude account. Nothing was measuring. Ed was mailed (message `1a1b86f274d1f1bb`), and the notice was acknowledged.
+- **Item 200 (1): settings after Ed's visit** (he ran `scripts/ops/mbp_quiet_os.zsh` from `ops/2026-11-07-mbp-quiet-os` at 15:42 PST). Each setting was read back at 15:58 PST. The before values are in `/Users/edr/night-archive/settings-baseline-2115-pre-ed.txt` (12:46 PST).
+  - Software Update: `softwareupdate --schedule` still says "Automatic checking for updates is turned on". `AutomaticDownload = 0`, which is new. The `AutomaticCheckEnabled` key did not persist on macOS 26.6.2. **The 6-hourly scan stays in the known-contention schedule.**
+  - Spotlight: `mdutil -s` shows "Indexing disabled" on `/` and `/System/Volumes/Data` (before: enabled).
+  - Photos: `com.apple.photoanalysisd` and `com.apple.mediaanalysisd` are disabled in `gui/501`. The running copies 13374 and 21331 are still SIGSTOPped (`T`).
+  - Time Machine: "No destinations configured", as before. `backupd` 531 and `backupd-helper` 429 are resident but idle.
+  - **Known scheduled contention (PST), replacing item 194's list:** 00:00 daily, the `/tmp` cleaner (now walks about 4,000 entries, not 73,100); about 05:09, 11:09, 17:09 and 23:09, the softwareupdated scan; about 05:40, XProtect; about 12:53, daily maintenance. Spotlight indexing is no longer a source. Clean gaps are unchanged.
+- **Item 200 (2): `/private/tmp`.** Activation 2115b21f pruned it at about 12:45 PST, from 79,077 entries to 3,919. It removed finished seat scratch by name only, and touched nothing under night-custody, night-archive or a measurement root. At 15:56 PST the count was 3,954.
+- **Item 200 (3).** The Spotlight STOP/CONT step stays in the R0 launch as a harmless no-op.
+- **Next activation (replaces item 198's pointer; everything else in item 195's last pointer holds):**
+  - (1) If R0 re-run 8 has not launched: at or after 17:15 PST, and only after the 17:09 `AutoBackgroundScanFinished` line is in `/var/log/install.log`, launch it exactly as item 195's last pointer (1) says. Check that `/Volumes` holds no external disk and that no other `claude` process is alive.
+  - (2) After R0: item 195's (2).
+  - (3) Flash-Next and the SSD qualification wait for Ed at the Mac (Sunday), and neither may overlap R0.
+
 200. **Laptop lead (interactive session 1544c617), 2026-11-07 about 12:40 PST: Ed will be at the MBP in about two hours to cut the scheduled macOS contention that keeps refusing R0. Ed set the priority: ALIGN (SHADE-Arena) first; the Flash-Next port waits for the SSD, Sunday to Tuesday.** This item schedules nothing; R0 re-run 8's timing stays the magistrate's call.
 - **Suggested to Ed** (his to apply; directive #417 leaves OS settings to him):
   - `sudo softwareupdate --schedule off`, plus automatic update checks off in System Settings. This stops the 6-hourly scan.
