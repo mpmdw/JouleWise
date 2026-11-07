@@ -98,8 +98,8 @@
     }
   },
   "WP18": {
-    "X": {"max_turns": null, "token_fixture_sha256": null},
-    "Y": {"max_turns": null, "token_fixture_sha256": null}
+    "X": {"max_turns": 12, "token_fixture_sha256": "9dac183dc113275c799f339f827be3ab1e332f4685b2e4b6b0da9466d6dc658f"},
+    "Y": {"max_turns": 12, "token_fixture_sha256": "f17a5a0f52921b52d67216e6b0bfa86cb3f96ebd143d6e39a4c210ba81420dac"}
   },
   "R0": {"reasoning_effort": null},
   "R1": {"B_D": null, "I_D": null, "T_dead": null, "thermal_policy": null},
