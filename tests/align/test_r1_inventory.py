@@ -109,6 +109,33 @@ class ClassificationTests(unittest.TestCase):
         inside = [row for row in rows if 1000 * NS <= row["started"]["monotonic_ns"] <= 2020 * NS]
         self.assertEqual(result["ranking"], self.classify(inventory, inside)["ranking"])
 
+    def test_record_carries_the_pr692_classifier_fields(self):
+        # LEAD-RULINGS-2 R9-1: record only; picks and status are unchanged.
+        from joulewise.align.apple import smc_enumeration
+        inventory, rows = step_capture()
+        alias = "Tp9z"  # an exact copy of the fast key (sorts after it): selected_key_aliases is non-empty
+        inventory["keys"].append({"key": alias, "unit": "degC", "data_type": "flt ", "data_size": 4})
+        for row in rows:
+            row["values"]["sensors"][alias] = row["values"]["sensors"][FAST]
+        with patch.object(smc_enumeration, "rank", wraps=smc_enumeration.rank) as rank:
+            result = self.classify(inventory, rows)
+        ranked = smc_enumeration.rank(rank.call_args.args[0], stage="r1")
+        fields = ("heat_ordering_indeterminate", "heat_ordering_wide_exclusion", "recovery_onset_gap_s",
+                  "alternative_slow_picks", "selected_key_aliases")
+        for field in fields:
+            with self.subTest(field=field):
+                self.assertIn(field, result)
+                self.assertEqual(result[field], ranked[field])
+        self.assertEqual(result["selected_key_aliases"][FAST], [alias])
+        self.assertIsNotNone(result["recovery_onset_gap_s"])
+        self.assertEqual(set(result["alternative_slow_picks"]), {"design_literal", "opus", "sol"})
+        self.assertEqual((result["status"], result["s_fast"], result["s_slow"]), ("pass", FAST, SLOW))
+        # Inside the digest: a changed diagnostic changes classification_sha256.
+        digest = result.pop("classification_sha256")
+        result["heat_ordering_indeterminate"] = not result["heat_ordering_indeterminate"]
+        self.assertNotEqual(hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":"),
+                                                      allow_nan=False).encode()).hexdigest(), digest)
+
     def test_missing_recovery_tail_fails_even_when_rank_still_has_picks(self):
         inventory, rows = step_capture()
         full_rows = rows

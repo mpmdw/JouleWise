@@ -271,6 +271,12 @@ class InventoryJournal:
             return deepcopy(self._rows)
 
 
+# LEAD-RULINGS-2 R9-1: PR #692 classifier fields the R1 classification record
+# keeps verbatim from smc_enumeration.rank (inside classification_sha256).
+CLASSIFIER_RECORD_FIELDS = ("heat_ordering_indeterminate", "heat_ordering_wide_exclusion",
+                            "recovery_onset_gap_s", "alternative_slow_picks", "selected_key_aliases")
+
+
 def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, recovery_s=600,
                   r0_sensors):
     """Classify a planning step with WP14(a), retaining its observation bounds."""
@@ -293,8 +299,11 @@ def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, r
     ranked = smc_enumeration.rank(capture, stage="r1")
     previous = {role: r0_sensors.get(role) for role in ("s_fast", "s_slow")}
     changed = any(ranked[role] != previous[role] for role in previous)
+    # LEAD-RULINGS-2 R9-1: the record also carries PR #692's classifier
+    # diagnostics (record only; no verdict reads them).
     result = {key: ranked[key] for key in ("rule", "s_fast", "s_slow", "die_candidates",
-                                          "heatsink_candidates", "record_only", "ranking")}
+                                          "heatsink_candidates", "record_only", "ranking")
+              + CLASSIFIER_RECORD_FIELDS}
     result.update(status="pass" if ranked["s_fast"] is not None and ranked["s_slow"] is not None else "fail",
                   r0_sensors=previous, sensor_pick_changed=changed,
                   flags=["r1.sensor_pick_changed"] if changed else [], phases=phases, journal_rows=len(rows),
