@@ -19,6 +19,11 @@ and Y=b-e18/index14 recorded pilot-7 turn counts and the token-id fixture
 digest. No configured 12-turn fallback is used for the contrast.
 R0.reasoning_effort stays a placeholder until R0 passes.
 R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
+W1's g0_cap_s binds r1_slots.g0_cap_w1.value_s (LEAD-RULINGS-2 R7-2, R7-12):
+clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600 s, R1 g0_timeout_s).
+Unreleased G0s count at the full R1 timeout; an inconclusive X-G records
+x_g_fallback. Ruling 1(f) uses this cap + max(G1 + H) + max(prefill + tool)
++ (B_D + turn_cap_tokens) / min(step-d and gated decode rates).
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
 I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.

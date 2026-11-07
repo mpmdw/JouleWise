@@ -55,8 +55,11 @@ class FakeWorld:
                  release_c=None, released=True, mount_after=None, journal_gap_kind=None, tail=20.0,
                  precool_timeout=(), leg_g0_unreleased=(), thermometry_status="pass",
                  b_d=8192, slot_changes=None, failed_soak_reads=0, g0_timeout=(), calibration_g0_timeouts=None,
-                 gated_decode_tokens=12600):
+                 gated_decode_tokens=12600, g0_waits=None, step_d_rate=20.0):
         self.tail = tail
+        self.step_d_rate = step_d_rate
+        # R7-2: gated run / X-G (by output name) -> its released G0 wait (s).
+        self.g0_waits = dict(g0_waits or {})
         self.precool_timeout = set(precool_timeout)
         # R6-1: gated runs / X-G (by output name) whose G0 times out.
         self.g0_timeout = set(g0_timeout)
@@ -131,6 +134,7 @@ class FakeWorld:
             self.calibration_g0_timeouts[kind] -= 1
             return completed(argv, out=json.dumps({
                 "kind": kind, "segment_status": "inconclusive", "g0_released": False, "g0_outcome": "timeout",
+                "g0_wait_s": 1200.0, "g0_timeout_s": 1200.0,
                 "cpu_busy_cores": [0.1] * 61, "cpu_busy_t_s": [float(i) for i in range(61)],
                 "census": [{"pid": 1, "name": "launchd"}],
                 "ac_powermode": {"value": self.mode, "source": "pmset -g custom", "observed_at": "episode_start"}}))
@@ -143,6 +147,9 @@ class FakeWorld:
                                     if kind == self.journal_gap_kind else [float(i) for i in range(61)]),
                    "census": [{"pid": 1, "name": "launchd"}],
                    "slots": slots if kind == "step-d" else {}}
+        if kind == "step-d" or kind.startswith("d-planning-turn"):
+            # R7-2: every G0 wait, under the R1 G0 timeout.
+            payload.update(g0_outcome="released", g0_wait_s=45.0, g0_timeout_s=1200.0)
         if kind == "idle":
             payload['sensor_roles'] = {'s_slow': 's_slow'}
             slope = 0.5 / 60 if self.unsettled_soak_once else 0.0
@@ -156,7 +163,7 @@ class FakeWorld:
             payload["sensor_series_end_t_s"] = 1799.0
         if kind == "step-d":
             payload["e_D_j_per_token"] = 3.6
-            payload["slot_detail"] = {"r_decode_tok_per_s": 20.0}
+            payload["slot_detail"] = {"r_decode_tok_per_s": self.step_d_rate}
         if kind in ("step-30b", "step-d") or kind.startswith(("d-spam", "d-bank")):
             payload["battery_drain_pct_per_h"] = {"step-30b": 4.0, "step-d": 6.0}.get(kind, 7.0)
         if kind == "harvest":
@@ -170,13 +177,17 @@ class FakeWorld:
                                       "r0_sensors": {"s_fast": "TC0P", "s_slow": "TG0P"},
                                       "die_candidates": ["TC0P"], "heatsink_candidates": ["TG0P"],
                                       "sensor_pick_changed": False, "flags": [], "reasons": [],
+                                      "alias_groups": [["TCMb", "TVD0"]],   # R7-13
                                       "classification_sha256": "c" * 64}
         if kind == "x-g" or kind.startswith(("d-spam", "d-bank")):
             payload.update(reference_source="r1_soak_reference",
                            gate_waits_s={"G0": [120.0], "G1": [40.0, 50.0, 60.0], "H": [30.0, 30.0, 30.0]},
                            # R6-1: W1's inter-member schedule (the kit configs' idle).
                            inter_member_idle_s=300.0,
-                           g0_outcome="timeout" if out.name in self.g0_timeout else "released")
+                           g0_outcome="timeout" if out.name in self.g0_timeout else "released",
+                           # R7-2: the G0 wait under the R1 G0 timeout.
+                           g0_wait_s=1200.0 if out.name in self.g0_timeout else self.g0_waits.get(out.name, 120.0),
+                           g0_timeout_s=1200.0)
         if kind.startswith("d-") and "planning" not in kind and kind != "d-4bit":
             payload.update(energy_j={"d-spam-benign-s1-a": 30000.0, "d-spam-benign-s1-b": 30036.0,
                                      "d-bank-benign-s1": 32000.0}[kind],
@@ -184,13 +195,13 @@ class FakeWorld:
                            # R6-3: 12,600 tokens in 700 s = 18 tok/s (step-d: 20).
                            decode_tokens=self.gated_decode_tokens,
                            deadman={"T_dead_s": 1451.018, "phases_s": {
-                               "G0": 120.0, "G1": 150.0, "H": 90.0, "decode": 700.0,
+                               "G0": self.g0_waits.get(out.name, 120.0), "G1": 150.0, "H": 90.0, "decode": 700.0,
                                "prefill": 120.0, "tool": 6.0, "tail": self.tail}})
             if out.name in self.g0_timeout:
-                # R6-1: a G0 timeout admits no turn and decodes nothing.
-                payload.update(admitted_turns=0, decode_tokens=0, gate_waits_s={"G0": [600.0], "G1": [], "H": []},
-                               deadman={"T_dead_s": 1451.018, "phases_s": {
-                                   "G0": 600.0, "G1": 0.0, "H": 0.0, "decode": 0.0,
+                # R6-1: a G0 timeout admits no turn and decodes nothing (R7-2: at 1,200 s).
+                payload.update(admitted_turns=0, decode_tokens=0, gate_waits_s={"G0": [1200.0], "G1": [], "H": []},
+                               g0_wait_s=1200.0, deadman={"T_dead_s": 1451.018, "phases_s": {
+                                   "G0": 1200.0, "G1": 0.0, "H": 0.0, "decode": 0.0,
                                    "prefill": 0.0, "tool": 0.0, "tail": 0.0}})
         if kind == "g0-release-soak":
             payload["released"] = self.released
@@ -345,7 +356,8 @@ class R1Tests(unittest.TestCase):
     def test_gated_d_runs_are_replay_pair_plus_bank_benign(self):
         kinds = [row[1] for row in r1.phase_plan(False) if row[0].endswith("_gated_held")
                  or row[0].endswith(("_held_a", "_held_b"))]
-        self.assertEqual(kinds, ["d-spam-benign-s1-a", "d-spam-benign-s1-b", "d-bank-benign-s1"])
+        # R7-1: the bank run first, then the replay pair.
+        self.assertEqual(kinds, ["d-bank-benign-s1", "d-spam-benign-s1-a", "d-spam-benign-s1-b"])
 
     def test_duty_bar_fails_on_gate_hold_share_and_names_fallbacks(self):
         result = {"admitted_turns": 3, "x7": False, "deadman": {"T_dead_s": 1000.0, "phases_s": {
@@ -1046,18 +1058,22 @@ class R1Tests(unittest.TestCase):
         from tests.align.test_v4_kit import ready_inputs
         for synthetic in (False, True):
             with self.subTest(synthetic=synthetic), tempfile.TemporaryDirectory() as td:
-                with patch.object(r1, "_run", FakeWorld()):
+                # R7-2: 1(f) now carries G0_cap_W1 (>= 600 s), so the fake
+                # decodes at 40 tok/s for the frozen B_D to fit T_dead.
+                with patch.object(r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000)):
                     self.assertEqual(r1.run(self.args(td, synthetic=synthetic)), 0)
                 slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
                 inputs, _ = ready_inputs(101.5, slots["max_r1_tail_s"])
-                # R5-4: the thermal policy is the one R1 measured.
+                # R5-4: the thermal policy is the one R1 measured; R7-2: W1's G0 cap is R1's slot.
                 inputs["R1"]["thermal_policy"].update(chunk_tokens=slots["slots"]["N_chunk"],
                                                       delta_slow_c=slots["slots"]["S6"],
-                                                      turn_cap_s=slots["slots"]["S7"])
+                                                      turn_cap_s=slots["slots"]["S7"],
+                                                      g0_cap_s=slots["g0_cap_w1"]["value_s"])
+                self.assertEqual(slots["g0_cap_w1"]["value_s"], 600)
                 self.assertEqual(slots["budget_fit_inputs"]["turn_cap_tokens"], 4096)
-                # R6-3: min(step-d 20 tok/s, the gated runs' 18 tok/s).
-                self.assertEqual(slots["budget_fit_inputs"]["r_decode_tok_per_s"], 18.0)
-                self.assertEqual(slots["budget_fit_inputs"]["r_decode_step_d_tok_per_s"], 20.0)
+                # R6-3: min(step-d 40 tok/s, the gated runs' 40 tok/s).
+                self.assertEqual(slots["budget_fit_inputs"]["r_decode_tok_per_s"], 40.0)
+                self.assertEqual(slots["budget_fit_inputs"]["r_decode_step_d_tok_per_s"], 40.0)
                 # R6-5: the policy carries R1's classification digest.
                 inputs["R1"]["thermal_policy"]["classification_sha256"] = \
                     slots["thermometry"]["D"]["classification_sha256"]
@@ -1157,20 +1173,24 @@ class Round5RulingTests(unittest.TestCase):
             with patch.object(r1, "wait_outside_os_batch", wait):
                 self.run_world(td, world)
             bounds = [w for _, w in waits]
-            # Round-5 executing review: R5-2 put the G0 (600 s cap) and the
-            # steps' 300 s quiet outside the deadman, so they join the bound.
-            self.assertIn(3300, bounds)      # 30B and D steps: 1,800 + 600 G0 + 300 quiet + 600 recovery
-            self.assertEqual(bounds.count(3300), 2 + 3)   # ... and the three designed states: 1,800 + 900 + 600
-            self.assertEqual(r1.SEGMENT_BOUND_S["step-d"], 3300)
-            self.assertEqual(r1.SEGMENT_BOUND_S["d-planning-turn-r-plus-4c"], 3300)
+            # Round-5 executing review: R5-2 put the G0 and the steps' 300 s
+            # quiet outside the deadman, so they join the bound. R7-2: step-d
+            # and the designed states arm the 1,200 s R1 G0 timeout.
+            self.assertEqual(bounds.count(3300), 1)   # 30B step: 1,800 + 600 G0 + 300 quiet + 600 recovery
+            self.assertEqual(bounds.count(3900), 1 + 3)   # D step: 1,800 + 1,200 + 300 + 600; states 1,800 + 900 + 1,200
+        table = r1.segment_bounds(r1.runtime_g0_timeout_s(None))
+        self.assertEqual(table["step-30b"], 3300)
+        self.assertEqual(table["step-d"], 3900)
+        self.assertEqual(table["d-planning-turn-r-plus-4c"], 3900)
         # Each bound covers the runtime's own caps around the re-armed deadman.
         from joulewise.align.apple import r1_runtime as rt
+        from joulewise.align.apple import thermal_gates
         deadman = rt.DEADMAN_FACTOR * r1.runtime_step_deadman_s(None)
-        g0_cap = 600   # thermal_gates: the G0 cap is 600 s
-        self.assertGreaterEqual(r1.SEGMENT_BOUND_S["step-d"],
-                                g0_cap + rt.STEP_QUIET_S + deadman + rt.RECOVERY_CAP_S)
-        self.assertGreaterEqual(r1.SEGMENT_BOUND_S["d-planning-turn-r-plus-0c"],
-                                rt.PREHEAT_CAP_S + g0_cap + deadman)
+        g0_cap = rt.g0_timeout_s(json.loads(r1.runtime_config_path(None).read_text()))
+        self.assertGreaterEqual(table["step-d"], g0_cap + rt.STEP_QUIET_S + deadman + rt.RECOVERY_CAP_S)
+        self.assertGreaterEqual(table["d-planning-turn-r-plus-0c"], rt.PREHEAT_CAP_S + g0_cap + deadman)
+        self.assertGreaterEqual(table["step-30b"], thermal_gates.G0_CAP_DEFAULT_S + rt.STEP_QUIET_S + deadman
+                                + rt.RECOVERY_CAP_S)
 
     def test_full_inventory_thermometry_is_registered_and_a_null_pick_fails_the_bar(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1218,7 +1238,7 @@ class Round5RulingTests(unittest.TestCase):
             before = rows[names.index(name) - 1]
             self.assertIn(before[1], d_turns, name)
             self.assertNotIn(name + ".precool", names)
-        self.assertEqual(names[names.index("X_G_contrast") - 1], "D_bank_benign_s1_gated_held")   # W1's D -> X
+        self.assertEqual(names[names.index("X_G_contrast") - 1], "D_spam_benign_s1_gated_held_b")   # W1's D -> X
         with tempfile.TemporaryDirectory() as td:
             world = FakeWorld()
             result, registration = self.run_world(td, world)
@@ -1236,40 +1256,43 @@ class Round5RulingTests(unittest.TestCase):
             self.assertEqual(schedule["inter_member_idle_s"], {"D": 300.0, "X-G": 300.0})
             self.assertEqual(schedule["authority"], "LEAD-RULINGS-2 R6-1")
             self.assertEqual(registration["x_g"]["status"], "measured")
-            self.assertEqual(registration["x_g"]["follows_d_turn"], "D_bank_benign_s1_gated_held")
+            self.assertEqual(registration["x_g"]["follows_d_turn"], "D_spam_benign_s1_gated_held_b")
 
     def test_a_gated_g0_timeout_makes_that_run_inconclusive_not_a_refusal(self):
         with tempfile.TemporaryDirectory() as td:
-            world = FakeWorld(g0_timeout={"D_spam_benign_s1_gated_held_b"})
+            world = FakeWorld(g0_timeout={"D_spam_benign_s1_gated_held_a"})
             result, registration = self.run_world(td, world)
             self.assertEqual(result["status"], "complete")
             rows = {row["run"]: row for row in registration["deadman_budget"]}
             # Without R6-1 this row read FAIL (no admitted turn).
+            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["duty_bar"]["verdict"], "inconclusive")
+            self.assertIn("G0 did not release", rows["D_spam_benign_s1_gated_held_a"]["inconclusive_reason"])
+            # Run b (R7-1: after a) then followed a member that dispatched no
+            # D turn: it did not test W1's D-after-D G0 either.
+            self.assertIsNone(rows["D_spam_benign_s1_gated_held_b"]["follows_d_turn"])
             self.assertEqual(rows["D_spam_benign_s1_gated_held_b"]["duty_bar"]["verdict"], "inconclusive")
-            self.assertIn("G0 did not release", rows["D_spam_benign_s1_gated_held_b"]["inconclusive_reason"])
-            # The bank run then followed a member that dispatched no D turn:
-            # it did not test W1's D-after-D G0 either.
-            self.assertIsNone(rows["D_bank_benign_s1_gated_held"]["follows_d_turn"])
-            self.assertEqual(rows["D_bank_benign_s1_gated_held"]["duty_bar"]["verdict"], "inconclusive")
-            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["follows_d_turn"], "planning_turn_R_plus_0C")
-            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["duty_bar"]["verdict"], "pass")
+            self.assertEqual(rows["D_bank_benign_s1_gated_held"]["follows_d_turn"], "planning_turn_R_plus_0C")
+            self.assertEqual(rows["D_bank_benign_s1_gated_held"]["duty_bar"]["verdict"], "pass")
             self.assertEqual(registration["duty_bar"]["verdict"], "inconclusive")
             self.assertFalse(registration["duty_bar"]["pass"])
             self.assertEqual(registration["duty_bar"]["inconclusive_runs"],
-                             ["D_bank_benign_s1_gated_held", "D_spam_benign_s1_gated_held_b"])
+                             ["D_spam_benign_s1_gated_held_a", "D_spam_benign_s1_gated_held_b"])
             # The replay pair cannot decide U5 either.
             self.assertEqual(registration["u5"]["verdict"], "inconclusive")
             self.assertFalse(registration["u5"]["sigma_pair_valid"])
-            # The kit stays conservative: the timed-out run's G0 (its 600 s cap)
-            # is still in ruling 1(f)'s worst-case G0 term, so W1 is refused.
+            # The kit stays conservative (R7-2): the timed-out run's G0 counts
+            # at the full 1,200 s R1 timeout in G0_cap_W1, ruling 1(f)'s G0
+            # term, so W1 is refused.
+            self.assertEqual(registration["g0_cap_w1"]["value_s"], 1200)
+            self.assertEqual(registration["g0_cap_w1"]["censored"], ["D_spam_benign_s1_gated_held_a"])
             from scripts import align_v4_kit as kit
             from tests.align.test_v4_kit import ready_inputs
             inputs, _ = ready_inputs(101.5, registration["max_r1_tail_s"])
             inputs["R1"]["thermal_policy"].update(chunk_tokens=registration["slots"]["N_chunk"],
                                                   delta_slow_c=registration["slots"]["S6"],
                                                   turn_cap_s=registration["slots"]["S7"],
-                                                  classification_sha256="c" * 64)
-            with self.assertRaisesRegex(ValueError, r"ruling 1\(f\).*G0_s 600\.0"):
+                                                  classification_sha256="c" * 64, g0_cap_s=1200)
+            with self.assertRaisesRegex(ValueError, r"ruling 1\(f\).*G0_s 1200\.0"):
                 kit.check_r1_evidence(inputs, registration, synthetic=True)
         with tempfile.TemporaryDirectory() as td:
             _, registration = self.run_world(td, FakeWorld(g0_timeout={"X_G_contrast"}))
@@ -1442,11 +1465,12 @@ class Round6RulingTests(unittest.TestCase):
             inputs, _ = ready_inputs(101.5, registration["max_r1_tail_s"])
             with self.assertRaisesRegex(ValueError, r"INCONCLUSIVE \(R6-2\): planning_turn_R_plus_0C"):
                 kit.check_r1_evidence(inputs, registration, synthetic=True)
-            # R6-1: the first gated run then followed no D turn (R + 0 C
-            # dispatched none), so it is INCONCLUSIVE; the later ones follow it.
+            # R6-1: the first gated run (R7-1: D_bank) then followed no D turn
+            # (R + 0 C dispatched none), so it is INCONCLUSIVE; the later ones follow it.
             rows = {row["run"]: row for row in registration["deadman_budget"]}
-            self.assertIsNone(rows["D_spam_benign_s1_gated_held_a"]["follows_d_turn"])
-            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["duty_bar"]["verdict"], "inconclusive")
+            self.assertIsNone(rows["D_bank_benign_s1_gated_held"]["follows_d_turn"])
+            self.assertEqual(rows["D_bank_benign_s1_gated_held"]["duty_bar"]["verdict"], "inconclusive")
+            self.assertEqual(rows["D_spam_benign_s1_gated_held_a"]["duty_bar"]["verdict"], "pass")
             self.assertEqual(rows["D_spam_benign_s1_gated_held_b"]["duty_bar"]["verdict"], "pass")
             self.assertEqual(registration["duty_bar"]["verdict"], "inconclusive")
         with tempfile.TemporaryDirectory() as td:
@@ -1525,7 +1549,8 @@ class Round6RulingTests(unittest.TestCase):
 
             def runner(argv):
                 result = world(argv)
-                if "--r1-kind" in argv and argv[argv.index("--r1-kind") + 1] == "d-bank-benign-s1":
+                # R7-1: D_spam b is the D member before X-G.
+                if "--r1-kind" in argv and argv[argv.index("--r1-kind") + 1] == "d-spam-benign-s1-b":
                     payload = json.loads(result.stdout)
                     payload.update(admitted_turns=0, decode_tokens=0)
                     payload["deadman"]["phases_s"].update(decode=0.0, prefill=0.0, tool=0.0)

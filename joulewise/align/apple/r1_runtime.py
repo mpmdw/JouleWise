@@ -72,6 +72,13 @@ STEP_QUIET_S = 300
 RECOVERY_CAP_S = 600
 COOLDOWN_CAP_S = 1500        # ruling 1(c)
 PREHEAT_CAP_S = 900
+# LEAD-RULINGS-2 R7-2: R1's gated D runs, X-G, step-d and the designed start
+# states (the R6-2 precool/retry segments) arm the G0 timeout the runtime
+# config names (``g0_timeout_s``, 1,200 s: after a full load no key reaches
+# G0's slope bar until 840-1,040 s after load end, so the 600 s cap truncated
+# the waits R1 exists to measure). Every other G0 keeps the 600 s default.
+G0_TIMEOUT_CONFIG_KEY = "g0_timeout_s"
+G0_TIMEOUT_KINDS = ("step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS)
 PREHEAT_MARGIN_C = 0.5
 PLANNING_FAST_CEILING_C = 150.0   # designed start states band S_slow only (ruling 6)
 DEADMAN_FACTOR = 1.13544
@@ -246,7 +253,13 @@ def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, r
                                           "heatsink_candidates", "record_only", "ranking")}
     result.update(status="pass" if ranked["s_fast"] is not None and ranked["s_slow"] is not None else "fail",
                   r0_sensors=previous, sensor_pick_changed=changed,
-                  flags=["r1.sensor_pick_changed"] if changed else [], phases=phases, journal_rows=len(rows))
+                  flags=["r1.sensor_pick_changed"] if changed else [], phases=phases, journal_rows=len(rows),
+                  # R7-13: aliased keys (identical series over this journal) are
+                  # one thermometer; the kit refuses a policy that gates on two
+                  # keys of one group.
+                  alias_groups=alias_groups([item["key"] for item in inventory.get("keys", ())], rows),
+                  alias_rule=("keys whose 1 Hz series are identical in every row of the classification "
+                              "journal are one sensor (LEAD-RULINGS-2 R7-13)"))
     stamps = [row["started"]["monotonic_ns"] for row in rows]
     if not stamps or min(stamps) > origin:
         result.update(status="fail", reason="quiet_not_observed")
@@ -347,16 +360,51 @@ def bands_c(soak, sensors):
     return out
 
 
-def gate_policy(sensors, bands, *, turn_cap_s, chunk_tokens, heavy, per_turn):
+def gate_policy(sensors, bands, *, turn_cap_s, chunk_tokens, heavy, per_turn, g0_cap_s=None):
     from joulewise.align.apple.thermal_gates import validate_gate_policy
-    return validate_gate_policy({
+    policy = {
         "sensors": sensors, "delta_fast_c": bands["delta_fast_c"], "delta_slow_c": bands["delta_slow_c"],
         "turn_cap_s": turn_cap_s, "chunk_tokens": chunk_tokens, "heavy": heavy, "per_turn": per_turn,
         # The policy validator needs a role; no R1 model member keeps it. Every
         # member installs its reference through a session hook before warmup
         # (the soak R, or a designed start state), so capture_reference never
         # replaces it with a self-captured warm value (LEAD-RULINGS-2 R5-1).
-        "window_reference": {"role": "capture"}})
+        "window_reference": {"role": "capture"}}
+    if g0_cap_s is not None:
+        policy["g0_cap_s"] = g0_cap_s   # R7-2: the R1 G0 timeout
+    return validate_gate_policy(policy)
+
+
+def g0_timeout_s(config):
+    """LEAD-RULINGS-2 R7-2: the one R1 G0 timeout constant (runtime config)."""
+    from joulewise.align.apple.thermal_gates import G0_CAP_DEFAULT_S, G0_CAP_MAX_S
+    value = config.get(G0_TIMEOUT_CONFIG_KEY)
+    if (type(value) not in (int, float) or not math.isfinite(value)
+            or not G0_CAP_DEFAULT_S <= value <= G0_CAP_MAX_S):
+        raise Refused(f"r1 runtime config {G0_TIMEOUT_CONFIG_KEY} must be a number in "
+                      f"[{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}] s (LEAD-RULINGS-2 R7-2), not {value!r}")
+    return value
+
+
+def g0_wait_fields(g0, cap_s):
+    """R7-2: record every G0 wait (the G0 interval's seconds) and the cap it ran under."""
+    return {"g0_wait_s": g0["duration_s"] if g0 else None, "g0_timeout_s": cap_s}
+
+
+def alias_groups(keys, rows):
+    """LEAD-RULINGS-2 R7-13: SMC keys whose 1 Hz series are identical in every
+    journal row (the same reading, value for value, failed reads included) are
+    one sensor under several keys, never independent thermometers. Keys with
+    no valid reading at all are left out (they are no thermometer). Returns
+    sorted groups of two or more keys."""
+    series = {}
+    for key in keys:
+        values = tuple(json.dumps((row.get("values") or {}).get("sensors", {}).get(key), allow_nan=True)
+                       for row in rows)
+        if all(value == "null" for value in values):
+            continue
+        series.setdefault(values, []).append(key)
+    return sorted(sorted(group) for group in series.values() if len(group) > 1)
 
 
 def rearm_deadman(deadman, seconds, origin):
@@ -1296,8 +1344,9 @@ class Segment:
     def reference_hook(self, reference, *, quiet_s=0, rearm_s=None):
         """Gate against the soak R (never a self-captured warm reference).
 
-        With ``rearm_s`` the G0 runs on its own 600 s cap (no deadman) and the
-        member's deadman is re-armed for ``rearm_s`` after it (R5-2); with
+        With ``rearm_s`` the G0 runs on its own cap (600 s; step-d's is the R7-2
+        timeout) with no deadman, and the member's deadman is re-armed for
+        ``rearm_s`` after it (R5-2); with
         ``quiet_s`` a released G0 is followed by that much idle before the
         prefill, the step's quiet window (protocol v4 :243-251, R5-5)."""
         segment = self
@@ -1329,8 +1378,8 @@ class Segment:
         proportional MLX heater while the production G0 (reference R + offset
         on S_slow) decides the release. The heater stops before the episode.
 
-        LEAD-RULINGS-2 R5-2: the preheat (PREHEAT_CAP_S) and the G0 (600 s)
-        keep their own caps; the member's deadman is armed only after the G0,
+        LEAD-RULINGS-2 R5-2: the preheat (PREHEAT_CAP_S) and the G0 (the R7-2
+        timeout, 1,200 s) keep their own caps; the member's deadman is armed only after the G0,
         for the decode (``rearm_s``)."""
         segment, slow_key = self, self.sensors["s_slow"]
 
@@ -1376,6 +1425,17 @@ class Segment:
         config, spec = read_template(self.config["templates"][key])
         return config, spec
 
+    @property
+    def g0_cap_s(self):
+        """R7-2: the G0 cap this segment's members arm (None = the 600 s default)."""
+        return g0_timeout_s(self.config) if self.kind in G0_TIMEOUT_KINDS else None
+
+    @property
+    def armed_g0_cap_s(self):
+        from joulewise.align.apple.thermal_gates import G0_CAP_DEFAULT_S
+        cap = self.g0_cap_s
+        return G0_CAP_DEFAULT_S if cap is None else cap
+
     def step_member(self, model_key, *, label, source=None, quiet_s=0, rearm=False):
         template, tspec = self.template(model_key)
         require_effort(tspec, model_key)
@@ -1384,7 +1444,7 @@ class Segment:
             template["model"].update(source)
         reference = self.reference()
         policy = gate_policy(self.sensors, self.bands(), turn_cap_s=300, chunk_tokens=256,
-                             heavy=False, per_turn=False)
+                             heavy=False, per_turn=False, g0_cap_s=self.g0_cap_s)
         step = self.config["step"]
         spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
         config = member_config(template, spec, run_id=f"align-v4-r1-{label}", kind=self.kind)
@@ -1464,14 +1524,15 @@ class Segment:
         flags = list(managed.session.flags)
         self.close_session(managed)
         return {"released": row["outcome"] == "released", "g0": row, "reference_c": reference["slow_c"],
-                "release_c": row["release"]["slow_c"], "flags": flags}
+                "release_c": row["release"]["slow_c"], "flags": flags,
+                **g0_wait_fields(row, self.armed_g0_cap_s)}
 
     def g0_inconclusive_fields(self, member, g0, incomplete, reference):
         """LEAD-RULINGS-2 R6-2: a calibration segment whose G0 timed out (and
         nothing else) is INCONCLUSIVE, exit 0; the driver precools and retries
         it once, then records it and the kit decides downstream."""
         return {"segment_status": "inconclusive", "g0_released": False,
-                "g0_outcome": g0["outcome"] if g0 else None,
+                "g0_outcome": g0["outcome"] if g0 else None, **g0_wait_fields(g0, self.armed_g0_cap_s),
                 "reason": "G0 did not release before its cap (LEAD-RULINGS-2 R6-2)",
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
                 "incomplete_reasons": incomplete, "episode_flags": list(member.ep.flags),
@@ -1494,6 +1555,7 @@ class Segment:
             return member, {
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
                 "g0_outcome": g0["outcome"], "g0_released": False, "leg_status": "inconclusive",
+                **g0_wait_fields(g0, self.armed_g0_cap_s),
                 "t_decline_status": "not_measured_g0_unreleased", "t_decline_s": None,
                 "incomplete_reasons": incomplete, "episode_flags": list(ep.flags),
                 "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
@@ -1505,7 +1567,7 @@ class Segment:
         return member, {
             "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
             "g0_outcome": g0["outcome"] if g0 else None, "g0_released": bool(g0) and g0["outcome"] == "released",
-            "t_decline_status": decline_status,
+            **g0_wait_fields(g0, self.armed_g0_cap_s), "t_decline_status": decline_status,
             "t_decline_s": decline_s, "decode_energy_j": joules, "decode_tokens": tokens,
             "prefill_tokens": turn.prefill_tokens, "energy_flags": flags, "episode_flags": list(ep.flags),
             "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
@@ -1566,7 +1628,8 @@ class Segment:
             [] if result["status"] == "pass" else ["null pick: " + ", ".join(
                 role for role in ("s_fast", "s_slow") if result[role] is None)])
         keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "die_candidates",
-                "heatsink_candidates", "record_only", "phases", "journal_rows", "classification_sha256")
+                "heatsink_candidates", "record_only", "phases", "journal_rows", "alias_groups", "alias_rule",
+                "classification_sha256")
         extra = {}
         if not record_only and result["sensor_pick_changed"] and result["s_fast"] and result["s_slow"]:
             extra["s7_for_r1_picks"] = s7_for_picks(
@@ -1620,7 +1683,7 @@ class Segment:
     def gated_policy(self, slots, *, heavy, per_turn, chunk_tokens=256):
         turn_cap = min(300.0, max(1.0, float(slots["S7"])))
         return gate_policy(self.sensors, self.bands(), turn_cap_s=turn_cap, chunk_tokens=chunk_tokens,
-                           heavy=heavy, per_turn=per_turn)
+                           heavy=heavy, per_turn=per_turn, g0_cap_s=self.g0_cap_s)
 
     def k_gated_d(self):
         step = self.step_d_result()
@@ -1674,7 +1737,7 @@ class Segment:
         return {"reference_c": reference["slow_c"], "reference_fast_c": reference["fast_c"],
                 "reference_source": "r1_soak_reference",
                 "g0_reference": g0.get("reference") if g0 else None,
-                "g0_outcome": g0["outcome"] if g0 else None,
+                "g0_outcome": g0["outcome"] if g0 else None, **g0_wait_fields(g0, self.armed_g0_cap_s),
                 "gate_waits_s": {kind: [r["duration_s"] for r in intervals if r["kind"] == kind]
                                  for kind in ("G0", "G1", "H")}}
 
@@ -1684,7 +1747,8 @@ class Segment:
         target = reference["slow_c"] + offset
         template, tspec = self.template("d_spam")
         require_effort(tspec, "d_spam")
-        policy = gate_policy(self.sensors, bands, turn_cap_s=300, chunk_tokens=256, heavy=False, per_turn=False)
+        policy = gate_policy(self.sensors, bands, turn_cap_s=300, chunk_tokens=256, heavy=False, per_turn=False,
+                             g0_cap_s=self.g0_cap_s)
         step = self.config["step"]
         spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
@@ -1716,6 +1780,7 @@ class Segment:
         return {"reference_c": reference["slow_c"], "g0_release_c": g0["release"]["slow_c"],
                 "delta_slow_c": bands["delta_slow_c"], "energy_j": record["turn_owned_j"],
                 "designed_offset_c": offset, "designed_release_c": target, "g0_outcome": g0["outcome"],
+                **g0_wait_fields(g0, self.armed_g0_cap_s),
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
                 "episode_flags": list(member.ep.flags), "ac_powermode": member.ep.hardware.get("ac_powermode")}
 

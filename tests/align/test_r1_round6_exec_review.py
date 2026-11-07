@@ -224,6 +224,10 @@ class PhaseOrderTests(unittest.TestCase):
                 gated = [i for i, (n, k, *_) in enumerate(phases) if n in r1.GATED_NAMES or k == "x-g"]
                 self.assertEqual(gated, list(range(gated[0], gated[0] + 4)))
                 self.assertEqual(phases[gated[0] - 1][0], "planning_turn_R_plus_0C")
+                # LEAD-RULINGS-2 R7-1: D_bank, D_spam a, D_spam b, X-G.
+                self.assertEqual([phases[i][0] for i in gated],
+                                 ["D_bank_benign_s1_gated_held", "D_spam_benign_s1_gated_held_a",
+                                  "D_spam_benign_s1_gated_held_b", "X_G_contrast"])
 
 
 if __name__ == "__main__":

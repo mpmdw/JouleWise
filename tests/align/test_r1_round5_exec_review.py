@@ -67,17 +67,32 @@ class DutyBarTests(unittest.TestCase):
             self.assertEqual(registration["duty_bar"]["inconclusive_runs"],
                              ["D_spam_benign_s1_gated_held_a", "D_spam_benign_s1_gated_held_b"])
 
-    def test_a_bank_run_g0_timeout_leaves_u5_to_the_replay_pair(self):
+    def test_an_x_g_g0_timeout_leaves_u5_to_the_replay_pair(self):
         # R5-1 scope (R6-1 since round 6): only a replay-pair run makes U5
-        # INCONCLUSIVE; the bank run's G0 timeout makes the duty bar
-        # INCONCLUSIVE and nothing else.
+        # INCONCLUSIVE. Since R7-1 X-G follows D_spam b, so its G0 timeout
+        # changes neither the duty bar nor U5; it is recorded in x_g.
+        world = FakeWorld(g0_timeout={"X_G_contrast"})
+        with tempfile.TemporaryDirectory() as td:
+            code, result, registration = _run_world(td, world)
+            self.assertEqual(code, 0, result.get("error"))
+            self.assertEqual(registration["duty_bar"]["verdict"], "pass")
+            self.assertEqual(registration["x_g"]["status"], "inconclusive")
+            self.assertTrue(registration["u5"]["sigma_pair_valid"])
+            self.assertNotEqual(registration["u5"]["verdict"], "inconclusive")
+
+    def test_a_bank_run_g0_timeout_makes_the_first_replay_run_inconclusive(self):
+        # R7-1: D_bank runs first, so a bank G0 timeout (no D work) leaves
+        # D_spam a without a full gated D predecessor (R6-1 (c), confirmed by
+        # R7-3): a is INCONCLUSIVE and so is U5; b follows a and is judged.
         world = FakeWorld(g0_timeout={"D_bank_benign_s1_gated_held"})
         with tempfile.TemporaryDirectory() as td:
             code, result, registration = _run_world(td, world)
             self.assertEqual(code, 0, result.get("error"))
             self.assertEqual(registration["duty_bar"]["verdict"], "inconclusive")
-            self.assertTrue(registration["u5"]["sigma_pair_valid"])
-            self.assertNotEqual(registration["u5"]["verdict"], "inconclusive")
+            self.assertEqual(registration["duty_bar"]["inconclusive_runs"],
+                             ["D_bank_benign_s1_gated_held", "D_spam_benign_s1_gated_held_a"])
+            self.assertFalse(registration["u5"]["sigma_pair_valid"])
+            self.assertEqual(registration["u5"]["verdict"], "inconclusive")
 
 
 class BudgetTests(unittest.TestCase):
@@ -105,23 +120,26 @@ class BudgetTests(unittest.TestCase):
     def _slots(self, rows, rate=11.0, cap=None):
         names = kit.GATED_D_RUN_NAMES
         base = {k: 0.0 for k in kit.GATED_PHASES}
-        return {"deadman_budget": [{"run": n, "phases_s": {**base, **row}, "decode_tokens": 0}
-                                   for n, row in zip(names, rows)],
+        return {"deadman_budget": [{"run": n, "phases_s": {**base, **row}, "decode_tokens": 0,
+                                    "g0_outcome": "released"} for n, row in zip(names, rows)],
+                # R7-2: X-G's G0 wait joins G0_cap_W1.
+                "x_g": {"status": "measured", "g0_outcome": "released", "g0_wait_s": 0.0},
                 "budget_fit_inputs": {"r_decode_tok_per_s": rate, "r_decode_step_d_tok_per_s": rate,
                                       "turn_cap_tokens": kit.d_turn_cap_tokens() if cap is None else cap},
                 "slots": {"B_D": 40960}}
 
     def test_ruling_1f_takes_each_term_at_its_worst_run(self):
-        # The worst case combines the worst G0, the worst holds and the worst
-        # prefill + tool even when no single run had all three.
-        rows = ({"G0": 300.0, "prefill": 10.0}, {"G1": 200.0, "H": 100.0, "prefill": 10.0},
+        # The worst case combines the worst G0 (since R7-2 as G0_cap_W1 =
+        # ceil(1.25 x 640 s)), the worst holds and the worst prefill + tool
+        # even when no single run had all three.
+        rows = ({"G0": 640.0, "prefill": 10.0}, {"G1": 200.0, "H": 100.0, "prefill": 10.0},
                 {"prefill": 150.0, "tool": 20.0})
         slots = self._slots(rows)
         cap = kit.d_turn_cap_tokens()
         fit = kit.ruling_1f_fit(slots, 6144, 2000.0)
-        self.assertEqual(fit["terms_s"], {"G0_s": 300.0, "holds_s": 300.0, "prefill_tool_s": 170.0,
+        self.assertEqual(fit["terms_s"], {"G0_s": 800, "holds_s": 300.0, "prefill_tool_s": 170.0,
                                           "decode_s": (6144 + cap) / 11.0})
-        self.assertAlmostEqual(fit["worst_s"], 770.0 + (6144 + cap) / 11.0)
+        self.assertAlmostEqual(fit["worst_s"], 1270.0 + (6144 + cap) / 11.0)
         self.assertFalse(kit.ruling_1f_fit(slots, 6144, fit["worst_s"] - 1.0)["fits"])
         self.assertTrue(kit.ruling_1f_fit(slots, 6144, fit["worst_s"])["fits"])
         # The sizing aid never names a budget that itself misses T_dead.

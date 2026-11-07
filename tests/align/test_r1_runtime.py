@@ -49,9 +49,10 @@ class ConformanceTests(unittest.TestCase):
             config = rs.synthetic_config(root / "cfg", decline_after_s=120.0, slow_gain=0.12)
             run = root / "r1"
             run.mkdir()
-            results = {}
+            results, kinds = {}, {}
 
             def segment(name, kind, *extra, soak=True):
+                kinds[name] = kind
                 args = list(extra)
                 if soak:
                     args += ["--soak-reference", str(run / "soak_reference.json")]
@@ -155,6 +156,27 @@ class ConformanceTests(unittest.TestCase):
             self.assertGreater(battery["drain_pct_per_h"]["D"], 0)
             self.assertGreater(battery["drain_pct_per_h"]["30B"], 0)
             self.assertIsNone(battery["charge_resume_soc_pct"])
+            # LEAD-RULINGS-2 R7-2: the gated runs, X-G, step-d and the designed
+            # start states arm the runtime config's 1,200 s G0 timeout through
+            # the gate policy; every other member keeps the 600 s default. Each
+            # reports its G0 wait (the bundle's G0 interval) and that cap.
+            armed = {}
+            for name, result in results.items():
+                if "bundle" not in result:
+                    continue
+                bundle = run / name / result["bundle"]
+                spec = json.loads(json.loads((bundle / "config.json").read_text())["workload_profile"]["prompt_text"])
+                armed[kinds[name]] = spec["thermal"].get("g0_cap_s")
+                episode = json.loads((bundle / "outputs/align_episode.json").read_text())
+                g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
+                self.assertEqual(result["g0_wait_s"], g0["duration_s"], name)
+                self.assertEqual(result["g0_timeout_s"], 1200 if kinds[name] in rt.G0_TIMEOUT_KINDS else 600, name)
+            for kind in ("step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS):
+                self.assertEqual(armed[kind], 1200, kind)
+            for kind in ("step-30b", *contract.HIGH_POWER_KINDS):
+                self.assertIsNone(armed[kind], kind)
+            # R7-13: the D classification records its alias groups (none here).
+            self.assertEqual(step["thermometry"]["alias_groups"], [])
             # Every runtime wrote only inside its own segment directory.
             self.assertEqual(sorted(p.name for p in run.iterdir()),
                              sorted([*results, "soak_reference.json"]))

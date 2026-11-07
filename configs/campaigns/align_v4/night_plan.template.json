@@ -168,6 +168,7 @@
       "classification_sha256": "PENDING_R1",
       "delta_fast_c": "PENDING_R1",
       "delta_slow_c": "PENDING_R1",
+      "g0_cap_s": "PENDING_R1",
       "heavy": true,
       "per_turn": true,
       "sensors": {

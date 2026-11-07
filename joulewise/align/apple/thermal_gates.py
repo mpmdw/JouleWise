@@ -20,6 +20,8 @@ from joulewise.align.apple.budget import DeadmanExpired
 from joulewise.interfaces import RuntimeEvent
 
 REFERENCE_SCHEMA = 'joulewise.align_window_reference.v1'
+G0_CAP_DEFAULT_S = 600
+G0_CAP_MAX_S = 1200
 
 
 class WindowReferenceRefused(RuntimeError):
@@ -93,10 +95,14 @@ def sample_rows(rows):
 def validate_gate_policy(value):
     required = {'sensors', 'delta_fast_c', 'delta_slow_c', 'turn_cap_s', 'per_turn', 'heavy', 'chunk_tokens'}
     if (not isinstance(value, Mapping) or not required <= value.keys()
-            or 'window_reference' not in value or set(value) - required - {'window_reference'}):
+            or 'window_reference' not in value or set(value) - required - {'window_reference', 'g0_cap_s'}):
         raise ValueError('thermal policy has missing or unknown fields')
     policy = dict(value)
     policy['sensors'] = validate_policy(policy['sensors'])
+    if 'g0_cap_s' in policy:
+        cap = policy['g0_cap_s']
+        if type(cap) not in (int, float) or not math.isfinite(cap) or not G0_CAP_DEFAULT_S <= cap <= G0_CAP_MAX_S:
+            raise ValueError(f'thermal.g0_cap_s must be finite and in [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}]')
     for name in ('delta_fast_c', 'delta_slow_c', 'turn_cap_s'):
         v = policy[name]
         if type(v) not in (int, float) or not math.isfinite(v) or v <= 0:
@@ -464,7 +470,7 @@ class ThermalSession:
             raise ThermalFault('thermal.collector_failed', fault)
         if kind == 'G0':
             # Without a bound status source G0 can never release; fail the
-            # member now rather than after a 600 s timeout (WP8 F5). Judge
+            # member now rather than after the G0 timeout (WP8 F5). Judge
             # only recent rows; a coverage gap is left to the X4 path.
             entry_ns = monotonic_ns(entry)
             recent = [r for r in self.rows if 0 <= entry_ns - r['monotonic_ns'] <= 10 * NS]
@@ -476,7 +482,7 @@ class ThermalSession:
                             'entry_stamp': _stamp_record(entry)})
         start = monotonic_ns(entry)
         entry_slope = slow_slope(self.rows, start, self.policy['sensors']['s_slow'])
-        cap = 600 if kind == 'G0' else self.policy['turn_cap_s']
+        cap = self.policy.get('g0_cap_s', G0_CAP_DEFAULT_S) if kind == 'G0' else self.policy['turn_cap_s']
         reference = self.reference if kind == 'G0' else self.episode_reference
         required = 10 if kind == 'G0' else 5
         fast, slow = (self.policy['sensors'][k] for k in ('s_fast', 's_slow'))

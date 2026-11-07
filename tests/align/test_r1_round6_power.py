@@ -381,7 +381,7 @@ class R1NightWorstCaseTests(unittest.TestCase):
         self.assertEqual(names, [row[0] for row in r1.phase_plan(False)])
         bounds = {row['name']: row['bound_s'] for row in value['segments']}
         self.assertEqual(bounds['idle_soak'], 1800)
-        self.assertEqual(bounds['step_D_prefill_10k_decode_4096'], 3300)
+        self.assertEqual(bounds['step_D_prefill_10k_decode_4096'], 3900)   # R7-2: 1,800 + 1,200 + 300 + 600
         self.assertAlmostEqual(bounds['high_power_B'], r1.aba_leg_bound_s(['fake-runtime']))
         self.assertAlmostEqual(value['no_redo_s'], sum(bounds.values()))
         self.assertEqual(value['batch_window_wait_max_s'], 5400)

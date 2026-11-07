@@ -385,7 +385,7 @@ def ready_inputs(i_d=300.0, tail=20.0):
     """Synthetic, fully supplied inputs (no model, no study data); WP11 is the committed one."""
     t_dead = kit.l1_t_dead(i_d, tail)
     policy = {'sensors': {'s_fast': 'TC0P', 's_slow': 'TG0P', 'fan_keys': [], 'r0_sha256': 'a' * 64},
-              'classification_sha256': 'b' * 64,
+              'classification_sha256': 'b' * 64, 'g0_cap_s': 600,
               'delta_fast_c': 8.0, 'delta_slow_c': 1.5, 'turn_cap_s': 120, 'chunk_tokens': 512,
               'heavy': True, 'per_turn': True}
     inputs = {
@@ -399,7 +399,7 @@ def ready_inputs(i_d=300.0, tail=20.0):
     return inputs, r1_record(i_d, tail)
 
 
-GATED_PHASES = {'G0': 120.0, 'G1': 150.0, 'H': 90.0, 'decode': 700.0, 'prefill': 120.0, 'tool': 6.0}
+GATED_PHASES = {'G0': 120.0, 'G1': 150.0, 'H': 90.0, 'decode': 280.0, 'prefill': 120.0, 'tool': 6.0}
 
 
 def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
@@ -409,18 +409,26 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
             'thermometry': {'bar': 'pass', 'D': {'s_fast': 'TC0P', 's_slow': 'TG0P',
                                                  'die_candidates': ['TC0P'], 'heatsink_candidates': ['TG0P'],
                                                  'classification_sha256': 'b' * 64,
+                                                 'alias_groups': [],
                                                  'sensor_pick_changed': False}},
             'max_r1_tail_s': tail,
             'slots': {'I_D': i_d, 'T_dead': 1451.0, 'B_D': 8192, 'N_chunk': 512, 'S5_fast': 8.0, 'S5': 1.5, 'S6': 1.5, 'S7': 120.0},
             'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
             'u5': {'verdict': 'pass', 'c': 1.0},
-            # R6-3: each gated run's observed decode rate (14,000 tokens in 700 s = step-d's 20 tok/s).
-            'deadman_budget': [{'run': name, 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2),
+            # 14,000 tokens in 280 s = 50 tok/s; the 600 s G0 floor still fits 1(f).
+            'deadman_budget': [{'run': name, 'g0_outcome': 'released',
+                                'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2),
                                 'decode_tokens': 14000, 'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
-            'budget_fit_inputs': {'r_decode_tok_per_s': 20.0, 'r_decode_step_d_tok_per_s': 20.0,
+            'budget_fit_inputs': {'r_decode_tok_per_s': 50.0, 'r_decode_step_d_tok_per_s': 50.0,
                                   'turn_cap_tokens': 4096},
             'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
+            'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 120.0},
+            'g0_cap_w1': {'authority': 'LEAD-RULINGS-2 R7-2, R7-12', 'r1_g0_timeout_s': 1200.0,
+                          'floor_s': 600.0, 'factor': 1.25,
+                          'waits_s': {**dict.fromkeys(kit.GATED_D_RUN_NAMES, 120.0), 'X_G_contrast': 120.0},
+                          'censored': [], 'x_g_fallback': False, 'max_g0_s': 120.0, 'value_s': 600,
+                          'rule': 'clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600, R1 g0_timeout_s)'},
             'duty_bar': {'pass': True, 'verdict': 'pass', 'schedule': R6_1_SCHEDULE}}
 
 
@@ -654,14 +662,14 @@ class R1BudgetBindingTests(unittest.TestCase):
             kit.require_ready(inputs, slots)
 
     def test_ruling_1f_refuses_a_budget_whose_worst_case_misses_t_dead(self):
-        inputs, slots = ready_inputs()             # worst = 120 + 240 + 126 + (8192 + 4096)/20 = 1100.4 s
+        inputs, slots = ready_inputs()
         fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
-        self.assertAlmostEqual(fit['worst_s'], 120 + 240 + 126 + 12288 / 20)
+        self.assertAlmostEqual(fit['worst_s'], 600 + 240 + 126 + 12288 / 50)
         self.assertTrue(fit['fits'])
         set_decode_rate(slots, 11.0)   # FD:145's ~370 s per 4,096 tokens
         with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit.*largest fitting B_D is None'):
             kit.require_ready(inputs, slots)
-        set_decode_rate(slots, 15.0)   # 486 + (B_D + 4096)/15 <= 1277.0
+        set_decode_rate(slots, 37.0)   # 966 + (B_D + 4096)/37 <= 1277.0
         self.assertEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 7168)
         with self.assertRaisesRegex(ValueError, 'largest fitting B_D is 7168'):
             kit.require_ready(inputs, slots)
@@ -781,15 +789,15 @@ class Round6KitTests(unittest.TestCase):
 
     def test_ruling_1f_uses_the_slowest_observed_decode_rate(self):
         inputs, slots = ready_inputs()
-        # The bank run decoded at 10 tok/s (7,000 tokens in 700 s); step-d at 20.
-        slots['deadman_budget'][2]['decode_tokens'] = 7000
+        # The bank run decoded at 10 tok/s (2,800 tokens in 280 s); step-d at 50.
+        slots['deadman_budget'][2]['decode_tokens'] = 2800
         with self.assertRaisesRegex(ValueError, r'is not min\(step-d'):
-            kit.require_ready(inputs, slots)       # the recorded 20 tok/s is stale
+            kit.require_ready(inputs, slots)       # the recorded 50 tok/s is stale
         slots['budget_fit_inputs']['r_decode_tok_per_s'] = 10.0
         fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
         self.assertEqual(fit['r_decode_tok_per_s'], 10.0)
         self.assertAlmostEqual(fit['terms_s']['decode_s'], (8192 + 4096) / 10.0)
-        # 486 + 12,288/10 > T_dead: step-d's rate alone would have admitted it.
+        # 966 + 12,288/10 > T_dead: step-d's rate alone would have admitted it.
         with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit'):
             kit.require_ready(inputs, slots)
         # A run that decoded nothing (G0 timeout) has no rate and does not lower it.
@@ -830,6 +838,169 @@ class Round6KitTests(unittest.TestCase):
             kit.require_ready(inputs, slots)
         del slots['inconclusive_segments']
         with self.assertRaisesRegex(ValueError, 'inconclusive_segments'):
+            kit.require_ready(inputs, slots)
+
+
+class Round7KitTests(unittest.TestCase):
+    def test_r1_g0_timeout_is_read_from_config_and_validated(self):
+        self.assertEqual(kit.r1_g0_timeout_s(), 1200.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / 'configs/align/v4/r1_runtime.json'
+            config.parent.mkdir(parents=True)
+            for value in (600, 975.5, 1200):
+                config.write_text(json.dumps({'g0_timeout_s': value}))
+                self.assertEqual(kit.r1_g0_timeout_s(tmp), value)
+            for value in (None, 599, 1201, True, float('nan'), '1200'):
+                config.write_text(json.dumps({'g0_timeout_s': value}))
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    kit.r1_g0_timeout_s(tmp)
+
+    def test_w1_g0_cap_released_waits_and_rounding(self):
+        _, slots = ready_inputs()
+        for row, wait in zip(slots['deadman_budget'], (120, 300, 500)):
+            row['phases_s']['G0'] = wait
+        slots['x_g']['g0_wait_s'] = 400
+        cap = kit.w1_g0_cap(slots)
+        self.assertEqual(cap['value_s'], 625)
+        self.assertEqual(cap['max_g0_s'], 500)
+        self.assertEqual(cap['waits_s'], dict(zip((*kit.GATED_D_RUN_NAMES, 'X_G_contrast'), (120, 300, 500, 400))))
+        self.assertEqual(cap['censored'], [])
+        self.assertIs(cap['x_g_fallback'], False)
+        slots['x_g']['g0_wait_s'] = 500.1
+        self.assertEqual(kit.w1_g0_cap(slots)['value_s'], 626)  # ceil, not truncation
+
+    def test_w1_g0_cap_floor_and_ceiling(self):
+        _, slots = ready_inputs()
+        self.assertEqual(kit.w1_g0_cap(slots)['value_s'], 600)
+        slots['deadman_budget'][0]['phases_s']['G0'] = 1000
+        self.assertEqual(kit.w1_g0_cap(slots)['value_s'], 1200)
+
+    def test_w1_g0_cap_counts_censored_d_at_full_r1_timeout(self):
+        for outcome in ('timeout', 'deadman', 'unobserved'):
+            _, slots = ready_inputs()
+            row = slots['deadman_budget'][1]
+            row['g0_outcome'] = outcome
+            cap = kit.w1_g0_cap(slots)
+            with self.subTest(outcome=outcome):
+                self.assertEqual(cap['value_s'], 1200)
+                self.assertEqual(cap['waits_s'][row['run']], 1200)
+                self.assertEqual(cap['censored'], [row['run']])
+                self.assertIs(cap['x_g_fallback'], False)
+
+    def test_w1_g0_cap_refuses_bad_observations_and_run_sets(self):
+        _, base = ready_inputs()
+        for outcome in (None, '', 'unknown', True):
+            for member in ('D', 'X-G'):
+                slots = deepcopy(base)
+                target = slots['deadman_budget'][0] if member == 'D' else slots['x_g']
+                target['g0_outcome'] = outcome
+                with self.subTest(outcome=outcome, member=member), self.assertRaisesRegex(ValueError, 'g0_outcome'):
+                    kit.w1_g0_cap(slots)
+        for wait in (None, -1, float('nan'), float('inf'), True, '12'):
+            for member in ('D', 'X-G'):
+                slots = deepcopy(base)
+                if member == 'D':
+                    slots['deadman_budget'][0]['phases_s']['G0'] = wait
+                else:
+                    slots['x_g']['g0_wait_s'] = wait
+                with self.subTest(wait=wait, member=member), self.assertRaisesRegex(ValueError, 'wait'):
+                    kit.w1_g0_cap(slots)
+        for rows in (None, [], base['deadman_budget'][:2],
+                     base['deadman_budget'][:2] + base['deadman_budget'][:1]):
+            with self.subTest(rows=rows), self.assertRaisesRegex(ValueError, 'exactly the three'):
+                kit.w1_g0_cap(dict(base, deadman_budget=rows))
+
+    def test_missing_or_stale_g0_cap_record_is_refused(self):
+        for field, value in ((None, None), ('value_s', 601), ('x_g_fallback', True), ('r1_g0_timeout_s', 600)):
+            inputs, slots = ready_inputs()
+            if field is None:
+                del slots['g0_cap_w1']
+            else:
+                slots['g0_cap_w1'][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, r'r1_slots\.g0_cap_w1.*missing or stale'):
+                kit.require_ready(inputs, slots)
+
+    def test_policy_g0_cap_must_bind_the_derived_slot(self):
+        inputs, slots = ready_inputs()
+        inputs['R1']['thermal_policy']['g0_cap_s'] = 625
+        with self.assertRaisesRegex(ValueError, r'r1_slots\.g0_cap_w1\.value_s.*LEAD-RULINGS-2 R7-2'):
+            kit.require_ready(inputs, slots)
+
+    def test_ruling_1f_uses_w1_cap_instead_of_measured_d_max(self):
+        inputs, slots = ready_inputs()
+        set_decode_rate(slots, 20.0)
+        fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
+        self.assertEqual(fit['terms_s']['G0_s'], 600)
+        self.assertEqual(fit['g0_cap_w1'], kit.w1_g0_cap(slots))
+        old_worst = 120 + 240 + 126 + (8192 + 4096) / 20
+        self.assertLess(old_worst, inputs['R1']['T_dead'])
+        self.assertFalse(fit['fits'])
+        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\).*g0_cap_w1'):
+            kit.require_ready(inputs, slots)
+
+    def test_inconclusive_x_g_falls_back_and_is_admitted_when_1f_fits(self):
+        inputs, slots = ready_inputs(i_d=0)
+        for row in slots['deadman_budget']:
+            row['phases_s'].update(G1=0, H=0)
+        set_decode_rate(slots, 80.0)
+        slots['x_g'] = {'status': 'inconclusive', 'g0_outcome': 'timeout', 'g0_wait_s': 1200}
+        cap = slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
+        inputs['R1']['thermal_policy']['g0_cap_s'] = cap['value_s']
+        self.assertIs(cap['x_g_fallback'], True)
+        self.assertEqual(cap['waits_s']['X_G_contrast'], 1200)
+        self.assertIn('X_G_contrast', cap['censored'])
+        fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
+        self.assertEqual(fit['terms_s']['G0_s'], 1200)
+        kit.require_ready(inputs, slots)
+        # No G0 interval after a predecessor did no D work: still censored.
+        slots['x_g']['g0_wait_s'] = None
+        self.assertEqual(kit.w1_g0_cap(slots), cap)
+
+    def test_missing_x_g_dict_is_refused(self):
+        inputs, slots = ready_inputs()
+        for value in (None, [], 'inconclusive', {}):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, r'r1_slots\.x_g'):
+                kit.require_ready(inputs, dict(slots, x_g=value))
+
+    def test_inconclusive_calibration_refusals_name_rerun_and_magistrate(self):
+        for segment in (kit.STEP_D_SEGMENT, 'planning_turn_R_plus_2C'):
+            inputs, slots = ready_inputs()
+            slots['inconclusive_segments'] = {segment: 'G0 timed out twice'}
+            with self.subTest(segment=segment), self.assertRaises(ValueError) as raised:
+                kit.require_ready(inputs, slots)
+            message = str(raised.exception)
+            for text in ('re-run', 'magistrate', 'no per-occurrence lead ruling', 'LEAD-RULINGS-2 R7-3'):
+                self.assertIn(text, message)
+
+    def test_missing_or_malformed_alias_groups_refuse(self):
+        for value in (None, {}, ['TC0P', 'TG0P'], [[1, 2]], [['TC0P']], [['TG0P', 'TC0P']],
+                      [['TC0P', 'TC0P']], [['TC0P', 'TG0P'], ['TG0P', 'Tm0P']]):
+            inputs, slots = ready_inputs()
+            if value is None:
+                del slots['thermometry']['D']['alias_groups']
+            else:
+                slots['thermometry']['D']['alias_groups'] = value
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'alias_groups.*R7-13'):
+                kit.require_ready(inputs, slots)
+
+    def test_selected_aliases_or_same_key_refuse_as_one_thermometer(self):
+        for same_key in (False, True):
+            inputs, slots = ready_inputs()
+            if same_key:
+                inputs['R1']['thermal_policy']['sensors']['s_slow'] = 'TC0P'
+            else:
+                slots['thermometry']['D']['alias_groups'] = [['TC0P', 'TG0P']]
+            with self.subTest(same_key=same_key), self.assertRaisesRegex(
+                    ValueError, 'aliased keys are one thermometer.*LEAD-RULINGS-2 R7-13'):
+                kit.require_ready(inputs, slots)
+
+    def test_aliases_elsewhere_preserve_admission(self):
+        inputs, slots = ready_inputs()
+        slots['thermometry']['D']['alias_groups'] = [['TCMb', 'TVD0'], ['Tf24', 'Tf2D', 'Tf2E']]
+        kit.require_ready(inputs, slots)
+        # Prove this is admission through the independence check, not a bypass.
+        slots['thermometry']['D']['alias_groups'].append(['TC0P', 'TG0P'])
+        with self.assertRaisesRegex(ValueError, 'aliased keys are one thermometer'):
             kit.require_ready(inputs, slots)
 
 

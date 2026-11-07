@@ -356,6 +356,13 @@ Under the three WP14 rulings above, retain these council rules:
 - G0 follows neutral benign warmup, before the episode stamp. Ten consecutive
   samples must meet R+δ, slow slope within ±0.2 °C/min over 60 s, OS level 0
   and Nominal powermetrics observed within 2 s. Cap 600 s; timeout flags X2.
+  **LEAD-RULINGS-2 R7-2:** W1's G0 cap is R1-derived, G0_cap_W1 =
+  clamp(ceil(1.25 × max gated G0 wait over R1's D_bank, D_spam a, D_spam b
+  and X-G), 600 s, 1,200 s), bound by the kit to `r1_slots.g0_cap_w1` and
+  armed through `thermal_policy.g0_cap_s`; R1's gated runs, X-G, step-d and
+  designed start states arm 1,200 s. A G0 that did not release counts at
+  1,200 s, and an INCONCLUSIVE X-G falls back to 1,200 s (R7-12). Ruling
+  1(f) uses G0_cap_W1 as its G0 term. Every other G0 keeps 600 s.
   **Round-4 lead decision:** a G0 that did not release (timeout X2,
   unobserved X4, deadman X7) leaves no episode reference, so the member ends
   before its first turn (`episode.g0_unreleased:0`, stop

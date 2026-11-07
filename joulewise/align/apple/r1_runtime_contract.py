@@ -23,6 +23,9 @@ DEADMAN_PHASES = ("G0", "G1", "H", "decode", "prefill", "tool", "tail")
 GATED_D_KINDS = ("d-spam-benign-s1-a", "d-spam-benign-s1-b", "d-bank-benign-s1")
 PLANNING_KINDS = tuple(f"d-planning-turn-r-plus-{offset}c" for offset in (0, 2, 4))
 HIGH_POWER_KINDS = ("high-power-aba-a1", "high-power-aba-b", "high-power-aba-a2")
+# LEAD-RULINGS-2 R7-2: every G0 wait is recorded. The kinds that arm the R1
+# G0 timeout (the runtime config's g0_timeout_s) report the wait and the cap.
+G0_WAIT_FIELDS = ("g0_wait_s", "g0_timeout_s")
 
 # Fields per kind, in addition to QUIET_FIELDS for quiet segments. Dotted names
 # are nested keys. ``soak_reference`` marks kinds that need --soak-reference.
@@ -39,7 +42,7 @@ KIND_FIELDS = {
     # classification around both planning-turn steps (the 30B for the record).
     "step-30b": ("battery_drain_pct_per_h", "thermometry.status", "thermometry.classification_sha256"),
     "step-d": ("slots", "e_D_j_per_token", "battery_drain_pct_per_h", "thermometry.status",
-               "thermometry.classification_sha256"),
+               "thermometry.classification_sha256", "thermometry.alias_groups", *G0_WAIT_FIELDS),
     # released: S_slow reached the G0 band of R (<= R + delta_slow) before the cap.
     "idle-until-soak": ("recovery_curve", "released"),
     # R5-1: X-G and the gated D runs gate against the soak R (reference_source
@@ -48,12 +51,14 @@ KIND_FIELDS = {
     # configured idle, inter_member_idle_s); its G0 outcome decides whether
     # the run is judged or INCONCLUSIVE. R6-3: decode_tokens gives the run's
     # observed decode rate (with deadman.phases_s.decode) for ruling 1(f).
-    "x-g": ("reference_c", "reference_source", "g0_outcome", "inter_member_idle_s"),
+    # R7-2: their G0 wait (g0_wait_s) under the R1 timeout (g0_timeout_s).
+    "x-g": ("reference_c", "reference_source", "g0_outcome", "inter_member_idle_s", *G0_WAIT_FIELDS),
     **{kind: ("energy_j", "admitted_turns", "x7", "deadman.T_dead_s", "deadman.phases_s",
               "battery_drain_pct_per_h", "reference_c", "reference_source", "gate_waits_s.G1",
-              "gate_waits_s.H", "g0_outcome", "inter_member_idle_s", "decode_tokens")
+              "gate_waits_s.H", "g0_outcome", "inter_member_idle_s", "decode_tokens", *G0_WAIT_FIELDS)
        for kind in GATED_D_KINDS},
-    **{kind: ("reference_c", "g0_release_c", "delta_slow_c", "energy_j") for kind in PLANNING_KINDS},
+    **{kind: ("reference_c", "g0_release_c", "delta_slow_c", "energy_j", *G0_WAIT_FIELDS)
+       for kind in PLANNING_KINDS},
     "d-4bit": (),
     "g0-release-soak": ("released",),
     # R5-3: g0_released false = the leg's own G0 did not release (no turn, no
@@ -68,7 +73,7 @@ KIND_FIELDS = {
 # Such a result carries segment_status "inconclusive" and g0_released false,
 # and only these fields beside the quiet ones.
 G0_INCONCLUSIVE_KINDS = ("step-d", *PLANNING_KINDS)
-INCONCLUSIVE_FIELDS = ("segment_status", "g0_released", "g0_outcome")
+INCONCLUSIVE_FIELDS = ("segment_status", "g0_released", "g0_outcome", *G0_WAIT_FIELDS)
 NEEDS_SOAK_REFERENCE = frozenset(("idle-until-soak", "g0-release-soak", "x-g", *GATED_D_KINDS, *PLANNING_KINDS,
                                   *HIGH_POWER_KINDS))
 

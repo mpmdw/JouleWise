@@ -27,7 +27,7 @@ def filled_template():
         "sensors": {"s_fast": "TC0P", "s_slow": "TG0P", "fan_keys": [],
                     "r0_sha256": "a" * 64},
         "delta_fast_c": 8.0, "delta_slow_c": 5.0,
-        "turn_cap_s": 120, "chunk_tokens": 512, "heavy": True, "per_turn": True,
+        "turn_cap_s": 120, "g0_cap_s": 600, "chunk_tokens": 512, "heavy": True, "per_turn": True,
     }
     costs = {"anchor": 3131.27 / 4, "D": 1800, "X-G": 1150, "Y-G": 1150,
              "X-S": 850, "Y-S": 850}
@@ -53,6 +53,13 @@ def check(value, inputs=None, slots=None):
 
 
 class W1PlanTests(unittest.TestCase):
+    def test_g0_cap_policy_validates_and_template_keeps_placeholder(self):
+        value = filled_template()
+        value['align_v4']['thermal_policy']['g0_cap_s'] = 625
+        self.assertEqual(check(value)['members'], 18)
+        template = validator.build_template()
+        self.assertEqual(template['align_v4']['thermal_policy']['g0_cap_s'], validator.PLACEHOLDER)
+
     def test_classification_digest_is_preserved_and_bound_to_inputs(self):
         good = filled_template()
         self.assertEqual(check(good)["members"], 18)
@@ -75,6 +82,7 @@ class W1PlanTests(unittest.TestCase):
         for path in (("align_v4", "B_D"), ("align_v4", "I_D"),
                      ("align_v4", "T_dead"), ("align_v4", "effort"),
                      ("align_v4", "thermal_policy", "classification_sha256"),
+                     ("align_v4", "thermal_policy", "g0_cap_s"),
                      ("align_v4", "thermal_policy", "sensors", "s_fast")):
             candidate = copy.deepcopy(good)
             target = candidate
