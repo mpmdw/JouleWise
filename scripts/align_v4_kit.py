@@ -190,6 +190,33 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
         raise ValueError('R1 r1_slots must carry the ruling 16 A-B-A verdict')
     if r1_slots['ac_powermode'] != (2 if high['verdict'] == 'adopt' else 0):
         raise ValueError('R1 r1_slots ac_powermode disagrees with the A-B-A verdict')
+    # LEAD-RULINGS-2 R5-5 (protocol v4 :243-251): the slots come from the D
+    # step run under the adopted series mode, and R1's own full-inventory
+    # classification of that step must give both picks (thermometry bar).
+    if r1_slots.get('slots_ac_powermode') != r1_slots['ac_powermode']:
+        raise ValueError('R1 slots were not measured under the adopted series AC powermode '
+                         f'({r1_slots.get("slots_ac_powermode")!r} != {r1_slots["ac_powermode"]!r})')
+    thermometry = r1_slots.get('thermometry')
+    if not isinstance(thermometry, dict) or thermometry.get('bar') != 'pass':
+        raise ValueError('R1 thermometry bar did not pass: the full-inventory classification of the D step '
+                         'must give both a die and a heatsink pick (protocol v4 WP14(a))')
+    classified = thermometry.get('D') if isinstance(thermometry.get('D'), dict) else {}
+    # Protocol v4 :249-253: W1's gate keys must be in R1's die/heatsink lists,
+    # and a pick R1 changed (S6/S7 recomputed for the R1 picks) needs the
+    # lead's recorded verification before the W1 freeze (Sol critique HIGH).
+    policy = inputs['R1'].get('thermal_policy')
+    sensors = policy.get('sensors') if isinstance(policy, dict) else None
+    if isinstance(sensors, dict):
+        if sensors.get('s_fast') not in (classified.get('die_candidates') or ()):
+            raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list')
+        if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()):
+            raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list')
+    if classified.get('sensor_pick_changed') is not False:
+        verification = thermometry.get('lead_verification')
+        if (not isinstance(verification, dict) or not isinstance(verification.get('authority'), str)
+                or not verification['authority'].strip()):
+            raise ValueError('R1 changed (or did not report) the R0 sensor picks (r1.sensor_pick_changed); '
+                             'the lead must record thermometry.lead_verification of S6/S7 for the R1 picks')
     u5 = r1_slots.get('u5')
     if not isinstance(u5, dict) or u5.get('verdict') not in U5_VERDICTS or u5.get('c') != 1.0:
         raise ValueError('R1 r1_slots must carry the U5 verdict with c = 1.0 (lead ruling L2)')
@@ -601,9 +628,22 @@ def build_files(root=ROOT):
                 window_plan_commit=WINDOW_PLAN_COMMIT,
                 reconciliations=['WP16/A1 D seed 1 overrides window-plan choice 101; held-out starts at 2.',
                                  'Synthesized ruling: checkpoint limit 0 throughout series overrides A1 conditional enablement.'],
-                runtime_requirements=dict(ac_powermode=ac_powermode, D_tools='family-validated XML via qwen3_5', presence_penalty=0,
-                                          window_reference='WP15 custody; member 5 captures; later members consume',
-                                          launcher=inputs['WP15']['runtime_entrypoint']))
+                runtime_requirements=dict(
+                    ac_powermode=ac_powermode, D_tools='family-validated XML via qwen3_5', presence_penalty=0,
+                    # Fable cold pass LOW-7 (LEAD-RULINGS-2 R5-7): W1 members run
+                    # from their own configs through the plan's stage commands;
+                    # their specs carry the custody roles (member 5 captures,
+                    # members 6-18 consume member 5). The WP15 R1 runtime is the
+                    # R1 rehearsal's argv only and is never a W1 launcher.
+                    window_reference=dict(capture_ordinal=WINDOW_REFERENCE_CAPTURE_ORDINAL,
+                                          capture_run_id=capture_run_id,
+                                          capture_config_sha256=capture_config_sha256,
+                                          rule='member 5 captures its last 60 s of idle before warmup '
+                                               '(role capture); every later thermal member consumes it '
+                                               '(role consume, bound to member 5 run_id and config bytes)'),
+                    w1_launcher='per-member configs via the plan_tree stage commands (the specs carry the roles)',
+                    r1_runtime_entrypoint=inputs['WP15']['runtime_entrypoint']))
+    check_window_reference_roles(plan)
     files[KIT / 'collection_plan.json'] = raw_json(plan)
     seed_table = {}
     for tag, indices in ((D_TAG, (1, 2, 91, 92, 93)), ('qwen3-30b-a3b', (1, 14, 16))):
@@ -667,6 +707,41 @@ def _identities(root, files, members, inputs):
         status=('PROVISIONAL_PENDING_WP11' if inputs['WP11']['local_file_verification'] is None
                 else 'WP11_D_FROM_R0_RECORD'), D=inputs['WP11']['local_file_verification'],
         inherited_30B_commit=ANCHOR_COMMIT, note='No local files were inspected by this builder.'))
+
+
+WINDOW_REFERENCE_CAPTURE_ORDINAL = 5
+
+
+def check_window_reference_roles(plan):
+    """Protocol v4 WP14(b): member 5 captures R; every later thermal member
+    consumes member 5's custody (cold pass LOW-7). Refuse a plan whose specs
+    say anything else, or whose runtime block names another launcher."""
+    members = plan['members']
+    capture = next(m for m in members if m['ordinal'] == WINDOW_REFERENCE_CAPTURE_ORDINAL)
+    for member in members:
+        thermal = member['spec'].get('thermal')
+        if thermal is None:
+            if member['ordinal'] >= WINDOW_REFERENCE_CAPTURE_ORDINAL:
+                raise ValueError(f'member {member["ordinal"]} has no thermal policy (window reference)')
+            continue
+        role = thermal.get('window_reference')
+        if member['ordinal'] == WINDOW_REFERENCE_CAPTURE_ORDINAL:
+            expected = {'role': 'capture'}
+        elif member['ordinal'] > WINDOW_REFERENCE_CAPTURE_ORDINAL:
+            expected = {'role': 'consume', 'source_run_id': capture['run_id'],
+                        'source_config_sha256': capture['config_sha256']}
+        else:
+            raise ValueError(f'member {member["ordinal"]} precedes the capture member but carries a thermal policy')
+        if role != expected:
+            raise ValueError(f'member {member["ordinal"]} window_reference {role!r} != {expected!r}')
+    block = plan['runtime_requirements']
+    if 'launcher' in block:
+        raise ValueError('runtime_requirements.launcher is ambiguous: the R1 runtime is not the W1 launcher')
+    reference = block.get('window_reference') or {}
+    if (reference.get('capture_ordinal') != WINDOW_REFERENCE_CAPTURE_ORDINAL
+            or reference.get('capture_run_id') != capture['run_id']
+            or reference.get('capture_config_sha256') != capture['config_sha256']):
+        raise ValueError('runtime_requirements.window_reference does not name member 5 as the capture member')
 
 
 def validate_powermode_members(plan, observed_by_run):
@@ -736,9 +811,13 @@ Missing numeric controls are null and invalid as executable EpisodeSpecs.
 The existing qwen3_5 endpoint selects XML tools from the model family.
 Presence penalty remains the endpoint's fixed zero; sampler is 1/.95/20/0.
 
-WP15 must wire the thermal launcher and custody for R: 5 captures its last
-60 s of idle before neutral warmup; all later sidecar members consume it.
-The scaffold's campaign commands remain a skeleton pending that wiring.
+Window reference R: member 5 captures its last 60 s of idle before neutral
+warmup (role capture); all later sidecar members consume it (role consume,
+bound to member 5's run_id and config bytes). The plan records this in
+runtime_requirements.window_reference and --check refuses any other roles.
+W1 members run from their own configs through the plan's stage commands; the
+WP15 R1 runtime (runtime_requirements.r1_runtime_entrypoint) runs R1 only.
+The scaffold's campaign commands remain a skeleton pending the W1 wiring.
 No synthetic sensor, reference temperature, model digest or turn count is used.
 
 Sizing_preview.json contains A1's planning guesses only. sizing_b5.json comes

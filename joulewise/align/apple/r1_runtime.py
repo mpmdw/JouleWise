@@ -63,7 +63,12 @@ STEP_D_SEGMENT = "step_D_prefill_10k_decode_4096"
 NS = 1_000_000_000
 TERM_TEARDOWN_S = 15.0       # forced exit, inside the driver's 20 s TERM grace
 G0_PREROLL_S = 65            # a G0 judges the slope over the preceding 60 s
-RECOVERY_CAP_S = 300         # step-d post-decode recovery observation (S4, S7)
+# Protocol v4 :243-251 (LEAD-RULINGS-2 R5-5): around both planning-turn steps
+# (30B and D) R1 journals the last 300 s of quiet before prefill and a fixed
+# 600 s recovery after the last decode (S4 tau, S7 G_turn and the inventory
+# classification all read that recovery).
+STEP_QUIET_S = 300
+RECOVERY_CAP_S = 600
 COOLDOWN_CAP_S = 1500        # ruling 1(c)
 PREHEAT_CAP_S = 900
 PREHEAT_MARGIN_C = 0.5
@@ -112,6 +117,86 @@ class RuntimeFailure(RuntimeError):
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+class InventoryJournal:
+    """Protocol v4 :243-251 (LEAD-RULINGS-2 R5-5): every inventoried T*/F* key
+    at 1 Hz around a planning-turn step. One serialized sweep per tick; failed
+    reads are data. The file holds the full rows (raw readings included); the
+    in-memory rows keep only what the WP14(a) classifier reads."""
+
+    def __init__(self, reader, now_ns, path):
+        self.reader, self.now_ns, self.path = reader, now_ns, Path(path)
+        self.inventory = None
+        self.keys = []
+        self._rows = []
+        self._lock = threading.Lock()
+
+    def start(self):
+        with self._lock:
+            inventory = self.reader.enumerate_sensors()
+            if not inventory.get("complete") or not inventory.get("keys"):
+                raise RuntimeFailure("SMC enumeration incomplete or no readable sensors")
+            self.inventory = deepcopy(inventory)
+            self.keys = sorted(item["key"] for item in inventory["keys"])
+
+    def sample(self):
+        from joulewise.align.apple import thermal
+        with self._lock:
+            if self.inventory is None:
+                raise RuntimeFailure("SMC inventory journal has not started")
+            started = self.now_ns()
+            values = thermal.sample(self.reader, self.keys)
+            finished = self.now_ns()
+            row = {"started": {"monotonic_ns": started}, "finished": {"monotonic_ns": finished},
+                   "values": values, "phase": None, "seq": len(self._rows) + 1}
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(canonical(row) + "\n")
+            lean = {**row, "values": {"sensors": values["sensors"], "errors": values["errors"]}}
+            self._rows.append(lean)
+            return lean
+
+    @property
+    def rows(self):
+        with self._lock:
+            return deepcopy(self._rows)
+
+
+def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, recovery_s=600,
+                  r0_sensors):
+    """Classify a planning step with WP14(a), retaining its observation bounds."""
+    from joulewise.align.apple import smc_enumeration
+    origin = prefill_ns - round(quiet_s * NS)
+    recovery_end = last_decode_ns + round(recovery_s * NS)
+    phases = [{"phase": phase, "start_s": (start - origin) / NS, "end_s": (end - origin) / NS}
+              for phase, start, end in (("idle", origin, prefill_ns),
+                                        ("load", prefill_ns, last_decode_ns),
+                                        ("recovery", last_decode_ns, recovery_end))]
+    samples = []
+    for row in rows:
+        stamp = row["started"]["monotonic_ns"]
+        phase = ("idle" if origin <= stamp < prefill_ns else
+                 "load" if prefill_ns <= stamp <= last_decode_ns else
+                 "recovery" if last_decode_ns < stamp <= recovery_end else "outside")
+        samples.append({**row, "phase": phase})
+    capture = {"inventory": inventory, "samples": samples, "phases": phases,
+               "started": {"monotonic_ns": origin}}
+    ranked = smc_enumeration.rank(capture, stage="r1")
+    previous = {role: r0_sensors.get(role) for role in ("s_fast", "s_slow")}
+    changed = any(ranked[role] != previous[role] for role in previous)
+    result = {key: ranked[key] for key in ("rule", "s_fast", "s_slow", "die_candidates",
+                                          "heatsink_candidates", "record_only", "ranking")}
+    result.update(status="pass" if ranked["s_fast"] is not None and ranked["s_slow"] is not None else "fail",
+                  r0_sensors=previous, sensor_pick_changed=changed,
+                  flags=["r1.sensor_pick_changed"] if changed else [], phases=phases, journal_rows=len(rows))
+    stamps = [row["started"]["monotonic_ns"] for row in rows]
+    if not stamps or min(stamps) > origin:
+        result.update(status="fail", reason="quiet_not_observed")
+    elif max(stamps) < recovery_end - NS:
+        result.update(status="fail", reason="recovery_not_observed")
+    result["classification_sha256"] = hashlib.sha256(canonical(result).encode("utf-8")).hexdigest()
+    return result
 
 
 def resolve(path):
@@ -204,8 +289,23 @@ def gate_policy(sensors, bands, *, turn_cap_s, chunk_tokens, heavy, per_turn):
     return validate_gate_policy({
         "sensors": sensors, "delta_fast_c": bands["delta_fast_c"], "delta_slow_c": bands["delta_slow_c"],
         "turn_cap_s": turn_cap_s, "chunk_tokens": chunk_tokens, "heavy": heavy, "per_turn": per_turn,
-        # Every R1 member captures its own reference at warmup (no W1 custody chain).
+        # The policy validator needs a role; no R1 model member keeps it. Every
+        # member installs its reference through a session hook before warmup
+        # (the soak R, or a designed start state), so capture_reference never
+        # replaces it with a self-captured warm value (LEAD-RULINGS-2 R5-1).
         "window_reference": {"role": "capture"}})
+
+
+def rearm_deadman(deadman, seconds, origin):
+    """LEAD-RULINGS-2 R5-2: an R1 step member's deadman covers the decode only.
+
+    The workload arms it at G0 entry (W1's rule); the R1 hook re-arms it once
+    the preheat, the G0 (each with its own cap) and any quiet are over, and
+    names the origin in the bundle's token_budget."""
+    from joulewise.align.apple.sampler import monotonic_ns
+    deadman.deadline_ns = monotonic_ns(deadman.clock.stamp()) + round(seconds * NS)
+    deadman.origin = origin
+    return deadman.deadline_ns
 
 
 def read_template(path):
@@ -537,7 +637,10 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
         "classification": {"s_fast_t63_le_5s": fast["t63_s"] <= 5.0,
                            "s_slow_delta_t_ge_3c": slow["delta_t_c"] >= 3.0,
                            "s_slow_tau_le_300s": slow["tau_s"] <= 300.0},
-        "responses": responses, "bands_c": bands, "S6_tuning": "pending: lead applies FD 2.6 S6 after the gated runs",
+        "responses": responses, "bands_c": bands, # LEAD-RULINGS-2 R5-7: S6 = delta_slow until the FD 2.6 tuning.
+        "S6_tuning": {"status": "TODO", "S6_now": "delta_slow (S5)", "rule": "FD 2.6 S6 tuning",
+                      "tied_to": "the median G1 wait of the R1 gated D runs (r1_slots.s6_tuning)",
+                      "authority": "LEAD-RULINGS-2 R5-7"},
         "recovery_s": recovery_s, "recovery_censored": recovery_censored,
         "t_decline_status": t_decline_status, "t_decline_censored": censored,
         "r_decode_tok_per_s": r_decode, "r_prefill_tok_per_s": r_prefill,
@@ -550,6 +653,39 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
         "T_dead_rule": "(1750 - I_D) / 1.13544 (lead ruling L1 first term; the kit applies max_r1_tail_s)",
     }
     return slots, detail
+
+
+def s7_for_picks(rows, picks, *, prefill_ns, quiet_s):
+    """Protocol v4 :249-251: when R1 changes R0's picks, S7 recovery is computed
+    for the R1 picks from the full-inventory journal (the lead verifies it
+    before the W1 freeze). The soak journal holds only R0's keys, so each new
+    key's reference is the median of the quiet window before prefill and its
+    band max(1.0 C, 3 x that window's SD) (FD 2.6's form). S7 = min(300 s,
+    3 x the time from the slow pick's peak to both picks within band)."""
+    from statistics import pstdev
+    out = {"keys": dict(picks), "rule": "reference = quiet-window median; band = max(1.0, 3 SD); "
+                                        "S7 = min(300, 3 x peak-to-band recovery)"}
+    reference, band = {}, {}
+    for role, key in picks.items():
+        quiet = [r["values"]["sensors"].get(key) for r in rows
+                 if prefill_ns - round(quiet_s * NS) <= r["started"]["monotonic_ns"] < prefill_ns]
+        quiet = [v for v in quiet if _finite(v)]
+        if len(quiet) < 5:
+            return {**out, "S7": None, "reason": f"{key}: fewer than five quiet samples"}
+        reference[role], band[role] = median(quiet), max(BAND_FLOOR_C, 3.0 * pstdev(quiet))
+    after = [(r["started"]["monotonic_ns"], r["values"]["sensors"]) for r in rows
+             if r["started"]["monotonic_ns"] >= prefill_ns]
+    slow = [(t, v[picks["s_slow"]]) for t, v in after if _finite(v.get(picks["s_slow"]))]
+    if not slow:
+        return {**out, "S7": None, "reason": "no slow-pick samples after prefill"}
+    peak_ns = max(slow, key=lambda tv: (tv[1], -tv[0]))[0]
+    recovered = next((t for t, v in after if t >= peak_ns and all(
+        _finite(v.get(key)) and v[key] <= reference[role] + band[role] for role, key in picks.items())), None)
+    censored = recovered is None
+    end = recovered if not censored else after[-1][0]
+    recovery_s = max(1.0, (end - peak_ns) / NS)
+    return {**out, "reference_c": reference, "band_c": band, "recovery_s": recovery_s,
+            "recovery_censored": censored, "S7": min(300.0, 3.0 * recovery_s)}
 
 
 def decode_energy(ep):
@@ -696,6 +832,10 @@ class ProductionBackend:
     def monotonic(self):
         return time.monotonic()
 
+    def inventory_reader(self):
+        from joulewise.align.apple.smc_reader import Reader
+        return Reader()
+
     def ticker(self, callback):
         stop = threading.Event()
 
@@ -800,6 +940,10 @@ class Segment:
         self._stop_ticker = None
         self.open_sessions = []
         self.heaters = []
+        self.quiet_spans = []
+        self.inventory = None
+        self.inventory_readers = []
+        self._stop_inventory = None
 
     # Journals -------------------------------------------------------------
     def _tick(self):
@@ -836,6 +980,10 @@ class Segment:
             except Exception as error:  # noqa: BLE001
                 errors.append(error)
         self.heaters = []
+        try:
+            self.stop_inventory()
+        except Exception as error:  # noqa: BLE001
+            errors.append(error)
         while self.open_sessions:
             try:
                 self.open_sessions.pop().close()
@@ -921,15 +1069,45 @@ class Segment:
                                status=summary.status.value,
                                failure_reason=getattr(summary.failure_reason, "value", None))
 
-    def reference_hook(self, reference):
+    def reference_hook(self, reference, *, quiet_s=0, rearm_s=None):
+        """Gate against the soak R (never a self-captured warm reference).
+
+        With ``rearm_s`` the G0 runs on its own 600 s cap (no deadman) and the
+        member's deadman is re-armed for ``rearm_s`` after it (R5-2); with
+        ``quiet_s`` a released G0 is followed by that much idle before the
+        prefill, the step's quiet window (protocol v4 :243-251, R5-5)."""
+        segment = self
+
         def hook(session):
             session.reference = {**reference, "source_member": "r1_soak_reference", "span_ns": None}
+            if not quiet_s and rearm_s is None:
+                return
+            original = session.wait
+
+            def wait(kind, **kwargs):
+                if kind != "G0":
+                    return original(kind, **kwargs)
+                deadman = kwargs.pop("deadman", None) if rearm_s is not None else kwargs.get("deadman")
+                row = original(kind, **kwargs)
+                if quiet_s and row["outcome"] == "released":
+                    start = segment.now_ns()
+                    while (segment.now_ns() - start) / NS < quiet_s:
+                        segment.clock.sleep(min(1.0, quiet_s - (segment.now_ns() - start) / NS))
+                    segment.quiet_spans.append([start, segment.now_ns()])
+                if deadman is not None and rearm_s is not None:
+                    rearm_deadman(deadman, rearm_s, "R1_after_G0_release" + ("_and_quiet" if quiet_s else ""))
+                return row
+            session.wait = wait
         return hook
 
-    def planning_hook(self, reference, target_slow_c):
+    def planning_hook(self, reference, target_slow_c, *, rearm_s):
         """Designed start state: preheat, then hold S_slow at R + offset with a
         proportional MLX heater while the production G0 (reference R + offset
-        on S_slow) decides the release. The heater stops before the episode."""
+        on S_slow) decides the release. The heater stops before the episode.
+
+        LEAD-RULINGS-2 R5-2: the preheat (PREHEAT_CAP_S) and the G0 (600 s)
+        keep their own caps; the member's deadman is armed only after the G0,
+        for the decode (``rearm_s``)."""
         segment, slow_key = self, self.sensors["s_slow"]
 
         def hook(session):
@@ -941,6 +1119,7 @@ class Segment:
             def wait(kind, **kwargs):
                 if kind != "G0":
                     return original(kind, **kwargs)
+                deadman = kwargs.pop("deadman", None)
                 heater = segment.backend.heater(segment.out / "heater")
                 segment.heaters.append(heater)
                 stop = None
@@ -964,6 +1143,8 @@ class Segment:
                         stop()
                     heater.stop()
                     segment.heaters.remove(heater)
+                    if deadman is not None:
+                        rearm_deadman(deadman, rearm_s, "R1_after_preheat_and_G0")
             session.wait = wait
         return hook
 
@@ -971,7 +1152,7 @@ class Segment:
         config, spec = read_template(self.config["templates"][key])
         return config, spec
 
-    def step_member(self, model_key, *, label, source=None):
+    def step_member(self, model_key, *, label, source=None, quiet_s=0, rearm=False):
         template, tspec = self.template(model_key)
         require_effort(tspec, model_key)
         if source is not None:
@@ -983,7 +1164,8 @@ class Segment:
         step = self.config["step"]
         spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
         config = member_config(template, spec, run_id=f"align-v4-r1-{label}", kind=self.kind)
-        return self.run_member(config, self.reference_hook(reference)), reference
+        hook = self.reference_hook(reference, quiet_s=quiet_s, rearm_s=step["deadman_s"] if rearm else None)
+        return self.run_member(config, hook), reference
 
     # Kinds -----------------------------------------------------------------
     def k_calibration(self):
@@ -1023,8 +1205,10 @@ class Segment:
         slow = self.sensors["s_slow"]
 
         def within():
+            # The G0 band is one-sided (S_slow <= R + delta_slow): a host that is
+            # already cooler than the soak has cooled (LEAD-RULINGS-2 R5-1).
             value = self.latest(managed.session, slow)
-            return value is not None and abs(value - reference["slow_c"]) <= bands["delta_slow_c"]
+            return value is not None and value <= reference["slow_c"] + bands["delta_slow_c"]
         released = self.idle(managed.session, cap, until=within)
         start = None
         curve = []
@@ -1048,48 +1232,111 @@ class Segment:
         return {"released": row["outcome"] == "released", "g0": row, "reference_c": reference["slow_c"],
                 "release_c": row["release"]["slow_c"], "flags": flags}
 
-    def k_step(self, model_key, *, label, source=None):
-        member, reference = self.step_member(model_key, label=label, source=source)
+    def k_step(self, model_key, *, label, source=None, quiet_s=0, rearm=False, leg=False):
+        member, reference = self.step_member(model_key, label=label, source=source, quiet_s=quiet_s,
+                                             rearm=rearm)
+        ep = member.ep
+        thermal = ep.hardware.get("thermal") or {}
+        g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
         incomplete = incomplete_member_reasons(member)
+        if leg and g0 is not None and g0["outcome"] != "released":
+            # LEAD-RULINGS-2 R5-3 (ruling 16): an A-B-A leg whose own G0 did not
+            # release has no turn and no t_decline. It is INCONCLUSIVE, not a
+            # refusal of the R1 night; t_decline_s is null here only beside
+            # g0_released false, never as "no decline".
+            return member, {
+                "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
+                "g0_outcome": g0["outcome"], "g0_released": False, "leg_status": "inconclusive",
+                "t_decline_status": "not_measured_g0_unreleased", "t_decline_s": None,
+                "incomplete_reasons": incomplete, "episode_flags": list(ep.flags),
+                "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
         if incomplete:
             raise RuntimeFailure(f"{self.kind}: step member is not one complete turn: {incomplete}")
-        ep = member.ep
         turn = ep.turns[0]
         decline_s, decline_status = t_decline(self.backend.pm_samples(member.bundle, ep), turn)
         joules, tokens, flags = decode_energy(ep)
-        thermal = ep.hardware.get("thermal") or {}
-        g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
         return member, {
             "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
-            "g0_outcome": g0["outcome"] if g0 else None, "t_decline_status": decline_status,
+            "g0_outcome": g0["outcome"] if g0 else None, "g0_released": bool(g0) and g0["outcome"] == "released",
+            "t_decline_status": decline_status,
             "t_decline_s": decline_s, "decode_energy_j": joules, "decode_tokens": tokens,
             "prefill_tokens": turn.prefill_tokens, "energy_flags": flags, "episode_flags": list(ep.flags),
             "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
 
     def k_step_30b(self):
-        _, fields = self.k_step("model_30b", label="step-30b")
+        self.start_inventory()
+        member, fields = self.k_step("model_30b", label="step-30b", quiet_s=STEP_QUIET_S, rearm=True)
         if fields["t_decline_status"] == "unobserved":
             raise RuntimeFailure("step-30b: no powermetrics GPU clock support for t_decline")
+        self.observe_recovery(member)
+        # Protocol v4: the 30B step is classified for the record only.
+        fields["thermometry"] = self.thermometry(member, label="step-30b", record_only=True)
         return fields
 
+    def observe_recovery(self, member):
+        """A fixed RECOVERY_CAP_S (600 s) of SMC journal after the last decode
+        (protocol v4 :243-251); returns the member and recovery rows, merged."""
+        managed = self.open_session("recovery")
+        turn = member.ep.turns[0]
+        remaining = RECOVERY_CAP_S - (self.now_ns() - turn.end_ns) / NS
+        if remaining > 0:
+            self.idle(managed.session, remaining + 1.0)
+        self.close_session(managed)
+        member_rows = journal_rows(member.bundle / "outputs" / "align_thermal.jsonl")
+        return sorted(member_rows + journal_rows(self.out / "recovery" / "align_thermal.jsonl"),
+                      key=lambda r: r["monotonic_ns"])
+
+    def start_inventory(self):
+        """Full-inventory 1 Hz journal from before the member (so the 300 s
+        quiet before prefill is inside it) through the 600 s recovery."""
+        reader = self.backend.inventory_reader()
+        self.inventory_readers.append(reader)
+        self.inventory = InventoryJournal(reader, self.now_ns, self.out / "inventory" / "inventory_journal.jsonl")
+        self.inventory.start()
+        self._stop_inventory = self.backend.ticker(self.inventory.sample)
+
+    def stop_inventory(self):
+        if self._stop_inventory is not None:
+            self._stop_inventory()
+            self._stop_inventory = None
+        while self.inventory_readers:
+            close = getattr(self.inventory_readers.pop(), "close", None)
+            if close is not None:
+                close()
+
+    def thermometry(self, member, *, label, record_only):
+        """The WP14(a) classifier on the step's full-inventory journal (stage r1)."""
+        self.stop_inventory()
+        turn = member.ep.turns[0]
+        result = classify_step(self.inventory.inventory, self.inventory.rows, prefill_ns=turn.start_ns,
+                               last_decode_ns=turn.end_ns, quiet_s=STEP_QUIET_S, recovery_s=RECOVERY_CAP_S,
+                               r0_sensors=self.sensors)
+        path = self.out / "inventory" / "r1_classification.json"
+        # classification_sha256 = sha256 of canonical(classification without that field).
+        path.write_text(json.dumps({"classification": result, "label": label, "for_record_only": record_only,
+                                    "inventory": self.inventory.inventory}, indent=2, sort_keys=True) + "\n")
+        reasons = [result["reason"]] if result.get("reason") else (
+            [] if result["status"] == "pass" else ["null pick: " + ", ".join(
+                role for role in ("s_fast", "s_slow") if result[role] is None)])
+        keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "die_candidates",
+                "heatsink_candidates", "record_only", "phases", "journal_rows", "classification_sha256")
+        extra = {}
+        if not record_only and result["sensor_pick_changed"] and result["s_fast"] and result["s_slow"]:
+            extra["s7_for_r1_picks"] = s7_for_picks(
+                self.inventory.rows, {"s_fast": result["s_fast"], "s_slow": result["s_slow"]},
+                prefill_ns=turn.start_ns, quiet_s=STEP_QUIET_S)
+        return {**{key: result.get(key) for key in keep}, **extra, "reasons": reasons,
+                "classification_file": path.relative_to(self.out).as_posix(),
+                "keys_inventoried": len(self.inventory.keys), "for_record_only": record_only}
+
     def k_step_d(self):
-        member, fields = self.k_step("d_spam", label="step-d")
+        self.start_inventory()
+        member, fields = self.k_step("d_spam", label="step-d", quiet_s=STEP_QUIET_S, rearm=True)
         if fields["t_decline_status"] == "unobserved":
             raise RuntimeFailure("step-d: no powermetrics GPU clock support for t_decline (slot S9)")
         reference, bands, sensors = self.reference(), self.bands(), self.sensors
         # Post-decode recovery (S4 tau, S7 G_turn), on the same monotonic clock.
-        managed = self.open_session("recovery")
-        member_rows = journal_rows(member.bundle / "outputs" / "align_thermal.jsonl")
-        peak_ns = max((t for t, _ in valid_series(member_rows, sensors["s_slow"])
-                       if t >= member.ep.start_ns), default=member.ep.start_ns)
-
-        def recovered():
-            rows = managed.session.rows
-            return bool(rows) and not recovery_time(rows[-1:], sensors, reference, bands, peak_ns)[1]
-        self.idle(managed.session, RECOVERY_CAP_S, until=recovered)
-        self.close_session(managed)
-        rows = sorted(member_rows + journal_rows(self.out / "recovery" / "align_thermal.jsonl"),
-                      key=lambda r: r["monotonic_ns"])
+        rows = self.observe_recovery(member)
         turn = member.ep.turns[0]
         responses = {role: step_response(rows, sensors[role], member.ep.start_ns, member.ep.end_ns)
                      for role in ("s_fast", "s_slow")}
@@ -1098,14 +1345,18 @@ class Segment:
             ep=member.ep, turn=turn, wall_s=member.wall_s, responses=responses, recovery_s=recovery_s,
             recovery_censored=censored, bands=bands, t_decline_s=fields["t_decline_s"],
             t_decline_status=fields["t_decline_status"], d_class=self.config.get("d_class", "heavy"))
+        detail["quiet_before_prefill_s"] = STEP_QUIET_S
+        detail["recovery_observed_s"] = RECOVERY_CAP_S
+        fields["thermometry"] = self.thermometry(member, label="step-d", record_only=False)
+        detail["thermometry_classification_sha256"] = fields["thermometry"]["classification_sha256"]
         return {**fields, "slots": slots, "slot_detail": detail,
                 "e_D_j_per_token": fields["decode_energy_j"] / fields["decode_tokens"]}
 
     def k_aba_leg(self):
-        _, fields = self.k_step("d_spam", label=self.kind)
-        if fields["t_decline_status"] == "unobserved":
+        _, fields = self.k_step("d_spam", label=self.kind, leg=True)
+        if fields["g0_released"] and fields["t_decline_status"] == "unobserved":
             raise RuntimeFailure(f"{self.kind}: no powermetrics GPU clock support for t_decline")
-        return fields   # t_decline_s: seconds, or None for no decline (infinite)
+        return fields   # t_decline_s: seconds, or None for no decline (infinite) when g0_released
 
     def k_d_4bit(self):
         source = self.config.get("d_4bit_source")
@@ -1133,19 +1384,34 @@ class Segment:
                     warmup_condition="benign",
                     max_episode_decode_tokens=(int(b_d) if type(b_d) is int and 1024 <= b_d <= 40960 else None))
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
-        member = self.run_member(config)
+        # LEAD-RULINGS-2 R5-1: gate against the soak R, as W1 members consume
+        # member 5's R; the driver precools to the G0 band of R before the run.
+        reference = self.reference()
+        member = self.run_member(config, self.reference_hook(reference))
         from joulewise.align.apple.thermal_desk import read_bundle_record
         record = read_bundle_record(member.bundle)
         ep = member.ep
         budget = ep.hardware.get("token_budget") or {}
         x7 = any(flag.startswith("episode.deadman:") for flag in ep.flags)
-        return {"energy_j": record["turn_owned_j"], "gross_episode_j": record["gross_episode_j"],
+        return {**self.reference_fields(reference, ep),
+                "energy_j": record["turn_owned_j"], "gross_episode_j": record["gross_episode_j"],
                 "admitted_turns": len(ep.turns), "x7": x7,
                 "deadman": {"T_dead_s": budget.get("deadman_s"), "deadline_ns": budget.get("deadline_ns"),
                             "phases_s": episode_phases(ep)},
                 "B_D": spec["max_episode_decode_tokens"], "bundle": str(member.bundle.relative_to(self.out)),
                 "member_status": member.status, "failure_reason": member.failure_reason,
                 "episode_flags": list(ep.flags), "ac_powermode": ep.hardware.get("ac_powermode")}
+
+    def reference_fields(self, reference, ep):
+        """R5-1 evidence: the R the member gated against and its per-gate waits."""
+        intervals = (ep.hardware.get("thermal") or {}).get("intervals", [])
+        g0 = next((r for r in intervals if r["kind"] == "G0"), None)
+        return {"reference_c": reference["slow_c"], "reference_fast_c": reference["fast_c"],
+                "reference_source": "r1_soak_reference",
+                "g0_reference": g0.get("reference") if g0 else None,
+                "g0_outcome": g0["outcome"] if g0 else None,
+                "gate_waits_s": {kind: [r["duration_s"] for r in intervals if r["kind"] == kind]
+                                 for kind in ("G0", "G1", "H")}}
 
     def k_planning(self):
         offset = int(self.kind.rsplit("-", 1)[-1][:-1])
@@ -1157,7 +1423,7 @@ class Segment:
         step = self.config["step"]
         spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
-        member = self.run_member(config, self.planning_hook(reference, target))
+        member = self.run_member(config, self.planning_hook(reference, target, rearm_s=step["deadman_s"]))
         from joulewise.align.apple.thermal_desk import read_bundle_record
         record = read_bundle_record(member.bundle)
         thermal = member.ep.hardware.get("thermal") or {}
@@ -1182,7 +1448,7 @@ class Segment:
                 "delta_slow_c": bands["delta_slow_c"], "energy_j": record["turn_owned_j"],
                 "designed_offset_c": offset, "designed_release_c": target, "g0_outcome": g0["outcome"],
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
-                "episode_flags": list(member.ep.flags)}
+                "episode_flags": list(member.ep.flags), "ac_powermode": member.ep.hardware.get("ac_powermode")}
 
     def k_x_g(self):
         template, tspec = self.template("x_g")
@@ -1192,12 +1458,14 @@ class Segment:
         spec = dict(tspec)
         spec.update(thermal=self.gated_policy(step["slots"], heavy=False, per_turn=True), warmup_condition="benign")
         config = member_config(template, spec, run_id="align-v4-r1-x-g", kind=self.kind)
-        member = self.run_member(config)
+        reference = self.reference()   # R5-1: the soak R, never a self-captured one
+        member = self.run_member(config, self.reference_hook(reference))
         from joulewise.align.apple.thermal_desk import read_bundle_record
         record = read_bundle_record(member.bundle)
-        return {"energy_j": record["turn_owned_j"], "admitted_turns": len(member.ep.turns),
+        return {**self.reference_fields(reference, member.ep), "energy_j": record["turn_owned_j"], "admitted_turns": len(member.ep.turns),
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
-                "episode_flags": list(member.ep.flags), "phases_s": episode_phases(member.ep)}
+                "episode_flags": list(member.ep.flags), "phases_s": episode_phases(member.ep),
+                "ac_powermode": member.ep.hardware.get("ac_powermode")}
 
     def k_harvest(self):
         parent = self.out.parent

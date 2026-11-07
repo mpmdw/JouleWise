@@ -38,7 +38,10 @@ I_D = 516.575
 # review MEDIUM-3) is exercised; the synthetic source is admitted only because
 # build_kit asks require_ready for it explicitly.
 SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE,
-                'ac_powermode': 0, 'max_r1_tail_s': 30.0, 'slots': {'I_D': I_D},
+                'ac_powermode': 0, 'slots_ac_powermode': 0,
+                'thermometry': {'bar': 'pass', 'D': {'die_candidates': [syn.FAST], 'heatsink_candidates': [syn.SLOW],
+                                                     'sensor_pick_changed': False}},
+                'max_r1_tail_s': 30.0, 'slots': {'I_D': I_D},
                 'high_power': {'verdict': 'not_adopted'}, 'u5': {'verdict': 'pass', 'c': 1.0},
                 'deadman_budget': [{'phases_s': {'tail': 30.0}}, {'phases_s': {'tail': 12.0}}],
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],

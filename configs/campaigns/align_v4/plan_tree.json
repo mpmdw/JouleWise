@@ -69,7 +69,7 @@
   ],
   "generator": {
     "path": "scripts/align_v4_kit.py",
-    "sha256": "ab63b7d2973618ce4c3dd2e795583feedceee902513b37eaed16d28510fb373b"
+    "sha256": "7924a6d785a264a6bfb8a3933c40c4202c21acb2584a7ace38903620347b0b01"
   },
   "module_order": [
     "align-v4-qwen3-30b-a3b",
@@ -77,8 +77,8 @@
   ],
   "non_claim": true,
   "plan": {
-    "actual_sha256": "96eaab9537f6089235e2008fbbc96487e2fa3725b2a06e4771d901745cd2e671",
-    "declared_sha256": "96eaab9537f6089235e2008fbbc96487e2fa3725b2a06e4771d901745cd2e671",
+    "actual_sha256": "0d14f55e3c1cf840493becd8392ae1c39932098c2112cc65bd57b513ba0b71eb",
+    "declared_sha256": "0d14f55e3c1cf840493becd8392ae1c39932098c2112cc65bd57b513ba0b71eb",
     "path": "collection_plan.json",
     "plan_id": "align-v4"
   },

@@ -400,6 +400,9 @@ def ready_inputs(i_d=300.0, tail=20.0):
 def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
     """The fields require_ready binds from an R1 driver r1_slots record."""
     return {'schema': kit.R1_SLOTS_SCHEMA, 'source': source, 'ac_powermode': ac_powermode,
+            'slots_ac_powermode': ac_powermode,
+            'thermometry': {'bar': 'pass', 'D': {'die_candidates': ['TC0P'], 'heatsink_candidates': ['TG0P'],
+                                                 'sensor_pick_changed': False}},
             'max_r1_tail_s': tail, 'slots': {'I_D': i_d, 'T_dead': 1451.0},
             'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
             'u5': {'verdict': 'pass', 'c': 1.0},
@@ -470,6 +473,45 @@ class R1EvidenceBindingTests(unittest.TestCase):
             kit.require_ready(inputs, slots)
         slots['duty_bar']['lead_fallback'] = {'step': 1, 'authority': 'LEAD-RULINGS-2 F1'}
         kit.require_ready(inputs, slots)
+
+    def test_slots_must_come_from_the_adopted_series_mode_and_pass_the_thermometry_bar(self):
+        # LEAD-RULINGS-2 R5-5: protocol v4 :243-251.
+        inputs, slots = ready_inputs()
+        for value in (None, 2):
+            with self.subTest(slots_ac_powermode=value), self.assertRaisesRegex(ValueError, 'series AC powermode'):
+                kit.require_ready(inputs, dict(slots, slots_ac_powermode=value))
+        for value in (None, {'bar': 'fail'}, {}):
+            with self.subTest(thermometry=value), self.assertRaisesRegex(ValueError, 'thermometry bar'):
+                kit.require_ready(inputs, dict(slots, thermometry=value))
+        # W1's gate keys must be in R1's lists; a changed pick needs the lead.
+        for role, listing in (('s_fast', 'die'), ('s_slow', 'heatsink')):
+            bad = deepcopy(inputs)
+            bad['R1']['thermal_policy']['sensors'][role] = 'TX9Z'
+            with self.subTest(role=role), self.assertRaisesRegex(ValueError, f'not in the R1 {listing} list'):
+                kit.require_ready(bad, slots)
+        changed = deepcopy(slots)
+        changed['thermometry']['D']['sensor_pick_changed'] = True
+        with self.assertRaisesRegex(ValueError, 'lead_verification'):
+            kit.require_ready(inputs, changed)
+        changed['thermometry']['lead_verification'] = {'authority': 'LEAD-RULINGS-3 S7 verified'}
+        kit.require_ready(inputs, changed)
+
+    def test_plan_names_member_5_as_capture_and_no_r1_launcher(self):
+        # Fable cold pass LOW-7 (LEAD-RULINGS-2 R5-7).
+        plan = json.loads((ROOT / kit.KIT / 'collection_plan.json').read_text())
+        block = plan['runtime_requirements']
+        self.assertNotIn('launcher', block)
+        self.assertEqual(block['window_reference']['capture_ordinal'], 5)
+        self.assertEqual(block['r1_runtime_entrypoint'], kit.read_inputs(ROOT)['WP15']['runtime_entrypoint'])
+        kit.check_window_reference_roles(plan)
+        bad = deepcopy(plan)
+        bad['members'][7]['spec']['thermal']['window_reference'] = {'role': 'capture'}
+        with self.assertRaisesRegex(ValueError, 'member 8 window_reference'):
+            kit.check_window_reference_roles(bad)
+        bad = deepcopy(plan)
+        bad['runtime_requirements']['launcher'] = block['r1_runtime_entrypoint']
+        with self.assertRaisesRegex(ValueError, 'not the W1 launcher'):
+            kit.check_window_reference_roles(bad)
 
     def test_powermode_must_follow_the_aba_verdict(self):
         inputs, slots = ready_inputs()

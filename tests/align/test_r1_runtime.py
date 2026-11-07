@@ -45,7 +45,7 @@ class ConformanceTests(unittest.TestCase):
     def test_every_kind_conforms_and_feeds_the_driver(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
-            config = rs.synthetic_config(root / "cfg", decline_after_s=120.0)
+            config = rs.synthetic_config(root / "cfg", decline_after_s=120.0, slow_gain=0.12)
             run = root / "r1"
             run.mkdir()
             results = {}
@@ -84,14 +84,52 @@ class ConformanceTests(unittest.TestCase):
             self.assertEqual(slots["N_chunk"], expected)
             self.assertAlmostEqual(slots["T_dead"], (1750 - slots["I_D"]) / 1.13544)
             self.assertGreater(step["e_D_j_per_token"], 0)
+            # R5-5 (protocol v4 :243-251): 300 s of quiet before the prefill, a
+            # fixed 600 s recovery after the last decode, and the full-inventory
+            # WP14(a) classification of the D step.
+            bundle = run / rt.STEP_D_SEGMENT / step["bundle"]
+            episode = json.loads((bundle / "outputs/align_episode.json").read_text())
+            g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
+            prefill_ns = episode["turns"][0]["start_ns"]
+            self.assertGreaterEqual((prefill_ns - g0["end_ns"]) / NS, rt.STEP_QUIET_S)
+            self.assertEqual(episode["hardware"]["token_budget"]["deadline_origin"], "R1_after_G0_release_and_quiet")
+            recovery = rt.journal_rows(run / rt.STEP_D_SEGMENT / "recovery/align_thermal.jsonl")
+            self.assertGreaterEqual((recovery[-1]["monotonic_ns"] - episode["turns"][0]["end_ns"]) / NS, 600)
+            self.assertEqual(detail["recovery_observed_s"], 600)
+            thermometry = step["thermometry"]
+            self.assertEqual((thermometry["status"], thermometry["s_fast"], thermometry["s_slow"]),
+                             ("pass", rs.syn.FAST, rs.syn.SLOW), thermometry)
+            self.assertFalse(thermometry["sensor_pick_changed"])
+            self.assertEqual(thermometry["keys_inventoried"], 4)
+            saved = json.loads((run / rt.STEP_D_SEGMENT / thermometry["classification_file"]).read_text())
+            body = dict(saved["classification"])
+            digest = body.pop("classification_sha256")
+            self.assertEqual(digest, thermometry["classification_sha256"])
+            self.assertEqual(digest, __import__("hashlib").sha256(rt.canonical(body).encode()).hexdigest())
+            self.assertEqual(detail["S6_tuning"]["status"], "TODO")
+            self.assertEqual(results["step_30b"]["thermometry"]["for_record_only"], True)
             cool = segment("cooldown_after_D", "idle-until-soak", "--duration-s", "1500")
             self.assertTrue(cool["recovery_curve"])
-            segment("X_G_contrast", "x-g")
+            xg = segment("X_G_contrast", "x-g")
+            self.assertEqual(xg["reference_source"], "r1_soak_reference")
             gated = {}
+            soak_r = json.loads((run / "soak_reference.json").read_text())["sensors_c"][rs.syn.SLOW]
             for name, kind in r1.GATED_D_RUNS:
+                # R5-1: precool to the G0 band of the soak R, then consume it.
+                self.assertIs(segment(name + r1.PRECOOL_SUFFIX, "idle-until-soak", "--duration-s", "1500")
+                              ["released"], True)
                 gated[name] = segment(name, kind)
                 r1._check_gated_t_dead(name, gated[name], step)
+                r1._check_soak_reference_consumed(name, gated[name], run / "soak_reference.json")
                 r1.deadman_summary(name, gated[name])
+                bundle = run / name / gated[name]["bundle"]
+                self.assertFalse((bundle / "outputs/align_window_reference.json").exists())
+                episode = json.loads((bundle / "outputs/align_episode.json").read_text())
+                g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
+                self.assertEqual(g0["reference"]["slow_c"], soak_r)
+                self.assertEqual(g0["reference"]["source_member"], "r1_soak_reference")
+            self.assertEqual(r1.gate_wait_medians(gated)["G1_waits"],
+                             sum(len(g["gate_waits_s"]["G1"]) for g in gated.values()))
             planning = [segment(f"planning_turn_R_plus_{o}C", f"d-planning-turn-r-plus-{o}c") for o in (0, 2, 4)]
             summary = r1.planning_temperature_summary(planning)
             self.assertEqual(len(summary["points"]), 3)
@@ -99,8 +137,9 @@ class ConformanceTests(unittest.TestCase):
             r1.projected_mde(step["e_D_j_per_token"], gated)
             release = segment("high_power_A1.g0_release0", "g0-release-soak")
             self.assertIs(release["released"], True)
-            legs = [segment(f"high_power_{leg}", f"high-power-aba-{leg.lower()}")["t_decline_s"]
-                    for leg in ("A1", "B", "A2")]
+            legs = [segment(f"high_power_{leg}", f"high-power-aba-{leg.lower()}") for leg in ("A1", "B", "A2")]
+            self.assertTrue(all(leg["g0_released"] is True for leg in legs))
+            legs = [leg["t_decline_s"] for leg in legs]
             r1.high_power_adoption(*legs)
             segment("post_calibration_bracket", "calibration-post", soak=False)
             harvested = segment("harvest", "harvest")
@@ -383,14 +422,15 @@ class IncompleteMemberTests(unittest.TestCase):
             self.assertTrue((bundle / "summary_metrics.json").exists())
 
     def test_planning_turn_cut_by_the_deadman_fails_the_segment(self):
-        # The Fable cold pass HIGH-1 path: G0 releases, then the deadman (armed
-        # at G0 entry, so it also pays for the preheat and the G0 wait) cuts the
-        # one decode. The old runtime returned that partial turn's energy.
+        # The Fable cold pass HIGH-1 path: G0 releases, then the deadman cuts
+        # the one decode. The old runtime returned that partial turn's energy.
+        # (Since R5-2 the deadman is armed after the G0, so it must be shorter
+        # than the turn itself to cut it.)
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
             data = json.loads(config.read_text())
-            data["step"]["deadman_s"] = 110   # synthetic G0 ~76 s, full turn ~60 s
+            data["step"]["deadman_s"] = 20    # synthetic full turn ~232 s
             config.write_text(json.dumps(data))
             soak = root / "soak.json"
             soak.write_text(json.dumps({"schema": rt.SOAK_REFERENCE_SCHEMA,
@@ -421,6 +461,101 @@ class IncompleteMemberTests(unittest.TestCase):
                 self.assertEqual(rt.incomplete_member_reasons(member(flags=(flag,))), [flag])
         self.assertEqual(rt.incomplete_member_reasons(member(turns=0)), ["turns:0"])
         self.assertTrue(rt.incomplete_member_reasons(member(status="failed")))
+
+
+def write_soak(path, slow=38.0, fast=38.0, sd=0.1):
+    path.write_text(json.dumps({"schema": rt.SOAK_REFERENCE_SCHEMA,
+                                "sensors_c": {rs.syn.FAST: fast, rs.syn.SLOW: slow},
+                                "detrended": {k: {"detrended_sd_c": sd} for k in (rs.syn.FAST, rs.syn.SLOW)}}))
+    return path
+
+
+class Round5RuntimeTests(unittest.TestCase):
+    """LEAD-RULINGS-2 R5-1, R5-2 and R5-3 in the runtime (synthetic backend)."""
+
+    def test_planning_deadman_is_armed_after_the_preheat_and_g0(self):
+        # R5-2 (exec MEDIUM-4, cold MEDIUM-3): the preheat and the G0 keep
+        # their own caps; the deadman covers the decode only. The synthetic
+        # turn takes ~232 s and the preheat plus G0 ~76 s or more, so with the
+        # old G0-entry arming a 280 s deadman cut the turn (exit 3).
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            config = rs.synthetic_config(root / "cfg")
+            data = json.loads(config.read_text())
+            data["step"]["deadman_s"] = 280
+            config.write_text(json.dumps(data))
+            soak = write_soak(root / "soak.json")
+            out = root / "planning_turn_R_plus_2C"
+            code, result = call(config, out, "d-planning-turn-r-plus-2c", "--soak-reference", str(soak))
+            self.assertEqual(code, 0, custody(out).get("error"))
+            self.assertEqual(result["g0_outcome"], "released")
+            episode = json.loads((out / "runs/align-v4-r1-d-planning-turn-r-plus-2c/outputs/align_episode.json")
+                                 .read_text())
+            budget = episode["hardware"]["token_budget"]
+            self.assertEqual(budget["deadline_origin"], "R1_after_preheat_and_G0")
+            g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
+            # Armed after the G0: the deadline is deadman_s past the G0's end.
+            self.assertGreaterEqual(budget["deadline_ns"], g0["end_ns"] + 280 * NS)
+            self.assertNotIn("episode.deadman:0", episode["flags"])
+
+    def test_gated_d_run_gates_against_the_soak_reference_not_a_warm_capture(self):
+        # R5-1 (cold HIGH-2): the old gated run captured its own R from the
+        # 60 s before warmup (a warm value) and wrote align_window_reference.json.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            config = rs.synthetic_config(root / "cfg")
+            soak = write_soak(root / "soak.json", slow=38.25, fast=38.5)
+            run = root / "r1"
+            (run / rt.STEP_D_SEGMENT).mkdir(parents=True)
+            (run / rt.STEP_D_SEGMENT / rt.RESULT_NAME).write_text(json.dumps({"kind": "step-d", "slots": {
+                "S7": 30.0, "T_dead": 600.0, "N_chunk": 256, "B_D": 4096}}))
+            out = run / "D_spam_benign_s1_gated_held_a"
+            code, result = call(config, out, "d-spam-benign-s1-a", "--soak-reference", str(soak))
+            self.assertEqual(code, 0, custody(out).get("error"))
+            self.assertEqual((result["reference_source"], result["reference_c"]), ("r1_soak_reference", 38.25))
+            self.assertEqual(result["g0_reference"]["slow_c"], 38.25)
+            self.assertEqual(result["g0_reference"]["fast_c"], 38.5)
+            self.assertEqual(set(result["gate_waits_s"]), {"G0", "G1", "H"})
+            bundle = out / result["bundle"]
+            self.assertFalse((bundle / "outputs/align_window_reference.json").exists())
+            code, _ = call(config, run / "no_soak", "d-spam-benign-s1-b")
+            self.assertEqual(code, rt.EXIT_REFUSED)
+            self.assertIn("--soak-reference", custody(run / "no_soak")["error"])
+
+    def test_aba_leg_without_its_own_g0_release_is_inconclusive_not_a_failure(self):
+        # R5-3 (exec MEDIUM-1): the leg used to exit 3 ("not one complete turn"),
+        # which refused the whole R1 night after ~10 h.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            config = rs.synthetic_config(root / "cfg")
+            soak = write_soak(root / "soak.json")
+            out = root / "high_power_B"
+            buffer = io.StringIO()
+            code = rt.main(["--config", str(config), "--r1-kind", "high-power-aba-b", "--output", str(out),
+                            "--soak-reference", str(soak)], stdout=buffer,
+                           backend_factory=IncompleteMemberTests.NoReleaseBackend)
+            self.assertEqual(code, 0, custody(out).get("error"))
+            result = json.loads(buffer.getvalue())
+            self.assertIs(result["g0_released"], False)
+            self.assertIsNone(result["t_decline_s"])
+            self.assertEqual(result["t_decline_status"], "not_measured_g0_unreleased")
+            self.assertEqual(result["leg_status"], "inconclusive")
+            self.assertEqual(contract.missing_fields("high-power-aba-b", result, quiet=True), [])
+            r1.os_load_verdict("high_power_B", result)
+
+    def test_cooldown_releases_on_the_one_sided_g0_band(self):
+        # R5-1: "within the G0 band of R" is S_slow <= R + delta_slow. A host
+        # already cooler than the soak R has cooled; the old |S_slow - R| <=
+        # delta rule waited out the whole cap and reported a timeout.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            config = rs.synthetic_config(root / "cfg")
+            soak = write_soak(root / "soak.json", slow=rs.syn.AMBIENT_C + 5.0)   # world sits at ambient
+            out = root / "D_bank_benign_s1_gated_held.precool"
+            code, result = call(config, out, "idle-until-soak", "--duration-s", "120", "--soak-reference", str(soak))
+            self.assertEqual(code, 0, custody(out).get("error"))
+            self.assertIs(result["released"], True)
+            self.assertLess(result["recovery_curve"][-1][0], 10)
 
 
 if __name__ == "__main__":

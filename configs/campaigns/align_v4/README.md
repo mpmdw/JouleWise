@@ -26,9 +26,13 @@ Missing numeric controls are null and invalid as executable EpisodeSpecs.
 The existing qwen3_5 endpoint selects XML tools from the model family.
 Presence penalty remains the endpoint's fixed zero; sampler is 1/.95/20/0.
 
-WP15 must wire the thermal launcher and custody for R: 5 captures its last
-60 s of idle before neutral warmup; all later sidecar members consume it.
-The scaffold's campaign commands remain a skeleton pending that wiring.
+Window reference R: member 5 captures its last 60 s of idle before neutral
+warmup (role capture); all later sidecar members consume it (role consume,
+bound to member 5's run_id and config bytes). The plan records this in
+runtime_requirements.window_reference and --check refuses any other roles.
+W1 members run from their own configs through the plan's stage commands; the
+WP15 R1 runtime (runtime_requirements.r1_runtime_entrypoint) runs R1 only.
+The scaffold's campaign commands remain a skeleton pending the W1 wiring.
 No synthetic sensor, reference temperature, model digest or turn count is used.
 
 Sizing_preview.json contains A1's planning guesses only. sizing_b5.json comes

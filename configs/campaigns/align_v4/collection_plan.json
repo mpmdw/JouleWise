@@ -1097,13 +1097,19 @@
   "runtime_requirements": {
     "D_tools": "family-validated XML via qwen3_5",
     "ac_powermode": null,
-    "launcher": [
+    "presence_penalty": 0,
+    "r1_runtime_entrypoint": [
       "scripts/align_r1_runtime.py",
       "--config",
       "configs/align/v4/r1_runtime.json"
     ],
-    "presence_penalty": 0,
-    "window_reference": "WP15 custody; member 5 captures; later members consume"
+    "w1_launcher": "per-member configs via the plan_tree stage commands (the specs carry the roles)",
+    "window_reference": {
+      "capture_config_sha256": "c05b83cd37c9c1dd0ec5e22995005333fca40461281e9b90249c13b33ad71c04",
+      "capture_ordinal": 5,
+      "capture_run_id": "align-v4-episodes-a-e05",
+      "rule": "member 5 captures its last 60 s of idle before warmup (role capture); every later thermal member consumes it (role consume, bound to member 5 run_id and config bytes)"
+    }
   },
   "schema_version": "joulewise.align_v4.v1",
   "seed_bits": 64,

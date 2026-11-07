@@ -38,17 +38,30 @@ class ContractTests(unittest.TestCase):
 
     def test_missing_fields_reports_nested_and_quiet_fields(self):
         result = {"energy_j": 1.0, "admitted_turns": 3, "x7": False, "battery_drain_pct_per_h": 3.0,
+                  "reference_c": 38.0, "reference_source": "r1_soak_reference",
+                  "gate_waits_s": {"G0": [1.0], "G1": [], "H": []},
                   "deadman": {"T_dead_s": 1.0, "phases_s": {p: 0.0 for p in contract.DEADMAN_PHASES[:-1]}}}
         self.assertEqual(contract.missing_fields("d-spam-benign-s1-a", result, quiet=False),
                          ["deadman.phases_s.tail"])
         self.assertEqual(contract.missing_fields("step-30b", {}, quiet=True),
-                         ["cpu_busy_cores", "cpu_busy_t_s", "census", "battery_drain_pct_per_h"])
+                         ["cpu_busy_cores", "cpu_busy_t_s", "census", "battery_drain_pct_per_h",
+                          "thermometry.status", "thermometry.classification_sha256"])
         with self.assertRaisesRegex(ValueError, "no kind"):
             contract.required_fields("unknown", quiet=False)
 
     def test_soak_reference_kinds(self):
         self.assertIn("idle-until-soak", contract.NEEDS_SOAK_REFERENCE)
         self.assertIn("g0-release-soak", contract.NEEDS_SOAK_REFERENCE)
+        # LEAD-RULINGS-2 R5-1: X-G and the gated D runs consume the soak R.
+        for kind in ("x-g", *contract.GATED_D_KINDS):
+            self.assertIn(kind, contract.NEEDS_SOAK_REFERENCE)
+            self.assertIn("reference_source", contract.required_fields(kind, quiet=False))
+        # R5-3: an A-B-A leg reports its own G0 outcome; R5-5: both steps classify.
+        for kind in contract.HIGH_POWER_KINDS:
+            self.assertIn("g0_released", contract.required_fields(kind, quiet=True))
+        for kind in ("step-30b", "step-d"):
+            self.assertIn("thermometry.classification_sha256", contract.required_fields(kind, quiet=True))
+        self.assertIn("released", contract.required_fields("idle-until-soak", quiet=False))
         self.assertNotIn("calibration-pre", contract.NEEDS_SOAK_REFERENCE)
 
 
