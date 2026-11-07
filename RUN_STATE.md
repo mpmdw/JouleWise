@@ -1098,6 +1098,39 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Also in the PR:** the suite instructions in `AGENTS.md`, `README.md` and "Start Here" step 8 now say `python3 scripts/shard_tests.py --workers 8 --split` instead of a sequential `unittest discover` (about 3.2 h); this file's header points here instead of the removed `RESUME-*` docs and the 2026-10-10 hand-off; `tools/normalized_compare.py` (superseded by `scripts/compare_b5_recompute.py`) is deleted with its R1 original and test.
 - **Evidence:** executing review and a Sol 6.1 critic passed; CI and the gate ledger green on the final head (PR #690 conversation).
 
+190. **Magistrate activation 08e39e3b (Opus 5.5, headless, 2026-11-06, about 22:35 PST): PR #691 merged into `lane/2026-11-05-align-pilot10-benign` at `e1a91226e`; R0 re-launched on it.** No pending notices, no unread mail from Ed, no new directive.
+- **What #691 changed.** R0's contention checks now measure CPU-seconds per second from cumulative CPU-time differences over at least 30 s, at the same 0.05 limit (`prewindow.INTERVAL_S`, `CPU_LIMIT_PERCENT`; `joulewise/hazards/contention.py` accounting).
+  - It covers both checks: the R0 guard (`joulewise/align/r0_host.py`) and the SMC probe (`smc_enumeration.CpuQuietProbe`).
+  - Only the first admission waits 30 s. Guard checks run on every token, and the SMC probe runs inside the 1 Hz capture.
+  - Counter regressions (macOS zombies read 0:00.00) are recorded, and refuse only with previous over-limit evidence.
+  - The SMC probe's host-aggregate bar of 0.05 is journaled with an `aggregate_above_0_05` flag, not judged. On the idle Mac it was 0.035-0.112, above 0.05 in 8 of 12 calls, and it also refused run 4. `contention.py` judges the aggregate only when a plan registers a limit.
+- **Gates.**
+  - Sol 6.1 built three rounds (high, xhigh, high).
+  - Opus executing reviews: ADMIT on `3297762ff` and `102fdb8c7`.
+  - Cold Fable passes: ADMIT on all three heads, `3297762ff`, `102fdb8c7` and `21da63a71`.
+  - CI green on `21da63a71`; gate ledger passed.
+  - Lead live checks on the real Mac each round.
+  - Papers: `/Users/edr/night-custody/magistrate/r0-census-fix/`.
+  - CI on this lane is slow: shards take 20 min to 2 h 16 min, as they did on #687. That is not a hang.
+- **R0 launch.**
+  - Canonical: `665c6452b` or later; `tests.test_magistrate_desk_fence` OK under python3.14.
+  - Measurement checkout: fast-forwarded `165e12872` → `e1a91226e`, clean.
+  - Host: Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`; AC; 83,081,601,024 bytes free.
+  - Spotlight 716 and 73957 showed `T` after STOP and `S` after CONT. photoanalysisd 13374 and mediaanalysisd 21331 are still held `T`.
+  - Arguments: `--output /Users/edr/night-align/r0-v4-20261107T0631Z`, `--deadline 1794069068` (08:31 PST 11-07), `--magistrate-pid 18060`, config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`.
+  - The Codex MCP adapter is stopped before launch.
+
+**Next activation (written 2026-11-06 by activation 08e39e3b; item 190; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0631Z`.
+- Commit to `docs/align/r0/2026-11-07-rerun5/`, on a new branch from `e1a91226e`.
+- Email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`.
+- The SMC row now carries `quiet_observations` with `aggregate_above_0_05` flags; report how many were flagged.
+- If the record directory is absent, follow item 185 (4).
+(2) **If R0 passes:** item 185 (2). **If it fails or is inconclusive:** item 185 (3)-(4). Before re-running after another contention refusal:
+- read the `cpu_interval` receipt (guard) or the SMC `NotQuiet` evidence;
+- the refusal is now a measured rate over at least 30 s, so treat it as real contention: find the process before any re-run.
+(3) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
+
 189. **Magistrate activation 08e39e3b (Opus 5.5, headless, 2026-11-06 from 18:07 PST): R0 re-run 4 passed load, generated and memory, then was refused at the start of `smc` by the census (a Spotlight `mdworker_shared` 0.6 s old at 6.0 % decayed `%CPU`). No unchanged re-run: R0's guard is being switched to direct CPU-seconds-per-second measurement.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0149Z` (17:50:10-18:05:15 PST, 905 s): load pass (NLL 11.0368 vs 11.0642), generated pass, memory pass (peak 37,025,381,468 bytes vs 45e9; swap flat), smc refused; ladder and long-decode not run. D pins PASS. Fence cleared, LaunchAgent gone, Spotlight `S`, photoanalysisd 13374 still `T`.
 - **Cause:** the guard (`joulewise/align/r0_host.py` `QuietGuard`) refuses on one `ps` `%CPU` snapshot (`prewindow.busy_contaminants`). It runs about every 15 s (101 receipts in 905 s); mdworker_shared spawns every 2-7 min and after R0's own writes; a 1 MB file copy into `~` put `mds_stores` at 35.7 % for about 1.5 s. A full R0 takes hundreds of samples, so an unchanged re-run would very likely be refused again. Same class as item 188's photoanalysisd refusal (two in a row).
