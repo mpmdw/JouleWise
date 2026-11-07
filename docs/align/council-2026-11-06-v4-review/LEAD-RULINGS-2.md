@@ -298,10 +298,174 @@ The infra lane's 45,087 / 50,487 s are for the round-5 table, which still had `c
 
 The gated runs and X-G are bounded at the 1,800 s member bound, with no separate allowance for the R6-1 300 s idle. If the idle falls outside that bound, add 4 × 300 = 1,200 s (45,687 / 51,087 s).
 
-**Deviation (cold LOW-6, second half).** No R1 night plan and no `window_max_s` exists in the repo. The builder added no R1 plan template, because the R1 plan is a Mac-side artifact (`MEASUREMENT_ROOT`, `NIGHT_DIR`, the sudo rules). The W1 night plan template is the only plan in the repo. Its own `window_max_s` is a `PENDING_R1` placeholder, and its only numeric window is W1's `window_cap_s` of 44,640 s, which is below even the no-redo R1 worst case. So the template gives no R1 value to copy. The lead must set the R1 plan's `window_max_s` from the numbers above, or accept a wall-clock cut in the all-caps case. The magistrate was asked to do this (kit-delivery note, item 3).
+**Deviation (cold LOW-6, second half).** No R1 night plan and no `window_max_s` exists in the repo. The builder added no R1 plan template, because the R1 plan is a Mac-side artifact (`MEASUREMENT_ROOT`, `NIGHT_DIR`, the sudo rules). The W1 night plan template is the only plan in the repo. Its own `window_max_s` is a `PENDING_R1` placeholder, and its only numeric window is W1's `window_cap_s` of 44,640 s. So the template gives no R1 value to copy. *(Corrected in round 7, R7-9; round-6 cold pass LOW-3.)* This sentence first said that 44,640 s "is below even the no-redo R1 worst case". That held for round 5's 45,087 s but was false on the round-6 table above, whose no-redo case is 44,487 s. On the round-7 table (R7-2: step-d and the designed start states arm the 1,200 s G0 timeout), the true figures are: no redo, no retry 46,887 s; with one batch-window wait 52,287 s; R6-2 retry allowance 21,600 s; every retry plus one batch-window wait 73,887 s (48,087 / 53,487 s if the 300 s idle of the gated runs and X-G falls outside their member bound). W1's `window_cap_s` of 44,640 s is 2,247 s below the round-7 no-redo case. The conclusion is unchanged: the R1 plan's `window_max_s` must come from these numbers. The lead must set the R1 plan's `window_max_s` from the numbers above, or accept a wall-clock cut in the all-caps case. The magistrate was asked to do this (kit-delivery note, item 3).
 
 **LOWs left.** None of the listed LOWs, apart from that second half of cold LOW-6.
 
 **Integration notes on R6-8.**
 - The science lane's own open items are now closed by the infra lane: exec LOW-2 for the A-B-A leg path, cold LOW-1 (`delta_fast_c`) and cold LOW-2 for unchanged picks.
 - The policy sensors must equal the R1 picks in every case (infra). With changed picks they must also equal `s7_for_r1_picks.keys` (science).
+
+## Round 7 (2026-11-07)
+
+These rulings settle the findings of the two reviews of the R1 round-6 integrated head (`54d584de6`, reviewed at lane tip `97714c644`), plus one new physics input from the measurement Mac:
+
+- "exec" is `docs/align/reviews/2026-11-07-r1-round6-executing-review.md` (its fixes are `4f2c3283a`);
+- "cold" is `docs/align/reviews/2026-11-07-r1-round6-cold-pass.md` (`1e3f046bc`);
+- "builder" is a round-6 builder decision recorded in the Round 6 section above.
+
+**Physics input** (R0 re-run 7 SMC journal, analysed by the magistrate's fresh-design seats; quoted as the lead gave it):
+
+> After the 900 s full load, no physical key reaches G0's 0.2 degC/min until 840-1,040 s after load end, but G0's cap is 600 s. The replayed G1 release came at 279 s, near the 300 s cap. Once the fans stop (180 s after the load), every key cools on one shared slow mode, tau about 430-510 s. TCMb and TVD0 are identical in all 1,800 rows; Tf24/Tf2D/Tf2E are one sensor under three keys. Aliased keys must never count as independent thermometers.
+
+Each ruling's text is quoted verbatim as the lead gave it, with the reason it carries. Under each one are the commits that implemented it and any deviation or open point the builders reported. Two builder lanes implemented them, both branched from `lane/2026-11-06-v4-r1-integrated@97714c644`:
+
+- **science** (R7-1, R7-2, R7-3, R7-12, R7-13): `lane/2026-11-07-v4-r1-round7-science@aa4cbfc6e`.
+  - `92cf83226`: the rulings. The kit and gate side was drafted by local Sol 6.1 xhigh and reviewed by the builder.
+  - `aa4cbfc6e`: fixes from a local Sol 6.1 xhigh critique of that diff (MEDIUM-2, LOW-3, LOW-4 fixed; MEDIUM-1 left open, below).
+  - The builder mutation-checked 25 mutations; every one was caught. Sol audit: no restricted path was opened.
+- **infra** (R7-4 to R7-8, R7-10, R7-11, R7-14): `lane/2026-11-07-v4-r1-round7-infra@d0a6d509f`.
+  - `0ed43d4e2`: the rulings. R7-6 and R7-8 were drafted by local Sol 6.1 xhigh.
+  - `d0a6d509f`: fixes from a local Sol 6.1 xhigh critique (F3-F6, F8; F1, F2, F7 left, below).
+
+They were integrated on `lane/2026-11-06-v4-r1-integrated` by three `--no-ff` merges: `035624383` (science), `9ad3a7d56` (infra) and `bed96a99d` (`origin/lane/2026-11-05-align-pilot10-benign@e1a91226e`, which carries the merged PR #691 R0 contention guard). The integration added `9541b9dbd` (test only: `test_r1_round5_exec_review`'s real-signal test now expects R7-7's read-back record; it failed on the infra lane head alone), and R7-9 and this section are its doc commit. The integration record is the "Round 7 integration" section of `docs/run_reports/2026-11-06-align-v4-r1-integration.md`.
+
+### R7-1. Gated block order: D_bank, D_spam a, D_spam b, X-G
+
+> R7-1 (cold MEDIUM-1, exec LOW-6): reorder the gated block to D_bank, D_spam a, D_spam b, X-G, so both runs of the U5 replay pair follow a full gated D episode (matched predecessors, CHAIR 1(g)). The R + 0 C planning turn stays the D turn before D_bank.
+
+**Implemented by** `92cf83226` (science). `phase_plan` runs `D_bank_benign_s1_gated_held`, `D_spam_benign_s1_gated_held_a`, `D_spam_benign_s1_gated_held_b`, `X_G_contrast` after `planning_turn_R_plus_0C`. X-G follows D_spam b, W1's D → X transition. Tests: `test_r1_round7_science.GatedOrderTests` (the phase table, and both replay runs following a full gated D episode). The contract doc and protocol v4 are updated.
+
+No deviation reported.
+
+### R7-2. R1's G0 timeout is 1,200 s; G0_cap_W1 is an R1-derived slot
+
+> R7-2 (design change before any W1 data; reason: the physics input above shows G0 settling takes longer than the 600 s cap, and R1 exists to measure W1's G0 waits, not truncate them): in R1's gated runs, X-G and the R6-2 precool/retry segments, the G0 timeout is 1,200 s (one config constant, matching the R0 classifier's adaptive-idle cap). Record every G0 wait. W1's G0 cap becomes an R1-derived slot: G0_cap_W1 = clamp(ceil(1.25 x max measured gated G0 wait over D_bank, D_spam a, D_spam b, X-G), 600 s, 1,200 s). The kit binds it to r1_slots and ruling 1(f) uses it in the max-G0 term. A gated G0 that still times out at 1,200 s is INCONCLUSIVE and keeps 1,200 s in 1(f) (builder decision (d) confirmed). Recompute and record the R1 night worst-case table with the new caps.
+
+**Implemented by** `92cf83226` and `aa4cbfc6e` (science).
+- **One constant.** `configs/align/v4/r1_runtime.json` `g0_timeout_s` = 1,200. It is armed through an optional gate-policy `g0_cap_s` (`thermal_gates.validate_gate_policy`: 600-1,200 s; absent = the 600 s default, so v3 and every other G0 are unchanged). The driver reads it at t0 and refuses before any power-mode or runtime work when it is missing, out of range, or different from the committed value (Sol MEDIUM-2: the kit re-derives G0_cap_W1 with the committed value).
+- **Every G0 wait.** `g0_wait_s` and `g0_timeout_s` are contract fields of every kind that runs a G0 (Sol LOW-3). `r1_slots.g0_waits` lists every wait of the night in run order, superseded and timed-out attempts and the `g0-release-soak` releases included. Each `deadman_budget` row carries its `g0_outcome`, and `x_g` carries `g0_wait_s`.
+- **G0_cap_W1.** `r1_slots.g0_cap_w1` (`value_s`, `waits_s`, `censored`, `max_g0_s`, `floor_s`, `factor`, `r1_g0_timeout_s`, `x_g_fallback`). A gated G0 that did not release is censored and counts at 1,200 s. The kit re-derives it (`align_v4_kit.w1_g0_cap`), refuses a missing or stale record field by field (Sol LOW-4), binds `inputs.R1.thermal_policy.g0_cap_s` to `value_s` (W1 template placeholder added), and uses `value_s` as ruling 1(f)'s G0 term.
+- **Worst case.** Step-d and the designed start states are bounded with the 1,200 s timeout (3,900 s each in the ruling 8 batch-window bounds). `night_worst_case_s(None)` on the integrated head:
+
+| Case | Round 6 (s) | Round 7 (s) |
+|---|---|---|
+| No redo, no retry | 44,487 | **46,887** |
+| With one 11:45-13:15 batch-window wait (+5,400) | 49,887 | **52,287** |
+| R6-2 retry allowance: 4 × (1,500 s precool + segment) | 19,200 | **21,600** |
+| Every R6-2 retry plus one batch-window wait | 69,087 | **73,887** |
+
+The gated runs and X-G stay at the 1,800 s member bound (their G0 is inside the member deadman). If their 300 s W1 idle falls outside that bound, add 1,200 s (48,087 / 53,487 s). Each quiet-segment redo (`MAX_SEGMENT_REDOS` = 2) adds its release and the segment again. Tests: `test_r1_round7_science.G0TimeoutTests`, `G0CapW1Tests`, `ContractTests`, and the `test_v4_kit` `test_w1_g0_cap_*`, `test_missing_or_stale_g0_cap_record_is_refused` and `test_policy_g0_cap_must_bind_the_derived_slot` tests.
+
+**Builder interpretation, for the lead to confirm.** "R6-2 precool/retry segments" was implemented as step-d and the designed start states (first attempt and retry) arming 1,200 s. The `idle-until-soak` precools themselves keep their 1,500 s cap.
+
+**Open, reported by the science builder (not changed):**
+- **1(f) will likely refuse W1.** The 1(f) G0 term is G0_cap_W1 itself (≥ 600 s and ≥ every counted wait). At about 20 tok/s, 1(f) then does not fit even at the B_D floor (6,144), so the kit will likely refuse W1 until the lead rules on the ruling 1(e) fallback (R6-3: no code fallback).
+- **Gated runs and X-G cannot observe a full 1,200 s G0.** Gated runs arm the 1,200 s G0 inside T_dead, and X-G inside its 1,086 s contrast deadman (W1's rule). A longer wait ends as a deadman cut and counts at 1,200 s, so X-G can never record a released G0 of 1,200 s.
+- **Sol MEDIUM-1 (pre-existing, not a round-7 ruling).** The ruling 8 batch-window bounds for step-d and the designed states (now 3,900 s) do not include member start-up overhead around the re-armed deadman. A near-cap step-d can take about 4,178 s and cross 11:45. Heavy redos add 600 s for the release but not its 65 s pre-roll.
+
+### R7-3. R6-1 builder decisions confirmed; the R6-2 refusal names its remedy
+
+> R7-3 (builder decisions R6-1 (a)-(c) confirmed; R6-2 refusal): (a) and (b) as built; (c) a gated run after a member with no D work is INCONCLUSIVE, confirmed. R6-2: the kit refusing W1 for any inconclusive_segments entry is confirmed; the remedy is an R1 re-run, which is the magistrate's call — no per-occurrence lead ruling. Make the kit's refusal message say that.
+
+**Implemented by** `92cf83226` (science). Both `inconclusive_segments` refusals in `align_v4_kit` (step-d by name, and any other entry) end with "the remedy is an R1 re-run, which is the magistrate's call, with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)". Test: `test_v4_kit` `test_inconclusive_calibration_refusals_name_rerun_and_magistrate`. The order of (a) is now R7-1's. The contract doc and protocol v4 record the confirmations.
+
+No deviation reported.
+
+### R7-4. SIGTERM and SIGHUP run the normal close
+
+> R7-4 (exec MEDIUM-2): run_night and the v4 install get SIGTERM and SIGHUP handlers that run their normal close (High Power restore included). Tests with real signals.
+
+**Implemented by** `0ed43d4e2` (infra). `run_night` and `align_v4_session.py install` handle TERM and HUP like SIGINT, so the normal close (the Automatic restore) runs. Once the close has begun, further TERM/HUP are swallowed. Tests with real signals: `test_r1_round7_power.NightSignalTests` (`test_sigterm_runs_the_close`, `test_sighup_runs_the_close`) and `test_r1_round7_install.InstallSignalTests`.
+
+No deviation reported.
+
+### R7-5. The host night lock lives as long as the night's process tree
+
+> R7-5 (exec MEDIUM-3, Sol F2/F3): the host night lock lives as long as the night's process tree: pass the lock fd to the chain (pass_fds) for run_night and the R1 driver. The close restores Automatic only after it has itself taken the lock, which proves no chain still holds it. If it cannot take the lock, it leaves the marker for the dead-man or the next session start. Orphaned descendants keeping the lock make W1 refuse (fail closed): accepted.
+
+**Implemented by** `0ed43d4e2` and `d0a6d509f` (infra).
+- `run_night` passes the lock descriptor to the chain (`pass_fds`) for a night admitted under 2; the R1 driver passes it to its runtime child. `HostLock.release` only closes a descriptor, never `LOCK_UN`.
+- The `run_night` close and the R1 guard first retake the lock on a fresh descriptor, and only then restore. Otherwise they log `ac powermode close deferred` (or `restore_deferred` in `r1_result.json`) and leave the marker for the dead-man or the next session start.
+- Sol F4: under the retaken lock, a W1 marker another session owns (an install between release and retake) is left alone with its mode. Sol F5: the descriptor is moved off the launcher handoff slot (FD 198) before it is passed.
+- Tests: `test_r1_round7_power.LockInheritanceTests`, `NightLockTreeTests`, `R1GuardTests`, `CritiqueFixTests` (F4, F5), `R1GuardOwnershipTests`.
+
+**Open, for the lead (Sol F1, MEDIUM, documented, not fixed).** Only the R1 runtime inherits the lock from the driver; the runtime's own children (the heater and powermetrics) do not. If the runtime is killed and those children survive, the driver can retake the lock and restore while they still run. Neither measures anything, and the runtime's teardown stops them. Fixing it means passing the lock through `r1_runtime`.
+
+### R7-6. The install checks launchd before High Power
+
+> R7-6 (exec MEDIUM-4, Sol F4): the install runs the launchd/installer check before it enters High Power, with a test seam.
+
+**Implemented by** `0ed43d4e2` (infra; drafted by local Sol 6.1 xhigh). Before it enters High Power, `install` runs the shared installer's launchd census through its command runner (`launchctl print gui/<uid>/com.joulewise.night`, 10 s timeout). A loaded job or an unavailable job state refuses before any pmset command; only exit 113 with the exact absent-service line admits. Tests: `test_r1_round7_install.InstallCensusTests`.
+
+No deviation reported.
+
+### R7-7. Every restore reads the mode back before clearing a marker
+
+> R7-7 (exec LOW-2, cold LOW-1): PowerModeGuard and every restore read back pmset -g custom before clearing any marker. If the readback is not AC powermode 0, keep the markers and refuse.
+
+**Implemented by** `0ed43d4e2` (infra). `PowerModeGuard.restore` reads `pmset -g custom` after the AUTO and removes both markers only on AC powermode 0; otherwise it keeps them and the run refuses. `powermode.restore_automatic` and `run_night` already read back (round-6 F6). Tests: `R1GuardTests.test_a_restore_that_does_not_read_back_zero_keeps_both_markers` and `..._reads_back_zero_clears_both_markers`.
+
+No deviation reported.
+
+### R7-8. The close signal deferral is bounded at 10 s
+
+> R7-8 (cold LOW-2): bound the round-6 signal deferral around a session close to at most 10 s, so the runtime's 15 s teardown watchdog always arms.
+
+**Implemented by** `0ed43d4e2` (infra; drafted by local Sol 6.1 xhigh) and `d0a6d509f` (F8, test synchronisation). `close_managed_session` delivers held signals to the previous handlers on the main thread (`pthread_kill`) at most 10 s after the first held signal, even if the close is blocked. Tests: `test_r1_round7_close_deferral`.
+
+**Open, for the lead (Sol F2, MEDIUM, not changed).** The 10 s cap plus the runtime's 15 s teardown watchdog lets the watchdog fire up to about 25 s after the first signal, but the driver kills the runtime at 20 s. The watchdog always arms, as R7-8 requires, but can fire after the kill. A fix would arm the watchdog when the first signal is held.
+
+### R7-9. Doc corrections to the window comparison
+
+> R7-9 (cold LOW-3): correct LEAD-RULINGS-2.md:301 and the integration report :958 (the window_cap_s comparison) to the true figures under the new caps.
+
+**Implemented by** the integration's doc commit (the commit that adds this section). The Round 6 cold LOW-6 deviation paragraph above and the integration report's "Open after round 6" line now carry an inline correction: the original claim was false on the round-6 table (44,487 s < 44,640 s); under R7-2's caps the no-redo case is 46,887 s, with 52,287 / 21,600 / 73,887 s for the other cases (48,087 / 53,487 s with the idle caveat), so W1's `window_cap_s` of 44,640 s is now 2,247 s below the no-redo case.
+
+### R7-10. A fixed production host state directory
+
+> R7-10 (cold LOW-4): the host state directory is a fixed path in production (/Users/Shared/JouleWise/host-power). An environment override exists only through a test seam that production entry points refuse. Record the path in the night and session receipts.
+
+**Implemented by** `0ed43d4e2` (infra). The production `__main__` of `run_night.py`, `align_v4_session.py`, `align_r1_rehearsal.py` and `magistrate_watchdog.py` mark themselves; from then on any use of an overridden `$JOULEWISE_HOST_STATE_DIR` refuses (`HostStateOverrideRefused`). The path is recorded in the night's admission record and custody log, the arm record (`staging/v4-arm-NNN.json`), the session-start restore records and `r1_result.json`. Tests: `test_r1_round7_power.HostStateDirTests`, `NightLockTreeTests.test_the_admission_record_and_log_carry_the_host_state_dir`, `R1GuardTests.test_the_r1_result_records_the_host_state_dir`, `test_r1_round7_install.InstallRecordsTests`.
+
+**Deviation (Sol F7, LOW; partial).** For admitted nights the host state directory is recorded in `night.log` and the admission record, not in `night/receipt.json` or `night/result.json`, to avoid changing write-once record schemas. Refusals carry it in their evidence.
+
+### R7-11. Lock errors, pre-admission exceptions and a failed marker write
+
+> R7-11 (cold LOW-5, exec LOW-3/LOW-4): _take_host_lock tells "another night holds the lock" (EWOULDBLOCK) apart from any other OSError, which gets its own refusal code and runs the restore path. Exceptions before admission run the restore path. A failed marker write after a plan-2 admission refuses the night before measuring.
+
+**Implemented by** `0ed43d4e2` and `d0a6d509f` (infra).
+- Only EWOULDBLOCK/EAGAIN counts as another holder (still `night_refused_ac_powermode`). Every other lock or lock-file error (EACCES included, Sol F6) refuses with `night_refused_host_lock_error` and runs the owner-scoped restore path.
+- Any exception or signal before the night's close is registered (the initial agent census, custody-log or census writes, the admission itself) runs the restore path, under the night's own lock when it already holds it, and then frees that lock (Sol F3: `admission_reached` is set only once the close is registered).
+- A failed marker write after a plan-2 admission refuses the night before it measures, and its close restores Automatic.
+- Tests: `test_r1_round7_power.HostLockErrorTests` and `CritiqueFixTests` (F3, F6).
+
+**Deviations reported by the infra builder:**
+- When the lock file itself cannot be opened, the restore path cannot take the lock either, so the marker stays and a manual restore is needed. This fails closed and follows R7-5's rule of never restoring without the lock. It differs from the round-6 cold pass's proposal (LOW-5) to restore without the lock.
+- Exec LOW-3, first half (a plan-2 admission refusal with no marker present restores nothing) is not in the R7-11 ruling text and was not changed.
+
+### R7-12. An INCONCLUSIVE X-G falls back to the 1,200 s cap
+
+> R7-12 (cold LOW-6): if r1_slots.x_g is INCONCLUSIVE, the kit uses the 1,200 s G0 cap for W1's D-to-X G0 term in 1(f) and records x_g_fallback; it does not refuse on that alone.
+
+**Implemented by** `92cf83226` and `aa4cbfc6e` (science). An `x_g` whose `status` is not `measured` counts at 1,200 s in G0_cap_W1 with `x_g_fallback: true`; that alone is never a refusal. Test: `G0CapW1Tests.test_an_inconclusive_x_g_falls_back_to_the_timeout`, and `test_v4_kit` `test_inconclusive_x_g_falls_back_and_is_admitted_when_1f_fits`.
+
+**Integration note.** G0_cap_W1 is one cap for every W1 G0, and 1(f) has one G0 term, so the fallback sets the whole of G0_cap_W1, and with it the 1(f) G0 term, to 1,200 s, not a D-to-X term alone. That is at least as conservative as the ruling text.
+
+### R7-13. Aliased keys are never two thermometers
+
+> R7-13 (aliases): the kit refuses a thermal_policy whose s_fast and s_slow are aliases (byte-identical series over the R1 classification journal), and the R1 classification records alias groups so an alias is never a second thermometer. Classifier code on the pilot10-benign lane is being amended separately by the measurement Mac (PR #692); do not edit smc_enumeration/thermal classification code there. Bind to its outputs only through the kit.
+
+**Implemented by** `92cf83226` (science). The R1 runtime computes `alias_groups` beside the classifier: sorted groups of inventoried keys whose 1 Hz series are identical in every row of the classification journal, failed reads included (keys never read are left out). They sit inside the classification digest, and the driver registers them. The kit refuses a record without `alias_groups`, and a `thermal_policy` whose `s_fast` and `s_slow` are one key or in one alias group. `smc_enumeration` is untouched (the measurement Mac's PR #692 lane). Tests: `test_r1_round7_science.AliasGroupTests` and `test_v4_kit` `test_missing_or_malformed_alias_groups_refuse`, `test_selected_aliases_or_same_key_refuse_as_one_thermometer` and `test_aliases_elsewhere_preserve_admission`.
+
+**Limits reported by the science builder.** Alias groups match recorded series exactly. Coincidentally identical series would be grouped, and true aliases whose failed reads or numbers differ would be missed.
+
+### R7-14. The R1 chain EXIT-trap restore stays as is
+
+> R7-14 (exec LOW-5): leave as is (it cannot overlap a W1 night today); document it.
+
+**Implemented by** `0ed43d4e2` (infra), documentation only. `docs/align/r1_runtime_contract.md` records that the R1 chain's EXIT-trap `pmset 0` runs after the driver has released the lock; no W1 night can be measuring then, because its install needs the single `com.joulewise.night` label, which the R1 night's job still holds, and both the v4 install's census (R7-6) and the shared installer refuse while it is loaded. A future multi-label installer must revisit this.
+
+### Process incident reported by the science builder
+
+A mistaken Sol launch truncated another lane's `r7-sol-crit.events.jsonl`. That lane's owner should audit the codex rollout file `~/.codex/sessions/2026/11/07/rollout-2026-11-07T03-16-19-01a1b5b9-42c4-76e1-88b1-79c2743a9890.jsonl` instead. No code or record of this lane is affected.

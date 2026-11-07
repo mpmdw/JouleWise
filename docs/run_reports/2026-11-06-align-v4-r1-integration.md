@@ -955,7 +955,137 @@ test_v4_w1_synthetic        Ran 18 tests in 3.022s     OK (skipped=14)   # full 
   | With one batch-window wait | 49,887 |
   | Plus the R6-2 retry allowance (19,200) | 69,087 |
 
-  This assumes the 300 s idle of the gated runs and X-G sits inside their 1,800 s member bound. If it does not, add 1,200 s. The W1 `window_cap_s` of 44,640 s is below even the no-redo R1 case. The lead must set the R1 plan's `window_max_s`. The infra builder's 45,087 / 50,487 s in the kit-delivery note are for the round-5 table and are superseded by these numbers.
+  This assumes the 300 s idle of the gated runs and X-G sits inside their 1,800 s member bound. If it does not, add 1,200 s. *(Corrected in round 7, R7-9; round-6 cold pass LOW-3.)* This line first said that the W1 `window_cap_s` of 44,640 s "is below even the no-redo R1 case"; on the round-6 table above that was false (44,487 s < 44,640 s). On the round-7 table (R7-2's 1,200 s G0 timeout on step-d and the designed start states) the true figures are 46,887 s with no redo or retry, 52,287 s with one batch-window wait, a 21,600 s R6-2 retry allowance and 73,887 s in all (48,087 / 53,487 s with the idle caveat), so 44,640 s is now 2,247 s below the no-redo case. See the "Round 7 integration" section. The lead must set the R1 plan's `window_max_s`. The infra builder's 45,087 / 50,487 s in the kit-delivery note are for the round-5 table and are superseded by these numbers.
 - **WP18 (Sol F7).** The fix to the WP18 seed index could not be checked against the real `p7-PILOT.json` off the Mac. If the tool refuses on the real files, the magistrate sends its exact message.
+- **Exec LOW-3 scope.** Signal deferral applies only to a session close on the main thread.
+- **Hardware checks carried over from round 5:** the inventory sweep duration, the second SMC reader, and the heater start-state loop on the first R1 night.
+
+## Round 7 integration (two lanes and pilot10-benign onto `97714c644`)
+
+This round is code and kit integration only:
+
+- no measurement ran;
+- no model weights were loaded;
+- no v3 kit bytes changed.
+
+The rulings R7-1 to R7-14 are recorded verbatim, with the commits that implemented each one and the builders' deviations, in the "Round 7" section of `docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md`, together with the R0 re-run 7 physics input behind R7-2 and R7-13. Three `--no-ff` merges landed, in this order:
+
+| Merge | Branch @ head | What landed |
+|---|---|---|
+| `035624383` (1/3) | `lane/2026-11-07-v4-r1-round7-science@aa4cbfc6e` (`92cf83226`, `aa4cbfc6e`) | **R7-1:** gated block D_bank, D_spam a, D_spam b, X-G. **R7-2:** one `g0_timeout_s` = 1,200 s for the gated runs, X-G, step-d and the designed states; every G0 wait recorded (`r1_slots.g0_waits`); `r1_slots.g0_cap_w1` derived, re-derived and bound by the kit to `thermal_policy.g0_cap_s` and ruling 1(f). **R7-3:** the `inconclusive_segments` refusal names the remedy. **R7-12:** `x_g_fallback`. **R7-13:** `alias_groups`. No conflicts: the lane descends from the integrated tip. |
+| `9ad3a7d56` (2/3) | `lane/2026-11-07-v4-r1-round7-infra@d0a6d509f` (`0ed43d4e2`, `d0a6d509f`) | **R7-4** TERM/HUP handlers, **R7-5** lock passed to the process tree and retaken before a restore, **R7-6** install census before High Power, **R7-7** read-back before clearing markers, **R7-8** 10 s deferral bound, **R7-10** fixed host state directory, **R7-11** lock-error code and pre-admission restores, **R7-14** documented. No textual conflicts: `r1_runtime_contract.md`, `r1_runtime.py`, `align_r1_rehearsal.py` and `test_v4_kit.py` auto-merged in disjoint hunks. |
+| `bed96a99d` (3/3) | `origin/lane/2026-11-05-align-pilot10-benign@e1a91226e` | Merged PR #691 (the R0 contention guard: CPU-seconds per second over ≥ 30 s, quiet guard and SMC probe), with PRs #687 (R0 echo count) and #689 (SSD qualification fix) and their review docs, which this lane lacked. No textual conflicts. The rule "pilot10-benign wins for R0/SMC code" needed no resolution: after the merge `smc_enumeration.py`, `ssd_qualification.py`, `test_smc_quiet.py` and `tests/hazards/test_smc_enumeration.py` are byte-identical to pilot10-benign, and the remaining differences in `r0.py`, `r0_host.py`, `external_volume.py` and their tests are this lane's own earlier additions (the W1 requirement report row, the diskutil retry, a synthetic backend test seam) in hunks pilot10-benign did not touch. |
+
+Integration commits after the merges:
+
+1. **`9541b9dbd` (test only).** `test_r1_round5_exec_review.RealSignalSeriesHighPowerTests` asserted that the R1 guard's last powermode record is `restore_automatic`. Since R7-7 the guard reads the mode back and records `after_restore_automatic`, so the test failed 3 of 3 subtests. It fails the same way on the infra lane head `d0a6d509f` alone (checked in a scratch worktree), so this is a stale infra-lane test, not a merge conflict. It now asserts `restore_automatic` (exit 0) followed by `after_restore_automatic` with `observed` 0. Mutation check: removing the R7-7 read-back block from `PowerModeGuard.restore` fails all three subtests.
+2. **The doc commit with this section.** R7-9 (the inline corrections at LEAD-RULINGS-2's round-6 cold LOW-6 deviation paragraph and at this report's "Open after round 6" window line) and the LEAD-RULINGS-2 Round 7 section.
+
+No integration code change was needed beyond that test.
+
+### Kit check on the round-7 head
+
+- `scripts/align_v4_kit.py` regenerated on the merged head: no file changed, and a second run changes nothing.
+- `git diff origin/lane/2026-11-05-align-pilot10-benign -- configs/campaigns/align_pilot_v3` is empty, both against HEAD and against the worktree.
+- `scripts/align_v4_kit.py --check` reports no drift and exits **1**. It is blocked on exactly nine leaves, the same set as in rounds 4 to 6:
+  - `WP18.X.max_turns`, `WP18.X.token_fixture_sha256`, `WP18.Y.max_turns`, `WP18.Y.token_fixture_sha256` (Mac-side: the magistrate runs `scripts/align_v4_wp18_fixtures.py`);
+  - `R0.reasoning_effort`;
+  - `R1.B_D`, `R1.I_D`, `R1.T_dead`, `R1.thermal_policy` (W1's `g0_cap_s` is a field of that policy, R7-2).
+- Beyond the leaves, `require_ready` now also needs from the R1 record (round 7):
+  - `r1_slots.g0_cap_w1`, equal field by field to the kit's re-derivation (`w1_g0_cap`) from `deadman_budget` and `x_g`, and `inputs.R1.thermal_policy.g0_cap_s` equal to its `value_s` (R7-2);
+  - `r1_slots.x_g` as a dict; an INCONCLUSIVE X-G is admitted with `x_g_fallback` (R7-12);
+  - ruling 1(f) with G0_cap_W1 as its G0 term (R7-2);
+  - `thermometry.D.alias_groups` present, and `s_fast`/`s_slow` neither one key nor in one alias group (R7-13);
+  - an empty `inconclusive_segments`, whose refusal now names the remedy (an R1 re-run, the magistrate's call; R7-3);
+  - everything listed for rounds 5 and 6.
+- `validate_align_v4_w1_plan.py` on the committed template still refuses its `PENDING_R1` placeholders, now including `$.align_v4.thermal_policy.g0_cap_s`, and `window_max_s`.
+
+### Suite tail (round 7 integration, code head `9541b9dbd`)
+
+How the suite ran:
+
+- Every run used `/private/tmp/jwsol/venv-both/bin/python -B -m unittest <module>` under `nice -n 19 taskpolicy -b`, one module per process.
+- `xargs -P 3 -n 1` ran at most three at a time, slowest modules first, each with its own `TMPDIR` under `/private/tmp/jwr7-tmp/suite`.
+- The suite ran on the merged head `bed96a99d`. `test_r1_round5_exec_review` failed there (above) and was rerun after `9541b9dbd`.
+- A mutation check of the R7-7 read-back edited `scripts/align_r1_rehearsal.py` in the worktree for about a minute while the suite ran. The modules that ran in or near that window (`test_r1_round5/6/7_*`, `test_r1_runtime_contract`, `test_r1_runtime_e2e`, `test_power_duty`, plus `test_r1_rehearsal`, `test_r1_runtime` and `test_v4_kit`) were rerun one at a time on `9541b9dbd`; all rc=0, with the same test counts.
+
+**Whole `tests/align` (123 modules, one per process).** Every module OK (`test_r1_round5_exec_review` from its rerun). In total, **Ran 1741 tests, skipped=36**.
+
+The slowest walls:
+
+| Module | Wall |
+|---|---|
+| test_moe_calibration | 2,832 s |
+| test_power_duty | 544 s |
+| test_energy_residual_regressions | 450 s |
+| test_moe_review | 409 s |
+| test_analysis_metadata_baseline | 347 s |
+
+Selected module tails:
+
+```
+test_r1_rehearsal             Ran 73 tests in 12.188s      OK
+test_r1_runtime               Ran 33 tests in 103.015s     OK
+test_r1_runtime_e2e           Ran 2 tests in 145.149s      OK
+test_r1_runtime_contract      Ran 11 tests in 0.023s       OK
+test_r1_inventory             Ran 11 tests in 1.284s       OK
+test_r1_round5_exec_review    Ran 7 tests in 4.707s        OK   # rerun on 9541b9dbd; 3 failures on bed96a99d (above)
+test_r1_round6_exec_review    Ran 9 tests in 2.733s        OK
+test_r1_round6_lows           Ran 18 tests in 16.596s      OK
+test_r1_round6_power          Ran 25 tests in 1.873s       OK
+test_r1_round7_science        Ran 16 tests in 1.381s       OK
+test_r1_round7_power          Ran 29 tests in 35.446s      OK
+test_r1_round7_install        Ran 6 tests in 9.932s        OK
+test_r1_round7_close_deferral Ran 3 tests in 4.594s        OK (skipped=1)
+test_thermal_gate             Ran 44 tests in 59.551s      OK
+test_v4_kit                   Ran 114 tests in 14.491s     OK
+test_v4_wp18_fixtures         Ran 11 tests in 0.197s       OK
+test_v4_w1_plan               Ran 12 tests in 0.929s       OK
+test_v4_prequal               Ran 33 tests in 7.002s       OK (skipped=3)
+test_v4_powermode_record      Ran 9 tests in 0.298s        OK
+test_external_volume          Ran 23 tests in 0.020s       OK
+test_protocol_v4_doc          Ran 5 tests in 0.799s        OK
+test_r0_host                  Ran 44 tests in 1.568s       OK
+test_r0_checks                Ran 30 tests in 4.209s       OK
+test_smc_quiet                Ran 19 tests in 0.048s       OK
+test_r0_mlx_native            Ran 1 test in 215.169s       OK
+test_v4_w1_synthetic          Ran 18 tests in 4.053s       OK (skipped=14)   # full windows gated by JW_WP22_FULL
+```
+
+The one skip in `test_r1_round7_close_deferral` is its subprocess helper class, which runs only inside the child the other two tests start.
+
+**WP22 synthetic W1 dry run** (`JW_WP22_FULL=1 tests.align.test_v4_w1_synthetic`, code head `9541b9dbd`): Ran 18 tests in 108.451s, OK (expected failures=1). As in rounds 4 to 6, only F3 (`InjectedWindowTests.test_collector_death_is_x4_and_episode_continues`) is expected to fail.
+
+**`tests.test_align_pilot_session`** (code head `9541b9dbd`): Ran 16 tests in 172.832s, OK.
+
+**Root modules the infra lane touched (for the record):**
+
+- `tests.hazards.test_refusal_allowlist`: Ran 23 tests in 55.426s, OK (skipped=1).
+- `tests.test_arm_retry`: Ran 36 tests in 0.189s, OK.
+- `tests.test_night_gate`: Ran 112 tests in 3.114s, OK.
+- `tests.test_run_night` and the watchdog modules were not rerun in this round; their environment-only failure classes under `taskpolicy -b` are recorded for round 6 above, and the R7 paths of `run_night` are exercised by `tests.align.test_r1_round7_power` (which drives `NightDriverTests` fixtures).
+
+### Open after round 7 (for the lead)
+
+From the builders (each also recorded under its ruling in LEAD-RULINGS-2 Round 7):
+
+- **R7-2, likely 1(f) refusal.** The 1(f) G0 term is G0_cap_W1 itself (≥ 600 s). At about 20 tok/s, 1(f) does not fit even at the B_D floor (6,144), so W1 will likely be refused until the lead rules on the ruling 1(e) fallback.
+- **R7-2, interpretation to confirm.** "R6-2 precool/retry segments" was implemented as step-d and the designed start states (first attempt and retry) arming 1,200 s; the `idle-until-soak` precools keep their 1,500 s cap.
+- **R7-2, observability.** Gated runs arm the 1,200 s G0 inside T_dead, and X-G inside its 1,086 s contrast deadman, so a longer wait ends as a deadman cut and counts at 1,200 s; X-G can never record a released G0 of 1,200 s.
+- **Science Sol MEDIUM-1 (pre-existing).** The ruling 8 batch-window bounds for step-d and the designed states (3,900 s) omit member start-up overhead around the re-armed deadman; a near-cap step-d can take about 4,178 s and cross 11:45. Heavy redos add 600 s for the release but not its 65 s pre-roll.
+- **R7-13 limits.** Alias groups match recorded series exactly: coincidentally identical series would be grouped, and true aliases whose failed reads or numbers differ would be missed. `smc_enumeration` is untouched (PR #692 lane).
+- **R7-12, integration note.** Because G0_cap_W1 is one cap with one 1(f) term, an INCONCLUSIVE X-G sets the whole cap to 1,200 s, not only a D-to-X term (at least as conservative as the ruling).
+- **Infra Sol F1 (MEDIUM).** Only the R1 runtime inherits the host lock from the driver; its heater and powermetrics children do not, so a killed runtime with surviving children lets the driver retake and restore while they run (neither measures; the runtime's teardown stops them).
+- **Infra Sol F2 (MEDIUM).** The 10 s deferral cap plus the runtime's 15 s teardown watchdog can fire the watchdog about 25 s after the first signal, after the driver's 20 s kill. A fix would arm the watchdog when the first signal is held.
+- **R7-10 partial deviation (Sol F7, LOW).** For admitted nights the host state directory is in `night.log` and the admission record, not in `night/receipt.json` or `night/result.json` (write-once schemas).
+- **R7-11.** An unopenable lock file leaves the marker for a manual restore (no restore without the lock, per R7-5), unlike the round-6 cold pass's proposal; exec LOW-3's first half (a plan-2 admission refusal with no marker restores nothing) was not in the ruling text and is unchanged.
+- **Flaky test reported by the science builder.** `test_r1_runtime_e2e`'s SIGTERM-during-step-30b test failed once under load; it passed here (2 tests, 145 s, and again in the rerun).
+- **Process incident.** The science builder's mistaken Sol launch truncated another lane's `r7-sol-crit.events.jsonl`; that lane's owner should audit the codex rollout file named in LEAD-RULINGS-2 Round 7 instead.
+
+Carried over and still open:
+
+- **R1 plan window.** There is still no R1 plan and no `window_max_s` in the repo. The round-7 all-caps worst case is 46,887 s with no redo or retry, 52,287 s with one batch-window wait, and 73,887 s with every R6-2 retry (allowance 21,600 s) and one batch-window wait; add 1,200 s if the gated runs' 300 s idle falls outside their member bound. W1's `window_cap_s` of 44,640 s is below the no-redo case. The lead (or magistrate) must set the R1 plan's `window_max_s`.
+- **Round-6 cold pass observation (unverified).** R1's D → gated-run gap also contains a new runtime process, a model load and session start-up; whether W1 members have the same overhead is not recorded. The first R1 night can measure it.
+- **WP18 (Sol F7, round 6).** The seed-index fix still needs checking against the real `p7-PILOT.json` on the Mac.
 - **Exec LOW-3 scope.** Signal deferral applies only to a session close on the main thread.
 - **Hardware checks carried over from round 5:** the inventory sweep duration, the second SMC reader, and the heater start-state loop on the first R1 night.
