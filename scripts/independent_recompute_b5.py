@@ -1184,6 +1184,11 @@ class Window:
             bracket = {}
         recorded = get(bracket, "drift_allowances", "gross_energy", "allowance_j")
         result["allowance_recorded_j"] = recorded
+        # Structure only: the record's gross-family endpoint protocol word. The bracket writer records the two
+        # survivor bound terms only under replicated_endpoints (whole_window.py survivor_fields), so the
+        # comparator compares them only when the record can carry them (2026-11-07 release trace, D6).
+        protocol = get(bracket, "claim_families", "gross_energy", "endpoint_protocol")
+        result["recorded_endpoint_protocol"] = protocol if isinstance(protocol, str) else None
         if not finite(recorded):
             r.flag("neg8_allowance_unrecorded", "window", "no recorded gross allowance")
         # Agreement policy, unrounded joules; no printed cell half-width on the allowance.

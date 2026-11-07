@@ -4,6 +4,8 @@ D2: the recompute's rail idle power read attempt 1's rich idle telemetry while t
 REG 5.8's idle_subtracted_energy_j) is the last idle attempt the controller measured.
 D4: the recompute listed a collected member that never measured a request as a whole-machine member with null
 values, where the harvest's meter record (and so L9's disclosure) has no row for it.
+D6: the comparator required BETA's two survivor bound terms although the record's endpoint protocol never carries
+them.
 """
 import json
 from pathlib import Path
@@ -12,7 +14,11 @@ from types import SimpleNamespace
 import unittest
 
 from .support import assert_values_agree, bundle, dump, full_pack, recompute as r, run_cli
+from .test_comparator import cmp
+from .test_input_gate import CODED
 from .test_meter import stream_file
+from .test_rc_cmp8 import Round
+from .test_review_fixes import DISCLOSURE
 
 
 def rich(path, rows):
@@ -106,6 +112,62 @@ class UnmeasuredMemberTests(unittest.TestCase):
         # Every measured member keeps its row.
         self.assertTrue(line["members"])
         self.assertTrue(all(row["phases"]["request"].get("window_ns") for row in line["members"].values()))
+
+
+    def test_recompute_reads_the_record_protocol_word(self):
+        a = full_pack(self.root, "ALPHA", 5)
+        path = a / "withheld/neg8-rescreen-bracket.json"
+        bracket = json.loads(path.read_text())
+        bracket["bracket"]["claim_families"] = {"gross_energy": {"endpoint_protocol": "replicated_endpoints_with_midpoint"}}
+        dump(path, bracket)
+        rc, out, _ = run_cli({"ALPHA": a}, self.root / "neg8.json")
+        self.assertEqual(rc, 0)
+        self.assertEqual(out["windows"]["ALPHA"]["neg8"]["recorded_endpoint_protocol"], "replicated_endpoints_with_midpoint")
+
+
+SURVIVOR = ("disclosure/beta/neg8_allowance/bound_envelope_j", "disclosure/beta/neg8_allowance/bound_prediction_j")
+
+
+class Neg8SurvivorTermTests(Round):
+    """D6: the two survivor bound terms are compared only when the record's protocol can carry them."""
+
+    def drop_beta_terms(self):
+        line = next(r for r in self.files[DISCLOSURE]["window_lines"]["beta"] if r["line"] == "neg8_allowance")
+        for term in ("bound_envelope_j", "bound_prediction_j"):
+            del line["values_j"]["bracket.claim_families.gross_energy." + term]
+
+    def test_planned_protocol_record_without_terms_agrees(self):
+        self.drop_beta_terms()
+        self.ours["windows"]["BETA"]["neg8"]["recorded_endpoint_protocol"] = "replicated_endpoints_with_midpoint"
+        code, err, out = self.exit_code(CODED)
+        self.assertEqual((code, err), (0, ""))
+        keys = {r["key"] for r in out["comparisons"]}
+        self.assertFalse(set(SURVIVOR) & keys)
+        self.assertIn("disclosure/beta/neg8_allowance/drift_allowance_j", keys)
+
+    def test_survivor_protocol_or_unknown_still_requires_the_terms(self):
+        for protocol in ("replicated_endpoints", None, cmp.MISSING):
+            with self.subTest(protocol=protocol if isinstance(protocol, (str, type(None))) else "absent"):
+                self.setUp()
+                self.drop_beta_terms()
+                neg8 = self.ours["windows"]["BETA"]["neg8"]
+                if protocol is cmp.MISSING:
+                    neg8.pop("recorded_endpoint_protocol", None)
+                else:
+                    neg8["recorded_endpoint_protocol"] = protocol
+                code, _, out = self.exit_code(CODED)
+                self.assertNotEqual(code, 0)
+                failing = {r["key"] for r in out["comparisons"] if r["verdict"] != "AGREE"}
+                self.assertTrue(set(SURVIVOR) <= failing)
+                self.assertIn("expected/disclosure/window_lines/beta/neg8_allowance/survivor_terms", failing)
+
+    def test_printed_terms_are_compared_whatever_the_protocol(self):
+        self.ours["windows"]["BETA"]["neg8"]["recorded_endpoint_protocol"] = "legacy_single_member_endpoints"
+        self.ours["windows"]["BETA"]["neg8"]["bound_envelope_j"] += 1.0
+        code, _, out = self.exit_code(CODED)
+        self.assertNotEqual(code, 0)
+        failing = {r["key"] for r in out["comparisons"] if r["verdict"] != "AGREE"}
+        self.assertIn(SURVIVOR[0], failing)
 
 
 if __name__ == "__main__":
