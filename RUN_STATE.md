@@ -1083,7 +1083,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - The background-sampler lane for the R0 quiet guard (item 192, required before W1) is building in Codex cloud, based on `lane/2026-11-05-align-pilot10-benign`.
   - Analysis: the blinded D-188 comparator found r2 EQUIVALENT to r1 on real data. Analysis r3 (with the release-trace fixes) is being assembled for a real dry run on the laptop.
 
-195. **Magistrate activation a9031916 (Opus 5.5, headless, 2026-11-07 from 01:02 PST): R0 re-run 7 ran the whole SMC capture with no contention refusal, but the selection was inconclusive because a 100 ms coverage tolerance discarded about half of the real readings. Fix lane `fix/2026-11-07-r0-smc-coverage-cell` is building; R0 re-launches in the 06:15-11:05 PST gap after its gates.** No pending notices, no unread mail from Ed, no new directive.
+195. **Magistrate activation a9031916 (Opus 5.5, headless, 2026-11-07 from 01:02 PST): R0 re-run 7 ran the whole SMC capture with no contention refusal, but the sensor selection could not be trusted: a 100 ms coverage tolerance discarded about half of the real readings, and with that fixed the picks were power-gated placeholders on an unsettled baseline. Per Ed's instruction, three blind fresh designs were reconciled into a new selection rule (DECISION D1-D6, Errata 1-5), built and reviewed over four rounds, and merged as #692 (`5f817856b`). R0 re-run 8 targets the 17:15-23:05 PST gap; read this item's last "Next activation" pointer.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0810Z` (08:11:31Z-08:57:59Z, 2,789 s): status `fail`, `complete_r0` false, `stopped_after` smc `inconclusive`. Ladder and long-decode did not run.
   - host, host-identity, model-load, load (NLL 11.0368), generated (0 off-spec), memory (peak 37,025,053,788 against 45e9): pass. Checkpoint not required. D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
   - smc: exit 0, 1,845.6 s. 305 quiet observations, all clean. 1,800 readings of 403 keys, zero read errors. Every key rejected with "insufficient phase coverage" (0.12 idle, 0.29 load, 0.22 recovery).
@@ -1187,6 +1187,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
     - D5's slow rule is chosen on this settled capture: print the alternatives and decide with the R1 lead.
     - R1-lane deferrals are in DECISION.md Erratum 5.
   - (4) WP18 and items 188 (3)-(4) are unchanged.
+
+- **Merged (08:45 PST):** #692 is merged into `lane/2026-11-05-align-pilot10-benign` at `5f817856b`.
+  - CI on the final head `172399c58`: 21 pass, 1 skipped. Shard 5 takes about 2-3 h on this lane because of BYTES archive tests; that is normal (it took 3 h on #691).
+  - `$M` was fast-forwarded `e1a91226e` -> `5f817856b` and is clean. Venv `0.31.2 0.31.3 5.12.1`. `r0_desk.json` smc_step: idle 300, idle_max 1200, load 900, recovery 600.
+  - The merged code on the re-run 7 journal: Tf18 / TaLP, TVH3 only excluded.
+  - Ed was mailed at 06:25 (message `1a1b66038fcd2487`). No reply.
+- **Next activation (replaces every pointer above in item 195):**
+  - (1) At or after 17:15 PST (after the 17:09 scan), launch R0 re-run 8 on `$M` at `5f817856b`:
+    - the launch checks in item 194: canonical desk-fence tests, `hw.model`, venv, Spotlight STOP/CONT, preflight, battery float;
+    - stop the Codex MCP adapter;
+    - `/opt/homebrew/opt/python@3.14/bin/python3.14 /Users/edr/code/JouleWise/scripts/launch_align_r0.py launch --custody-root /Users/edr/night-custody/magistrate --magistrate-pid <watchdog-lock pid> --deadline <23:05 PST epoch> --repo $M --python-bin $M/.venv/bin/python --config $M/configs/align/v4/r0_desk.json --output /Users/edr/night-align/r0-v4-<UTC yyyymmddThhmmZ> --disk-path /Users/edr`;
+    - mail Ed on thread `1a198fafa8fc12ba`, then exit at once.
+    - A launch before 17:15 risks the 17:09 scan. The gap is 5 h 50 min against about 4.5 h of R0.
+  - (2) After R0: item 185 (1) on the new record. The SMC section now also carries:
+    - the idle settle record (actual idle seconds, settled, settle keys);
+    - per-key `baseline_unsettled`;
+    - the D1(d) reference, its rise and the exclusions;
+    - `heat_ordering_indeterminate` and `heat_ordering_wide_exclusion`;
+    - `alternative_slow_picks`.
+    Decide the D5 slow rule on this capture with the R1 lead. The candidates: Fable band-hold (default), design-literal, Opus and Sol.
+  - (3) WP18 (item 191) and items 188 (3)-(4) are unchanged. The R1-lane deferrals are in DECISION.md Erratum 5.
 
 194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
