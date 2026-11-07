@@ -720,3 +720,97 @@ executing MEDIUM-4 and cold pass LOW-3.
    W1 launcher); the R1 night plan (`MEASUREMENT_ROOT`, `NIGHT_DIR`, the two
    `sudo -n pmset -c powermode 0|2` rules, avoiding 11:45-13:15); the
    hardware check of the heater start-state loop on the first R1 night.
+
+## Round 5 integration (two lanes onto `54e844b87`)
+
+This is code and kit integration only. No measurement ran, no model weights were loaded and no v3 kit bytes changed. The rulings are recorded verbatim, with the commits that implemented each one, in `docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md`. There were two `--no-ff` merges, in this order:
+
+| Merge | Lane @ head | What landed |
+|---|---|---|
+| `e3e52ce5a` (1/2) | `lane/2026-11-06-v4-r1-round5-science@e8bfd4ed5` | R5-1 (gated runs and X-G consume the soak R; bounded cool-to-band precool; a timeout is INCONCLUSIVE), R5-2 (planning deadman armed after preheat + G0; start states warmest first), R5-3 (a leg without its own G0 release is INCONCLUSIVE), R5-5 (A-B-A before step-d; slots under the adopted series mode; full-inventory journals; 600 s recovery; thermometry bar in the kit), R5-7 (S6 TODO; member 5 captures and the others consume). No conflicts. |
+| `e7aec1ea9` (2/2) | `lane/2026-11-06-v4-r1-round5-infra@70986d5c9` | R5-4 (no unbudgeted gated D; the kit binds B_D and the thermal policy and asserts ruling 1(f)), R5-6 (W1 under an adopted High Power), R5-8 (`scripts/align_v4_wp18_fixtures.py`), R5-9 (Sol F2/F3, `Segment.close`, sizing provenance, hf_pins bytes), R5-10 (the LOW set). Conflicts in the driver, runtime, synthetic stand-in, contract doc, three test modules and two generated files. |
+
+Conflict resolutions (full list in the `e7aec1ea9` message):
+
+- **Driver run loop.** The science lane moved the A-B-A legs into the phase loop, before step-d (R5-5). The infra lane's standalone A-B-A block after the loop is dropped. Science's `aba_adoption` handles the release timeout and R5-3, and it calls infra's stricter `high_power_adoption`. After step-d, the driver checks in this order:
+  1. the member powermode (science);
+  2. the soak-reference consumption (science);
+  3. `_check_step_d` (infra).
+
+  The registration record is the union: `thermometry`, `s6_tuning` and `x_g` from science, `budget_fit_inputs` from infra.
+- **A-B-A batch-window bound (an integration decision).** Infra's `aba_leg_bound_s` read step-d's I_D. Under the R5-5 order step-d has not run when the legs start, so every night would have refused at A1. The bound now uses `ABA_LEG_I_D_BOUND_S = 1750`, the largest I_D the runtime admits:
+
+      65 + 600 + 1750 + 1.13544 × 1580 + 120 ≈ 4,329 s
+
+  The legs keep G0-entry arming (no re-arm), so the formula still holds. A larger bound only waits longer for the 11:45-13:15 window. The infra test now asserts this value and that the legs precede step-d. With the infra function, the run refuses at A1, so the test fails.
+- **`Segment.close`.** The science lane's `stop_inventory` was caught with `except Exception`. A TERM there would have skipped every session close (powermetrics included) and the journals, against R5-9. It is widened to BaseException. The extended close test fails without this (`SystemExit: 143`).
+- **Test fixtures, made consistent with the other lane:**
+  - Science's soak-reference runtime test writes the step-d complete custody, which F3 requires.
+  - Science's precool-timeout test fills `inputs.R1.thermal_policy` from the slots (R5-4), so that only the duty bar refuses.
+  - Infra's close test sets the inventory attributes.
+  - The FakeWorld, `r1_record` and WP22 r1_slots stand-ins are unions.
+- **Generated files.** `plan_tree.json` and `identity_pins.json` were regenerated with `scripts/align_v4_kit.py`. `validate_align_v4_w1_plan.py --regenerate-template` leaves the template unchanged. Rerunning the generator changes nothing.
+
+### Kit check on the round-5 head
+
+- `git diff origin/lane/2026-11-05-align-pilot10-benign -- configs/campaigns/align_pilot_v3` is empty, both against HEAD and against the worktree.
+- `scripts/align_v4_kit.py --check` reports no drift and exits **1**. It is blocked on exactly nine leaves, the same set as in round 4:
+  - `WP18.X.max_turns`, `WP18.X.token_fixture_sha256`, `WP18.Y.max_turns`, `WP18.Y.token_fixture_sha256`. These clear once the magistrate runs `scripts/align_v4_wp18_fixtures.py` on the Mac and commits its outputs (kit-delivery note in the infra run report).
+  - `R0.reasoning_effort`.
+  - `R1.B_D`, `R1.I_D`, `R1.T_dead`, `R1.thermal_policy`.
+
+  After WP18, the leaves left are R0 and R1 only. Beyond the leaves, `require_ready` now also needs:
+  - an r1_slots record whose slots were measured under the adopted mode;
+  - a passing thermometry bar;
+  - `inputs.R1.B_D` ≤ `slots.B_D`;
+  - a thermal policy equal to N_chunk/S6/S7;
+  - ruling 1(f) fitting T_dead.
+
+  `require_w1_ready` also needs both WP18 fixture files.
+- `validate_align_v4_w1_plan.py` on the committed template still refuses its `PENDING_R1` placeholders.
+
+### Suite tail (round 5 integration, code head `e7aec1ea9`)
+
+Every run used `/private/tmp/jwsol/venv-both/bin/python -B` under `nice -n 19 taskpolicy -b`, one module per process. `xargs -P 3` ran three at a time, the slowest modules first, with a per-module `TMPDIR` under `/private/tmp/jwr5-tmp/suite`. The commits after `e7aec1ea9` are docs only.
+
+- **Whole `tests/align`, one module per process (115 modules):** every module rc=0, OK. In total, **Ran 1534 tests, skipped=27**. Slowest walls:
+  - test_moe_calibration 3,348 s;
+  - test_moe_review 991 s;
+  - test_analysis_metadata_baseline 831 s;
+  - test_r0_mlx_native 522 s;
+  - test_analysis_budget_pilot 515 s.
+
+  Selected module tails:
+  ```
+  test_r1_rehearsal         Ran 62 tests in 9.325s    OK
+  test_r1_runtime           Ran 31 tests in 58.277s   OK
+  test_r1_runtime_e2e       Ran 2 tests in 74.707s    OK
+  test_r1_runtime_contract  Ran 9 tests in 0.005s     OK
+  test_r1_inventory         Ran 11 tests in 0.953s    OK
+  test_v4_kit               Ran 87 tests in 11.072s   OK
+  test_v4_wp18_fixtures     Ran 11 tests in 0.178s    OK
+  test_v4_w1_plan           Ran 10 tests in 0.855s    OK
+  test_v4_prequal           Ran 33 tests in 5.885s    OK (skipped=3)
+  test_v4_powermode_record  Ran 9 tests in 0.352s     OK
+  test_external_volume      Ran 23 tests in 0.024s    OK
+  test_protocol_v4_doc      Ran 5 tests in 0.613s     OK
+  test_r0_mlx_native        Ran 1 test in 520.330s    OK
+  test_v4_w1_synthetic      Ran 18 tests in 3.436s    OK (skipped=14)   # full windows gated by JW_WP22_FULL
+  ```
+- **`JW_WP22_FULL=1 tests.align.test_v4_w1_synthetic` (the WP22 synthetic W1 dry run):** Ran 18 tests in 217.342s, OK (expected failures=1). Only F3 is expected to fail, as in round 4.
+- **`tests.test_align_pilot_session`:** Ran 16 tests in 369.915s, OK.
+- `tests.test_run_night` and the other non-align modules the infra lane touched were not rerun here. The infra lane's report has their tails on its head, and the merge did not touch those files.
+
+### Open after round 5 (for the lead)
+
+- **R5-1 design point.** A gated run's G0 starts from the soak band, but W1's D-after-D G0 follows only the 300 s inter-member idle. The duty bar's G0 share may be lower than W1 will see. The alternative is a fixed 300 s idle before each gated run instead of cool-to-band.
+- **Ruling 1(f) will likely bind on hardware.** At about 11 tok/s, (6,144 + 4,096)/11 ≈ 930 s against T_dead ≈ 1,200-1,280 s, which leaves about 270-350 s for worst G0 + (G1 + H) + prefill + tool. A non-fit refuses W1 and names the largest fitting B_D. The lead then needs either ruling 1(e)'s fallback order or a ruling on the "last admitted turn" term.
+- **Classification digest not bound.** Protocol v4 asks WP16 to bind `thermometry.D.classification_sha256` into the frozen inputs. No lane does yet: the kit checks the lists, the bar and the pick verification, but not that `inputs.R1.thermal_policy` carries the digest.
+- **Inventory journal on hardware.** Coverage can fail closed if a T*/F* sweep takes more than about 200 ms. A second SMC reader runs beside the sidecar during the steps, which is untested on hardware. Check the sweep durations in `inventory/inventory_journal.jsonl` on the first R1 night.
+- **Changed-pick S7.** It uses the quiet-window median as R, not the soak. The lead's verification should confirm this.
+- **`cooldown_after_30b` (600 s).** It is kept, although step-30b now ends with a 600 s recovery. Dropping it would save 600 s per night.
+- **S6 tuning record.** The science `s6_tuning` TODO record is not the kit's tuning receipt. A tuning must record `{authority, from_c = S5, to_c = S6 ≤ 2.0}`.
+- **W1 High Power marker.** If `run_night` is SIGKILLed on a W1 High Power night, the next night refuses on the mode alone (fails closed), and a manual `sudo -n pmset -c powermode 0` is needed.
+- **Inconclusive scope.** Only an A-B-A leg whose own G0 did not release is INCONCLUSIVE. Other incomplete legs still refuse R1.
+- **LOWs left, with reasons.** These are listed in `LEAD-RULINGS-2.md` under R5-10. The round-3 `recovery_curve` row-shape check is still open: neither lane added it.
+- **Integration slip.** On this run the first suite launcher's concurrency cap did not work: `jobs` inside a command substitution sees no jobs. About 115 test modules started at once for roughly two minutes, and the load average reached about 48. I stopped them by process tree and by cwd; neither protected process (61827, 89849) was touched. I then reran the whole suite under `xargs -P 3`. Every tail below comes from that rerun.
