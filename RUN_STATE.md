@@ -1042,6 +1042,35 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+193. **Magistrate activation ac09cac6 (Opus 5.5, headless, 2026-11-06 from 23:12 PST): R0 re-run 5 was refused in `smc` by the 23:09 PST softwareupdated background scan, which is real, measured contention. R0 re-launched about 23:20 PST, timed into the 6 h gap before the next scan.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261107T0631Z` (22:32:18-23:09:44 PST, 2,246 s): status `fail`, `complete_r0` false.
+  - Passed: host, host-identity, model-load, generated (no off-spec echo) and memory (peak 37,024,627,804 bytes against 45e9; swap flat).
+  - load passed: NLL 11.0368 against the reference, delta -0.027.
+  - checkpoint: not required (rewind fraction 0.0 over 12 transitions).
+  - smc exited 3 `NotQuiet` after 1,310 s (idle 300 and load 900 complete, recovery at sample 78 of 600): over 35.9 s, softwareupdated pid 547 ran at 0.0704 CPU-s/s and duetexpertd pid 834 at 0.0670, against the 0.05 limit. The host aggregate, 0.364, was flagged and not judged.
+  - D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
+  - Item 190 expected a `quiet_observations` field. The SMC row has none, because a refused probe returns only the refusal.
+- **Cause:** softwareupdated's automatic background scan. `/var/log/install.log` shows `AutoBackgroundScanFinished` every 6 h, at about 05:09, 11:09, 17:09 and 23:09 PST, every day from 11-02 to 11-06. This one finished at 23:09:53, the minute of the refusal. duetexpertd burst at the same moment; its lifetime average is about 0.0007 CPU-s/s. 30 s later neither daemon was using measurable CPU. It is not an R0 defect. Under item 181 this is the second `smc` failure in a row, with a different cause from run 4 (the #691 snapshot artefact). It is not a third consecutive failure, so it does not go to Ed.
+- **Remedy: timing.** No setting was changed (directive #417 leaves the update settings to Ed). The re-run starts right after the 23:09 scan. The next scan is at about 05:09 PST, so the run has about 5.8 h; a full all-pass R0 is planned at 3-4 h (item 176). A run still going at 05:09 may be refused the same way.
+- Record: branch `records/2026-11-07-align-r0-v4-rerun5` (`ea89c4d3f`, `docs/align/r0/2026-11-07-rerun5/`: report.json sha256 `6fb21198…1c48`, report.md, NOTE.md, D-pin output, SMC journal sha256 `022c8681…a68b`).
+- **Re-launch** under items 181 and 185 (3):
+  - Canonical `37c969429`; desk-fence tests 35 OK under python3.14.
+  - Measurement checkout `e1a91226e`, clean; Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`.
+  - Spotlight 716 and 73957 `T` after STOP and `S` after CONT.
+  - Preflight: AC true, free 84,010,049,536 bytes. Battery: ExternalConnected Yes, IsCharging No, InstantAmperage 0.
+  - `--output /Users/edr/night-align/r0-v4-20261107T0720Z`, `--deadline 1794072000` (09:20 PST 11-07), config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`.
+  - The Codex MCP adapter is stopped before launch.
+- Process note: this activation ran one `git fetch` in the canonical root at launch. Nothing was armed and the tree did not move.
+
+**Next activation (written 2026-11-06 by activation ac09cac6; item 193; item 181 holds):**
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0720Z`. Commit to `docs/align/r0/2026-11-07-rerun6/` on a new branch from `e1a91226e`, and email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`. If the record directory is absent, follow item 185 (4).
+(2) **If R0 passes:** item 185 (2). **If it fails or is inconclusive:** item 185 (3)-(4).
+  - Compare any contention refusal's interval with the softwareupdated scan times (`grep AutoBackgroundScanFinished /var/log/install.log`).
+  - A refusal at the 05:09 scan means the run was too long for the gap. Re-launch right after a scan.
+  - A refusal by `smc` for any other cause makes three in a row: mail Ed (item 181) and wait.
+(3) **WP18 fixtures (item 191):** still to run once R0 has exited and before any new R0 launch, since it takes minutes.
+(4) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
+
 192. **Laptop lead (interactive session 1544c617, Opus 5.5, through a delegate), 2026-11-06 about 22:30 PST: review delivery. The executing and cold review gates of PR #691 (R0 contention, `fix/2026-11-07-r0-census-cpu-interval`) at head `21da63a71` were run off-Mac on the analysis Air (offload rule: item 180 / Ed 11-06). Both verdicts are ADMIT_WITH_FIXES. Neither review found a blocker. Neither verdict is ADMIT, so the gates are not yet satisfied: the findings below are the magistrate's to fix or disposition.** This item schedules nothing; when R0 runs is the magistrate's call. Nothing was pushed to the PR branch, and the PR was not merged or marked ready.
 - **Executing review** (Opus 5.5, laptop lead): ADMIT_WITH_FIXES. https://github.com/mpmdw/JouleWise/pull/691#issuecomment-6703316986
   - Covers the delta `3297762ff..21da63a71` and the full diff, checked against the item 189 ruling. Both probes judge per process at 0.05 CPU-s/s over at least 30 s. The `CpuQuietProbe` aggregate is journaled and flagged (`aggregate_above_0_05`) and never judged.
