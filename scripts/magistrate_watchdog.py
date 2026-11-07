@@ -242,6 +242,10 @@ class Dependencies:
     sleep: Callable[[float], None]
     fixture_census: Callable[[], Mapping[str, Any]] | None = None
     driver_probe: Callable[[], CensusObservation] | None = None
+    # Lead ruling R6-7: the command boundary for the J4 High Power restore
+    # (``sudo -n pmset -c powermode 0`` and the ``pmset -g custom`` read-back);
+    # None is the production subprocess runner.
+    power_runner: Callable[[Sequence[str]], Any] | None = None
 
 
 class RealProcessTable:
@@ -1104,6 +1108,33 @@ def _write_launch_abandoned(
         # FileExistsError: another tick wrote it. Anything else: no marker,
         # so no key and no release on this tick.
         return
+
+
+def _restore_abandoned_high_power(
+    plan: NightPlan, storage: Storage, deps: Dependencies, now: dt.datetime
+) -> dict[str, Any] | None:
+    """Lead ruling R6-7 (round-5 executing review MEDIUM-4): the J4 release
+    knows no driver ran for this plan, so a W1 session that set High Power for
+    it would leave the host at 2. Restore Automatic for the host-level marker
+    this plan owns. A marker another plan owns (a retried night's) is left
+    alone, and nothing is restored while a measuring night holds the host
+    night lock; the retry's own install re-enters High Power. Never raises.
+    """
+    if storage.dry_run:
+        return None
+    try:
+        from joulewise.align.apple import powermode
+        record = powermode.restore_owed(
+            [powermode.host_marker_path()], runner=deps.power_runner, reason="launch_abandoned",
+            owner={"custody_root": plan.custody_root})
+        if record.get("action") != "none":
+            storage.append_jsonl(storage.root / "events.jsonl", {
+                "schema": EVENT_SCHEMA, "kind": "high_power_restore", "plan_id": plan.plan_id,
+                "epoch_s": now.timestamp(), "record": record,
+            })
+        return record
+    except Exception:  # noqa: BLE001 - a restore attempt never changes the release
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -2071,6 +2102,7 @@ def decide(
                     "plan_id": plan.plan_id, "key": key, "epoch_s": wall.timestamp(),
                 })
                 if kind == "launch_abandoned":
+                    _restore_abandoned_high_power(plan, storage, deps, wall)
                     notices = state.setdefault("notice_pending", [])
                     notice_id = f"launch-abandoned-{key}"
                     if not any(isinstance(item, dict) and item.get("id") == notice_id

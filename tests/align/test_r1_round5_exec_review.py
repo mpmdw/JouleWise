@@ -176,6 +176,12 @@ args = type("Args", (), dict(output=root / "run", registration=root / "registrat
                              runtime=["fake-runtime"], include_4bit=False, synthetic=True))()
 with patch.object(r1, "_now_local", lambda: NOON_SAFE), patch.object(r1, "_run", runner):
     code = r1.run(args)
+# The burst's later signals may land after run() restored the default
+# handlers; the driver's work is done, so the reporting child ignores them
+# (with fakes the teardown takes ~ms, so this raced the 50 ms burst spacing).
+import signal
+for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+    signal.signal(_sig, signal.SIG_IGN)
 print(json.dumps({"code": code, "mode": world.mode}))
 '''
 

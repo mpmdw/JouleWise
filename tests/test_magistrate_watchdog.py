@@ -32,6 +32,10 @@ from joulewise.night_plan_writer import (
 )
 from scripts import magistrate_watchdog as wd
 
+# Lead ruling R6-7: the host-level High Power marker and night lock never
+# touch the real host path from a test process.
+os.environ.setdefault("JOULEWISE_HOST_STATE_DIR", tempfile.mkdtemp(prefix="jw-host-power-"))
+
 
 RETIRED_V1 = (
     Path(__file__).resolve().parent / "fixtures" / "night_plan_v1_retired.json"
@@ -3025,6 +3029,59 @@ class TerminalWindowReleaseTests(WatchdogTestCase):
             (night / name).write_text("{}", encoding="utf-8")
         self.assertTrue(wd.plan_span_active(plan, self.base.timestamp() + 600, self.harness.storage))
         self.assertTrue(wd.plan_is_armed(plan, self.base.timestamp() + 600, self.harness.storage))
+
+    # -- lead ruling R6-7: the J4 release restores the High Power an armed W1 session set ----
+
+    def _abandoned_with_host_marker(self, owner_custody: Path | None = None, *, lock_held: bool = False):
+        from joulewise.align.apple import powermode
+        env = mock.patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(self.temp / "host-power")})
+        env.start()
+        self.addCleanup(env.stop)
+        self.honor_marker()
+        plan = self.write_hazard_plan(t0=self.base.timestamp() - wd.LAUNCH_LIVENESS_S - 60)
+        marker = Path(powermode.host_marker_path())
+        powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG,
+                                    owner={"custody_root": owner_custody or plan.custody_root})
+        host = {"mode": 2, "calls": []}
+
+        def power_runner(argv):
+            argv = tuple(argv)
+            host["calls"].append(argv)
+            if argv == ("sudo", "-n", "/usr/bin/pmset", "-c", "powermode", "0"):
+                host["mode"] = 0
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            if argv == ("/usr/bin/pmset", "-g", "custom"):
+                return subprocess.CompletedProcess(argv, 0, f"AC Power:\n powermode {host['mode']}\n", "")
+            raise AssertionError(f"unexpected command {argv}")
+        self.harness.deps.power_runner = power_runner
+        if lock_held:
+            other = powermode.HostLock(role="a retried night, measuring")
+            self.assertTrue(other.acquire())
+            self.addCleanup(other.release)
+        decision, _state = self.decide()
+        self.assertEqual("LAUNCHING", decision.state)
+        self.assertEqual("launch_abandoned", self.events("terminal_release")[0]["release_kind"])
+        return plan, marker, host
+
+    def test_launch_abandoned_restores_automatic_for_the_plans_own_marker(self) -> None:
+        # Round-5 executing review MEDIUM-4: an abandoned W1 launch left the host at 2.
+        _plan, marker, host = self._abandoned_with_host_marker()
+        self.assertEqual(0, host["mode"])
+        self.assertFalse(marker.exists())
+        [event] = self.events("high_power_restore")
+        self.assertEqual("restored", event["record"]["action"])
+
+    def test_launch_abandoned_leaves_another_plans_marker_alone(self) -> None:
+        _plan, marker, host = self._abandoned_with_host_marker(self.temp / "a-retried-session")
+        self.assertEqual((2, []), (host["mode"], host["calls"]))
+        self.assertTrue(marker.exists())
+
+    def test_launch_abandoned_never_restores_under_a_measuring_night(self) -> None:
+        _plan, marker, host = self._abandoned_with_host_marker(lock_held=True)
+        self.assertEqual((2, []), (host["mode"], host["calls"]))
+        self.assertTrue(marker.exists())
+        [event] = self.events("high_power_restore")
+        self.assertEqual("deferred_measuring_night", event["record"]["action"])
 
     # -- negative controls ------------------------------------------------------------------
 

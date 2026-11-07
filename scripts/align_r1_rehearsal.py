@@ -11,6 +11,7 @@ declared in ``joulewise/align/apple/r1_runtime_contract.py`` and
 from __future__ import annotations
 
 import argparse
+import hashlib
 from contextlib import AbstractContextManager
 from datetime import datetime, time as wall_time, timedelta
 import json
@@ -33,7 +34,7 @@ from joulewise.align.apple import external_volume  # noqa: E402
 
 SCHEMA = "joulewise.align.r1_slots.v1"
 SLOT_NAMES = tuple(f"S{i}" for i in range(1, 10)) + (
-    "B_D", "I_D", "T_dead", "N_chunk", "t_decline", "class",
+    "S5_fast", "B_D", "I_D", "T_dead", "N_chunk", "t_decline", "class",
 )
 PLANNING_START_OFFSETS_C = (0.0, 2.0, 4.0)
 # LEAD-RULINGS-2 R5-2: the designed start states run warmest first (R + 4,
@@ -177,9 +178,12 @@ class PowerModeGuard(AbstractContextManager):
     LIST = ("sudo", "-n", "-l")
     QUERY = ("/usr/bin/pmset", "-g", "custom")
 
-    def __init__(self, runner: Callable = _run, marker: Path | None = None):
+    def __init__(self, runner: Callable = _run, marker: Path | None = None, host_marker: Path | None = None):
         self.runner = runner
         self.marker = marker
+        # Lead ruling R6-7: the same obligation at the host-level path every
+        # later session, night admission and the watchdog read.
+        self.host_marker = host_marker
         self.records: list[dict] = []
         self.armed = False
 
@@ -199,8 +203,10 @@ class PowerModeGuard(AbstractContextManager):
         self.records.append({"point": "restore_automatic", "exit_code": result.returncode,
                              "stdout": result.stdout, "stderr": result.stderr})
         self.armed = False
-        if result.returncode == 0 and self.marker is not None:
-            self.marker.unlink(missing_ok=True)
+        if result.returncode == 0:
+            for marker in (self.marker, self.host_marker):
+                if marker is not None:
+                    marker.unlink(missing_ok=True)
         return result.returncode == 0
 
     def __enter__(self):
@@ -222,6 +228,10 @@ class PowerModeGuard(AbstractContextManager):
         if self.marker is not None:
             self.marker.parent.mkdir(parents=True, exist_ok=True)
             self.marker.write_text("high-power restoration required\n")
+        if self.host_marker is not None:
+            from joulewise.align.apple import powermode
+            powermode.write_host_marker(self.host_marker, tag=powermode.R1_MARKER_TEXT,
+                                        owner={"writer": "R1 driver"})
         # The marker must predate High Power: SIGKILL at any later instruction
         # leaves a durable host-level restoration obligation.
         self._must(self.HIGH, "high_failed")
@@ -752,7 +762,7 @@ def write_soak_reference(output, soak_row):
     value = {"schema": SOAK_REFERENCE_SCHEMA, "source_segment": soak_row["name"],
              "source_output": soak_row["output_dir"], "attempt": soak_row["attempt"],
              "window_s": SOAK_TAIL_S, "sensors_c": {k: v["mean_c"] for k, v in detrended.items()},
-             "detrended": detrended}
+             "detrended": detrended, "sensor_roles": (soak_row.get("result") or {}).get("sensor_roles")}
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
     return path
 
@@ -962,6 +972,7 @@ def _check_precool(name, result):
     curve = result.get("recovery_curve")
     if not isinstance(curve, list) or not curve:
         raise Refusal(f"{name}: runtime omitted the recovery curve (ruling 1(c))")
+    _check_recovery_curve(name, curve)
     if not isinstance(result.get("released"), bool):
         raise Refusal(f"{name}: idle-until-soak must report released (bool)")
     return result["released"]
@@ -1015,6 +1026,42 @@ def aba_leg_bound_s(runtime_argv):
     from scripts.align_v4_kit import DEADMAN_FACTOR
     return (G0_PREROLL_S + G0_RELEASE_BOUND_S + ABA_LEG_I_D_BOUND_S
             + DEADMAN_FACTOR * runtime_step_deadman_s(runtime_argv) + LEG_BOUND_MARGIN_S)
+
+
+def night_worst_case_s(runtime_argv=None, include_4bit=False):
+    """Round-5 cold pass LOW-6 (lead ruling R6-8): the all-caps wall of one
+    R1 night with no redo, from this phase table and its caps (a timed segment
+    its duration or cap, a quiet model segment its ruling 8 bound, an A-B-A
+    leg its release + member bound, any other model segment the 1,800 s
+    member bound). The calibration brackets and the harvest are not bounded
+    here. Each quiet-segment redo (MAX_SEGMENT_REDOS) adds a release and the
+    segment again, and one ruling 8 batch-window wait adds up to 5,400 s.
+
+    Round-6 integration: the table is the R6-1/R6-2/R6-6 one, with the
+    runtime config's calibration precool cap (as ``run`` builds it), and
+    ``r6_2_retry_max_s`` is the all-caps cost of the one R6-2 retry (precool +
+    segment again) that each G0-inconclusive-capable segment may take."""
+    rows = []
+    precool_cap_s = runtime_precool_cap_s(runtime_argv)
+    retry_s = 0.0
+    for name, kind, duration, _class in phase_plan(include_4bit, precool_cap_s=precool_cap_s):
+        if kind in contract.HIGH_POWER_KINDS:
+            bound = aba_leg_bound_s(runtime_argv)
+        elif kind in ("calibration-pre", "calibration-post"):
+            bound = 0.0
+        elif duration is not None:
+            bound = float(duration)
+        else:
+            bound = float(SEGMENT_BOUND_S.get(kind, QUIET_SEGMENT_BOUND_S))
+        rows.append({"name": name, "kind": kind, "bound_s": bound})
+        if kind in contract.G0_INCONCLUSIVE_KINDS:
+            retry_s += precool_cap_s + bound
+    (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
+    total = math.fsum(row["bound_s"] for row in rows)
+    wait = float((h1 * 60 + m1 - h0 * 60 - m0) * 60)
+    return {"segments": rows, "no_redo_s": total, "precool_cap_s": precool_cap_s,
+            "batch_window_wait_max_s": wait, "with_one_batch_wait_s": total + wait,
+            "r6_2_retry_max_s": retry_s, "with_retries_and_one_batch_wait_s": total + retry_s + wait}
 
 
 def budget_fit_inputs(step_d, gated, deadman_rows=()):
@@ -1153,9 +1200,23 @@ def _check_soak_reference_consumed(name, result, soak_reference):
         raise Refusal(f"{name}: gated run did not consume the soak reference R "
                       f"(reference_source {result.get('reference_source')!r})")
     reference = _finite_number(result.get("reference_c"), f"{name}.reference_c")
-    soak = json.loads(Path(soak_reference).read_text())["sensors_c"]
-    if not any(math.isclose(reference, float(v), abs_tol=1e-9) for v in soak.values()):
-        raise Refusal(f"{name}: reference_c {reference} is not a soak reference value")
+    soak = json.loads(Path(soak_reference).read_text())
+    slow_key = (soak.get("sensor_roles") or {}).get("s_slow")
+    slow = (soak.get("sensors_c") or {}).get(slow_key)
+    if (isinstance(slow, bool) or not isinstance(slow, (int, float)) or not math.isfinite(slow)
+            or not math.isclose(reference, slow, rel_tol=0, abs_tol=1e-9)):
+        raise Refusal(f"{name}: reference_c {reference} is not the soak s_slow reference value")
+
+
+def _check_recovery_curve(name, curve):
+    """Ruling 1(c): finite [t_s, S_slow] pairs in acquisition order."""
+    previous = -math.inf
+    for row in curve:
+        if (not isinstance(row, list) or len(row) != 2
+                or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in row)
+                or row[0] < previous):
+            raise Refusal(f"{name}: recovery curve must contain finite [t_s, S_slow] rows with non-decreasing t_s")
+        previous = row[0]
 
 
 QUIET_KINDS = ("idle", "step-30b", "step-d") + tuple(
@@ -1172,7 +1233,12 @@ def run(args):
     results = {}
     # Resolve the runner at call time so synthetic rehearsals can replace the
     # complete command boundary (runtime, SMC journal, sudo and pmset).
-    guard = PowerModeGuard(_run, marker)
+    from joulewise.align.apple import powermode
+    guard = PowerModeGuard(_run, marker, Path(powermode.host_marker_path()))
+    # Lead ruling R6-7: R1 measures holding the host night lock, so no session
+    # start or late launchd fire restores Automatic under its High Power legs.
+    host_lock = powermode.HostLock(role="R1 driver")
+    staged_registration = None
     old_handlers = {}
 
     stopping = []
@@ -1198,6 +1264,12 @@ def run(args):
         except FileExistsError as error:
             raise Refusal(f"output directory already exists: {output}") from error
         created = True
+        try:
+            locked = host_lock.acquire()
+        except OSError as error:
+            raise Refusal(f"powermode.host_lock_unavailable: {error}") from error
+        if not locked:
+            raise Refusal("powermode.host_lock_held: another night holds the host night lock")
         # Ruling 20 at t0, before any powermode or runtime work.
         watch.check("t0")
         # R6-1/R6-2 inputs, also before any powermode or runtime work.
@@ -1371,8 +1443,13 @@ def run(args):
                         "projected_mde": mde, "battery": battery}
         reg = args.registration.resolve()
         reg.parent.mkdir(parents=True, exist_ok=True)
-        reg.write_text(json.dumps(registration, indent=2, sort_keys=True) + "\n")
-        record.update(status="complete", **{k: v for k, v in registration.items() if k not in ("schema", "source")})
+        # Round-5 executing review LOW-6 (lead ruling R6-8): r1_result.status
+        # is the authority for committing r1_slots, so the registration is
+        # written only after a terminal record that says complete (finally).
+        staged_registration = (reg, json.dumps(registration, indent=2, sort_keys=True) + "\n")
+        record.update(status="complete", registration_path=str(reg),
+                      registration_sha256=hashlib.sha256(staged_registration[1].encode()).hexdigest(),
+                      **{k: v for k, v in registration.items() if k not in ("schema", "source")})
         return 0
     except BaseException as error:
         record.update(status="refused" if isinstance(error, Refusal) else "aborted",
@@ -1390,7 +1467,13 @@ def run(args):
         # A second idempotent attempt covers setup failures before __enter__ and
         # exceptions raised by context teardown itself.
         try:
-            guard.restore()
+            if host_lock.held:
+                guard.restore()
+            else:
+                # R6-7 (round-6 Sol critique): without the host night lock this
+                # run never changed the mode, and another night may be
+                # measuring under High Power; never restore under it.
+                record["restore_skipped"] = "host night lock not held: this run never changed the AC powermode"
         except BaseException as error:  # noqa: BLE001 - the terminal record must still be written
             record.setdefault("teardown_errors", []).append(f"restore: {type(error).__name__}: {error}")
         record["powermode"] = guard.records
@@ -1401,8 +1484,19 @@ def run(args):
                                   "reasons": [f"{type(error).__name__}: {error}"]})
         record["external_volumes"] = watch.records
         _write_result(output, record, created)
+        if staged_registration is not None and record.get("status") == "complete":
+            _commit_registration(*staged_registration)
+        host_lock.release()
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
+
+
+def _commit_registration(path, text):
+    """Exec LOW-6: r1_slots.json appears (atomically) only beside a complete
+    r1_result.json; a run that ends any other way never leaves one."""
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(text)
+    os.replace(temporary, path)
 
 
 def _write_result(output, record, created):

@@ -74,7 +74,7 @@ class ConformanceTests(unittest.TestCase):
             detrended = r1.soak_detrended(soak["sensor_series_c"], soak["sensor_series_t_s"],
                                           soak["sensor_series_end_t_s"])
             r1.write_soak_reference(run, {"name": "idle_soak", "output_dir": str(run / "idle_soak"),
-                                          "attempt": 0, "soak_detrended": detrended})
+                                          "attempt": 0, "soak_detrended": detrended, "result": soak})
             segment("step_30b", "step-30b")
             step = segment(rt.STEP_D_SEGMENT, "step-d")
             slots = r1.derive_slots(step)

@@ -45,13 +45,19 @@ class WP18FixtureTests(unittest.TestCase):
                   {'generation': {'prompt_token_ids': [6, 7, 8, 9], 'output_token_ids': [10]}}],
         }
         self.members = []
-        for arm, (run_id, condition, _, seed) in IDENTITIES.items():
+        for arm, (run_id, condition, seed_index, seed) in IDENTITIES.items():
+            for index, row in enumerate(self.rows[arm]):
+                # The endpoint's row shape: turn index, and the sampler's per-turn
+                # seed from the member's episode seed (cold pass LOW-5, R6-8).
+                row['turn'] = index
+                row['generation']['sampler'] = {'kind': 'categorical',
+                                                'per_turn_seed': fixtures.turn_seed(seed, index)}
             generations = [row['generation'] for row in self.rows[arm]]
             self.members.append({
                 'run_id': run_id, 'task_pair': 'spam_filter_update', 'condition': condition,
                 'excluded': False, 'exclusion_codes': [],
                 'summary': {
-                    'episode_id': f'synthetic-{arm}', 'seed': seed,
+                    'episode_id': f'synthetic-{arm}', 'seed': seed_index,   # the desk's Episode.seed
                     'task_pair': 'shade/spam_filter_update', 'condition': condition,
                     'per_turn_decode_tokens': [len(g['output_token_ids']) for g in generations],
                     'per_turn_output_token_ids': [g['output_token_ids'][:] for g in generations],
@@ -105,7 +111,8 @@ class WP18FixtureTests(unittest.TestCase):
                 'arm': arm, 'run_id': run_id, 'source': 'pilot-7',
                 'task_pair': 'spam_filter_update', 'condition': condition,
                 'seed_index': seed_index, 'episode_seed': seed, 'max_turns': count,
-                'turns': [dict(turn=i, **row['generation']) for i, row in enumerate(self.rows[arm])],
+                'turns': [dict(turn=i, **{f: row['generation'][f] for f in fixtures.TOKEN_FIELDS})
+                          for i, row in enumerate(self.rows[arm])],
                 'sources': {
                     'align_turns_jsonl_sha256': hashlib.sha256(self.paths[arm].read_bytes()).hexdigest(),
                     'p7_pilot_json_sha256': hashlib.sha256(self.pilot_path.read_bytes()).hexdigest(),

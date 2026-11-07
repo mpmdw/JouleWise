@@ -239,6 +239,8 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
             raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list')
         if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()):
             raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list')
+        if any(sensors.get(role) != classified.get(role) for role in ('s_fast', 's_slow')):
+            raise ValueError('R1.thermal_policy sensors must equal the R1 thermometry.D picks')
     if classified.get('sensor_pick_changed') is not False:
         verification = thermometry.get('lead_verification')
         if (not isinstance(verification, dict) or not isinstance(verification.get('authority'), str)
@@ -256,7 +258,9 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     if not isinstance(volumes, list) or not volumes or any(
             (row or {}).get('verdict') != 'PASS' for row in volumes):
         raise ValueError('R1 r1_slots must record passing external-volume censuses (ruling 20)')
+    check_r1_fast_band(inputs['R1'], r1_slots)
     check_r1_budget_and_policy(inputs['R1'], r1_slots)
+    check_duty_bar_consistency(r1_slots)
     duty = r1_slots.get('duty_bar')
     if not isinstance(duty, dict) or type(duty.get('pass')) is not bool:
         raise ValueError('R1 r1_slots must carry the ruling 1(d) duty bar verdict')
@@ -302,6 +306,43 @@ def w1_inter_member_idle_s(root=ROOT):
 
 def _close(a, b):
     return finite(a) and finite(b) and math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
+
+
+def check_r1_fast_band(r1_inputs, r1_slots):
+    """Cold LOW-1 (lead ruling R6-8): delta_fast_c binds a recorded R1 fast band.
+
+    Unchanged picks: the soak fast band of the gate keys (slots.S5_fast).
+    Round-6 integration, with R6-4: when R1 changes the picks, S5_fast still
+    describes R0's fast key, so delta_fast_c binds the fast band computed for
+    the R1 picks (thermometry.D.s7_for_r1_picks.band_c.s_fast), like S6/S7."""
+    policy = r1_inputs.get('thermal_policy')
+    policy = policy if isinstance(policy, dict) else {}
+    classified = (r1_slots.get('thermometry') or {}).get('D') or {}
+    if classified.get('sensor_pick_changed') is True:
+        computed = classified.get('s7_for_r1_picks')
+        band = computed.get('band_c') if isinstance(computed, dict) else None
+        fast = band.get('s_fast') if isinstance(band, dict) else None
+        source = 'r1_slots.thermometry.D.s7_for_r1_picks.band_c.s_fast'
+        if not finite(fast) or fast <= 0:
+            raise ValueError(f'{source}: the R1-pick fast band was not computed (finite, positive required)')
+    else:
+        fast = (r1_slots.get('slots') or {}).get('S5_fast')
+        source = 'r1_slots.slots.S5_fast'
+    if not _close(policy.get('delta_fast_c'), fast):
+        raise ValueError(f'inputs.R1.thermal_policy.delta_fast_c must equal {source}')
+
+
+def check_duty_bar_consistency(r1_slots):
+    """Re-derive FAIL > INCONCLUSIVE > PASS from the driver's per-run bars."""
+    rows = r1_slots.get('deadman_budget')
+    bars = [row.get('duty_bar') for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    verdicts = [bar.get('verdict') if isinstance(bar, dict) else None for bar in bars]
+    if not verdicts or any(v not in ('pass', 'inconclusive', 'fail') for v in verdicts):
+        raise ValueError('R1 deadman_budget must carry a duty_bar.verdict for every run')
+    verdict = 'fail' if 'fail' in verdicts else 'inconclusive' if 'inconclusive' in verdicts else 'pass'
+    duty = r1_slots.get('duty_bar')
+    if not isinstance(duty, dict) or duty.get('verdict') != verdict or duty.get('pass') is not (verdict == 'pass'):
+        raise ValueError('R1 duty_bar verdict/pass disagrees with the per-run duty verdicts')
 
 
 # The R1 driver's three gated D runs (council ruling 1(b)); ruling 1(f) is
@@ -675,6 +716,21 @@ def require_sizing(root=ROOT):
         raise ValueError(f'{SIZING} is stale for {W1_PLAN}; regenerate the kit')
 
 
+def check_wp18_turn_contents(fixture, label):
+    """Validate the turn and source shape written by align_v4_wp18_fixtures."""
+    for index, turn in enumerate(fixture['turns']):
+        if not isinstance(turn, dict) or type(turn.get('turn')) is not int or turn['turn'] != index:
+            raise ValueError(f'{label}: turn must equal its zero-based index {index}')
+        for field in ('prompt_token_ids', 'output_token_ids'):
+            ids = turn.get(field)
+            if not isinstance(ids, list) or not ids or any(type(v) is not int or v < 0 for v in ids):
+                raise ValueError(f'{label}: turn {index} {field} must be non-empty non-negative integer token IDs')
+    sources = fixture.get('sources')
+    if (not isinstance(sources, dict) or set(sources) != {'align_turns_jsonl_sha256', 'p7_pilot_json_sha256'}
+            or not all(valid_digest(value) for value in sources.values())):
+        raise ValueError(f'{label}: sources must hold exactly the two source sha256 digests')
+
+
 def validate_wp18_fixtures(inputs, root=ROOT):
     """Lead ruling R5-8: each filled WP18 digest binds a committed fixture.
 
@@ -703,6 +759,7 @@ def validate_wp18_fixtures(inputs, root=ROOT):
                 or not isinstance(fixture.get('turns'), list) or len(fixture['turns']) != fixture['max_turns']):
             raise ValueError(f'{relative} is not the WP18 {name} fixture for {WP18_RUN_IDS[name]} with '
                              f'max_turns {inputs["WP18"][name]["max_turns"]}')
+        check_wp18_turn_contents(fixture, relative)
 
 
 def require_w1_ready(root=ROOT):

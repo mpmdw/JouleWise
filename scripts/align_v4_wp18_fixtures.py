@@ -13,9 +13,13 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from joulewise.align.apple.sampling import turn_seed  # noqa: E402  (stdlib only)
 REGISTRATION = Path('configs/campaigns/align_v4/registration')
 ARMS = {
     'X': ('align-pilot-v3-episodes-b-e25', 'sabotage', 16, 7655467588542005630),
@@ -37,8 +41,8 @@ def _load(raw, label):
 
 
 def _ids(value, label):
-    if not isinstance(value, list) or not value or any(type(v) is not int for v in value):
-        raise ValueError(f'{label}: expected a non-empty list of non-bool integers')
+    if not isinstance(value, list) or not value or any(type(v) is not int or v < 0 for v in value):
+        raise ValueError(f'{label}: expected a non-empty list of non-negative non-bool integers')
 
 
 def build_fixture(arm, turns_bytes, pilot_bytes):
@@ -53,6 +57,18 @@ def build_fixture(arm, turns_bytes, pilot_bytes):
         generation = row.get('generation') if isinstance(row, dict) else None
         if not isinstance(generation, dict):
             raise ValueError(f'{label}: missing generation object')
+        # Round-5 cold pass LOW-5 (lead ruling R6-8): the row itself must be
+        # this member's. align_turns.jsonl rows carry no run id or episode seed
+        # field; they carry their turn index and the sampler's per-turn seed,
+        # which the seed law derives from the member's episode seed (unique per
+        # member), so a row from another member or turn is refused here.
+        if type(row.get('turn')) is not int or row['turn'] != index:
+            raise ValueError(f'{label}: turn must equal its row index {index}')
+        sampler = generation.get('sampler')
+        per_turn = sampler.get('per_turn_seed') if isinstance(sampler, dict) else None
+        if type(per_turn) is not int or per_turn != turn_seed(seed, index):
+            raise ValueError(f'{label}: generation.sampler.per_turn_seed must be the seed law value for '
+                             f'{run_id} episode seed {seed} turn {index}')
         turn = {'turn': index}
         for field in TOKEN_FIELDS:
             _ids(generation.get(field), f'{label} generation.{field}')
@@ -76,8 +92,13 @@ def build_fixture(arm, turns_bytes, pilot_bytes):
         raise ValueError(f'{arm} {run_id}: member must have a summary')
     if summary.get('excluded', False) is not False:
         raise ValueError(f'{arm} {run_id}: summary is excluded')
-    if type(summary.get('seed')) is not int or summary['seed'] != seed:
-        raise ValueError(f'{arm} {run_id}: summary seed must equal {seed}')
+    # Round-6 Sol critique: the pilot desk's summary seed is the episode's seed
+    # index (Episode.seed, scripts/align_pilot_session.py), from which the seed
+    # law derives the sampled episode seed; accept either pinned identity of
+    # this member. The rows' per-turn seeds below bind the derived seed.
+    if type(summary.get('seed')) is not int or summary['seed'] not in (seed_index, seed):
+        raise ValueError(f'{arm} {run_id}: summary seed must equal its seed index {seed_index} '
+                         f'(or the derived episode seed {seed})')
     for field, expected in (('task_pair', PAIR), ('condition', condition)):
         values = [record[field] for record in (summary, member) if field in record]
         if not values or any(v not in (expected, 'shade/' + expected) for v in values):

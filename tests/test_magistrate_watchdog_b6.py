@@ -253,3 +253,9 @@ class InstalledBlockSixTests(WatchdogTestCase):
                 self.set_wall(plan.t0_epoch_s - wd.KILL_LEAD_S)
                 self.assertFalse(supervisor.step())
                 self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
+
+
+# Lead ruling R6-7: the host-level High Power marker and night lock are never the real host's
+# (set at import, before any test runs; placed here so pinned line numbers above stay put).
+import os as _jw_os, tempfile as _jw_tempfile  # noqa: E401,E402
+_jw_os.environ.setdefault("JOULEWISE_HOST_STATE_DIR", _jw_tempfile.mkdtemp(prefix="jw-host-power-"))
