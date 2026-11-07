@@ -23,7 +23,8 @@ Four parts, all standard library:
   the existing ``joulewise.adapters.powermetrics`` parser, unchanged).
 * ``evaluate``: the presence offset and the write effects with 90 % t
   intervals, the criteria Q1-Q3 against the design's s_r, the operational
-  criterion Q5, and the strongest option (A, A-lite, B or C) they allow.
+  criterion Q5, and the strongest option (B or C) they allow; A and A-lite
+  wait for a write-variability criterion.
 
 Units: power in W, energy in J, time in s.
 """
@@ -66,10 +67,17 @@ DEFAULT_S_R_MIN_J = 19.0  # smallest per-pair s_r in the series: Qwen3-30B spam,
 DEFAULT_T_EPISODE_S = 234.5  # 30B planning episode upper bound (sizing_b5.json episode_upper_s)
 PRESENCE_FRACTION = 0.0025  # U4 point bar: 0.25 % of the decode energy
 WRITE_IDLE_FRACTION = 0.05  # bias bar: 0.05 s_r per episode
-WRITE_DECODE_FRACTION = 0.30  # MDE inflation bar: added SD <= 0.3 s_r gives <= 4.4 % MDE growth
+WRITE_DECODE_FRACTION = 0.30  # mean write-effect bar (Q3 tests the mean, not added variance; A/A-lite only)
 
 
 # ---------------------------------------------------------------- plan
+
+
+# Five physical blocks: Q1 fits block means with intercept, drift and presence,
+# so it needs at least four blocks for one residual df; five give two. The
+# CLI (scripts/align_ssd_qualification.py) takes its defaults from here.
+DEFAULT_BLOCKS = ("attached", "detached", "attached", "detached", "attached")
+DEFAULT_IDLE_PAIRS = 6
 
 
 def _abba(n_pairs: int) -> list[tuple[str, str]]:
@@ -79,7 +87,7 @@ def _abba(n_pairs: int) -> list[tuple[str, str]]:
     return order
 
 
-def plan(*, blocks: Sequence[str] = ("attached", "detached", "attached"), idle_pairs: int = 8,
+def plan(*, blocks: Sequence[str] = DEFAULT_BLOCKS, idle_pairs: int = DEFAULT_IDLE_PAIRS,
          decode_pairs: int = 6, segment_s: float = 120.0, gap_s: float = 60.0,
          settle_s: float = 600.0) -> dict[str, Any]:
     """The schedule. Every block repeats the same idle-then-decode shape."""
@@ -326,45 +334,64 @@ def _ols(x_rows: Sequence[Sequence[float]], y: Sequence[float]) -> tuple[list[fl
 def presence_offset(rows: Sequence[Mapping[str, Any]], *, load: str) -> dict[str, Any] | None:
     """Attached minus detached quiet GPU power, adjusted for linear drift.
 
-    Model over the quiet segments of one load level: P = a + b * t + c *
-    attached, with t the segment start in hours. The interval for c uses the
-    segment residual variance but only df = blocks - 1, because block-level
-    shocks cannot be told from presence with so few physical swaps (the
-    study recommends at least A-D-A; A-D-A-D-A tightens it). Block means
-    minus the drift line are printed as the nonlinearity check.
+    Model over *block means* of the quiet segments: P = a + b * t + c *
+    attached, with t the mean segment start in hours.  Blocks, rather than
+    segments, are the independent units for the physical presence treatment.
+    Consequently the residual degrees of freedom are ``blocks - 3``.  The
+    old segment-level fit was pseudoreplication: changing the cable once did
+    not turn every segment in that block into an independent presence trial.
     """
 
-    picked = []
+    kept = []
     for row in rows:
         if row.get("load") != load or row.get("condition") != "quiet" or row.get("extract_flags"):
             continue
         value = _gpu(row)
-        if value is None:
-            continue
-        t = row.get("start_epoch_s")
-        t = float(t) / 3600 if isinstance(t, (int, float)) else float(row["ordinal"]) * 180 / 3600
-        picked.append((t, 1.0 if row["presence"] == "attached" else 0.0, value, row["block"]))
-    blocks = {b for *_x, b in picked}
-    kinds = {a for _t, a, _v, _b in picked}
-    if len(blocks) < 2 or kinds != {0.0, 1.0}:
+        if value is not None:
+            if not isinstance(row.get("block"), str):
+                return None  # a usable row with no block identity cannot be placed: fail closed
+            kept.append((row, value))
+    # One time basis for every row: epoch stamps when all rows have them,
+    # otherwise the planned ordinal clock for all (never a mix of the two).
+    epoch = all(isinstance(row.get("start_epoch_s"), (int, float)) for row, _v in kept)
+    picked = [(float(row["start_epoch_s"]) / 3600 if epoch else float(row["ordinal"]) * 180 / 3600,
+               1.0 if row["presence"] == "attached" else 0.0, value, row["block"]) for row, value in kept]
+    grouped: dict[str, list[tuple[float, float, float]]] = {}
+    for t, attached, value, block in picked:
+        grouped.setdefault(block, []).append((t, attached, value))
+    if len(grouped) < 4:
         return None
-    t0 = min(t for t, *_r in picked)
-    x_rows = [[1.0, t - t0, a] for t, a, _v, _b in picked]
-    y = [v for _t, _a, v, _b in picked]
+    # The fit weights block means equally, which is valid while their
+    # segment-noise shares are similar. Fail closed (INCONCLUSIVE) when a block
+    # kept fewer than half the quiet segments of the fullest block.
+    # Every block seen in any row (any load) counts; one with no usable quiet
+    # segment of this load counts as 0 (it must not just vanish).
+    counts = {block: len(grouped.get(block, ())) for block in
+              {row.get("block") for row in rows if isinstance(row.get("block"), str)} | set(grouped)}
+    if 2 * min(counts.values()) < max(counts.values()):
+        return None
+    block_rows = [(block, statistics.fmean(t for t, _a, _v in members), members[0][1],
+                   statistics.fmean(v for _t, _a, v in members))
+                  for block, members in grouped.items()]
+    if {a for _block, _t, a, _v in block_rows} != {0.0, 1.0}:
+        return None
+    t0 = min(t for _block, t, _a, _v in block_rows)
+    x_rows = [[1.0, t - t0, a] for _block, t, a, _v in block_rows]
+    y = [v for _block, _t, _a, v in block_rows]
     try:
         beta, inv, s2, _df = _ols(x_rows, y)
     except ValueError:
         return None
     se = math.sqrt(s2 * inv[2][2]) if math.isfinite(s2) else math.nan
-    df = max(1, len(blocks) - 1)
+    df = len(block_rows) - 3
+    if df <= 0 or not math.isfinite(se):
+        return None
     t = student_t_quantile(0.95, df)
-    nonlinearity = {}
-    for block in sorted(blocks):
-        members = [(xr, v) for xr, v, (*_r, b) in zip(x_rows, y, picked) if b == block]
-        fitted = [beta[0] + beta[1] * xr[1] + beta[2] * xr[2] for xr, _v in members]
-        nonlinearity[block] = statistics.fmean(v for _x, v in members) - statistics.fmean(fitted)
+    nonlinearity = {block: value - sum(b * xv for b, xv in zip(beta, xr))
+                    for (block, _time, _attached, value), xr in zip(block_rows, x_rows)}
     return {"mean": beta[2], "se": se, "df": df, "lo": beta[2] - t * se, "hi": beta[2] + t * se,
             "drift_w_per_h": beta[1], "reference_power_w": statistics.fmean(y),
+            "quiet_segments_per_block": counts, "time_basis": "epoch" if epoch else "ordinal",
             "block_mean_minus_fit_w_print_only": nonlinearity}
 
 
@@ -410,21 +437,20 @@ def evaluate(rows: Sequence[Mapping[str, Any]], *, ops: Mapping[str, Any],
     }
     q5 = operational(ops)
     q["Q5_operational"] = q5["verdict"]
-    if q["Q1_presence_decode"] == PASS and q5["verdict"] == PASS:
-        allowed = "B"
-        if q["Q2_write_idle"] == PASS and q["Q3_write_decode"] == PASS:
-            allowed = "A"  # A-lite needs the same evidence and carries less risk
-    else:
-        allowed = "C"
+    # A and A-lite are capped off: Q3 bounds only the mean write effect, and
+    # no variability criterion exists yet (study section 6). Q2/Q3 still print.
+    allowed = "B" if q["Q1_presence_decode"] == PASS and q5["verdict"] == PASS else "C"
     return {"schema": SCHEMA + ".verdict", "criteria": q, "strongest_option_allowed": allowed,
-            "margins_w": {"q1_presence_decode_w": q1_margin, **margins},
+            "write_criteria_pass_print_only": q["Q2_write_idle"] == PASS and q["Q3_write_decode"] == PASS,
+            "margins_w": {"q1_presence_decode_w": q1_margin if math.isfinite(q1_margin) else None, **margins},
             "inputs": {"s_r_min_j": s_r_min_j, "t_episode_s": t_episode_s},
             "estimates_w": {"presence_decode": presence, "presence_idle_print_only": presence_idle,
                             "write_idle": write_idle, "write_decode": write_decode,
                             "internal_write_control_idle_print_only": control_idle,
                             "internal_write_control_decode_print_only": control_decode},
             "operational": q5,
-            "note": "Option A and A-lite need Q1, Q2, Q3 and Q5; B needs Q1 and Q5; otherwise C. "
+            "note": "B needs Q1 and Q5 PASS; otherwise C. A and A-lite are not available from this "
+                    "verdict until a write-variability criterion exists (Q3 tests the mean only). "
                     "The council and Ed decide; this verdict only states what the data allow."}
 
 
@@ -505,8 +531,9 @@ def summarize_ops(journal: Sequence[Mapping[str, Any]], *, s_slow_key: str | Non
         def mean_for(kind):
             values = [(r.get("smc_means") or {}).get(s_slow_key) for r in segments
                       if r.get("presence") == kind and r.get("load") == "idle" and r.get("condition") == "quiet"]
-            values = [v for v in values if isinstance(v, (int, float))]
-            return statistics.fmean(values) if values else None
+            if not values or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in values):
+                return None  # a missing reading is missing evidence: Q5 fails
+            return statistics.fmean(values)
         a, d = mean_for("attached"), mean_for("detached")
         offset = a - d if a is not None and d is not None else None
     return {"arm_check_start": arm[0].get("verdict") if arm else None,

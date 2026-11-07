@@ -65,6 +65,32 @@ class PlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.plan(idle_pairs=1)
 
+    def test_default_has_independent_presence_residual_degrees_of_freedom(self):
+        schedule = q.plan()
+        self.assertEqual(schedule["blocks"],
+                         ["attached", "detached", "attached", "detached", "attached"])
+
+    def test_cli_plan_without_flags_is_the_five_block_default(self):
+        """`plan --out` with no other flags is what the operator runs; it must
+        not fall back to the old A-D-A, 8-idle-pair, 87-segment schedule."""
+        from contextlib import redirect_stdout
+        import io
+        from scripts import align_ssd_qualification as cli
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "plan.json"
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(["plan", "--out", str(out)]), 0)
+            schedule = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(schedule["blocks"], ["attached", "detached", "attached", "detached", "attached"])
+        self.assertEqual(len(schedule["segments"]), 125)
+        self.assertEqual(schedule, q.plan())
+        analyzed = [s for s in schedule["segments"] if s["analyzed"]]
+        for block in {s["block"] for s in analyzed}:
+            for load in ("idle", "decode"):
+                pairs = {s["pair"] for s in analyzed if s["block"] == block and s["load"] == load}
+                self.assertEqual(len(pairs), 6, (block, load))
+        self.assertAlmostEqual(schedule["planned_total_s"] / 3600, 6.83, places=2)
+
 
 class PatternTests(unittest.TestCase):
     def test_fixed_cadence_bytes_and_fsyncs(self):
@@ -121,12 +147,84 @@ class ExtractTests(unittest.TestCase):
 
 
 class EvaluateTests(unittest.TestCase):
-    def test_null_world_allows_a(self):
+    def test_null_world_allows_b_and_a_stays_capped(self):
         verdict = q.evaluate(world(), ops=GOOD_OPS)
         self.assertEqual(verdict["criteria"]["Q2_write_idle"], q.PASS, verdict["estimates_w"]["write_idle"])
         self.assertEqual(verdict["criteria"]["Q3_write_decode"], q.PASS)
         self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.PASS)
-        self.assertEqual(verdict["strongest_option_allowed"], "A")
+        self.assertTrue(verdict["write_criteria_pass_print_only"])
+        # Q3 bounds only the mean write effect; A/A-lite wait for a variability criterion.
+        self.assertEqual(verdict["strongest_option_allowed"], "B")
+
+    def test_unbalanced_blocks_make_q1_inconclusive(self):
+        rows, seen = [], {}
+        for row in world():
+            if row["load"] == "decode" and row["condition"] == "quiet" and row["presence"] == "detached":
+                seen[row["block"]] = seen.get(row["block"], 0) + 1
+                if seen[row["block"]] > 2:  # 2 of 6 kept, under half the fullest block
+                    continue
+            rows.append(row)
+        self.assertIsNone(q.presence_offset(rows, load="decode"))
+        verdict = q.evaluate(rows, ops=GOOD_OPS)
+        self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.INCONCLUSIVE)
+        self.assertEqual(verdict["strongest_option_allowed"], "C")
+        mild, seen = [], {}
+        for row in world():
+            if row["load"] == "decode" and row["condition"] == "quiet" and row["presence"] == "detached":
+                seen[row["block"]] = seen.get(row["block"], 0) + 1
+                if seen[row["block"]] > 3:  # half kept is still admissible
+                    continue
+            mild.append(row)
+        self.assertEqual(q.presence_offset(mild, load="decode")["quiet_segments_per_block"]["2-detached"], 3)
+        emptied = [r for r in world() if not (r["block"] == "2-detached" and r["load"] == "decode"
+                                              and r["condition"] == "quiet")]
+        emptied += [{**r, "extract_flags": ["segment.coverage_below_95pct"]} for r in world()
+                    if r["block"] == "2-detached" and r["load"] == "decode" and r["condition"] == "quiet"]
+        self.assertIsNone(q.presence_offset(emptied, load="decode"))  # an all-flagged block is 0, not absent
+        no_decode = [r for r in world() if not (r["block"] == "2-detached" and r["load"] == "decode")]
+        self.assertIsNone(q.presence_offset(no_decode, load="decode"))  # block seen only under idle is 0
+        stray = world() + [{"load": "decode", "condition": "quiet", "extract_flags": ["bad"]}]
+        self.assertEqual(q.presence_offset(stray, load="decode")["df"], 2)  # skipped row, no block: ignored
+        unplaced = world() + [{"load": "decode", "condition": "quiet", "extract_flags": [], "ordinal": 0,
+                               "presence": "attached", "power_w": {"gpu": 25.0}}]
+        self.assertIsNone(q.presence_offset(unplaced, load="decode"))  # usable row, no block: fail closed
+
+    def test_time_basis_is_never_mixed(self):
+        rows = [{**row, "start_epoch_s": 1.8e9 + row["ordinal"] * 180} for row in world()]
+        self.assertEqual(q.presence_offset(rows, load="decode")["time_basis"], "epoch")
+        del rows[next(i for i, r in enumerate(rows) if r["load"] == "decode" and r["condition"] == "quiet")
+                 ]["start_epoch_s"]
+        mixed = q.presence_offset(rows, load="decode")
+        self.assertEqual(mixed["time_basis"], "ordinal")
+        self.assertAlmostEqual(mixed["mean"], q.presence_offset(world(), load="decode")["mean"], places=9)
+        # An irregular real clock must be the one fitted when every row has it: drift is linear in
+        # epoch time but not in the ordinal, so an ordinal fit would bias the presence estimate.
+        rng, clock, timed = random.Random(3), 1.8e9, []
+        for row in world(drift_w_per_h=0.0, decode_sd=0.0):
+            clock += 180 * (1 + 3 * rng.random())
+            timed.append({**row, "start_epoch_s": clock,
+                          "power_w": {**row["power_w"], "gpu": row["power_w"]["gpu"] + 0.5 * (clock - 1.8e9) / 3600}})
+        fit = q.presence_offset(timed, load="decode")
+        self.assertEqual(fit["time_basis"], "epoch")
+        self.assertAlmostEqual(fit["mean"], 0.0, places=6)
+        self.assertAlmostEqual(fit["drift_w_per_h"], 0.5, places=6)
+
+    def test_cli_evaluate_serializes_an_inconclusive_q1(self):
+        from contextlib import redirect_stdout
+        import io
+        from scripts import align_ssd_qualification as cli
+        rows = world(schedule=q.plan(blocks=("attached", "detached", "attached")))
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "rows.json").write_text(json.dumps(rows), encoding="utf-8")
+            (tmp / "journal.jsonl").write_text("", encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                code = cli.main(["evaluate", "--rows", str(tmp / "rows.json"), "--journal",
+                                 str(tmp / "journal.jsonl"), "--out", str(tmp / "verdict.json")])
+            verdict = json.loads((tmp / "verdict.json").read_text(encoding="utf-8"))
+        self.assertEqual(code, 0)
+        self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.INCONCLUSIVE)
+        self.assertIsNone(verdict["margins_w"]["q1_presence_decode_w"])
 
     def test_margins_follow_s_r(self):
         margins = q.criteria_margins(s_r_min_j=19.0, t_episode_s=234.5)
@@ -145,6 +243,16 @@ class EvaluateTests(unittest.TestCase):
         verdict = q.evaluate(world(presence_w=0.3), ops=GOOD_OPS)  # 1.2 % of 25 W
         self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.FAIL)
         self.assertEqual(verdict["strongest_option_allowed"], "C")
+
+    def test_three_block_presence_design_is_inconclusive_not_pseudoreplicated(self):
+        schedule = q.plan(blocks=("attached", "detached", "attached"))
+        verdict = q.evaluate(world(schedule=schedule), ops=GOOD_OPS)
+        self.assertEqual(verdict["criteria"]["Q1_presence_decode"], q.INCONCLUSIVE)
+        self.assertEqual(verdict["strongest_option_allowed"], "C")
+
+    def test_presence_interval_uses_blocks_as_independent_units(self):
+        estimate = q.presence_offset(world(), load="decode")
+        self.assertEqual(estimate["df"], 2)
 
     def test_noisy_decode_never_passes(self):
         for seed in range(5):
@@ -190,6 +298,14 @@ class OpsTests(unittest.TestCase):
         ops = q.summarize_ops(journal)
         self.assertIsNone(ops["s_slow_presence_offset_c"])
         self.assertEqual(q.operational(ops)["verdict"], q.FAIL)
+        for presence, value in (("attached", None), ("detached", None), ("attached", float("nan")),
+                                ("detached", float("inf"))):
+            with self.subTest(presence=presence, value=value):
+                means = {"B0AC": -20.0} if value is None else {"B0AC": -20.0, "TS0P": value}
+                bad = {**seg, "presence": presence, "smc_means": means}  # S_slow missing or non-finite
+                ops = q.summarize_ops(journal[:-1] + [bad, journal[-1]], s_slow_key="TS0P")
+                self.assertIsNone(ops["s_slow_presence_offset_c"])
+                self.assertEqual(q.operational(ops)["verdict"], q.FAIL)
 
 
 class RunSessionTests(unittest.TestCase):
@@ -209,7 +325,7 @@ class RunSessionTests(unittest.TestCase):
                                  pattern={"s": {"period_s": 0.005, "bytes": 4, "fsync_every_s": 0.01}},
                                  burst_bytes=16, burst_copies=2,
                                  ps_text=lambda: " 10 0:00.00 mds\n", is_attached=lambda: True)
-            self.assertEqual(presence, ["attached", "detached", "attached"])
+            self.assertEqual(presence, ["attached", "detached", "attached", "detached", "attached"])
             segments = [r for r in rows if r["kind"] == "segment"]
             self.assertEqual(len(segments), len(schedule["segments"]))
             on_disk = [json.loads(line) for line in (tmp / "internal/journal.jsonl").read_text().splitlines()]

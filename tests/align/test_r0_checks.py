@@ -169,6 +169,26 @@ class R0ChecksTest(unittest.TestCase):
         self.assertEqual(generated["off_spec_echo_turns"], 1)
         self.assertTrue(generated["transitions"][2]["off_spec_echo"])
 
+    def test_echo_prompt_states_a_total_that_covers_the_b7_floor(self):
+        # A model that makes exactly the number of calls the prompt states, then
+        # stops to ask the user (R0 2026-11-06T2235Z stopped after 6 without one).
+        import re
+        stated = [int(n) for n in re.findall(r"\b(\d+)\b", r0.ECHO_PROMPT)]
+        self.assertTrue(stated)
+        self.assertTrue(all(n == r0.ECHO_CALLS for n in stated))
+        self.assertGreater(r0.ECHO_CALLS, r0.ECHO_TRANSITIONS)
+        backend = FakeBackend()
+        chat = backend.chat
+        def obedient(messages, tools, max_tokens, seed):
+            result = chat(messages, tools, max_tokens, seed)
+            made = sum(m.role == "tool" for m in messages)
+            return result if made < stated[0] else replace(result, tool_calls=())
+        backend.chat = obedient
+        generated = r0.generated_rewrites(backend)
+        self.assertEqual(generated["status"], "pass")
+        self.assertEqual(len(generated["transitions"]), r0.ECHO_TRANSITIONS)
+        self.assertEqual(r0.checkpoint_verdict("D", generated)["status"], "not_required")
+
     def test_checkpoint_sample_floor_closed_reasoning_and_threshold(self):
         rows = [{"closed_reasoning": True, "rewritten_prefix_tokens": 0} for _ in range(12)]
         self.assertEqual(r0.checkpoint_verdict("D", {"transitions": rows[:11]})["status"], "inconclusive")

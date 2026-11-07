@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Always-attached SSD hardware qualification (DRAFT; non-claim; by day, nothing armed).
 
-  plan       write the segment schedule (default blocks attached,detached,attached)
+  plan       write the segment schedule (default blocks attached,detached,attached,detached,attached,
+             6 idle and 6 decode pairs per block: 125 segments, about 6.8 h)
   run        execute a schedule: idle and fixed-work decode segments, write pattern,
              teardown bursts, 1 Hz SMC, metadata-daemon CPU; journal on internal disk
   extract    mean rail power per segment from one continuous powermetrics capture
-  evaluate   Q1-Q5 and the strongest option (A / A-lite / B / C) the data allow
+  evaluate   Q1-Q3, Q5 (there is no Q4) and the strongest option (B / C) the data allow
   write-pattern
              replay the window write pattern alone into a directory (e.g. during R1)
 
@@ -85,8 +86,8 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("plan")
     p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--blocks", default="attached,detached,attached")
-    p.add_argument("--idle-pairs", type=int, default=8)
+    p.add_argument("--blocks", default=",".join(q.DEFAULT_BLOCKS))
+    p.add_argument("--idle-pairs", type=int, default=q.DEFAULT_IDLE_PAIRS)
     p.add_argument("--decode-pairs", type=int, default=6)
     p.add_argument("--segment-s", type=float, default=120.0)
     p.add_argument("--gap-s", type=float, default=60.0)
