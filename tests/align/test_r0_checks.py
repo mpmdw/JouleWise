@@ -270,6 +270,54 @@ class R0ChecksTest(unittest.TestCase):
             self.assertEqual(report["status"], "pass")
             self.assertIn("required", [r["status"] for r in report["checks"]])
 
+    def test_softwareupdate_scan_forecast_is_reported_and_never_refuses(self):
+        forecast = {"status": "forecast", "last_finished": "2026-11-06T23:09:00", "cadence_hours": 6,
+                    "predicted": ["2026-11-07T05:09:00"], "window": ["2026-11-07T00:00:00", "2026-11-07T06:00:00"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("joulewise.align.r0_runner.softwareupdate_scan_forecast", return_value=forecast) as made, \
+                    patch.object(r0, "checkpoint_verdict", return_value={"status": "required"}), \
+                    patch.object(r0, "ladder", return_value={"status": "fallback", "selected": None, "rungs": []}):
+                report = execute(config_at(root), root, ["generated", "ladder", "template"], ["D"],
+                                 guard=FakeGuard(), backend_factory=FakeBackend, per_check_timeout=100)
+            self.assertEqual(report["status"], "pass")
+            self.assertEqual(report["softwareupdate_scan_forecast"], forecast)
+            start, deadline = made.call_args.args
+            self.assertEqual((deadline - start).total_seconds(), 300)  # 3 checks x 100 s
+            self.assertIn("Software update scan forecast (advisory)", (root / "report.md").read_text())
+            self.assertIn("2026-11-07T05:09:00", (root / "report.md").read_text())
+            self.assertIn("host aggregate above 0.05 CPU-s/s (journaled, never judged): 0 of 0 judged windows",
+                          (root / "report.md").read_text())
+
+    def test_report_counts_guard_windows_with_host_aggregate_above_limit(self):
+        # Cold LOW-1: the one signal that sees a contaminant born and gone
+        # between two guard snapshots is shown in report.md.
+        report = {"census": [{"cpu_intervals": [{"aggregate_above_0_05": True},
+                                                {"aggregate_above_0_05": False}]},
+                             {"fake": True}, {"cpu_intervals": [{"aggregate_above_0_05": True}]}]}
+        self.assertEqual(r0.host_aggregate_line(report),
+                         "Quiet-guard host aggregate above 0.05 CPU-s/s (journaled, never judged): "
+                         "2 of 3 judged windows.")
+
+    def test_inventory_mode_closes_the_guard(self):
+        # Cold LOW-2: --inventory is the one caller outside execute()'s finally.
+        closed = []
+        class ClosingGuard(FakeGuard):
+            def close(self):
+                closed.append(True)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.json"
+            config.write_text(json.dumps(config_at(root)))
+            hashed = root / "hashed"
+            hashed.mkdir()
+            (hashed / "a").write_bytes(b"abc")
+            code = main(["--config", str(config), "--output", str(root / "inventory.json"),
+                         "--inventory", str(hashed)], backend_factory=FakeBackend,
+                        guard_factory=ClosingGuard, lock_path=root / "r0.lock")
+            self.assertEqual(code, 0)
+            self.assertEqual(closed, [True])
+
     def test_coherence_format_and_echo_are_diagnostics_but_nll_is_a_bar(self):
         from dataclasses import replace
         class Backend(FakeBackend):
