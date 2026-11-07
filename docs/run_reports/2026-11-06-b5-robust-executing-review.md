@@ -42,8 +42,18 @@ tests exercise, except for two defects, both now fixed on the branch in
 
 Not fixed (all are in the Findings section below): a deterministic worker crash
 now crashes the driver process when the step is retried serially; orphaned pool
-workers could race a resume started immediately after a kill. Real-chain resume
-evidence beyond step 0 is in the cloud section at the end.
+workers could race a resume started immediately after a kill.
+
+The builder left the real-chain resume check pending. It is now done, on cloud
+Sol with the real synthetic S10 chain at `--workers 2`; details are in the
+section near the end:
+- killed after step 3b, so the brackets are rebuilt for real: **EQUAL** to the
+  uninterrupted run;
+- killed inside step 5, leaving partial mint outputs on disk: **EQUAL** to the
+  uninterrupted run.
+
+In both cases the record bytes and every manifest path outside `resume/` and
+the timer logs are identical.
 
 ## What I checked
 
@@ -171,15 +181,25 @@ Python 3.12.13, 3 cores, `--workers 2`.
   resumed run.
 
 **C: killed inside step 5, then resumed** (`task_e_6aee943fd2e083229e7d64f066a23d4f`):
-**Pending.** The combined task, with the reference run and the C run in one
+**EQUAL.** The combined task, with the reference run and the C run in one
 session, ended in ERROR with no diff after about 1 h. That is probably the
 session limit: the builder's original task died the same way. The reference A
-run of the first C attempt (`9eb90c6c5`, record `5d561618...306a`, 1,358
-files) finished before that agent stopped. It is saved as
-`2026-11-06-b5-robust/e2e-resume-C/A-summary.json`. The C run alone was
-relaunched on the same branch at `150b8e7b3`:
-`task_e_6aeea281379483228abd1affc6008133`. Its summary is compared against
-that A summary.
+run of the first C attempt (`9eb90c6c5`, record `5d561618...306a`) finished
+before that agent stopped and is saved as `e2e-resume-C/A-summary.json`. The C
+run alone (`task_e_6aeea281379483228abd1affc6008133`, at `150b8e7b3`, same
+environment, Python 3.12.13, 3 cores) is saved as `C-summary.json` and
+`RUN.md`. I compared the two summaries:
+- `record_sha256` `5d561618...306a` in both, and joined-driver exit 2 in both;
+- the same step statuses;
+- the same 1,355 filtered manifest paths (`restricted/resume/` and timer logs
+  dropped), with 0 differences.
+
+C's `restricted/resume/` shows rollback doing its job. `abandoned/1/` holds what
+the interrupted step 5 left behind: its runner logs `0531-5-block.*`, plus
+`mint/{alpha,beta}/calibration_plan.json`, `order_manifest.json`,
+`floor-mint-inputs.json` and `floor-mint-pinset.json`, and the old timer logs.
+The rerun of step 5 wrote byte-identical replacements. Wall time was 3,038 s
+for the kill plus the resume, against 1,681 s for an uninterrupted run.
 
 ## Sol audit
 
