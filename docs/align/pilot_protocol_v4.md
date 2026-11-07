@@ -363,6 +363,15 @@ Under the three WP14 rulings above, retain these council rules:
   designed start states arm 1,200 s. A G0 that did not release counts at
   1,200 s, and an INCONCLUSIVE X-G falls back to 1,200 s (R7-12). Ruling
   1(f) uses G0_cap_W1 as its G0 term. Every other G0 keeps 600 s.
+  **R1's G0 timeout (LEAD-RULINGS-2 R7-2):** R1's gated D runs, X-G,
+  step-d and the designed start states (first attempt and retry) arm one
+  G0 timeout of 1,200 s, the runtime config's `g0_timeout_s`; the
+  idle-until-soak precools keep their 1,500 s cap (confirmed by
+  LEAD-RULINGS-2 R8-8). Every G0 wait of the R1 night is recorded
+  (`r1_slots.g0_waits`). The W1 G0 cap is therefore an R1-derived slot,
+  `r1_slots.g0_cap_w1.value_s`, which the W1 plan carries as the
+  `inputs.R1.thermal_policy.g0_cap_s` placeholder (`PENDING_R1`) until
+  R1 fills it.
   **Round-4 lead decision:** a G0 that did not release (timeout X2,
   unobserved X4, deadman X7) leaves no episode reference, so the member ends
   before its first turn (`episode.g0_unreleased:0`, stop
@@ -661,7 +670,18 @@ R1 is an armed `run_night` rehearsal with calibration brackets and harvest:
 30-min idle soak; 30B and D planning turns (10k fed prefill + 4,096 seeded
 decode, 10-min cooldown each); one X-G identity run; two gated/held D s1
 spam/benign runs plus one gated/held bank/benign run (ruling 1(b)); optional
-qualified 4-bit run. Ed's appended ruling now
+qualified 4-bit run. **Gated-block order (LEAD-RULINGS-2 R7-1):** after the
+designed start states (warmest first), the R + 0 °C planning turn is the D
+turn before the gated block, which runs back to back in the order D_bank,
+D_spam a, D_spam b, X-G. Both runs of the U5 replay pair thus follow a full
+gated D episode with the same idle (matched predecessors, CHAIR 1(g)), and
+X-G follows D_spam b, W1's D → X transition. **R1 calibration remedies
+(LEAD-RULINGS-2 R7-3):** the R6-1 builder decisions are confirmed, (a) the
+order (now R7-1's), (b) "the member's own configured idle" as W1's
+inter-member schedule and (c) a gated run after a member with no D work is
+INCONCLUSIVE; the kit refuses W1 for any `inconclusive_segments` entry, and
+its refusal names the remedy: an R1 re-run, which is the magistrate's call,
+with no per-occurrence lead ruling. Ed's appended ruling now
 **includes High Power A-B-A in R1**, superseding the earlier skip default.
 Ed installs `/etc/sudoers.d/joulewise-powermode`, a narrow sudoers rule
 limited to exactly `pmset -c powermode 0` and `pmset -c powermode 2`.

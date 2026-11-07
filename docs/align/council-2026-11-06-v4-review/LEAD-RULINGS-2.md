@@ -380,6 +380,8 @@ No deviation reported.
 
 No deviation reported.
 
+**Correction (round 8, R8-1).** The sentence "the normal close (the Automatic restore) runs" held for `install`, and for `run_night` only before the chain spawned or after it exited; the R7-4 tests parked the signal inside the chain spawn. While the chain ran, the close could not retake the lock the chain had inherited (R7-5), so it deferred, and the chain measured on with no supervisor and no window deadline (round-7 cold MEDIUM-1, exec MEDIUM-3). Since R8-1 an interrupt after launch first terminates the chain's process group and proves it gone, and only then runs the close, which then restores.
+
 ### R7-5. The host night lock lives as long as the night's process tree
 
 > R7-5 (exec MEDIUM-3, Sol F2/F3): the host night lock lives as long as the night's process tree: pass the lock fd to the chain (pass_fds) for run_night and the R1 driver. The close restores Automatic only after it has itself taken the lock, which proves no chain still holds it. If it cannot take the lock, it leaves the marker for the dead-man or the next session start. Orphaned descendants keeping the lock make W1 refuse (fail closed): accepted.
@@ -469,3 +471,115 @@ No deviation reported.
 ### Process incident reported by the science builder
 
 A mistaken Sol launch truncated another lane's `r7-sol-crit.events.jsonl`. That lane's owner should audit the codex rollout file `~/.codex/sessions/2026/11/07/rollout-2026-11-07T03-16-19-01a1b5b9-42c4-76e1-88b1-79c2743a9890.jsonl` instead. No code or record of this lane is affected.
+
+## Round 8 (2026-11-07)
+
+These rulings settle the findings of the two reviews of the R1 round-7 integrated head (`915f59446`, with the executing review's fixes `e51156033`), plus the science and infra builders' open items:
+
+- "exec" is `docs/align/reviews/2026-11-07-r1-round7-executing-review.md` (`72c7c8a50`; its fixes are `e51156033`);
+- "cold" is `docs/align/reviews/2026-11-07-r1-round7-cold-pass.md` (`d20ccd829`);
+- "science Sol" and "infra Sol" are the local Sol 6.1 xhigh critiques recorded under Round 7 above.
+
+Each ruling's text is quoted verbatim as the lead gave it. One builder implemented all of them on `lane/2026-11-06-v4-r1-integrated`, branched from `72c7c8a50`:
+
+- `191455724`: the code and tests (R8-1, R8-3 to R8-6), with `tests/align/test_r1_round8.py`. Every behaviour test in it fails on `72c7c8a50` (checked by stashing the code change).
+- The doc commit that adds this section: R8-1's and R8-2's contract text, the R7-4 correction above, R8-4's table and R8-7's protocol v4 text, with `test_r1_round8.DocTests` (which fails on the round-7 docs).
+- A report commit after it: the Round 8 section of `docs/run_reports/2026-11-06-align-v4-r1-integration.md` (kit check and exact test tails).
+
+### R8-1. An interrupt after launch stops the chain, proves it gone, then closes
+
+> R8-1 (exec MEDIUM-3 = cold MEDIUM-1, option A; required before any W1 arm under High Power): on an interrupt (INT/TERM/HUP) after the chain has launched, run_night terminates the chain's process group (TERM, bounded wait, then KILL) and proves it gone, as the window-deadline path already does, then runs the normal close, which can now retake the lock and restore. Same for the R1 driver and its runtime. Tests with real signals while the chain runs (the round-7 tests only parked the signal before the chain existed). Correct the contract doc and the R7-4 text in LEAD-RULINGS-2.
+
+**Implemented by** `191455724`.
+- **`run_night`.** `_run_chain_once` records the launched chain (and its window deadline) and catches `KeyboardInterrupt`, which is what SIGINT and the R7-4 TERM/HUP handler raise. `_stop_chain_on_interrupt` then cancels the deadline thread (if the deadline already fired, its outcome stands), and runs `_terminate_process_group`: killpg TERM, wait 30 s, a re-signalled group census for 5 s, killpg KILL, wait 30 s, census again. It records `chain.exited` for a claimed chain, or `chain.unkilled` if the proof fails, and logs `chain terminated on interrupt (lead ruling R8-1)` with the outcome. The interrupt is then re-raised, so `run_night`'s close runs: it retakes the lock (the chain no longer holds it) and restores. If the group cannot be proven gone, the retake fails and the close defers, as R7-5 says. This covers the HAZARD_PACK chain too (`b5/driver.py` reaches the same `_run_chain_once`).
+  - SIGINT (when it still has Python's default handler) now goes through the same handler as TERM/HUP. It still raises `KeyboardInterrupt`, but once the chain termination or the close has begun, further INT/TERM/HUP are swallowed, so they cannot cut either short.
+  - The new re-raise site is allowlisted in `configs/gates/hazard_refusals.json` (category INTERNAL: it adds no refusal).
+- **R1 driver and runtime.** The driver's `_run` already TERMed its child, waited 20 s and KILLed it on an interrupt. `_terminate` now also records the child's descendants (`ps -A -o pid=,ppid=,command=`) while it lives: before the TERM, and again before a KILL. Once the child is reaped, it TERMs every recorded descendant still alive with its recorded command, waits at most 5 s, KILLs, waits at most 5 s more, and proves none is left. Each proof goes to `r1_result.child_terminations`. If a census fails or a descendant survives (for example a root `powermetrics` the user cannot signal), `PowerModeGuard.restore` restores nothing: `restore_deferred` names R8-1, and the markers stay for the dead-man or the next session start. `_terminate` also no longer waits forever on an output pipe that an orphaned descendant inherited: it waits on the reaped child, ends the tree, then drains with a bound and closes the pipes.
+- **Tests with real signals** (`tests/align/test_r1_round8.py`):
+  - `NightInterruptTests`: TERM, HUP, and INT on a chain that ignores TERM. Each signal lands while a real chain process, which inherited the host night lock and started a member in its group, is measuring under a plan of 2. In each case the chain and member are gone, `chain.exited` is written, no `chain.unkilled`, the close restores (mode 0, marker gone) and nothing defers.
+  - `R1InterruptTests`: a real TERM while a real runtime runs X-G under the adopted High Power. The runtime has started a "heater" that ignores TERM and that the runtime orphans on its own exit. The heater is gone at every restore call, and the proof is recorded. With a descendant that cannot be ended, the restore defers and the markers stay; the next session start restores.
+  - `TerminateTreeTests`: an orphan that holds the pipe neither hangs `_terminate` nor survives.
+- **Docs.** The contract doc (item 4 of "W1 under an adopted High Power", the driver's TERM bullet, the host-lock paragraph) and the R7-4 text above are corrected.
+
+No deviation.
+
+### R8-2. Members and runtime children do not inherit the lock: documented
+
+> R8-2 (exec MEDIUM-4, infra Sol F1): document only. Measuring members started by run_campaign and the runtime's heater/powermetrics children do not inherit the host lock; an orphan after a supervisor SIGKILL can see a restore under it. No data is admitted in that case (the night is aborted). Not fixed because it touches shared Block-5 code. Record it in the contract doc.
+
+**Implemented by** the doc commit: `docs/align/r1_runtime_contract.md`, host-level marker and night lock paragraph ("Known gap, not fixed (lead ruling R8-2 …)"). No code change.
+
+### R8-3. The runtime's watchdog arms when the first signal is held
+
+> R8-3 (infra Sol F2): arm the runtime's teardown watchdog when the first signal is held (the R7-8 deferral), not after the deferral ends, so it fires before the driver's 20 s kill.
+
+**Implemented by** `191455724`. `Termination.arm(signum)` starts the 15 s teardown watchdog once (idempotent). `Termination.handler` uses it. `close_managed_session`'s `hold` calls it for the first held signal when the deferred handler is the runtime's `Termination`. So the forced exit counts from the signal's arrival: 15 s, plus at most 4 s of hard-exit teardown, which is inside the driver's 20 s grace. The watchdog's terminal record names the held signal (`armed_signum`) if the handler has not run yet. Tests: `WatchdogArmTests.test_the_watchdog_fires_inside_a_blocked_close` (with a 0.5 s watchdog, it fires inside a close blocked for 2 s; it fails on `72c7c8a50`), and `test_a_handler_that_is_not_the_runtimes_termination_is_left_alone`.
+
+No deviation.
+
+### R8-4. Batch-window bounds include member start-up and the release pre-roll
+
+> R8-4 (science Sol MEDIUM-1): ruling 8's batch-window bounds for step-d and the designed states include member start-up overhead around the re-armed deadman and the 65 s pre-roll of heavy redos. Recompute and record the worst-case table.
+
+**Implemented by** `191455724`.
+- `rearmed_member_bound_s` uses the A-B-A leg law (round-3 LOW-1) for the member whose deadman R5-2 re-arms: the member law's start-up and close at the largest I_D the runtime admits (1,750 s; step-d's own I_D is what step-d measures), plus 1.13544 × the re-armed `step.deadman_s` (1,580 s), plus 120 s of margin. That is 3,663.9952 s.
+- `segment_bounds(g0_timeout_s, step_deadman_s)` adds the pre-deadman phases:
+  - step-d: 3,663.9952 + 1,200 (G0 timeout) + 300 (quiet) + 600 (recovery) = **5,763.9952 s**;
+  - each designed state: 3,663.9952 + 900 (preheat cap) + 1,200 (G0 timeout) = **5,763.9952 s**.
+  - Round 7 had 3,900 s for each; science Sol's counterexample was a step-d of 4,178 s.
+- A release before a segment (a heavy redo, or a release-first attempt) adds `release_segment_bound_s()` = 65 s pre-roll + 600 s G0 cap = **665 s** (round 7: 600 s). The A-B-A leg bound already had both.
+
+`night_worst_case_s(None)` on this head:
+
+| Case | Round 7 (s) | Round 8 (s) |
+|---|---|---|
+| No redo, no retry | 46,886.99 | **54,342.97** |
+| With one 11:45-13:15 batch-window wait (+5,400) | 52,286.99 | **59,742.97** |
+| R6-2 retry allowance: 4 × (1,500 s precool + segment) | 21,600 | **29,055.98** |
+| Every R6-2 retry plus one batch-window wait | 73,886.99 | **88,798.95** |
+
+The per-segment bounds behind the table:
+- the soak 1,800 s;
+- step-30b 3,300 s (unchanged);
+- each A-B-A leg 4,328.9952 s;
+- each precool and the post-D cooldown 1,500 s;
+- step-d and each designed state 5,763.9952 s;
+- the gated runs and X-G 1,800 s.
+
+If the gated runs' and X-G's 300 s W1 idle falls outside their member bound, add 1,200 s (55,542.97 / 60,942.97 s). Each quiet-segment redo (`MAX_SEGMENT_REDOS` = 2) adds its 665 s release (`redo_release_s`) and the segment again. W1's `window_cap_s` (44,640 s) is now 9,702.97 s below the no-redo case.
+
+Tests:
+- `test_r1_round7_science.G0TimeoutTests` (the bounds and the round-8 table), `test_r1_round6_power.R1NightWorstCaseTests` and `test_r1_rehearsal` (the admitted bounds), updated to the round-8 values;
+- `test_r1_round8.RedoReleaseBoundTests` (a heavy redo waits with the segment bound + 665 s).
+
+**Builder notes, for the lead.**
+- Step-30b keeps its round-5 bound of 3,300 s, because the ruling names step-d and the designed states. The same underbound argument applies to it (its deadman is also re-armed after the G0 and quiet).
+- The designed states run after step-d, so their bound could use step-d's measured I_D instead of 1,750 s. That would be tighter. The builder kept the admissible maximum (a larger bound only waits longer).
+
+### R8-5. An interrupt during `--dry-arm` only exits
+
+> R8-5 (cold LOW-1): an interrupt during --dry-arm must not restore an armed session's High Power; it only exits.
+
+**Implemented by** `191455724`. `run_night`'s outer handler runs neither pre-admission restore branch when `dry_arm` is set. Tests: `test_r1_round8.DryArmInterruptTests` covers an interrupt in the dry-arm branch (the cold pass's probe D) and one in its initial agent census. In both, the mode stays 2, the marker is kept and nothing is restored. Both fail on `72c7c8a50`.
+
+No deviation.
+
+### R8-6. Aliased picks fail R1's thermometry bar
+
+> R8-6 (cold LOW-3): R1's thermometry bar fails when s_fast and s_slow are aliases (alias_groups), not only the kit.
+
+**Implemented by** `191455724`. `picks_aliased` is true when the D classification's two picks are one key or sit in one of its `alias_groups`. In that case the driver sets `thermometry.bar` to `fail`, adds the flag `r1.picks_aliased` and records a `bar_reason`. The runtime's classification and its digest are unchanged. Tests: `test_r1_round8.AliasedPicksBarTests` (aliased picks fail; aliases elsewhere keep `pass`; the rule).
+
+No deviation.
+
+### R8-7. Protocol v4 made true
+
+> R8-7 (cold LOW-4): update docs/align/pilot_protocol_v4.md so its claims are true: record R7-1's gated-block order, R7-2's R1 G0 cap of 1,200 s and the R1-derived W1 G0 cap slot, and R7-3, each citing LEAD-RULINGS-2.
+
+**Implemented by** the doc commit. Protocol v4's R1 paragraph now states R7-1's gated-block order and R7-3's confirmations and remedy. Its G0 paragraph now states R1's single 1,200 s G0 timeout, which covers the gated runs, X-G, step-d and the designed states, first attempt and retry; the precools keep 1,500 s (R8-8). It also states that every G0 wait is recorded, and that W1's G0 cap is the R1-derived slot `r1_slots.g0_cap_w1.value_s`, carried as the `thermal_policy.g0_cap_s` placeholder. Each passage cites LEAD-RULINGS-2. With this, the round-7 claims "protocol v4 updated" under R7-1 and R7-3 are true.
+
+### R8-8. Confirmations, recorded only
+
+> R8-8 (confirmations, record only): the builder reading of 'R6-2 precool/retry segments' is confirmed (step-d and the designed states arm 1,200 s; idle-until-soak precools keep 1,500 s). Round-7 exec LOW-2 (G0 waits inside the member deadman) is accepted, because it is conservative. Ruling 1(f) likely refusing W1 at about 20 tok/s is expected: the 1(e) fallback is ruled by the lead after the R1 night, on its numbers.
+
+Recorded. No code change.

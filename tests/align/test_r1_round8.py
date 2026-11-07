@@ -37,7 +37,7 @@ def load_tests(loader, tests, pattern):
     NightDriverTests fixture, not its tests)."""
     suite = unittest.TestSuite()
     for case in (NightInterruptTests, R1InterruptTests, TerminateTreeTests, WatchdogArmTests, RedoReleaseBoundTests,
-                 DryArmInterruptTests, AliasedPicksBarTests):
+                 DryArmInterruptTests, AliasedPicksBarTests, DocTests):
         names = sorted(name for name in vars(case) if name.startswith("test_"))
         suite.addTests(case(name) for name in names)
     return suite
@@ -461,6 +461,23 @@ class AliasedPicksBarTests(unittest.TestCase):
         self.assertTrue(r1.picks_aliased({"s_fast": "A", "s_slow": "B", "alias_groups": [["A", "B"]]}))
         self.assertFalse(r1.picks_aliased({"s_fast": "A", "s_slow": "B", "alias_groups": [["A", "C"]]}))
         self.assertFalse(r1.picks_aliased({"s_fast": None, "s_slow": None, "alias_groups": []}))
+
+
+class DocTests(unittest.TestCase):
+    """R8-7: protocol v4 states R7-1, R7-2 and R7-3; R8-1/R8-2 in the contract."""
+
+    def test_protocol_v4_records_round7_rulings(self):
+        text = " ".join((ROOT / "docs/align/pilot_protocol_v4.md").read_text().split())
+        for needle in ("Gated-block order (LEAD-RULINGS-2 R7-1)", "D_bank, D_spam a, D_spam b, X-G",
+                       "R1's G0 timeout (LEAD-RULINGS-2 R7-2)", "G0 timeout of 1,200 s",
+                       "`r1_slots.g0_cap_w1.value_s`", "(LEAD-RULINGS-2 R7-3)", "magistrate's call"):
+            self.assertIn(needle, text)
+
+    def test_contract_records_r8_1_and_r8_2(self):
+        text = " ".join((ROOT / "docs/align/r1_runtime_contract.md").read_text().split())
+        for needle in ("lead ruling R8-1", "lead ruling R8-2", "R8-3", "R8-4", "R8-5", "R8-6", "5,763.9952 s",
+                       "54,342.97 s"):
+            self.assertIn(needle, text)
 
 
 if __name__ == "__main__":
