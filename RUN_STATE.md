@@ -1058,6 +1058,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After R0 exits: item 185 (1) on the new record, then 194 (3) for contention.
 (4) WP18 (item 191) and items 188 (3)-(4) are unchanged.
 
+- **Update about 02:25 PST: the fix lane's cold passes are in. R0 is HELD; the re-launch planned for the 06:15 gap is withdrawn.**
+  - #692 (draft, base `lane/2026-11-05-align-pilot10-benign`, head `3c0b71b24`, Sol 6.1 builder): Fable 5.1 and Opus 5.5 ran blind executing cold passes. Both returned ADMIT_WITH_FIXES: the diff is correct and no capture that `collect()` can produce passes falsely. Dispositions: https://github.com/mpmdw/JouleWise/pull/692#issuecomment-6705062492. Reviews: `/Users/edr/night-archive/r0-smc-cov/{fable,opus}/REVIEW.md`.
+  - **Fable F1:** the R0 host receipt (`r0_host.py:484-491`) re-checks the picks against the capture-wide coverage block that `scripts/align_smc_enumerate.py:130` writes at 100 ms. On the real payload it stays inconclusive (36/1800). A capture-wide grid at 500 ms gives 0.906, because the phases sit on different sub-second offsets. The receipt must read `rank`'s per-phase coverage.
+  - **Opus HIGH, re-executed by the lead on the raw journal:** with the coverage fixed, the picks are artifacts.
+    - All 16 die keys are `Tg*` GPU keys reading a fixed -2.75 degC on 286 of 300 idle samples (power-gated placeholder), and they drop back to it two samples into recovery.
+    - TaRT was still cooling through idle (34.0 to 30.6 degC); its 50-60 s rise is 0.06 degC against a noise floor of 1.14.
+    - The real CPU-cluster keys TCMb, TCDX and TCMz (t63 18-26 s, tau 16-27 s) fall between the die class (t63 <= 5 s) and the heatsink class (tau > 30 s), so they are record-only.
+  - **Disposition:** #692 stays draft and unmerged. Merging it with the receipt fix alone would turn a wrong-reason inconclusive into a pass with physically wrong picks. The classifier needs a design decision, a result the design does not cover (item 185 (3)), so it goes to Ed and the laptop lead:
+    - rejecting placeholder series;
+    - a settled-idle criterion (the idle phase follows the memory check's load);
+    - classes that fit Mac15,9's sensors, or a different load step;
+    - what W1 thermal control needs from `s_fast` and `s_slow`.
+  - Reviewer harness note: agent tool calls do not keep a standalone `cd`, so plain `-m unittest` imported the custody checkout. Use `python -P` or `PYTHONSAFEPATH=1`.
+
+**Next activation (replaces item 195's pointer above; written 2026-11-07 about 02:25 PST by activation a9031916):**
+(1) Do not re-launch R0 until a classifier amendment covering the Opus HIGH and Fable F1 is decided, built (onto #692 or a successor), gated and merged. A re-run on the current lane is inconclusive for a known reason and costs 3-4 h of quiet Mac.
+(2) Read Ed's reply on thread `1a198fafa8fc12ba` and any laptop-lead item. If a two-seat classifier consult has run (`/Users/edr/night-archive/r0-smc-cov/consult/`), its proposals are inputs to that decision.
+(3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
 194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
   - host, host-identity, model-load, generated (0 off-spec turns) and memory (peak 37,025,283,164 bytes against 45e9; swap flat): pass.
