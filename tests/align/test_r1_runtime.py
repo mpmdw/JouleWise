@@ -112,15 +112,18 @@ class ConformanceTests(unittest.TestCase):
             self.assertEqual(results["step_30b"]["thermometry"]["for_record_only"], True)
             cool = segment("cooldown_after_D", "idle-until-soak", "--duration-s", "1500")
             self.assertTrue(cool["recovery_curve"])
-            xg = segment("X_G_contrast", "x-g")
-            self.assertEqual(xg["reference_source"], "r1_soak_reference")
             gated = {}
             soak_r = json.loads((run / "soak_reference.json").read_text())["sensors_c"][rs.syn.SLOW]
             for name, kind in r1.GATED_D_RUNS:
-                # R5-1: precool to the G0 band of the soak R, then consume it.
-                self.assertIs(segment(name + r1.PRECOOL_SUFFIX, "idle-until-soak", "--duration-s", "1500")
-                              ["released"], True)
+                # R6-1: no precool; the member's own W1 idle is the schedule.
                 gated[name] = segment(name, kind)
+                self.assertEqual(gated[name]["inter_member_idle_s"], 300.0)
+                self.assertTrue(r1._check_schedule(name, gated[name], r1.check_w1_schedule(None), "D"))
+                self.assertEqual(gated[name]["decode_tokens"],
+                                 sum(t["decode_tokens"] for t in json.loads(
+                                     (run / name / gated[name]["bundle"] / "outputs/align_episode.json")
+                                     .read_text())["turns"]))
+                self.assertGreater(gated[name]["decode_tokens"], 0)
                 r1._check_gated_t_dead(name, gated[name], step)
                 r1._check_soak_reference_consumed(name, gated[name], run / "soak_reference.json")
                 r1.deadman_summary(name, gated[name])
@@ -130,6 +133,9 @@ class ConformanceTests(unittest.TestCase):
                 g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
                 self.assertEqual(g0["reference"]["slow_c"], soak_r)
                 self.assertEqual(g0["reference"]["source_member"], "r1_soak_reference")
+            xg = segment("X_G_contrast", "x-g")
+            self.assertEqual(xg["reference_source"], "r1_soak_reference")
+            self.assertEqual((xg["inter_member_idle_s"], xg["g0_outcome"]), (300.0, "released"))
             self.assertEqual(r1.gate_wait_medians(gated)["G1_waits"],
                              sum(len(g["gate_waits_s"]["G1"]) for g in gated.values()))
             planning = [segment(f"planning_turn_R_plus_{o}C", f"d-planning-turn-r-plus-{o}c") for o in (0, 2, 4)]
@@ -402,7 +408,7 @@ class IncompleteMemberTests(unittest.TestCase):
             finally:
                 del world.status
 
-    def test_planning_turn_with_an_unreleased_g0_fails_the_segment(self):
+    def test_planning_turn_with_an_unreleased_g0_is_inconclusive(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
@@ -415,10 +421,17 @@ class IncompleteMemberTests(unittest.TestCase):
             code = rt.main(["--config", str(config), "--r1-kind", "d-planning-turn-r-plus-2c", "--output", str(out),
                             "--soak-reference", str(soak)], stdout=buffer, backend_factory=self.NoReleaseBackend)
             record = custody(out)
-            self.assertEqual(code, rt.EXIT_FAILED, record)
-            self.assertEqual(buffer.getvalue(), "")
-            self.assertEqual(record["status"], "failed")
-            self.assertIn("designed start state not reached: G0 timeout", record["error"])
+            # LEAD-RULINGS-2 R6-2: INCONCLUSIVE (exit 0), not a failure that
+            # refuses the night; still no release temperature and no energy.
+            self.assertEqual(code, 0, record)
+            self.assertEqual(record["status"], "complete")
+            result = json.loads(buffer.getvalue())
+            self.assertEqual((result["segment_status"], result["g0_released"], result["g0_outcome"]),
+                             ("inconclusive", False, "timeout"))
+            self.assertNotIn("g0_release_c", result)
+            self.assertNotIn("energy_j", result)
+            self.assertEqual(contract.missing_fields("d-planning-turn-r-plus-2c", result, quiet=True), [])
+            r1.os_load_verdict("planning_turn_R_plus_2C", result)
             # The member itself ended at G0 with no turn: the evidence stays in DIR.
             bundle = out / "runs" / "align-v4-r1-d-planning-turn-r-plus-2c"
             self.assertTrue((bundle / "summary_metrics.json").exists())
@@ -450,6 +463,41 @@ class IncompleteMemberTests(unittest.TestCase):
             self.assertEqual([r["outcome"] for r in episode["hardware"]["thermal"]["intervals"]
                               if r["kind"] == "G0"], ["released"])
             self.assertEqual(len(episode["turns"]), 1)
+
+    def test_step_d_with_an_unreleased_g0_is_inconclusive(self):
+        # R6-2: step-d's G0 timeout used to exit 3 and refuse R1 after hours.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            config = rs.synthetic_config(root / "cfg")
+            soak = write_soak(root / "soak.json")
+            out = root / rt.STEP_D_SEGMENT
+            buffer = io.StringIO()
+            code = rt.main(["--config", str(config), "--r1-kind", "step-d", "--output", str(out),
+                            "--soak-reference", str(soak)], stdout=buffer, backend_factory=self.NoReleaseBackend)
+            record = custody(out)
+            self.assertEqual(code, 0, record)
+            result = json.loads(buffer.getvalue())
+            self.assertEqual((result["segment_status"], result["g0_released"]), ("inconclusive", False))
+            self.assertNotIn("slots", result)
+            self.assertEqual(sorted(result["incomplete_reasons"]),
+                             ["episode.g0_unreleased:0", "thermal.start_gate_timeout", "turns:0"])
+            self.assertEqual(contract.missing_fields("step-d", result, quiet=True), [])
+            # A consumer never reads an INCONCLUSIVE step-d as slots.
+            run = root
+            code, _ = call(config, run / "D_spam_benign_s1_gated_held_a", "d-spam-benign-s1-a",
+                           "--soak-reference", str(soak))
+            self.assertEqual(code, rt.EXIT_REFUSED)
+
+    def test_only_a_pure_g0_timeout_is_inconclusive(self):
+        self.assertTrue(rt.g0_timeout_only(["turns:0", "episode.g0_unreleased:0", "thermal.start_gate_timeout"]))
+        self.assertTrue(rt.g0_timeout_only(["thermal.start_gate_timeout"]))
+        for reasons in ([], ["turns:0"], ["turns:0", "thermal.start_gate_timeout", "thermal.custody_invalid"],
+                        ["episode.g0_unreleased:0", "member_status:failed:unknown_error"],
+                        ["thermal.start_gate_timeout", "thermal.collector_failed"]):
+            with self.subTest(reasons=reasons):
+                self.assertFalse(rt.g0_timeout_only(reasons))
+        self.assertFalse(contract.is_g0_inconclusive("x-g", {"segment_status": "inconclusive"}))
+        self.assertTrue(contract.is_g0_inconclusive("step-d", {"segment_status": "inconclusive"}))
 
     def test_incomplete_member_reasons(self):
         def member(status="succeeded", turns=1, flags=()):

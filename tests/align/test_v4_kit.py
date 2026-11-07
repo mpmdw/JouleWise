@@ -384,6 +384,7 @@ def ready_inputs(i_d=300.0, tail=20.0):
     """Synthetic, fully supplied inputs (no model, no study data); WP11 is the committed one."""
     t_dead = kit.l1_t_dead(i_d, tail)
     policy = {'sensors': {'s_fast': 'TC0P', 's_slow': 'TG0P', 'fan_keys': [], 'r0_sha256': 'a' * 64},
+              'classification_sha256': 'b' * 64,
               'delta_fast_c': 8.0, 'delta_slow_c': 1.5, 'turn_cap_s': 120, 'chunk_tokens': 512,
               'heavy': True, 'per_turn': True}
     inputs = {
@@ -405,16 +406,31 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
     return {'schema': kit.R1_SLOTS_SCHEMA, 'source': source, 'ac_powermode': ac_powermode,
             'slots_ac_powermode': ac_powermode,
             'thermometry': {'bar': 'pass', 'D': {'die_candidates': ['TC0P'], 'heatsink_candidates': ['TG0P'],
+                                                 'classification_sha256': 'b' * 64,
                                                  'sensor_pick_changed': False}},
             'max_r1_tail_s': tail,
             'slots': {'I_D': i_d, 'T_dead': 1451.0, 'B_D': 8192, 'N_chunk': 512, 'S5': 1.5, 'S6': 1.5, 'S7': 120.0},
             'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
             'u5': {'verdict': 'pass', 'c': 1.0},
-            'deadman_budget': [{'run': name, 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2)}
+            # R6-3: each gated run's observed decode rate (14,000 tokens in 700 s = step-d's 20 tok/s).
+            'deadman_budget': [{'run': name, 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2),
+                                'decode_tokens': 14000}
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
-            'budget_fit_inputs': {'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 4096},
-            'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
-            'duty_bar': {'pass': True}}
+            'budget_fit_inputs': {'r_decode_tok_per_s': 20.0, 'r_decode_step_d_tok_per_s': 20.0,
+                                  'turn_cap_tokens': 4096},
+            'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
+            'duty_bar': {'pass': True, 'schedule': R6_1_SCHEDULE}}
+
+
+# LEAD-RULINGS-2 R6-1: the duty bar's schedule as the driver records it.
+R6_1_SCHEDULE = {'authority': 'LEAD-RULINGS-2 R6-1', 'inter_member_idle_s': {'D': 300.0, 'X-G': 300.0}}
+
+
+def set_decode_rate(slots, rate):
+    """Step-d and every gated run decoding at ``rate`` tok/s (R6-3 re-derives the minimum)."""
+    slots['budget_fit_inputs'].update(r_decode_tok_per_s=rate, r_decode_step_d_tok_per_s=rate)
+    for row in slots['deadman_budget']:
+        row['decode_tokens'] = round(rate * row['phases_s']['decode'])
 
 
 class FakeArmHost:
@@ -481,7 +497,7 @@ class R1EvidenceBindingTests(unittest.TestCase):
 
     def test_failed_duty_bar_needs_a_recorded_lead_fallback_step(self):
         inputs, slots = ready_inputs()
-        slots['duty_bar'] = {'pass': False}
+        slots['duty_bar'] = {'pass': False, 'schedule': R6_1_SCHEDULE}
         with self.assertRaisesRegex(ValueError, 'no lead fallback step'):
             kit.require_ready(inputs, slots)
         slots['duty_bar']['lead_fallback'] = {'step': 5, 'authority': 'x'}
@@ -514,7 +530,36 @@ class R1EvidenceBindingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'lead_verification'):
             kit.require_ready(inputs, changed)
         changed['thermometry']['lead_verification'] = {'authority': 'LEAD-RULINGS-3 S7 verified'}
+        changed['thermometry']['D']['s7_for_r1_picks'] = {
+            'S7': slots['slots']['S7'], 'band_c': {'s_slow': slots['slots']['S6']},
+            'keys': {'s_fast': 'TC0P', 's_slow': 'TG0P'}}
         kit.require_ready(inputs, changed)
+
+    def test_classification_digest_must_match_the_r1_record(self):
+        inputs, slots = ready_inputs()
+        kit.require_ready(inputs, slots)
+        del inputs['R1']['thermal_policy']['classification_sha256']
+        with self.assertRaisesRegex(ValueError, 'classification_sha256'):
+            kit.check_r1_evidence(inputs, slots)
+        for digest in (None, '', 'b' * 63, 'g' * 64, 'c' * 64):
+            inputs['R1']['thermal_policy']['classification_sha256'] = digest
+            with self.subTest(digest=digest), self.assertRaisesRegex(ValueError, 'classification_sha256'):
+                kit.check_r1_evidence(inputs, slots)
+
+    def test_classification_digest_is_not_installed_in_member_gate_policies(self):
+        inputs, slots = ready_inputs()
+        kit.require_ready(inputs, slots)
+        with patch.object(kit, 'read_inputs', return_value=inputs), \
+                patch.object(kit, 'read_r1_slots', return_value=slots):
+            files = kit.build_files(ROOT)
+        plan = json.loads(files[kit.KIT / 'collection_plan.json'])
+        for member in plan['members']:
+            config = json.loads(files[Path(member['config_path'])])
+            spec = EpisodeSpec.from_text(config['workload_profile']['prompt_text'])
+            with self.subTest(ordinal=member['ordinal']):
+                if spec.thermal is not None:
+                    self.assertNotIn('classification_sha256', spec.thermal)
+        self.assertEqual(inputs['R1']['thermal_policy']['classification_sha256'], 'b' * 64)
 
     def test_plan_names_member_5_as_capture_and_no_r1_launcher(self):
         # Fable cold pass LOW-7 (LEAD-RULINGS-2 R5-7).
@@ -610,10 +655,10 @@ class R1BudgetBindingTests(unittest.TestCase):
         fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
         self.assertAlmostEqual(fit['worst_s'], 120 + 240 + 126 + 12288 / 20)
         self.assertTrue(fit['fits'])
-        slots['budget_fit_inputs']['r_decode_tok_per_s'] = 11.0   # FD:145's ~370 s per 4,096 tokens
+        set_decode_rate(slots, 11.0)   # FD:145's ~370 s per 4,096 tokens
         with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit.*largest fitting B_D is None'):
             kit.require_ready(inputs, slots)
-        slots['budget_fit_inputs']['r_decode_tok_per_s'] = 15.0   # 486 + (B_D + 4096)/15 <= 1277.0
+        set_decode_rate(slots, 15.0)   # 486 + (B_D + 4096)/15 <= 1277.0
         self.assertEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 7168)
         with self.assertRaisesRegex(ValueError, 'largest fitting B_D is 7168'):
             kit.require_ready(inputs, slots)
@@ -626,17 +671,141 @@ class R1BudgetBindingTests(unittest.TestCase):
         negative = deepcopy(three)
         negative[2]['phases_s']['H'] = -500.0
         for change in (dict(budget_fit_inputs=None), dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0}),
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 4096}),
                        dict(deadman_budget=[{'phases_s': {'tail': 20.0}}]),
                        dict(deadman_budget=three[:2]),                       # the bank run left out
                        dict(deadman_budget=three[:2] + three[:1]),           # a run counted twice
                        dict(deadman_budget=negative),
-                       dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 1}),
-                       dict(budget_fit_inputs={'r_decode_tok_per_s': 0.0, 'turn_cap_tokens': 4096}),
-                       dict(budget_fit_inputs={'r_decode_tok_per_s': float('nan'), 'turn_cap_tokens': 4096})):
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0, 'r_decode_step_d_tok_per_s': 20.0,
+                                               'turn_cap_tokens': 1}),
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': 0.0, 'r_decode_step_d_tok_per_s': 0.0,
+                                               'turn_cap_tokens': 4096}),
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': float('nan'),
+                                               'r_decode_step_d_tok_per_s': float('nan'), 'turn_cap_tokens': 4096})):
             inputs, slots = ready_inputs()
             slots.update(change)
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, r'ruling 1\(f\)'):
                 kit.require_ready(inputs, slots)
+
+
+class R1ChangedPickBindingTests(unittest.TestCase):
+    """R6-4: changed picks use the full-inventory R1 recovery and slow band."""
+
+    def setUp(self):
+        self.inputs, self.slots = ready_inputs()
+        self.policy = self.inputs['R1']['thermal_policy']
+        self.policy['sensors'].update(s_fast='TC1P', s_slow='TG1P')
+        self.policy.update(delta_slow_c=1.25, turn_cap_s=60.0)
+        self.slots['thermometry']['lead_verification'] = {'authority': 'lead, R6-4 verified'}
+        self.slots['thermometry']['D'].update(
+            sensor_pick_changed=True, die_candidates=['TC1P'], heatsink_candidates=['TG1P'],
+            s7_for_r1_picks={'keys': {'s_fast': 'TC1P', 's_slow': 'TG1P'},
+                             'reference_c': {'s_fast': 40.0, 's_slow': 35.0},
+                             'band_c': {'s_fast': 1.0, 's_slow': 1.25},
+                             'recovery_s': 20.0, 'recovery_censored': False, 'S7': 60.0})
+
+    def test_r1_pick_s6_and_s7_admit_with_lead_verification(self):
+        kit.require_ready(self.inputs, self.slots)
+        del self.slots['thermometry']['lead_verification']
+        with self.assertRaisesRegex(ValueError, 'lead_verification'):
+            kit.require_ready(self.inputs, self.slots)
+
+    def test_r0_pick_s6_and_s7_refuse_when_different(self):
+        for name, slot in (('turn_cap_s', 'S7'), ('delta_slow_c', 'S6')):
+            inputs = deepcopy(self.inputs)
+            inputs['R1']['thermal_policy'][name] = self.slots['slots'][slot]
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, r'thermometry\.D\.s7_for_r1_picks'):
+                kit.require_ready(inputs, self.slots)
+
+    def test_uncomputed_r1_pick_s6_or_s7_refuses(self):
+        for name in ('S7', 's_slow'):
+            for value in (None, 0, -1, float('nan'), float('inf'), True, '60'):
+                slots = deepcopy(self.slots)
+                computed = slots['thermometry']['D']['s7_for_r1_picks']
+                (computed if name == 'S7' else computed['band_c'])[name] = value
+                with self.subTest(name=name, value=value), self.assertRaisesRegex(
+                        ValueError, r'thermometry\.D\.s7_for_r1_picks.*not computed'):
+                    kit.require_ready(self.inputs, slots)
+        del self.slots['thermometry']['D']['s7_for_r1_picks']
+        with self.assertRaisesRegex(ValueError, r'thermometry\.D\.s7_for_r1_picks.*not computed'):
+            kit.require_ready(self.inputs, self.slots)
+
+    def test_policy_keys_must_be_the_keys_the_r1_pick_values_describe(self):
+        # Sol critique of round 6: old keys still in the candidate lists, new numbers.
+        self.slots['thermometry']['D'].update(die_candidates=['TC1P', 'TC0P'], heatsink_candidates=['TG1P', 'TG0P'])
+        kit.require_ready(self.inputs, self.slots)
+        self.policy['sensors'].update(s_fast='TC0P', s_slow='TG0P')
+        with self.assertRaisesRegex(ValueError, r'not the keys .*s7_for_r1_picks\.keys'):
+            kit.require_ready(self.inputs, self.slots)
+
+    def test_s6_tuning_receipt_uses_the_r1_pick_base_and_cap(self):
+        self.policy['delta_slow_c'] = 2.0
+        self.slots['s6_tuning'] = {'authority': 'lead, FD 2.6', 'from_c': 1.25, 'to_c': 2.0}
+        kit.require_ready(self.inputs, self.slots)
+        self.slots['s6_tuning']['from_c'] = self.slots['slots']['S5']
+        with self.assertRaisesRegex(ValueError, r'thermometry\.D\.s7_for_r1_picks'):
+            kit.require_ready(self.inputs, self.slots)
+        self.slots['s6_tuning']['from_c'] = 1.25
+        self.slots['s6_tuning']['to_c'] = self.policy['delta_slow_c'] = 2.5
+        with self.assertRaisesRegex(ValueError, r'thermometry\.D\.s7_for_r1_picks.*2.0 C cap'):
+            kit.require_ready(self.inputs, self.slots)
+
+
+class Round6KitTests(unittest.TestCase):
+    """LEAD-RULINGS-2 R6-1, R6-2 and R6-3 in the kit."""
+
+    def test_ruling_1f_uses_the_slowest_observed_decode_rate(self):
+        inputs, slots = ready_inputs()
+        # The bank run decoded at 10 tok/s (7,000 tokens in 700 s); step-d at 20.
+        slots['deadman_budget'][2]['decode_tokens'] = 7000
+        with self.assertRaisesRegex(ValueError, r'is not min\(step-d'):
+            kit.require_ready(inputs, slots)       # the recorded 20 tok/s is stale
+        slots['budget_fit_inputs']['r_decode_tok_per_s'] = 10.0
+        fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
+        self.assertEqual(fit['r_decode_tok_per_s'], 10.0)
+        self.assertAlmostEqual(fit['terms_s']['decode_s'], (8192 + 4096) / 10.0)
+        # 486 + 12,288/10 > T_dead: step-d's rate alone would have admitted it.
+        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit'):
+            kit.require_ready(inputs, slots)
+        # A run that decoded nothing (G0 timeout) has no rate and does not lower it.
+        inputs, slots = ready_inputs()
+        slots['deadman_budget'][1]['decode_tokens'] = 0
+        slots['deadman_budget'][1]['phases_s']['decode'] = 0.0
+        kit.require_ready(inputs, slots)
+        for bad in (None, -1, 1.5, True, '14000'):
+            inputs, slots = ready_inputs()
+            slots['deadman_budget'][0]['decode_tokens'] = bad
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'decode_tokens'):
+                kit.require_ready(inputs, slots)
+        inputs, slots = ready_inputs()
+        slots['deadman_budget'][0]['phases_s']['decode'] = 0.0      # tokens without decode seconds
+        with self.assertRaisesRegex(ValueError, 'decode_tokens'):
+            kit.require_ready(inputs, slots)
+
+    def test_duty_bar_must_record_w1_s_schedule(self):
+        self.assertEqual(kit.w1_inter_member_idle_s(), {'D': 300.0, 'X-G': 300.0})
+        for schedule in (None, {}, {'authority': 'LEAD-RULINGS-2 R5-1', 'inter_member_idle_s': {'D': 300.0, 'X-G': 300.0}},
+                         {'authority': 'LEAD-RULINGS-2 R6-1', 'inter_member_idle_s': {'D': 450.0, 'X-G': 300.0}}):
+            inputs, slots = ready_inputs()
+            slots['duty_bar']['schedule'] = schedule
+            with self.subTest(schedule=schedule), self.assertRaisesRegex(ValueError, 'R6-1 schedule'):
+                kit.require_ready(inputs, slots)
+
+    def test_an_inconclusive_step_d_is_refused_by_name(self):
+        inputs, slots = ready_inputs()
+        slots['inconclusive_segments'] = {kit.STEP_D_SEGMENT: 'G0 did not release, twice'}
+        with self.assertRaisesRegex(ValueError, 'step-d was INCONCLUSIVE'):
+            kit.require_ready(inputs, slots)
+
+    def test_an_inconclusive_designed_state_refuses_w1(self):
+        # Sol critique of round 6: fail closed at the kit for every R6-2 segment.
+        inputs, slots = ready_inputs()
+        slots['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
+        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(R6-2\): planning_turn_R_plus_2C'):
+            kit.require_ready(inputs, slots)
+        del slots['inconclusive_segments']
+        with self.assertRaisesRegex(ValueError, 'inconclusive_segments'):
+            kit.require_ready(inputs, slots)
 
 
 class L1Tests(unittest.TestCase):

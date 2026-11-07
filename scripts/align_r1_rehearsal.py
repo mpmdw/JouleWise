@@ -36,10 +36,10 @@ SLOT_NAMES = tuple(f"S{i}" for i in range(1, 10)) + (
     "B_D", "I_D", "T_dead", "N_chunk", "t_decline", "class",
 )
 PLANNING_START_OFFSETS_C = (0.0, 2.0, 4.0)
-# LEAD-RULINGS-2 R5-2: the designed start states run warmest first. They follow
-# D_bank (the host is warm) and the heater duty is clamped at 0 above the
-# target, so the R + 4 C G0 needs the least natural cooling, and each later
-# state has had the earlier ones' time to cool (fewest G0 timeouts).
+# LEAD-RULINGS-2 R5-2: the designed start states run warmest first (R + 4,
+# R + 2, R + 0 C). R6-2 then precools S_slow to the G0 band of R before each
+# of them (the ruling 1(c) post-D cooldown before the first, a bounded precool
+# before the others), so each preheats from the same defined state.
 PLANNING_RUN_ORDER_C = (4.0, 2.0, 0.0)
 # A1 R1 item 4 replay pair (a, b) plus council ruling 1(b)'s bank/benign run.
 GATED_D_RUNS = (
@@ -49,13 +49,26 @@ GATED_D_RUNS = (
 )
 REPLAY_PAIR = ("D_spam_benign_s1_gated_held_a", "D_spam_benign_s1_gated_held_b")
 COOLDOWN_AFTER_D_MAX_S = 1500          # ruling 1(c)
-# LEAD-RULINGS-2 R5-1: every gated D run consumes the soak R (as W1 members
-# consume member 5's R) and is preceded by an idle-cool until S_slow is within
-# the G0 band of R, bounded by the ruling 1(c) cap. A timeout makes that gated
-# run INCONCLUSIVE (recorded); it never refuses the night. X-G's precool is
-# cooldown_after_D, which immediately precedes it.
-GATED_PRECOOL_MAX_S = COOLDOWN_AFTER_D_MAX_S
+# LEAD-RULINGS-2 R6-1 (supersedes R5-1's cool-to-band): the duty bar must
+# reproduce W1's D-after-D G0. Every gated D run, and X-G, follows a D turn
+# with exactly W1's inter-member schedule: the member's own configured idle
+# (sampling.idle_seconds of the W1 kit config it runs), and nothing else; no
+# cool-to-band. They still consume the soak R (R5-1). A G0 timeout makes that
+# run INCONCLUSIVE (recorded), never a night refusal. They therefore run after
+# the designed start states: the R + 0 C planning turn (a D turn) precedes the
+# first, and X-G follows D_bank (W1's D -> X transition).
+# R6-2: the calibration segments (step-d and each designed start state) start
+# from a defined state: a bounded idle-until-soak precool (cap from the runtime
+# config, calibration_precool_cap_s) to the G0 band of R. A G0 timeout there is
+# retried once after another precool, then recorded INCONCLUSIVE; the kit
+# decides downstream (fail closed at the kit, not mid-night).
 PRECOOL_SUFFIX = ".precool"
+PRECOOL_RETRY_SUFFIX = ".precool_retry"
+G0_TIMEOUT_SUFFIX = ".g0_timeout1"
+W1_PLAN_TEMPLATE = Path("configs/campaigns/align_v4/night_plan.template.json")   # = align_v4_kit.W1_PLAN_TEMPLATE
+# The W1 roster role each R1 gated member stands for, and the R1 runtime
+# config template it runs (R6-1: its configured idle must be W1's).
+W1_SCHEDULE_ROLES = {"d_spam": "D", "d_bank": "D", "x_g": "X-G"}
 # Ruling 16 legs: (label, AC powermode). LEAD-RULINGS-2 R5-5 (protocol v4
 # :243-251): the A-B-A decision precedes step-d, so the D step that fills the
 # slots, and every later D measurement, runs under the adopted series mode.
@@ -225,7 +238,7 @@ class PowerModeGuard(AbstractContextManager):
         return False
 
 
-def phase_plan(include_4bit=False):
+def phase_plan(include_4bit=False, precool_cap_s=COOLDOWN_AFTER_D_MAX_S):
     """R1 phase table: (name, runtime kind, duration_s, class).
 
     A1 R1 item 4 is a *replay pair* of D spam/benign seed 1 (U3, the R1 replay
@@ -237,28 +250,34 @@ def phase_plan(include_4bit=False):
     energies feed beta_T.
 
     Order (LEAD-RULINGS-2): the ruling 16 A-B-A legs run right after the 30B
-    step, so step-d and every later D measurement run under the adopted
-    series mode (R5-5); each gated D run has its own bounded precool against
-    the soak R (R5-1); the designed start states run warmest first (R5-2).
+    step (R6-6: its 600 s recovery observation is the idle; no separate
+    cooldown), so step-d and every later D measurement run under the adopted
+    series mode (R5-5). Step-d and each designed start state are preceded by
+    a bounded precool to the G0 band of R (R6-2; the ruling 1(c) post-D
+    cooldown is the first state's), the states run warmest first (R5-2), and
+    the gated D runs and X-G follow the last state back to back, each after a
+    D turn with only W1's inter-member schedule (R6-1). ``precool_cap_s`` is
+    the runtime config's ``calibration_precool_cap_s``.
     """
     phases = [
         ("pre_calibration_bracket", "calibration-pre", None, "light"),
         ("idle_soak", "idle", 1800, "light"),
         ("step_30b", "step-30b", None, "heavy"),
-        ("cooldown_after_30b", "idle", 600, "light"),
     ]
     phases += [(f"high_power_{label}", f"high-power-aba-{label.lower()}", None, "heavy")
                for label, _ in HIGH_POWER_LEGS]
     phases += [
-        ("step_D_prefill_10k_decode_4096", "step-d", None, "heavy"),
+        (STEP_D_NAME + PRECOOL_SUFFIX, "idle-until-soak", precool_cap_s, "light"),
+        (STEP_D_NAME, "step-d", None, "heavy"),
         ("cooldown_after_D", "idle-until-soak", COOLDOWN_AFTER_D_MAX_S, "light"),
-        ("X_G_contrast", "x-g", None, "heavy"),
     ]
-    for name, kind in GATED_D_RUNS:
-        phases += [(name + PRECOOL_SUFFIX, "idle-until-soak", GATED_PRECOOL_MAX_S, "light"),
-                   (name, kind, None, "heavy")]
-    phases += [(f"planning_turn_R_plus_{int(offset)}C", f"d-planning-turn-r-plus-{int(offset)}c", None, "heavy")
-               for offset in PLANNING_RUN_ORDER_C]
+    for index, offset in enumerate(PLANNING_RUN_ORDER_C):
+        name = f"planning_turn_R_plus_{int(offset)}C"
+        if index:
+            phases.append((name + PRECOOL_SUFFIX, "idle-until-soak", precool_cap_s, "light"))
+        phases.append((name, f"d-planning-turn-r-plus-{int(offset)}c", None, "heavy"))
+    phases += [(name, kind, None, "heavy") for name, kind in GATED_D_RUNS]
+    phases.append(("X_G_contrast", "x-g", None, "heavy"))
     if include_4bit:
         phases.append(("D_4bit_optional", "d-4bit", None, "heavy"))
     phases.append(("post_calibration_bracket", "calibration-post", None, "light"))
@@ -398,7 +417,9 @@ def battery_report(results, harvested):
     """Council ruling 4(b): drain rate (%/h) under D and under the 30B, and the
     SoC at which charging resumed, to predict top-ups per window."""
     def drain(name):
-        value = results[name].get("battery_drain_pct_per_h")
+        # R6-2: a segment that did not run (step-d INCONCLUSIVE skips the
+        # gated runs) has no drain rate.
+        value = (results.get(name) or {}).get("battery_drain_pct_per_h")
         # null: the segment charged throughout or had too few samples.
         return None if value is None else _finite_number(value, f"{name}.battery_drain_pct_per_h")
     d_names = ("step_D_prefill_10k_decode_4096", *(name for name, _ in GATED_D_RUNS))
@@ -470,7 +491,7 @@ def _finite_number(value, label):
     return float(value)
 
 
-def deadman_summary(name, result, duty_t_dead=None, *, precool_released=True):
+def deadman_summary(name, result, duty_t_dead=None, *, inconclusive_reason=None):
     """Ruling 1(a)/(d): deadman consumption by phase, predicted turns, duty bar.
 
     The 40 % share is judged against ``duty_t_dead`` when given: min(armed
@@ -500,15 +521,24 @@ def deadman_summary(name, result, duty_t_dead=None, *, precool_released=True):
     checks = {"no_x7": not x7, "admitted_turns_ge_3": turns >= DUTY_BAR["min_admitted_turns"],
               "gate_hold_le_40pct_T_dead": gate_hold <= DUTY_BAR["max_gate_hold_fraction_of_T_dead"] * duty}
     bar = {"checks": checks, "pass": all(checks.values()), "verdict": "pass" if all(checks.values()) else "fail"}
-    if not precool_released:
-        # LEAD-RULINGS-2 R5-1: the run did not start from the G0 band of the
-        # soak R, so it does not test W1's G0/G1/H; recorded, never judged.
-        bar.update(**{"pass": False, "verdict": "inconclusive",
-                      "reason": "precool did not reach the G0 band of the soak R before the cap"})
+    if inconclusive_reason is not None:
+        # LEAD-RULINGS-2 R6-1: the run's G0 timed out after W1's inter-member
+        # schedule, or it did not follow a D turn; it is INCONCLUSIVE
+        # (recorded), never judged and never a night refusal.
+        bar.update(**{"pass": False, "verdict": "inconclusive", "reason": inconclusive_reason})
+    # R6-3: the decode tokens with phases_s.decode give the run's observed
+    # decode rate (none when it decoded nothing), an input of ruling 1(f).
+    tokens = result.get("decode_tokens")
+    if tokens is not None and (type(tokens) is not int or tokens < 0):
+        raise Refusal(f"{name}: decode_tokens must be a non-negative integer")
+    if tokens and phases["decode"] <= 0:
+        raise Refusal(f"{name}: {tokens} decode tokens in {phases['decode']} s of decode")
+    rate = tokens / phases["decode"] if tokens else None
     return {"run": name, "T_dead_s": t_dead, "duty_T_dead_s": duty, "phases_s": phases,
             "fraction_of_T_dead": {k: v / t_dead for k, v in phases.items()},
             "gate_hold_s": gate_hold, "admitted_turns": turns, "x7": x7,
-            "predicted_turns_per_episode": predicted, "precool_released": precool_released,
+            "predicted_turns_per_episode": predicted, "inconclusive_reason": inconclusive_reason,
+            "decode_tokens": tokens, "r_decode_tok_per_s": rate,
             "duty_bar": bar}
 
 
@@ -552,7 +582,15 @@ def thermometry_record(name, result):
     keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "reasons",
             "die_candidates", "heatsink_candidates", "classification_sha256", "classification_file",
             "s7_for_r1_picks")
-    return {key: block.get(key) for key in keep}
+    record = {key: block.get(key) for key in keep}
+    if isinstance(record.get("s7_for_r1_picks"), dict):
+        # LEAD-RULINGS-2 R6-4: the changed-pick S7's reference R is the quiet
+        # window's median (the soak journal lacks the R1-pick keys): ACCEPTED.
+        record["s7_for_r1_picks"] = {
+            **record["s7_for_r1_picks"],
+            "reference_rule": "median of the 300 s quiet window before prefill (the soak journal lacks these keys)",
+            "reference_rule_status": "ACCEPTED", "reference_rule_authority": "LEAD-RULINGS-2 R6-4"}
+    return record
 
 
 def _sustained_busy(samples):
@@ -728,6 +766,14 @@ def _release_against_soak(args, output, label, soak_reference):
     return release
 
 
+def _fresh_name(output, stem, start):
+    """``stem`` + the first index from ``start`` that names no existing entry."""
+    index = start
+    while (output / f"{stem}{index}").exists():
+        index += 1
+    return f"{stem}{index}"
+
+
 def _segment(args, output, name, kind, duration, workload_class, record, *, quiet,
              soak_reference=None, release_first=False, contract_key=None, extra=None, bound_s=None):
     """Invoke one runtime segment; quiet segments obey ruling 8 and are redone on load.
@@ -748,7 +794,8 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
             (duration or SEGMENT_BOUND_S.get(kind, QUIET_SEGMENT_BOUND_S))
             + (G0_RELEASE_BOUND_S if release_now else 0))
         waited = wait_outside_os_batch(bound) if quiet else 0.0
-        release = (_release_against_soak(args, output, f"{name}.g0_release{attempt}", soak_reference)
+        release = (_release_against_soak(args, output, _fresh_name(output, f"{name}.g0_release", attempt),
+                                         soak_reference)
                    if release_now else None)
         started = time.time_ns()
         result = _invoke(args.runtime, kind, target, duration, soak_reference=soak_reference,
@@ -774,7 +821,9 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
             row["superseded_attempts"] = attempts[:-1]
             record["phases"].append(row)
             return result, row
-        rejected = output / f"{name}.rejected{attempt + 1}"
+        # R6-2: a retried calibration segment calls this twice, so take the
+        # next free name rather than overwrite (or fail on) an earlier one.
+        rejected = output / _fresh_name(output, f"{name}.rejected", attempt + 1)
         if target.exists():
             target.rename(rejected)
         row["output_dir"] = str(rejected)
@@ -810,20 +859,149 @@ def _check_step_d(result):
     return slots
 
 
+def runtime_config_path(runtime_argv):
+    """The runtime config the runtime argv names (``--config``), or the committed default."""
+    argv = list(runtime_argv or ())
+    path = Path(argv[argv.index("--config") + 1]) if "--config" in argv[:-1] else DEFAULT_RUNTIME_CONFIG
+    return path if path.is_absolute() else ROOT / path
+
+
+def _runtime_config_value(runtime_argv, keys, purpose):
+    path = runtime_config_path(runtime_argv)
+    try:
+        value = json.loads(path.read_text())
+        for key in keys:
+            value = value[key]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise Refusal(f"runtime config {path}: no {'.'.join(keys)} for {purpose}: {error}") from error
+    return path, value
+
+
 def runtime_step_deadman_s(runtime_argv):
     """``step.deadman_s`` of the runtime config the runtime argv names
     (``--config``), or of the committed default config."""
-    argv = list(runtime_argv or ())
-    path = Path(argv[argv.index("--config") + 1]) if "--config" in argv[:-1] else DEFAULT_RUNTIME_CONFIG
-    path = path if path.is_absolute() else ROOT / path
-    try:
-        value = json.loads(path.read_text())["step"]["deadman_s"]
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        raise Refusal(f"runtime config {path}: no step.deadman_s for the A-B-A leg bound: {error}") from error
+    _, value = _runtime_config_value(runtime_argv, ("step", "deadman_s"), "the A-B-A leg bound")
     value = _finite_number(value, "runtime config step.deadman_s")
     if value <= 0:
         raise Refusal("runtime config step.deadman_s must be positive")
     return value
+
+
+def runtime_precool_cap_s(runtime_argv):
+    """LEAD-RULINGS-2 R6-2: the calibration precool cap, from the runtime config."""
+    _, value = _runtime_config_value(runtime_argv, ("calibration_precool_cap_s",), "the R6-2 precool cap")
+    value = _finite_number(value, "runtime config calibration_precool_cap_s")
+    if value <= 0:
+        raise Refusal("runtime config calibration_precool_cap_s must be positive")
+    return value
+
+
+def w1_inter_member_idle_s(root=ROOT):
+    """LEAD-RULINGS-2 R6-1: W1's inter-member schedule per roster role, taken
+    from the W1 plan (``night_plan.template.json``): each member's configured
+    idle (``sampling.idle_seconds`` of its kit config). The kit's reading, so
+    the driver and the kit binding share one source."""
+    from scripts.align_v4_kit import w1_inter_member_idle_s as read
+    try:
+        return read(root)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise Refusal(f"W1 plan {W1_PLAN_TEMPLATE}: no inter-member schedule: {error}") from error
+
+
+def check_w1_schedule(runtime_argv, root=ROOT):
+    """R6-1 at t0 (before any powermode or runtime work): the members the R1
+    gated D runs and X-G run (the runtime config's templates) must carry
+    exactly W1's configured idle for their roster role."""
+    expected = w1_inter_member_idle_s(root)
+    path, templates = _runtime_config_value(runtime_argv, ("templates",), "the R6-1 schedule")
+    configured = {}
+    for key, role in W1_SCHEDULE_ROLES.items():
+        target = Path(templates.get(key, "")) if isinstance(templates, dict) else Path()
+        target = target if target.is_absolute() else ROOT / target
+        try:
+            idle = json.loads(target.read_text())["sampling"]["idle_seconds"]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise Refusal(f"runtime config {path}: template {key} has no sampling.idle_seconds: {error}") from error
+        configured[key] = _finite_number(idle, f"runtime template {key} sampling.idle_seconds")
+        if configured[key] != expected[role]:
+            raise Refusal(f"R6-1: runtime template {key} idles {configured[key]} s, but W1 {role} members idle "
+                          f"{expected[role]} s; the gated runs would not reproduce W1's inter-member schedule")
+    return {"authority": "LEAD-RULINGS-2 R6-1", "inter_member_idle_s": expected, "templates_idle_s": configured,
+            "source": f"{W1_PLAN_TEMPLATE} member configs, sampling.idle_seconds",
+            "rule": ("each gated D run and X-G follows a D turn with only W1's inter-member schedule "
+                     "(the member's own configured idle); no cool-to-band")}
+
+
+def _check_schedule(name, result, schedule, role):
+    """R6-1 per run: the member idled exactly W1's schedule and reported its G0."""
+    idle = _finite_number(result.get("inter_member_idle_s"), f"{name}.inter_member_idle_s")
+    if idle != schedule["inter_member_idle_s"][role]:
+        raise Refusal(f"{name}: idled {idle} s before warmup, not W1's {role} schedule "
+                      f"{schedule['inter_member_idle_s'][role]} s (R6-1)")
+    if not isinstance(result.get("g0_outcome"), str):
+        raise Refusal(f"{name}: g0_outcome must name the G0 outcome (R6-1)")
+    return result["g0_outcome"] == "released"
+
+
+# R6-1: the segments that end with a D turn (when their G0 released).
+D_TURN_KINDS = frozenset(("step-d", "d-4bit", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS))
+
+
+def schedule_inconclusive_reason(g0_released, follows_d_turn):
+    """R6-1: why a gated run or X-G is INCONCLUSIVE (None when it is judged)."""
+    if not g0_released:
+        return "G0 did not release after W1's inter-member schedule (LEAD-RULINGS-2 R6-1)"
+    if follows_d_turn is None:
+        return ("the preceding member dispatched no D turn (its G0 timed out), so this run did not test "
+                "W1's D-after-D G0 (LEAD-RULINGS-2 R6-1)")
+    return None
+
+
+def _check_precool(name, result):
+    """An idle-until-soak segment: the ruling 1(c) recovery curve and its release flag."""
+    curve = result.get("recovery_curve")
+    if not isinstance(curve, list) or not curve:
+        raise Refusal(f"{name}: runtime omitted the recovery curve (ruling 1(c))")
+    if not isinstance(result.get("released"), bool):
+        raise Refusal(f"{name}: idle-until-soak must report released (bool)")
+    return result["released"]
+
+
+def _g0_inconclusive(name, kind, result):
+    """R6-2: the runtime reported the calibration segment INCONCLUSIVE (G0 timeout)."""
+    if not contract.is_g0_inconclusive(kind, result):
+        return False
+    if result.get("g0_released") is not False:
+        raise Refusal(f"{name}: an INCONCLUSIVE segment must report g0_released false")
+    return True
+
+
+def _calibration_segment(args, output, name, kind, record, *, quiet, soak_reference, extra, precool_cap_s,
+                         precools):
+    """LEAD-RULINGS-2 R6-2: step-d or a designed start state. A G0 timeout is
+    retried once, after another bounded precool to the G0 band of R; a second
+    timeout makes the segment INCONCLUSIVE (recorded), never a night refusal.
+    Returns (result, row, status) with status ``measured`` or ``inconclusive``."""
+    result, row = _segment(args, output, name, kind, None, "heavy", record, quiet=quiet,
+                           soak_reference=soak_reference, extra=extra)
+    if not _g0_inconclusive(name, kind, result):
+        return result, row, "measured"
+    target, moved = output / name, output / (name + G0_TIMEOUT_SUFFIX)
+    if target.exists():
+        target.rename(moved)
+    row.update(output_dir=str(moved), segment_status="inconclusive", superseded_by="R6-2 retry")
+    retry = name + PRECOOL_RETRY_SUFFIX
+    precool, _ = _segment(args, output, retry, "idle-until-soak", precool_cap_s, "light", record, quiet=False,
+                          soak_reference=soak_reference)
+    precools[retry] = _check_precool(retry, precool)
+    first = dict(row)
+    result, row = _segment(args, output, name, kind, None, "heavy", record, quiet=quiet,
+                           soak_reference=soak_reference, extra=extra)
+    row["g0_timeout_attempt"] = first["output_dir"]
+    if _g0_inconclusive(name, kind, result):
+        row["segment_status"] = "inconclusive"
+        return result, row, "inconclusive"
+    return result, row, "measured"
 
 
 def aba_leg_bound_s(runtime_argv):
@@ -839,22 +1017,31 @@ def aba_leg_bound_s(runtime_argv):
             + DEADMAN_FACTOR * runtime_step_deadman_s(runtime_argv) + LEG_BOUND_MARGIN_S)
 
 
-def budget_fit_inputs(step_d, gated):
+def budget_fit_inputs(step_d, gated, deadman_rows=()):
     """What the kit needs to assert ruling 1(f) for the B_D it freezes (lead
-    ruling R5-4): the measured step-d decode rate and the per-turn decode cap
-    the gated D runs armed (an admitted last turn keeps its full cap, FD:263).
-    The G0, hold, prefill and tool seconds are in ``deadman_budget``."""
-    rate = _finite_number(((step_d or {}).get("slot_detail") or {}).get("r_decode_tok_per_s"),
-                          "step-d.slot_detail.r_decode_tok_per_s")
+    ruling R5-4): the decode rate and the per-turn decode cap the gated D runs
+    armed (an admitted last turn keeps its full cap, FD:263). The G0, hold,
+    prefill and tool seconds are in ``deadman_budget``.
+
+    LEAD-RULINGS-2 R6-3: the worst-case decode term uses min(step-d's decode
+    rate, every gated run's observed decode rate); a run that decoded nothing
+    (its G0 timed out) has no rate. The kit re-derives the minimum from
+    ``r_decode_step_d_tok_per_s`` and the ``deadman_budget`` rows."""
+    step_rate = _finite_number(((step_d or {}).get("slot_detail") or {}).get("r_decode_tok_per_s"),
+                               "step-d.slot_detail.r_decode_tok_per_s")
     caps = {_finite_number(result.get("turn_cap_tokens"), f"{name}.turn_cap_tokens")
             for name, result in gated.items()}
-    if rate <= 0 or len(caps) != 1 or min(caps) <= 0:
+    if step_rate <= 0 or len(caps) != 1 or min(caps) <= 0:
         raise Refusal("ruling 1(f) inputs: the decode rate must be positive and every gated D run must arm "
                       "the same positive per-turn decode cap")
-    return {"authority": "CHAIR ruling 1(f); lead ruling R5-4", "r_decode_tok_per_s": rate,
+    observed = {row["run"]: row.get("r_decode_tok_per_s") for row in deadman_rows}
+    rates = [step_rate, *(rate for rate in observed.values() if rate is not None)]
+    return {"authority": "CHAIR ruling 1(f); lead rulings R5-4, R6-3", "r_decode_tok_per_s": min(rates),
+            "r_decode_step_d_tok_per_s": step_rate, "r_decode_gated_tok_per_s": observed,
             "turn_cap_tokens": int(caps.pop()),
             "rule": ("max G0 + max (G1 + H) + max (prefill + tool) over the gated D runs "
-                     "+ (B_D + turn_cap_tokens) / r_decode <= T_dead (scripts/align_v4_kit.py ruling_1f_fit)")}
+                     "+ (B_D + turn_cap_tokens) / r_decode <= T_dead, r_decode = min(step-d rate, every gated "
+                     "run's observed rate) (scripts/align_v4_kit.py ruling_1f_fit)")}
 
 
 def _check_gated_t_dead(name, result, step_d):
@@ -1013,11 +1200,19 @@ def run(args):
         created = True
         # Ruling 20 at t0, before any powermode or runtime work.
         watch.check("t0")
+        # R6-1/R6-2 inputs, also before any powermode or runtime work.
+        schedule = check_w1_schedule(args.runtime)
+        precool_cap = runtime_precool_cap_s(args.runtime)
         with guard:
             soak_reference = None
             legs, releases, leg_g0, adoption, series_mode = {}, {}, {}, None, None
             precool = {}
-            for name, kind, duration, workload_class in phase_plan(args.include_4bit):
+            inconclusive = {}     # R6-2: calibration segment -> reason
+            skipped = {}          # gated runs and X-G not run without step-d slots
+            g0_ok = {}            # R6-1: gated run / X-G -> its G0 released
+            follows = {}          # R6-1: gated run / X-G -> the D turn it follows (None: no D turn)
+            last_d_turn = None    # the latest model segment, if it dispatched a D turn
+            for name, kind, duration, workload_class in phase_plan(args.include_4bit, precool_cap_s=precool_cap):
                 if kind in contract.HIGH_POWER_KINDS:
                     # Ed ruling: A-B-A, Automatic / High Power / Automatic.
                     # Ruling 16: each leg starts only after a G0-style release
@@ -1046,70 +1241,119 @@ def run(args):
                     continue
                 if kind == "calibration-post" and series_mode == 2:
                     _set_powermode(guard, 0, "series.restored", "series_restore")
+                if (name in GATED_NAMES or kind == "x-g") and STEP_D_NAME in inconclusive:
+                    # R6-2: without step-d's slots no gated run can be budgeted
+                    # (R5-4); recorded, and the kit refuses W1 downstream.
+                    skipped[name] = "step-d INCONCLUSIVE (G0 timeout after a retry): no slots to budget the run"
+                    record["phases"].append({"name": name, "class": workload_class, "skipped": skipped[name]})
+                    continue
                 quiet = kind in QUIET_KINDS and not (kind == "idle" and name != "idle_soak")
                 model = kind not in ("calibration-pre", "calibration-post", "idle", "idle-until-soak")
+                extra = {"powermode": series_mode} if model and series_mode is not None else None
                 # (step_30b runs before the decision, in Automatic, unchecked as before.)
-                results[name], row = _segment(
-                    args, output, name, kind, duration, workload_class, record, quiet=quiet,
-                    soak_reference=soak_reference,
-                    contract_key="idle_soak" if name == "idle_soak" else None,
-                    extra={"powermode": series_mode} if model and series_mode is not None else None)
+                if kind in contract.G0_INCONCLUSIVE_KINDS:
+                    results[name], row, status = _calibration_segment(
+                        args, output, name, kind, record, quiet=quiet, soak_reference=soak_reference, extra=extra,
+                        precool_cap_s=precool_cap, precools=precool)
+                    if status == "inconclusive":
+                        inconclusive[name] = "G0 did not release, twice (each after a precool to the G0 band of R)"
+                else:
+                    results[name], row = _segment(
+                        args, output, name, kind, duration, workload_class, record, quiet=quiet,
+                        soak_reference=soak_reference,
+                        contract_key="idle_soak" if name == "idle_soak" else None, extra=extra)
                 if name == "idle_soak":
                     soak_reference = write_soak_reference(output, row)
                 if model and series_mode is not None:
                     _check_member_powermode(name, results[name], series_mode)
                 if name in GATED_NAMES or kind == "x-g":
                     _check_soak_reference_consumed(name, results[name], soak_reference)
-                if name == STEP_D_NAME:
+                    g0_ok[name] = _check_schedule(name, results[name], schedule,
+                                                  "X-G" if kind == "x-g" else "D")
+                    follows[name] = last_d_turn
+                if model:
+                    # R6-1: did this segment end with a D turn? (A timed-out G0
+                    # dispatches none, so the next gated run would not follow one.)
+                    # A gated run counts only with observed D work (decode
+                    # tokens): a released G0 alone may still dispatch nothing
+                    # (Sol critique of round 6).
+                    last_d_turn = name if (kind in D_TURN_KINDS and name not in inconclusive
+                                           and not (name in GATED_NAMES and not (
+                                               g0_ok[name] and type(results[name].get("decode_tokens")) is int
+                                               and results[name]["decode_tokens"] > 0))) else None
+                if name == STEP_D_NAME and name not in inconclusive:
                     _check_step_d(results[name])
                 if name in GATED_NAMES:
-                    _check_gated_t_dead(name, results[name], results.get("step_D_prefill_10k_decode_4096"))
+                    _check_gated_t_dead(name, results[name], results.get(STEP_D_NAME))
                 if kind == "idle-until-soak":
-                    curve = results[name].get("recovery_curve")
-                    if not isinstance(curve, list) or not curve:
-                        raise Refusal(f"{name}: runtime omitted the recovery curve (ruling 1(c))")
-                    if not isinstance(results[name].get("released"), bool):
-                        raise Refusal(f"{name}: idle-until-soak must report released (bool)")
-                    precool[name] = results[name]["released"]
+                    precool[name] = _check_precool(name, results[name])
 
             # Same thin runtime seam owns the pilot-style authenticated harvest;
             # the driver records but never re-implements calibration custody.
             harvested = _invoke(args.runtime, "harvest", output / "harvest", soak_reference=soak_reference,
                                 watch=args.volume_watch)
             record["phases"].append({"name": "harvest", "class": "light", "result": harvested})
-        slots = derive_slots(results.get("step_D_prefill_10k_decode_4096") or {})
-        temperature_summary = planning_temperature_summary(
-            [results[f"planning_turn_R_plus_{int(offset)}C"] for offset in PLANNING_START_OFFSETS_C])
+        step_d_ok = STEP_D_NAME not in inconclusive
+        planning = {offset: f"planning_turn_R_plus_{int(offset)}C" for offset in PLANNING_START_OFFSETS_C}
+        planning_inconclusive = sorted(name for name in planning.values() if name in inconclusive)
+        if planning_inconclusive:
+            # R6-2: a designed start state that was not reached gives beta_T no
+            # point; U5 is INCONCLUSIVE and the kit decides downstream.
+            temperature_summary = {"label": "PRINT_ONLY_R1_PLANNING_TEMPERATURE_SECONDARY", "status": "inconclusive",
+                                   "inconclusive_states": planning_inconclusive}
+        else:
+            temperature_summary = planning_temperature_summary([results[planning[o]] for o in PLANNING_START_OFFSETS_C])
         temperature_summary["run_order_offsets_c"] = list(PLANNING_RUN_ORDER_C)
-        gated = {name: results[name] for name, _ in GATED_D_RUNS}
-        precool_ok = {name: precool[name + PRECOOL_SUFFIX] for name in gated}
-        uncooled = sorted(name for name, ok in precool_ok.items() if not ok)
-        max_tail = max(deadman_summary(name, result)["phases_s"]["tail"] for name, result in gated.items())
-        l1 = l1_evaluation(slots["I_D"], slots["T_dead"], max_tail)
-        print("R1 L1: " + json.dumps(l1, sort_keys=True), flush=True)
-        deadman = [deadman_summary(name, result, duty_t_dead=l1["effective_T_dead_s"],
-                                   precool_released=precool_ok[name])
-                   for name, result in gated.items()]
-        verdict = duty_verdict(deadman)
-        duty = {"declared": DUTY_BAR, "pass": verdict == "pass", "verdict": verdict,
-                "inconclusive_runs": uncooled, "reference": "soak R (LEAD-RULINGS-2 R5-1)",
-                "duty_T_dead_s": l1["effective_T_dead_s"], "fallback_order": list(DUTY_FALLBACK_ORDER)}
+        if step_d_ok:
+            slots = derive_slots(results.get(STEP_D_NAME) or {})
+            gated = {name: results[name] for name, _ in GATED_D_RUNS}
+            reasons = {name: schedule_inconclusive_reason(g0_ok[name], follows[name]) for name in g0_ok}
+            uncooled = sorted(name for name in gated if reasons[name])
+            max_tail = max(deadman_summary(name, result)["phases_s"]["tail"] for name, result in gated.items())
+            l1 = l1_evaluation(slots["I_D"], slots["T_dead"], max_tail)
+            print("R1 L1: " + json.dumps(l1, sort_keys=True), flush=True)
+            deadman = [deadman_summary(name, result, duty_t_dead=l1["effective_T_dead_s"],
+                                       inconclusive_reason=reasons[name]) | {"follows_d_turn": follows[name]}
+                       for name, result in gated.items()]
+            verdict = duty_verdict(deadman)
+            duty = {"declared": DUTY_BAR, "pass": verdict == "pass", "verdict": verdict,
+                    "inconclusive_runs": uncooled, "reference": "soak R (LEAD-RULINGS-2 R5-1)",
+                    "schedule": schedule, "duty_T_dead_s": l1["effective_T_dead_s"],
+                    "fallback_order": list(DUTY_FALLBACK_ORDER)}
+            mde = projected_mde(results[STEP_D_NAME].get("e_D_j_per_token"), gated)
+            u5 = (u5_verdict(temperature_summary, gated, inconclusive_runs=uncooled) if not planning_inconclusive else
+                  {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2", "verdict": "inconclusive",
+                   "reason": "designed start state(s) INCONCLUSIVE (R6-2): " + ", ".join(planning_inconclusive)})
+            s6 = {"status": "TODO", "S6_c": slots["S6"], "rule": "S6 = delta_slow (S5) until the FD 2.6 tuning",
+                  "tied_to": "the gated D runs' median G1 wait (with the hold median, fallback step 1)",
+                  "authority": "LEAD-RULINGS-2 R5-7", **gate_wait_medians(gated)}
+            fit_inputs = budget_fit_inputs(results[STEP_D_NAME], gated, deadman)
+            thermometry_d = thermometry_record(STEP_D_NAME, results[STEP_D_NAME])
+            x_g = {"status": "inconclusive" if reasons["X_G_contrast"] else "measured",
+                   "inconclusive_reason": reasons["X_G_contrast"],
+                   "g0_outcome": results["X_G_contrast"]["g0_outcome"], "follows_d_turn": follows["X_G_contrast"],
+                   "inter_member_idle_s": results["X_G_contrast"]["inter_member_idle_s"],
+                   "authority": "LEAD-RULINGS-2 R6-1"}
+        else:
+            # R6-2: recorded, not refused mid-night. With no step-d slots the
+            # kit refuses W1 (no slots, no thermometry bar, no duty bar).
+            slots = l1 = max_tail = mde = s6 = fit_inputs = thermometry_d = None
+            deadman = []
+            duty = {"declared": DUTY_BAR, "pass": False, "verdict": "inconclusive", "inconclusive_runs": [],
+                    "reason": "step-d INCONCLUSIVE: the gated D runs did not run", "schedule": schedule,
+                    "fallback_order": list(DUTY_FALLBACK_ORDER)}
+            u5 = {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2", "verdict": "inconclusive",
+                  "reason": "step-d INCONCLUSIVE (R6-2): no replay pair ran"}
+            x_g = {"status": "not_run", "reason": skipped.get("X_G_contrast")}
         # Ruling 20: the last census before the slots are frozen.
         watch.check("before_registration")
-        mde = projected_mde(results["step_D_prefill_10k_decode_4096"].get("e_D_j_per_token"), gated)
-        u5 = u5_verdict(temperature_summary, gated, inconclusive_runs=uncooled)
         battery = battery_report(results, harvested)
-        thermometry = {"D": thermometry_record("step_D_prefill_10k_decode_4096",
-                                               results["step_D_prefill_10k_decode_4096"]),
+        thermometry = {"D": thermometry_d,
                        "30B_record_only": thermometry_record("step_30b", results["step_30b"]),
                        "authority": "protocol v4 WP14(a) R1 paragraph (LEAD-RULINGS-2 R5-5)"}
         # Either null pick fails R1's thermometry bar (D only; the 30B is record-only).
-        thermometry["bar"] = thermometry["D"]["status"]
-        thermometry["flags"] = list(thermometry["D"].get("flags") or [])
-        s6 = {"status": "TODO", "S6_c": slots["S6"], "rule": "S6 = delta_slow (S5) until the FD 2.6 tuning",
-              "tied_to": "the gated D runs' median G1 wait (with the hold median, fallback step 1)",
-              "authority": "LEAD-RULINGS-2 R5-7", **gate_wait_medians(gated)}
-        fit_inputs = budget_fit_inputs(results[STEP_D_NAME], gated)
+        thermometry["bar"] = thermometry_d["status"] if thermometry_d else "inconclusive"
+        thermometry["flags"] = list((thermometry_d or {}).get("flags") or [])
         # Ruling 7 + 16: the frozen series AC powermode is the A-B-A outcome.
         ac_powermode = 2 if adoption["verdict"] == "adopt" else 0
         registration = {"schema": SCHEMA, "source": "R1 synthetic rehearsal" if args.synthetic else "R1 hardware rehearsal",
@@ -1120,8 +1364,8 @@ def run(args):
                                        **adoption},
                         "deadman_budget": deadman, "duty_bar": duty, "l1": l1,
                         "max_r1_tail_s": max_tail, "budget_fit_inputs": fit_inputs,
-                        "x_g": {"precool_released": precool["cooldown_after_D"],
-                                "status": "measured" if precool["cooldown_after_D"] else "inconclusive"},
+                        "x_g": x_g, "inconclusive_segments": inconclusive, "skipped_segments": skipped,
+                        "calibration_precools": {name: released for name, released in precool.items()},
                         "thermometry": thermometry, "s6_tuning": s6,
                         "external_volumes": watch.records,
                         "projected_mde": mde, "battery": battery}

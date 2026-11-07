@@ -165,6 +165,7 @@
     "status": "PENDING_R1",
     "thermal_policy": {
       "chunk_tokens": "PENDING_R1",
+      "classification_sha256": "PENDING_R1",
       "delta_fast_c": "PENDING_R1",
       "delta_slow_c": "PENDING_R1",
       "heavy": true,

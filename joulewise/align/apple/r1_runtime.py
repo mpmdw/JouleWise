@@ -108,6 +108,19 @@ def incomplete_member_reasons(member):
     return reasons
 
 
+# LEAD-RULINGS-2 R6-2: the reasons a member gives when its G0 timed out and
+# nothing else went wrong (no turn was dispatched). Only such a step-d or
+# designed start state is INCONCLUSIVE; any other incomplete member still
+# fails the segment (exit 3).
+G0_TIMEOUT_REASONS = ("turns:0", "thermal.start_gate_timeout")
+
+
+def g0_timeout_only(reasons):
+    """True when ``reasons`` (``incomplete_member_reasons``) say only "G0 timed out"."""
+    return (any(r == "thermal.start_gate_timeout" or r.startswith("episode.g0_unreleased:") for r in reasons)
+            and all(r in G0_TIMEOUT_REASONS or r.startswith("episode.g0_unreleased:") for r in reasons))
+
+
 class Refused(RuntimeError):
     """Fail closed: an input is pending or invalid (exit 2)."""
 
@@ -1409,13 +1422,26 @@ class Segment:
         return {"released": row["outcome"] == "released", "g0": row, "reference_c": reference["slow_c"],
                 "release_c": row["release"]["slow_c"], "flags": flags}
 
-    def k_step(self, model_key, *, label, source=None, quiet_s=0, rearm=False, leg=False):
+    def g0_inconclusive_fields(self, member, g0, incomplete, reference):
+        """LEAD-RULINGS-2 R6-2: a calibration segment whose G0 timed out (and
+        nothing else) is INCONCLUSIVE, exit 0; the driver precools and retries
+        it once, then records it and the kit decides downstream."""
+        return {"segment_status": "inconclusive", "g0_released": False,
+                "g0_outcome": g0["outcome"] if g0 else None,
+                "reason": "G0 did not release before its cap (LEAD-RULINGS-2 R6-2)",
+                "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
+                "incomplete_reasons": incomplete, "episode_flags": list(member.ep.flags),
+                "ac_powermode": member.ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
+
+    def k_step(self, model_key, *, label, source=None, quiet_s=0, rearm=False, leg=False, g0_inconclusive=False):
         member, reference = self.step_member(model_key, label=label, source=source, quiet_s=quiet_s,
                                              rearm=rearm)
         ep = member.ep
         thermal = ep.hardware.get("thermal") or {}
         g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
         incomplete = incomplete_member_reasons(member)
+        if g0_inconclusive and (g0 is None or g0["outcome"] != "released") and g0_timeout_only(incomplete):
+            return member, self.g0_inconclusive_fields(member, g0, incomplete, reference)
         if leg and g0 is not None and g0["outcome"] != "released":
             # LEAD-RULINGS-2 R5-3 (ruling 16): an A-B-A leg whose own G0 did not
             # release has no turn and no t_decline. It is INCONCLUSIVE, not a
@@ -1508,7 +1534,12 @@ class Segment:
 
     def k_step_d(self):
         self.start_inventory()
-        member, fields = self.k_step("d_spam", label="step-d", quiet_s=STEP_QUIET_S, rearm=True)
+        member, fields = self.k_step("d_spam", label="step-d", quiet_s=STEP_QUIET_S, rearm=True,
+                                     g0_inconclusive=True)
+        if fields.get("segment_status") == "inconclusive":
+            # R6-2: no turn, so no step response, slots or classification.
+            self.stop_inventory()
+            return fields
         if fields["t_decline_status"] == "unobserved":
             raise RuntimeFailure("step-d: no powermetrics GPU clock support for t_decline (slot S9)")
         reference, bands, sensors = self.reference(), self.bands(), self.sensors
@@ -1560,7 +1591,8 @@ class Segment:
                     warmup_condition="benign", max_episode_decode_tokens=b_d)
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
         # LEAD-RULINGS-2 R5-1: gate against the soak R, as W1 members consume
-        # member 5's R; the driver precools to the G0 band of R before the run.
+        # member 5's R. R6-1: no precool; the run follows a D turn with only
+        # W1's inter-member schedule (this member's configured idle).
         reference = self.reference()
         member = self.run_member(config, self.reference_hook(reference))
         from joulewise.align.apple.thermal_desk import read_bundle_record
@@ -1568,15 +1600,28 @@ class Segment:
         ep = member.ep
         budget = ep.hardware.get("token_budget") or {}
         x7 = any(flag.startswith("episode.deadman:") for flag in ep.flags)
-        return {**self.reference_fields(reference, ep),
+        return {**self.reference_fields(reference, ep), **self.schedule_fields(template),
                 "energy_j": record["turn_owned_j"], "gross_episode_j": record["gross_episode_j"],
                 "admitted_turns": len(ep.turns), "x7": x7,
+                # R6-3: with deadman.phases_s.decode, the run's observed decode rate.
+                "decode_tokens": sum(int(turn.decode_tokens) for turn in ep.turns),
                 "deadman": {"T_dead_s": budget.get("deadman_s"), "deadline_ns": budget.get("deadline_ns"),
                             "phases_s": episode_phases(ep)},
                 "B_D": spec["max_episode_decode_tokens"], "turn_cap_tokens": spec.get("max_tokens"),
                 "bundle": str(member.bundle.relative_to(self.out)),
                 "member_status": member.status, "failure_reason": member.failure_reason,
                 "episode_flags": list(ep.flags), "ac_powermode": ep.hardware.get("ac_powermode")}
+
+    @staticmethod
+    def schedule_fields(template):
+        """LEAD-RULINGS-2 R6-1: the only thing between the preceding D turn and
+        this member's G0 is W1's inter-member schedule, the member's own
+        configured idle (the W1 kit config's sampling.idle_seconds); the
+        driver checks it against the W1 plan."""
+        idle = (template.get("sampling") or {}).get("idle_seconds")
+        if not _finite(idle) or idle < 0:
+            raise RuntimeFailure("member template has no finite sampling.idle_seconds")
+        return {"inter_member_idle_s": float(idle)}
 
     def reference_fields(self, reference, ep):
         """R5-1 evidence: the R the member gated against and its per-gate waits."""
@@ -1606,17 +1651,21 @@ class Segment:
         g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
         if g0 is None:
             raise RuntimeFailure(f"{self.kind}: member has no G0 interval")
+        incomplete = incomplete_member_reasons(member)
         if g0["outcome"] != "released":
             # Round-4 executing review HIGH-1: a G0 that timed out has no release
             # temperature (its "release" row is only the last sample), and the
             # g0_unreleased stop leaves a member with no turn, so energy_j is 0.
-            # Returning them would put a zero-energy point at a designed
-            # temperature into beta_T (U5). The designed start state was not
-            # reached: fail the segment, as the driver does for an out-of-band
-            # release.
+            # It must never reach beta_T (U5) as a point. LEAD-RULINGS-2 R6-2:
+            # the designed start state was not reached, so the segment is
+            # INCONCLUSIVE (no energy, no release temperature); the driver
+            # precools and retries it once. Any other fault still fails it.
+            if g0_timeout_only(incomplete):
+                return {**self.g0_inconclusive_fields(member, g0, incomplete, reference),
+                        "delta_slow_c": bands["delta_slow_c"], "designed_offset_c": offset,
+                        "designed_release_c": target}
             raise RuntimeFailure(f"{self.kind}: designed start state not reached: G0 {g0['outcome']} "
-                                 f"(no release; turns {len(member.ep.turns)})")
-        incomplete = incomplete_member_reasons(member)
+                                 f"(no release; turns {len(member.ep.turns)}; {incomplete})")
         if incomplete:
             # A deadman- or fault-cut planning turn is a partial energy (HIGH-1).
             raise RuntimeFailure(f"{self.kind}: planning member is not one complete turn: {incomplete}")
@@ -1638,7 +1687,8 @@ class Segment:
         member = self.run_member(config, self.reference_hook(reference))
         from joulewise.align.apple.thermal_desk import read_bundle_record
         record = read_bundle_record(member.bundle)
-        return {**self.reference_fields(reference, member.ep), "energy_j": record["turn_owned_j"], "admitted_turns": len(member.ep.turns),
+        return {**self.reference_fields(reference, member.ep), **self.schedule_fields(template),
+                "energy_j": record["turn_owned_j"], "admitted_turns": len(member.ep.turns),
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
                 "episode_flags": list(member.ep.flags), "phases_s": episode_phases(member.ep),
                 "ac_powermode": member.ep.hardware.get("ac_powermode")}
