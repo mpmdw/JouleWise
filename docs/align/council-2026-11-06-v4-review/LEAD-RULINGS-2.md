@@ -683,3 +683,52 @@ Tests: `test_r1_round7_science.G0TimeoutTests` (step-30b = member + 600 + 300 + 
 > D8-6 (LOW-3): accepted, no change; record.
 
 Recorded. The normal (no-signal) `_run` path keeps its unbounded `communicate()`. It is pre-existing, and it fails safe: a signal breaks the block, the held pipes fail the proof, and the restore defers.
+
+## Round 9 (2026-11-07)
+
+These rulings settle the two gaps that the integration of WP18 and PR #692 reported but did not change. They are listed under "Classifier consistency (R1 path on #692)", "Not changed", items 1 and 2, in `docs/run_reports/2026-11-06-align-v4-r1-integration.md` (section "Integration: WP18 + #692", head `949f4d12d`). Each ruling is quoted verbatim as the lead gave it. One builder implemented both on `lane/2026-11-06-v4-r1-integrated`, from `949f4d12d`:
+
+- `0930d2f4a`: R9-1, code, test and contract text;
+- `ca198bbaf`: R9-1 follow-up, the stubbed `rank` in `test_r1_round7_science.AliasGroupTests` returns the five fields that `rank` always returns;
+- `c3f318951`: R9-2, code, tests and contract text;
+- `a90a5ebfc`: the kit regenerated for the R9-2 kit change (generator digest and its identity pin only);
+- the doc commit that adds this section.
+
+### R9-1. The R1 classification record carries #692's classifier fields
+
+> R9-1: R1's classification record (classify_step) must carry #692's classifier fields it currently drops: heat_ordering_indeterminate, heat_ordering_wide_exclusion, recovery_onset_gap_s, alternative_slow_picks, selected_key_aliases. Record only; no verdict change.
+
+**Implemented by** `0930d2f4a`. `classify_step` copies the five fields verbatim from `smc_enumeration.rank` (`r1_runtime.CLASSIFIER_RECORD_FIELDS`). They are in `DIR/inventory/r1_classification.json` and inside `classification_sha256`. No bar, pick, driver or kit verdict reads them. The runtime's step result block (`keep`) and the driver's `thermometry_record` are unchanged, so `r1_slots` does not grow. The contract doc says so. Test: `test_r1_inventory.ClassificationTests.test_record_carries_the_pr692_classifier_fields`. Each field equals `rank`'s value on the same capture, an exact alias of the fast key appears in `selected_key_aliases`, status and picks are unchanged, and the fields are inside the digest. It fails on `949f4d12d`.
+
+No deviation.
+
+### R9-2. The changed-pick S7 uses the classifier's D2 baseline, and the kit re-derives it
+
+> R9-2 (protocol fidelity, WP14(b) and #692 D2): s7_for_picks must compute its reference and band from the same baseline as the classifier: the median over the last 60 s of the quiet window, and the OLS residual SD (D2), not the whole-300 s median and raw SD. Bind the kit's re-derivation to the same function so the driver and the kit cannot disagree.
+
+**Implemented by** `c3f318951`.
+- **Runtime.** `r1_runtime.quiet_baseline(rows, key, prefill_ns, quiet_s)` is the classifier's D2 baseline on the capture that `classify_step` builds. It uses the same valid, bracketed reads of the idle phase and `smc_enumeration.IDLE_WINDOW_S`, and returns the median and `smc_enumeration._idle_stats`'s OLS residual SD.
+  - `s7_for_picks` takes each pick's reference and noise from it. The band is `pick_band(noise)` = max(1.0 °C, 3 × residual SD), and S7 is `pick_s7(recovery)` = min(300 s, 3 × recovery).
+  - The record adds `noise_c` and `rule` = `r1_runtime.R1_PICK_S7_RULE`.
+  - With fewer than five valid reads in the last 60 s, S7 is null with a reason. Before, five reads anywhere in the 300 s were enough.
+- **Kit.** Before this ruling the kit did not re-derive the changed-pick values; it only bound W1 to the recorded `band_c` and `S7`. `align_v4_kit.rederive_r1_pick_s7` now re-derives them, and runs whenever R1 changed the picks, right after the existing "not computed" check:
+  - `rule` must equal `R1_PICK_S7_RULE`, so a record made on the pre-R9-2 whole-window median and raw SD is refused;
+  - each `band_c` must equal `r1_runtime.pick_band(noise_c)`;
+  - `S7` must equal `r1_runtime.pick_s7(recovery_s)`.
+
+  The kit imports these functions from the runtime, so the driver and the kit cannot disagree.
+- **Driver.** `thermometry_record`'s `reference_rule` now names the last-60 s median and the OLS residual SD, with authority "LEAD-RULINGS-2 R6-4, R9-2". R6-4's acceptance of a quiet-window reference (the soak journal lacks the R1-pick keys) stands. Only the window and the SD change.
+- **Tests** (each fails on the code before `c3f318951`):
+  - `test_r1_inventory.ChangedPickRecoveryTests.test_reference_and_band_are_the_classifier_d2_baseline`. Under a 0.6 °C/min quiet drift of the slow key, `reference_c` and `noise_c` equal `rank`'s `baseline` and `noise` for both picks exactly, and the slow band is 1.0 °C. The pre-R9-2 band would be 2.6 °C.
+  - `test_r1_inventory.ChangedPickRecoveryTests.test_short_last_60s_window_has_no_s7`.
+  - `test_v4_kit.R1ChangedPickBindingTests.test_kit_rederives_the_r1_pick_bands_and_s7_with_the_runtime_functions`. It covers the pre-R9-2 rule, missing or non-finite noise, a band that is not the re-derivation, and an S7 that is not 3 × recovery. The runtime's own `s7_for_picks` output on a synthetic journal re-derives exactly.
+  - `test_r1_rehearsal.Round6RulingTests.test_changed_pick_s7_records_the_accepted_quiet_window_reference`: the rule text and authority.
+- **Builder note.** The band uses the residual SD itself, as the ruling says, not the classifier's D4/D5 `noise_floor` = max(0.05 °C, quantum, SD). That floor gates resolution, not the band, and the 1.0 °C band floor dominates it anyway.
+
+No deviation.
+
+### Slow-pick rule before R1 arms
+
+Before R1 arms, the slow-pick rule (#692 D5) must be chosen from R0 re-run 8's settled capture; R1 must not run on the provisional rule.
+
+Recorded. R1 calls `rank(stage="r1")` and inherits whatever slow rule `rank` holds when it runs. On this head that is still D5's provisional band-hold rule. No code change in this round.
