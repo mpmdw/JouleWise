@@ -1266,3 +1266,134 @@ tests.test_b5_driver -k interrupt -k termination -k chain -k signal   (shared _r
                                 Ran 8 tests in 9.227s       OK
 ```
 
+
+## Integration: WP18 + #692
+
+Two merges onto `4501b03f9` (2026-11-07, Air), then a kit regeneration and the fixes the merged state needed. Code head `d6a9744f0`.
+
+### Merges
+
+- **`81b9e181e`**: `--no-ff` merge of `lane/2026-11-07-wp18-fixtures@aaee4b2d2`. Clean. It adds only `configs/campaigns/align_v4/registration/wp18_{x,y}_token_ids.json`, which the measurement Mac produced with `scripts/align_v4_wp18_fixtures.py` at `97714c644`. The file digests match the commit message: X `9dac183d…d658f` and Y `f17a5a0f…0dac`, each with `max_turns` 12 = `len(turns)`. Both pilot-7 members ran the full 12 turns, so the recorded turn count happens to equal the configured ceiling.
+- **`ffed246cd`**: `--no-ff` merge of `origin/lane/2026-11-05-align-pilot10-benign@5f817856b` (PR #692, R0/R1 SMC D1-D6 and Errata 1-5).
+  - One conflict hunk, in `tests/align/test_r0_host.py`. `capture_seconds` takes pilot10-benign's 2,700 (1,200 s adaptive-idle cap + 900 s + 600 s). The R1 lane's `w1_requirement` assertions in the same hunk stay.
+  - `r0_host.py` and `r0_desk_runbook.md` auto-merged.
+  - The classifier files equal pilot10-benign byte for byte: `smc_enumeration.py`, `thermal.py`, `r0_runner.py`, `align_smc_enumerate.py`, `r0_desk.json` and the SMC/classifier tests.
+
+### Follow-up commits
+
+- **`6f56420d4`: one alias definition.** #692's `rank` now reports `selected_key_aliases`. Its signature is the (value, error) pair in every capture row. R1's `alias_groups` (R7-13, the kit's input and R8-6's bar input) compared values only. Two keys with equal values but different failed-read errors were therefore one sensor to R1 and two to the classifier.
+  - `r1_runtime.alias_groups` now uses the classifier's signature over all inventoried keys. Keys never read are still left out. A pick's group is exactly its `selected_key_aliases` among the degC keys.
+  - The contract doc says so.
+  - New tests: `AliasGroupTests.test_one_alias_definition_with_the_pr692_classifier` and `test_r1_g0_timeout_matches_the_classifier_settle_rule`.
+- **`9dd2404d7`: WP18 leaves filled, kit regenerated.** `inputs.json` `WP18.{X,Y}` = {12, fixture sha256}.
+  - These were written with the fixture tool's own `_updated_inputs`, applied to the committed fixtures. The tool's sources stay on the Mac and were not read here.
+  - Regenerating the kit changes the eight X/Y episode configs (`max_turns` 12), the two order manifests, `collection_plan.json`, `plan_tree.json` and its identity pin. A second run changes nothing.
+- **`abb03de8e`: semantic conflict, R1-lane code on #692's config.**
+  - `prequal.check_r0_config` called `r0_step.step_budget`, which refuses #692's `smc_step.idle_max_seconds`. The prequal `r0-config` check therefore failed on the merged `r0_desk.json`.
+  - It now uses `r0_host.step_budget`, #692's D3 budget and the one `r0_runner` already uses.
+  - `night_plan.template.json` was regenerated (`--regenerate-template`) for the new X/Y config digests. Idempotent.
+- **`d6a9744f0`: tests follow the merged state.**
+  - `test_r1_inventory`: the synthetic slow key had tau 60 s. That is now on the fast side of D4/D5, so the fixture uses 120 s.
+  - `test_r1_runtime`: the X-G template carries 12. The pending-WP18 refusal is now tested on a copy whose `max_turns` is null.
+  - `test_v4_kit`: the committed kit blocks on R0/R1 only. An emptied WP18 owner still blocks. The X/Y specs carry the fixture's turn count. A new test binds the committed leaves to the fixtures.
+  - `test_v4_wp18_fixtures`: the tool is tested on the committed inputs with the WP18 leaves nulled.
+  - `test_r1_round7_science`: `G0CapW1Tests` and `AliasGroupTests` now inherit `_World` and its NOON_SAFE clock. Unpinned, the driver's ruling-8 batch-window wait slept in real time once a synthetic segment crossed 11:45 local. A 10:15 run hung.
+
+### Classifier consistency (R1 path on #692)
+
+The R1 path was checked by reading the code and by replaying a synthetic R1 step-d journal through `classify_step` and the real `rank`:
+- 1 Hz ticker unaligned to the origin;
+- 300 s quiet, a 420 s decode, 600 s recovery;
+- an exact alias pair;
+- a `Tg`-style key at a 0.0 placeholder outside load.
+
+- **Placeholder rejection: holds.** The placeholder key is record-only under D1(a).
+- **Baseline: holds.** It is the median of the last 60 s of R1's 300 s post-G0 quiet (D2). R1 has no adaptive idle; its quiet follows a G0 release.
+- **Fast tau <= 60 s: holds.** In the replay the fast pick is the tau-25 s key and the slow pick the tau-120 s key. A tau-400 s key is record-only.
+- **Per-phase coverage: holds, and an old blocker is fixed.** Coverage is 1.0 in every phase. With the pre-#692 100 ms tolerance the same journal gives about 0.13-0.37 and the bar fails. This closes the LEAD-RULINGS-2 round-5 concern that R1's full-inventory sweeps would fail coverage. D6 (two adjacent empty cells) now applies in R1 too: a sweep longer than 1 s leaves an empty cell.
+- **Slow rule: provisional, and R1 inherits it.** R1 calls `rank(stage="r1")`, so it inherits D5's provisional band-hold slow rule, and `picks_provisional` is false at stage r1. DECISION D5 says the slow rule is chosen on the first settled R0 capture. If the lead picks another rule, `rank` changes and R1 follows. An R1 night run before that choice binds W1 to the provisional rule.
+- **R7-2 and R7-13: consistent.**
+  - R1's G0 timeout of 1,200 s = `IDLE_MAX_S`. G0's 0.2 °C/min over 60 s × 10 = D3's settle constants. Now pinned by a test.
+  - R7-13's alias handling and R8-6's bar now use the classifier's alias signature, as above.
+- **Not changed (reported, no redesign):**
+  1. `classify_step` keeps only rule, picks, candidate lists and the ranking. #692's `heat_ordering_indeterminate`, `heat_ordering_wide_exclusion`, `recovery_onset_gap_s`, `alternative_slow_picks` and `selected_key_aliases` are computed but not written to the R1 classification. The per-row flags survive in `ranking`.
+  2. `s7_for_picks` (changed picks) uses the median of the whole 300 s quiet window and its raw SD. D2 uses the last 60 s and the OLS residual SD. Under residual drift, the raw SD widens the R1-pick band that W1 gates on.
+  3. Other R1 driver tests may also run without the NOON_SAFE clock. Only the two classes above were found hanging.
+
+### Kit check on the final head (`d6a9744f0`)
+
+- `scripts/align_v4_kit.py` and `validate_align_v4_w1_plan.py --regenerate-template`: no file changes.
+- `scripts/align_v4_kit.py --check` exits **1**, blocked on exactly five leaves: `R0.reasoning_effort`, `R1.B_D`, `R1.I_D`, `R1.T_dead`, `R1.thermal_policy`. No WP18 leaf remains.
+- `git diff origin/lane/2026-11-05-align-pilot10-benign -- configs/campaigns/align_pilot_v3` is empty, and so is the diff against `4501b03f9`.
+
+### Suite tails
+
+How the suite ran: `/private/tmp/jwsol/venv-both/bin/python -B -P -m unittest <module>` with `PYTHONPATH` set to the worktree, under `nice -n 19 taskpolicy -b`. One module per process, at most two at once, with a per-module `TMPDIR` under `/private/tmp/jwint9-tmp`.
+
+**Pass 1, whole `tests/align` on `9dd2404d7` (126 modules, 1,823 tests).** 119 modules had rc=0. Seven failed, all fixed in `abb03de8e`/`d6a9744f0` (above):
+
+| Module | Result |
+| --- | --- |
+| `test_r1_inventory` | 3 failures |
+| `test_r1_runtime` | 1 failure |
+| `test_v4_kit` | 7 failures |
+| `test_v4_w1_plan` | 3 failures, 4 errors |
+| `test_v4_prequal` | 2 failures, 3 errors |
+| `test_v4_wp18_fixtures` | 1 failure |
+| `test_r1_round7_science` | hung on the rerun only (clock) |
+
+The slowest walls were `test_moe_calibration` (1,458 s), `test_moe_review` (394 s) and `test_analysis_metadata_baseline` (325 s).
+
+**Pass 2, final head `d6a9744f0`.** Every module that touches the changed code (prequal, the W1 template, `r1_runtime`, the kit, the R1 driver, `r0_host`, `smc_enumeration`, WP18, the synthetic worlds) was rerun: 34 modules, all rc=0. The other 92 modules' pass-1 results stand, because nothing they import changed.
+
+```
+test_r0_host                   Ran 54 tests in 32.888s     OK (skipped=1)
+test_r0_step                   Ran 12 tests in 1.242s      OK
+test_r0_checks                 Ran 30 tests in 3.162s      OK
+test_r0_scheduling             Ran 14 tests in 8.207s      OK
+test_r1_inventory              Ran 11 tests in 1.258s      OK
+test_r1_rehearsal              Ran 73 tests in 10.614s     OK
+test_r1_runtime                Ran 33 tests in 94.884s     OK
+test_r1_runtime_e2e            Ran 2 tests in 72.834s      OK
+test_r1_runtime_contract       Ran 11 tests in 0.005s      OK
+test_r1_round5_exec_review     Ran 7 tests in 6.762s       OK
+test_r1_round6_exec_review     Ran 9 tests in 1.922s       OK
+test_r1_round6_lows            Ran 18 tests in 5.988s      OK
+test_r1_round6_power           Ran 25 tests in 0.761s      OK
+test_r1_round7_science         Ran 18 tests in 0.654s      OK
+test_r1_round7_power           Ran 29 tests in 7.440s      OK
+test_r1_round7_install         Ran 6 tests in 2.676s       OK
+test_r1_round7_close_deferral  Ran 3 tests in 3.313s       OK (skipped=1)
+test_r1_round7_exec_review     Ran 6 tests in 0.851s       OK
+test_r1_round8                 Ran 21 tests in 29.558s     OK
+test_r1_round8_exec_review     Ran 7 tests in 36.631s      OK
+test_smc_classifier_v4         Ran 26 tests in 55.162s     OK
+test_smc_quiet                 Ran 28 tests in 3.913s      OK
+test_smc_selection             Ran 10 tests in 0.670s      OK
+test_smc_gpu                   Ran 4 tests in 0.010s       OK
+test_smc_native                Ran 0 tests in 0.000s       OK (skipped=2)
+test_thermal_sidecar           Ran 9 tests in 0.116s       OK
+test_v4_kit                    Ran 115 tests in 20.122s    OK
+test_v4_prequal                Ran 33 tests in 9.223s      OK
+test_v4_w1_plan                Ran 12 tests in 1.474s      OK
+test_v4_wp18_fixtures          Ran 11 tests in 0.331s      OK
+test_v4_powermode_record       Ran 9 tests in 0.594s       OK
+test_window_reference_custody  Ran 4 tests in 1.904s       OK
+test_protocol_v4_doc           Ran 5 tests in 0.583s       OK
+test_v4_w1_synthetic           Ran 18 tests in 5.531s      OK (skipped=14)   # full windows gated by JW_WP22_FULL
+```
+
+Classifier and thermal modules from pass 1 (no change since): `test_thermal_coverage` 6 OK, `test_thermal_gate` 44 OK, `test_thermal_desk` 24 OK, `test_r0_documentation` 5 OK, `test_r0_mlx_native` 1 OK.
+
+Further runs on the final head:
+
+```
+JW_WP22_FULL=1 tests.align.test_v4_w1_synthetic
+                                Ran 18 tests in 181.390s    OK (expected failures=1)   # F3 only, as before
+tests.hazards.test_smc_enumeration
+                                Ran 16 tests in 0.036s      OK
+tests.test_run_night -k close -k signal -k powermode
+                                Ran 12 tests in 2.299s      OK   (nice only)
+```
+
+The `test_run_night` subset failed twice under `taskpolicy -b`, both times on the known `bind_supervision` timing flake: `test_signalled_child_cannot_hold_cleanup_past_budget` at 1.091 s and 1.113 s against a 1.05 s budget. It passed when rerun under nice only.
