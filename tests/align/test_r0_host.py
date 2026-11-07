@@ -375,6 +375,31 @@ class R0HostTest(unittest.TestCase):
             self.assertEqual(softwareupdate_scan_forecast(start, start, log_path=log.with_name("missing"))["status"],
                              "unknown")
 
+    def test_softwareupdate_forecast_reads_install_log_lines_and_never_raises(self):
+        from datetime import datetime
+        start, deadline = datetime(2026, 11, 7, 6, 0), datetime(2026, 11, 7, 20, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "install.log"
+            # The layout seen in this Mac's /var/log/install.log (with the
+            # zone offset); the latest finished scan wins.
+            log.write_text(
+                "2026-11-06 22:45:25-08 host softwareupdated[1635]: softwareupdated: Posting "
+                "com.apple.softwareupdate.AutoBackgroundScanFinished notification\n"
+                "2026-11-07 04:45:00-08 host softwareupdated[1635]: softwareupdated: Posting "
+                "com.apple.softwareupdate.AutoBackgroundScanFinished notification\n"
+                "2026-11-07 05:00:00-08 host softwareupdated[1635]: unrelated line\n")
+            result = softwareupdate_scan_forecast(start, deadline, log_path=log)
+            self.assertEqual(result["status"], "forecast")
+            self.assertEqual(result["last_finished"], "2026-11-07T04:45:00")
+            self.assertEqual(result["predicted"], ["2026-11-07T10:45:00", "2026-11-07T16:45:00"])
+            self.assertEqual(result["window"], ["2026-11-07T06:00:00", "2026-11-07T20:00:00"])
+            for path, args in ((Path(tmp), (start, deadline)),            # unreadable: a directory
+                               (log, (deadline, start)),                  # inverted window
+                               (log, ("not a time", deadline))):
+                self.assertEqual(softwareupdate_scan_forecast(*args, log_path=path)["status"], "unknown")
+            log.write_text("no scan lines\n")
+            self.assertEqual(softwareupdate_scan_forecast(start, deadline, log_path=log)["status"], "unknown")
+
 
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
@@ -422,7 +447,47 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard_type = DrivenGuard if driven else QuietGuard
         guard = guard_type([], run=run, inspect_custody=lambda **kw: Census(),
                            clock=clock, sleep=clock.sleep)
+        # The real daemon thread never fires during a test; ticks are driven.
+        guard.SNAPSHOT_CADENCE_S = 3600
+        self.addCleanup(guard.close)
         return guard, clock, calls
+
+    def threaded(self, counter_at, *, until):
+        """A guard whose real daemon thread runs at a 1 ms real cadence. Each
+        daemon cycle advances the fake clocks by one SNAPSHOT_CADENCE_S (at
+        its first probe, so a snapshot itself takes no fake time). The daemon
+        blocks before passing ``until`` and sets ``reached``."""
+        import threading
+        from datetime import datetime
+        wall0 = datetime(2026, 11, 6, 18, 0, 0).timestamp()
+        clock = GuardClock()
+        reached, release = threading.Event(), threading.Event()
+        ps_threads = []
+        def run(argv, **kwargs):
+            daemon = threading.current_thread().name == "joulewise-quiet-snapshots"
+            if daemon and "launchctl" in argv[0]:
+                if clock.now + QuietGuard.SNAPSHOT_CADENCE_S > until:
+                    reached.set()
+                    release.wait(5)
+                    raise RuntimeError("fixture released")
+                clock.now += QuietGuard.SNAPSHOT_CADENCE_S
+            if argv == contention.PS_ARGV:
+                ps_threads.append(threading.current_thread().name)
+                value = counter_at(clock.now)
+                return subprocess.CompletedProcess(argv, 0, cpu_table(
+                    (42, OLD_START, f"{int(value // 60)}:{value % 60:05.2f}", "mdworker_shared")), "")
+            if argv == prewindow.PS_ARGV:
+                return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n", "")
+            return self.runner(argv, **kwargs)
+        guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(), clock=clock,
+                           sleep=clock.sleep, wall_clock_ns=lambda: int((wall0 + clock()) * 1e9),
+                           host_reader=None)
+        guard.SNAPSHOT_CADENCE_S = 0.001
+        def stop():
+            release.set()
+            guard.close()
+        self.addCleanup(stop)
+        return guard, clock, reached, ps_threads
 
     def assert_rate(self, actual, expected, elapsed):
         # One ps TIME quantum over the measured interval bounds the
@@ -503,7 +568,7 @@ class R0QuietIntervalTest(unittest.TestCase):
             with self.assertRaisesRegex(Refused, "photoanalysisd.*CPU-s/s"):
                 guard.check(force=True)
 
-    def test_forced_calls_use_newest_30_second_opening_and_prune_history(self):
+    def test_each_snapshot_closes_a_window_from_the_newest_30_second_opening_and_prunes(self):
         def snapshot(cpu):
             return cpu_table((42, OLD_START, cpu, "mdworker_shared"))
         guard, clock, calls = self.guard([snapshot("0:00.00"), snapshot("0:00.00"),
@@ -512,16 +577,20 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         clock.now = 30.1
         guard.check(force=True)  # 1 CPU-s / 30.1 s, rather than / 0.1 s.
-        # Opening is 0: bracket by 1 s (100 TIME quanta). The next eligible
-        # opening is 30.1 = 30 + 10 TIME quanta, bracketed by 30 and 31.
-        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
+        interval = guard.receipts[-1]["cpu_interval"]
+        self.assertEqual((interval["start_monotonic_s"], interval["end_monotonic_s"]), (0, 30.1))
+        self.assert_rate(interval["contaminants"][0]["cpu_s_per_s"], 1 / 30.1, 30.1)
         clock.now = 45
         guard.check(force=True)
+        self.assertEqual(guard.receipts[-1]["cpu_interval"]["start_monotonic_s"], 0)
         clock.now = 60.2
         guard.check(force=True)
+        # The newest opening at least 30 s before 60.2 is 30.1 (= 30 + 10
+        # TIME quanta), not 30: the window slides one snapshot at a time.
         opening = guard.receipts[-1]["cpu_interval"]["start_monotonic_s"]
-        self.assertEqual(opening, 30)
-        self.assertEqual(len(guard._snapshots), 5)
+        self.assertEqual(opening, 30.1)
+        # History before the newest opening is pruned; the guard keeps 3.
+        self.assertEqual(len(guard._snapshots), 3)
         self.assertEqual(len(calls), 5)
 
     def test_reused_pid_counts_new_identity_from_zero(self):
@@ -550,7 +619,9 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         clock.now = 30.1
         guard.check(force=True)
-        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
+        self.assertFalse(guard.receipts[-1]["busy"])
+        recorded = guard.receipts[-1]["cpu_interval"]["regressed_counters"]
+        self.assertEqual([(row["pid"], row["contaminant"]) for row in recorded], [(42, True)])
 
     def test_failed_and_unparsable_initial_snapshots_refuse(self):
         for sample in ((1, ""), "", "PID PPID\ninvalid\n", RuntimeError("ps failed")):
@@ -591,22 +662,6 @@ class R0QuietIntervalTest(unittest.TestCase):
         interval = guard.receipts[-1]["cpu_interval"]
         self.assertFalse(interval["exited_over_limit"])
         self.assertEqual(interval["unaccounted"][0]["reason"], "exited")
-
-    def test_exited_over_limit_rule_uses_contention_previous_interval_evidence(self):
-        # The public check latches before a second busy interval. Exercise
-        # accounting directly to prove the retained exit rule independently.
-        guard, clock, _ = self.guard([
-            cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
-            cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")), cpu_table()])
-        with self.assertRaises(Refused):
-            guard.check(force=True)
-        clock.now = 60
-        guard._background_snapshot()
-        details = {"regressed_counters": [], "regressed_noncontaminant": []}
-        busy = guard._judge_cpu_interval(guard._snapshots[1], guard._snapshots[2], details)
-        self.assertEqual(busy[0]["pid"], 42)
-        self.assertIn("previous interval", busy[0]["basis"])
-        self.assert_rate(busy[0]["cpu_s_per_s"], 0.06, 30)
 
     def test_report_floor_filters_only_the_receipt(self):
         # 0.005 * 30 = 0.15 CPU-s; 0.14 / 0.16 are one TIME quantum
@@ -649,7 +704,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         clock.now += 10 * contention.PS_TIME_QUANTUM_S
         guard.check(force=True)
-        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
+        self.assertEqual(guard.receipts[-1]["cpu_interval"]["regressed_noncontaminant"][0]["pid"], 42)
 
     def test_zombie_regressions_are_recorded_for_both_contaminant_match_sources(self):
         # 300 TIME quanta = 3.00 CPU-s -> zero, with no prior interval
@@ -666,26 +721,6 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertFalse(guard.receipts[-1]["busy"])
                 self.assertEqual([(row["pid"], row["contaminant"]) for row in interval["regressed_counters"]],
                                  [(42, contaminant)])
-
-    def test_contaminant_regression_with_previous_over_limit_still_refuses(self):
-        # (0.05 + 0.01) * 30 = 1.80 CPU-s, then TIME -> zero.
-        # check() latches on the first interval, so inspect the next interval
-        # directly to verify the module's exited_over_limit rule too.
-        guard, clock, _ = self.guard([
-            cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
-            cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")),
-            cpu_table((42, OLD_START, "0:00.00", "mdworker_shared"))])
-        with self.assertRaisesRegex(Refused, "mdworker_shared 0.06 CPU-s/s"):
-            guard.check(force=True)
-        clock.now += prewindow.INTERVAL_S
-        guard._background_snapshot()
-        interval = {"regressed_counters": [], "regressed_noncontaminant": []}
-        self.assertEqual(guard._judge_cpu_interval(
-            guard._snapshots[1], guard._snapshots[2], interval)[0]["pid"], 42)
-        self.assertEqual(interval["exited_over_limit"][0]["pid"], 42)
-        self.assertTrue(interval["regressed_counters"][0]["contaminant"])
-        with self.assertRaises(Refused):
-            guard.check(force=True)
 
     def test_interval_regression_after_missing_snapshot_is_recorded_for_every_identity(self):
         # Opening at 30 s, missing at 1.5 * 30, reappearing at 2 * 30:
@@ -704,64 +739,182 @@ class R0QuietIntervalTest(unittest.TestCase):
                 recorded = guard.receipts[-1]["cpu_interval"]["regressed_counters"]
                 self.assertEqual([(row["pid"], row["contaminant"]) for row in recorded], [(42, contaminant)])
 
-    def test_300_second_caller_gap_does_not_dilute_60_second_contender(self):
-        # Regression: 0.2 CPU-s/s for 60 s used to be divided by a 300 s
-        # caller gap. The daemon snapshots every 15 s, so a 30 s window sees it.
-        counters = [0, 0]
-        for t in range(45, 331, 15):
-            counters.append(min(max(t - 120, 0), 60) * .2)
-        snapshots = [cpu_table((42, OLD_START, f"0:{value:05.2f}", "mdworker_shared"))
-                     for value in counters]
-        guard, clock, calls = self.guard(snapshots, driven=False)
-        guard.check(force=True)
-        guard.sleep = lambda seconds: self.fail("caller slept after admission")
-        for t in range(45, 331, 15):
+    # Daemon-sampler tests. Background ticks are driven by calling the
+    # daemon's own cycle (_background_snapshot) at fake times, except where
+    # a real thread is the point. CADENCE = the guard's one constant.
+
+    def tick(self, guard, clock, *times):
+        for t in times:
             clock.now = t
             guard._background_snapshot()
-        with self.assertRaisesRegex(Refused, "mdworker_shared 0.2 CPU-s/s"):
-            guard.check(force=True)
-        self.assertLessEqual(max(row["elapsed_s"] for row in guard.receipts[-1]["cpu_intervals"]), 30)
-        self.assertEqual(len(calls), len(snapshots))
 
-    def test_calls_29_seconds_apart_cannot_make_a_58_second_window(self):
-        snapshots = [cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
-                     cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
-                     cpu_table((42, OLD_START, "0:02.00", "mdworker_shared")),
-                     cpu_table((42, OLD_START, "0:02.00", "mdworker_shared"))]
-        guard, clock, calls = self.guard(snapshots, driven=False)
+    def test_300_second_caller_gap_daemon_thread_refuses_60_second_contender(self):
+        # Measured failure (cold review should-fix 1): 0.2 CPU-s/s for 60 s
+        # inside a 300 s caller gap (model load / prefill) passed with a
+        # long_interval flag. The real daemon thread snapshots through the
+        # gap; the first post-gap check judges 30 s windows and refuses.
+        def counter(t):
+            return min(max(t - 120, 0), 60) * 0.2
+        guard, clock, reached, ps_threads = self.threaded(counter, until=330)
         guard.check(force=True)
-        clock.now = 45
-        guard._background_snapshot()
+        self.assertTrue(reached.wait(2), "daemon did not reach the end of the caller gap")
+        self.assertEqual(clock.now, 330)
+        with self.assertRaisesRegex(Refused, "42 mdworker_shared 0.1 CPU-s/s"):
+            guard.check(force=True)
+        windows = guard.receipts[-1]["cpu_intervals"]
+        self.assertLessEqual(max(w["elapsed_s"] for w in windows),
+                             prewindow.INTERVAL_S + QuietGuard.SNAPSHOT_CADENCE_S)
+        # Admission's two snapshots ran on the caller; every later ps ran on
+        # the daemon, and the caller never slept again.
+        self.assertEqual(set(ps_threads[2:]), {"joulewise-quiet-snapshots"})
+        self.assertEqual(clock.sleeps, [prewindow.INTERVAL_S])
+
+    def test_calls_29_seconds_apart_with_a_2_cpu_second_burst_refuse(self):
+        # Measured failure (cold review should-fix 2): forced calls 29 s
+        # apart made a 58 s window and a 2.0 CPU-s burst passed (2/58 <
+        # 0.05). The burst (85-95 s) straddles the 90 s snapshot, so
+        # back-to-back 30 s windows from 30 s would also split it (1.0 +
+        # 1.0); the sliding 75-105 s window holds all of it: 2/30 > 0.05.
+        def snapshot(cpu):
+            return cpu_table((42, OLD_START, cpu, "mdworker_shared"))
+        guard, clock, calls = self.guard([snapshot("0:00.00")] * 5 + [
+            snapshot("0:01.00"), snapshot("0:02.00")], driven=False)
+        guard.check(force=True)
+        self.tick(guard, clock, 45)
         clock.now = 59
         guard.check(force=True)
-        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
-        clock.now = 60
-        guard._background_snapshot()
+        self.tick(guard, clock, 60, 75)
         clock.now = 88
-        with self.assertRaisesRegex(Refused, "mdworker_shared"):
+        guard.check(force=True)
+        self.tick(guard, clock, 90, 105)
+        clock.now = 117
+        with self.assertRaisesRegex(Refused, "42 mdworker_shared 0.0666667 CPU-s/s"):
             guard.check(force=True)
-        self.assertEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], 30)
-        self.assertEqual(len(calls), 4)  # checks themselves ran no ps
+        windows = [w for receipt in guard.receipts for w in receipt.get("cpu_intervals", ())]
+        self.assertEqual((windows[-1]["start_monotonic_s"], windows[-1]["end_monotonic_s"]), (75, 105))
+        self.assertLessEqual(max(w["elapsed_s"] for w in windows),
+                             prewindow.INTERVAL_S + QuietGuard.SNAPSHOT_CADENCE_S)
+        # Windows are contiguous: each opening is at or before the last end.
+        for previous, current in zip(windows, windows[1:]):
+            self.assertLessEqual(current["start_monotonic_s"], previous["end_monotonic_s"])
+        self.assertEqual(len(calls), 7)  # 2 admission + 5 daemon; checks ran none
 
-    def test_no_sleep_or_ps_on_caller_after_first_admission(self):
-        guard, clock, calls = self.guard([cpu_table(), cpu_table(), cpu_table()], driven=False)
+    def test_repeated_short_startup_bursts_do_not_refuse(self):
+        # Proportionality: mdworker_shared / photoanalysisd respawns, each
+        # ~0.6 CPU-s (60 TIME quanta, 0.02 CPU-s/s over 30 s), a new pair
+        # born in every 15 s cadence slot for ten minutes and gone at the
+        # next snapshot. Per-process judgement keeps them below 0.05.
+        from datetime import datetime
+        wall0 = datetime(2026, 11, 6, 18, 0, 0).timestamp()
+        def lstart(t):
+            d = datetime.fromtimestamp(wall0 + t)
+            return d.strftime("%a %b ") + f"{d.day:2d}" + d.strftime(" %H:%M:%S %Y")
+        times = [0, 30] + list(range(45, 631, 15))
+        tables = [cpu_table()] * 2 + [
+            cpu_table((20000 + 2 * t, lstart(t - 5), "0:00.60", "mdworker_shared"),
+                      (20001 + 2 * t, lstart(t - 3), "0:00.60", "photoanalysisd"))
+            for t in times[2:]]
+        guard, clock, _ = self.guard(tables, driven=False)
+        guard.wall_clock_ns = lambda: int((wall0 + clock()) * 1e9)
+        guard.check(force=True)
+        for t in times[2:]:
+            self.tick(guard, clock, t)
+            guard.check()
+        windows = [w for receipt in guard.receipts for w in receipt.get("cpu_intervals", ())]
+        self.assertEqual(len(windows), len(times) - 1)
+        rates = [c["cpu_s_per_s"] for w in windows for c in w["contaminants"]]
+        # 0.6 CPU-s over a 30 s window (0.02), or over the first 45 s one.
+        self.assert_rate(max(rates), 0.02, prewindow.INTERVAL_S)
+        self.assertIsNone(guard.failure)
+
+    def test_no_sleep_or_process_on_caller_after_first_admission(self):
+        guard, clock, calls = self.guard([cpu_table()] * 4, driven=False)
         guard.check(force=True)
         guard.sleep = lambda seconds: self.fail("caller slept after admission")
-        clock.now = 45
-        guard._background_snapshot()
-        before = len(calls)
-        clock.now = 46
+        self.tick(guard, clock, 45)
+        run = guard.run
+        guard.run = lambda *a, **k: self.fail("caller launched a process after admission")
+        # Per-token checks, forced boundaries and windows judged on stored data.
+        for step in range(1, 200):
+            clock.now = 45 + step * 0.05
+            guard.check(force=step % 50 == 0)
+        guard.run = run
+        self.tick(guard, clock, 60)
+        guard.run = lambda *a, **k: self.fail("caller launched a process after admission")
+        clock.now = 61
         guard.check(force=True)
-        self.assertEqual(len(calls), before)
+        self.assertEqual(guard.receipts[-1]["cpu_interval"]["end_monotonic_s"], 60)
+        self.assertEqual(guard.receipts[-1]["background_snapshots_monotonic_s"], [60])
+        self.assertEqual(len(calls), 4)
 
     def test_background_snapshot_failure_refuses_next_check_and_stops(self):
         guard, clock, _ = self.guard([cpu_table(), cpu_table(), RuntimeError("ps failed")], driven=False)
         guard.check(force=True)
-        clock.now = 45
-        guard._background_snapshot()
-        with self.assertRaisesRegex(Refused, "background cumulative CPU snapshot"):
+        self.tick(guard, clock, 45)
+        self.assertTrue(guard._stop_sampler.is_set())
+        clock.now = 45.1  # inside the 15 s throttle: still refuses
+        with self.assertRaisesRegex(Refused, "background sampler.*cumulative CPU snapshot: ps failed"):
+            guard.check()
+        guard._sampler.join(1)
+        self.assertFalse(guard._sampler.is_alive())
+
+    def test_background_census_refusal_fails_closed(self):
+        # The census moved off the caller with the snapshots: a window armed
+        # after admission refuses at the next check, as it did per check.
+        guard, clock, _ = self.guard([cpu_table()] * 3, driven=False)
+        guard.check(force=True)
+        agents = self.default_parent / "Library/LaunchAgents"
+        agents.mkdir(parents=True)
+        (agents / "com.joulewise.night.future.plist").write_text("synthetic")
+        self.tick(guard, clock, 45)
+        with self.assertRaisesRegex(Refused, "background sampler.*measurement window armed"):
+            guard.check()
+
+    def test_stalled_sampler_refuses(self):
+        guard, clock, _ = self.guard([cpu_table()] * 2, driven=False)
+        guard.check(force=True)
+        clock.now = 30 + QuietGuard.MAX_WINDOW_S - 1
+        guard.check(force=True)  # no new snapshot yet, within bound
+        clock.now = 30 + QuietGuard.MAX_WINDOW_S + 1
+        guard.check()  # per-token calls stay throttled to one judgement per 15 s
+        clock.now = 30 + QuietGuard.MAX_WINDOW_S + 15
+        with self.assertRaisesRegex(Refused, "background snapshots stalled"):
+            guard.check()
+
+    def test_window_longer_than_two_intervals_refuses_rather_than_dilutes(self):
+        # A daemon delayed 65 s leaves no opening newer than 30 s: the
+        # 65 s window would dilute, so it is indeterminate.
+        guard, clock, _ = self.guard([cpu_table()] * 3, driven=False)
+        guard.check(force=True)
+        self.tick(guard, clock, 95)
+        with self.assertRaisesRegex(Refused, "judged CPU window of 65.0 s exceeds 60 s"):
+            guard.check(force=True)
+
+    def test_refusal_stops_the_daemon_thread(self):
+        guard, clock, _ = self.guard([cpu_table(), cpu_table(),
+                                      cpu_table((42, OLD_START, "0:01.80", "mdworker_shared"))],
+                                     driven=False)
+        guard.check(force=True)
+        self.assertTrue(guard._sampler.is_alive())
+        self.tick(guard, clock, 60)
+        with self.assertRaises(Refused):
             guard.check(force=True)
         self.assertTrue(guard._stop_sampler.is_set())
+        guard._sampler.join(1)
+        self.assertFalse(guard._sampler.is_alive())
+
+    def test_real_daemon_thread_join_is_bounded(self):
+        import time as real_time
+        guard, clock, reached, _ = self.threaded(lambda t: 0, until=45)
+        guard.JOIN_TIMEOUT_S = 0.05
+        guard.check(force=True)
+        self.assertTrue(reached.wait(2))  # daemon now blocked inside a probe
+        started = real_time.monotonic()
+        with guard:
+            pass  # context exit closes
+        self.assertLess(real_time.monotonic() - started, 1.0)
+        self.assertTrue(guard._stop_sampler.is_set())
+        self.assertTrue(guard._sampler.is_alive())  # still blocked; join gave up
 
     def test_both_cpu_snapshot_tables_use_the_module_probe_timeout(self):
         guard, _, _ = self.guard([cpu_table(), cpu_table()])

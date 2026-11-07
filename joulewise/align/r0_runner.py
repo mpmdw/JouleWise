@@ -127,9 +127,11 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
+    # Advisory only (never a verdict input): predicted softwareupdated scans
+    # up to the run's bound of one per-check timeout per selected check.
     forecast_start = datetime.now()
     report["softwareupdate_scan_forecast"] = softwareupdate_scan_forecast(
-        forecast_start, forecast_start + timedelta(seconds=per_check_timeout))
+        forecast_start, forecast_start + timedelta(seconds=per_check_timeout * max(1, len(checks))))
     def receipt(name, model, fn, *, incremental=False):
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}

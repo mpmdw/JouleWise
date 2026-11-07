@@ -270,6 +270,23 @@ class R0ChecksTest(unittest.TestCase):
             self.assertEqual(report["status"], "pass")
             self.assertIn("required", [r["status"] for r in report["checks"]])
 
+    def test_softwareupdate_scan_forecast_is_reported_and_never_refuses(self):
+        forecast = {"status": "forecast", "last_finished": "2026-11-06T23:09:00", "cadence_hours": 6,
+                    "predicted": ["2026-11-07T05:09:00"], "window": ["2026-11-07T00:00:00", "2026-11-07T06:00:00"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("joulewise.align.r0_runner.softwareupdate_scan_forecast", return_value=forecast) as made, \
+                    patch.object(r0, "checkpoint_verdict", return_value={"status": "required"}), \
+                    patch.object(r0, "ladder", return_value={"status": "fallback", "selected": None, "rungs": []}):
+                report = execute(config_at(root), root, ["generated", "ladder", "template"], ["D"],
+                                 guard=FakeGuard(), backend_factory=FakeBackend, per_check_timeout=100)
+            self.assertEqual(report["status"], "pass")
+            self.assertEqual(report["softwareupdate_scan_forecast"], forecast)
+            start, deadline = made.call_args.args
+            self.assertEqual((deadline - start).total_seconds(), 300)  # 3 checks x 100 s
+            self.assertIn("Software update scan forecast (advisory)", (root / "report.md").read_text())
+            self.assertIn("2026-11-07T05:09:00", (root / "report.md").read_text())
+
     def test_coherence_format_and_echo_are_diagnostics_but_nll_is_a_bar(self):
         from dataclasses import replace
         class Backend(FakeBackend):
