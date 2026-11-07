@@ -151,17 +151,20 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
         # critique of R5-6): never change the power mode for it.
         raise ValueError('v4 install refused: the session is terminal (night/result.json exists)')
     already = (state.get('install') or {}).get('exit_code') == 0
-    if (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2 and not already:
-        # Lead ruling R5-6: W1 under an adopted High Power. The marker comes
-        # first (powermode.enter_high_power), so any later crash leaves the
-        # restore owed to the next night that expects Automatic.
-        high = powermode.enter_high_power(marker, runner=runner)
+    entering = (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2 and not already
     try:
+        if entering:
+            # Lead ruling R5-6: W1 under an adopted High Power. The marker comes
+            # first (powermode.enter_high_power), so any later crash leaves the
+            # restore owed to the next night that expects Automatic. Inside the
+            # try (round-5 executing review): a signal during the entry itself,
+            # after pmset applied 2, still restores Automatic below.
+            high = powermode.enter_high_power(marker, runner=runner)
         return _arm_and_install(session, state, measurement_root, plan, high, runner=runner,
                                 volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
                                 disk_gate=disk_gate, **kwargs)
     except BaseException:
-        if high is not None:
+        if entering:
             # The arm did not hand off: leave the host Automatic (R5-6), on
             # every failure from the mode change on.
             restore = powermode.restore_automatic(marker, runner=runner)

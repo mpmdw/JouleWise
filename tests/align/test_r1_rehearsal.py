@@ -1121,10 +1121,20 @@ class Round5RulingTests(unittest.TestCase):
             with patch.object(r1, "wait_outside_os_batch", wait):
                 self.run_world(td, world)
             bounds = [w for _, w in waits]
-            self.assertIn(2400, bounds)      # 30B and D steps: 1,800 + 600 s recovery
-            self.assertIn(2700, bounds)      # designed start states: 1,800 + 900 s preheat
-            self.assertEqual(r1.SEGMENT_BOUND_S["step-d"], 2400)
-            self.assertEqual(r1.SEGMENT_BOUND_S["d-planning-turn-r-plus-4c"], 2700)
+            # Round-5 executing review: R5-2 put the G0 (600 s cap) and the
+            # steps' 300 s quiet outside the deadman, so they join the bound.
+            self.assertIn(3300, bounds)      # 30B and D steps: 1,800 + 600 G0 + 300 quiet + 600 recovery
+            self.assertEqual(bounds.count(3300), 2 + 3)   # ... and the three designed states: 1,800 + 900 + 600
+            self.assertEqual(r1.SEGMENT_BOUND_S["step-d"], 3300)
+            self.assertEqual(r1.SEGMENT_BOUND_S["d-planning-turn-r-plus-4c"], 3300)
+        # Each bound covers the runtime's own caps around the re-armed deadman.
+        from joulewise.align.apple import r1_runtime as rt
+        deadman = rt.DEADMAN_FACTOR * r1.runtime_step_deadman_s(None)
+        g0_cap = 600   # thermal_gates: the G0 cap is 600 s
+        self.assertGreaterEqual(r1.SEGMENT_BOUND_S["step-d"],
+                                g0_cap + rt.STEP_QUIET_S + deadman + rt.RECOVERY_CAP_S)
+        self.assertGreaterEqual(r1.SEGMENT_BOUND_S["d-planning-turn-r-plus-0c"],
+                                rt.PREHEAT_CAP_S + g0_cap + deadman)
 
     def test_full_inventory_thermometry_is_registered_and_a_null_pick_fails_the_bar(self):
         with tempfile.TemporaryDirectory() as td:

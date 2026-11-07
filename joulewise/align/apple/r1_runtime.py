@@ -710,7 +710,8 @@ def gated_budget(slots):
         t_dead = float(slots["T_dead"])
     except (KeyError, TypeError, ValueError) as error:
         raise Refused("step-d T_dead is not a finite positive number") from error
-    if isinstance(slots.get("T_dead"), bool) or not math.isfinite(t_dead) or t_dead <= 0:
+    # A JSON number only: float("1200") would admit a string (round-5 executing review).
+    if type(slots.get("T_dead")) not in (int, float) or not math.isfinite(t_dead) or t_dead <= 0:
         raise Refused("step-d T_dead is not a finite positive number")
     b_d = slots.get("B_D")
     if type(b_d) is not int or not 1024 <= b_d <= 40960 or b_d % 1024:

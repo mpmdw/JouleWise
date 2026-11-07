@@ -88,10 +88,15 @@ QUIET_SEGMENT_BOUND_S = 1800           # planning bound for an unscheduled step 
 # bounds preheat + G0 + turn).
 STEP_RECOVERY_S = 600
 PLANNING_PREHEAT_CAP_S = 900
-SEGMENT_BOUND_S = {"step-30b": QUIET_SEGMENT_BOUND_S + STEP_RECOVERY_S,
-                   "step-d": QUIET_SEGMENT_BOUND_S + STEP_RECOVERY_S,
+# Round-5 executing review: R5-2 re-arms the deadman after the G0 (its own
+# 600 s cap) and, for the 30B/D steps, after the 300 s quiet as well, so the
+# 1,800 s member bound no longer contains either; both are added here.
+STEP_G0_CAP_S = 600
+STEP_QUIET_S = 300
+SEGMENT_BOUND_S = {"step-30b": QUIET_SEGMENT_BOUND_S + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
+                   "step-d": QUIET_SEGMENT_BOUND_S + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
                    **{f"d-planning-turn-r-plus-{int(o)}c": QUIET_SEGMENT_BOUND_S + PLANNING_PREHEAT_CAP_S
-                      for o in PLANNING_START_OFFSETS_C}}
+                      + STEP_G0_CAP_S for o in PLANNING_START_OFFSETS_C}}
 CPU_BUSY_CORES_LIMIT = 0.5
 CPU_BUSY_SUSTAINED_S = 60
 MAX_SEGMENT_REDOS = 2

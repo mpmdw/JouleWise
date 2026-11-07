@@ -1141,6 +1141,28 @@ class W1HighPowerTests(unittest.TestCase):
             self.assertEqual(self.host.mode, 0)
             self.assertFalse(self.marker.exists())
 
+    def test_a_signal_inside_the_high_power_entry_still_restores_automatic(self):
+        # Round-5 executing review (Sol critic F4): enter_high_power ran before
+        # the restoring try, so a first SIGINT after pmset applied 2 (here at
+        # the read-back) escaped with the host at 2 and the W1 marker kept.
+        with tempfile.TemporaryDirectory() as tmp:
+            original = FakeArmHost.__call__
+            state = {'armed': False}
+
+            def interrupted(host, argv):
+                result = original(host, argv)
+                if tuple(argv) == ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2'):
+                    state['armed'] = True
+                elif state['armed'] and tuple(argv)[:3] == ('/usr/bin/pmset', '-g', 'custom'):
+                    state['armed'] = False
+                    raise KeyboardInterrupt('SIGINT during the High Power read-back')
+                return result
+            with patch.object(FakeArmHost, '__call__', interrupted), self.assertRaises(KeyboardInterrupt):
+                self.install(tmp, 2)
+            self.assertFalse(self.called)
+            self.assertEqual(self.host.mode, 0)
+            self.assertFalse(self.marker.exists())
+
     def test_a_terminal_or_installed_session_never_sets_high_power(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.install(tmp, 2)                       # first arm: host at 2, marker present
