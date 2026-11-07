@@ -190,11 +190,19 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     allowed = (R1_HARDWARE_SOURCE, R1_SYNTHETIC_SOURCE) if synthetic else (R1_HARDWARE_SOURCE,)
     if r1_slots.get('source') not in allowed:
         raise ValueError(f'R1 r1_slots source must be {R1_HARDWARE_SOURCE!r}, not {r1_slots.get("source")!r}')
-    inconclusive = r1_slots.get('inconclusive_segments') or {}
+    inconclusive = r1_slots.get('inconclusive_segments')
+    if not isinstance(inconclusive, dict):
+        raise ValueError('R1 r1_slots must record inconclusive_segments (LEAD-RULINGS-2 R6-2)')
     if STEP_D_SEGMENT in inconclusive:
         # LEAD-RULINGS-2 R6-2: recorded by the driver, refused here (fail closed at the kit).
         raise ValueError(f'R1 step-d was INCONCLUSIVE ({inconclusive[STEP_D_SEGMENT]}): no slots, no thermometry '
                          'bar and no gated runs; W1 cannot be sized from this R1 record')
+    if inconclusive:
+        # A designed start state that was never reached leaves beta_T (U5)
+        # without a point; before R6-2 it refused the night, so it still
+        # refuses W1 here (Sol critique of round 6).
+        raise ValueError('R1 calibration segment(s) INCONCLUSIVE (R6-2): ' + ', '.join(sorted(inconclusive))
+                         + '; the lead must rule before W1')
     slots = r1_slots.get('slots')
     if not isinstance(slots, dict) or not finite(slots.get('I_D')):
         raise ValueError('R1 r1_slots must carry the step-d slots with a finite I_D')
@@ -416,6 +424,14 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
         if not finite(s6) or s6 <= 0 or not finite(s7) or s7 <= 0:
             raise ValueError(f'{source}: R1-pick S6/S7 were not computed (finite, positive '
                              'band_c.s_slow and S7 required)')
+        # The R1-pick S6/S7 describe the keys they were computed for; the
+        # policy must gate on exactly those (Sol critique of round 6).
+        keys = computed.get('keys') if isinstance(computed.get('keys'), dict) else {}
+        sensors = policy.get('sensors') if isinstance(policy.get('sensors'), dict) else {}
+        if any(sensors.get(role) != keys.get(role) or keys.get(role) is None for role in ('s_fast', 's_slow')):
+            raise ValueError(f'inputs.R1.thermal_policy.sensors {sensors.get("s_fast")!r}/{sensors.get("s_slow")!r} '
+                             f'are not the keys {source}.keys {keys.get("s_fast")!r}/{keys.get("s_slow")!r} '
+                             'that the R1-pick S6/S7 were computed for')
         bindings.append(('turn_cap_s', s7, source + '.S7'))
         if not _close(policy.get('delta_slow_c'), s6):
             tuning = r1_slots.get('s6_tuning')

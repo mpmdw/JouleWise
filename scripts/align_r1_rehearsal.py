@@ -1274,8 +1274,13 @@ def run(args):
                 if model:
                     # R6-1: did this segment end with a D turn? (A timed-out G0
                     # dispatches none, so the next gated run would not follow one.)
+                    # A gated run counts only with observed D work (decode
+                    # tokens): a released G0 alone may still dispatch nothing
+                    # (Sol critique of round 6).
                     last_d_turn = name if (kind in D_TURN_KINDS and name not in inconclusive
-                                           and not (name in GATED_NAMES and not g0_ok[name])) else None
+                                           and not (name in GATED_NAMES and not (
+                                               g0_ok[name] and type(results[name].get("decode_tokens")) is int
+                                               and results[name]["decode_tokens"] > 0))) else None
                 if name == STEP_D_NAME and name not in inconclusive:
                     _check_step_d(results[name])
                 if name in GATED_NAMES:

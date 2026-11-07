@@ -1435,6 +1435,12 @@ class Round6RulingTests(unittest.TestCase):
             self.assertEqual(list(registration["inconclusive_segments"]), ["planning_turn_R_plus_0C"])
             self.assertEqual(registration["planning_temperature"]["status"], "inconclusive")
             self.assertEqual(registration["u5"]["verdict"], "inconclusive")
+            # Fail closed at the kit (Sol critique of round 6).
+            from scripts import align_v4_kit as kit
+            from tests.align.test_v4_kit import ready_inputs
+            inputs, _ = ready_inputs(101.5, registration["max_r1_tail_s"])
+            with self.assertRaisesRegex(ValueError, r"INCONCLUSIVE \(R6-2\): planning_turn_R_plus_0C"):
+                kit.check_r1_evidence(inputs, registration, synthetic=True)
             # R6-1: the first gated run then followed no D turn (R + 0 C
             # dispatched none), so it is INCONCLUSIVE; the later ones follow it.
             rows = {row["run"]: row for row in registration["deadman_budget"]}
@@ -1510,6 +1516,23 @@ class Round6RulingTests(unittest.TestCase):
             self.assertEqual(picks["S7"], 60.0)
             self.assertEqual(picks["reference_rule_status"], "ACCEPTED")
             self.assertIn("quiet window", picks["reference_rule"])
+
+    def test_a_released_g0_that_decoded_nothing_is_not_a_d_turn_predecessor(self):
+        # Sol critique of round 6: G0 released, then no D work (zero decode tokens).
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+
+            def runner(argv):
+                result = world(argv)
+                if "--r1-kind" in argv and argv[argv.index("--r1-kind") + 1] == "d-bank-benign-s1":
+                    payload = json.loads(result.stdout)
+                    payload.update(admitted_turns=0, decode_tokens=0)
+                    payload["deadman"]["phases_s"].update(decode=0.0, prefill=0.0, tool=0.0)
+                    result = completed(argv, out=json.dumps(payload))
+                return result
+            _, registration = self.run_world(td, runner)
+            self.assertIsNone(registration["x_g"]["follows_d_turn"])
+            self.assertEqual(registration["x_g"]["status"], "inconclusive")
 
     def test_cooldown_after_30b_is_dropped_and_nothing_reads_it(self):
         # R6-6: step-30b's own 600 s recovery observation is the idle.

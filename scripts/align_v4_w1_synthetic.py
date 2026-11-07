@@ -52,7 +52,7 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,
                                       'turn_cap_tokens': 4096},
-                'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
+                'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
                 # R6-1: the duty bar ran under W1's inter-member schedule.
                 'duty_bar': {'pass': True, 'schedule': {'authority': 'LEAD-RULINGS-2 R6-1',
                                                         'inter_member_idle_s': {'D': 300.0, 'X-G': 300.0}}},

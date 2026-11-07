@@ -418,7 +418,7 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
             'budget_fit_inputs': {'r_decode_tok_per_s': 20.0, 'r_decode_step_d_tok_per_s': 20.0,
                                   'turn_cap_tokens': 4096},
-            'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
+            'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
             'duty_bar': {'pass': True, 'schedule': R6_1_SCHEDULE}}
 
 
@@ -531,7 +531,8 @@ class R1EvidenceBindingTests(unittest.TestCase):
             kit.require_ready(inputs, changed)
         changed['thermometry']['lead_verification'] = {'authority': 'LEAD-RULINGS-3 S7 verified'}
         changed['thermometry']['D']['s7_for_r1_picks'] = {
-            'S7': slots['slots']['S7'], 'band_c': {'s_slow': slots['slots']['S6']}}
+            'S7': slots['slots']['S7'], 'band_c': {'s_slow': slots['slots']['S6']},
+            'keys': {'s_fast': 'TC0P', 's_slow': 'TG0P'}}
         kit.require_ready(inputs, changed)
 
     def test_classification_digest_must_match_the_r1_record(self):
@@ -729,6 +730,14 @@ class R1ChangedPickBindingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r'thermometry\.D\.s7_for_r1_picks.*not computed'):
             kit.require_ready(self.inputs, self.slots)
 
+    def test_policy_keys_must_be_the_keys_the_r1_pick_values_describe(self):
+        # Sol critique of round 6: old keys still in the candidate lists, new numbers.
+        self.slots['thermometry']['D'].update(die_candidates=['TC1P', 'TC0P'], heatsink_candidates=['TG1P', 'TG0P'])
+        kit.require_ready(self.inputs, self.slots)
+        self.policy['sensors'].update(s_fast='TC0P', s_slow='TG0P')
+        with self.assertRaisesRegex(ValueError, r'not the keys .*s7_for_r1_picks\.keys'):
+            kit.require_ready(self.inputs, self.slots)
+
     def test_s6_tuning_receipt_uses_the_r1_pick_base_and_cap(self):
         self.policy['delta_slow_c'] = 2.0
         self.slots['s6_tuning'] = {'authority': 'lead, FD 2.6', 'from_c': 1.25, 'to_c': 2.0}
@@ -786,6 +795,16 @@ class Round6KitTests(unittest.TestCase):
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {kit.STEP_D_SEGMENT: 'G0 did not release, twice'}
         with self.assertRaisesRegex(ValueError, 'step-d was INCONCLUSIVE'):
+            kit.require_ready(inputs, slots)
+
+    def test_an_inconclusive_designed_state_refuses_w1(self):
+        # Sol critique of round 6: fail closed at the kit for every R6-2 segment.
+        inputs, slots = ready_inputs()
+        slots['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
+        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(R6-2\): planning_turn_R_plus_2C'):
+            kit.require_ready(inputs, slots)
+        del slots['inconclusive_segments']
+        with self.assertRaisesRegex(ValueError, 'inconclusive_segments'):
             kit.require_ready(inputs, slots)
 
 
