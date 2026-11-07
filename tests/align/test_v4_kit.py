@@ -436,16 +436,21 @@ def set_decode_rate(slots, rate):
 
 
 class FakeArmHost:
-    """pmset, the narrow restore rule, mount and diskutil; nothing real runs."""
+    """launchctl, pmset, the narrow restore rule, mount and diskutil; nothing real runs."""
 
-    def __init__(self, mode, ssd=False, *, marker=None, fail_high=False):
+    def __init__(self, mode, ssd=False, *, marker=None, fail_high=False, night_job_loaded=False):
         self.mode, self.ssd, self.marker, self.fail_high = mode, ssd, marker, fail_high
+        self.night_job_loaded = night_job_loaded
         self.calls = []
 
     def __call__(self, argv):
         import plistlib
         argv = tuple(argv)
         self.calls.append(argv)
+        if argv == ('launchctl', 'print', f'gui/{os.getuid()}/com.joulewise.night'):
+            absent = f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}'
+            return subprocess.CompletedProcess(argv, 0 if self.night_job_loaded else 113, '',
+                                               '' if self.night_job_loaded else absent + '\n')
         if argv == ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2'):
             # The marker must already exist when High Power is set (R5-6).
             if self.marker is not None and not self.marker.exists():

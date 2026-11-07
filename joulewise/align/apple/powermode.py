@@ -77,6 +77,13 @@ def w1_marker(marker):
 # lock never outlives its night. No restore ever runs while another process
 # holds the lock, so a late launchd fire (or an operator's session start)
 # cannot change the mode under a measuring night.
+# Lead ruling R7-10 (round-6 cold LOW-4): in production the host state
+# directory is this fixed path. ``$JOULEWISE_HOST_STATE_DIR`` is a test seam
+# only: the production entry points (the ``__main__`` of run_night, the v4
+# session, the R1 driver and the watchdog) call ``mark_production_entry``,
+# and from then on any use of an overridden directory refuses
+# (``HostStateOverrideRefused``), so a shell that still exports the override
+# can never split the marker and the lock between an install and its night.
 HOST_STATE_ENV = "JOULEWISE_HOST_STATE_DIR"
 HOST_STATE_DEFAULT = "/Users/Shared/JouleWise/host-power"
 HOST_MARKER_NAME = "high-power.marker"
@@ -87,10 +94,43 @@ NIGHT_LOCK_WAIT_S = 240.0
 R1_MARKER_TEXT = "high-power restoration required"
 
 
+class HostStateOverrideRefused(ValueError):
+    """A production entry point found the host state directory overridden."""
+
+
+_PRODUCTION_ENTRY = None
+
+
+def mark_production_entry(entry):
+    """Lead ruling R7-10: called by each production entry point's ``__main__``
+    before anything else; from then on this process refuses an overridden
+    host state directory."""
+    global _PRODUCTION_ENTRY
+    _PRODUCTION_ENTRY = str(entry)
+
+
+def host_state_override():
+    """The test-seam directory when ``$JOULEWISE_HOST_STATE_DIR`` names one
+    other than the fixed production path, else None."""
+    value = os.environ.get(HOST_STATE_ENV)
+    if not value or os.path.realpath(value) == os.path.realpath(HOST_STATE_DEFAULT):
+        return None
+    return value
+
+
 def host_state_dir():
-    """The host-level directory (``$JOULEWISE_HOST_STATE_DIR`` overrides; tests
-    and synthetic harnesses always set it)."""
-    return os.environ.get(HOST_STATE_ENV) or HOST_STATE_DEFAULT
+    """The host-level directory: the fixed ``HOST_STATE_DEFAULT`` in
+    production. ``$JOULEWISE_HOST_STATE_DIR`` overrides it only as a test
+    seam (tests and synthetic harnesses always set it); a production entry
+    point (``mark_production_entry``) refuses the override (R7-10)."""
+    override = host_state_override()
+    if override is None:
+        return HOST_STATE_DEFAULT
+    if _PRODUCTION_ENTRY is not None:
+        raise HostStateOverrideRefused(
+            f"{_PRODUCTION_ENTRY}: the host state directory is fixed at {HOST_STATE_DEFAULT} in production; "
+            f"${HOST_STATE_ENV}={override!r} is a test seam only (lead ruling R7-10). Unset it and retry.")
+    return override
 
 
 def host_marker_path():
@@ -192,14 +232,29 @@ class HostLock:
         return True
 
     def release(self):
-        import fcntl
+        """Close this holder's descriptor. Lead ruling R7-5: never ``LOCK_UN``,
+        which would drop the lock for every process that inherited the same
+        open file description (the night's chain, the R1 runtime child); the
+        kernel releases the flock only when the last of them closes it."""
         fd, self.fd = self.fd, None
-        if fd is None:
-            return
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
+        if fd is not None:
             os.close(fd)
+
+    def retake(self):
+        """Lead ruling R7-5: prove that no descendant still holds the lock.
+
+        Closes this holder's descriptor (descendants that inherited it keep
+        the lock) and takes the lock again on a fresh descriptor without
+        waiting. True means this process alone now holds it, so no chain or
+        runtime child that inherited it is still alive. False (or OSError)
+        means it could not be proved; the caller must not restore."""
+        self.release()
+        return self.acquire()
+
+    def pass_fds(self):
+        """The descriptor to hand to the night's chain (``pass_fds``) so the
+        lock lives as long as the night's process tree (R7-5)."""
+        return () if self.fd is None else (self.fd,)
 
 
 def restore_owed(markers, *, runner=None, lock=None, owner=None, reason):

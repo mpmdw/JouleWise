@@ -1658,6 +1658,7 @@ class NightGateTests(unittest.TestCase):
                 "night_courier_running",
                 "night_courier_unavailable",
                 "night_refused_ac_powermode",
+                "night_refused_host_lock_error",
                 "night_plan_overruns_deadman",
                 "night_record_exists",
                 "night_window_exceeded",

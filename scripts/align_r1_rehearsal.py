@@ -158,10 +158,19 @@ def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> None:
     process.communicate()
 
 
+# Lead ruling R7-5: while the driver holds the host night lock, every child it
+# starts (the runtime above all) inherits the lock's descriptor, so the lock
+# lives as long as the R1 process tree, not the driver alone.
+_CHILD_HOST_LOCK = None
+
+
 def _run(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
     # Not subprocess.run: on any exception (the one-shot signal handler raises
     # KeyboardInterrupt here) it SIGKILLs the child at once.
-    process = subprocess.Popen(list(argv), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    lock = _CHILD_HOST_LOCK
+    pass_fds = lock.pass_fds() if lock is not None and lock.held else ()
+    process = subprocess.Popen(list(argv), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               pass_fds=pass_fds)
     try:
         stdout, stderr = process.communicate()
     except BaseException:
@@ -178,12 +187,17 @@ class PowerModeGuard(AbstractContextManager):
     LIST = ("sudo", "-n", "-l")
     QUERY = ("/usr/bin/pmset", "-g", "custom")
 
-    def __init__(self, runner: Callable = _run, marker: Path | None = None, host_marker: Path | None = None):
+    def __init__(self, runner: Callable = _run, marker: Path | None = None, host_marker: Path | None = None,
+                 lock=None):
         self.runner = runner
         self.marker = marker
         # Lead ruling R6-7: the same obligation at the host-level path every
         # later session, night admission and the watchdog read.
         self.host_marker = host_marker
+        # Lead ruling R7-5: the driver's host night lock (its children inherit
+        # it); a restore runs only after the guard has retaken it.
+        self.lock = lock
+        self.deferred = False
         self.records: list[dict] = []
         self.armed = False
 
@@ -199,15 +213,45 @@ class PowerModeGuard(AbstractContextManager):
 
     def restore(self):
         # Do not condition this on setup completion: every possible exit tries 0.
+        if self.lock is not None and self.armed:
+            # Lead ruling R7-5: the close of an armed guard (children may have
+            # run) first retakes the host night lock on a fresh descriptor;
+            # that proves no child of this run still holds it. Otherwise the
+            # markers stay for the dead-man or the next session start, and
+            # nothing is restored here.
+            try:
+                proven, error = self.lock.retake(), None
+            except Exception as exc:  # noqa: BLE001 - not proven
+                proven, error = False, f"{type(exc).__name__}: {exc}"
+            if not proven:
+                self.deferred = True
+                self.armed = False
+                self.records.append({"point": "restore_deferred", "lock_error": error,
+                                     "reason": "the host night lock could not be retaken; a child of this run "
+                                               "may still hold it (lead ruling R7-5); markers kept"})
+                return False
         result = self.runner(self.AUTO)
         self.records.append({"point": "restore_automatic", "exit_code": result.returncode,
                              "stdout": result.stdout, "stderr": result.stderr})
         self.armed = False
-        if result.returncode == 0:
-            for marker in (self.marker, self.host_marker):
-                if marker is not None:
-                    marker.unlink(missing_ok=True)
-        return result.returncode == 0
+        if result.returncode != 0:
+            return False
+        # Lead ruling R7-7 (round-6 exec LOW-2, cold LOW-1): read the mode back
+        # before clearing any marker; anything but AC powermode 0 keeps them.
+        try:
+            query = self.runner(self.QUERY)
+            observed = parse_ac_powermode(query.stdout) if query.returncode == 0 else None
+            self.records.append({"point": "after_restore_automatic", "exit_code": query.returncode,
+                                 "stdout": query.stdout, "observed": observed})
+        except Exception as exc:  # noqa: BLE001 - an unread mode is not 0
+            observed = None
+            self.records.append({"point": "after_restore_automatic", "error": f"{type(exc).__name__}: {exc}"})
+        if observed != 0:
+            return False
+        for marker in (self.marker, self.host_marker):
+            if marker is not None:
+                marker.unlink(missing_ok=True)
+        return True
 
     def __enter__(self):
         # Ed ruling 2026-11-05 (PLAN "High Power A-B-A is IN R1"): verify the
@@ -1234,10 +1278,12 @@ def run(args):
     # Resolve the runner at call time so synthetic rehearsals can replace the
     # complete command boundary (runtime, SMC journal, sudo and pmset).
     from joulewise.align.apple import powermode
-    guard = PowerModeGuard(_run, marker, Path(powermode.host_marker_path()))
+    global _CHILD_HOST_LOCK
     # Lead ruling R6-7: R1 measures holding the host night lock, so no session
     # start or late launchd fire restores Automatic under its High Power legs.
     host_lock = powermode.HostLock(role="R1 driver")
+    guard = PowerModeGuard(_run, marker, Path(powermode.host_marker_path()), lock=host_lock)
+    record["host_state_dir"] = powermode.host_state_dir()   # lead ruling R7-10
     staged_registration = None
     old_handlers = {}
 
@@ -1270,6 +1316,7 @@ def run(args):
             raise Refusal(f"powermode.host_lock_unavailable: {error}") from error
         if not locked:
             raise Refusal("powermode.host_lock_held: another night holds the host night lock")
+        _CHILD_HOST_LOCK = host_lock   # R7-5: children inherit the lock
         # Ruling 20 at t0, before any powermode or runtime work.
         watch.check("t0")
         # R6-1/R6-2 inputs, also before any powermode or runtime work.
@@ -1466,10 +1513,15 @@ def run(args):
                 signal.signal(sig, signal.SIG_IGN)
         # A second idempotent attempt covers setup failures before __enter__ and
         # exceptions raised by context teardown itself.
+        _CHILD_HOST_LOCK = None
         try:
             if host_lock.held:
                 guard.restore()
-            else:
+            if guard.deferred:
+                record["restore_deferred"] = ("the host night lock could not be retaken (a child of this run may "
+                                              "still hold it); the markers are left for the dead-man or the next "
+                                              "session start (lead ruling R7-5)")
+            elif not host_lock.held:
                 # R6-7 (round-6 Sol critique): without the host night lock this
                 # run never changed the mode, and another night may be
                 # measuring under High Power; never restore under it.
@@ -1537,6 +1589,12 @@ def main(argv=None):
         except (OSError, ValueError, Refusal) as error:
             print(f"align_r1_rehearsal: refused: {error}", file=sys.stderr)
             return 3
+    from joulewise.align.apple import powermode
+    try:
+        powermode.host_state_dir()   # lead ruling R7-10: refuses an override in production
+    except powermode.HostStateOverrideRefused as error:
+        print(f"align_r1_rehearsal: refused: {error}", file=sys.stderr)
+        return 3
     return run(args)
 
 
@@ -1558,4 +1616,6 @@ def runtime_argv_from_inputs(path):
 
 
 if __name__ == "__main__":
+    from joulewise.align.apple import powermode as _powermode
+    _powermode.mark_production_entry("align_r1_rehearsal")   # lead ruling R7-10
     raise SystemExit(main())

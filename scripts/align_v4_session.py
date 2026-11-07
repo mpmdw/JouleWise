@@ -16,7 +16,10 @@ measuring night holds the host night lock.
 import json
 import os
 from pathlib import Path
+import signal
+import subprocess
 import sys
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +76,7 @@ def session_start_restore(measurement_root, *, runner=None, lock=None, keep_owne
     markers = [m for m in _power_markers(measurement_root)
                if os.path.lexists(m) and not (keep_owner and powermode.owned_by(m, **keep_owner))]
     record = powermode.restore_owed(markers, runner=runner, lock=lock, reason='session_start')
+    record['host_state_dir'] = powermode.host_state_dir()   # lead ruling R7-10
     if record['action'] in ('restore_failed', 'error'):
         raise ValueError('v4 session start refused: a High Power marker is present and the Automatic restore '
                          'failed: ' + json.dumps(record.get('restore') or record.get('error'), sort_keys=True,
@@ -144,7 +148,9 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     if volumes['verdict'] != external_volume.PASS:
         reasons += ['external_volume: ' + reason for reason in volumes['reasons']]
     return {'schema': ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': reasons,
-            'ac_powermode': power, 'external_volumes': volumes}
+            'ac_powermode': power, 'external_volumes': volumes,
+            # Lead ruling R7-10: the host state directory this arm used.
+            'host_state_dir': powermode.host_state_dir()}
 
 
 def w1_disk_check(config_path, *, gate=None):
@@ -173,6 +179,25 @@ def w1_disk_check(config_path, *, gate=None):
     return receipt
 
 
+def _require_night_job_absent(runner=None):
+    """Lead ruling R7-6 (round-6 exec MEDIUM-4): the shared installer's launchd
+    census (``bytes_h_session.install``: same argv, 10 s budget, only exit
+    113 with the exact absent-service line admits), run before any power
+    mode change. ``runner`` is the install's command boundary (the test seam)."""
+    label = 'com.joulewise.night'
+    argv = ['launchctl', 'print', f'gui/{os.getuid()}/{label}']
+    try:
+        job = (runner(argv) if runner is not None else
+               subprocess.run(argv, check=False, capture_output=True, text=True, timeout=10))
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(f'v4 install refused: launchd job state unavailable: {exc}') from exc
+    if job.returncode == 0:
+        raise ValueError('v4 install refused: launchd already holds the night job')
+    absent = f'Could not find service "{label}" in domain for user gui: {os.getuid()}'
+    if job.returncode != 113 or absent not in (job.stderr or '').splitlines():
+        raise ValueError('v4 install refused: launchd job state unavailable')
+
+
 def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_config=None,
             disk_gate=None, **kwargs):
     session = Path(session_root)
@@ -197,18 +222,30 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     # a late launchd fire interleaves with it and it never changes the mode
     # under a measuring night.
     lock = powermode.HostLock(role='v4-install')
-    if not lock.acquire():
-        raise ValueError('v4 install refused: a measuring night holds the host night lock '
-                         f'({powermode.night_lock_path()})')
+    # Lead ruling R7-4: TERM and HUP unwind the install like INT, so its normal
+    # close runs (the Automatic restore below included).
+    closing, restore_signals = _termination_handlers()
     try:
+        if not lock.acquire():
+            raise ValueError('v4 install refused: a measuring night holds the host night lock '
+                             f'({powermode.night_lock_path()})')
+    except BaseException:
+        restore_signals()
+        raise
+    try:
+        already = (state.get('install') or {}).get('exit_code') == 0
+        entering = (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2 and not already
+        if entering:
+            # Lead ruling R7-6: plan-0 nights do not hold this lock. Refuse a
+            # loaded (or unknown) night job before any pmset command, the
+            # session-start restore included.
+            _require_night_job_absent(runner)
         # R6-7 session start: any marker this session does not own is a
         # restore owed (an R1 crash, an abandoned or killed W1 night).
         start = session_start_restore(measurement_root, runner=runner, lock=lock,
                                       keep_owner={'custody_root': custody_root})
         if start['action'] != 'none':
             pilot.h.write(session / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
-        already = (state.get('install') or {}).get('exit_code') == 0
-        entering = (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2 and not already
         try:
             if entering:
                 # Lead ruling R5-6: W1 under an adopted High Power. The marker
@@ -230,6 +267,7 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                                  'Automatic restored')
             return result
         except BaseException:
+            closing()
             if entering:
                 # The arm did not hand off: leave the host Automatic (R5-6), on
                 # every failure from the mode change on.
@@ -240,7 +278,37 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                     pass
             raise
     finally:
+        closing()
         lock.release()
+        restore_signals()
+
+
+TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+
+
+def _termination_handlers():
+    """Lead ruling R7-4: until the close begins (``closing()``), SIGTERM and
+    SIGHUP raise KeyboardInterrupt, as SIGINT does, so the install's normal
+    close runs; once it has begun they are swallowed so they cannot
+    interrupt the restore. Python handlers reset on exec, so children keep
+    default dispositions. Main thread only. Returns ``(closing, restore)``."""
+    if threading.current_thread() is not threading.main_thread():
+        return (lambda: None), (lambda: None)
+    state = {'closing': False}
+
+    def handler(signum, _frame):
+        if not state['closing']:
+            raise KeyboardInterrupt(f'signal {signum}')
+
+    previous = {sig: signal.signal(sig, handler) for sig in TERMINATION_SIGNALS}
+
+    def closing():
+        state['closing'] = True
+
+    def restore():
+        for sig, old in previous.items():
+            signal.signal(sig, old)
+    return closing, restore
 
 
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
@@ -284,4 +352,6 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    from joulewise.align.apple import powermode as _powermode
+    _powermode.mark_production_entry('align_v4_session')   # lead ruling R7-10
     raise SystemExit(main())

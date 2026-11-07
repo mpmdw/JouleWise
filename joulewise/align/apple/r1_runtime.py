@@ -130,27 +130,63 @@ def only_g0_unreleased(incomplete, g0_outcome):
 
 
 DEFERRED_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+CLOSE_SIGNAL_DEFER_MAX_S = 10.0
 
 
 def close_managed_session(managed, after=None):
     """Round-5 executing review LOW-3 (lead ruling R6-8): close one managed
-    session with TERM/INT/HUP held back until the close returns, so a first
-    signal cannot land between the powermetrics adapter dropping its process
-    handle and stopping the process. A signal that arrives meanwhile is
+    session with TERM/INT/HUP held back for at most 10 s (R7-8), protecting
+    the powermetrics adapter between dropping its process handle and stopping
+    the process. A signal that arrives meanwhile is
     re-raised to the previous handler once the close has finished (or
-    failed). Python handlers run on the main thread, so the deferral swaps
+    failed), or at the bound so the teardown watchdog can arm even if the
+    close blocks. Python handlers run on the main thread, so the deferral swaps
     the handlers there (whichever thread the kernel delivers to); off the
     main thread the close runs as before. ``after`` runs once the close has
-    returned, before a held signal is delivered."""
+    returned, before held signals are delivered if the bound has not expired."""
     if threading.current_thread() is not threading.main_thread():
         managed.close()
         if after is not None:
             after()
         return
     pending, previous = [], {}
+    timer = None
+    expired = restored = False
+    main_ident = threading.main_thread().ident
+    delivery_lock = threading.Lock()
+
+    def restore_and_deliver():
+        nonlocal restored
+        if restored:
+            return
+        restored = True
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        for signum in dict.fromkeys(pending):
+            signal.raise_signal(signum)
+
+    def expire():
+        nonlocal expired
+        # Serialize against normal completion so an in-flight timer cannot
+        # send an extra signal after the previous handlers have been restored.
+        with delivery_lock:
+            if not restored:
+                expired = True
+                # Target the main thread to interrupt its blocking close;
+                # process-directed delivery could land on this timer thread.
+                signal.pthread_kill(main_ident, pending[0])
 
     def hold(signum, _frame):
+        nonlocal timer
         pending.append(signum)
+        if expired:
+            # Only the main thread can restore Python signal handlers. The
+            # timer's wakeup replays pending signals here, never in the timer.
+            restore_and_deliver()
+        elif timer is None:
+            timer = threading.Timer(CLOSE_SIGNAL_DEFER_MAX_S, expire)
+            timer.daemon = True
+            timer.start()
     try:
         for sig in DEFERRED_SIGNALS:
             previous[sig] = signal.signal(sig, hold)
@@ -158,10 +194,10 @@ def close_managed_session(managed, after=None):
         if after is not None:
             after()
     finally:
-        for sig, handler in previous.items():
-            signal.signal(sig, handler)
-        for signum in dict.fromkeys(pending):
-            signal.raise_signal(signum)
+        with delivery_lock:
+            if timer is not None:
+                timer.cancel()
+            restore_and_deliver()
 
 
 class Refused(RuntimeError):
