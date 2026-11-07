@@ -1938,10 +1938,27 @@ def controller_request_spans(member):
     return request, baseline
 
 
+def idle_attempt_telemetry_name(member):
+    """The rich idle telemetry file of the idle-baseline attempt the bundle's baseline is.
+
+    The controller re-measures the idle baseline when its first admission attempt is not admitted,
+    and the baseline it keeps (metadata idle_baseline: the reducer's idle term, REG 5.8's
+    idle_subtracted_energy_j) is the LAST attempt measured (controller._measure_idle_admission_attempt).
+    The adapter writes attempt 1's rich rows to rich_telemetry_idle.jsonl and attempt N's to
+    rich_telemetry_idle_attempt_N.jsonl; promotion replaces only the canonical raw plist, never the
+    rich file (adapters/powermetrics.py measure_idle, promote_idle_admission_attempt). So the file
+    is the one of the metadata's last recorded environment_admission attempt.
+    """
+    attempts = get(getattr(member, "metadata", None), "environment_admission", "attempts")
+    last = attempts[-1].get("attempt") if isinstance(attempts, list) and attempts and isinstance(attempts[-1], dict) else 1
+    return "rich_telemetry_idle_attempt_%d.jsonl" % last if positive_int(last) and last > 1 else "rich_telemetry_idle.jsonl"
+
+
 def rail_idle_power(member):
-    """REG 5.8: elapsed_ns-weighted rich idle telemetry, never the trace's idle overlap."""
+    """REG 5.8: elapsed_ns-weighted rich idle telemetry of the kept idle attempt, never the trace's idle overlap."""
     if not hasattr(member, "_rail_idle_power"):
-        rows = member.reader.lines(member.path / "rich_telemetry_idle.jsonl", member.run_id + "/rich_telemetry_idle.jsonl")
+        name = idle_attempt_telemetry_name(member)
+        rows = member.reader.lines(member.path / name, member.run_id + "/" + name)
         valid = [row for row in rows if positive_int(row.get("elapsed_ns"))
                  and finite(row.get("rail_sum_power_w")) and row["rail_sum_power_w"] >= 0]
         member._rail_idle_power = (math.fsum(row["rail_sum_power_w"] * row["elapsed_ns"] for row in valid)
@@ -2367,6 +2384,15 @@ def add_machine(output, selections, windows, meter_dir=None):
             if not (root / rid / "metadata.json").is_file():
                 continue
             member = w.member(rid, which)
+            if (rid not in mapping(recorded.get("members")) and "request" not in member.edges
+                    and controller_request_spans(member) is None):
+                # PLAN 8.2 describes each member over its measured request (the harvest's request span,
+                # sampling_started to sampling_stopped; harvest.member_spans). A collected member that never
+                # measured one has no meter row on either side; it is listed here, never as a null member. A
+                # member with a measured request that the record lacks still gets its row (a dropped row stays
+                # visible to the comparator).
+                line.setdefault("no_measured_request", []).append(rid)
+                continue
             if which != "corpus" and "request" in member.edges:
                 start = member.origin + member.edges["request"][0]
                 old = line["first_request_epoch_s"]
