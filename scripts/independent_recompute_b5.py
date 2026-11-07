@@ -1489,9 +1489,14 @@ def pooled_floor_estimate(values, widths, form):
 def contrast_stats(d, D=0.0):
     n = len(d)
     result = {"n": n, "d_k": d, "dbar_j": None, "s_d_j": None, "se_j": None,
+              "df": n - 1 if n >= 2 else None,
               "t_star": None, "metrology_interval_j": [None, None], "D_j": D,
               "decision_interval_j": [None, None], "t_stat": None, "p": 1.0}
     if n < 2:
+        # Blind lead ruling, 2026-11-05 / D-190: an absent estimator has
+        # neither a deterministic widening nor a test, even if D was supplied.
+        result.update(D_j=None, p=None)
+        result["null_reason"] = {"outcome": "not_estimable", "codes": ["insufficient_complete_blocks"]}
         return result
     mean, s = statistics.fmean(d), statistics.stdev(d)
     se = s / math.sqrt(n)
@@ -1507,11 +1512,12 @@ def contrast_stats(d, D=0.0):
 
 
 def holm(p_values):
-    p = [x if finite(x) else 1.0 for x in p_values]
-    order = sorted(range(2), key=lambda i: (p[i], i))
-    result = [None, None]
-    result[order[0]] = min(1.0, 2 * p[order[0]])
-    result[order[1]] = min(1.0, max(2 * p[order[0]], p[order[1]]))
+    # Keep the frozen two-hypothesis denominator; a missing test remains null.
+    order = sorted((i for i, p in enumerate(p_values) if finite(p)), key=lambda i: (p_values[i], i))
+    result, running = [None, None], 0.0
+    for rank, i in enumerate(order):
+        running = max(running, (2 - rank) * p_values[i])
+        result[i] = min(1.0, running)
     return result
 
 
@@ -1551,16 +1557,20 @@ def reduced_contrast(row, ids, kinds, omitted):
         D = math.fsum(terms) if all(finite(t) for t in terms) else None
     else:
         terms, D = row.get("D_terms_j"), row["D_j"]
-    return {**contrast_stats([row["d_k"][i] for i in keep], D), "D_terms_j": terms}
+    return {**contrast_stats([row["d_k"][i] for i in keep], D), "D_terms_j": terms if len(keep) >= 2 else []}
 
 
 def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, missing=False, partner=None):
     row = dict(row)
-    if row["n"] < minimum or missing or not finite(row["dbar_j"]):
+    if row["n"] < 2:
+        row.update(p=None, D_j=None, df=None)
+        if "D_terms_j" in row:
+            row["D_terms_j"] = []
+    elif row["n"] < minimum or missing or not finite(row["dbar_j"]):
         row["p"] = 1.0
     row.update(floor_gate_j=floor, holm_p=holm([row["p"], other_p])[0])
     # PLAN 7.2 fixes familywise alpha=0.05; not a numerical agreement bar.
-    row["holm_reject"] = row["holm_p"] <= 0.05
+    row["holm_reject"] = finite(row["holm_p"]) and row["holm_p"] <= 0.05
     row["direction"] = "positive" if finite(row["dbar_j"]) and row["dbar_j"] > 0 else (
         "negative" if finite(row["dbar_j"]) and row["dbar_j"] < 0 else None)
     row["outcome"] = evaluate_outcome(row, floor, row["holm_reject"], minimum, missing)
@@ -1575,9 +1585,9 @@ def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, mi
                 partner_row, partner_ids, partner_kinds, partner_missing = partner
                 paired = reduced_contrast(partner_row, partner_ids, partner_kinds, omitted)
                 partner_n = paired["n"]
-                partner_p = 1.0 if partner_missing else paired["p"]
+                partner_p = 1.0 if partner_missing and paired["n"] >= 2 else paired["p"]
                 # An unchanged partner retains its full-data minimum rule.
-                if paired["n"] == partner_row["n"] and paired["n"] < minimum:
+                if paired["n"] == partner_row["n"] and 2 <= paired["n"] < minimum:
                     partner_p = 1.0
             adjusted = holm([1.0 if missing else reduced["p"], partner_p])[0]
             # Same PLAN 7.2 familywise alpha for the leave-one-out replay.
@@ -1648,7 +1658,7 @@ def contrast_inputs(window, quads, phase, bound=None):
     terms = [statistics.fmean(k[j] for k in kinds) if kinds and all(finite(k[j]) for k in kinds) else None
              for j in range(3)]
     D = math.fsum(terms) if all(finite(v) for v in terms) else None
-    return {**contrast_stats(d, D), "D_terms_j": terms}, kinds, a, b
+    return {**contrast_stats(d, D), "D_terms_j": terms if len(d) >= 2 else []}, kinds, a, b
 
 
 def missing_pack():
@@ -1685,8 +1695,13 @@ def make_floors(window, phase, chosen, reported, bound=None):
         forms[form] = result
     absolute = forms["absolute"]["drift_widened_guarded_floor_j"]
     comparative = forms["comparative"]["drift_widened_guarded_floor_j"]
-    return forms, {"floor_abs_j": absolute, "floor_cmp_j": comparative,
-                   "floor_gate_j": max(absolute, comparative) if all(finite(v) for v in (absolute, comparative)) else None}
+    cell = {"floor_abs_j": absolute, "floor_cmp_j": comparative,
+            "floor_gate_j": max(absolute, comparative) if all(finite(v) for v in (absolute, comparative)) else None}
+    if not window.diagnostic and reported["status"] == "below_minimum" and absolute is None and comparative is None:
+        # Independent source-health reason, matching the registered resolution
+        # code for an existing source cell whose eligibility is not claim_ready.
+        cell["null_reason"] = {"outcome": "not_resolvable", "codes": ["cell_not_claim_ready"]}
+    return forms, cell
 
 
 def contrast_floor(cells, phase):
@@ -1694,7 +1709,16 @@ def contrast_floor(cells, phase):
     values = [c.get("floor_gate_j") for c in sides.values()]
     value = max(values) if all(finite(v) for v in values) else None
     attained = [pack for pack, cell in sides.items() if value is not None and cell.get("floor_gate_j") == value]
-    return {"floor_gate_j": value, "attained_by": attained, "sides": sides}
+    result = {"floor_gate_j": value, "attained_by": attained, "sides": sides}
+    unavailable = [cell for cell in sides.values() if cell.get("floor_gate_j") is None]
+    reasons = [cell.get("null_reason") for cell in unavailable]
+    if value is None and reasons and all(
+            isinstance(reason, dict) and set(reason) == {"outcome", "codes"}
+            and reason["outcome"] == "not_resolvable" and isinstance(reason["codes"], list) and reason["codes"]
+            and all(isinstance(code, str) for code in reason["codes"]) for reason in reasons):
+        result["null_reason"] = {"outcome": "not_resolvable",
+                                 "codes": sorted({code for reason in reasons for code in reason["codes"]})}
+    return result
 
 
 def number(value):
@@ -2622,7 +2646,7 @@ def add_sensitivity(output, selections, windows, diagnostic):
         else:
             row, kinds, _, _ = contrast_inputs(w, chosen["quad"], phase, bound)
             missing = len(chosen["quad"]) < len(strings(get(w.exclusion_cells.get(cid, {}), "kept_units", "quad")))
-            if not diagnostic and (row["n"] < 5 or missing):
+            if not diagnostic and row["n"] >= 2 and (row["n"] < 5 or missing):
                 row["p"] = 1.0
             rows[cid], operands[cid] = row, (phase, kinds, missing and not diagnostic)
     if set(windows) != {"ALPHA", "BETA", "GAMMA"}:
@@ -2712,7 +2736,7 @@ def scaled_gamma_inputs(window, quads, phase, basis):
             "T_a_s": sides["a"]["T_s"], "T_b_s": sides["b"]["T_s"], "sides": sides,
             "registered_allowance_j": window.neg8["allowance_j"], "scaled_allowance_j": terms[2],
             "registered_D_j": registered["D_j"], "registered_D_terms_j": registered["D_terms_j"],
-            "D_terms_j": terms}, scaled_kinds
+            "D_terms_j": terms if registered["n"] >= 2 else []}, scaled_kinds
 
 
 def add_scaled_allowance(output, selections, windows, diagnostic=False):
@@ -3021,7 +3045,7 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
             phase = "decode" if "decode" in cid else "prefill"
             row, kinds, a, b = contrast_inputs(gamma, chosen["quad"], phase)
             declared_n = len(strings(get(gamma.exclusion_cells.get(cid, {}), "kept_units", "quad")))
-            if not diagnostic and (row["n"] < 5 or row["n"] < declared_n):
+            if not diagnostic and row["n"] >= 2 and (row["n"] < 5 or row["n"] < declared_n):
                 row["p"] = 1.0
             rows[cid], operands[cid] = row, (kinds, a, b, phase)
             if len(chosen["quad"]) < 5 and not diagnostic:

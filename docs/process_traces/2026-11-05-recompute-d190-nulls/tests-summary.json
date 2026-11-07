@@ -1,0 +1,128 @@
+[
+  {
+    "module": "tests.independent_recompute.test_d190_nulls",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_d190_nulls"
+    ],
+    "exit": 0,
+    "wall_s": 9.059,
+    "stdout": "",
+    "stderr": "....................\n----------------------------------------------------------------------\nRan 20 tests in 7.656s\n\nOK\n"
+  },
+  {
+    "module": "tests.independent_recompute.test_examples",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_examples"
+    ],
+    "exit": 1,
+    "wall_s": 0.986,
+    "stdout": "",
+    "stderr": ".............................F\n======================================================================\nFAIL: test_S9_holm (tests.independent_recompute.test_examples.WorkedExamples.test_S9_holm) (p=[0.001, None])\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/tests/independent_recompute/test_examples.py\", line 191, in test_S9_holm\n    with self.subTest(p=p): self.assertEqual(r.holm(p),expected)\n                            ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: [0.002, None] != [0.002, 1.0]\n\nFirst differing element 1:\nNone\n1.0\n\n- [0.002, None]\n+ [0.002, 1.0]\n\n----------------------------------------------------------------------\nRan 30 tests in 0.652s\n\nFAILED (failures=1)\n"
+  },
+  {
+    "module": "tests.independent_recompute.test_examples",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_examples"
+    ],
+    "exit": 0,
+    "wall_s": 1.238,
+    "stdout": "",
+    "stderr": "..............................\n----------------------------------------------------------------------\nRan 30 tests in 0.787s\n\nOK\n"
+  },
+  {
+    "module": "tests.independent_recompute.test_comparator",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_comparator"
+    ],
+    "exit": 0,
+    "wall_s": 27.34,
+    "stdout": "",
+    "stderr": "............................\n----------------------------------------------------------------------\nRan 28 tests in 25.900s\n\nOK\n"
+  },
+  {
+    "module": "tests.independent_recompute.test_rc_cmp11",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_rc_cmp11"
+    ],
+    "exit": 0,
+    "wall_s": 24.308,
+    "stdout": "",
+    "stderr": ".............\n----------------------------------------------------------------------\nRan 13 tests in 23.836s\n\nOK\n"
+  },
+  {
+    "module": "tests.independent_recompute.test_hygiene",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_hygiene"
+    ],
+    "exit": 0,
+    "wall_s": 1.092,
+    "stdout": "",
+    "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.880s\n\nOK\n"
+  },
+  {
+    "module": "tests.independent_recompute.test_input_gate",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_input_gate"
+    ],
+    "exit": 0,
+    "wall_s": 11.908,
+    "stdout": "",
+    "stderr": ".............................................\n----------------------------------------------------------------------\nRan 45 tests in 11.390s\n\nOK\n"
+  },
+  {
+    "module": "tests.independent_recompute.test_archives",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.independent_recompute.test_archives"
+    ],
+    "exit": 0,
+    "wall_s": 33.696,
+    "stdout": "",
+    "stderr": "..............\n----------------------------------------------------------------------\nRan 14 tests in 33.501s\n\nOK\n"
+  },
+  {
+    "module": "tests.b5_analysis.test_step11_null_outcomes",
+    "command": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.b5_analysis.test_step11_null_outcomes"
+    ],
+    "exit": 0,
+    "wall_s": 2.449,
+    "stdout": "",
+    "stderr": ".........\n----------------------------------------------------------------------\nRan 9 tests in 1.660s\n\nOK\n"
+  }
+]

@@ -1,0 +1,286 @@
+{
+  "artifact_sha256": {
+    "comparison-initial.json": "fc8e0db4b33b24331c0f9e09657679d452cdac1415145d75b7b3f53cfdfd9261",
+    "index.json": "721dbb43d2b4dfd635066233eaccc83339315c3d213d17dd1d20094c0a9a5d08",
+    "recompute.json": "8a83045ad1ed02bc8d6b9fa457fa91698e3dc36fbb46f38c50efde11ceb78fdf"
+  },
+  "bar_set": "b5_release_recompute_coded_7e322b76",
+  "case": "baseline",
+  "commands": {
+    "comparator-command.json": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/scripts/compare_b5_recompute.py",
+      "--l9-custody",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/synthetic-custody",
+      "--recompute",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/recompute.json",
+      "--window-index",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/index.json",
+      "--restricted-out",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/comparison-initial.json"
+    ],
+    "recompute-command.json": [
+      "/opt/homebrew/opt/python@3.13/bin/python3.13",
+      "-B",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/scripts/independent_recompute_b5.py",
+      "--member-detail",
+      "--out",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/recompute.json",
+      "--alpha",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/alpha/archive",
+      "--claim-runs-alpha",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/alpha/custody/runs_claim",
+      "--bound-runs-alpha",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/alpha/custody/runs_bound",
+      "--beta",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/beta/archive",
+      "--claim-runs-beta",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/beta/custody/runs_claim",
+      "--bound-runs-beta",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/beta/custody/runs_bound",
+      "--gamma",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/gamma/archive",
+      "--claim-runs-gamma",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/gamma/custody/runs_claim",
+      "--bound-runs-gamma",
+      "/Users/edr/code/CapstoneProject/jw-wt/sol-d190-null-rule/.scratch-d190/r2/.scratch-s10f/tmp/baseline/fixtures/gamma/custody/runs_bound"
+    ]
+  },
+  "comparison_stopped": false,
+  "completed_without_tooling_refusal": true,
+  "counts": {
+    "b_op_s": {
+      "fail": 0,
+      "pass": 14
+    },
+    "battery_term": {
+      "fail": 0,
+      "pass": 0
+    },
+    "contrast_j": {
+      "fail": 0,
+      "pass": 122
+    },
+    "contrast_p": {
+      "fail": 0,
+      "pass": 44
+    },
+    "count": {
+      "fail": 0,
+      "pass": 133
+    },
+    "descriptive_ratio": {
+      "fail": 0,
+      "pass": 6
+    },
+    "dominance_branch": {
+      "fail": 0,
+      "pass": 2
+    },
+    "dominance_ratio": {
+      "fail": 0,
+      "pass": 12
+    },
+    "exclusions_rederivation": {
+      "fail": 0,
+      "pass": 3
+    },
+    "floor_gate_j": {
+      "fail": 0,
+      "pass": 70
+    },
+    "floor_j": {
+      "fail": 0,
+      "pass": 149
+    },
+    "holm_order": {
+      "fail": 0,
+      "pass": 1
+    },
+    "kept_units": {
+      "fail": 0,
+      "pass": 26
+    },
+    "machine_j": {
+      "fail": 0,
+      "pass": 0
+    },
+    "meter_j": {
+      "fail": 0,
+      "pass": 0
+    },
+    "meter_w": {
+      "fail": 0,
+      "pass": 0
+    },
+    "outcome_word": {
+      "fail": 0,
+      "pass": 188
+    },
+    "p42_status": {
+      "fail": 0,
+      "pass": 6
+    },
+    "per_token_j": {
+      "fail": 0,
+      "pass": 10
+    },
+    "reported_cell_j": {
+      "fail": 0,
+      "pass": 144
+    },
+    "rho": {
+      "fail": 0,
+      "pass": 0
+    },
+    "routing_id": {
+      "fail": 0,
+      "pass": 798
+    },
+    "run_phase_energy_j": {
+      "fail": 0,
+      "pass": 786
+    },
+    "window_edge_s": {
+      "fail": 0,
+      "pass": 0
+    }
+  },
+  "coverage": {
+    "absent_sources": [],
+    "compared": 328,
+    "nonfinite": 0,
+    "normalized_paths": 1384,
+    "unbound": 0,
+    "uncovered": 1056,
+    "uncovered_numeric": 340,
+    "unmapped": 0
+  },
+  "disagreements": [],
+  "driver_wall_s": 2551.72,
+  "exits": {
+    "comparison": 0,
+    "driver": 0,
+    "recompute": 0
+  },
+  "r2_commit": "929fc65c9ce3ff82f0311d28acf76a682edd466f",
+  "recompute_flags": {
+    "archive_file_missing": 19,
+    "member_pre_bound_missing": 3,
+    "meter_absent": 3,
+    "trace_plist_missing": 3
+  },
+  "record_sha256": "fc5562630384806adc758360434c871c2f0633a066e0fb5c78b55c5db954767c",
+  "sha256": {
+    "configs/analysis/b5/recompute_bars.json": "2f65bba22c0afd23a637cabb5079e1c5dc6a367d53d956f77c20ead416813892",
+    "scripts/compare_b5_recompute.py": "c29ff97604c740aba682dd254450ee8875059c5722e77dc6e99dd193e999927b",
+    "scripts/independent_recompute_b5.py": "6bb9d1003919f2c0a5d76362edd327a813430cd653001541239675d812c63881"
+  },
+  "steps": [
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "0",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "1",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "2",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "3",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "3b",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "4",
+      "window": "alpha"
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "4",
+      "window": "beta"
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "5",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "8",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "6",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "9",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "9b",
+      "window": null
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "10",
+      "window": "alpha"
+    },
+    {
+      "flags": [],
+      "status": "ok",
+      "step": "10",
+      "window": "beta"
+    },
+    {
+      "flags": [
+        "results_rendering_not_run_no_block5_template"
+      ],
+      "status": "ok",
+      "step": "11",
+      "window": null
+    }
+  ],
+  "structure_flags": [],
+  "synthetic_only": true,
+  "totals": {
+    "agree_null": {
+      "by_reason": {},
+      "total": 0
+    },
+    "categorical_agreements": 1024,
+    "comparisons": 2514,
+    "disagreements": 0,
+    "numeric_agreements": 1490
+  }
+}

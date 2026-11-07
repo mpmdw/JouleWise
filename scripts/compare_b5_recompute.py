@@ -14,7 +14,9 @@ Rules (RC-CMP-1 A1-A4):
 - numeric families pass when both sides are finite numbers within the family bar;
 - categorical families (outcome words, dominance branch, p42 status, Holm order,
   the recompute's exclusion re-derivation, routing ids) pass only on equal type and value;
-- a value missing or null on either side is DISAGREE;
+- a value missing or null on either side is DISAGREE, except paired D-190 nulls
+  carrying the same registered reason/code; these have status agree_null:<reason>
+  and are counted separately from numeric passes (blind lead ruling 2026-11-05);
 - one union, one key space (RC-CMP-5 S3): every family pairs L9's keyed items with
   the recompute's through Comparison.pairs, which takes the union of keys and
   writes a routing_id row per key, so a key on one side only is DISAGREE
@@ -193,9 +195,91 @@ def bar_for(spec, reference):
     return max(parts)
 
 
+# D-190's scientific non-issuance states, not a general null-equality waiver.
+# Independent copy of the registered resolution vocabulary in
+# detection_floor.TRANSPORT_REASON_CODES. Existing provenance gates still apply.
+NULL_CODES = {
+    "not_estimable": frozenset({"insufficient_complete_blocks"}),
+    "not_resolvable": frozenset({
+        "artifact_hash_mismatch", "artifact_schema_invalid",
+        "cell_missing", "cell_not_claim_ready", "cell_stale", "condition_not_predeclared",
+        "stack_mismatch", "power_outside_calibrated_envelope", "duration_outside_calibrated_envelope",
+        "cadence_harder_than_calibration", "clock_anchor_harder_than_calibration",
+        "interpolation_harder_than_calibration", "drift_harder_than_calibration",
+        "consumer_identity_set_unauthenticated", "consumer_identity_undeclared",
+        "consumer_term_unknown", "transport_group_incomplete",
+    }),
+}
+
+
+def null_reason(outcome, codes):
+    """Canonical registered state and exact code set; reject aliases and unknown codes."""
+    if (not isinstance(outcome, str) or outcome not in NULL_CODES
+            or not isinstance(codes, (list, tuple)) or not codes
+            or any(not isinstance(code, str) or code not in NULL_CODES[outcome] for code in codes)
+            or len(set(codes)) != len(codes)):
+        return None
+    return outcome + ":" + ",".join(sorted(codes))
+
+
+def registered_null_reason(value):
+    if not isinstance(value, dict) or set(value) != {"outcome", "codes"}:
+        return None
+    return null_reason(value["outcome"], value["codes"])
+
+
+def estimator_null_reason(row, independent=False):
+    """Both producers must establish the n<2 state independently; outcome alone is insufficient."""
+    fields = ("n", "dbar_j", "s_d_j", "se_j", "t_star", "metrology_interval_j", "D_j", "decision_interval_j", "p")
+    if independent and any(field not in row for field in fields):
+        return None
+    if not independent and (
+            not isinstance(row.get("estimator"), dict)
+            or any(field not in row["estimator"] for field in
+                   ("n", "estimate", "s_d", "SE_total", "t_critical_95", "metrology_aware_CI95"))
+            or not isinstance(row.get("deterministic_bounds"), dict)
+            or any(field not in row["deterministic_bounds"] for field in ("total", "terms", "decision_interval"))):
+        return None
+    n = row.get("n") if independent else get(row, "estimator", "n")
+    if type(n) is not int or not 0 <= n < 2:
+        return None
+    if independent:
+        reason = registered_null_reason(row.get("null_reason"))
+        return reason if reason == null_reason("not_estimable", ["insufficient_complete_blocks"]) else None
+    evaluation = row.get("claim_evaluation") or {}
+    if (evaluation.get("outcome") == "not_estimable"
+            and "insufficient_complete_blocks" in (evaluation.get("reason_codes") or [])):
+        return null_reason("not_estimable", ["insufficient_complete_blocks"])
+    return None
+
+
+def resolution_null_reason(row):
+    if any(field not in row for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j")):
+        return None
+    return null_reason("not_resolvable", row.get("reason_codes")) if row.get("status") == "refused" else None
+
+
+def floor_null_reason(row):
+    if row.get("status") != "refused" or any(field not in row for field in ("floor_abs_j", "floor_cmp_j", "active_floor_j")):
+        return None
+    refused = [r for r in listed(row.get("resolutions")) if isinstance(r, dict) and r.get("status") == "refused"]
+    if not refused or any(resolution_null_reason(r) is None for r in refused):
+        return None
+    return null_reason("not_resolvable", sorted({code for r in refused for code in r["reason_codes"]}))
+
+
+def independent_floor_null_reason(row, cell=False):
+    """A recompute must carry its own code; a missing floor never invents one."""
+    if any(field not in row for field in (("floor_abs_j", "floor_cmp_j", "floor_gate_j") if cell else ("floor_gate_j",))):
+        return None
+    reason = registered_null_reason(row.get("null_reason"))
+    return reason if reason and reason.startswith("not_resolvable:") else None
+
+
 class Comparison:
-    def __init__(self, bars):
+    def __init__(self, bars, flags=None):
         self.bars, self.rows, self.scope, self.seen, self.excluded = bars, [], [], set(), []
+        self.flags = flags if flags is not None else []
         # RC-CMP-9: the concrete paths of the items the expected-check table claimed, per L9 document.
         self.claimed = {}
 
@@ -209,18 +293,36 @@ class Comparison:
         self.rows.append(row)
         return row
 
-    def numeric(self, family, key, l9, ours):
+    def numeric(self, family, key, l9, ours, *, null_reasons=(None, None)):
         assert family in NUMERIC + METER, family
         if family not in self.bars["families"]:
             raise Refusal("bars_family_missing:" + family)
         row = {"family": family, "key": key, "l9": l9, "recompute": ours}
+        if (l9 is None or ours is None) and any(reason is not None for reason in null_reasons):
+            row["null_reasons"] = {"l9": null_reasons[0], "recompute": null_reasons[1]}
         if finite(l9) and finite(ours):
             row["difference"] = ours - l9
             row["bar"] = bar_for(family_spec(self.bars["families"][family], key), l9)
             row["verdict"] = "AGREE" if abs(ours - l9) <= row["bar"] else "DISAGREE"
+        elif (l9 is None and ours is None and null_reasons[0] is not None and null_reasons[0] == null_reasons[1]
+              and not any(flag.get("code") == "nonfinite_value_read_as_null" for flag in self.flags)):
+            # Reasons are canonical tokens made by null_reason, never free-text aliases.
+            outcome, _, codes = null_reasons[0].partition(":") if isinstance(null_reasons[0], str) else (None, None, "")
+            registered = null_reason(outcome, codes.split(","))
+            if registered == null_reasons[0]:
+                row.update(verdict="AGREE", status="agree_null:" + registered, null_reason=registered)
+            else:
+                row.update(verdict="DISAGREE", reason="unregistered_null_reason")
         else:
             row["verdict"], row["reason"] = "DISAGREE", "missing_or_null"
         return self.add(row)
+
+    def nullable_numeric(self, family, key, l9, ours, *, null_reasons):
+        # Keep the ordinary numeric call unchanged, including the existing
+        # counterfactual test seams, when no null state is being compared.
+        if finite(l9) and finite(ours) or null_reasons == (None, None):
+            return self.numeric(family, key, l9, ours)
+        return self.numeric(family, key, l9, ours, null_reasons=null_reasons)
 
     def exact(self, family, key, l9, ours, raw=MISSING):
         """Equal type and value. raw: the L9 value as printed, when the compared word is derived from it."""
@@ -317,8 +419,20 @@ class Comparison:
         counts = {family: {"pass": 0, "fail": 0} for family in NUMERIC + METER + CATEGORICAL
                   if family not in METER or family in self.bars["families"]}
         for row in self.rows:
-            counts[row["family"]]["pass" if row["verdict"] == "AGREE" else "fail"] += 1
+            if row.get("status", "").startswith("agree_null:"):
+                family = counts[row["family"]]
+                family["agree_null"] = family.get("agree_null", 0) + 1
+            else:
+                counts[row["family"]]["pass" if row["verdict"] == "AGREE" else "fail"] += 1
         return counts
+
+    def null_counts(self):
+        reasons = {}
+        for row in self.rows:
+            if row.get("status", "").startswith("agree_null:"):
+                reason = row["null_reason"]
+                reasons[reason] = reasons.get(reason, 0) + 1
+        return {"total": sum(reasons.values()), "by_reason": dict(sorted(reasons.items()))}
 
 
 NONFINITE = type("NonFinite", (), {})()
@@ -2145,13 +2259,18 @@ def compare_arms(c, ours, cid, floor, registry):
                 {"alpha": "A", "beta": "B"}.get(pack))
         c.exact("routing_id", f"contrast/{cid}/arm/{index}/condition_family_id", gate.get("condition_family_id"),
                 contrast["conditions"][index] if pack else None)
-        c.numeric("floor_gate_j", f"{cid}/arm/{index}/floor_gate_j", gate.get("floor_gate_j"),
-                  get(cells, f"{MODELS.get(pack)}/{phase}", "floor_gate_j"))
+        c.nullable_numeric("floor_gate_j", f"{cid}/arm/{index}/floor_gate_j", gate.get("floor_gate_j"),
+                  get(cells, f"{MODELS.get(pack)}/{phase}", "floor_gate_j"),
+                  null_reasons=(resolution_null_reason((positions(floor.get("resolutions")).get(index) or {}))
+                                if gate.get("status") == "refused" else None,
+                                independent_floor_null_reason(get(cells, f"{MODELS.get(pack)}/{phase}", default={}) or {}, cell=True)))
     for index, resolution, pack in c.pairs(f"contrast/{cid}/resolution/", positions(floor.get("resolutions")), ARMS):
         resolution = resolution if isinstance(resolution, dict) else {}
         cell = f"{MODELS.get(pack)}/{phase}"
         for field in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
-            c.numeric("floor_gate_j", f"{cid}/resolution/{index}/{field}", resolution.get(field), get(cells, cell, field))
+            c.nullable_numeric("floor_gate_j", f"{cid}/resolution/{index}/{field}", resolution.get(field), get(cells, cell, field),
+                      null_reasons=(resolution_null_reason(resolution),
+                                    independent_floor_null_reason(get(cells, cell, default={}) or {}, cell=True)))
         # FS1 (RC-CMP-10): the transfer rule each resolution applies, as the manifest registers it for the arm's
         # transport group (group_rule_id); the floor_selector's transport_rule_id is not printed in any L9 output.
         c.exact("routing_id", f"contrast/{cid}/resolution/{index}/transport_rule_id", resolution.get("transport_rule_id"),
@@ -2232,27 +2351,34 @@ def compare_contrasts(c, custody, ours):
     l9_p, our_p = {}, {}
     for cid, row, mine in c.pairs("contrast/", l9_rows, mine_all):
         row, mine = row or {}, mine or {}
+        reasons = (estimator_null_reason(row), estimator_null_reason(mine, independent=True))
+        def estimate_number(family, key, a, b):
+            return c.nullable_numeric(family, key, a, b, null_reasons=reasons)
         est = row.get("estimator") or {}
-        c.numeric("contrast_j", f"{cid}/dbar_j", est.get("estimate"), mine.get("dbar_j"))
-        c.numeric("contrast_j", f"{cid}/s_d_j", est.get("s_d"), mine.get("s_d_j"))
-        c.numeric("contrast_j", f"{cid}/se_j", est.get("SE_total"), mine.get("se_j"))
-        c.numeric("contrast_p", f"{cid}/t_critical", est.get("t_critical_95"), mine.get("t_star"))
+        estimate_number("contrast_j", f"{cid}/dbar_j", est.get("estimate"), mine.get("dbar_j"))
+        estimate_number("contrast_j", f"{cid}/s_d_j", est.get("s_d"), mine.get("s_d_j"))
+        estimate_number("contrast_j", f"{cid}/se_j", est.get("SE_total"), mine.get("se_j"))
+        estimate_number("contrast_p", f"{cid}/t_critical", est.get("t_critical_95"), mine.get("t_star"))
         for side, a, b in sides(est.get("metrology_aware_CI95"), mine.get("metrology_interval_j")):
-            c.numeric("contrast_j", f"{cid}/metrology_interval_j/{side}", a, b)
+            estimate_number("contrast_j", f"{cid}/metrology_interval_j/{side}", a, b)
         bounds = row.get("deterministic_bounds") or {}
-        c.numeric("contrast_j", f"{cid}/D_j", bounds.get("total"), mine.get("D_j"))
+        estimate_number("contrast_j", f"{cid}/D_j", bounds.get("total"), mine.get("D_j"))
         # F1 (RC-CMP-9): the printed terms (each with the engine's exact term keys) sum to the compared total.
-        c.numeric("contrast_j", f"{cid}/D_terms_j", terms_total(bounds.get("terms")), mine.get("D_j"))
+        estimate_number("contrast_j", f"{cid}/D_terms_j", terms_total(bounds.get("terms")), mine.get("D_j"))
         for side, a, b in sides(bounds.get("decision_interval"), mine.get("decision_interval_j")):
-            c.numeric("contrast_j", f"{cid}/decision_interval_j/{side}", a, b)
-        c.numeric("floor_gate_j", f"{cid}/active_floor_j", get(row, "floor", "active_floor_j"), mine.get("floor_gate_j"))
+            estimate_number("contrast_j", f"{cid}/decision_interval_j/{side}", a, b)
+        floor_reasons = (floor_null_reason(row.get("floor") or {}),
+                         independent_floor_null_reason(mine.get("floor") or {}))
+        c.nullable_numeric("floor_gate_j", f"{cid}/active_floor_j", get(row, "floor", "active_floor_j"), mine.get("floor_gate_j"),
+                  null_reasons=floor_reasons)
         for field in ("floor_abs_j", "floor_cmp_j"):
-            c.numeric("floor_gate_j", f"{cid}/{field}", get(row, "floor", field),
-                      contrast_floor_part(ours.get("floor_cells"), registry.entry(cid, "contrast"), field))
+            c.nullable_numeric("floor_gate_j", f"{cid}/{field}", get(row, "floor", field),
+                      contrast_floor_part(ours.get("floor_cells"), registry.entry(cid, "contrast"), field),
+                      null_reasons=floor_reasons)
         compare_arms(c, ours, cid, row.get("floor") if isinstance(row.get("floor"), dict) else {}, registry)
         multiplicity = row.get("multiplicity") or {}
-        c.numeric("contrast_p", f"{cid}/raw_p", multiplicity.get("raw_p"), mine.get("p"))
-        c.numeric("contrast_p", f"{cid}/adjusted_p", multiplicity.get("adjusted_p"), mine.get("holm_p"))
+        estimate_number("contrast_p", f"{cid}/raw_p", multiplicity.get("raw_p"), mine.get("p"))
+        estimate_number("contrast_p", f"{cid}/adjusted_p", multiplicity.get("adjusted_p"), mine.get("holm_p"))
         floor_l9 = get(row, "floor", "active_floor_j")
         numbers = contrast_numbers(row, mine, floor_l9)
         tests = outcome_atoms(c, cid, *numbers, registry.alpha)
@@ -2260,7 +2386,12 @@ def compare_contrasts(c, custody, ours):
         c.word("outcome_word", f"{cid}/holm_reject", multiplicity.get("rejected"), mine.get("holm_reject"),
                named(tests, "reject"), lambda t: t["reject"])
         c.numeric("count", f"{cid}/n", est.get("n"), mine.get("n"))
-        c.numeric("count", f"{cid}/df", est.get("df"), mine["n"] - 1 if finite(mine.get("n")) else None)
+        # D-190: the registered n<2 estimator has no degrees of freedom.
+        # Read the explicit recompute null; a numeric placeholder still disagrees.
+        own_df = (mine.get("df") if finite(mine.get("n")) and mine["n"] < 2
+                  else mine["n"] - 1 if finite(mine.get("n")) else None)
+        c.nullable_numeric("count", f"{cid}/df", est.get("df"), own_df,
+                           null_reasons=reasons if "df" in mine else (None, None))
         c.exact("kept_units", f"{cid}/kept_quads", kept_blocks(get(row, "bundle_blocks", "blocks", default=None)),
                 sorted(mine["kept_quads"]) if mine.get("kept_quads") else None)
         evaluation = row.get("claim_evaluation") or {}
@@ -2848,15 +2979,20 @@ def compare_sensitivity(c, custody, ours):
                  "sensitivity_contrast")
     for cid, row, _ in c.pairs("sensitivity/contrasts/", rows, items(line.get("contrasts"))):
         row, mine = row or {}, get(line, "contrasts", cid, default={}) or {}
-        c.numeric("contrast_j", f"sensitivity/{cid}/D_j", get(row, "sensitivity", "D_j"), mine.get("D_j"))
-        c.numeric("floor_gate_j", f"sensitivity/{cid}/floor_gate_j", get(row, "sensitivity", "floor_gate_j"),
-                  mine.get("floor_gate_j"))
+        verdict = verdict_row_of(custody, cid)
+        estimate_reasons = (estimator_null_reason(verdict), estimator_null_reason(mine, independent=True))
+        floor_reasons = (floor_null_reason(verdict.get("floor") or {}),
+                         independent_floor_null_reason(mine.get("floor") or {}))
+        c.nullable_numeric("contrast_j", f"sensitivity/{cid}/D_j", get(row, "sensitivity", "D_j"), mine.get("D_j"),
+                  null_reasons=estimate_reasons)
+        c.nullable_numeric("floor_gate_j", f"sensitivity/{cid}/floor_gate_j", get(row, "sensitivity", "floor_gate_j"),
+                  mine.get("floor_gate_j"), null_reasons=floor_reasons)
         for field in ("floor_abs_j", "floor_cmp_j"):
-            c.numeric("floor_gate_j", f"sensitivity/{cid}/{field}", get(row, "sensitivity", field),
-                      contrast_floor_part(line.get("floor_cells"), registry.entry(cid, "contrast"), field))
+            c.nullable_numeric("floor_gate_j", f"sensitivity/{cid}/{field}", get(row, "sensitivity", field),
+                      contrast_floor_part(line.get("floor_cells"), registry.entry(cid, "contrast"), field),
+                      null_reasons=floor_reasons)
         # FS3 (RC-CMP-10): the sensitivity outcome reads the same tests as the primary one, against the
         # sensitivity floor and decision interval (L9's: the metrology interval widened by the sensitivity D).
-        verdict = verdict_row_of(custody, cid)
         primary_numbers = contrast_numbers(verdict, get(ours, "contrasts", cid, default={}) or {},
                                            get(verdict, "floor", "active_floor_j"))
         sensitivity_numbers = sensitivity_tests_numbers(primary_numbers, row, mine)
@@ -2879,11 +3015,16 @@ def compare_sensitivity(c, custody, ours):
         after = {field: contrast_floor_part(line.get("floor_cells"), entry, field) for field in ("floor_abs_j", "floor_cmp_j")}
         after.update(floor_gate_j=mine.get("floor_gate_j"), D_j=mine.get("D_j"))
         relation_words(c, f"sensitivity/{cid}", row, before, after, (), FLOOR_KEYS + ("D_j",),
-                       dict.fromkeys(FLOOR_KEYS, "floor_gate_j") | {"D_j": "contrast_j"})
+                       dict.fromkeys(FLOOR_KEYS, "floor_gate_j") | {"D_j": "contrast_j"},
+                       null_fields={field for field in FLOOR_KEYS + ("D_j",)
+                                    if (pair := estimate_reasons if field == "D_j" else floor_reasons)[0]
+                                    is not None and pair[0] == pair[1]})
         # F1 (RC-CMP-9): the record's own primary values; A3: its floor cell ids against the registered cells.
         for field in FLOOR_KEYS:
-            c.numeric("floor_gate_j", f"sensitivity/primary/{cid}/{field}", get(row, "primary", field), before.get(field))
-        c.numeric("contrast_j", f"sensitivity/primary/{cid}/D_j", get(row, "primary", "D_j"), before.get("D_j"))
+            c.nullable_numeric("floor_gate_j", f"sensitivity/primary/{cid}/{field}", get(row, "primary", field), before.get(field),
+                      null_reasons=(floor_reasons[0], independent_floor_null_reason(primary.get("floor") or {})))
+        c.nullable_numeric("contrast_j", f"sensitivity/primary/{cid}/D_j", get(row, "primary", "D_j"), before.get("D_j"),
+                  null_reasons=(estimate_reasons[0], estimator_null_reason(primary, independent=True)))
         c.word("outcome_word", f"sensitivity/primary/{cid}/outcome", get(row, "primary", "outcome"), primary.get("outcome"),
                unprefixed(p_tests, "p_"), decide_outcome)
         compare_floor_ids(c, f"sensitivity/{cid}/floor_cell_ids", row.get("floor_cell_ids"), entry, registry)
@@ -3033,10 +3174,16 @@ def widened_interval(value, d):
     return [minus(lower, d), upper + d if finite(upper) and finite(d) else None]
 
 
-def relation_words(c, key, row, before, after, equal_keys, not_below_keys, families):
+def relation_words(c, key, row, before, after, equal_keys, not_below_keys, families, null_fields=()):
     """FS3 (RC-CMP-10): a sensitivity row's equals_primary (each value equal to its primary value) and
     not_below_primary (none below it) words, each from its tests sensitivity - primary against 0, on L9's printed
     primary and sensitivity values and on the recompute's. A word is compared only when its tests fix it."""
+    # D-190 excludes an unavailable value from not_below_primary. Do that only
+    # when both independent code checks passed and all four copies are null.
+    inactive = {field for field in null_fields if all(value is None for value in (
+        get(row, "primary", field), get(row, "sensitivity", field), before.get(field), after.get(field)))}
+    equal_keys = tuple(field for field in equal_keys if field not in inactive)
+    not_below_keys = tuple(field for field in not_below_keys if field not in inactive)
     def tests(keys, test):
         return [c.atom(field, families[field], f"{key}/{field}", minus(get(row, "sensitivity", field),
                                                                         get(row, "primary", field)),
@@ -3566,6 +3713,9 @@ COVERAGE = (
      DISCLOSURE_CONTROL),
     # Fill input: each contrast's copy of its claim verdict, bound by its contrast_id.
     (F + "estimate", "contrast_j", "{cid}/dbar_j"),
+    # D-190 writes the entire interval as null, rather than an object of endpoints.
+    (F + "interval", "contrast_j", "{cid}/metrology_interval_j/lower"),
+    (F + "decision_interval", "contrast_j", "{cid}/decision_interval_j/lower"),
     (F + "interval/(?P<side>lower|upper)", "contrast_j", "{cid}/metrology_interval_j/{side}"),
     (F + "decision_interval/(?P<side>lower|upper)", "contrast_j", "{cid}/decision_interval_j/{side}"),
     (F + "deterministic_widening_total", "contrast_j", "{cid}/D_j"),
@@ -3664,6 +3814,8 @@ COVERAGE = (
     (D + r"contrasts/primary_contrast/estimator/(?P<field>n|df)", "count", "{cid}/{field}"),
     (D + r"contrasts/primary_contrast/estimator/t_critical_95", "contrast_p", "{cid}/t_critical"),
     (D + r"contrasts/primary_contrast/estimator/raw_p", "contrast_p", "{cid}/raw_p"),
+    (D + r"contrasts/primary_contrast/estimator/metrology_aware_CI95", "contrast_j",
+     "{cid}/metrology_interval_j/lower"),
     (D + r"contrasts/primary_contrast/estimator/metrology_aware_CI95/(?P<side>lower|upper)", "contrast_j",
      "{cid}/metrology_interval_j/{side}"),
     (D + r"contrasts/primary_contrast/estimator/(SE_repeat|SE_metrology|repeat_point_CI95/(lower|upper)|"
@@ -3672,6 +3824,8 @@ COVERAGE = (
     (D + r"contrasts/primary_contrast/estimator/(excluded_stochastic_terms/\*|variance_contributions/\*/name)",
      UNCOVERED + "estimator internals' labels (variance-contribution names, no extra stochastic terms); they assert no "
      "claim, and the contributions' values are listed as estimator internals"),
+    (D + r"contrasts/(primary_contrast|decision_floor)/decision_interval", "contrast_j",
+     "{cid}/decision_interval_j/lower"),
     (D + r"contrasts/(primary_contrast|decision_floor)/decision_interval/(?P<side>lower|upper)", "contrast_j",
      "{cid}/decision_interval_j/{side}"),
     (D + r"contrasts/decision_floor/floor_j", "floor_gate_j", "{cid}/active_floor_j"),
@@ -4024,7 +4178,7 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
         ours = loads(Path(recompute_path).read_bytes(), flags, "recompute", duplicate="recompute_output_duplicate_key")
     except (OSError, ValueError):
         raise Refusal("recompute_output_unreadable") from None
-    c = Comparison(bars)
+    c = Comparison(bars, flags=flags)
     # RC-CMP-9: the registry-driven walk first: every expected check must find its item on both sides.
     table = compare_expected(c, custody, ours)
     compare_runs(c, custody, ours)
@@ -4045,7 +4199,7 @@ def run(l9_custody, recompute_path, bars_path=DEFAULT_BARS, rules=None, meter=()
             "l9_steps": {f"{s}/{w}" if w else str(s): v for (s, w), v in sorted(custody.status.items(), key=str)},
             "recompute_program_sha256": ours.get("program_sha256"), "harvest_meter_sha256": meter_digests,
             "routing_registry_sha256": custody.registry.digests,
-            "structure_flags": flags, "counts": c.counts(),
+            "structure_flags": flags, "counts": c.counts(), "null_agreements": c.null_counts(),
             # RC-CMP-9 A1: the expected-check table's structure (families, checks, conditions; no value).
             "expected_checks": table_structure(table),
             # G7: each member kept out of a family's key universe, with the family it is compared in.
@@ -4086,6 +4240,7 @@ def main(argv=None):
     cover = result["coverage"]
     # Public line: per-family pass/fail counts and structure only, never a value or a difference.
     print("bar_set=" + str(result["bar_set"]) + " families=" + json.dumps(counts, sort_keys=True, separators=(",", ":"))
+          + " null_agreements=" + str(result["null_agreements"]["total"])
           + " step11_unmapped=" + str(len(cover["unmapped"])) + " step11_nonfinite=" + str(len(cover["nonfinite"]))
           + " step11_uncovered_numeric="
           + str(len(cover["uncovered_numeric"])) + " step11_absent=" + ",".join(cover["absent_sources"] or ["none"])
