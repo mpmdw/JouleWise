@@ -1089,3 +1089,106 @@ Carried over and still open:
 - **WP18 (Sol F7, round 6).** The seed-index fix still needs checking against the real `p7-PILOT.json` on the Mac.
 - **Exec LOW-3 scope.** Signal deferral applies only to a session close on the main thread.
 - **Hardware checks carried over from round 5:** the inventory sweep duration, the second SMC reader, and the heater start-state loop on the first R1 night.
+
+## Round 8 (lead rulings R8-1 to R8-8 on `72c7c8a50`)
+
+This round is code, test and documentation work only:
+
+- no measurement ran;
+- no model weights were loaded;
+- no v3 kit bytes changed.
+
+The rulings are recorded verbatim, with their implementing commits, builder notes and residual windows, in the "Round 8" section of `docs/align/council-2026-11-06-v4-review/LEAD-RULINGS-2.md`. One builder implemented them directly on `lane/2026-11-06-v4-r1-integrated`, branching from `72c7c8a50` (which already contains the round-7 cold pass `d20ccd829`, the exec fixes `e51156033` and the exec review `72c7c8a50`):
+
+| Commit | What |
+|---|---|
+| `191455724` | **Code.** R8-1: an interrupt after launch terminates and proves gone the chain's process group, then the close runs. The R1 driver proves its runtime's descendants gone, and an unproven termination defers its restore. R8-3: the watchdog arms on the first held signal. R8-4: bounds 5,763.9952 s; release 665 s. R8-5: dry-arm restores nothing. R8-6: aliased picks fail the bar. Also the allowlist entry for the new re-raise site, `tests/align/test_r1_round8.py`, and the old value tests updated to the R8-4 numbers. |
+| `543c9565d` | **Docs.** LEAD-RULINGS-2 Round 8 and the R7-4 correction. The contract: R8-1 to R8-6. Protocol v4: R8-7. `test_r1_round8.DocTests`. |
+| `3d507c8fe` | **Fixes from a local Sol 6.1 xhigh static critique** of `72c7c8a50..543c9565d` (audit below). An unproven chain termination defers the close even when the lock can be retaken. The first signal latches the shutdown. The process and the deadline are published earlier. The R1 tree proof identifies a process by pid and start time, re-reads the tree during the grace, and treats held pipes and an unreaped child as unproven. The night tests check survivors from inside `run_night`'s process. |
+| this commit | This section. |
+
+**Fail-without-fix.** Every behaviour test in `test_r1_round8` fails without its fix:
+- The first 14 tests were run with `scripts/` and `joulewise/` stashed back to `72c7c8a50`. Results: 7 failures and 5 errors. The errors are missing new attributes; the R1 proven-gone test also fails behaviourally ("heater alive" at the restore) when rerun with `create=True`.
+- `DocTests` were run with the two docs stashed: 2 failures.
+- The five Sol-fix tests were run with `scripts/` stashed back to `543c9565d`. Four fail. The fifth, `SignalLatchTests`, kills the test process with an uncaught `KeyboardInterrupt`.
+
+**Sol audit.** `/usr/bin/grep -E 'jw-b5-|night-custody|night-archive|night-|restricted/'` on `jw-wt/r8-sol-crit.events.jsonl` gives 2 hits. Both are text inside repository files Sol read: a Spotlight-exclusion note in a task list, and the thread name `night-window-deadline`. No command it ran named any of those paths or `/Users/Shared/JouleWise`: **AUDIT CLEAN**. Sol ran read-only and static; its worktree was removed.
+
+### Kit check on the round-8 head (`3d507c8fe`)
+
+- `scripts/align_v4_kit.py` regenerated: no file changed.
+- `scripts/align_v4_kit.py --check` exits **1**, blocked on the same nine leaves as in rounds 4 to 7: `WP18.X.max_turns`, `WP18.X.token_fixture_sha256`, `WP18.Y.max_turns`, `WP18.Y.token_fixture_sha256`, `R0.reasoning_effort`, `R1.B_D`, `R1.I_D`, `R1.T_dead`, `R1.thermal_policy`.
+- `git diff origin/lane/2026-11-05-align-pilot10-benign -- configs/campaigns/align_pilot_v3` is empty, and so is the diff against `72c7c8a50`.
+
+### Suite tail (round 8, code head `3d507c8fe`)
+
+How the suite ran:
+- `/private/tmp/jwsol/venv-both/bin/python -B -m unittest <module>` under `nice -n 19 taskpolicy -b`, one module per process;
+- `xargs -P 2` (at most two at a time), each process with its own `TMPDIR` under `/private/tmp/jwr8-tmp/suite2`.
+- A first suite run on `191455724` was stopped after three modules when the Sol fixes landed, and rerun in full on `3d507c8fe`.
+- Process note: twice, briefly, a third test process ran beside the suite's two: `test_r1_round8` for 31 s and its `DocTests` for under a second.
+
+**Whole `tests/align` (125 modules, one per process).** Every module rc=0. **Ran 1805 tests, skipped=28** in total.
+
+The slowest walls:
+
+| Module | Wall |
+|---|---|
+| test_moe_calibration | 2,370 s |
+| test_moe_review | 518 s |
+| test_analysis_metadata_baseline | 516 s |
+| test_energy_residual_regressions | 381 s |
+| test_apple_campaign | 290 s |
+
+Selected module tails:
+
+```
+test_r1_round8                Ran 21 tests in 25.311s      OK
+test_r1_rehearsal             Ran 73 tests in 7.936s       OK
+test_r1_runtime               Ran 33 tests in 58.553s      OK
+test_r1_runtime_e2e           Ran 2 tests in 38.533s       OK
+test_r1_runtime_contract      Ran 11 tests in 0.002s       OK
+test_r1_round5_exec_review    Ran 7 tests in 4.083s        OK
+test_r1_round6_exec_review    Ran 9 tests in 1.448s        OK
+test_r1_round6_lows           Ran 18 tests in 3.920s       OK
+test_r1_round6_power          Ran 25 tests in 0.467s       OK
+test_r1_round7_science        Ran 16 tests in 0.262s       OK
+test_r1_round7_power          Ran 29 tests in 4.061s       OK
+test_r1_round7_install        Ran 6 tests in 1.642s        OK
+test_r1_round7_close_deferral Ran 3 tests in 2.994s        OK (skipped=1)
+test_r1_round7_exec_review    Ran 6 tests in 0.655s        OK
+test_thermal_gate             Ran 44 tests in 53.005s      OK
+test_v4_kit                   Ran 114 tests in 16.558s     OK
+test_v4_w1_plan               Ran 12 tests in 1.143s       OK
+test_protocol_v4_doc          Ran 5 tests in 0.321s        OK
+test_v4_w1_synthetic          Ran 18 tests in 4.388s       OK (skipped=14)   # full windows gated by JW_WP22_FULL
+```
+
+**WP22 synthetic W1** (`JW_WP22_FULL=1 tests.align.test_v4_w1_synthetic`): Ran 18 tests in 120.129s, OK (expected failures=1). As in rounds 4 to 7, only F3 is the expected failure.
+
+**`tests.hazards.test_refusal_allowlist`:** Ran 23 tests in 58.348s, OK (skipped=1). It needed one new entry for the R8-1 re-raise site.
+
+**`tests.test_run_night`, power and close subsets:**
+- Power (`-k powermode -k high_power -k marker -k Automatic -k night_lock -k restore -k dead_man -k lock`): Ran 62 tests in 62.356s, FAILED (failures=3). All three are `BindSupervisionProcessTests` (`test_blocked_journal_never_blocks_deadline_or_grants_go`, `test_blocking_join_startup_and_post_publication`, `test_startup_hang_is_nonblocking`), which `-k lock` matches through "blocking". The round-7 executing review found the same 62 / 59.
+- Close (`-k close -k signal -k interrupt -k termination`): Ran 13 tests in 15.312s, OK. On the stopped first run, one `BindSupervisionProcessTests` timing test missed its 1.05 s budget by 39 ms.
+
+**Whole `tests.test_run_night`:** Ran 318 tests in 261.360s, FAILED (failures=12). All 12 are in the environment classes recorded in rounds 6 and 7:
+- 8 `NightDriverTests` installer tests ("test interpreter must load the battery fixture in child Pythons");
+- 3 `BindSupervisionProcessTests`;
+- 1 `QuietDriverIntegrationTests.test_supervised_worker_is_reaped_on_cancellation`.
+
+The last four rerun without `taskpolicy -b` (still `nice -n 19`): `BindSupervisionProcessTests` plus the quiet test, Ran 23 tests in 27.422s, OK. No powermode, marker, lock, signal or R7/R8 test fails.
+
+### Open after round 8 (for the lead)
+
+- **R8-4 builder notes.**
+  - Step-30b keeps its round-5 bound of 3,300 s. The ruling names step-d and the designed states, but the same underbound argument applies to 30B.
+  - The designed states could use step-d's measured I_D instead of 1,750 s, which would be tighter.
+- **R8-1 residual windows.**
+  - A signal inside `Popen` itself, after the fork and before it returns, escapes the termination.
+  - The R1 tree proof can miss a descendant that is started and orphaned between two one-second reads and does not hold the output pipe.
+  - Both fail toward an unsupervised orphan, the R8-2 class.
+- **R8-1, HAZARD_PACK.** The chain is now terminated on an interrupt. The hazard monitor and meter that `b5/driver.py` starts (it catches `Exception`, not `KeyboardInterrupt`) are still not stopped on that path. They do not hold the lock. Changing this would touch shared Block-5 code.
+- **R8-1 scope.** Only interrupts terminate the chain. A non-interrupt exception escaping the chain wait loop still leaves it running, as before; the deadline thread is a daemon and dies with `run_night`.
+- **R1 plan window.** The round-8 all-caps worst case is 54,342.97 s with no redo, 59,742.97 s with one batch-window wait, and 88,798.95 s with every R6-2 retry (allowance 29,055.98 s) and one batch-window wait. W1's `window_cap_s` (44,640 s) is 9,702.97 s below the no-redo case. There is still no R1 plan; the lead or magistrate sets its `window_max_s`.
+- **Carried over:** ruling 1(e) after the R1 night (R8-8); R7-10's partial deviation; R7-11's unopenable-lock manual restore; R7-13's exact-match alias limits; the WP18 seed-index check on the Mac; exec LOW-3's main-thread scope; the hardware checks from round 5.
