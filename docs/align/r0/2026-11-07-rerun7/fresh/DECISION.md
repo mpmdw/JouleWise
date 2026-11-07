@@ -102,3 +102,16 @@ the 1 degC band floor).
 2. Gates: Fable and Opus blind executing cold passes, then CI.
 3. Merge into `lane/2026-11-05-align-pilot10-benign` and fast-forward the measurement checkout.
 4. Run one R0 in a clean gap. The slow-rule choice uses that settled capture.
+
+## Erratum 1 (02:59 PST, lead ruling on the build seat's NEEDS_RULING F1)
+
+**D1 (c).** A key is not selectable if any valid reading over the whole capture is above 125 degC.
+- Derivation: 125 degC is the standard absolute-maximum junction rating for silicon. A reading above it
+  is not a component temperature on a running machine. The composite max-die key TCMb peaked at
+  85.5 degC, and the hottest plausible real key (TCMz) at 112 degC.
+- Fable's fresh design (P3) proposed this ceiling; the reconciliation left it out by omission.
+- Under literal D1-D6 the build seat found TVH3 winning the fast pick: rise 64.1 degC, max reading
+  137 degC. Fable measured TVH3 = 1.72 x TCMb - 38 (R^2 0.98), a firmware-derived value, not a
+  thermometer.
+- With D1 (c), the replay gives Tf18 / TaLP, with alternatives TaRT / TSXR / TVS0, as DECISION.md
+  expected.
