@@ -1192,3 +1192,77 @@ The last four rerun without `taskpolicy -b` (still `nice -n 19`): `BindSupervisi
 - **R8-1 scope.** Only interrupts terminate the chain. A non-interrupt exception escaping the chain wait loop still leaves it running, as before; the deadline thread is a daemon and dies with `run_night`.
 - **R1 plan window.** The round-8 all-caps worst case is 54,342.97 s with no redo, 59,742.97 s with one batch-window wait, and 88,798.95 s with every R6-2 retry (allowance 29,055.98 s) and one batch-window wait. W1's `window_cap_s` (44,640 s) is 9,702.97 s below the no-redo case. There is still no R1 plan; the lead or magistrate sets its `window_max_s`.
 - **Carried over:** ruling 1(e) after the R1 night (R8-8); R7-10's partial deviation; R7-11's unopenable-lock manual restore; R7-13's exact-match alias limits; the WP18 seed-index check on the Mac; exec LOW-3's main-thread scope; the hardware checks from round 5.
+
+### Round 8 review dispositions (D8-1 to D8-6 on `f2f723734`)
+
+The round-8 executing review (`f2f723734`, ADMIT_WITH_FIXES) was settled by lead dispositions D8-1 to D8-6. They are recorded verbatim, with their implementation, in the "Round 8 review dispositions" section of `LEAD-RULINGS-2.md`. This round is code, test and documentation work only:
+
+- no measurement ran;
+- no model weights were loaded;
+- no v3 kit bytes changed.
+
+| Commit | What |
+|---|---|
+| `48938e64d` | **Code and tests.** D8-1: `_qualification_observe` re-raises `KeyboardInterrupt` and `SystemExit` after recording its fault. D8-2: `_run_night` sets `_CHAIN_TERMINATION_UNPROVEN` on every unproven path (interrupt, census abort, supervision stop, window deadline, an exception escaping the chain wait), and the close defers. D8-3: step-30b's bound is 5,163.9952 s. Two allowlist entries (INTERNAL re-raises). The two pinned `expectedFailure`s were removed, and two tests were added. |
+| `ef530e058` | **Docs.** The LEAD-RULINGS-2 dispositions. The contract: D8-1 to D8-5. `test_r1_round8.DocTests` extended. |
+| this commit | This section. |
+
+**Fail-without-fix.** With `scripts/run_night.py` stashed back to `f2f723734`, `tests.align.test_r1_round8_exec_review` gives Ran 7, FAILED (failures=4). The failures are:
+- the two D8-1 tests: "KeyboardInterrupt not raised" and "SystemExit not raised";
+- the two D8-2 tests: `'restore' unexpectedly found in ['read', 'restore', 'read']`.
+
+**D8-3 worst case (`night_worst_case_s(None)`):**
+- no redo: **56,206.96 s** (R8-4 alone: 54,342.97 s);
+- with one batch-window wait: 61,606.96 s;
+- the R6-2 retry allowance: 29,055.98 s (unchanged);
+- every retry plus one wait: 90,662.94 s;
+- W1's `window_cap_s` is 11,566.96 s below the no-redo case.
+
+There is still no R1 plan; the lead or magistrate sets its `window_max_s` from this table.
+
+#### Kit check on the dispositions head (`ef530e058`)
+
+- `scripts/align_v4_kit.py` regenerated: no file changed.
+- `scripts/align_v4_kit.py --check` exits **1**, blocked on the same nine leaves as in rounds 4 to 8: `WP18.X.max_turns`, `WP18.X.token_fixture_sha256`, `WP18.Y.max_turns`, `WP18.Y.token_fixture_sha256`, `R0.reasoning_effort`, `R1.B_D`, `R1.I_D`, `R1.T_dead`, `R1.thermal_policy`.
+- `git diff origin/lane/2026-11-05-align-pilot10-benign -- configs/campaigns/align_pilot_v3` is empty, and so is the diff against `f2f723734`.
+
+#### Suite tail (dispositions, code head `48938e64d`, docs `ef530e058`)
+
+How the suite ran: `/private/tmp/jwsol/venv-both/bin/python -B -m unittest <module>` under `nice -n 19 taskpolicy -b`, one module per process, `xargs -P 2`, with a per-module `TMPDIR` under `/private/tmp/jwr8fix-tmp/suite`. `test_r1_round8` ran after the doc commit.
+
+**Whole `tests/align` (126 modules, one per process).** Every module rc=0: 1,818 tests reported in total, 36 skipped, no failures. The slowest walls were `test_moe_calibration` (3,419 s), `test_moe_review` (886 s) and `test_analysis_metadata_baseline` (763 s).
+
+```
+test_r1_round8_exec_review     Ran 7 tests in 32.917s      OK
+test_r1_round8                 Ran 21 tests in 25.088s     OK
+test_r1_rehearsal              Ran 73 tests in 7.780s      OK
+test_r1_runtime                Ran 33 tests in 49.252s     OK
+test_r1_runtime_e2e            Ran 2 tests in 38.411s      OK
+test_r1_runtime_contract       Ran 11 tests in 0.002s      OK
+test_r1_round5_exec_review     Ran 7 tests in 4.069s       OK
+test_r1_round6_exec_review     Ran 9 tests in 0.959s       OK
+test_r1_round6_lows            Ran 18 tests in 3.210s      OK
+test_r1_round6_power           Ran 25 tests in 0.401s      OK
+test_r1_round7_science         Ran 16 tests in 0.255s      OK
+test_r1_round7_power           Ran 29 tests in 3.818s      OK
+test_r1_round7_install         Ran 6 tests in 1.563s       OK
+test_r1_round7_close_deferral  Ran 3 tests in 3.015s       OK (skipped=1)
+test_r1_round7_exec_review     Ran 6 tests in 0.405s       OK
+test_thermal_gate              Ran 44 tests in 26.943s     OK
+test_v4_kit                    Ran 114 tests in 11.113s    OK
+test_v4_w1_plan                Ran 12 tests in 0.802s      OK
+test_protocol_v4_doc           Ran 5 tests in 0.263s       OK
+test_v4_w1_synthetic           Ran 18 tests in 2.985s      OK (skipped=14)   # full windows gated by JW_WP22_FULL
+```
+
+Further runs on the same head:
+
+```
+tests.test_run_night -k close -k signal -k interrupt -k termination -k powermode -k dry_arm
+                                Ran 16 tests in 11.324s     OK   (under taskpolicy -b; no timing flake this run)
+tests.hazards.test_refusal_allowlist
+                                Ran 23 tests in 29.499s     OK (skipped=1)
+tests.test_b5_driver -k interrupt -k termination -k chain -k signal   (shared _run_chain_once)
+                                Ran 8 tests in 9.227s       OK
+```
+
