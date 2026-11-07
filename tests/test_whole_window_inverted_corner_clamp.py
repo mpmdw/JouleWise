@@ -60,8 +60,10 @@ ORIGIN_MAIN_SHA256 = {
         "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
     ),
 }
+# Cited rebind (DLE-3, docs/analysis/b5/DEVIATION-LOG.md): test_frozen_files.py gained the
+# calibration_bracketing.py entry of EVOLVED_ON_MAIN and its citation (b5 under-90 round 2, 13af1baa8).
 FROZEN_FILES_TEST_SHA256 = (
-    "523f4ee386efc143fee98843104f60b2a9137d58083c17bcb0d5e7b325a4e19d"
+    "fc1b377c2d00eb361df437c5fd5da87e13a3bd950e5808bc9068ab1ce948bdf9"
 )
 PREFILL = "/phase_energy_j/prefill"
 UNRECORDED = "anchor_energy_envelope_unrecorded"
