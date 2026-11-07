@@ -384,7 +384,20 @@ def u5_verdict(temperature, gated):
     bound = temperature["abs_beta_T_90_j_per_c"] * delta
     bar = U5_C * sigma
     verdict = "pass" if bound <= bar else "fail" if point > bar else "inconclusive"
+    # Round-4 executing review HIGH-2: a replay run whose G0 did not release
+    # ends with no turn (episode.g0_unreleased), so its turn-owned energy_j is
+    # 0 and |E_a - E_b| is the whole other episode, not identical-work noise.
+    # That inflates sigma_pair and can turn U5 into a false PASS. Such a pair
+    # cannot decide U5.
+    empty = [name for name in REPLAY_PAIR
+             if type(gated[name].get("admitted_turns")) is int and gated[name]["admitted_turns"] == 0]
+    sigma_reason = None
+    if empty:
+        verdict = "inconclusive"
+        sigma_reason = ("replay-pair run(s) " + ", ".join(empty) + " admitted no turn (G0 not released); "
+                        "|E_a - E_b| is not an identical-work pair difference")
     return {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2",
+            "sigma_pair_valid": not empty, "sigma_pair_invalid_reason": sigma_reason,
             "sigma_pair_observed_j": observed, "sigma_pair_floor_j": U5_SIGMA_PAIR_FLOOR_J,
             "sigma_pair_j": sigma, "delta_slow_c": delta,
             "beta_T_j_per_c": temperature["beta_T_j_per_c"],

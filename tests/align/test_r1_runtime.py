@@ -343,5 +343,85 @@ class SignalTests(unittest.TestCase):
         self.assertEqual({sig: signal.getsignal(sig) for sig in previous}, previous)
 
 
+class IncompleteMemberTests(unittest.TestCase):
+    """Round-4 executing review HIGH-1 (with the round-4 Fable cold pass HIGH-1):
+    a designed start state whose G0 never released, or whose one turn was cut,
+    must not reach the driver as a planning point (the G0 case carried the
+    last sample as its 'release' temperature and energy_j = 0, because the
+    g0_unreleased stop leaves the member with no turn)."""
+
+    class NoReleaseBackend(rs.SyntheticBackend):
+        def run_member(self, config_map, runs_root, hook):
+            world = self.world
+            nominal = type(world).status
+            # PM state never Nominal: the production G0 can only time out.
+            world.status = lambda: {**nominal(world), "pm_state": "Moderate"}
+            try:
+                return super().run_member(config_map, runs_root, hook)
+            finally:
+                del world.status
+
+    def test_planning_turn_with_an_unreleased_g0_fails_the_segment(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            config = rs.synthetic_config(root / "cfg")
+            soak = root / "soak.json"
+            soak.write_text(json.dumps({"schema": rt.SOAK_REFERENCE_SCHEMA,
+                                        "sensors_c": {rs.syn.FAST: 38.0, rs.syn.SLOW: 38.0},
+                                        "detrended": {k: {"detrended_sd_c": 0.1} for k in (rs.syn.FAST, rs.syn.SLOW)}}))
+            out = root / "planning_turn_R_plus_2C"
+            buffer = io.StringIO()
+            code = rt.main(["--config", str(config), "--r1-kind", "d-planning-turn-r-plus-2c", "--output", str(out),
+                            "--soak-reference", str(soak)], stdout=buffer, backend_factory=self.NoReleaseBackend)
+            record = custody(out)
+            self.assertEqual(code, rt.EXIT_FAILED, record)
+            self.assertEqual(buffer.getvalue(), "")
+            self.assertEqual(record["status"], "failed")
+            self.assertIn("designed start state not reached: G0 timeout", record["error"])
+            # The member itself ended at G0 with no turn: the evidence stays in DIR.
+            bundle = out / "runs" / "align-v4-r1-d-planning-turn-r-plus-2c"
+            self.assertTrue((bundle / "summary_metrics.json").exists())
+
+    def test_planning_turn_cut_by_the_deadman_fails_the_segment(self):
+        # The Fable cold pass HIGH-1 path: G0 releases, then the deadman (armed
+        # at G0 entry, so it also pays for the preheat and the G0 wait) cuts the
+        # one decode. The old runtime returned that partial turn's energy.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            config = rs.synthetic_config(root / "cfg")
+            data = json.loads(config.read_text())
+            data["step"]["deadman_s"] = 110   # synthetic G0 ~76 s, full turn ~60 s
+            config.write_text(json.dumps(data))
+            soak = root / "soak.json"
+            soak.write_text(json.dumps({"schema": rt.SOAK_REFERENCE_SCHEMA,
+                                        "sensors_c": {rs.syn.FAST: 38.0, rs.syn.SLOW: 38.0},
+                                        "detrended": {k: {"detrended_sd_c": 0.1} for k in (rs.syn.FAST, rs.syn.SLOW)}}))
+            out = root / "planning_turn_R_plus_0C"
+            code, result = call(config, out, "d-planning-turn-r-plus-0c", "--soak-reference", str(soak))
+            record = custody(out)
+            self.assertEqual(code, rt.EXIT_FAILED, record)
+            self.assertIsNone(result)
+            self.assertIn("planning member is not one complete turn", record["error"])
+            self.assertIn("episode.deadman:0", record["error"])
+            episode = json.loads((out / "runs/align-v4-r1-d-planning-turn-r-plus-0c/outputs/align_episode.json")
+                                 .read_text())
+            self.assertEqual([r["outcome"] for r in episode["hardware"]["thermal"]["intervals"]
+                              if r["kind"] == "G0"], ["released"])
+            self.assertEqual(len(episode["turns"]), 1)
+
+    def test_incomplete_member_reasons(self):
+        def member(status="succeeded", turns=1, flags=()):
+            return SimpleNamespace(status=status, failure_reason=None,
+                                   ep=SimpleNamespace(turns=[object()] * turns, flags=list(flags)))
+        self.assertEqual(rt.incomplete_member_reasons(member(flags=(
+            "turn_budget_reached", "episode.malformed_tool_call:0", "turn_token_budget_reached:0"))), [])
+        for flag in ("episode.deadman:0", "episode.g0_unreleased:0", "thermal.start_gate_timeout",
+                     "thermal.state_unobserved", "episode.decode_budget:0"):
+            with self.subTest(flag=flag):
+                self.assertEqual(rt.incomplete_member_reasons(member(flags=(flag,))), [flag])
+        self.assertEqual(rt.incomplete_member_reasons(member(turns=0)), ["turns:0"])
+        self.assertTrue(rt.incomplete_member_reasons(member(status="failed")))
+
+
 if __name__ == "__main__":
     unittest.main()

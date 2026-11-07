@@ -66,7 +66,7 @@ The journal must cover the segment (executing review MEDIUM-1). With W the wall 
 | `idle-until-soak` | R | `recovery_curve`: non-empty list of `[t_s, S_slow °C]`. Idle until S_slow is within δ of R, or 1,500 s (ruling 1(c)). |
 | `x-g` | | none |
 | `d-spam-benign-s1-a`, `d-spam-benign-s1-b`, `d-bank-benign-s1` | | `energy_j`; `admitted_turns` (int ≥ 0); `x7` (bool); `deadman.T_dead_s` (the deadman the run armed at G0 entry; it must equal the `step-d` `slots.T_dead`, or R1 refuses at that run); `deadman.phases_s.{G0,G1,H,decode,prefill,tool,tail}` (finite seconds) (ruling 1(a), 1(d)); `battery_drain_pct_per_h` |
-| `d-planning-turn-r-plus-0c`, `d-planning-turn-r-plus-2c`, `d-planning-turn-r-plus-4c` | R | quiet fields; `reference_c` (R, identical across the three); `g0_release_c` (the S_slow **measured** at release); `delta_slow_c` (the gate band, identical across the three, > 0); `energy_j`. The driver refuses a release outside R + offset ± δ_slow and fits β_T on the measured release temperatures (ruling 6). |
+| `d-planning-turn-r-plus-0c`, `d-planning-turn-r-plus-2c`, `d-planning-turn-r-plus-4c` | R | quiet fields; `reference_c` (R, identical across the three); `g0_release_c` (the S_slow **measured** at release); `delta_slow_c` (the gate band, identical across the three, > 0); `energy_j`. The driver refuses a release outside R + offset ± δ_slow and fits β_T on the measured release temperatures (ruling 6). A G0 that did not release is not a designed start state: the runtime fails the segment (exit 3) instead of reporting its last sample as a release (round-4 executing review HIGH-1). |
 | `d-4bit` | | none (optional) |
 | `g0-release-soak` | R | `released`: true if S_slow came within δ of R before the G0 cap (600 s), false on timeout |
 | `high-power-aba-a1`, `high-power-aba-b`, `high-power-aba-a2` | R | quiet fields; `t_decline_s`: positive seconds, or null for no decline (infinite) |
@@ -79,6 +79,7 @@ The journal must cover the segment (executing review MEDIUM-1). With W the wall 
 - **U5 (ruling 6 with lead ruling L2, c = 1.0).** Inputs:
   - σ_pair = max(|E_a − E_b|, 2.97 J), where E_a and E_b are the `energy_j` of the two spam/benign replay runs;
   - δ_slow is the planning-turn `delta_slow_c`.
+  - a replay run that admitted no turn (its G0 did not release, so `energy_j` is 0) makes |E_a − E_b| meaningless; U5 is then INCONCLUSIVE with `sigma_pair_valid: false` and the reason (round-4 executing review HIGH-2).
 
   The verdict:
   - PASS if |β_T|₉₀·δ_slow ≤ σ_pair;
@@ -112,6 +113,7 @@ The runtime adds orchestration only; every measurement uses an existing producti
 - **Step tests** (10k fed prefill + 4,096 seeded decode) are one-turn episodes of a deterministic long-prefill task (`StepTask`), gated by a G0 against the soak R with no G1 or holds so the decode is continuous.
 - **Sensor segments** (`idle`, `idle-until-soak`, `g0-release-soak`) run a `ThermalSession` alone in `DIR/<label>/align_thermal.jsonl`; `g0-release-soak` starts powermetrics for the PM state, pre-rolls 65 s for the slope window and calls the production `wait('G0')` with R as its reference.
 - **Read-back** uses `read_episode_bundle`, `thermal_desk.read_bundle_record` (`energy_j` is its `turn_owned_j`), `thermal_desk.native_pm_samples` (the PM clock) and `attribute_episode` (decode energy).
+- **Completeness** (round-4 executing review HIGH-1, Fable cold pass HIGH-1): a step (`step-30b`, `step-d`, `d-4bit`), planning-turn or A-B-A member must be exactly one turn, `succeeded`, with none of `episode.deadman:`, `episode.decode_budget:`, `episode.g0_unreleased:`, `episode.time_guard:`, `episode.context_limit:`, `episode_error:`, `endpoint_error:`, `thermal.start_gate_timeout`, `thermal.gate_timeout:`, `thermal.hold_timeout:`, `thermal.state_unobserved`, `thermal.collector_failed`, `thermal.custody_invalid` or `thermal.status_source_missing` (`r1_runtime.INCOMPLETE_MEMBER_FLAGS`); otherwise the runtime exits 3 and R1 refuses. A malformed or refused tool-call flag does not cut the decode and does not count. The gated D runs and X-G are exempt: their truncation is the duty-bar evidence.
 - **Journals**: `contract.LoadJournal` once a second (the runtime's own PID tree excluded) and `pmset -g batt` every 30 s (`DIR/battery.jsonl`).
 
 Field derivations and their stated approximations:

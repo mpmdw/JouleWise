@@ -79,6 +79,27 @@ MODEL_KINDS = ("step-30b", "step-d", "x-g", "d-4bit", *contract.GATED_D_KINDS,
                *contract.PLANNING_KINDS, *contract.HIGH_POWER_KINDS)
 # Ruling 4(b): the drain rate is reported under D and under the 30B.
 BATTERY_DRAIN_KINDS = ("step-30b", "step-d", *contract.GATED_D_KINDS)
+# Round-4 executing review HIGH-1 (and the round-4 Fable cold pass HIGH-1):
+# a step, planning-turn or A-B-A member must be one complete, ungated-by-fault
+# turn. Any of these episode flags means the measured turn was cut short or
+# its thermal state was not observed, so its energy, step response and
+# t_decline are not the designed measurement. (Gated D runs and X-G are
+# exempt: their truncation is the duty-bar evidence itself.) A malformed or
+# refused tool-call flag does not cut the decode and is not listed.
+INCOMPLETE_MEMBER_FLAGS = ("episode.deadman:", "episode.decode_budget:", "episode.g0_unreleased:",
+                           "episode.time_guard:", "episode.context_limit:", "episode_error:", "endpoint_error:",
+                           "thermal.start_gate_timeout", "thermal.gate_timeout:", "thermal.hold_timeout:",
+                           "thermal.state_unobserved", "thermal.collector_failed", "thermal.custody_invalid",
+                           "thermal.status_source_missing")
+
+
+def incomplete_member_reasons(member):
+    """Why ``member`` is not one complete measured turn (empty when it is)."""
+    reasons = [] if member.status == "succeeded" else [f"member_status:{member.status}:{member.failure_reason}"]
+    if len(member.ep.turns) != 1:
+        reasons.append(f"turns:{len(member.ep.turns)}")
+    reasons += sorted({flag for flag in member.ep.flags if flag.startswith(INCOMPLETE_MEMBER_FLAGS)})
+    return reasons
 
 
 class Refused(RuntimeError):
@@ -1029,11 +1050,10 @@ class Segment:
 
     def k_step(self, model_key, *, label, source=None):
         member, reference = self.step_member(model_key, label=label, source=source)
-        if member.status != "succeeded":
-            raise RuntimeFailure(f"{self.kind}: step member {member.status} ({member.failure_reason})")
+        incomplete = incomplete_member_reasons(member)
+        if incomplete:
+            raise RuntimeFailure(f"{self.kind}: step member is not one complete turn: {incomplete}")
         ep = member.ep
-        if not ep.turns:
-            raise RuntimeFailure(f"{self.kind}: step member has no turn")
         turn = ep.turns[0]
         decline_s, decline_status = t_decline(self.backend.pm_samples(member.bundle, ep), turn)
         joules, tokens, flags = decode_energy(ep)
@@ -1144,6 +1164,20 @@ class Segment:
         g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
         if g0 is None:
             raise RuntimeFailure(f"{self.kind}: member has no G0 interval")
+        if g0["outcome"] != "released":
+            # Round-4 executing review HIGH-1: a G0 that timed out has no release
+            # temperature (its "release" row is only the last sample), and the
+            # g0_unreleased stop leaves a member with no turn, so energy_j is 0.
+            # Returning them would put a zero-energy point at a designed
+            # temperature into beta_T (U5). The designed start state was not
+            # reached: fail the segment, as the driver does for an out-of-band
+            # release.
+            raise RuntimeFailure(f"{self.kind}: designed start state not reached: G0 {g0['outcome']} "
+                                 f"(no release; turns {len(member.ep.turns)})")
+        incomplete = incomplete_member_reasons(member)
+        if incomplete:
+            # A deadman- or fault-cut planning turn is a partial energy (HIGH-1).
+            raise RuntimeFailure(f"{self.kind}: planning member is not one complete turn: {incomplete}")
         return {"reference_c": reference["slow_c"], "g0_release_c": g0["release"]["slow_c"],
                 "delta_slow_c": bands["delta_slow_c"], "energy_j": record["turn_owned_j"],
                 "designed_offset_c": offset, "designed_release_c": target, "g0_outcome": g0["outcome"],

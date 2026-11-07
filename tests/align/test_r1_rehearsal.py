@@ -408,6 +408,18 @@ class R1Tests(unittest.TestCase):
         self.assertEqual((u5["sigma_pair_j"], u5["verdict"]), (2.97, "inconclusive"))
         temperature.update(beta_T_j_per_c=2.0, abs_beta_T_90_j_per_c=3.5)
         self.assertEqual(r1.u5_verdict(temperature, gated)["verdict"], "fail")
+        # Round-4 executing review HIGH-2: a replay run with an unreleased G0
+        # has no turn and energy_j 0; |E_a - E_b| is then a whole episode, which
+        # would make sigma_pair huge and U5 a false PASS.
+        temperature.update(beta_T_j_per_c=1.0, abs_beta_T_90_j_per_c=2.5)
+        empty = {r1.REPLAY_PAIR[0]: {"energy_j": 0, "admitted_turns": 0},
+                 r1.REPLAY_PAIR[1]: {"energy_j": 9000.0, "admitted_turns": 12}}
+        u5 = r1.u5_verdict(temperature, empty)
+        self.assertEqual(u5["verdict"], "inconclusive")
+        self.assertFalse(u5["sigma_pair_valid"])
+        self.assertIn(r1.REPLAY_PAIR[0], u5["sigma_pair_invalid_reason"])
+        both = {name: {"energy_j": 1000.0, "admitted_turns": 3} for name in r1.REPLAY_PAIR}
+        self.assertTrue(r1.u5_verdict(temperature, both)["sigma_pair_valid"])
         with tempfile.TemporaryDirectory() as td:
             with patch.object(r1, "_run", FakeWorld()):
                 self.assertEqual(r1.run(self.args(td)), 0)
