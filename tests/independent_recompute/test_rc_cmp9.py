@@ -319,10 +319,11 @@ class TableTests(GateCase):
             counts[entry["kind"]] = counts.get(entry["kind"], 0) + 1
         # RC-CMP-10: the history lines per window-index attempt (attempt_history, g10) and re-harvest account per
         # pack; the fill's finalized manifest.
+        # 2026-11-07 (D6): one conditional neg8_allowance/survivor_terms check per pack (the + 1 per window).
         self.assertEqual(counts, {
             "history_line": 3 * 3, "fill_identity": 1,
             "fill_document": 1, "fill_campaign": 2, "verdicts_document": 1, "kept_units_record": 3,
-            "disclosure_document": 1, "disclosure_window": 3, "window_line": 3 * (21 + 2), "block_line": 3 + 2,
+            "disclosure_document": 1, "disclosure_window": 3, "window_line": 3 * (21 + 2 + 1), "block_line": 3 + 2,
             "fixed_sentence": 13, "sensitivity_record": 1, "sensitivity_bmax": 1, "sensitivity_window": 3,
             "sensitivity_reported": 2 + 4 * 2, "projection_cell": 6, "cell_line": 4 * 5, "sensitivity_floor": 4,
             "aggregate_cell": 4, "ratio": 12, "dominance_branch": 1, "extraction_cell": 12, "floor_line": 12 + 8,

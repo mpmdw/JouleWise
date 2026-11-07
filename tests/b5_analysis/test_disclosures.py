@@ -377,9 +377,13 @@ class PartBTests(unittest.TestCase):
     def test_T8_T20_B8_meter_all_members(self):
         h=Harness((6,)); rhos=[.78,.80,.81,.79,.82,.80,.77,.81,.80,.83]
         members={h.rows[i]["member"]["bundle_id"]:{"rho":rho,"rail_delta_J":rho*600,
-            "machine":{"delta_J":600,"battery_available":True}} for i,rho in enumerate(rhos)}
+            "machine":{"delta_J":600,"battery_term_available":True}} for i,rho in enumerate(rhos)}
         h.archives["alpha"].withheld["withheld/meter.json"]=d.canonical_json_bytes({"members":members})
         text=h.text(); self.assertIn("median 0.8000; range 0.7700 to 0.8300; IQR 0.7925 to 0.8100",text)
+        # 2026-11-07 release trace: the record's machine object names the flag battery_term_available
+        # (km003c_parse.delta_machine_energy); the member line copies it, never a null from another key.
+        lines=items(h.produce()["window_lines"],"alpha","machine_member")
+        self.assertEqual(len(lines),len(rhos)); self.assertTrue(all(r["battery_term_available"] is True for r in lines))
         self.assertIn("plausible spread 0.0750; consistent",text)
         self.assertIn("removed by the exclusion function",text)
         removed=h.rows[5]["member"]["bundle_id"]

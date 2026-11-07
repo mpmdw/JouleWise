@@ -927,7 +927,8 @@ def expected_checks(registry):
              ("disclosure", ("window_lines", pack), ())], [(("windows", PACK), ())])
         for word in WINDOW_LINES:
             line = {"below_screen_bound": (("b_op_s",), ("below",)), "neg8_screen": (("decision",),),
-                    "neg8_allowance": (("source",),) + tuple(("values_j", NEG8_TERM + term) for term in NEG8_TERMS),
+                    "neg8_allowance": (("source",),) + tuple(("values_j", NEG8_TERM + term) for term in NEG8_TERMS
+                                                             if term not in NEG8_SURVIVOR_TERMS),
                     "reference_counts": nested("counts", ("start", "midpoint", "end"))
                     + nested("planned", ("start", "midpoint", "end")),
                     "corpus_counts": (("collected",), ("in_window",), ("deciding",), ("desk_cap",))
@@ -942,6 +943,13 @@ def expected_checks(registry):
             add("window_line", f"disclosure/window_lines/{pack}/{word}",
                 [("disclosure", ("window_lines", pack, {"line": word}), keys)],
                 [own.get(word, (("windows", PACK), ()))])
+            if word == "neg8_allowance":
+                # D6: the survivor-protocol bound terms, expected when either side says the record carries them.
+                add("window_line", f"disclosure/window_lines/{pack}/neg8_allowance/survivor_terms",
+                    [("disclosure", ("window_lines", pack, {"line": word}),
+                      tuple(("values_j", NEG8_TERM + term) for term in NEG8_SURVIVOR_TERMS))],
+                    [(("windows", PACK, "neg8"), tuple((term,) for term in NEG8_SURVIVOR_TERMS))],
+                    condition=("neg8_survivor_terms", pack))
         for tripwire in TRIPWIRES:
             add("window_line", f"disclosure/window_lines/{pack}/tripwire/{tripwire}",
                 [("disclosure", ("window_lines", pack, {"line": "tripwire", "tripwire": tripwire}), (("result",),))],
@@ -1203,6 +1211,12 @@ NEG8_TERM = "bracket.claim_families.gross_energy."
 NEG8_TERMS = ("bound_envelope_j", "bound_prediction_j", "start.mean_j", "midpoint.mean_j", "end.mean_j",
               "trajectory_excursion_max_j", "drift_allowance_j")
 NEG8_OWN = ("bound_envelope_j", "bound_prediction_j", "start_mean_j", "midpoint_j", "end_mean_j", "spread_j", "allowance_j")
+# 2026-11-07 release trace (D6): the bracket writer records these two bound terms only under the survivor endpoint
+# protocol (whole_window.py: survivor_fields, NEG8_SURVIVOR_PROTOCOL); the planned and legacy protocols
+# (replicated_endpoints_with_midpoint, legacy_single_member_endpoints) keep their historical bytes without them, so
+# the disclosure, which copies the record's finite *_j fields, prints them only when the record carries them.
+NEG8_SURVIVOR_TERMS = ("bound_envelope_j", "bound_prediction_j")
+NEG8_SURVIVOR_PROTOCOL = "replicated_endpoints"
 # The projection cell keys each compared reported-cell value is read from (paper-reported-energy kernel rows).
 PROJECTION_KEYS = (("mean_j",), ("lower_j",), ("upper_j",), ("interval", "h_j"), ("interval", "B_j"), ("interval", "s_r"),
                    ("interval", "s_b"), ("interval", "variance"), ("interval", "n_r"), ("interval", "n_b"),
@@ -1382,6 +1396,17 @@ def condition_holds(condition, docs, ours, registry):
         return any(isinstance(line, dict) and line.get("line") == word and line.get("pack") == pack
                    and (plan_id is None or line.get("plan_id") == plan_id)
                    for line in listed(get(docs["disclosure"], "block_lines")))
+    if kind == "neg8_survivor_terms":
+        # D6 (2026-11-07): L9 prints a survivor term (the record carries it), or the recompute reads the record's
+        # gross-family endpoint protocol as the survivor protocol. A recompute that names no protocol (absent or
+        # null: it did not read the record) keeps the terms expected (the safe side).
+        pack = condition[1]
+        line = next((r for r in listed(get(docs["disclosure"], "window_lines", pack)) if isinstance(r, dict)
+                     and r.get("line") == "neg8_allowance"), {})
+        values = line.get("values_j") if isinstance(line.get("values_j"), dict) else {}
+        protocol = get(ours, "windows", PACKS[pack], "neg8", "recorded_endpoint_protocol", default=MISSING)
+        return (any(NEG8_TERM + term in values for term in NEG8_SURVIVOR_TERMS)
+                or protocol is MISSING or protocol is None or protocol == NEG8_SURVIVOR_PROTOCOL)
     if kind == "ratio_computable":
         line = next((r for r in listed(get(docs["disclosure"], "contrasts")) if isinstance(r, dict)
                      and r.get("line") == "magnitude_ratio" and r.get("contrast_id") == condition[1]), {})
@@ -3272,10 +3297,14 @@ def compare_disclosures(c, custody, ours):
                 c.exact("outcome_word", key + "/source", row.get("source"), neg8.get("source"))
                 values = row.get("values_j") or {}
                 base = "bracket.claim_families.gross_energy."
+                survivor = holds(custody, ours, ("neg8_survivor_terms", pack))
                 for field, other in (("bound_envelope_j", "bound_envelope_j"), ("bound_prediction_j", "bound_prediction_j"),
                                      ("start.mean_j", "start_mean_j"), ("midpoint.mean_j", "midpoint_j"),
                                      ("end.mean_j", "end_mean_j"), ("trajectory_excursion_max_j", "spread_j"),
                                      ("drift_allowance_j", "allowance_j")):
+                    if field in NEG8_SURVIVOR_TERMS and not survivor:
+                        # D6: a planned/legacy-protocol record has no survivor term; neither side prints one.
+                        continue
                     c.numeric("floor_j", key + "/" + field, values.get(base + field), neg8.get(other))
             elif name == "reference_counts":
                 for slot, other in (("start", "n_start"), ("midpoint", "n_mid"), ("end", "n_end")):
