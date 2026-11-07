@@ -1042,7 +1042,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
-190. **Laptop lead (interactive session 359dce51, Opus 5.5, through a delegate), 2026-11-06 about 17:45 PST: kit delivery. The hard repo prune (PR #690) is merged into `main` at this PR's merge (the sha follows in a one-line commit).** This item schedules nothing.
+190. **Laptop lead (interactive session 359dce51, Opus 5.5, through a delegate), 2026-11-06 about 17:45 PST: kit delivery. The hard repo prune (PR #690) is merged into `main` at `959628ccc`.** This item schedules nothing.
 - **What it did:** removed 8,111 stale files from `main` (13,031 files / 376 MB to 4,924 / about 186 MB; 8,109 in the reviewed prune plus the two `normalized_compare.py` copies below): process traces, legacy docs, old run reports and reviews, stale campaign configs, and dead or superseded code with its tests. Nothing was rewritten out of history. Run report: `docs/run_reports/2026-11-06-repo-prune.md`.
 - **Getting a file back:** tag `archive/pre-prune-2026-11-06` (and the branch of the same name) at `eeea6d5cf`, the last `main` before the prune. `docs/ARCHIVE.md` gives the commands.
 - **Tool map:** `CANONICAL.md` names the one current tool or document per job. Check it before building anything.
