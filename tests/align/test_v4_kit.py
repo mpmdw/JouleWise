@@ -397,13 +397,19 @@ def ready_inputs(i_d=300.0, tail=20.0):
     return inputs, r1_record(i_d, tail)
 
 
+GATED_PHASES = {'G0': 120.0, 'G1': 150.0, 'H': 90.0, 'decode': 700.0, 'prefill': 120.0, 'tool': 6.0}
+
+
 def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
     """The fields require_ready binds from an R1 driver r1_slots record."""
     return {'schema': kit.R1_SLOTS_SCHEMA, 'source': source, 'ac_powermode': ac_powermode,
-            'max_r1_tail_s': tail, 'slots': {'I_D': i_d, 'T_dead': 1451.0},
+            'max_r1_tail_s': tail,
+            'slots': {'I_D': i_d, 'T_dead': 1451.0, 'B_D': 8192, 'N_chunk': 512, 'S5': 1.5, 'S6': 1.5, 'S7': 120.0},
             'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
             'u5': {'verdict': 'pass', 'c': 1.0},
-            'deadman_budget': [{'phases_s': {'tail': tail}}, {'phases_s': {'tail': tail / 2}}],
+            'deadman_budget': [{'phases_s': dict(GATED_PHASES, tail=tail)},
+                               {'phases_s': dict(GATED_PHASES, tail=tail / 2)}],
+            'budget_fit_inputs': {'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 4096},
             'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
             'duty_bar': {'pass': True}}
 
@@ -411,12 +417,22 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
 class FakeArmHost:
     """pmset, the narrow restore rule, mount and diskutil; nothing real runs."""
 
-    def __init__(self, mode, ssd=False):
-        self.mode, self.ssd = mode, ssd
+    def __init__(self, mode, ssd=False, *, marker=None, fail_high=False):
+        self.mode, self.ssd, self.marker, self.fail_high = mode, ssd, marker, fail_high
+        self.calls = []
 
     def __call__(self, argv):
         import plistlib
         argv = tuple(argv)
+        self.calls.append(argv)
+        if argv == ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2'):
+            # The marker must already exist when High Power is set (R5-6).
+            if self.marker is not None and not self.marker.exists():
+                raise AssertionError('High Power set before the marker was written')
+            if self.fail_high:
+                return subprocess.CompletedProcess(argv, 1, '', 'sudo: a password is required')
+            self.mode = 2
+            return subprocess.CompletedProcess(argv, 0, '', '')
         if argv == ('/usr/bin/pmset', '-g', 'custom'):
             out = f'Battery Power:\n powermode 0\nAC Power:\n lowpowermode 0\n powermode {self.mode}\n'
             return subprocess.CompletedProcess(argv, 0, out, '')
@@ -468,6 +484,10 @@ class R1EvidenceBindingTests(unittest.TestCase):
         slots['duty_bar']['lead_fallback'] = {'step': 5, 'authority': 'x'}
         with self.assertRaisesRegex(ValueError, 'no lead fallback step'):
             kit.require_ready(inputs, slots)
+        # Fable cold pass round 4 LOW-1: step 4 ("D screen-only") never admits W1.
+        slots['duty_bar']['lead_fallback'] = {'step': 4, 'authority': 'LEAD-RULINGS-2 F4'}
+        with self.assertRaisesRegex(ValueError, 'no lead fallback step'):
+            kit.require_ready(inputs, slots)
         slots['duty_bar']['lead_fallback'] = {'step': 1, 'authority': 'LEAD-RULINGS-2 F1'}
         kit.require_ready(inputs, slots)
 
@@ -498,6 +518,64 @@ class R1EvidenceBindingTests(unittest.TestCase):
         self.assertEqual([m['run_id'] for m in verdict['powermode_mismatches']], ['a'])
         with self.assertRaisesRegex(ValueError, 'freezes no series value'):
             kit.arm_powermode_check({'runtime_requirements': {'ac_powermode': None}}, None)
+
+
+class R1BudgetBindingTests(unittest.TestCase):
+    """Lead ruling R5-4: B_D, the thermal policy and ruling 1(f) bind to r1_slots."""
+
+    def test_b_d_may_only_be_lowered_from_the_step_d_budget(self):
+        inputs, slots = ready_inputs()
+        inputs['R1']['B_D'] = 6144
+        kit.require_ready(inputs, slots)
+        inputs['R1']['B_D'] = 9216
+        with self.assertRaisesRegex(ValueError, 'exceeds r1_slots.slots.B_D 8192'):
+            kit.require_ready(inputs, slots)
+
+    def test_r1_slots_without_an_admissible_step_d_budget_refuse(self):
+        inputs, slots = ready_inputs()
+        for bad in (0, None, 512, 8193, True):
+            slots['slots']['B_D'] = bad
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'slots.B_D must be the step-d'):
+                kit.require_ready(inputs, slots)
+
+    def test_thermal_policy_binds_n_chunk_s6_and_s7(self):
+        for name, value in (('chunk_tokens', 768), ('delta_slow_c', 2.0), ('turn_cap_s', 90)):
+            inputs, slots = ready_inputs()
+            inputs['R1']['thermal_policy'][name] = value
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, f'thermal_policy.{name}'):
+                kit.require_ready(inputs, slots)
+
+    def test_s6_tuning_must_be_recorded_when_s6_leaves_s5(self):
+        inputs, slots = ready_inputs()
+        slots['slots']['S6'] = 2.0
+        inputs['R1']['thermal_policy']['delta_slow_c'] = 2.0
+        with self.assertRaisesRegex(ValueError, 'S6 differs from S5'):
+            kit.require_ready(inputs, slots)
+        slots['s6_tuning'] = {'authority': 'lead, FD 2.6 S6 tuning', 'from_c': 1.5, 'to_c': 2.0}
+        kit.require_ready(inputs, slots)
+
+    def test_ruling_1f_refuses_a_budget_whose_worst_case_misses_t_dead(self):
+        inputs, slots = ready_inputs()             # worst = 120 + 240 + 126 + (8192 + 4096)/20 = 1100.4 s
+        fit = kit.ruling_1f_fit(slots, 8192, inputs['R1']['T_dead'])
+        self.assertAlmostEqual(fit['worst_s'], 120 + 240 + 126 + 12288 / 20)
+        self.assertTrue(fit['fits'])
+        slots['budget_fit_inputs']['r_decode_tok_per_s'] = 11.0   # FD:145's ~370 s per 4,096 tokens
+        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit.*largest fitting B_D is None'):
+            kit.require_ready(inputs, slots)
+        slots['budget_fit_inputs']['r_decode_tok_per_s'] = 15.0   # 486 + (B_D + 4096)/15 <= 1277.0
+        self.assertEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 7168)
+        with self.assertRaisesRegex(ValueError, 'largest fitting B_D is 7168'):
+            kit.require_ready(inputs, slots)
+        inputs['R1']['B_D'] = 7168
+        kit.require_ready(inputs, slots)
+
+    def test_ruling_1f_needs_the_measured_inputs(self):
+        for change in (dict(budget_fit_inputs=None), dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0}),
+                       dict(deadman_budget=[{'phases_s': {'tail': 20.0}}])):
+            inputs, slots = ready_inputs()
+            slots.update(change)
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, r'ruling 1\(f\)'):
+                kit.require_ready(inputs, slots)
 
 
 class L1Tests(unittest.TestCase):
@@ -602,19 +680,23 @@ class SessionParameterTests(unittest.TestCase):
     def test_v4_install_reads_measurement_r1_slots_and_refuses_powermode_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             measurement, session_root = self._arm_fixture(tmp)
-            host = FakeArmHost(mode=0)
+            # The series froze 2 (R5-6: install sets it); a host that cannot be
+            # set to High Power stays at 0 and the arm refuses the mismatch.
+            host = FakeArmHost(mode=0, fail_high=True)
             seen = []
             with patch.object(kit, 'read_inputs', return_value={}), \
                     patch.object(kit, 'require_w1_ready', side_effect=seen.append), \
                     patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
                     patch.object(pilot, 'install') as install:
-                with self.assertRaisesRegex(ValueError, 'AC powermode 0 != expected 2'):
+                with self.assertRaisesRegex(ValueError, 'set High Power failed.*AC powermode 0 != expected 2'):
                     session.install(session_root, runner=host, volume_runner=host)
                 install.assert_not_called()
                 self.assertEqual(seen, [str(measurement)])
-                host.mode = 2
+                self.assertEqual(host.mode, 0)
+                host.fail_high = False
                 session.install(session_root, runner=host, volume_runner=host)
                 install.assert_called_once()
+                self.assertEqual(host.mode, 2)
 
     def test_v4_arm_records_observed_powermode_pmset_text_and_volume_census(self):
         # Cold pass MEDIUM-5 (ruling 7): every arm records the observed value.
@@ -714,8 +796,29 @@ class WP11IdentityTests(unittest.TestCase):
 
     def test_committed_wp11_is_not_pending_and_binds_the_folded_pins(self):
         self.assertFalse([p for p in kit.pending_inputs(kit.read_inputs(ROOT)) if p.startswith('WP11.')])
-        self.assertEqual(kit.validate_d_identity(self.wp11, self.pins), self.FOLDED)
+        raw = (ROOT / kit.D_PINS).read_bytes()
+        self.assertEqual(kit.validate_d_identity(self.wp11, self.pins, pins_raw=raw), self.FOLDED)
         self.assertEqual(self.wp11['identity_unit']['model_artifact_sha256'], self.FOLDED)
+
+    def test_wp11_receipt_pins_the_actual_hf_pin_document_bytes(self):
+        # Sol w1rev (R5-9): the hf_pins receipt is bound to the pin file's bytes.
+        raw = (ROOT / kit.D_PINS).read_bytes()
+        bad = deepcopy(self.wp11)
+        bad['local_file_verification']['hf_pins']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'committed pins bytes'):
+            kit.validate_d_identity(bad, self.pins, pins_raw=raw)
+        with self.assertRaisesRegex(ValueError, 'committed pins bytes'):
+            kit.validate_d_identity(self.wp11, self.pins, pins_raw=raw + b' ')
+        bad['local_file_verification']['hf_pins'] = {'path': 'elsewhere.json'}
+        with self.assertRaisesRegex(ValueError, 'identify the D HF pins document'):
+            kit.validate_d_identity(bad, self.pins)
+
+    def test_w1_readiness_reads_the_pin_bytes(self):
+        with patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
+                patch.object(kit, 'validate_wp18_fixtures'), \
+                patch.object(kit, 'validate_d_identity', wraps=kit.validate_d_identity) as validate:
+            kit.require_w1_ready(ROOT)
+        self.assertEqual(validate.call_args.kwargs['pins_raw'], (ROOT / kit.D_PINS).read_bytes())
 
     def test_kit_identity_pins_load_with_a_64_hex_d_sha(self):
         files = kit.build_files(ROOT)
@@ -872,6 +975,136 @@ class W1SizingTests(unittest.TestCase):
                 kit.require_sizing(tmp)
             (Path(tmp) / kit.SIZING).write_bytes(self.files[kit.SIZING])
             kit.require_sizing(tmp)
+            # Sol w1rev (R5-9): sizing_b5.json is bound to the W1 plan bytes it came from.
+            (Path(tmp) / kit.W1_PLAN).write_bytes(self.raw + b' ')
+            with self.assertRaisesRegex(ValueError, 'is stale'):
+                kit.require_sizing(tmp)
+            (Path(tmp) / kit.SIZING).write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'W1-plan provenance'):
+                kit.require_sizing(tmp)
+
+
+class WP18FixtureBindingTests(unittest.TestCase):
+    """Lead ruling R5-8: the WP18 fixtures are a hard W1 prerequisite."""
+
+    def write(self, root, inputs):
+        from scripts import align_v4_wp18_fixtures as tool
+        for name, (run_id, _, _, _) in tool.ARMS.items():
+            fixture = {'schema': kit.WP18_FIXTURE_SCHEMA, 'arm': name, 'run_id': run_id,
+                       'max_turns': inputs['WP18'][name]['max_turns'],
+                       'turns': [{'turn': i} for i in range(inputs['WP18'][name]['max_turns'])]}
+            raw = (json.dumps(fixture, sort_keys=True) + '\n').encode()
+            path = root / kit.WP18_FIXTURES[name]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+            inputs['WP18'][name]['token_fixture_sha256'] = hashlib.sha256(raw).hexdigest()
+
+    def test_filled_digests_must_bind_committed_fixture_bytes(self):
+        inputs, _ = ready_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(ValueError, 'WP18.X token fixture is missing'):
+                kit.validate_wp18_fixtures(inputs, root)
+            self.write(root, inputs)
+            kit.validate_wp18_fixtures(inputs, root)
+            (root / kit.WP18_FIXTURES['Y']).write_bytes(b'tampered')
+            with self.assertRaisesRegex(ValueError, 'WP18.Y.token_fixture_sha256 does not match'):
+                kit.validate_wp18_fixtures(inputs, root)
+
+    def test_fixture_must_be_the_arm_and_turn_count_inputs_name(self):
+        inputs, _ = ready_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write(root, inputs)
+            inputs['WP18']['X']['max_turns'] += 1
+            with self.assertRaisesRegex(ValueError, 'not the WP18 X fixture'):
+                kit.validate_wp18_fixtures(inputs, root)
+
+    def test_w1_readiness_requires_the_fixtures(self):
+        with patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
+                patch.object(kit, 'read_inputs', return_value=ready_inputs()[0]), \
+                self.assertRaisesRegex(ValueError, 'WP18.X token fixture is missing'):
+            kit.require_w1_ready(ROOT)
+
+
+class W1HighPowerTests(unittest.TestCase):
+    """Lead ruling R5-6: W1 under an adopted High Power, end to end with fake sudo/pmset."""
+
+    def install(self, tmp, ac_powermode, *, gate_status='pass', start_mode=0):
+        measurement = Path(tmp) / 'm'
+        (measurement / kit.KIT).mkdir(parents=True, exist_ok=True)
+        (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
+            {'runtime_requirements': {'ac_powermode': ac_powermode}}))
+        session_root = Path(tmp) / 's'
+        (session_root / 'staging').mkdir(parents=True, exist_ok=True)
+        (session_root / 'session.json').write_text(json.dumps({'measurement_root': str(measurement)}))
+        self.marker = measurement / '.align-r1-high-power'
+        self.host = FakeArmHost(mode=start_mode, marker=self.marker)
+        config = W1DiskGateTests.config(self, tmp)
+        with patch.object(kit, 'require_w1_ready'), patch.object(pilot, 'install') as install:
+            try:
+                session.install(session_root, runner=self.host, volume_runner=self.host, w1_disk_config=config,
+                                disk_gate=lambda c: {'status': gate_status, 'offloads': []})
+            finally:
+                self.called = install.called
+        return session_root
+
+    def test_adopted_high_power_is_set_with_the_marker_and_the_arm_admits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.install(tmp, 2)
+            self.assertTrue(self.called)
+            self.assertEqual(self.host.mode, 2)
+            self.assertTrue(self.marker.exists())        # owed to the night's close
+            record = json.loads((root / 'staging/v4-arm-001.json').read_text())
+            self.assertTrue(record['admitted'])
+            self.assertEqual(record['ac_powermode']['observed'], 2)
+            self.assertTrue(record['high_power_enter']['ok'])
+            self.assertNotIn(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '0'), self.host.calls)
+
+    def test_a_refused_high_power_arm_restores_automatic_and_removes_the_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, 'W1 disk gate refused'):
+                root = self.install(tmp, 2, gate_status='fail')
+            self.assertFalse(self.called)
+            self.assertEqual(self.host.mode, 0)
+            self.assertFalse(self.marker.exists())
+            restore = json.loads((Path(tmp) / 's/staging/v4-arm-001.restore.json').read_text())
+            self.assertTrue(restore['ok'])
+
+    def test_automatic_series_never_sets_high_power(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.install(tmp, 0)
+            self.assertTrue(self.called)
+            self.assertNotIn(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2'), self.host.calls)
+            self.assertFalse(self.marker.exists())
+
+    def test_admission_keeps_the_marker_only_when_the_plan_declares_two(self):
+        from joulewise.align.apple import powermode
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / '.align-r1-high-power'
+            marker.write_text('x')
+            host = FakeArmHost(mode=2)
+            admitted = powermode.admit_ac_powermode(2, marker=marker, runner=host)
+            self.assertTrue(admitted['admitted'])
+            self.assertTrue(marker.exists())
+            self.assertEqual(host.mode, 2)
+            refused = powermode.admit_ac_powermode(0, marker=None, runner=host)
+            self.assertFalse(refused['admitted'])        # 2 is never admitted under a plan of 0
+            restored = powermode.admit_ac_powermode(0, marker=marker, runner=host)
+            self.assertTrue(restored['admitted'])
+            self.assertFalse(marker.exists())
+            self.assertEqual(host.mode, 0)
+            self.assertFalse(powermode.admit_ac_powermode(2, marker=None, runner=host)['admitted'])
+
+    def test_prepare_declares_the_series_powermode_in_the_night_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            measurement = Path(tmp)
+            (measurement / kit.KIT).mkdir(parents=True)
+            (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(
+                {'runtime_requirements': {'ac_powermode': 2}}))
+            with patch.object(kit, 'generate'), patch.object(pilot.h, 'prepare', return_value='ok') as prepare:
+                session.prepare(measurement, Path(tmp) / 'session')
+            self.assertEqual(prepare.call_args.kwargs['ac_powermode'], 2)
 
 
 class W1DiskGateTests(unittest.TestCase):
@@ -896,6 +1129,7 @@ class W1DiskGateTests(unittest.TestCase):
     def config(self, tmp):
         path = Path(tmp) / 'r0.json'
         config = json.loads((ROOT / 'configs/align/v4/r0_desk.json').read_text())
+        config['disk_path'] = str(Path(tmp).resolve())   # Sol w1rev: never stat the home directory
         config['offloads'] = [{'label': 'pilot10', 'inventory': '/x/pilot10.json', 'destination': '/x/pilot10'}]
         path.write_text(json.dumps(config))
         return path

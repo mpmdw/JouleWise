@@ -296,7 +296,7 @@ def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
 
 def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time,
             statvfs=os.statvfs, capacity=important_capacity, kit=KIT, pack_id=PACK_ID,
-            session_prefix='bytes-h-'):
+            session_prefix='bytes-h-', ac_powermode=None):
     measurement, session = Path(measurement_root).resolve(), Path(session_root).resolve()
     reg = measurement / kit / 'registration'
     sized = registration.load_sizing(reg)['packs'][pack_id]
@@ -356,6 +356,10 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
                   bytes_per_member=per_member)
     inputs['thresholds']['disk']['headroom_bytes'] = native_budget['headroom_bytes']
     inputs['t0_epoch_s'] = t0
+    if ac_powermode is not None:
+        # The night plan declares the AC powermode run_night admits (ALIGN v4:
+        # the R1-frozen series value, lead ruling R5-6).
+        inputs['ac_powermode'] = ac_powermode
     record = None
     try:
         record = plan.write_window_plan(inputs, now=now)

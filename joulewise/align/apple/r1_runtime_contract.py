@@ -30,7 +30,9 @@ KIND_FIELDS = {
     "calibration-pre": (),
     "calibration-post": (),
     "idle": (),
-    "idle_soak": ("sensor_series_c",),
+    # sensor_series_t_s: one read time per value, so the soak SD uses the last
+    # 1,200 s and not the last 1,200 valid samples (cold pass round 4 LOW-2).
+    "idle_soak": ("sensor_series_c", "sensor_series_t_s"),
     # Ruling 4(b): the battery drain rate (%/h) under the 30B and under D.
     "step-30b": ("battery_drain_pct_per_h",),
     "step-d": ("slots", "e_D_j_per_token", "battery_drain_pct_per_h"),

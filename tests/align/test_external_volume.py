@@ -130,6 +130,32 @@ class CensusTests(unittest.TestCase):
         result = ev.census(FakeRun(BASE_MOUNT, infos))
         self.assertTrue(result["errors"])
 
+    def test_one_transient_diskutil_failure_is_retried(self):
+        # Executing review round 4 LOW-3: one failed read must not refuse R1.
+        class Flaky(FakeRun):
+            failed = set()
+
+            def __call__(self, argv):
+                argv = list(argv)
+                if argv[:3] == [ev.DISKUTIL, "info", "-plist"] and argv[3] not in self.failed:
+                    self.failed.add(argv[3])
+                    self.calls.append(argv)
+                    return subprocess.CompletedProcess(argv, 1, "", "transient")
+                return super().__call__(argv)
+        run = Flaky(BASE_MOUNT, INTERNAL_INFOS)
+        result = ev.census(run)
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["external"], [])
+        retried = [r for r in result["mounts"] if r.get("diskutil_failures")]
+        self.assertTrue(retried)
+        self.assertTrue(all(r["class"] == "internal" for r in retried))
+        # Two failures on the same mount still refuse.
+        infos = dict(INTERNAL_INFOS)
+        del infos["/dev/disk3s6"]
+        run = FakeRun(BASE_MOUNT, infos)
+        self.assertTrue(ev.census(run)["errors"])
+        self.assertEqual(sum(1 for c in run.calls if c[-1] == "/dev/disk3s6"), 2)
+
 
 class ArmCheckTests(unittest.TestCase):
     def test_off_refuses_any_external_volume_like_today(self):

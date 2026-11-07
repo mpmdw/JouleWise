@@ -83,7 +83,9 @@ _INPUT_KEYS = {
     "identity_epoch_json", "t1_bindings_json", "t0_epoch_s", "programmed_span_s",
     "T_stream_max_s", "bytes_per_member", "thresholds", "g10", "registration",
 }
-_OPTIONAL_INPUT_KEYS = {"ledger_path", "capture_screen", "spare_retries"}
+# ac_powermode: the AC powermode run_night must admit (0 or 2; absent = 0).
+# ALIGN v4 W1 declares 2 when R1 adopted High Power (lead ruling R5-6).
+_OPTIONAL_INPUT_KEYS = {"ledger_path", "capture_screen", "spare_retries", "ac_powermode"}
 # The 25-key window environment allowlist (the exact key set of the T-0
 # window.env contract, copied so this module stays off the retired arm path).
 WINDOW_ENV_KEYS = (
@@ -542,6 +544,9 @@ def _validate_inputs(inputs: Mapping[str, Any]) -> None:
     _require(type(inputs["g10"]) is bool, "g10 must be a boolean")
     if "spare_retries" in inputs:
         _require(type(inputs["spare_retries"]) is bool, "spare_retries must be a boolean")
+    if "ac_powermode" in inputs:
+        _require(type(inputs["ac_powermode"]) is int and inputs["ac_powermode"] in (0, 2),
+                 "ac_powermode must be integer 0 or 2")
     if "capture_screen" in inputs:
         screen = inputs["capture_screen"]
         _require(isinstance(screen, Mapping) and set(screen) == {
@@ -966,6 +971,8 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "registration_path": registration["path"] if registration else None,
         "hazard_window": hazard_window,
     }
+    if "ac_powermode" in inputs:
+        plan_value["ac_powermode"] = inputs["ac_powermode"]
     try:
         night_gate.NightPlan.from_mapping(plan_value)
     except night_gate.PlanError as exc:

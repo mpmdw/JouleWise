@@ -825,6 +825,40 @@ runpy.run_path(script, run_name='__main__')
         exit_code, calls = self._run_night()
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
 
+    def test_declared_high_power_keeps_the_marker_and_restores_automatic_at_close(self) -> None:
+        # Lead ruling R5-6: a plan that declares 2 admits the host the W1
+        # session set to 2 (marker present, no restore at admission) and the
+        # night's close restores Automatic and removes the marker.
+        mapping = json.loads(self.plan_path.read_text())
+        mapping["ac_powermode"] = 2
+        self.plan_path.write_text(json.dumps(mapping))
+        host = self._power_host(2)
+        marker = self.root / ".align-r1-high-power"
+        marker.write_text("high-power restoration required (ALIGN v4 W1)\n")
+        exit_code, calls = self._run_night()
+        self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+        self.assertEqual(host.calls[0], "read")
+        self.assertEqual(host.calls.index("restore"), len(host.calls) - 2)   # at close, then the read-back
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+        self.assertIn("ac powermode close", (self.custody / "night.log").read_text())
+
+    def test_failed_close_restore_keeps_the_marker_for_the_next_night(self) -> None:
+        mapping = json.loads(self.plan_path.read_text())
+        mapping["ac_powermode"] = 2
+        self.plan_path.write_text(json.dumps(mapping))
+        host = self._power_host(2, restore_code=1)
+        marker = self.root / ".align-r1-high-power"
+        marker.write_text("x\n")
+        self._run_night()
+        self.assertEqual(host.mode, 2)
+        self.assertTrue(marker.exists())
+
+    def test_automatic_plan_never_runs_the_close_restore(self) -> None:
+        host = self._power_host(0)
+        self._run_night()
+        self.assertNotIn("restore", host.calls)
+
     def test_plan_declared_powermode_must_be_zero_or_two(self) -> None:
         mapping = json.loads(self.plan_path.read_text())
         for bad in (1, "0", None, True):

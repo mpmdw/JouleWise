@@ -2,8 +2,13 @@
 """Guarded v4 session skeleton; full thermal/desk integration remains WP15/21.
 
 prepare refuses until the kit is W1-ready (inputs, D identity, R1-derived
-sizing_b5.json). install additionally requires the AC powermode to equal the
-frozen series value and the R0 host's w1_disk_gate to pass.
+sizing_b5.json, WP18 fixtures) and writes the frozen series AC powermode into
+the night plan. install additionally requires the AC powermode to equal the
+frozen series value and the R0 host's w1_disk_gate to pass. Under an adopted
+High Power (r1_slots ac_powermode 2, lead ruling R5-6) install sets
+powermode 2 through the narrow sudo rule after writing the High Power marker,
+and restores Automatic if the arm then refuses; run_night admits 2 only for a
+plan that declares 2 and restores Automatic when that night closes.
 """
 import json
 from pathlib import Path
@@ -16,8 +21,20 @@ if str(ROOT) not in sys.path:
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
 
 
+def series_ac_powermode(measurement_root):
+    """The R1-frozen series AC powermode the generated collection plan carries."""
+    plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    value = (plan.get('runtime_requirements') or {}).get('ac_powermode')
+    if type(value) is not int or value not in (0, 2):
+        raise ValueError(f'v4 collection plan freezes no series AC powermode (got {value!r})')
+    return value
+
+
 def prepare(measurement_root, session_root, **kwargs):
     kit.generate(measurement_root, check=True, source_root=measurement_root)
+    # Lead ruling R5-6: the night plan declares the frozen series powermode, so
+    # run_night admits a High Power host only for a W1 that adopted it.
+    kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root))
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
@@ -125,7 +142,19 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     # checkout's r1_slots, and arm refuses on a mismatch with the host.
     kit.require_w1_ready(measurement_root)
     plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
+    from joulewise.align.apple import powermode
+    high = None
+    if (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2:
+        # Lead ruling R5-6: W1 under an adopted High Power. The marker comes
+        # first (powermode.enter_high_power), so any later crash leaves the
+        # restore owed to the next night that expects Automatic.
+        high = powermode.enter_high_power(Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER, runner=runner)
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner)
+    if high is not None:
+        record['high_power_enter'] = high
+        if not high['ok']:
+            record['admitted'] = False
+            record['reasons'] = ['high_power_enter: ' + str(high['reason'])] + record['reasons']
     record['epoch_s'] = (now or time.time)()
     # Every arm records what it saw, admitted or not (ruling 7: "every arm and
     # every bundle records it"), before the shared installer can run.
@@ -140,12 +169,20 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                                                     'ac_powermode': record['ac_powermode'].get('observed'),
                                                     'reasons': record['reasons']})
     pilot.h.write(session / 'session.json', state)
-    if not record['admitted']:
-        raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
-    kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
-    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
-    pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
-    return pilot.install(session_root, **kwargs)
+    try:
+        if not record['admitted']:
+            raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
+        kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
+        receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
+        pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
+        return pilot.install(session_root, **kwargs)
+    except BaseException:
+        if high is not None:
+            # The arm did not hand off: leave the host Automatic (R5-6).
+            restore = powermode.restore_automatic(Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER,
+                                                  runner=runner)
+            pilot.h.write(session / f'staging/v4-arm-{attempt:03d}.restore.json', restore)
+        raise
 
 
 def main(argv=None):

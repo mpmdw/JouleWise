@@ -188,6 +188,19 @@ class WindowPlanTests(WindowPlanFixture):
         self.assertFalse((self.root / "custody").exists())
         self.assertFalse((self.root / "runs" / leaf["claim_root_leaf"]).exists())
 
+    def test_declared_ac_powermode_is_carried_into_the_night_plan(self):
+        # Lead ruling R5-6: ALIGN v4 W1 under an adopted High Power declares 2.
+        record = self.write(self.inputs(ac_powermode=2))
+        raw = json.loads(Path(record["plan"]["path"]).read_text())
+        self.assertEqual(2, raw["ac_powermode"])
+        self.assertEqual(2, night_gate.NightPlan.from_mapping(raw).ac_powermode)
+
+    def test_declared_ac_powermode_must_be_zero_or_two(self):
+        for bad in (1, True, "2", None):
+            with self.subTest(bad=bad), self.assertRaisesRegex(b5_plan.WindowPlanError, "ac_powermode"):
+                self.write(self.inputs(ac_powermode=bad))
+            self.assertFalse((self.root / "custody").exists())
+
     def test_input_refusals_write_nothing(self):
         cases = {
             "custody not empty": None,
