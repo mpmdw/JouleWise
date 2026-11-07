@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple.sampling import episode_seed, turn_seed
+from joulewise.align.apple import thermal_gates
 from joulewise.b5 import chain
 
 KIT = Path('configs/campaigns/align_v4')
@@ -196,13 +197,16 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     if STEP_D_SEGMENT in inconclusive:
         # LEAD-RULINGS-2 R6-2: recorded by the driver, refused here (fail closed at the kit).
         raise ValueError(f'R1 step-d was INCONCLUSIVE ({inconclusive[STEP_D_SEGMENT]}): no slots, no thermometry '
-                         'bar and no gated runs; W1 cannot be sized from this R1 record')
+                         'bar and no gated runs; W1 cannot be sized from this R1 record; '
+                         'the remedy is an R1 re-run, which is the magistrate\'s call, '
+                         'with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)')
     if inconclusive:
         # A designed start state that was never reached leaves beta_T (U5)
         # without a point; before R6-2 it refused the night, so it still
         # refuses W1 here (Sol critique of round 6).
         raise ValueError('R1 calibration segment(s) INCONCLUSIVE (R6-2): ' + ', '.join(sorted(inconclusive))
-                         + '; the lead must rule before W1')
+                         + '; the remedy is an R1 re-run, which is the magistrate\'s call, '
+                         'with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)')
     slots = r1_slots.get('slots')
     if not isinstance(slots, dict) or not finite(slots.get('I_D')):
         raise ValueError('R1 r1_slots must carry the step-d slots with a finite I_D')
@@ -234,7 +238,23 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
         raise ValueError('inputs.R1.thermal_policy.classification_sha256 must be a 64-hex digest matching '
                          'r1_slots.thermometry.D.classification_sha256')
     sensors = policy.get('sensors') if isinstance(policy, dict) else None
+    aliases = classified.get('alias_groups')
+    seen = set()
+    if not isinstance(aliases, list):
+        raise ValueError('R1 thermometry.D.alias_groups must record the classification aliases '
+                         '(LEAD-RULINGS-2 R7-13); missing aliases cannot verify independence')
+    for group in aliases:
+        if (not isinstance(group, list) or len(group) < 2
+                or not all(isinstance(key, str) and key for key in group)
+                or group != sorted(set(group)) or seen.intersection(group)):
+            raise ValueError('R1 thermometry.D.alias_groups must be sorted groups of at least two strings, '
+                             'with no key in two groups (LEAD-RULINGS-2 R7-13)')
+        seen.update(group)
     if isinstance(sensors, dict):
+        fast, slow = sensors.get('s_fast'), sensors.get('s_slow')
+        if fast == slow or any(fast in group and slow in group for group in aliases):
+            raise ValueError('R1.thermal_policy s_fast/s_slow: aliased keys are one thermometer '
+                             '(LEAD-RULINGS-2 R7-13)')
         if sensors.get('s_fast') not in (classified.get('die_candidates') or ()):
             raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list')
         if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()):
@@ -360,13 +380,75 @@ def d_turn_cap_tokens(root=ROOT):
     return json.loads(json.loads(raw)['workload_profile']['prompt_text'])['max_tokens']
 
 
+def r1_g0_timeout_s(root=ROOT):
+    """The single configured R1 G0 timeout (LEAD-RULINGS-2 R7-2)."""
+    config = json.loads((Path(root) / 'configs/align/v4/r1_runtime.json').read_bytes())
+    value = config.get('g0_timeout_s') if isinstance(config, dict) else None
+    if not finite(value) or not thermal_gates.G0_CAP_DEFAULT_S <= value <= thermal_gates.G0_CAP_MAX_S:
+        raise ValueError('R1 g0_timeout_s must be finite and in '
+                         f'[{thermal_gates.G0_CAP_DEFAULT_S}, {thermal_gates.G0_CAP_MAX_S}]')
+    return float(value)
+
+
+def w1_g0_cap(r1_slots, root=ROOT):
+    """Re-derive W1's G0 cap from every gated D and X-G wait (R7-2, R7-12).
+
+    Unreleased/censored G0 intervals count at the full R1 timeout. An X-G
+    without a measured release falls back to that timeout and still admits.
+    """
+    timeout = r1_g0_timeout_s(root)
+    rows = r1_slots.get('deadman_budget') if isinstance(r1_slots, dict) else None
+    names = [row.get('run') if isinstance(row, dict) else None for row in rows] if isinstance(rows, list) else []
+    if sorted(map(str, names)) != sorted(GATED_D_RUN_NAMES):
+        raise ValueError('R1 deadman_budget must hold exactly the three gated D runs (ruling 1(f), R7-2)')
+    waits, censored = {}, []
+
+    def count(name, outcome, wait):
+        if outcome not in ('released', 'timeout', 'deadman', 'unobserved'):
+            raise ValueError(f'{name}: missing or malformed g0_outcome (LEAD-RULINGS-2 R7-2)')
+        if not finite(wait) or wait < 0:
+            raise ValueError(f'{name}: G0 wait must be finite and non-negative (LEAD-RULINGS-2 R7-2)')
+        # A G0 that did not release is censored: it counts at the full R1 timeout.
+        waits[name] = float(wait) if outcome == 'released' else timeout
+        if outcome != 'released':
+            censored.append(name)
+
+    for row in rows:
+        phases = row.get('phases_s')
+        count(row['run'], row.get('g0_outcome'), phases.get('G0') if isinstance(phases, dict) else None)
+    x_g = r1_slots.get('x_g')
+    if not isinstance(x_g, dict) or x_g.get('status') not in ('measured', 'inconclusive', 'not_run'):
+        raise ValueError('R1 r1_slots.x_g must be an object with a measured/inconclusive/not_run status (R7-12)')
+    # R7-12: an X-G that is not measured (INCONCLUSIVE) uses the R1 timeout
+    # for W1's D-to-X G0 term and records x_g_fallback; that alone never
+    # refuses, so its outcome and wait are recorded but not required.
+    fallback = x_g['status'] != 'measured'
+    if fallback:
+        waits['X_G_contrast'] = timeout
+        if x_g.get('g0_outcome') != 'released':
+            censored.append('X_G_contrast')
+    elif x_g['status'] == 'measured' and x_g.get('g0_outcome') != 'released':
+        raise ValueError('X_G_contrast: a measured X-G needs a released g0_outcome (LEAD-RULINGS-2 R7-2)')
+    else:
+        count('X_G_contrast', 'released', x_g.get('g0_wait_s'))
+    maximum = max(waits.values())
+    floor, factor = float(thermal_gates.G0_CAP_DEFAULT_S), 1.25
+    return {'authority': 'LEAD-RULINGS-2 R7-2, R7-12', 'r1_g0_timeout_s': timeout,
+            'floor_s': floor, 'factor': factor, 'waits_s': waits, 'censored': censored,
+            'x_g_fallback': fallback, 'max_g0_s': maximum,
+            'value_s': int(min(max(math.ceil(factor * min(maximum, timeout)), floor), timeout)),
+            'rule': 'clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600, R1 g0_timeout_s)'}
+
+
 def ruling_1f_fit(r1_slots, b_d, t_dead):
     """Council ruling 1(f) for a B_D (lead ruling R5-4): the worst case R1
     measured must fit T_dead.
 
-    worst = max G0 + max (G1 + H) + max (prefill + tool) over the gated D runs
+    worst = G0_cap_W1 + max (G1 + H) + max (prefill + tool) over the gated D runs
             + (B_D + turn_cap_tokens) / r_decode
 
+    G0_cap_W1 is re-derived from all gated D and X-G waits, with unreleased
+    waits counted at the R1 timeout (LEAD-RULINGS-2 R7-2, R7-12).
     A turn is admitted while fewer than B_D decode tokens are spent and then
     keeps its full per-turn cap (FD:263), so B_D + cap bounds the episode
     decode. LEAD-RULINGS-2 R6-3: r_decode = min(step-d's measured rate, every
@@ -407,12 +489,13 @@ def ruling_1f_fit(r1_slots, b_d, t_dead):
     if cap != d_turn_cap_tokens():
         raise ValueError(f'ruling 1(f): the gated runs armed a {cap}-token turn cap, but W1 D members carry '
                          f'{d_turn_cap_tokens()}')
-    terms = {'G0_s': max(p['G0'] for p in phases), 'holds_s': max(p['G1'] + p['H'] for p in phases),
+    g0_cap = w1_g0_cap(r1_slots)
+    terms = {'G0_s': g0_cap['value_s'], 'holds_s': max(p['G1'] + p['H'] for p in phases),
              'prefill_tool_s': max(p['prefill'] + p['tool'] for p in phases),
              'decode_s': (b_d + cap) / rate}
     worst = math.fsum(terms.values())
     return {'B_D': b_d, 'T_dead_s': t_dead, 'terms_s': terms, 'r_decode_tok_per_s': rate, 'worst_s': worst,
-            'fits': worst <= t_dead + 1e-6}
+            'g0_cap_w1': g0_cap, 'fits': worst <= t_dead + 1e-6}
 
 
 def max_fitting_b_d(r1_slots, t_dead):
@@ -450,6 +533,20 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
     policy = r1_inputs.get('thermal_policy')
     if not isinstance(policy, dict):
         raise ValueError('inputs.R1.thermal_policy must be an object')
+    derived = w1_g0_cap(r1_slots)
+    recorded = r1_slots.get('g0_cap_w1')
+    if (not isinstance(recorded, dict) or type(recorded.get('value_s')) is not int
+            or type(recorded.get('x_g_fallback')) is not bool
+            or not finite(recorded.get('r1_g0_timeout_s'))
+            or any(recorded.get(key) != derived[key] for key in ('value_s', 'x_g_fallback', 'r1_g0_timeout_s',
+                                                                  'waits_s', 'max_g0_s', 'floor_s', 'factor'))
+            or not isinstance(recorded.get('censored'), list)
+            or sorted(map(str, recorded['censored'])) != sorted(derived['censored'])):
+        raise ValueError('r1_slots.g0_cap_w1 is missing or stale; must match the re-derivation '
+                         f'{derived} (LEAD-RULINGS-2 R7-2, R7-12)')
+    if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != derived['value_s']:
+        raise ValueError('inputs.R1.thermal_policy.g0_cap_s must equal r1_slots.g0_cap_w1.value_s '
+                         f'{derived["value_s"]} (LEAD-RULINGS-2 R7-2)')
     classified = (r1_slots.get('thermometry') or {}).get('D') or {}
     changed = classified.get('sensor_pick_changed') is True
     bindings = [('chunk_tokens', slots.get('N_chunk'), 'r1_slots.slots.N_chunk')]
@@ -505,7 +602,8 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
     if not fit['fits']:
         raise ValueError(f'ruling 1(f): B_D {fit["B_D"]} does not fit T_dead {fit["T_dead_s"]:.1f} s: worst '
                          f'{fit["worst_s"]:.1f} s = ' + ' + '.join(f'{k} {v:.1f}' for k, v in fit['terms_s'].items())
-                         + f'; the largest fitting B_D is {max_fitting_b_d(r1_slots, r1_inputs["T_dead"])}')
+                         + f'; the largest fitting B_D is {max_fitting_b_d(r1_slots, r1_inputs["T_dead"])}'
+                         + f'; g0_cap_w1 = {fit["g0_cap_w1"]}')
     return fit
 
 
@@ -1147,6 +1245,11 @@ and Y=b-e18/index14 recorded pilot-7 turn counts and the token-id fixture
 digest. No configured 12-turn fallback is used for the contrast.
 R0.reasoning_effort stays a placeholder until R0 passes.
 R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
+W1's g0_cap_s binds r1_slots.g0_cap_w1.value_s (LEAD-RULINGS-2 R7-2, R7-12):
+clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600 s, R1 g0_timeout_s).
+Unreleased G0s count at the full R1 timeout; an inconclusive X-G records
+x_g_fallback. Ruling 1(f) uses this cap + max(G1 + H) + max(prefill + tool)
++ (B_D + turn_cap_tokens) / min(step-d and gated decode rates).
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
 I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.

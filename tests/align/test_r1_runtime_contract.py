@@ -40,13 +40,13 @@ class ContractTests(unittest.TestCase):
         result = {"energy_j": 1.0, "admitted_turns": 3, "x7": False, "battery_drain_pct_per_h": 3.0,
                   "reference_c": 38.0, "reference_source": "r1_soak_reference",
                   "gate_waits_s": {"G0": [1.0], "G1": [], "H": []}, "g0_outcome": "released",
-                  "inter_member_idle_s": 300.0, "decode_tokens": 0,
+                  "inter_member_idle_s": 300.0, "decode_tokens": 0, "g0_wait_s": 1.0, "g0_timeout_s": 1200,
                   "deadman": {"T_dead_s": 1.0, "phases_s": {p: 0.0 for p in contract.DEADMAN_PHASES[:-1]}}}
         self.assertEqual(contract.missing_fields("d-spam-benign-s1-a", result, quiet=False),
                          ["deadman.phases_s.tail"])
         self.assertEqual(contract.missing_fields("step-30b", {}, quiet=True),
                          ["cpu_busy_cores", "cpu_busy_t_s", "census", "battery_drain_pct_per_h",
-                          "thermometry.status", "thermometry.classification_sha256"])
+                          "thermometry.status", "thermometry.classification_sha256", "g0_wait_s", "g0_timeout_s"])
         with self.assertRaisesRegex(ValueError, "no kind"):
             contract.required_fields("unknown", quiet=False)
 
@@ -79,7 +79,8 @@ class Round6ContractTests(unittest.TestCase):
     def test_an_inconclusive_step_d_or_designed_state_needs_only_its_g0_and_the_quiet_fields(self):
         # R6-2: a G0 timeout there is INCONCLUSIVE, not a contract failure.
         quiet = {"cpu_busy_cores": [0.1], "cpu_busy_t_s": [0.0], "census": [{}]}
-        result = {**quiet, "segment_status": "inconclusive", "g0_released": False, "g0_outcome": "timeout"}
+        result = {**quiet, "segment_status": "inconclusive", "g0_released": False, "g0_outcome": "timeout",
+                  "g0_wait_s": 1200.0, "g0_timeout_s": 1200}   # R7-2
         for kind in ("step-d", *contract.PLANNING_KINDS):
             self.assertEqual(contract.missing_fields(kind, result, quiet=True), [], kind)
             # Without segment_status the measured fields are required.

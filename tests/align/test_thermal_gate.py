@@ -68,6 +68,49 @@ def session(*, values=None, config=None, no_status=False):
 
 
 class GateTests(unittest.TestCase):
+    def test_g0_configured_cap_waits_past_600_and_times_out_at_1200(self):
+        obj, clock = session(config=policy(g0_cap_s=1200))
+        self.addCleanup(obj.close)
+        obj.reader._transport.values = lambda t: (45, 40)
+        start = clock.now()
+        observed = []
+        sleep = clock.sleep
+        def advance(seconds):
+            if clock.now() - start > 600:
+                observed.append(clock.now() - start)
+            sleep(seconds)
+        clock.sleep = advance
+        gate = obj.wait('G0')
+        self.assertTrue(observed)
+        self.assertEqual(gate['duration_s'], 1200)
+        self.assertEqual(gate['outcome'], 'timeout')
+
+    def test_g0_default_cap_preserves_600_second_timeout(self):
+        original = policy()
+        self.assertEqual(validate_policy(original), original)
+        self.assertNotIn('g0_cap_s', validate_policy(original))
+        obj, _ = session(config=original)
+        self.addCleanup(obj.close)
+        obj.reader._transport.values = lambda t: (45, 40)
+        gate = obj.wait('G0')
+        self.assertEqual(gate['duration_s'], 600)
+        self.assertEqual(gate['outcome'], 'timeout')
+
+    def test_g0_cap_policy_bounds_and_types(self):
+        for value in (600, 625.5, 1200):
+            self.assertEqual(validate_policy(policy(g0_cap_s=value))['g0_cap_s'], value)
+        for value in (599, 1201, True, float('nan'), float('inf'), '1200'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'g0_cap_s'):
+                validate_policy(policy(g0_cap_s=value))
+
+    def test_larger_g0_cap_keeps_unobserved_limit_at_300(self):
+        obj, _ = session(config=policy(g0_cap_s=1200))
+        self.addCleanup(obj.close)
+        obj.reader._transport.values = lambda t: (None, None)
+        gate = obj.wait('G0')
+        self.assertEqual(gate['duration_s'], 300)
+        self.assertEqual(gate['outcome'], 'unobserved')
+
     def test_gate_windows_use_sidecar_grid_across_caller_slot_boundaries(self):
         from joulewise.hazards.base import Stamp
         # Every valid 70 ms read crosses the caller's phase-anchored slot.

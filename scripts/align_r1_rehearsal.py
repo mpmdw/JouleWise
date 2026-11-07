@@ -43,10 +43,14 @@ PLANNING_START_OFFSETS_C = (0.0, 2.0, 4.0)
 # before the others), so each preheats from the same defined state.
 PLANNING_RUN_ORDER_C = (4.0, 2.0, 0.0)
 # A1 R1 item 4 replay pair (a, b) plus council ruling 1(b)'s bank/benign run.
+# LEAD-RULINGS-2 R7-1 (round-6 cold MEDIUM-1, exec LOW-6): they run in this
+# order, D_bank first, so both runs of the U5 replay pair follow a full gated
+# D episode with the same idle (matched predecessors, CHAIR 1(g)); D_bank
+# follows the R + 0 C planning turn and is not in the pair.
 GATED_D_RUNS = (
+    ("D_bank_benign_s1_gated_held", "d-bank-benign-s1"),
     ("D_spam_benign_s1_gated_held_a", "d-spam-benign-s1-a"),
     ("D_spam_benign_s1_gated_held_b", "d-spam-benign-s1-b"),
-    ("D_bank_benign_s1_gated_held", "d-bank-benign-s1"),
 )
 REPLAY_PAIR = ("D_spam_benign_s1_gated_held_a", "D_spam_benign_s1_gated_held_b")
 COOLDOWN_AFTER_D_MAX_S = 1500          # ruling 1(c)
@@ -57,7 +61,7 @@ COOLDOWN_AFTER_D_MAX_S = 1500          # ruling 1(c)
 # cool-to-band. They still consume the soak R (R5-1). A G0 timeout makes that
 # run INCONCLUSIVE (recorded), never a night refusal. They therefore run after
 # the designed start states: the R + 0 C planning turn (a D turn) precedes the
-# first, and X-G follows D_bank (W1's D -> X transition).
+# first (D_bank, R7-1), and X-G follows D_spam b (W1's D -> X transition).
 # R6-2: the calibration segments (step-d and each designed start state) start
 # from a defined state: a bounded idle-until-soak precool (cap from the runtime
 # config, calibration_precool_cap_s) to the G0 band of R. A G0 timeout there is
@@ -107,10 +111,25 @@ PLANNING_PREHEAT_CAP_S = 900
 # 1,800 s member bound no longer contains either; both are added here.
 STEP_G0_CAP_S = 600
 STEP_QUIET_S = 300
-SEGMENT_BOUND_S = {"step-30b": QUIET_SEGMENT_BOUND_S + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
-                   "step-d": QUIET_SEGMENT_BOUND_S + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
-                   **{f"d-planning-turn-r-plus-{int(o)}c": QUIET_SEGMENT_BOUND_S + PLANNING_PREHEAT_CAP_S
-                      + STEP_G0_CAP_S for o in PLANNING_START_OFFSETS_C}}
+# LEAD-RULINGS-2 R7-2: step-d and the designed start states (the R6-2
+# calibration segments), the gated D runs and X-G arm the R1 G0 timeout, the
+# runtime config's g0_timeout_s (1,200 s); step-30b keeps the 600 s G0 cap.
+# The gated runs and X-G arm their G0 inside the member deadman, so their
+# 1,800 s member bound already contains it.
+G0_TIMEOUT_KEY = "g0_timeout_s"
+W1_G0_CAP_FLOOR_S = 600       # R7-2: G0_cap_W1 = clamp(ceil(1.25 x max wait), 600 s, R1 G0 timeout)
+W1_G0_CAP_FACTOR = 1.25
+W1_G0_CAP_RUNS = ("D_bank_benign_s1_gated_held", "D_spam_benign_s1_gated_held_a",
+                  "D_spam_benign_s1_gated_held_b", "X_G_contrast")
+
+
+def segment_bounds(g0_timeout_s):
+    """Ruling 8 batch-window bounds of the quiet model segments, with the R1
+    G0 timeout (R7-2) for step-d and the designed start states."""
+    return {"step-30b": QUIET_SEGMENT_BOUND_S + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
+            "step-d": QUIET_SEGMENT_BOUND_S + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
+            **{f"d-planning-turn-r-plus-{int(o)}c": QUIET_SEGMENT_BOUND_S + PLANNING_PREHEAT_CAP_S
+               + g0_timeout_s for o in PLANNING_START_OFFSETS_C}}
 CPU_BUSY_CORES_LIMIT = 0.5
 CPU_BUSY_SUSTAINED_S = 60
 MAX_SEGMENT_REDOS = 2
@@ -476,13 +495,14 @@ def u5_verdict(temperature, gated, inconclusive_runs=()):
         verdict = "inconclusive"
         sigma_reason = ("replay-pair run(s) " + ", ".join(empty) + " admitted no turn (G0 not released); "
                         "|E_a - E_b| is not an identical-work pair difference")
-    # LEAD-RULINGS-2 R5-1: a replay run whose precool did not reach the G0
-    # band of the soak R is INCONCLUSIVE; its energy cannot decide U5 either.
+    # LEAD-RULINGS-2 R6-1 (superseding R5-1's precool): a replay run that is
+    # INCONCLUSIVE (its G0 did not release after W1's schedule, or it did not
+    # follow a gated D episode, R7-1) cannot decide U5 either.
     uncooled = [name for name in REPLAY_PAIR if name in set(inconclusive_runs)]
     if uncooled:
         verdict = "inconclusive"
-        reason = ("replay-pair run(s) " + ", ".join(uncooled) + " are INCONCLUSIVE: the precool did not "
-                  "reach the G0 band of the soak R before the cap")
+        reason = ("replay-pair run(s) " + ", ".join(uncooled) + " are INCONCLUSIVE (R6-1): the G0 did not "
+                  "release after W1's inter-member schedule, or the run did not follow a D turn")
         sigma_reason = reason if sigma_reason is None else sigma_reason + "; " + reason
         empty = empty or uncooled
     return {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2",
@@ -545,6 +565,9 @@ def deadman_summary(name, result, duty_t_dead=None, *, inconclusive_reason=None)
         raise Refusal(f"{name}: {tokens} decode tokens in {phases['decode']} s of decode")
     rate = tokens / phases["decode"] if tokens else None
     return {"run": name, "T_dead_s": t_dead, "duty_T_dead_s": duty, "phases_s": phases,
+            # R7-2: the G0 outcome decides whether phases_s.G0 is a measured
+            # wait or a censored one in G0_cap_W1.
+            "g0_outcome": result.get("g0_outcome"),
             "fraction_of_T_dead": {k: v / t_dead for k, v in phases.items()},
             "gate_hold_s": gate_hold, "admitted_turns": turns, "x7": x7,
             "predicted_turns_per_episode": predicted, "inconclusive_reason": inconclusive_reason,
@@ -591,7 +614,7 @@ def thermometry_record(name, result):
         raise Refusal(f"{name}: thermometry.classification_sha256 must be a sha256 hex digest")
     keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "reasons",
             "die_candidates", "heatsink_candidates", "classification_sha256", "classification_file",
-            "s7_for_r1_picks")
+            "s7_for_r1_picks", "alias_groups", "alias_rule")
     record = {key: block.get(key) for key in keep}
     if isinstance(record.get("s7_for_r1_picks"), dict):
         # LEAD-RULINGS-2 R6-4: the changed-pick S7's reference R is the quiet
@@ -800,8 +823,10 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
     target = output / name
     for attempt in range(MAX_SEGMENT_REDOS + 1):
         release_now = release_first or (attempt > 0 and workload_class == "heavy")
+        if bound_s is None and duration is None and getattr(args, "segment_bounds", None) is None:
+            args.segment_bounds = segment_bounds(runtime_g0_timeout_s(args.runtime))
         bound = bound_s if bound_s is not None else (
-            (duration or SEGMENT_BOUND_S.get(kind, QUIET_SEGMENT_BOUND_S))
+            (duration or (args.segment_bounds or {}).get(kind, QUIET_SEGMENT_BOUND_S))
             + (G0_RELEASE_BOUND_S if release_now else 0))
         waited = wait_outside_os_batch(bound) if quiet else 0.0
         release = (_release_against_soak(args, output, _fresh_name(output, f"{name}.g0_release", attempt),
@@ -894,6 +919,16 @@ def runtime_step_deadman_s(runtime_argv):
     value = _finite_number(value, "runtime config step.deadman_s")
     if value <= 0:
         raise Refusal("runtime config step.deadman_s must be positive")
+    return value
+
+
+def runtime_g0_timeout_s(runtime_argv):
+    """LEAD-RULINGS-2 R7-2: the R1 G0 timeout, one runtime-config constant."""
+    from joulewise.align.apple.thermal_gates import G0_CAP_DEFAULT_S, G0_CAP_MAX_S
+    _, value = _runtime_config_value(runtime_argv, (G0_TIMEOUT_KEY,), "the R7-2 G0 timeout")
+    value = _finite_number(value, f"runtime config {G0_TIMEOUT_KEY}")
+    if not G0_CAP_DEFAULT_S <= value <= G0_CAP_MAX_S:
+        raise Refusal(f"runtime config {G0_TIMEOUT_KEY} {value} is outside [{G0_CAP_DEFAULT_S}, {G0_CAP_MAX_S}] s")
     return value
 
 
@@ -1040,9 +1075,13 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
     Round-6 integration: the table is the R6-1/R6-2/R6-6 one, with the
     runtime config's calibration precool cap (as ``run`` builds it), and
     ``r6_2_retry_max_s`` is the all-caps cost of the one R6-2 retry (precool +
-    segment again) that each G0-inconclusive-capable segment may take."""
+    segment again) that each G0-inconclusive-capable segment may take.
+    Round 7: step-d and the designed start states are bounded with the R7-2
+    G0 timeout (the runtime config's g0_timeout_s)."""
     rows = []
     precool_cap_s = runtime_precool_cap_s(runtime_argv)
+    g0_timeout = runtime_g0_timeout_s(runtime_argv)
+    bounds = segment_bounds(g0_timeout)
     retry_s = 0.0
     for name, kind, duration, _class in phase_plan(include_4bit, precool_cap_s=precool_cap_s):
         if kind in contract.HIGH_POWER_KINDS:
@@ -1052,14 +1091,14 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
         elif duration is not None:
             bound = float(duration)
         else:
-            bound = float(SEGMENT_BOUND_S.get(kind, QUIET_SEGMENT_BOUND_S))
+            bound = float(bounds.get(kind, QUIET_SEGMENT_BOUND_S))
         rows.append({"name": name, "kind": kind, "bound_s": bound})
         if kind in contract.G0_INCONCLUSIVE_KINDS:
             retry_s += precool_cap_s + bound
     (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
     total = math.fsum(row["bound_s"] for row in rows)
     wait = float((h1 * 60 + m1 - h0 * 60 - m0) * 60)
-    return {"segments": rows, "no_redo_s": total, "precool_cap_s": precool_cap_s,
+    return {"segments": rows, "no_redo_s": total, "precool_cap_s": precool_cap_s, "g0_timeout_s": g0_timeout,
             "batch_window_wait_max_s": wait, "with_one_batch_wait_s": total + wait,
             "r6_2_retry_max_s": retry_s, "with_retries_and_one_batch_wait_s": total + retry_s + wait}
 
@@ -1083,12 +1122,74 @@ def budget_fit_inputs(step_d, gated, deadman_rows=()):
                       "the same positive per-turn decode cap")
     observed = {row["run"]: row.get("r_decode_tok_per_s") for row in deadman_rows}
     rates = [step_rate, *(rate for rate in observed.values() if rate is not None)]
-    return {"authority": "CHAIR ruling 1(f); lead rulings R5-4, R6-3", "r_decode_tok_per_s": min(rates),
+    return {"authority": "CHAIR ruling 1(f); lead rulings R5-4, R6-3, R7-2", "r_decode_tok_per_s": min(rates),
             "r_decode_step_d_tok_per_s": step_rate, "r_decode_gated_tok_per_s": observed,
             "turn_cap_tokens": int(caps.pop()),
-            "rule": ("max G0 + max (G1 + H) + max (prefill + tool) over the gated D runs "
-                     "+ (B_D + turn_cap_tokens) / r_decode <= T_dead, r_decode = min(step-d rate, every gated "
-                     "run's observed rate) (scripts/align_v4_kit.py ruling_1f_fit)")}
+            "rule": ("G0_cap_W1 (r1_slots.g0_cap_w1.value_s, R7-2) + max (G1 + H) + max (prefill + tool) over "
+                     "the gated D runs + (B_D + turn_cap_tokens) / r_decode <= T_dead, r_decode = min(step-d rate, "
+                     "every gated run's observed rate) (scripts/align_v4_kit.py ruling_1f_fit)")}
+
+
+def w1_g0_cap(deadman_rows, x_g, g0_timeout_s):
+    """LEAD-RULINGS-2 R7-2 and R7-12: W1's G0 cap, an R1-derived slot.
+
+    G0_cap_W1 = clamp(ceil(1.25 x max G0 wait over D_bank, D_spam a, D_spam b
+    and X-G), 600 s, the R1 G0 timeout). A G0 that did not release (timeout,
+    deadman or unobserved) is censored and counts at the full R1 timeout
+    (builder decision (d), confirmed by R7-2). An X-G that is not ``measured``
+    counts at the R1 timeout too, with ``x_g_fallback`` (R7-12). The kit
+    re-derives this from deadman_budget and x_g, binds
+    inputs.R1.thermal_policy.g0_cap_s to ``value_s`` and uses it as ruling
+    1(f)'s G0 term."""
+    waits, censored = {}, []
+    for row in deadman_rows:
+        if row["g0_outcome"] == "released":
+            waits[row["run"]] = row["phases_s"]["G0"]
+        else:
+            waits[row["run"]] = float(g0_timeout_s)
+            censored.append(row["run"])
+    fallback = x_g.get("status") != "measured"     # measured implies a released G0 (R6-1)
+    if fallback:
+        waits["X_G_contrast"] = float(g0_timeout_s)
+        if x_g.get("g0_outcome") != "released":
+            censored.append("X_G_contrast")
+    else:
+        waits["X_G_contrast"] = _finite_number(x_g.get("g0_wait_s"), "X_G_contrast.g0_wait_s")
+    if sorted(waits) != sorted(W1_G0_CAP_RUNS):
+        raise Refusal(f"R7-2: G0_cap_W1 needs exactly {list(W1_G0_CAP_RUNS)}, got {sorted(waits)}")
+    peak = max(waits.values())
+    value = int(min(max(math.ceil(W1_G0_CAP_FACTOR * peak), W1_G0_CAP_FLOOR_S), g0_timeout_s))
+    return {"authority": "LEAD-RULINGS-2 R7-2, R7-12", "r1_g0_timeout_s": float(g0_timeout_s),
+            "floor_s": float(W1_G0_CAP_FLOOR_S), "factor": W1_G0_CAP_FACTOR, "waits_s": waits,
+            "censored": sorted(censored), "x_g_fallback": fallback, "max_g0_s": peak, "value_s": value,
+            "rule": ("G0_cap_W1 = clamp(ceil(1.25 x max G0 wait over D_bank, D_spam a, D_spam b, X-G), 600 s, "
+                     "R1 G0 timeout); an unreleased G0, or an X-G that is not measured (x_g_fallback), counts "
+                     "at the R1 G0 timeout; ruling 1(f) uses value_s as its G0 term")}
+
+
+def g0_wait_record(phases):
+    """R7-2: every G0 wait of the night, superseded attempts and the releases
+    before the A-B-A legs and redos included, in run order."""
+    rows = []
+
+    def add(row):
+        # The release (when one preceded the attempt) ran first.
+        release = row.get("g0_release")
+        if isinstance(release, dict) and "g0_wait_s" in release:
+            rows.append({"segment": row["name"] + ".g0_release", "output_dir": None,
+                         "g0_outcome": (release.get("g0") or {}).get("outcome"),
+                         "g0_wait_s": release.get("g0_wait_s"), "g0_timeout_s": release.get("g0_timeout_s")})
+        result = row.get("result")
+        if isinstance(result, dict) and "g0_wait_s" in result:
+            rows.append({"segment": row["name"], "output_dir": row.get("output_dir"),
+                         "g0_outcome": result.get("g0_outcome"), "g0_wait_s": result.get("g0_wait_s"),
+                         "g0_timeout_s": result.get("g0_timeout_s")})
+
+    for row in phases:
+        for earlier in row.get("superseded_attempts") or ():
+            add(earlier)
+        add(row)
+    return rows
 
 
 def _check_gated_t_dead(name, result, step_d):
@@ -1275,6 +1376,16 @@ def run(args):
         # R6-1/R6-2 inputs, also before any powermode or runtime work.
         schedule = check_w1_schedule(args.runtime)
         precool_cap = runtime_precool_cap_s(args.runtime)
+        # R7-2: the R1 G0 timeout bounds step-d and the designed start states.
+        g0_timeout = runtime_g0_timeout_s(args.runtime)
+        from scripts.align_v4_kit import r1_g0_timeout_s as kit_g0_timeout_s
+        if g0_timeout != kit_g0_timeout_s(ROOT):
+            # One constant (R7-2): the kit re-derives G0_cap_W1 with the
+            # committed config's value, so a runtime config that overrides it
+            # would yield a record the kit refuses after the whole night.
+            raise Refusal(f"R7-2: runtime config {G0_TIMEOUT_KEY} {g0_timeout} differs from the committed "
+                          f"{DEFAULT_RUNTIME_CONFIG} value {kit_g0_timeout_s(ROOT)}")
+        args.segment_bounds = segment_bounds(g0_timeout)
         with guard:
             soak_reference = None
             legs, releases, leg_g0, adoption, series_mode = {}, {}, {}, None, None
@@ -1405,7 +1516,9 @@ def run(args):
                    "inconclusive_reason": reasons["X_G_contrast"],
                    "g0_outcome": results["X_G_contrast"]["g0_outcome"], "follows_d_turn": follows["X_G_contrast"],
                    "inter_member_idle_s": results["X_G_contrast"]["inter_member_idle_s"],
+                   "g0_wait_s": results["X_G_contrast"].get("g0_wait_s"),
                    "authority": "LEAD-RULINGS-2 R6-1"}
+            g0_cap = w1_g0_cap(deadman, x_g, g0_timeout)
         else:
             # R6-2: recorded, not refused mid-night. With no step-d slots the
             # kit refuses W1 (no slots, no thermometry bar, no duty bar).
@@ -1417,6 +1530,7 @@ def run(args):
             u5 = {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2", "verdict": "inconclusive",
                   "reason": "step-d INCONCLUSIVE (R6-2): no replay pair ran"}
             x_g = {"status": "not_run", "reason": skipped.get("X_G_contrast")}
+            g0_cap = None
         # Ruling 20: the last census before the slots are frozen.
         watch.check("before_registration")
         battery = battery_report(results, harvested)
@@ -1436,7 +1550,8 @@ def run(args):
                                        **adoption},
                         "deadman_budget": deadman, "duty_bar": duty, "l1": l1,
                         "max_r1_tail_s": max_tail, "budget_fit_inputs": fit_inputs,
-                        "x_g": x_g, "inconclusive_segments": inconclusive, "skipped_segments": skipped,
+                        "x_g": x_g, "g0_cap_w1": g0_cap, "g0_waits": g0_wait_record(record["phases"]),
+                        "inconclusive_segments": inconclusive, "skipped_segments": skipped,
                         "calibration_precools": {name: released for name, released in precool.items()},
                         "thermometry": thermometry, "s6_tuning": s6,
                         "external_volumes": watch.records,

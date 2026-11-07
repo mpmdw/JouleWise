@@ -43,6 +43,7 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                 'thermometry': {'bar': 'pass', 'D': {'s_fast': syn.FAST, 's_slow': syn.SLOW,
                                                      'die_candidates': [syn.FAST], 'heatsink_candidates': [syn.SLOW],
                                                      'classification_sha256': hashlib.sha256(b'synthetic-r1-classification').hexdigest(),
+                                                     'alias_groups': [],
                                                      'sensor_pick_changed': False}},
                 'max_r1_tail_s': 30.0,
                 # Lead ruling R5-4: B_D, N_chunk, S5/S6 and S7 bind the inputs below.
@@ -50,12 +51,19 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                 'high_power': {'verdict': 'not_adopted'}, 'u5': {'verdict': 'pass', 'c': 1.0},
                 # R6-3: 8,000 tokens in 200 s of decode = step-d's 40 tok/s.
                 # R6-8 (exec LOW-5): each run's duty verdict; the kit re-derives the bar.
-                'deadman_budget': [{'run': name, 'phases_s': dict(SYN_PHASES, tail=tail), 'decode_tokens': 8000,
+                'deadman_budget': [{'run': name, 'g0_outcome': 'released',
+                                    'phases_s': dict(SYN_PHASES, tail=tail), 'decode_tokens': 8000,
                                     'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,
                                       'turn_cap_tokens': 4096},
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}], 'inconclusive_segments': {},
+                'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 60.0},
+                'g0_cap_w1': {'authority': 'LEAD-RULINGS-2 R7-2, R7-12', 'r1_g0_timeout_s': 1200.0,
+                              'floor_s': 600.0, 'factor': 1.25,
+                              'waits_s': {**dict.fromkeys(kit.GATED_D_RUN_NAMES, 60.0), 'X_G_contrast': 60.0},
+                              'censored': [], 'x_g_fallback': False, 'max_g0_s': 60.0, 'value_s': 600,
+                              'rule': 'clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600, R1 g0_timeout_s)'},
                 # R6-1: the duty bar ran under W1's inter-member schedule.
                 'duty_bar': {'pass': True, 'verdict': 'pass',
                              'schedule': {'authority': 'LEAD-RULINGS-2 R6-1',
@@ -80,7 +88,7 @@ SYN_INPUTS = {
                               'sensors': {'s_fast': syn.FAST, 's_slow': syn.SLOW, 'fan_keys': [syn.FAN],
                                           'r0_sha256': R0_SHA},
                               'delta_fast_c': 1.5, 'delta_slow_c': 1.0, 'turn_cap_s': 120,
-                              'chunk_tokens': 2048, 'heavy': True, 'per_turn': True}},
+                              'chunk_tokens': 2048, 'g0_cap_s': 600, 'heavy': True, 'per_turn': True}},
     'WP15': {'runtime_entrypoint': ['scripts/align_r1_runtime.py', '--config', 'configs/align/v4/r1_runtime.json']},
 }
 

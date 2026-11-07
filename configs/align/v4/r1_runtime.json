@@ -14,5 +14,6 @@
   "sensors": "PENDING_R0",
   "step": {"prefill_chars": 40000, "decode_tokens": 4096, "seed": 1, "deadman_s": 1580},
   "battery_poll_s": 30,
-  "calibration_precool_cap_s": 1500
+  "calibration_precool_cap_s": 1500,
+  "g0_timeout_s": 1200
 }
