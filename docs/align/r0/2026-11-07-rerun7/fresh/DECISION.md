@@ -175,3 +175,55 @@ Derivation: the ordering argument needs the reference to be a real thermometer n
 for the fast role, such as the flicker key Tp0M, cannot anchor it. With every resolving key allowed as the
 reference, Tp0M became the reference and the fast pick moved to Tf48. With role-qualified references the replay
 keeps Tf18 / TaLP.
+
+## Erratum 4 (about 04:10 PST, lead dispositions of the two delta reviews on eb6e8e493)
+
+Both delta reviews (Fable 5.1 and Opus 5.5, blind and executing) returned ADMIT_WITH_FIXES. Every Erratum 2/3
+fault is reproduced on the parent and gone at the head. The real capture gives Tf18 / TaLP, and the receipt
+passes. Reviews: `cold3-fable-REVIEW.md` and `cold3-opus-REVIEW.md`.
+
+- **D1 (d) rebuilt** (Fable H1, Opus M1 and N1).
+  - Fault, executed by both: the reference was the argmin of a cooling tau measured from the first recovery
+    read. Eight Tf keys lie within 1.1 s of each other. The fast keys drop about 6 degC in the first
+    second, and the margin was 0.16 degC. As a result:
+    - a first recovery read one cell late, or a +1.3 s load overrun, moves the reference to Ts0h or TV0m
+      and excludes the whole Tf family (Fable);
+    - one admitted missed read of Tf2B excludes Tf18 and Tf2B (Opus).
+    - In each case the receipt still prints pass.
+  - New rule, in three parts:
+    1. **Reference cooling time** (stable threshold): the first crossing of baseline + rise/e, where rise is
+       the load-tail median already computed, timed from the load phase's actual end. Neither the threshold
+       nor the origin depends on when the first recovery read lands (Fable).
+    2. **Reference rise:** the largest rise among D4-qualified keys (Erratum 3) whose stable cooling time is
+       within 1 s of the shortest. 1 s is the crossing resolution at 1 Hz (Opus).
+    3. **Margin:** 1.0 degC, the band floor, the smallest temperature difference the gates resolve. The 3
+       noise floors measured one sensor's noise. The question here is the gain and offset spread between
+       sensors (Opus N1), which is 0.46 degC across the co-located Tf keys.
+  - A key whose rise exceeds the reference rise + 1.0 degC is excluded. On this capture that is TVH3 only
+    (64.1 against 45.68; 54.5 at a 0.85 step).
+  - The class tau (D4/D5) is unchanged. The stable cooling time is printed beside it.
+- **The receipt and summary print the D1 (d) reference, its rise and the excluded keys** (Fable L2).
+- **Settle set:** the idle D1 (b) half-range term is dropped (Opus M2).
+  - For stationary noise the largest one-second jump (about 4.9 sigma) always exceeds half the range (about
+    2.75 sigma). The term therefore emptied the set on a settled machine and blinded the D3 cost
+    measurement.
+  - The 0.15 degC noise bar alone removes the flicker keys (3-8 degC).
+- **An empty settle set** (Fable L1) ends idle only after 10 consecutive evaluations with no settle key (G0's
+  confirmation count). settled stays null.
+- **complete_r0 needs smc pass** (Opus L1). smc `inconclusive` still lets the other checks run, but the report
+  records `smc_selection_missing` and complete_r0 is False.
+- **Cells end at the phase deadline** (Opus L2 and N3).
+  - Coverage and empty-cell counts stop at the configured deadline (for adaptive idle, the evaluation that
+    ended it). Exit overrun lies outside the reader's grid, like the handshake.
+  - The phase-length flag stays at 1 s.
+- **Documented, not changed** (Fable M1, Opus L3): fast-role keys with noise in (0.15, 1/3] degC are not waited
+  on, because the 0.2 degC/min test is undecidable for them at 3 sigma. rank still flags their
+  `baseline_unsettled`. Opus L3's decidable-drift option is deferred to the R1 lane.
+- **Docs and wording:**
+  - `r0_desk_runbook.md:153` gets Erratum 3's reference (Opus L5).
+  - The CLAMP_DISTINCT comment: 10 or more distinct values in about 300 reads means sigma >= about 1.8q, so the
+    non-clamp mode fraction is <= 0.22, under the 0.40 bar (Fable L3, Opus N2).
+- **Required replays, written beside the rule** (acceptance-rule requirements): the real capture;
+  recovery_delay 0.3 and 1.0 s; overrun_load 1.3 and 1.6 s; scale 0.6, 0.85 and 1.2; a missed read of
+  Tf2B at recovery 0 and at load 236-237. Record the D1 (d) exclusions for each. Expected: TVH3 only, with
+  Tf18 the fast pick or a Tf sibling where a D6 hole removes Tf18.
