@@ -1091,9 +1091,25 @@ class LeafSpec:
     # yield the same value and the same reads, and the key does not tell them
     # apart (see ``reduce_bundle_dict``).
     plain_trees: bool = False
+    # A registered key-only projection; forwarded call arguments stay intact.
+    scalar_key: Callable[[tuple], tuple] | None = None
 
     def roles(self) -> dict[str, str]:
         return dict(self.params)
+
+
+def _scalar_bytes(spec: LeafSpec, arguments: Mapping[str, Any]) -> bytes:
+    values = tuple((name, arguments[name]) for name, role in spec.params if role == SCALAR)
+    return canonical_bytes(values if spec.scalar_key is None else spec.scalar_key(values))
+
+
+def _bracket_scalar_key(values: tuple) -> tuple:
+    """L4's temporary ledger parent is key-only; the frozen leaf never reads it."""
+    from joulewise.calibration_ledger import CalibrationLedgerSnapshot
+
+    return tuple((name, replace(value, ledger_path=Path(value.ledger_path.name))
+                  if name == "ledger_snapshot" and isinstance(value, CalibrationLedgerSnapshot)
+                  and isinstance(value.ledger_path, PurePath) else value) for name, value in values)
 
 
 def _calibration_key(metadata: Any) -> str | None:
@@ -1238,6 +1254,7 @@ LEAVES: tuple[LeafSpec, ...] = (
          ("bracket_evidence_root_id", SCALAR), ("diagnostics", SCALAR), ("trigger_scope", SCALAR),
          ("_allow_unissued_fixture", SCALAR)),
         path_free=True,
+        scalar_key=_bracket_scalar_key,
     ),
     LeafSpec(
         "L5_environment_refusals",
@@ -1460,7 +1477,7 @@ class VerifiedStore:
         bound = signature.bind(*args, **kwargs)
         bound.apply_defaults()
         arguments = dict(bound.arguments)
-        scalars = canonical_bytes(tuple((name, arguments[name]) for name, role in spec.params if role == SCALAR))
+        scalars = _scalar_bytes(spec, arguments)
         trees: list[_TreeRef] = []
         for name, role in spec.params:
             if role == TREE:
@@ -2102,8 +2119,7 @@ class VerifiedStore:
         if getattr(caches, "worker_observer_unavailable", False):
             return None
         with _suspended():
-            if canonical_bytes(tuple((name, prepared.arguments[name]) for name, role in prepared.spec.params
-                                     if role == SCALAR)) != prepared.scalars:
+            if _scalar_bytes(prepared.spec, prepared.arguments) != prepared.scalars:
                 return None
             for tree, verdict in zip(prepared.trees, prepared.verdicts):
                 walk = _walk(tree.root)
@@ -2437,6 +2453,14 @@ class VerifiedStore:
         self._count("poison")
         if self._served.get(key):
             self._defect("poisoned_after_serving")
+
+    def discard_entries(self, selector: Callable[[str, Entry], bool]) -> None:
+        """Evict expired cache values without clearing poison, defects or counters."""
+        with self._lock:
+            expired = [key for key, entry in self._entries.items() if selector(key, entry)]
+            for key in expired:
+                del self._entries[key]
+                self._new.discard(key)
 
     def export_entries(self, selector: Callable[[str, Entry], bool] | None = None,
                        *, new_only: bool = False) -> dict[str, Any]:

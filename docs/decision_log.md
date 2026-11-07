@@ -12270,3 +12270,83 @@ Binding reading:
 3. **No harm to science or data.** Every engine-shaped input that passed step 11 before gives the same output byte for byte: the changed branches are reached only by inputs that refused before. The one tightening, a refused floor that carries a value, is a shape the verdict validator already refuses (`artifact.py`: "refused floor must have null values"). No number, outcome or decision is computed or changed. The engine (`joulewise/analysis_engine`), the claim-side-bound producer and the analyze-claims writer are unchanged. A not-resolvable or not-estimable contrast is the registered result (plan §3.1), already in step 9's verdicts. Step 11 now completes in every state D-189 calls not issuable, so its public status is the same in all of them.
 4. **Rebind.** The two files are part of the frozen analysis commit `b5/analysis-r1` (`081875292`) and have no registry pin (`scripts/repin.py --check` passes). The fix goes on main and, as an equal hunk, on `lane/b5-r1-9b-fix` (the equivalence reference, never merged). Like D-189, it needs a new analysis tag before the next dry-run attempt. The D-188 comparator needs no change: the sensitivity record, disclosures and fill input are outputs it already compares.
 5. **Regression tests.** `tests/b5_analysis/test_step11_null_outcomes.py` runs the real `sensitivity_pass`, `produce_disclosures` and `adapt_claim_verdicts` on the engine's shapes in each non-issuable state (refused floor with and without source cells, not estimable, no anchor term, no deterministic term), and checks that step 9b's eligibility check and the producer agree on each state.
+
+## DRAFT — successor to D-178: explicit non-issuable contrast rows (NEEDS-ED, 2026-11-05)
+
+**Status: DRAFT / NEEDS-ED. This is proposed decision text, not an adopted
+decision, an allocated D-number or implementation authority.** D-178,
+D-189 and D-190 remain in force. No release artifact, registered result,
+producer, custody grant or paper fill changes through this draft.
+
+**Problem.** D-178's v2 sidecar copies numeric evidence only when every
+contrast is issuable. D-189 correctly treats legitimate non-issuance as a
+non-stopping outcome and creates no sidecar. A future typed account could
+say explicitly which contrast has numeric evidence and which cannot have
+it, while leaving the verdict's scientific outcome untouched. A missing
+bound must never become zero, an inferred bound or evidence for a claim.
+
+**Proposed decision, contingent on Ed's ratification:**
+
+1. Introduce a new, versioned account with one row per authenticated verdict
+   contrast, in verdict order, with unique registered contrast IDs and exact
+   coverage. Rows are a closed discriminated union: `issued` carries D-178's
+   exact numeric projection; `not_issuable` carries an explicit absence
+   status and source-structure witness, with no numeric widening or interval
+   fields. The witness identifies the source fields and binds their exact
+   bytes; it does not infer a cause from numerical values. Neither row kind
+   is a new scientific outcome. The wire name/version and witness schema
+   require ratification with the amended contract before implementation.
+
+2. The proposed rows cover the following existing states. These are
+   conditions in source verdicts, not new classifications of measured data.
+
+   | Proposed row kind | Source condition | Numeric authority |
+   | --- | --- | --- |
+   | `issued` | Every existing D-178 prerequisite passes | Exact copies of total, ordered terms, unit, estimand, metrology interval and decision interval; no arithmetic or extra widening |
+   | `not_issuable` | A floor resolution is outside `exact`/`transported` | None; preserve the resolution's state and recorded source-cell list, including an empty list for a genuinely unavailable floor |
+   | `not_issuable` | `estimator.metrology_aware_CI95` is null in a validated legitimate non-issuable state | None; no substitute interval |
+   | `not_issuable` | `deterministic_bounds.decision_interval` is null in a validated legitimate non-issuable state | None; no fabricated decision endpoints |
+   | `not_issuable` | `deterministic_bounds.terms` is an empty list | None; absence does not mean a zero total |
+   | `not_issuable` | The otherwise valid term list has no `E_clock_anchor_shift_bound_j` term | None; no invented anchor term |
+
+   A row can have more than one such condition. Its classification must
+   preserve D-189's first-failing-producer-clause rule, in contrast order
+   and `_project`'s own clause order; this table is not a new precedence
+   rule. In particular, the producer's grouped shape clause must not be
+   reordered by using this table as a sequential checklist.
+
+3. All input and provenance validation remains mandatory. Malformed JSON,
+   duplicate keys, non-finite or invalid numerals, unregistered or duplicate
+   contrast IDs, invalid units/estimands, bad joins, malformed term/interval
+   shapes and earlier provenance defects remain tooling failures. They do
+   not gain a `not_issuable` row. Keep D-178's exact numeral bytes, typed
+   quantities, ordered source-cell identity, estimator identity and join
+   guarantees for every issued row. Non-issuable rows must bind the actual
+   authenticated resolution structure; empty cells never authorize an
+   invented join or bypass a provenance check in another contrast.
+
+4. Bind the account to the exact claim-verdict bytes and independently
+   authenticated finalized manifest and floor artifact. A future custody
+   validator replays the projection and checks those bindings. An issued
+   sibling cannot confer numeric authority on a non-issuable subject. The
+   latter grants only access to its authenticated status; a fill requiring
+   numeric claim evidence still refuses. No sidecar value enters
+   `evaluate_claim`; no row changes a claim verdict, kept unit or registered
+   outcome. Custody-role versioning and grant rules require an explicit
+   contract amendment and their own synthetic counterexamples.
+
+5. This proposal would require a prospective successor to D-189's
+   **no-sidecar/no-claim-custody** rule if a future driver writes this new
+   account for a non-issuable run. It does not amend that rule now. The
+   release tags, existing v2 producer/validator, old receipts and D-190 null
+   behavior stay governed by their current decisions. Do not regenerate or
+   relabel released evidence. A future implementation must name its
+   analysis version, disclose this artifact/custody change and preserve
+   D-189's single blinded public non-issuance code; detailed row witnesses
+   must not reveal a state during a blinded run.
+
+**Open ruling.** Ed may adopt this typed-account direction, request a
+separate status-only artifact instead, or retain v2's all-or-nothing
+issuance. Recommendation: the typed account, prospectively and only after
+wire, precedence, custody and blinding tests are ratified. No code is
+authorized by recording these options.
