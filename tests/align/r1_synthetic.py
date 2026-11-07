@@ -9,8 +9,8 @@ No model, SHADE cache, sensor or host setting is touched.
 
 Selected by an R1 runtime config with ``"backend": "synthetic"``; its
 ``synthetic`` block may set ``battery`` {start_pct, drain_pct_per_h,
-resume_at_pct}, ``background_pcpu`` and ``decline_after_s`` (a synthetic
-GPU clock decline that far into decode).
+resume_at_pct}, ``background_pcpu``, ``decline_after_s`` (a synthetic
+GPU clock decline that far into decode) and ``slow_gain``.
 """
 from __future__ import annotations
 
@@ -79,7 +79,10 @@ class SyntheticBackend:
     def __init__(self, config):
         self.config = config
         self.options = config.get("synthetic") or {}
-        self.world = R1World()
+        # slow_gain (C/W): the heatsink pole's gain; the WP22 default gives the
+        # D step a ~3 C rise, at the WP14(a) heatsink-class boundary.
+        self.world = R1World(**({"slow_gain": float(self.options["slow_gain"])}
+                                if "slow_gain" in self.options else {}))
         self.clock = self.world.clock
         self.stack, _ = syn.patches(self.world)
         self.stack.__enter__()
@@ -130,6 +133,30 @@ class SyntheticBackend:
         return stop
 
     # Collectors -------------------------------------------------------------
+    def inventory_reader(self):
+        world = self.world
+
+        class Reader:
+            # A one-quantum deterministic dither stands in for sensor noise, so a
+            # settled synthetic key is not a "constant/stale idle series".
+            reads = 0
+
+            def enumerate_sensors(self):
+                return {"keys": [{"key": key, "unit": "rpm" if key == syn.FAN else "degC",
+                                  "data_type": "flt ", "data_size": 4}
+                                 for key in sorted((syn.FAST, syn.SLOW, syn.FAN, "Ta0P"))],
+                        "errors": {}, "unsupported_types": {}, "complete": True}
+
+            def read(self, keys):
+                self.reads += 1
+                dither = ((self.reads % 3) - 1) / 256
+                values = {syn.FAST: world.t_fast + dither, syn.SLOW: world.t_slow + dither, syn.FAN: 1200.0,
+                          "Ta0P": syn.AMBIENT_C + 0.001 * world.t_slow}
+                return {"values": {key: round(values[key] * 256) / 256 for key in keys if key in values},
+                        "errors": {key: "unknown synthetic sensor" for key in keys if key not in values}, "raw": {}}
+
+        return Reader()
+
     def session(self, policy, outputs_dir, run_id, *, pm_status=False):
         from types import SimpleNamespace
         from joulewise.align.apple.smc_reader import Reader

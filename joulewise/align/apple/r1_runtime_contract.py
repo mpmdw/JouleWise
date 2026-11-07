@@ -32,21 +32,31 @@ KIND_FIELDS = {
     "idle": (),
     "idle_soak": ("sensor_series_c",),
     # Ruling 4(b): the battery drain rate (%/h) under the 30B and under D.
-    "step-30b": ("battery_drain_pct_per_h",),
-    "step-d": ("slots", "e_D_j_per_token", "battery_drain_pct_per_h"),
-    "idle-until-soak": ("recovery_curve",),
-    "x-g": (),
+    # Protocol v4 :243-251 (LEAD-RULINGS-2 R5-5): the full-inventory R1
+    # classification around both planning-turn steps (the 30B for the record).
+    "step-30b": ("battery_drain_pct_per_h", "thermometry.status", "thermometry.classification_sha256"),
+    "step-d": ("slots", "e_D_j_per_token", "battery_drain_pct_per_h", "thermometry.status",
+               "thermometry.classification_sha256"),
+    # released: S_slow reached the G0 band of R (<= R + delta_slow) before the cap.
+    "idle-until-soak": ("recovery_curve", "released"),
+    # R5-1: X-G and the gated D runs gate against the soak R (reference_source
+    # r1_soak_reference), never a self-captured warm reference.
+    "x-g": ("reference_c", "reference_source"),
     **{kind: ("energy_j", "admitted_turns", "x7", "deadman.T_dead_s", "deadman.phases_s",
-              "battery_drain_pct_per_h")
+              "battery_drain_pct_per_h", "reference_c", "reference_source", "gate_waits_s.G1",
+              "gate_waits_s.H")
        for kind in GATED_D_KINDS},
     **{kind: ("reference_c", "g0_release_c", "delta_slow_c", "energy_j") for kind in PLANNING_KINDS},
     "d-4bit": (),
     "g0-release-soak": ("released",),
-    **{kind: ("t_decline_s",) for kind in HIGH_POWER_KINDS},
+    # R5-3: g0_released false = the leg's own G0 did not release (no turn, no
+    # t_decline); the driver makes adoption INCONCLUSIVE and R1 continues.
+    **{kind: ("t_decline_s", "g0_released") for kind in HIGH_POWER_KINDS},
     # Ruling 4(b): the SoC at which charging resumed during R1 (null if never).
     "harvest": ("charge_resume_soc_pct",),
 }
-NEEDS_SOAK_REFERENCE = frozenset(("idle-until-soak", "g0-release-soak", *PLANNING_KINDS, *HIGH_POWER_KINDS))
+NEEDS_SOAK_REFERENCE = frozenset(("idle-until-soak", "g0-release-soak", "x-g", *GATED_D_KINDS, *PLANNING_KINDS,
+                                  *HIGH_POWER_KINDS))
 
 
 def required_fields(kind, *, quiet, contract_key=None):

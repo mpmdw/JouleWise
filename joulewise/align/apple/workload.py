@@ -709,8 +709,11 @@ class EpisodeRuntimeAdapter:
         token_details = budget_record(spec, turns, reason, incomplete=incomplete,
                                       effective_context_cap=self.prepared.get("max_context_tokens"))
         if gate_deadman is not None:
+            # An R1 step member re-arms its deadman after the G0 (LEAD-RULINGS-2
+            # R5-2) and says so on the deadman; W1 members never do.
             token_details['token_budget'].update(deadline_ns=gate_deadman.deadline_ns,
-                                                deadline_origin='G0_entry', planned_g0_allowance_s=0)
+                                                deadline_origin=getattr(gate_deadman, 'origin', 'G0_entry'),
+                                                planned_g0_allowance_s=0)
         episode = Episode(
             episode_id=episode_id,
             task_pair=task.task_pair if task is not None else "unavailable",
