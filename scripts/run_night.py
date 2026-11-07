@@ -4130,9 +4130,14 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
             # is not this night's; leave the mode and the marker to it.
             record = {"ok": False, "action": "not_owner", "marker": host_marker,
                       "owner": powermode.marker_owner(host_marker)}
-            _append_log(Path(plan.custody_root), "ac powermode close: the host marker belongs to another "
-                        "session after the retake; nothing restored: " + json.dumps(record, sort_keys=True,
-                                                                                    default=str))
+            try:
+                _append_log(Path(plan.custody_root), "ac powermode close: the host marker belongs to another "
+                            "session after the retake; nothing restored: " + json.dumps(record, sort_keys=True,
+                                                                                        default=str))
+            finally:
+                # Round-7 executing review: free the retaken lock on this
+                # return too, or the descriptor blocks every later session.
+                lock.release()
             return record
         markers = [m for m in _power_markers(plan) if os.path.lexists(m)] or [host_marker]
         record = powermode.restore_automatic(markers[0], runner=runner)

@@ -1640,12 +1640,16 @@ def run(args):
         # exceptions raised by context teardown itself.
         _CHILD_HOST_LOCK = None
         try:
-            if host_lock.held:
+            if host_lock.held and not guard.deferred:
+                # Round-7 executing review: a deferred guard (no retake, or a
+                # W1 session's marker after the retake) is never restored by
+                # this second attempt, which would bypass both checks.
                 guard.restore()
             if guard.deferred:
-                record["restore_deferred"] = ("the host night lock could not be retaken (a child of this run may "
-                                              "still hold it); the markers are left for the dead-man or the next "
-                                              "session start (lead ruling R7-5)")
+                record["restore_deferred"] = next(
+                    (r["reason"] for r in reversed(guard.records) if r.get("point") == "restore_deferred"),
+                    "the host night lock could not be retaken (a child of this run may still hold it); the "
+                    "markers are left for the dead-man or the next session start (lead ruling R7-5)")
             elif not host_lock.held:
                 # R6-7 (round-6 Sol critique): without the host night lock this
                 # run never changed the mode, and another night may be

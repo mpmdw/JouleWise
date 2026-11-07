@@ -436,6 +436,15 @@ def admit_ac_powermode(expected, *, marker=None, runner=None, markers=(), lock=N
                 lock.release()
         record["observations"].append({"point": "after_marker_restore", **second})
         final = second
+        if expected != 0 and second["value"] is not None and second["value"] != 0:
+            # Round-7 executing review (lead ruling R7-7): a restore that does
+            # not read back 0 keeps the markers and refuses. Under a plan of 2
+            # the mode would otherwise equal ``expected`` and admit a night
+            # whose owed restore just failed.
+            record["observed"] = second["value"]
+            record["pmset_text"] = second["pmset_text"]
+            return refuse(f"a High Power marker's Automatic restore did not read back 0 (observed "
+                          f"{second['value']}); markers kept (lead ruling R7-7)")
     else:
         final = first
     record["observed"] = final["value"]
