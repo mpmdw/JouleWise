@@ -2126,7 +2126,7 @@ def run(mode,index,custody,*,workers=None,resume=False,_test_pack_table=None,_te
                     return candidate,False
                 except _resume.ResumeError:
                     runner._counter=counter
-            fresh=attach(new_state());fresh.index=state.index
+            fresh=attach(new_state());fresh.index=state.index;fresh.workers=run_caches.workers
             try:
                 _resume.rebuild(fresh,runner,runner_factory,document,deadline=deadline,caches=run_caches)
             except _resume.ResumeError:
@@ -2240,8 +2240,13 @@ def run(mode,index,custody,*,workers=None,resume=False,_test_pack_table=None,_te
                 if reason is None:break
                 try:
                     _resume.rollback(restricted,document,move_live=False,verify_only=True)
+                    # Executing review 11-06: the retry, and a builder step's rebuild before it,
+                    # run serially and without the failed attempt's lost-observer flag (else
+                    # the rebuild refuses as rebuild_deadline_fired and no retry ever runs).
+                    _resume.serial(s,run_caches)
                     candidate,full=restored(s,document,full=step in _resume.BUILDERS)
                 except _resume.ResumeError:
+                    s.workers=run_caches.workers=workers
                     break
                 moved=_resume.rollback(restricted,document,move_live=False)
                 retries+=1

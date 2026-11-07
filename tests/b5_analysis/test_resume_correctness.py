@@ -10,6 +10,7 @@ from unittest import mock
 
 from joulewise import powermetrics_fiducial as pf
 from joulewise.b5_analysis import dry_run as d, parallel, resume as R
+from joulewise.b5_analysis.deadline_observer import OBSERVER_UNAVAILABLE
 from tests.b5_analysis import test_dry_run as base, test_resume as recovery
 from tests.b5_analysis.test_shared_physics_cache import JumpingClock
 
@@ -167,6 +168,62 @@ class RecoveryCorrectnessTests(recovery.ResumeTests):
         with mock.patch.object(R, '_atomic', atomic):
             custody = self.crash(_runner=recovery.CrashingDouble, workers=1)
         recovery.CrashingDouble.crash_at = None
+        self.assertSameRun(reference, self.execute(custody=custody, resume=True, workers=1))
+
+
+class ObserverLostOnceDouble(base.DriverDouble):
+    """The first step-1 strict validation loses its worker observer (the sticky run-cache flag)."""
+    lost = False
+
+    def run(self, main, argv, *, step, window=None, stdout_path=None):
+        result = super().run(main, argv, step=step, window=window, stdout_path=stdout_path)
+        if step == '1' and argv and argv[0] == 'validate-bundle' and not type(self).lost:
+            type(self).lost = True
+            from joulewise import analysis_run_cache
+            analysis_run_cache.current().worker_observer_unavailable = True
+        return result
+
+
+class ExecutingReviewTests(RecoveryCorrectnessTests):
+    """Regressions from the executing review of 9eb90c6c5 (lead + local Sol 6.1)."""
+    for name in [n for n in dir(RecoveryCorrectnessTests) if n.startswith('test_')]:
+        locals()[name] = None
+    del name
+
+    def test_a_lost_worker_observer_in_a_builder_step_is_retried(self):
+        # Before the fix the builder retry's rebuild saw the failed attempt's sticky
+        # flag, refused as rebuild_deadline_fired, and the step stayed a tooling refusal.
+        reference = self.execute(workers=1)
+        ObserverLostOnceDouble.lost = False
+        result = self.execute(runner=ObserverLostOnceDouble, workers=1)
+        self.assertTrue(ObserverLostOnceDouble.lost)
+        self.assertEqual((result['code'], result['raw'], result['stderr']),
+                         (reference['code'], reference['raw'], reference['stderr']))
+        self.assertEqual(recovery.tree(result['restricted']), recovery.tree(reference['restricted']))
+        path = result['restricted'] / R.RESUME_DIR / R.RETRIES
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        self.assertEqual([(r['event'], r['step'], r['reason'], r['rebuilt']) for r in rows],
+                         [('step_retry', '1', OBSERVER_UNAVAILABLE, True)])
+
+    def test_malformed_checkpoint_fields_are_a_closed_refusal(self):
+        reference = self.execute(workers=1)
+        custody = self.crash_boundary(3)
+        path = custody / 'dry-run/restricted' / R.RESUME_DIR / R.CHECKPOINT
+        original = path.read_bytes()
+        mutations = {
+            'binding': None, 'step_records': [1], 'raw_codes': [[{}]], 'outputs': [['role', 'name']],
+            'members': 'x', 'ran': [0], 'position': len(d.STEPS) + 1, 'counter': -1, 'stopped': 0,
+            'files': {'a': 1}, 'parts': {'census': [1]}}
+        for key, value in mutations.items():
+            with self.subTest(key=key):
+                document = json.loads(original)
+                document[key] = value
+                path.write_bytes(R._canonical(document))
+                resumed = self.execute(custody=custody, resume=True, workers=1)
+                self.assertEqual(resumed['code'], 2)
+                self.assertIn('resume refused: checkpoint_invalid', resumed['stderr'])
+                self.assertNotIn('Traceback', resumed['stderr'])
+        path.write_bytes(original)
         self.assertSameRun(reference, self.execute(custody=custody, resume=True, workers=1))
 
 

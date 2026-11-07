@@ -214,6 +214,38 @@ def note(restricted, row):
         pass
 
 
+def _strings(value, length=None):
+    return (type(value) is list and (length is None or len(value) == length)
+            and all(type(item) is str for item in value))
+
+
+def _well_formed(document):
+    """The nested shapes restore(), verify_state() and rollback() read: a malformed one is a closed refusal."""
+    from .dry_run import STEPS
+    parts = document['parts']
+    if type(document['step_records']) is not list or type(document['raw_codes']) is not list:
+        return False
+    try:
+        for row in document['step_records']:
+            _record(row)
+        for row, code, exception in document['raw_codes']:
+            _record(row)
+            if (code is not None and type(code) is not str) or (exception is not None and type(exception) is not str):
+                return False
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return False
+    return (type(document['binding']) is dict and type(document['stopped']) is bool
+            and 0 <= document['position'] <= len(STEPS) and document['counter'] >= 0
+            and _strings(document['ran']) and _strings(document['dirs'])
+            and all(type(value) is str for value in document['files'].values())
+            and type(document['outputs']) is list and all(_strings(item, 3) for item in document['outputs'])
+            and type(document['members']) is list and all(_strings(item, 2) for item in document['members'])
+            and (parts is None or (type(parts) is dict and set(parts) == {'attempts', 'windows', 'census', 'flags'}
+                                   and all(type(parts[key]) is list for key in parts)
+                                   and all(type(row) is dict and type(row.get('window')) is str
+                                           and type(row.get('path')) is str for row in parts['census']))))
+
+
 def load(restricted, binding):
     """The checkpoint of an interrupted run, checked against this invocation's binding."""
     path = Path(restricted) / RESUME_DIR / CHECKPOINT
@@ -225,7 +257,8 @@ def load(restricted, binding):
         raise ResumeError('checkpoint_unreadable') from None
     if (type(document) is not dict or set(document) != _KEYS or document['schema_version'] != SCHEMA
             or type(document['position']) is not int or type(document['counter']) is not int
-            or type(document['files']) is not dict or type(document['dirs']) is not list):
+            or type(document['files']) is not dict or type(document['dirs']) is not list
+            or not _well_formed(document)):
         raise ResumeError('checkpoint_invalid')
     for key in sorted(binding):
         if document['binding'].get(key) != binding[key]:
