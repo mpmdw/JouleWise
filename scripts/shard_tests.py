@@ -698,6 +698,22 @@ def _group_units_by_module(units) -> tuple[tuple[str, bool, tuple[str, ...]], ..
     )
 
 
+def _detach_unfileable_main() -> None:
+    """Let multiprocessing's spawn start method work when ``__main__`` is not a file.
+
+    CI runs each shard from ``python - <<'PY'``, so ``__main__.__file__`` is
+    ``'<stdin>'``. A spawned worker re-runs ``__main__`` from that path and dies
+    with FileNotFoundError before it runs its task (the b5 producer and member
+    pools use spawn). Without ``__file__`` spawn skips that step, as it does for
+    an interactive interpreter. A real script path is left alone.
+    """
+
+    main = sys.modules.get("__main__")
+    path = getattr(main, "__file__", None)
+    if getattr(main, "__spec__", None) is None and isinstance(path, str) and not os.path.isfile(path):
+        del main.__file__
+
+
 def run_units(units, shard_count: int, shard_index: int) -> int:
     """Run one shard of mixed whole-module and per-test units in this process.
 
@@ -715,6 +731,7 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
     """
 
     _ensure_import_paths()
+    _detach_unfileable_main()
     loader = unittest.TestLoader()
     total_tests = total_failures = total_errors = total_skipped = 0
     unit_list = list(units)

@@ -1,0 +1,2173 @@
+{
+ "step": "5",
+ "interval_s": 0.02,
+ "samples": 55495,
+ "self": [
+  [
+   "threading.py:323:Condition.wait",
+   13775
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath",
+   7542
+  ],
+  [
+   "powermetrics_fiducial.py:562:_overlap_fraction",
+   6473
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read",
+   5572
+  ],
+  [
+   "authentication_io.py:637:_reserved_vocabulary_path",
+   4133
+  ],
+  [
+   "authentication_io.py:918:bridged_grammar_verdict",
+   1522
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge",
+   1380
+  ],
+  [
+   "powermetrics_fiducial.py:555:_huber",
+   1289
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw",
+   1268
+  ],
+  [
+   "pathlib.py:1015:Path.read_bytes",
+   1231
+  ],
+  [
+   "powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr>",
+   1006
+  ],
+  [
+   "pathlib.py:835:Path.stat",
+   944
+  ],
+  [
+   "<frozen abc>:121:ABCMeta.__subclasscheck__",
+   883
+  ],
+  [
+   "analysis_verified_store.py:421:_walk",
+   831
+  ],
+  [
+   "typing.py:1221:_BaseGenericAlias.__instancecheck__",
+   668
+  ],
+  [
+   "typing.py:1492:_SpecialGenericAlias.__subclasscheck__",
+   665
+  ],
+  [
+   "analysis_verified_store.py:339:canonical_digest",
+   630
+  ],
+  [
+   "pathlib.py:1005:Path.open",
+   547
+  ],
+  [
+   "analysis_verified_store.py:2543:_kernel_resolves_to",
+   335
+  ],
+  [
+   "fractions.py:317:Fraction._from_coprime_ints",
+   328
+  ],
+  [
+   "analysis_verified_store.py:281:_frame",
+   305
+  ],
+  [
+   "powermetrics_fiducial.py:454:TraceInterval.duration_s",
+   276
+  ],
+  [
+   "analysis_verified_store.py:285:canonical_bytes",
+   224
+  ],
+  [
+   "authentication_io.py:683:_strict_jsonl",
+   192
+  ],
+  [
+   "idle_admission.py:344:_record_cpu_busy_ratio",
+   147
+  ],
+  [
+   "powermetrics_fiducial.py:571:_pulse_loss",
+   140
+  ],
+  [
+   "analysis_verified_store.py:492:_file_signature",
+   139
+  ],
+  [
+   "pathlib.py:1030:Path.write_bytes",
+   121
+  ],
+  [
+   "archive.py:37:_read",
+   120
+  ],
+  [
+   "fractions.py:613:Fraction._operator_fallbacks.<locals>.forward",
+   101
+  ],
+  [
+   "analysis_verified_store.py:322:canonical_bytes.<locals>.<genexpr>",
+   96
+  ],
+  [
+   "calibration_ledger.py:233:canonical_sha256",
+   93
+  ],
+  [
+   "authentication_io.py:619:_finite_float",
+   91
+  ],
+  [
+   "decoder.py:344:JSONDecoder.raw_decode",
+   84
+  ],
+  [
+   "fractions.py:742:Fraction._mul",
+   79
+  ],
+  [
+   "whole_window.py:7281:_validated_evaluation_basis",
+   74
+  ],
+  [
+   "plistlib.py:198:_PlistParser.handle_begin_element",
+   70
+  ],
+  [
+   "authentication_io.py:626:_finite_int",
+   69
+  ],
+  [
+   "pathlib.py:1050:Path.iterdir",
+   69
+  ],
+  [
+   "analysis_verified_store.py:321:canonical_bytes.<locals>.<genexpr>",
+   65
+  ],
+  [
+   "authentication_io.py:654:_strict_json",
+   63
+  ],
+  [
+   "<frozen abc>:117:ABCMeta.__instancecheck__",
+   59
+  ],
+  [
+   "whole_window.py:2452:canonical_sha256",
+   57
+  ],
+  [
+   "<frozen importlib._bootstrap>:480:_call_with_frames_removed",
+   55
+  ],
+  [
+   "powermetrics_fiducial.py:820:_fit_pulse.<locals>.<lambda>",
+   54
+  ],
+  [
+   "reduce.py:2003:_shift_energy_j.<locals>.<genexpr>",
+   54
+  ],
+  [
+   "authentication_io.py:600:_duplicate_key",
+   52
+  ],
+  [
+   "decoder.py:333:JSONDecoder.decode",
+   52
+  ],
+  [
+   "decoder.py:285:JSONDecoder.__init__",
+   47
+  ],
+  [
+   "fractions.py:186:Fraction.__new__",
+   45
+  ],
+  [
+   "analysis_verified_store.py:324:canonical_bytes.<locals>.<genexpr>",
+   45
+  ],
+  [
+   "powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda>",
+   42
+  ],
+  [
+   "fractions.py:726:Fraction._sub",
+   40
+  ],
+  [
+   "<string>:2:__create_fn__.<locals>.__init__",
+   39
+  ],
+  [
+   "dataclasses.py:1301:is_dataclass",
+   39
+  ],
+  [
+   "fractions.py:933:Fraction._richcmp",
+   38
+  ],
+  [
+   "fractions.py:710:Fraction._add",
+   38
+  ],
+  [
+   "plistlib.py:209:_PlistParser.handle_data",
+   37
+  ],
+  [
+   "powermetrics_fiducial.py:739:_fit_pulse",
+   37
+  ],
+  [
+   "analysis_verified_store.py:393:_hash_file_nofollow",
+   34
+  ],
+  [
+   "floor_extraction.py:1705:_forbidden_admitted_vocabulary_paths.<locals>.walk",
+   33
+  ],
+  [
+   "fractions.py:758:Fraction._div",
+   29
+  ],
+  [
+   "powermetrics_fiducial.py:709:_grid",
+   29
+  ],
+  [
+   "pathlib.py:1306:Path.mkdir",
+   27
+  ],
+  [
+   "whole_window.py:2345:custody_telemetry_identity",
+   26
+  ],
+  [
+   "plistlib.py:204:_PlistParser.handle_end_element",
+   25
+  ],
+  [
+   "reduce.py:1171:_verify_instrument_calibration",
+   23
+  ],
+  [
+   "fractions.py:959:Fraction.__gt__",
+   22
+  ],
+  [
+   "__init__.py:299:loads",
+   21
+  ],
+  [
+   "pathlib.py:1059:Path._scandir",
+   20
+  ],
+  [
+   "reduce.py:172:_integrate.<locals>.<genexpr>",
+   20
+  ],
+  [
+   "authentication_io.py:1144:V2AuthenticationReadSession._register",
+   19
+  ],
+  [
+   "fractions.py:963:Fraction.__le__",
+   19
+  ],
+  [
+   "uncertainty_evidence.py:666:_lp2",
+   18
+  ],
+  [
+   "whole_window.py:8125:_validate_row_uncached",
+   18
+  ],
+  [
+   "pathlib.py:200:_WildcardSelector._select_from",
+   16
+  ],
+  [
+   "fractions.py:397:Fraction.numerator",
+   16
+  ],
+  [
+   "shutil.py:642:_rmtree_safe_fd",
+   16
+  ],
+  [
+   "powermetrics_fiducial.py:721:_baseline_stats.<locals>.<genexpr>",
+   15
+  ],
+  [
+   "mint_floor_artifact.py:295:_sha256",
+   15
+  ]
+ ],
+ "inclusive": [
+  [
+   "joined_s10.py:241:JoinedHarness.execute",
+   48847
+  ],
+  [
+   "b5_e2e_synthetic.py:1:<module>",
+   48847
+  ],
+  [
+   "b5_e2e_synthetic.py:179:main",
+   48847
+  ],
+  [
+   "dry_run.py:1950:run",
+   48847
+  ],
+  [
+   "dry_run.py:1204:step_5",
+   48845
+  ],
+  [
+   "dry_run.py:646:RunState.invoke",
+   48841
+  ],
+  [
+   "dry_run.py:120:StepRunner.run",
+   48837
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4772:main",
+   28726
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4435:mint_multi_cell_floor_artifact",
+   28725
+  ],
+  [
+   "mint_floor_artifact_generalized.py:132:compose_indexed_producers",
+   21908
+  ],
+  [
+   "whole_window.py:8729:whole_window_refusal_reasons",
+   20986
+  ],
+  [
+   "emit_floor_mint_pinset.py:560:main",
+   20111
+  ],
+  [
+   "emit_floor_mint_pinset.py:506:emit_indexed_pinset",
+   20110
+  ],
+  [
+   "mint_floor_artifact_generalized.py:3937:_authenticate_v2_inputs",
+   17372
+  ],
+  [
+   "mint_floor_artifact_generalized.py:3881:_authenticate_v2_component",
+   17264
+  ],
+  [
+   "mint_floor_artifact.py:1092:_authenticate_component",
+   17263
+  ],
+  [
+   "analysis_member_pool.py:566:consume",
+   16639
+  ],
+  [
+   "analysis_verified_store.py:1692:VerifiedStore.call",
+   16061
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4516:_mint_multi_cell_floor_artifact_active",
+   14644
+  ],
+  [
+   "whole_window.py:7705:_validate_row",
+   14108
+  ],
+  [
+   "whole_window.py:8125:_validate_row_uncached",
+   14095
+  ],
+  [
+   "producer_parallel.py:9:consume_prepared",
+   14087
+  ],
+  [
+   "pack_parallel.py:170:consume",
+   14087
+  ],
+  [
+   "mint_floor_artifact_generalized.py:169:compose_indexed_producers.<locals>.<lambda>",
+   14080
+  ],
+  [
+   "mint_floor_artifact_generalized.py:188:_compose_indexed_producer",
+   14080
+  ],
+  [
+   "bracket.py:428:evaluate_window_bracket",
+   13946
+  ],
+  [
+   "threading.py:323:Condition.wait",
+   13775
+  ],
+  [
+   "_base.py:428:Future.result",
+   13774
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons",
+   11896
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read",
+   10625
+  ],
+  [
+   "analysis_verified_store.py:2049:VerifiedStore._fill",
+   10537
+  ],
+  [
+   "powermetrics_fiducial.py:1097:rederive_detection_from_artifacts",
+   10399
+  ],
+  [
+   "mint_floor_artifact.py:530:_authenticated_consumption_summaries",
+   9974
+  ],
+  [
+   "powermetrics_fiducial.py:912:detect_pulses",
+   9380
+  ],
+  [
+   "powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr>",
+   9364
+  ],
+  [
+   "powermetrics_fiducial.py:739:_fit_pulse",
+   9363
+  ],
+  [
+   "authentication_io.py:1379:read_authentication_input",
+   9092
+  ],
+  [
+   "powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss",
+   9042
+  ],
+  [
+   "powermetrics_fiducial.py:571:_pulse_loss",
+   9038
+  ],
+  [
+   "powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr>",
+   8898
+  ],
+  [
+   "whole_window.py:5250:_read_json_object",
+   8383
+  ],
+  [
+   "pack_parallel.py:122:pack_map",
+   8061
+  ],
+  [
+   "bracket.py:253:_calibration_assessment",
+   7867
+  ],
+  [
+   "calibration_bracketing.py:2842:calibration_bracket_for_bundles",
+   7840
+  ],
+  [
+   "calibration_bracketing.py:1675:_load_calibration_candidate_unbounded",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1944:discover_calibration_candidates",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1659:load_calibration_candidate.<locals>.inspect",
+   7790
+  ],
+  [
+   "calibration_ledger.py:5476:probe_custody",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1807:_candidate_from_observation",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1651:load_calibration_candidate",
+   7790
+  ],
+  [
+   "powermetrics_fiducial.py:1279:verify_stored_evidence_physics",
+   7783
+  ],
+  [
+   "<frozen posixpath>:420:realpath",
+   7561
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath",
+   7546
+  ],
+  [
+   "whole_window.py:4451:launch_lineage_refusal_reasons",
+   6855
+  ],
+  [
+   "powermetrics_fiducial.py:562:_overlap_fraction",
+   6749
+  ],
+  [
+   "whole_window.py:4075:ordinary_present_bundle_paths",
+   6716
+  ],
+  [
+   "authentication_io.py:719:_parse_strict",
+   6648
+  ],
+  [
+   "authentication_io.py:786:_parse_strict_below",
+   6648
+  ],
+  [
+   "analysis_member_pool.py:466:member_map",
+   6556
+  ],
+  [
+   "authentication_io.py:654:_strict_json",
+   6456
+  ],
+  [
+   "whole_window.py:1901:AuthenticatedConsumptionSession._prepare",
+   6393
+  ],
+  [
+   "whole_window.py:9139:whole_window_drift_allowances",
+   6315
+  ],
+  [
+   "authentication_io.py:683:_strict_jsonl",
+   6300
+  ],
+  [
+   "authentication_io.py:637:_reserved_vocabulary_path",
+   6088
+  ],
+  [
+   "bracket.py:312:_window_inputs",
+   5982
+  ],
+  [
+   "pathlib.py:1228:Path.resolve",
+   5788
+  ],
+  [
+   "floor_mint_estimator.py:675:bind_v2_floor_artifact_evidence",
+   5532
+  ],
+  [
+   "floor_mint_estimator.py:533:recompute_comparative_estimate",
+   5293
+  ],
+  [
+   "floor_mint_estimator.py:461:_authenticated_common_mode_session",
+   4706
+  ],
+  [
+   "analysis_verified_store.py:1464:VerifiedStore._prepare",
+   4620
+  ],
+  [
+   "powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda>",
+   4598
+  ],
+  [
+   "analysis_verified_store.py:1836:VerifiedStore._apply",
+   4583
+  ],
+  [
+   "powermetrics_fiducial.py:820:_fit_pulse.<locals>.<lambda>",
+   4538
+  ],
+  [
+   "mint_floor_artifact.py:443:_strict_bundle",
+   4234
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge",
+   4169
+  ],
+  [
+   "mint_floor_artifact.py:1199:_authenticate_component.<locals>.<genexpr>",
+   3774
+  ],
+  [
+   "mint_floor_artifact_generalized.py:3295:_build_v2_artifacts",
+   3710
+  ],
+  [
+   "mint_floor_artifact.py:1923:bind_floor_artifact_evidence",
+   3671
+  ],
+  [
+   "mint_floor_artifact_generalized.py:2710:_v2_gate_postcollection",
+   3593
+  ],
+  [
+   "cli.py:550:validate_bundle",
+   3332
+  ],
+  [
+   "emit_floor_mint_pinset.py:549:emit_indexed_pinset.<locals>.<lambda>",
+   2966
+  ],
+  [
+   "whole_window.py:1613:_verified_environment_refusals",
+   2721
+  ],
+  [
+   "reduce.py:1171:_verify_instrument_calibration",
+   2716
+  ],
+  [
+   "cli.py:618:_strict_problems",
+   2693
+  ],
+  [
+   "cli.py:463:_strict_reduce_dict",
+   2668
+  ],
+  [
+   "reduce.py:2627:reduce_bundle",
+   2668
+  ],
+  [
+   "analysis_verified_store.py:1171:reduce_bundle_dict",
+   2668
+  ],
+  [
+   "reduce.py:3467:_reduce",
+   2667
+  ],
+  [
+   "reduce.py:1735:_derive_anchor_context",
+   2654
+  ],
+  [
+   "analysis_verified_store.py:1394:_Hit.apply",
+   2563
+  ],
+  [
+   "typing.py:1221:_BaseGenericAlias.__instancecheck__",
+   2214
+  ],
+  [
+   "whole_window.py:1542:_verified_instrument_calibration",
+   2155
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw",
+   2147
+  ],
+  [
+   "authentication_io.py:1563:sha256_authentication_input",
+   2147
+  ],
+  [
+   "emit_floor_mint_pinset.py:152:build_pinset",
+   1843
+  ],
+  [
+   "pathlib.py:1015:Path.read_bytes",
+   1726
+  ],
+  [
+   "whole_window.py:4381:_authenticate_whole_window_launch_sources",
+   1640
+  ],
+  [
+   "whole_window.py:4259:_hazard_bound_corpus_binding",
+   1635
+  ],
+  [
+   "typing.py:1492:_SpecialGenericAlias.__subclasscheck__",
+   1546
+  ],
+  [
+   "analysis_verified_store.py:1007:_AuthAdapter.ensure_verdict",
+   1522
+  ],
+  [
+   "authentication_io.py:1098:V2AuthenticationReadSession.bridged_grammar_verdict",
+   1522
+  ],
+  [
+   "authentication_io.py:918:bridged_grammar_verdict",
+   1522
+  ],
+  [
+   "whole_window.py:524:_archive_launch_refusal_reasons",
+   1522
+  ],
+  [
+   "whole_window.py:5538:_bundle_evidence_sha256",
+   1390
+  ],
+  [
+   "powermetrics_fiducial.py:555:_huber",
+   1289
+  ],
+  [
+   "analysis_verified_store.py:563:_Scope.verify_tree",
+   1177
+  ],
+  [
+   "analysis_verified_store.py:1717:VerifiedStore.probe",
+   1168
+  ],
+  [
+   "analysis_member_pool.py:449:_prefilter",
+   1153
+  ],
+  [
+   "authentication_io.py:1402:read_authentication_text",
+   963
+  ],
+  [
+   "pathlib.py:835:Path.stat",
+   945
+  ],
+  [
+   "whole_window.py:4100:_authenticated_bundle_launch_lineage_set",
+   931
+  ],
+  [
+   "<frozen abc>:121:ABCMeta.__subclasscheck__",
+   884
+  ],
+  [
+   "uncertainty_evidence.py:878:derive_powermetrics_anchor_v3",
+   878
+  ],
+  [
+   "whole_window.py:7364:_whole_window_row_launch_refusal_reasons",
+   873
+  ],
+  [
+   "detection_floor.py:558:complete_bundle_sha256",
+   847
+  ],
+  [
+   "analysis_verified_store.py:285:canonical_bytes",
+   843
+  ],
+  [
+   "analysis_verified_store.py:1101:_scalar_bytes",
+   843
+  ],
+  [
+   "analysis_verified_store.py:324:canonical_bytes.<locals>.<genexpr>",
+   840
+  ],
+  [
+   "analysis_verified_store.py:421:_walk",
+   831
+  ],
+  [
+   "whole_window.py:2345:custody_telemetry_identity",
+   793
+  ],
+  [
+   "analysis_verified_store.py:321:canonical_bytes.<locals>.<genexpr>",
+   784
+  ],
+  [
+   "uncertainty_evidence.py:666:_lp2",
+   722
+  ],
+  [
+   "floor_mint_estimator.py:334:_authenticate_mint_launch_lineage",
+   719
+  ],
+  [
+   "analysis_verified_store.py:339:canonical_digest",
+   630
+  ],
+  [
+   "whole_window.py:5268:_current_strict_summary",
+   629
+  ],
+  [
+   "fractions.py:613:Fraction._operator_fallbacks.<locals>.forward",
+   611
+  ],
+  [
+   "pathlib.py:1005:Path.open",
+   550
+  ],
+  [
+   "whole_window.py:6633:_load_idle_records",
+   521
+  ],
+  [
+   "arm_readiness.py:11727:authenticate_bundle_launch_lineage",
+   447
+  ],
+  [
+   "window_lineage.py:617:authenticate_lineage",
+   447
+  ],
+  [
+   "window_lineage.py:775:authenticate_bundle",
+   447
+  ],
+  [
+   "window_lineage.py:590:_completion_records",
+   446
+  ],
+  [
+   "__init__.py:299:loads",
+   440
+  ],
+  [
+   "uncertainty_evidence.py:607:_lp2_line_optimum",
+   430
+  ],
+  [
+   "pathlib.py:886:Path.is_file",
+   408
+  ],
+  [
+   "whole_window.py:6748:_current_core_rederivation_reasons.<locals>.<genexpr>",
+   406
+  ],
+  [
+   "decoder.py:333:JSONDecoder.decode",
+   372
+  ],
+  [
+   "whole_window.py:7281:_validated_evaluation_basis",
+   366
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4800:main.<locals>.<lambda>",
+   366
+  ],
+  [
+   "analysis_verified_store.py:472:tree_digest",
+   350
+  ],
+  [
+   "analysis_verified_store.py:2543:_kernel_resolves_to",
+   335
+  ],
+  [
+   "fractions.py:317:Fraction._from_coprime_ints",
+   328
+  ],
+  [
+   "bundle_read.py:281:BundleReader.events",
+   326
+  ],
+  [
+   "decoder.py:344:JSONDecoder.raw_decode",
+   320
+  ],
+  [
+   "analysis_verified_store.py:281:_frame",
+   305
+  ],
+  [
+   "archive.py:37:_read",
+   304
+  ],
+  [
+   "floor_extraction.py:2640:_common_mode_block_inputs_from_evidence",
+   302
+  ],
+  [
+   "bracket.py:73:_Inputs.source",
+   287
+  ],
+  [
+   "whole_window.py:4081:ordinary_present_bundle_paths.<locals>.<genexpr>",
+   279
+  ],
+  [
+   "powermetrics_fiducial.py:454:TraceInterval.duration_s",
+   276
+  ]
+ ],
+ "edges": [
+  [
+   "authentication_io.py:786:_parse_strict_below -> authentication_io.py:786:_parse_strict_below",
+   203013
+  ],
+  [
+   "joined_s10.py:241:JoinedHarness.execute -> dry_run.py:1950:run",
+   48847
+  ],
+  [
+   "b5_e2e_synthetic.py:179:main -> joined_s10.py:241:JoinedHarness.execute",
+   48847
+  ],
+  [
+   "b5_e2e_synthetic.py:1:<module> -> b5_e2e_synthetic.py:179:main",
+   48847
+  ],
+  [
+   "dry_run.py:1950:run -> dry_run.py:1204:step_5",
+   48845
+  ],
+  [
+   "dry_run.py:1204:step_5 -> dry_run.py:646:RunState.invoke",
+   48841
+  ],
+  [
+   "dry_run.py:646:RunState.invoke -> dry_run.py:120:StepRunner.run",
+   48837
+  ],
+  [
+   "dry_run.py:120:StepRunner.run -> mint_floor_artifact_generalized.py:4772:main",
+   28726
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4772:main -> mint_floor_artifact_generalized.py:4435:mint_multi_cell_floor_artifact",
+   28725
+  ],
+  [
+   "authentication_io.py:637:_reserved_vocabulary_path -> authentication_io.py:637:_reserved_vocabulary_path",
+   25726
+  ],
+  [
+   "dry_run.py:120:StepRunner.run -> emit_floor_mint_pinset.py:560:main",
+   20111
+  ],
+  [
+   "emit_floor_mint_pinset.py:560:main -> emit_floor_mint_pinset.py:506:emit_indexed_pinset",
+   20110
+  ],
+  [
+   "mint_floor_artifact_generalized.py:3937:_authenticate_v2_inputs -> mint_floor_artifact_generalized.py:3881:_authenticate_v2_component",
+   17264
+  ],
+  [
+   "mint_floor_artifact_generalized.py:3881:_authenticate_v2_component -> mint_floor_artifact.py:1092:_authenticate_component",
+   17263
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4435:mint_multi_cell_floor_artifact -> mint_floor_artifact_generalized.py:4516:_mint_multi_cell_floor_artifact_active",
+   14644
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4435:mint_multi_cell_floor_artifact -> mint_floor_artifact_generalized.py:4435:mint_multi_cell_floor_artifact",
+   14644
+  ],
+  [
+   "whole_window.py:8729:whole_window_refusal_reasons -> whole_window.py:7705:_validate_row",
+   14102
+  ],
+  [
+   "whole_window.py:7705:_validate_row -> whole_window.py:8125:_validate_row_uncached",
+   14095
+  ],
+  [
+   "producer_parallel.py:9:consume_prepared -> pack_parallel.py:170:consume",
+   14087
+  ],
+  [
+   "mint_floor_artifact_generalized.py:132:compose_indexed_producers -> producer_parallel.py:9:consume_prepared",
+   14086
+  ],
+  [
+   "pack_parallel.py:170:consume -> analysis_member_pool.py:566:consume",
+   14082
+  ],
+  [
+   "mint_floor_artifact_generalized.py:169:compose_indexed_producers.<locals>.<lambda> -> mint_floor_artifact_generalized.py:188:_compose_indexed_producer",
+   14080
+  ],
+  [
+   "analysis_member_pool.py:566:consume -> mint_floor_artifact_generalized.py:169:compose_indexed_producers.<locals>.<lambda>",
+   14080
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4435:mint_multi_cell_floor_artifact -> mint_floor_artifact_generalized.py:132:compose_indexed_producers",
+   14080
+  ],
+  [
+   "mint_floor_artifact_generalized.py:188:_compose_indexed_producer -> bracket.py:428:evaluate_window_bracket",
+   13946
+  ],
+  [
+   "_base.py:428:Future.result -> threading.py:323:Condition.wait",
+   13774
+  ],
+  [
+   "analysis_verified_store.py:1692:VerifiedStore.call -> analysis_verified_store.py:2049:VerifiedStore._fill",
+   13205
+  ],
+  [
+   "whole_window.py:8125:_validate_row_uncached -> whole_window.py:6702:_current_core_rederivation_reasons",
+   11896
+  ],
+  [
+   "emit_floor_mint_pinset.py:506:emit_indexed_pinset -> mint_floor_artifact_generalized.py:3937:_authenticate_v2_inputs",
+   10185
+  ],
+  [
+   "mint_floor_artifact.py:530:_authenticated_consumption_summaries -> whole_window.py:8729:whole_window_refusal_reasons",
+   9974
+  ],
+  [
+   "powermetrics_fiducial.py:1097:rederive_detection_from_artifacts -> powermetrics_fiducial.py:912:detect_pulses",
+   9380
+  ],
+  [
+   "powermetrics_fiducial.py:912:detect_pulses -> powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr>",
+   9364
+  ],
+  [
+   "powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr> -> powermetrics_fiducial.py:739:_fit_pulse",
+   9363
+  ],
+  [
+   "authentication_io.py:1379:read_authentication_input -> authentication_io.py:1180:V2AuthenticationReadSession.read",
+   9092
+  ],
+  [
+   "powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss -> powermetrics_fiducial.py:571:_pulse_loss",
+   9038
+  ],
+  [
+   "powermetrics_fiducial.py:571:_pulse_loss -> powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr>",
+   8898
+  ],
+  [
+   "whole_window.py:5250:_read_json_object -> authentication_io.py:1379:read_authentication_input",
+   8354
+  ],
+  [
+   "pack_parallel.py:122:pack_map -> _base.py:428:Future.result",
+   8037
+  ],
+  [
+   "bracket.py:428:evaluate_window_bracket -> bracket.py:253:_calibration_assessment",
+   7867
+  ],
+  [
+   "bracket.py:253:_calibration_assessment -> analysis_verified_store.py:1692:VerifiedStore.call",
+   7852
+  ],
+  [
+   "analysis_verified_store.py:2049:VerifiedStore._fill -> calibration_bracketing.py:2842:calibration_bracket_for_bundles",
+   7840
+  ],
+  [
+   "mint_floor_artifact_generalized.py:132:compose_indexed_producers -> mint_floor_artifact_generalized.py:132:compose_indexed_producers",
+   7828
+  ],
+  [
+   "emit_floor_mint_pinset.py:506:emit_indexed_pinset -> mint_floor_artifact_generalized.py:132:compose_indexed_producers",
+   7828
+  ],
+  [
+   "mint_floor_artifact_generalized.py:132:compose_indexed_producers -> pack_parallel.py:122:pack_map",
+   7817
+  ],
+  [
+   "calibration_bracketing.py:1659:load_calibration_candidate.<locals>.inspect -> calibration_bracketing.py:1675:_load_calibration_candidate_unbounded",
+   7790
+  ],
+  [
+   "calibration_ledger.py:5476:probe_custody -> calibration_bracketing.py:1659:load_calibration_candidate.<locals>.inspect",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1651:load_calibration_candidate -> calibration_ledger.py:5476:probe_custody",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1807:_candidate_from_observation -> calibration_bracketing.py:1651:load_calibration_candidate",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1944:discover_calibration_candidates -> calibration_bracketing.py:1807:_candidate_from_observation",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:2842:calibration_bracket_for_bundles -> calibration_bracketing.py:1944:discover_calibration_candidates",
+   7790
+  ],
+  [
+   "calibration_bracketing.py:1675:_load_calibration_candidate_unbounded -> powermetrics_fiducial.py:1279:verify_stored_evidence_physics",
+   7783
+  ],
+  [
+   "powermetrics_fiducial.py:1279:verify_stored_evidence_physics -> powermetrics_fiducial.py:1097:rederive_detection_from_artifacts",
+   7780
+  ],
+  [
+   "<frozen posixpath>:420:realpath -> <frozen posixpath>:429:_joinrealpath",
+   7546
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4516:_mint_multi_cell_floor_artifact_active -> mint_floor_artifact_generalized.py:3937:_authenticate_v2_inputs",
+   7187
+  ],
+  [
+   "whole_window.py:8729:whole_window_refusal_reasons -> whole_window.py:4451:launch_lineage_refusal_reasons",
+   6855
+  ],
+  [
+   "mint_floor_artifact.py:1092:_authenticate_component -> mint_floor_artifact.py:530:_authenticated_consumption_summaries",
+   6770
+  ],
+  [
+   "authentication_io.py:786:_parse_strict_below -> authentication_io.py:719:_parse_strict",
+   6648
+  ],
+  [
+   "powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> -> powermetrics_fiducial.py:562:_overlap_fraction",
+   6625
+  ],
+  [
+   "whole_window.py:4451:launch_lineage_refusal_reasons -> whole_window.py:4075:ordinary_present_bundle_paths",
+   6473
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> whole_window.py:1901:AuthenticatedConsumptionSession._prepare",
+   6393
+  ],
+  [
+   "mint_floor_artifact.py:1092:_authenticate_component -> whole_window.py:9139:whole_window_drift_allowances",
+   6315
+  ],
+  [
+   "whole_window.py:9139:whole_window_drift_allowances -> whole_window.py:8729:whole_window_refusal_reasons",
+   6306
+  ],
+  [
+   "authentication_io.py:719:_parse_strict -> authentication_io.py:683:_strict_jsonl",
+   6300
+  ],
+  [
+   "authentication_io.py:683:_strict_jsonl -> authentication_io.py:654:_strict_json",
+   6108
+  ],
+  [
+   "authentication_io.py:654:_strict_json -> authentication_io.py:637:_reserved_vocabulary_path",
+   6088
+  ],
+  [
+   "whole_window.py:4075:ordinary_present_bundle_paths -> whole_window.py:5250:_read_json_object",
+   6021
+  ],
+  [
+   "bracket.py:428:evaluate_window_bracket -> bracket.py:312:_window_inputs",
+   5982
+  ],
+  [
+   "pathlib.py:1228:Path.resolve -> <frozen posixpath>:420:realpath",
+   5539
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4516:_mint_multi_cell_floor_artifact_active -> floor_mint_estimator.py:675:bind_v2_floor_artifact_evidence",
+   5532
+  ],
+  [
+   "bracket.py:312:_window_inputs -> analysis_member_pool.py:466:member_map",
+   5420
+  ],
+  [
+   "analysis_member_pool.py:466:member_map -> _base.py:428:Future.result",
+   5402
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read -> pathlib.py:1228:Path.resolve",
+   5034
+  ],
+  [
+   "floor_mint_estimator.py:461:_authenticated_common_mode_session -> whole_window.py:8729:whole_window_refusal_reasons",
+   4706
+  ],
+  [
+   "floor_mint_estimator.py:533:recompute_comparative_estimate -> floor_mint_estimator.py:461:_authenticated_common_mode_session",
+   4706
+  ],
+  [
+   "powermetrics_fiducial.py:739:_fit_pulse -> powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda>",
+   4598
+  ],
+  [
+   "powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda> -> powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss",
+   4556
+  ],
+  [
+   "powermetrics_fiducial.py:739:_fit_pulse -> powermetrics_fiducial.py:820:_fit_pulse.<locals>.<lambda>",
+   4538
+  ],
+  [
+   "powermetrics_fiducial.py:820:_fit_pulse.<locals>.<lambda> -> powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss",
+   4484
+  ],
+  [
+   "analysis_verified_store.py:1836:VerifiedStore._apply -> analysis_verified_store.py:1894:VerifiedStore._bridge",
+   4169
+  ],
+  [
+   "mint_floor_artifact.py:1199:_authenticate_component.<locals>.<genexpr> -> mint_floor_artifact.py:443:_strict_bundle",
+   3774
+  ],
+  [
+   "mint_floor_artifact.py:1092:_authenticate_component -> mint_floor_artifact.py:1199:_authenticate_component.<locals>.<genexpr>",
+   3774
+  ],
+  [
+   "floor_mint_estimator.py:675:bind_v2_floor_artifact_evidence -> mint_floor_artifact.py:1923:bind_floor_artifact_evidence",
+   3671
+  ],
+  [
+   "mint_floor_artifact_generalized.py:3295:_build_v2_artifacts -> mint_floor_artifact_generalized.py:2710:_v2_gate_postcollection",
+   3593
+  ],
+  [
+   "mint_floor_artifact_generalized.py:2710:_v2_gate_postcollection -> floor_mint_estimator.py:533:recompute_comparative_estimate",
+   3521
+  ],
+  [
+   "analysis_verified_store.py:1692:VerifiedStore.call -> analysis_verified_store.py:1464:VerifiedStore._prepare",
+   3467
+  ],
+  [
+   "cli.py:550:validate_bundle -> analysis_verified_store.py:1692:VerifiedStore.call",
+   3332
+  ],
+  [
+   "mint_floor_artifact.py:1923:bind_floor_artifact_evidence -> mint_floor_artifact.py:530:_authenticated_consumption_summaries",
+   3204
+  ],
+  [
+   "emit_floor_mint_pinset.py:549:emit_indexed_pinset.<locals>.<lambda> -> cli.py:550:validate_bundle",
+   2966
+  ],
+  [
+   "mint_floor_artifact.py:443:_strict_bundle -> emit_floor_mint_pinset.py:549:emit_indexed_pinset.<locals>.<lambda>",
+   2966
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> whole_window.py:1613:_verified_environment_refusals",
+   2721
+  ],
+  [
+   "whole_window.py:1613:_verified_environment_refusals -> analysis_verified_store.py:1692:VerifiedStore.call",
+   2718
+  ],
+  [
+   "analysis_verified_store.py:2049:VerifiedStore._fill -> cli.py:550:validate_bundle",
+   2695
+  ],
+  [
+   "cli.py:550:validate_bundle -> cli.py:618:_strict_problems",
+   2693
+  ],
+  [
+   "analysis_verified_store.py:1171:reduce_bundle_dict -> reduce.py:2627:reduce_bundle",
+   2668
+  ],
+  [
+   "analysis_verified_store.py:2049:VerifiedStore._fill -> analysis_verified_store.py:1171:reduce_bundle_dict",
+   2668
+  ],
+  [
+   "cli.py:463:_strict_reduce_dict -> analysis_verified_store.py:1692:VerifiedStore.call",
+   2668
+  ],
+  [
+   "cli.py:618:_strict_problems -> cli.py:463:_strict_reduce_dict",
+   2668
+  ],
+  [
+   "reduce.py:2627:reduce_bundle -> reduce.py:3467:_reduce",
+   2667
+  ],
+  [
+   "reduce.py:3467:_reduce -> reduce.py:1735:_derive_anchor_context",
+   2654
+  ],
+  [
+   "reduce.py:1735:_derive_anchor_context -> reduce.py:1171:_verify_instrument_calibration",
+   2623
+  ],
+  [
+   "reduce.py:1171:_verify_instrument_calibration -> powermetrics_fiducial.py:1097:rederive_detection_from_artifacts",
+   2619
+  ],
+  [
+   "analysis_verified_store.py:1394:_Hit.apply -> analysis_verified_store.py:1836:VerifiedStore._apply",
+   2563
+  ],
+  [
+   "analysis_member_pool.py:566:consume -> analysis_verified_store.py:1394:_Hit.apply",
+   2563
+  ],
+  [
+   "whole_window.py:1901:AuthenticatedConsumptionSession._prepare -> analysis_member_pool.py:566:consume",
+   2557
+  ],
+  [
+   "whole_window.py:1901:AuthenticatedConsumptionSession._prepare -> whole_window.py:1542:_verified_instrument_calibration",
+   2155
+  ],
+  [
+   "authentication_io.py:1563:sha256_authentication_input -> authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw",
+   2147
+  ],
+  [
+   "analysis_verified_store.py:285:canonical_bytes -> analysis_verified_store.py:321:canonical_bytes.<locals>.<genexpr>",
+   2101
+  ],
+  [
+   "whole_window.py:1542:_verified_instrument_calibration -> analysis_verified_store.py:1692:VerifiedStore.call",
+   2062
+  ],
+  [
+   "analysis_verified_store.py:321:canonical_bytes.<locals>.<genexpr> -> analysis_verified_store.py:285:canonical_bytes",
+   2036
+  ],
+  [
+   "analysis_verified_store.py:1692:VerifiedStore.call -> analysis_verified_store.py:1836:VerifiedStore._apply",
+   2020
+  ],
+  [
+   "authentication_io.py:637:_reserved_vocabulary_path -> typing.py:1221:_BaseGenericAlias.__instancecheck__",
+   1955
+  ],
+  [
+   "analysis_verified_store.py:285:canonical_bytes -> analysis_verified_store.py:324:canonical_bytes.<locals>.<genexpr>",
+   1930
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4516:_mint_multi_cell_floor_artifact_active -> mint_floor_artifact_generalized.py:3295:_build_v2_artifacts",
+   1870
+  ],
+  [
+   "emit_floor_mint_pinset.py:506:emit_indexed_pinset -> emit_floor_mint_pinset.py:152:build_pinset",
+   1843
+  ],
+  [
+   "emit_floor_mint_pinset.py:152:build_pinset -> mint_floor_artifact_generalized.py:3295:_build_v2_artifacts",
+   1840
+  ],
+  [
+   "analysis_verified_store.py:324:canonical_bytes.<locals>.<genexpr> -> analysis_verified_store.py:285:canonical_bytes",
+   1815
+  ],
+  [
+   "analysis_verified_store.py:1464:VerifiedStore._prepare -> <frozen posixpath>:420:realpath",
+   1806
+  ],
+  [
+   "floor_mint_estimator.py:675:bind_v2_floor_artifact_evidence -> floor_mint_estimator.py:533:recompute_comparative_estimate",
+   1772
+  ],
+  [
+   "whole_window.py:4381:_authenticate_whole_window_launch_sources -> whole_window.py:4259:_hazard_bound_corpus_binding",
+   1635
+  ],
+  [
+   "typing.py:1221:_BaseGenericAlias.__instancecheck__ -> typing.py:1492:_SpecialGenericAlias.__subclasscheck__",
+   1546
+  ],
+  [
+   "authentication_io.py:1098:V2AuthenticationReadSession.bridged_grammar_verdict -> authentication_io.py:918:bridged_grammar_verdict",
+   1522
+  ],
+  [
+   "analysis_verified_store.py:1007:_AuthAdapter.ensure_verdict -> authentication_io.py:1098:V2AuthenticationReadSession.bridged_grammar_verdict",
+   1522
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge -> analysis_verified_store.py:1007:_AuthAdapter.ensure_verdict",
+   1522
+  ],
+  [
+   "whole_window.py:8125:_validate_row_uncached -> whole_window.py:524:_archive_launch_refusal_reasons",
+   1522
+  ],
+  [
+   "whole_window.py:4259:_hazard_bound_corpus_binding -> whole_window.py:5538:_bundle_evidence_sha256",
+   1390
+  ],
+  [
+   "whole_window.py:5538:_bundle_evidence_sha256 -> authentication_io.py:1563:sha256_authentication_input",
+   1326
+  ],
+  [
+   "powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> -> powermetrics_fiducial.py:555:_huber",
+   1267
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge -> pathlib.py:1015:Path.read_bytes",
+   1153
+  ],
+  [
+   "analysis_verified_store.py:1717:VerifiedStore.probe -> analysis_verified_store.py:1464:VerifiedStore._prepare",
+   1153
+  ],
+  [
+   "analysis_member_pool.py:449:_prefilter -> analysis_verified_store.py:1717:VerifiedStore.probe",
+   1153
+  ],
+  [
+   "analysis_member_pool.py:466:member_map -> analysis_member_pool.py:449:_prefilter",
+   1153
+  ],
+  [
+   "whole_window.py:1901:AuthenticatedConsumptionSession._prepare -> analysis_member_pool.py:466:member_map",
+   1136
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> whole_window.py:5250:_read_json_object",
+   1053
+  ],
+  [
+   "analysis_verified_store.py:1464:VerifiedStore._prepare -> analysis_verified_store.py:563:_Scope.verify_tree",
+   1044
+  ],
+  [
+   "authentication_io.py:1402:read_authentication_text -> authentication_io.py:1180:V2AuthenticationReadSession.read",
+   961
+  ],
+  [
+   "typing.py:1492:_SpecialGenericAlias.__subclasscheck__ -> <frozen abc>:121:ABCMeta.__subclasscheck__",
+   881
+  ],
+  [
+   "whole_window.py:524:_archive_launch_refusal_reasons -> whole_window.py:7364:_whole_window_row_launch_refusal_reasons",
+   873
+  ],
+  [
+   "powermetrics_fiducial.py:1097:rederive_detection_from_artifacts -> uncertainty_evidence.py:878:derive_powermetrics_anchor_v3",
+   853
+  ],
+  [
+   "mint_floor_artifact.py:443:_strict_bundle -> detection_floor.py:558:complete_bundle_sha256",
+   847
+  ],
+  [
+   "analysis_verified_store.py:1101:_scalar_bytes -> analysis_verified_store.py:285:canonical_bytes",
+   843
+  ],
+  [
+   "analysis_verified_store.py:1464:VerifiedStore._prepare -> analysis_verified_store.py:1101:_scalar_bytes",
+   843
+  ],
+  [
+   "detection_floor.py:558:complete_bundle_sha256 -> authentication_io.py:1563:sha256_authentication_input",
+   812
+  ],
+  [
+   "analysis_verified_store.py:563:_Scope.verify_tree -> analysis_verified_store.py:421:_walk",
+   776
+  ],
+  [
+   "floor_extraction.py:1705:_forbidden_admitted_vocabulary_paths.<locals>.walk -> floor_extraction.py:1705:_forbidden_admitted_vocabulary_paths.<locals>.walk",
+   696
+  ],
+  [
+   "whole_window.py:7364:_whole_window_row_launch_refusal_reasons -> whole_window.py:4381:_authenticate_whole_window_launch_sources",
+   677
+  ],
+  [
+   "uncertainty_evidence.py:878:derive_powermetrics_anchor_v3 -> uncertainty_evidence.py:666:_lp2",
+   639
+  ],
+  [
+   "whole_window.py:5268:_current_strict_summary -> whole_window.py:2345:custody_telemetry_identity",
+   629
+  ],
+  [
+   "analysis_verified_store.py:1464:VerifiedStore._prepare -> analysis_verified_store.py:339:canonical_digest",
+   611
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> whole_window.py:6633:_load_idle_records",
+   521
+  ],
+  [
+   "whole_window.py:6633:_load_idle_records -> authentication_io.py:1402:read_authentication_text",
+   510
+  ],
+  [
+   "floor_mint_estimator.py:334:_authenticate_mint_launch_lineage -> whole_window.py:4381:_authenticate_whole_window_launch_sources",
+   508
+  ],
+  [
+   "pathlib.py:1015:Path.read_bytes -> pathlib.py:1005:Path.open",
+   495
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw -> authentication_io.py:1180:V2AuthenticationReadSession.read",
+   492
+  ],
+  [
+   "mint_floor_artifact.py:1923:bind_floor_artifact_evidence -> mint_floor_artifact.py:443:_strict_bundle",
+   460
+  ],
+  [
+   "whole_window.py:524:_archive_launch_refusal_reasons -> whole_window.py:4381:_authenticate_whole_window_launch_sources",
+   455
+  ],
+  [
+   "window_lineage.py:775:authenticate_bundle -> window_lineage.py:617:authenticate_lineage",
+   447
+  ],
+  [
+   "arm_readiness.py:11727:authenticate_bundle_launch_lineage -> window_lineage.py:775:authenticate_bundle",
+   447
+  ],
+  [
+   "whole_window.py:4100:_authenticated_bundle_launch_lineage_set -> arm_readiness.py:11727:authenticate_bundle_launch_lineage",
+   447
+  ],
+  [
+   "window_lineage.py:590:_completion_records -> pathlib.py:1015:Path.read_bytes",
+   446
+  ],
+  [
+   "window_lineage.py:617:authenticate_lineage -> window_lineage.py:590:_completion_records",
+   446
+  ],
+  [
+   "uncertainty_evidence.py:666:_lp2 -> uncertainty_evidence.py:607:_lp2_line_optimum",
+   430
+  ],
+  [
+   "pathlib.py:886:Path.is_file -> pathlib.py:835:Path.stat",
+   408
+  ],
+  [
+   "whole_window.py:4100:_authenticated_bundle_launch_lineage_set -> whole_window.py:5250:_read_json_object",
+   408
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> whole_window.py:6748:_current_core_rederivation_reasons.<locals>.<genexpr>",
+   406
+  ],
+  [
+   "whole_window.py:2345:custody_telemetry_identity -> authentication_io.py:1379:read_authentication_input",
+   405
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw -> pathlib.py:1228:Path.resolve",
+   387
+  ],
+  [
+   "whole_window.py:4451:launch_lineage_refusal_reasons -> whole_window.py:4100:_authenticated_bundle_launch_lineage_set",
+   382
+  ],
+  [
+   "whole_window.py:4075:ordinary_present_bundle_paths -> pathlib.py:886:Path.is_file",
+   381
+  ],
+  [
+   "__init__.py:299:loads -> decoder.py:333:JSONDecoder.decode",
+   372
+  ],
+  [
+   "mint_floor_artifact_generalized.py:4800:main.<locals>.<lambda> -> cli.py:550:validate_bundle",
+   366
+  ],
+  [
+   "mint_floor_artifact.py:443:_strict_bundle -> mint_floor_artifact_generalized.py:4800:main.<locals>.<lambda>",
+   366
+  ],
+  [
+   "whole_window.py:2345:custody_telemetry_identity -> whole_window.py:5250:_read_json_object",
+   362
+  ],
+  [
+   "mint_floor_artifact.py:1092:_authenticate_component -> floor_mint_estimator.py:334:_authenticate_mint_launch_lineage",
+   355
+  ],
+  [
+   "analysis_verified_store.py:563:_Scope.verify_tree -> analysis_verified_store.py:472:tree_digest",
+   350
+  ],
+  [
+   "authentication_io.py:719:_parse_strict -> authentication_io.py:654:_strict_json",
+   348
+  ],
+  [
+   "whole_window.py:8125:_validate_row_uncached -> whole_window.py:7281:_validated_evaluation_basis",
+   342
+  ],
+  [
+   "uncertainty_evidence.py:607:_lp2_line_optimum -> fractions.py:613:Fraction._operator_fallbacks.<locals>.forward",
+   333
+  ],
+  [
+   "decoder.py:333:JSONDecoder.decode -> decoder.py:344:JSONDecoder.raw_decode",
+   320
+  ],
+  [
+   "whole_window.py:1901:AuthenticatedConsumptionSession._prepare -> whole_window.py:5268:_current_strict_summary",
+   309
+  ],
+  [
+   "authentication_io.py:654:_strict_json -> __init__.py:299:loads",
+   305
+  ],
+  [
+   "floor_mint_estimator.py:533:recompute_comparative_estimate -> floor_extraction.py:2640:_common_mode_block_inputs_from_evidence",
+   302
+  ],
+  [
+   "analysis_verified_store.py:1464:VerifiedStore._prepare -> analysis_verified_store.py:2543:_kernel_resolves_to",
+   292
+  ],
+  [
+   "bracket.py:73:_Inputs.source -> archive.py:37:_read",
+   287
+  ],
+  [
+   "analysis_verified_store.py:472:tree_digest -> _base.py:428:Future.result",
+   284
+  ],
+  [
+   "bracket.py:312:_window_inputs -> bracket.py:73:_Inputs.source",
+   284
+  ],
+  [
+   "whole_window.py:4075:ordinary_present_bundle_paths -> whole_window.py:4081:ordinary_present_bundle_paths.<locals>.<genexpr>",
+   279
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> whole_window.py:5268:_current_strict_summary",
+   276
+  ],
+  [
+   "powermetrics_fiducial.py:562:_overlap_fraction -> powermetrics_fiducial.py:454:TraceInterval.duration_s",
+   276
+  ],
+  [
+   "floor_mint_estimator.py:533:recompute_comparative_estimate -> floor_mint_estimator.py:334:_authenticate_mint_launch_lineage",
+   275
+  ],
+  [
+   "mint_floor_artifact.py:1439:_diagnostics_are_nonpublishing -> mint_floor_artifact.py:1439:_diagnostics_are_nonpublishing",
+   272
+  ],
+  [
+   "whole_window.py:8125:_validate_row_uncached -> whole_window.py:432:_archive_neg8_replay_reasons",
+   267
+  ],
+  [
+   "bundle_read.py:520:BundleReader.measured_window -> bundle_read.py:281:BundleReader.events",
+   262
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> idle_admission.py:392:evaluate_cpu_idle_admission",
+   258
+  ],
+  [
+   "whole_window.py:6748:_current_core_rederivation_reasons.<locals>.<genexpr> -> whole_window.py:5250:_read_json_object",
+   255
+  ],
+  [
+   "whole_window.py:432:_archive_neg8_replay_reasons -> whole_window.py:6203:_derived_neg8_decision",
+   255
+  ],
+  [
+   "bundle_read.py:281:BundleReader.events -> authentication_io.py:1402:read_authentication_text",
+   251
+  ],
+  [
+   "pathlib.py:1228:Path.resolve -> pathlib.py:835:Path.stat",
+   249
+  ],
+  [
+   "emit_floor_mint_pinset.py:506:emit_indexed_pinset -> pack_parallel.py:122:pack_map",
+   244
+  ],
+  [
+   "pathlib.py:870:Path.is_dir -> pathlib.py:835:Path.stat",
+   244
+  ],
+  [
+   "whole_window.py:4259:_hazard_bound_corpus_binding -> whole_window.py:4075:ordinary_present_bundle_paths",
+   243
+  ],
+  [
+   "whole_window.py:6702:_current_core_rederivation_reasons -> bundle_read.py:520:BundleReader.measured_window",
+   240
+  ],
+  [
+   "idle_admission.py:392:evaluate_cpu_idle_admission -> idle_admission.py:344:_record_cpu_busy_ratio",
+   238
+  ],
+  [
+   "analysis_verified_store.py:285:canonical_bytes -> analysis_verified_store.py:322:canonical_bytes.<locals>.<genexpr>",
+   220
+  ],
+  [
+   "whole_window.py:7281:_validated_evaluation_basis -> authentication_io.py:1379:read_authentication_input",
+   216
+  ],
+  [
+   "analysis_verified_store.py:1836:VerifiedStore._apply -> <frozen posixpath>:420:realpath",
+   216
+  ],
+  [
+   "whole_window.py:1901:AuthenticatedConsumptionSession._prepare -> whole_window.py:5250:_read_json_object",
+   215
+  ],
+  [
+   "fractions.py:613:Fraction._operator_fallbacks.<locals>.forward -> fractions.py:742:Fraction._mul",
+   213
+  ],
+  [
+   "whole_window.py:4081:ordinary_present_bundle_paths.<locals>.<genexpr> -> pathlib.py:870:Path.is_dir",
+   210
+  ],
+  [
+   "floor_mint_estimator.py:334:_authenticate_mint_launch_lineage -> whole_window.py:4100:_authenticated_bundle_launch_lineage_set",
+   199
+  ],
+  [
+   "uncertainty_evidence.py:666:_lp2 -> fractions.py:613:Fraction._operator_fallbacks.<locals>.forward",
+   185
+  ],
+  [
+   "powermetrics.py:1703:parse_powermetrics_records -> powermetrics.py:1753:_parse_powermetrics_records",
+   184
+  ],
+  [
+   "whole_window.py:7364:_whole_window_row_launch_refusal_reasons -> whole_window.py:4100:_authenticated_bundle_launch_lineage_set",
+   178
+  ],
+  [
+   "whole_window.py:524:_archive_launch_refusal_reasons -> whole_window.py:4100:_authenticated_bundle_launch_lineage_set",
+   172
+  ],
+  [
+   "bracket.py:312:_window_inputs -> pathlib.py:1030:Path.write_bytes",
+   172
+  ],
+  [
+   "powermetrics.py:2056:_powermetrics_documents -> plistlib.py:896:loads",
+   169
+  ],
+  [
+   "plistlib.py:896:loads -> plistlib.py:874:load",
+   168
+  ],
+  [
+   "whole_window.py:5299:_custody_strict_invalid -> whole_window.py:2345:custody_telemetry_identity",
+   164
+  ],
+  [
+   "plistlib.py:874:load -> plistlib.py:183:_PlistParser.parse",
+   164
+  ],
+  [
+   "powermetrics.py:1753:_parse_powermetrics_records -> powermetrics.py:2056:_powermetrics_documents",
+   162
+  ],
+  [
+   "powermetrics_fiducial.py:1097:rederive_detection_from_artifacts -> powermetrics.py:1703:parse_powermetrics_records",
+   161
+  ],
+  [
+   "bracket.py:91:_snapshot -> calibration_ledger.py:2586:load_calibration_ledger_snapshot",
+   161
+  ],
+  [
+   "powermetrics_fiducial.py:739:_fit_pulse -> powermetrics_fiducial.py:638:_accepted_region_projection",
+   159
+  ],
+  [
+   "uncertainty_evidence.py:878:derive_powermetrics_anchor_v3 -> uncertainty_evidence.py:785:_native_v3_constraints",
+   154
+  ],
+  [
+   "powermetrics_fiducial.py:638:_accepted_region_projection -> powermetrics_fiducial.py:592:_pulse_loss_cell_lower_bound",
+   153
+  ],
+  [
+   "calibration_ledger.py:1636:_parse_ledger -> calibration_ledger.py:1546:_scan_physical_ledger",
+   153
+  ],
+  [
+   "calibration_ledger.py:2586:load_calibration_ledger_snapshot -> calibration_ledger.py:1636:_parse_ledger",
+   153
+  ],
+  [
+   "whole_window.py:6748:_current_core_rederivation_reasons.<locals>.<genexpr> -> whole_window.py:5299:_custody_strict_invalid",
+   151
+  ],
+  [
+   "analysis_verified_store.py:589:_Scope.verify_file -> analysis_verified_store.py:492:_file_signature",
+   139
+  ],
+  [
+   "whole_window.py:5388:_reference_energy_evidence -> whole_window.py:5409:_reference_energy_evidence_detail",
+   138
+  ],
+  [
+   "whole_window.py:6203:_derived_neg8_decision -> whole_window.py:5388:_reference_energy_evidence",
+   138
+  ],
+  [
+   "bundle_read.py:824:BundleReader._strict_json -> authentication_io.py:1402:read_authentication_text",
+   135
+  ],
+  [
+   "bundle_read.py:272:BundleReader.metadata -> bundle_read.py:824:BundleReader._strict_json",
+   135
+  ],
+  [
+   "fractions.py:742:Fraction._mul -> fractions.py:317:Fraction._from_coprime_ints",
+   134
+  ],
+  [
+   "analysis_verified_store.py:1836:VerifiedStore._apply -> analysis_verified_store.py:563:_Scope.verify_tree",
+   133
+  ],
+  [
+   "fractions.py:613:Fraction._operator_fallbacks.<locals>.forward -> fractions.py:710:Fraction._add",
+   129
+  ],
+  [
+   "analysis_verified_store.py:322:canonical_bytes.<locals>.<genexpr> -> analysis_verified_store.py:281:_frame",
+   124
+  ],
+  [
+   "powermetrics_fiducial.py:592:_pulse_loss_cell_lower_bound -> powermetrics_fiducial.py:562:_overlap_fraction",
+   124
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge -> analysis_verified_store.py:589:_Scope.verify_file",
+   112
+  ],
+  [
+   "fractions.py:613:Fraction._operator_fallbacks.<locals>.forward -> fractions.py:726:Fraction._sub",
+   112
+  ],
+  [
+   "analysis_verified_store.py:285:canonical_bytes -> analysis_verified_store.py:281:_frame",
+   111
+  ],
+  [
+   "whole_window.py:4059:_safe_source_path -> pathlib.py:1228:Path.resolve",
+   109
+  ],
+  [
+   "calibration_ledger.py:364:_receipt_digest -> calibration_ledger.py:233:canonical_sha256",
+   103
+  ],
+  [
+   "floor_extraction.py:1695:_forbidden_admitted_vocabulary_paths -> floor_extraction.py:1705:_forbidden_admitted_vocabulary_paths.<locals>.walk",
+   101
+  ],
+  [
+   "floor_extraction.py:1720:validate_admitted_report_vocabulary -> floor_extraction.py:1695:_forbidden_admitted_vocabulary_paths",
+   101
+  ],
+  [
+   "archive.py:37:_read -> pathlib.py:1015:Path.read_bytes",
+   101
+  ],
+  [
+   "whole_window.py:1647:_verified_reduce_dict -> analysis_verified_store.py:1692:VerifiedStore.call",
+   97
+  ],
+  [
+   "whole_window.py:5409:_reference_energy_evidence_detail -> whole_window.py:1647:_verified_reduce_dict",
+   97
+  ],
+  [
+   "whole_window.py:1542:_verified_instrument_calibration -> reduce.py:1171:_verify_instrument_calibration",
+   93
+  ],
+  [
+   "uncertainty_evidence.py:785:_native_v3_constraints -> fractions.py:613:Fraction._operator_fallbacks.<locals>.forward",
+   92
+  ],
+  [
+   "floor_extraction.py:2640:_common_mode_block_inputs_from_evidence -> bundle_read.py:272:BundleReader.metadata",
+   92
+  ]
+ ],
+ "stacks": [
+  [
+   "threading.py:323:Condition.wait <- _base.py:428:Future.result <- pack_parallel.py:122:pack_map <- mint_floor_artifact_generalized.py:132:compose_indexed_producers <- mint_floor_artifact_generalized.py:132:compose_indexed_producers <- emit_floor_mint_pinset.py:506:emit_indexed_pinset <- emit_floor_mint_pinset.py:560:main <- dry_run.py:120:StepRunner.run",
+   7810
+  ],
+  [
+   "threading.py:323:Condition.wait <- _base.py:428:Future.result <- analysis_member_pool.py:466:member_map <- bracket.py:312:_window_inputs <- bracket.py:428:evaluate_window_bracket <- mint_floor_artifact_generalized.py:188:_compose_indexed_producer <- mint_floor_artifact_generalized.py:169:compose_indexed_producers.<locals>.<lambda> <- analysis_member_pool.py:566:consume",
+   5402
+  ],
+  [
+   "powermetrics_fiducial.py:562:_overlap_fraction <- powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> <- powermetrics_fiducial.py:571:_pulse_loss <- powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss <- powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda> <- powermetrics_fiducial.py:739:_fit_pulse <- powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr> <- powermetrics_fiducial.py:912:detect_pulses",
+   3202
+  ],
+  [
+   "powermetrics_fiducial.py:562:_overlap_fraction <- powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> <- powermetrics_fiducial.py:571:_pulse_loss <- powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss <- powermetrics_fiducial.py:820:_fit_pulse.<locals>.<lambda> <- powermetrics_fiducial.py:739:_fit_pulse <- powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr> <- powermetrics_fiducial.py:912:detect_pulses",
+   3150
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- pathlib.py:1228:Path.resolve <- authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:4075:ordinary_present_bundle_paths <- whole_window.py:4451:launch_lineage_refusal_reasons",
+   2316
+  ],
+  [
+   "authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json <- authentication_io.py:683:_strict_jsonl",
+   1842
+  ],
+  [
+   "authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json <- authentication_io.py:683:_strict_jsonl <- authentication_io.py:719:_parse_strict",
+   1749
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:4075:ordinary_present_bundle_paths <- whole_window.py:4451:launch_lineage_refusal_reasons <- whole_window.py:8729:whole_window_refusal_reasons <- mint_floor_artifact.py:530:_authenticated_consumption_summaries <- mint_floor_artifact.py:1092:_authenticate_component",
+   1036
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:4075:ordinary_present_bundle_paths <- whole_window.py:4451:launch_lineage_refusal_reasons <- whole_window.py:8729:whole_window_refusal_reasons <- whole_window.py:9139:whole_window_drift_allowances <- mint_floor_artifact.py:1092:_authenticate_component",
+   948
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- pathlib.py:1228:Path.resolve <- authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   859
+  ],
+  [
+   "authentication_io.py:918:bridged_grammar_verdict <- authentication_io.py:1098:V2AuthenticationReadSession.bridged_grammar_verdict <- analysis_verified_store.py:1007:_AuthAdapter.ensure_verdict <- analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1394:_Hit.apply <- analysis_member_pool.py:566:consume <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare",
+   836
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:4075:ordinary_present_bundle_paths <- whole_window.py:4451:launch_lineage_refusal_reasons <- whole_window.py:8729:whole_window_refusal_reasons <- floor_mint_estimator.py:461:_authenticated_common_mode_session <- floor_mint_estimator.py:533:recompute_comparative_estimate",
+   813
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1394:_Hit.apply <- analysis_member_pool.py:566:consume <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   752
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1542:_verified_instrument_calibration <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   690
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1717:VerifiedStore.probe <- analysis_member_pool.py:449:_prefilter <- analysis_member_pool.py:466:member_map <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons",
+   657
+  ],
+  [
+   "powermetrics_fiducial.py:555:_huber <- powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> <- powermetrics_fiducial.py:571:_pulse_loss <- powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss <- powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda> <- powermetrics_fiducial.py:739:_fit_pulse <- powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr> <- powermetrics_fiducial.py:912:detect_pulses",
+   636
+  ],
+  [
+   "powermetrics_fiducial.py:555:_huber <- powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> <- powermetrics_fiducial.py:571:_pulse_loss <- powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss <- powermetrics_fiducial.py:820:_fit_pulse.<locals>.<lambda> <- powermetrics_fiducial.py:739:_fit_pulse <- powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr> <- powermetrics_fiducial.py:912:detect_pulses",
+   631
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:4075:ordinary_present_bundle_paths <- whole_window.py:4451:launch_lineage_refusal_reasons <- whole_window.py:8729:whole_window_refusal_reasons <- mint_floor_artifact.py:530:_authenticated_consumption_summaries <- mint_floor_artifact.py:1923:bind_floor_artifact_evidence",
+   544
+  ],
+  [
+   "<frozen abc>:121:ABCMeta.__subclasscheck__ <- typing.py:1492:_SpecialGenericAlias.__subclasscheck__ <- typing.py:1221:_BaseGenericAlias.__instancecheck__ <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path",
+   522
+  ],
+  [
+   "powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> <- powermetrics_fiducial.py:571:_pulse_loss <- powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss <- powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda> <- powermetrics_fiducial.py:739:_fit_pulse <- powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr> <- powermetrics_fiducial.py:912:detect_pulses <- powermetrics_fiducial.py:1097:rederive_detection_from_artifacts",
+   505
+  ],
+  [
+   "powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> <- powermetrics_fiducial.py:571:_pulse_loss <- powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss <- powermetrics_fiducial.py:820:_fit_pulse.<locals>.<lambda> <- powermetrics_fiducial.py:739:_fit_pulse <- powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr> <- powermetrics_fiducial.py:912:detect_pulses <- powermetrics_fiducial.py:1097:rederive_detection_from_artifacts",
+   500
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1613:_verified_environment_refusals <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   441
+  ],
+  [
+   "typing.py:1221:_BaseGenericAlias.__instancecheck__ <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json",
+   414
+  ],
+  [
+   "pathlib.py:1015:Path.read_bytes <- analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1394:_Hit.apply <- analysis_member_pool.py:566:consume <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   364
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw <- authentication_io.py:1563:sha256_authentication_input <- whole_window.py:5538:_bundle_evidence_sha256 <- whole_window.py:4259:_hazard_bound_corpus_binding <- whole_window.py:4381:_authenticate_whole_window_launch_sources <- whole_window.py:7364:_whole_window_row_launch_refusal_reasons <- whole_window.py:524:_archive_launch_refusal_reasons <- whole_window.py:8125:_validate_row_uncached",
+   346
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw <- authentication_io.py:1563:sha256_authentication_input <- detection_floor.py:558:complete_bundle_sha256 <- mint_floor_artifact.py:443:_strict_bundle <- mint_floor_artifact.py:1199:_authenticate_component.<locals>.<genexpr> <- mint_floor_artifact.py:1092:_authenticate_component <- mint_floor_artifact_generalized.py:3881:_authenticate_v2_component <- mint_floor_artifact_generalized.py:3937:_authenticate_v2_inputs",
+   296
+  ],
+  [
+   "authentication_io.py:918:bridged_grammar_verdict <- authentication_io.py:1098:V2AuthenticationReadSession.bridged_grammar_verdict <- analysis_verified_store.py:1007:_AuthAdapter.ensure_verdict <- analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1542:_verified_instrument_calibration <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare",
+   287
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1542:_verified_instrument_calibration <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   283
+  ],
+  [
+   "typing.py:1492:_SpecialGenericAlias.__subclasscheck__ <- typing.py:1221:_BaseGenericAlias.__instancecheck__ <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json <- authentication_io.py:683:_strict_jsonl",
+   246
+  ],
+  [
+   "analysis_verified_store.py:339:canonical_digest <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1613:_verified_environment_refusals <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row <- whole_window.py:8729:whole_window_refusal_reasons",
+   239
+  ],
+  [
+   "authentication_io.py:918:bridged_grammar_verdict <- authentication_io.py:1098:V2AuthenticationReadSession.bridged_grammar_verdict <- analysis_verified_store.py:1007:_AuthAdapter.ensure_verdict <- analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1613:_verified_environment_refusals <- whole_window.py:6702:_current_core_rederivation_reasons",
+   236
+  ],
+  [
+   "analysis_verified_store.py:421:_walk <- analysis_verified_store.py:563:_Scope.verify_tree <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1542:_verified_instrument_calibration <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   228
+  ],
+  [
+   "threading.py:323:Condition.wait <- _base.py:428:Future.result <- pack_parallel.py:122:pack_map <- emit_floor_mint_pinset.py:506:emit_indexed_pinset <- emit_floor_mint_pinset.py:560:main <- dry_run.py:120:StepRunner.run <- dry_run.py:646:RunState.invoke <- dry_run.py:1204:step_5",
+   227
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw <- authentication_io.py:1563:sha256_authentication_input <- whole_window.py:5538:_bundle_evidence_sha256 <- whole_window.py:4259:_hazard_bound_corpus_binding <- whole_window.py:4381:_authenticate_whole_window_launch_sources <- whole_window.py:524:_archive_launch_refusal_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   227
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- pathlib.py:1228:Path.resolve <- authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw <- authentication_io.py:1563:sha256_authentication_input <- whole_window.py:5538:_bundle_evidence_sha256 <- whole_window.py:4259:_hazard_bound_corpus_binding <- whole_window.py:4381:_authenticate_whole_window_launch_sources",
+   225
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1394:_Hit.apply <- analysis_member_pool.py:566:consume <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   216
+  ],
+  [
+   "pathlib.py:1015:Path.read_bytes <- analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1613:_verified_environment_refusals <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   214
+  ],
+  [
+   "analysis_verified_store.py:339:canonical_digest <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1542:_verified_instrument_calibration <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   204
+  ],
+  [
+   "analysis_verified_store.py:421:_walk <- analysis_verified_store.py:563:_Scope.verify_tree <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1717:VerifiedStore.probe <- analysis_member_pool.py:449:_prefilter <- analysis_member_pool.py:466:member_map <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons",
+   200
+  ],
+  [
+   "typing.py:1492:_SpecialGenericAlias.__subclasscheck__ <- typing.py:1221:_BaseGenericAlias.__instancecheck__ <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json",
+   197
+  ],
+  [
+   "analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1613:_verified_environment_refusals <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row <- whole_window.py:8729:whole_window_refusal_reasons",
+   193
+  ],
+  [
+   "authentication_io.py:683:_strict_jsonl <- authentication_io.py:719:_parse_strict <- authentication_io.py:786:_parse_strict_below <- authentication_io.py:786:_parse_strict_below <- authentication_io.py:786:_parse_strict_below <- authentication_io.py:786:_parse_strict_below <- authentication_io.py:786:_parse_strict_below <- authentication_io.py:786:_parse_strict_below",
+   192
+  ],
+  [
+   "pathlib.py:835:Path.stat <- pathlib.py:886:Path.is_file <- whole_window.py:4075:ordinary_present_bundle_paths <- whole_window.py:4451:launch_lineage_refusal_reasons <- whole_window.py:8729:whole_window_refusal_reasons <- whole_window.py:9139:whole_window_drift_allowances <- mint_floor_artifact.py:1092:_authenticate_component <- mint_floor_artifact_generalized.py:3881:_authenticate_v2_component",
+   192
+  ],
+  [
+   "authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json <- authentication_io.py:683:_strict_jsonl <- authentication_io.py:719:_parse_strict <- authentication_io.py:786:_parse_strict_below",
+   191
+  ],
+  [
+   "typing.py:1221:_BaseGenericAlias.__instancecheck__ <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json <- authentication_io.py:683:_strict_jsonl",
+   182
+  ],
+  [
+   "analysis_verified_store.py:421:_walk <- analysis_verified_store.py:563:_Scope.verify_tree <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1613:_verified_environment_refusals <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   181
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- pathlib.py:1228:Path.resolve <- authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1402:read_authentication_text <- whole_window.py:6633:_load_idle_records <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   172
+  ],
+  [
+   "authentication_io.py:1322:V2AuthenticationReadSession.sha256_streaming_raw <- authentication_io.py:1563:sha256_authentication_input <- detection_floor.py:558:complete_bundle_sha256 <- mint_floor_artifact.py:443:_strict_bundle <- mint_floor_artifact.py:1923:bind_floor_artifact_evidence <- floor_mint_estimator.py:675:bind_v2_floor_artifact_evidence <- mint_floor_artifact_generalized.py:4516:_mint_multi_cell_floor_artifact_active <- mint_floor_artifact_generalized.py:4435:mint_multi_cell_floor_artifact",
+   167
+  ],
+  [
+   "<frozen posixpath>:429:_joinrealpath <- <frozen posixpath>:420:realpath <- pathlib.py:1228:Path.resolve <- authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:2345:custody_telemetry_identity <- whole_window.py:5268:_current_strict_summary",
+   166
+  ],
+  [
+   "analysis_verified_store.py:339:canonical_digest <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1717:VerifiedStore.probe <- analysis_member_pool.py:449:_prefilter <- analysis_member_pool.py:466:member_map <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   166
+  ],
+  [
+   "authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1402:read_authentication_text <- whole_window.py:6633:_load_idle_records <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row <- whole_window.py:8729:whole_window_refusal_reasons <- mint_floor_artifact.py:530:_authenticated_consumption_summaries",
+   163
+  ],
+  [
+   "pathlib.py:835:Path.stat <- pathlib.py:1228:Path.resolve <- authentication_io.py:1180:V2AuthenticationReadSession.read <- authentication_io.py:1379:read_authentication_input <- whole_window.py:5250:_read_json_object <- whole_window.py:4075:ordinary_present_bundle_paths <- whole_window.py:4451:launch_lineage_refusal_reasons <- whole_window.py:8729:whole_window_refusal_reasons",
+   161
+  ],
+  [
+   "<frozen abc>:121:ABCMeta.__subclasscheck__ <- typing.py:1492:_SpecialGenericAlias.__subclasscheck__ <- typing.py:1221:_BaseGenericAlias.__instancecheck__ <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:637:_reserved_vocabulary_path <- authentication_io.py:654:_strict_json",
+   157
+  ],
+  [
+   "pathlib.py:1015:Path.read_bytes <- analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1542:_verified_instrument_calibration <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   147
+  ],
+  [
+   "pathlib.py:1005:Path.open <- pathlib.py:1015:Path.read_bytes <- analysis_verified_store.py:1894:VerifiedStore._bridge <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1394:_Hit.apply <- analysis_member_pool.py:566:consume <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons",
+   140
+  ],
+  [
+   "powermetrics_fiducial.py:454:TraceInterval.duration_s <- powermetrics_fiducial.py:562:_overlap_fraction <- powermetrics_fiducial.py:579:_pulse_loss.<locals>.<genexpr> <- powermetrics_fiducial.py:571:_pulse_loss <- powermetrics_fiducial.py:798:_fit_pulse.<locals>.loss <- powermetrics_fiducial.py:828:_fit_pulse.<locals>.<lambda> <- powermetrics_fiducial.py:739:_fit_pulse <- powermetrics_fiducial.py:983:detect_pulses.<locals>.<genexpr>",
+   140
+  ],
+  [
+   "threading.py:323:Condition.wait <- _base.py:428:Future.result <- analysis_verified_store.py:472:tree_digest <- analysis_verified_store.py:563:_Scope.verify_tree <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1613:_verified_environment_refusals <- whole_window.py:6702:_current_core_rederivation_reasons",
+   138
+  ],
+  [
+   "analysis_verified_store.py:2543:_kernel_resolves_to <- analysis_verified_store.py:1464:VerifiedStore._prepare <- analysis_verified_store.py:1692:VerifiedStore.call <- whole_window.py:1542:_verified_instrument_calibration <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached <- whole_window.py:7705:_validate_row",
+   137
+  ],
+  [
+   "pathlib.py:1015:Path.read_bytes <- window_lineage.py:590:_completion_records <- window_lineage.py:617:authenticate_lineage <- window_lineage.py:775:authenticate_bundle <- arm_readiness.py:11727:authenticate_bundle_launch_lineage <- whole_window.py:4100:_authenticated_bundle_launch_lineage_set <- whole_window.py:4451:launch_lineage_refusal_reasons <- whole_window.py:8729:whole_window_refusal_reasons",
+   135
+  ],
+  [
+   "analysis_verified_store.py:421:_walk <- analysis_verified_store.py:563:_Scope.verify_tree <- analysis_verified_store.py:1836:VerifiedStore._apply <- analysis_verified_store.py:1394:_Hit.apply <- analysis_member_pool.py:566:consume <- whole_window.py:1901:AuthenticatedConsumptionSession._prepare <- whole_window.py:6702:_current_core_rederivation_reasons <- whole_window.py:8125:_validate_row_uncached",
+   133
+  ]
+ ]
+}

@@ -224,6 +224,11 @@ def _floor_engine_reasons(resolutions: Sequence[FloorResolution]) -> list[str]:
                 reasons.append("floor_row_stale")
             elif reason == "transport_group_incomplete":
                 reasons.append("floor_row_ambiguous")
+            elif reason == "artifact_schema_invalid":
+                # D5b (DLE-3, docs/analysis/b5/DEVIATION-LOG.md): a floor-evidence
+                # binding refusal is an invalid floor artifact, plan section 7.2
+                # step 1 (not_estimable), not an inapplicable transport.
+                reasons.append("floor_artifact_invalid")
             else:
                 reasons.append("floor_transport_inapplicable")
     return ordered_reason_codes(reasons)

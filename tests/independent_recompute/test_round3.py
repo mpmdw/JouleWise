@@ -404,6 +404,21 @@ class Round3ArithmeticTests(unittest.TestCase):
             self.assertNotIn(code, r.STOP_FLAG_CODES)
 
 
+def _unanchored_describable(path):
+    """D3's preconditions, read from the bundle's own files (not the recompute's helpers): a succeeded member
+    with one measured-run sampling start and stop event, controller clock stamps for both, and a recorded
+    power_trace.csv."""
+    summary = json.loads((path / 'summary_metrics.json').read_text())
+    events = [json.loads(line) for line in (path / 'events.jsonl').read_text().splitlines() if line.strip()]
+    metadata = json.loads((path / 'metadata.json').read_text())
+    sampling = [e.get('event_type') for e in events if e.get('phase') == 'measured_run'
+                and e.get('event_type') in ('sampling_started', 'sampling_stopped')]
+    stamps = ((metadata.get('uncertainty_evidence') or {}).get('clock_anchor') or {}).get('clock_stamps') or {}
+    return (summary.get('status') == 'succeeded' and sorted(sampling) == ['sampling_started', 'sampling_stopped']
+            and {'sampling_started', 'sampling_stopped'} <= set(stamps)
+            and (path / 'power_trace.csv').is_file() and (path / 'power_trace.csv').stat().st_size > 0)
+
+
 @unittest.skipUnless(archive_available(R18) and archive_available((R2 / 'r18-registered.json')), 'R18 / round-2 baseline unavailable')
 class Round3RehearsalTests(unittest.TestCase):
     @classmethod
@@ -427,20 +442,29 @@ class Round3RehearsalTests(unittest.TestCase):
         mismatches = {f['scope']: f for f in self.out['flags'] if f['code'] == 'meter_request_mismatch'}
         self.assertEqual(mismatches, {})
         unbounded = 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1'
-        self.assertEqual(line['members'][unbounded]['phases']['request']['recorded_comparison'], {
-            'status': 'not_compared', 'matches': None, 'reason': 'anchor_unbounded'})
+        # 2026-11-07 release trace (D3): a succeeded member whose anchor did not resolve is described from its
+        # controller stamps and recorded trace when it has them (status descriptive_unanchored) and then agrees
+        # with the record; without them it stays not_compared and null.
+        request = line['members'][unbounded]['phases']['request']
+        described = request.get('status') == 'descriptive_unanchored'
+        # The fixture decides which branch holds, read structurally from the bundle (PR #693 review L2), so a
+        # revert of D3's unanchored path fails here instead of passing through the null branch.
+        self.assertEqual(described, _unanchored_describable(R18 / 'sources/claim-runs' / unbounded))
+        if not described:
+            self.assertEqual(request['recorded_comparison'], {
+                'status': 'not_compared', 'matches': None, 'reason': 'anchor_unbounded'})
         self.assertEqual(len(line['members']), 53)
         for run_id, record in archived.items():
             for field in ('rail_delta_J', 'rho'):
                 with self.subTest(member=run_id, field=field):
                     own = line['members'][run_id]['phases']['request'].get(field)
-                    if run_id == unbounded:
+                    if run_id == unbounded and not described:
                         self.assertIsNone(own)
                     else:
                         assert_values_agree(self, own, record[field], ratio=field == 'rho')
         summary = self.out['disclosures']['whole_machine']['request_cross_check']['windows']['ALPHA']['models']
         self.assertEqual(set(summary), {'Qwen3-1.7B-4bit', 'Qwen2.5-1.5B-Instruct-4bit'})
-        self.assertEqual(sum(m['n_members'] for m in summary.values()), 52)
+        self.assertEqual(sum(m['n_members'] for m in summary.values()), 53 if described else 52)
 
     def test_R18_gross_meter_phase_and_edge_corners(self):
         line = self.out['disclosures']['whole_machine']['windows']['ALPHA']

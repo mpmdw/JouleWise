@@ -634,20 +634,40 @@ def _finite_int(value: str) -> int:
     return parsed
 
 
-def _reserved_vocabulary_path(value: object, where: str) -> str | None:
+def _reserved_key_present(value: object) -> bool:
+    """Whether the reserved key occurs below ``value`` (speed only, b5 under-90 lane).
+
+    The located walk's exact checks (the same ``isinstance`` tests, in the same
+    order, one Python frame per nesting level) without formatting every
+    node's dotted location, so a RecursionError, if any, is raised at the same
+    depth as before.
+    """
     if isinstance(value, Mapping):
         for key, child in value.items():
-            child_path = f"{where}.{key}"
             if key == "estimator_registration":
-                return child_path
-            nested = _reserved_vocabulary_path(child, child_path)
-            if nested is not None:
-                return nested
+                return True
+            if _reserved_key_present(child):
+                return True
+    elif isinstance(value, list):
+        for child in value:
+            if _reserved_key_present(child):
+                return True
+    return False
+
+
+def _reserved_vocabulary_path(value: object, where: str) -> str | None:
+    # Same result, traversal order and frames per nesting level as before: a
+    # child's dotted location is formatted only when its subtree holds the key.
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if key == "estimator_registration":
+                return f"{where}.{key}"
+            if _reserved_key_present(child):
+                return _reserved_vocabulary_path(child, f"{where}.{key}")
     elif isinstance(value, list):
         for index, child in enumerate(value):
-            nested = _reserved_vocabulary_path(child, f"{where}[{index}]")
-            if nested is not None:
-                return nested
+            if _reserved_key_present(child):
+                return _reserved_vocabulary_path(child, f"{where}[{index}]")
     return None
 
 

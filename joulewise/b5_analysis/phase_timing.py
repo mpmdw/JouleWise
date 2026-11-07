@@ -19,6 +19,8 @@ STRUCTURE (outside custody, ``scripts/run_b5_analysis.py --phase-log PATH``):
         heartbeat   {event, step, step_s, elapsed_s}   (every JOULEWISE_B5_PHASE_HEARTBEAT_S, default 300)
         step_end    {event, step, wall_s}
         run_end     {event, total_s}
+        step_retry  {event, step, attempt}             (lane b5-robust: a serial rerun of the step)
+        run_resume  {event, step}                      (lane b5-robust: first step of a resumed run)
 
     No label, phase, program, pool or count column ever reaches this tier;
     ``validate_phase_line`` refuses any other key or value before a write.
@@ -169,8 +171,12 @@ _STRUCTURE_KEYS = {
     'heartbeat': frozenset({'event', 'step', 'step_s', 'elapsed_s'}),
     'step_end': frozenset({'event', 'step', 'wall_s'}),
     'run_end': frozenset({'event', 'total_s'}),
+    # Lane b5-robust: a step rerun serially after a host tooling refusal, and a
+    # resumed run's first step ('-' when only the record remained).
+    'step_retry': frozenset({'event', 'step', 'attempt'}),
+    'run_resume': frozenset({'event', 'step'}),
 }
-_STRUCTURE_INTS = frozenset({'elapsed_s', 'step_s', 'wall_s', 'total_s'})
+_STRUCTURE_INTS = frozenset({'elapsed_s', 'step_s', 'wall_s', 'total_s', 'attempt'})
 _RESTRICTED_KEYS = {
     'run_start': frozenset({'event', 'schema', 'mode', 'sample_ms', 'heartbeat_s', 'pid', 'cpu_count'}),
     'step_begin': frozenset({'event', 'step', 'elapsed_ms'}),
@@ -180,6 +186,8 @@ _RESTRICTED_KEYS = {
                            'load_x100', 'programs', 'pool', 'children', 'phases', 'sampled_ms',
                            'unattributed_ms', 'top'}),
     'run_end': frozenset({'event', 'total_ms', 'cpu_ms', 'phases', 'top'}),
+    'step_retry': frozenset({'event', 'step', 'attempt', 'elapsed_ms'}),
+    'run_resume': frozenset({'event', 'step', 'elapsed_ms'}),
 }
 _RESTRICTED_EVENTS = frozenset(_RESTRICTED_KEYS)
 _GROUPS = ('driver', 'child', 'member')
@@ -321,8 +329,9 @@ def _check_restricted(document):
     """The restricted tier's closed schema: exactly what _Timer writes, nothing else."""
     event = document['event']
     if 'step' in document:
-        _need(document['step'] in STEP_IDS or (event == 'heartbeat' and document['step'] == '-'), 'step')
-    for key in ('sample_ms', 'heartbeat_s', 'pid', 'cpu_count', 'elapsed_ms', 'step_ms', 'wall_ms', 'cpu_ms',
+        _need(document['step'] in STEP_IDS or (event in ('heartbeat', 'run_resume') and document['step'] == '-'),
+              'step')
+    for key in ('sample_ms', 'heartbeat_s', 'pid', 'cpu_count', 'elapsed_ms', 'step_ms', 'wall_ms', 'cpu_ms', 'attempt',
                 'serial_ms', 'maxrss_mib', 'sampled_ms', 'unattributed_ms', 'total_ms'):
         if key in document:
             _need(_is_count(document[key]), key)
@@ -776,6 +785,21 @@ class _Timer:
             'sampled_ms': _ms(acc.sampled), 'unattributed_ms': _ms(acc.unattributed),
             'top': _top(acc.hist)})
 
+    def step_retry(self, step, attempt):
+        if step not in STEP_IDS or not _is_count(attempt):
+            return
+        now = self.clock()
+        self.write('structure', {'event': 'step_retry', 'step': step, 'attempt': attempt})
+        self.write('restricted', {'event': 'step_retry', 'step': step, 'attempt': attempt,
+                                  'elapsed_ms': _ms(now - self.t0)})
+
+    def run_resume(self, step):
+        if step not in STEP_IDS and step != '-':
+            return
+        now = self.clock()
+        self.write('structure', {'event': 'run_resume', 'step': step})
+        self.write('restricted', {'event': 'run_resume', 'step': step, 'elapsed_ms': _ms(now - self.t0)})
+
     def run_end(self):
         if self.ended:
             return
@@ -1024,6 +1048,14 @@ def step_end(step) -> None:
 
 def run_end() -> None:
     _call('run_end')
+
+
+def step_retry(step, attempt) -> None:
+    _call('step_retry', step, attempt)
+
+
+def run_resume(step) -> None:
+    _call('run_resume', step)
 
 
 def program_span(main, argv) -> _Span:

@@ -245,6 +245,12 @@ class AssistCustody:
     def read(self, name):
         return self.record
 
+    def one(self, pattern):
+        # The real custody's single-document read; D6's neg8_survivor_terms condition reads the
+        # disclosure through it (release-hold trace, 2026-11-07).
+        names = self.names(pattern)
+        return self.read(names[0]) if names else None
+
 
 class OneKeySpaceTests(Case):
     """S3 (Sol finding 3, Opus N2)."""
