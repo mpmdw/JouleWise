@@ -36,7 +36,7 @@ def load_tests(loader, tests, pattern):
     """Only this module's own tests (the night cases inherit the
     NightDriverTests fixture, not its tests)."""
     suite = unittest.TestSuite()
-    for case in (NightInterruptTests, R1InterruptTests, TerminateTreeTests, WatchdogArmTests, RedoReleaseBoundTests,
+    for case in (NightInterruptTests, NightUnprovenCloseTests, SignalLatchTests, R1InterruptTests, TerminateTreeTests, WatchdogArmTests, RedoReleaseBoundTests,
                  DryArmInterruptTests, AliasedPicksBarTests, DocTests):
         names = sorted(name for name in vars(case) if name.startswith("test_"))
         suite.addTests(case(name) for name in names)
@@ -103,6 +103,18 @@ try:
 except BaseException as error:
     outcome["raised"] = type(error).__name__ + ": " + str(error)
 night = case.custody / "night"
+def alive(pid):
+    # Checked here, before the parent's emergency cleanup can kill anything
+    # (round-8 Sol critique); an orphan is reaped by launchd within moments.
+    for _ in range(100):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        time.sleep(0.05)
+    return True
+pids = json.loads(Path(ready).read_text()) if Path(ready).exists() else {}
+outcome["alive_after"] = {role: alive(pid) for role, pid in pids.items()}
 outcome.update(mode=host.mode, marker=marker.exists(), calls=host.calls, pass_fds=seen.get("pass_fds"),
                log=(case.custody / "night.log").read_text(), exited=(night / "chain.exited").exists(),
                unkilled=(night / "chain.unkilled").exists())
@@ -154,8 +166,9 @@ class NightInterruptTests(unittest.TestCase):
         self.assertNotIn("ac powermode close deferred", outcome["log"])
         self.assertIn("ac powermode close: restore Automatic", outcome["log"])
         self.assertEqual((outcome["mode"], outcome["marker"]), (0, False))
-        self.assertTrue(gone(pids["chain"]))
-        self.assertTrue(gone(pids["member"]))
+        # Observed by run_night's own process right after it returned, before
+        # any cleanup here.
+        self.assertEqual(outcome["alive_after"], {"chain": False, "member": False})
 
     def test_sigterm_while_the_chain_runs_stops_it_and_restores(self):
         self.check(*self.run_and_signal(signal.SIGTERM))
@@ -194,6 +207,9 @@ class R1InterruptTests(unittest.TestCase):
         wait = mock.patch.object(r1, "TREE_STOP_WAIT_S", 1.0)
         wait.start()
         self.addCleanup(wait.stop)
+        # The run's termination proofs are module state; never leak an
+        # unproven one into a later guard in this process.
+        self.addCleanup(r1._CHILD_TERMINATIONS.clear)
 
     def run_interrupted(self, td, *, extra_patches=()):
         td = Path(td)
@@ -288,6 +304,65 @@ class R1InterruptTests(unittest.TestCase):
             self.assertEqual((record["action"], world.mode), ("restored", 0))
 
 
+class NightUnprovenCloseTests(rn.NightDriverTests):
+    """R8-1 (round-8 Sol critique): an interrupt whose chain termination is not
+    proven defers the close even when the lock could be retaken (a survivor
+    that does not hold the lock, such as an unsignalable root descendant)."""
+
+    def test_an_unproven_chain_termination_restores_nothing(self):
+        mapping = json.loads(self.plan_path.read_text())
+        mapping["ac_powermode"] = 2
+        self.plan_path.write_text(json.dumps(mapping))
+        host = self._power_host(2)
+        marker = Path(powermode.host_marker_path())
+        powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG, owner={"custody_root": self.custody})
+        calls = {"census": 0, "terminate": 0}
+        real_census = self.driver.agent_census
+
+        def census(probes):
+            calls["census"] += 1
+            if calls["census"] >= 2:          # the first in-window census: the signal lands here
+                raise KeyboardInterrupt("signal 15")
+            return real_census(probes)
+
+        def terminate(*_args, **_kwargs):
+            calls["terminate"] += 1
+            return False                      # the group could not be proven gone
+        spawn = lambda argv, *a, **k: rn.UnkillableProcess(argv)
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn), \
+                mock.patch.object(self.driver, "agent_census", census), \
+                mock.patch.object(self.driver, "_terminate_process_group", terminate), \
+                self.assertRaises(KeyboardInterrupt):
+            self.driver.run_night(self.plan_path)
+        self.assertEqual(calls["terminate"], 1)
+        log = (self.custody / "night.log").read_text()
+        self.assertIn("not proven gone after the interrupt (lead ruling R8-1)", log)
+        self.assertNotIn("restore", host.calls)
+        self.assertEqual(host.mode, 2)
+        self.assertTrue(marker.exists())
+        probe = powermode.HostLock(role="probe")            # the close freed the lock
+        self.assertTrue(probe.acquire())
+        probe.release()
+        self.assertIsNone(self.driver._CHAIN_INTERRUPT_UNPROVEN)   # cleared for the next night
+
+
+class SignalLatchTests(unittest.TestCase):
+    """R8-1 (round-8 Sol critique): the first TERM/HUP/INT latches the
+    shutdown, so a second one cannot escape before the termination begins."""
+
+    def test_a_second_signal_is_swallowed_without_closing(self):
+        from scripts import run_night
+        _closing, restore = run_night._install_termination_handlers()
+        self.addCleanup(restore)
+        with self.assertRaises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(1)
+        os.kill(os.getpid(), signal.SIGHUP)      # would raise again without the latch
+        time.sleep(0.2)
+        os.kill(os.getpid(), signal.SIGINT)
+        time.sleep(0.2)
+
+
 class TerminateTreeTests(unittest.TestCase):
     """R8-1: ``_terminate`` ends the child, then proves its descendants gone,
     even one that ignores TERM and holds the child's output pipe."""
@@ -315,6 +390,56 @@ class TerminateTreeTests(unittest.TestCase):
         self.assertIn(str(grandchild), outcome["descendants"])
         self.assertTrue(gone(grandchild))
         self.assertEqual(process.returncode, 143)
+
+    def test_a_pipe_held_by_an_unrecorded_process_is_not_proven(self):
+        # The child exited before any census (round-8 Sol critique): its
+        # orphan was never recorded but still holds the output pipe.
+        code = ("import subprocess, sys\n"
+                "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+                "print(g.pid, flush=True)\n")
+        process = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True)
+        orphan = int(process.stdout.readline())
+        self.addCleanup(lambda: gone(orphan, 0.01) or os.kill(orphan, signal.SIGKILL))
+        deadline = time.monotonic() + 30
+        while process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        with mock.patch.object(r1, "TREE_STOP_WAIT_S", 0.5):
+            outcome = r1._terminate(process, grace_s=0.5)
+        self.assertFalse(outcome["proven"])
+        self.assertTrue(outcome["pipes_held_open"])
+
+    def test_a_child_that_is_never_reaped_is_not_proven(self):
+        class Stuck:
+            pid, returncode, stdout, stderr = 999999, None, None, None
+
+            def poll(self):
+                return None
+
+            def send_signal(self, _number):
+                pass
+
+            def kill(self):
+                pass
+
+            def communicate(self, timeout=None):
+                raise subprocess.TimeoutExpired("stuck", timeout)
+
+            def wait(self, timeout=None):
+                raise subprocess.TimeoutExpired("stuck", timeout)
+        with mock.patch.object(r1, "_process_table", lambda: {}), \
+                mock.patch.object(r1, "REAP_AFTER_KILL_S", 0.1), mock.patch.object(r1, "TREE_STOP_WAIT_S", 0.1):
+            outcome = r1._terminate(Stuck(), grace_s=0.2)
+        self.assertFalse(outcome["proven"])
+        self.assertTrue(outcome["unreaped"])
+
+    def test_identity_is_pid_and_start_time_not_command(self):
+        started = "Sat Nov 7 06:00:00 2026"
+        tree = {101: (started, "python heater"), 102: (started, "sudo powermetrics")}
+        table = {101: (1, started, "/usr/bin/other-program"),        # exec'd: still the same process
+                 102: (1, "Sat Nov 7 06:05:00 2026", "sudo powermetrics")}   # pid reused: not ours
+        with mock.patch.object(r1, "_process_table", lambda: table):
+            self.assertEqual(r1._tree_survivors(tree), {101: tree[101]})
 
 
 class WatchdogArmTests(unittest.TestCase):

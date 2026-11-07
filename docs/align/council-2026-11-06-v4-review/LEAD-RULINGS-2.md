@@ -484,7 +484,7 @@ Each ruling's text is quoted verbatim as the lead gave it. One builder implement
 
 - `191455724`: the code and tests (R8-1, R8-3 to R8-6), with `tests/align/test_r1_round8.py`. Every behaviour test in it fails on `72c7c8a50` (checked by stashing the code change).
 - The doc commit that adds this section: R8-1's and R8-2's contract text, the R7-4 correction above, R8-4's table and R8-7's protocol v4 text, with `test_r1_round8.DocTests` (which fails on the round-7 docs).
-- A report commit after it: the Round 8 section of `docs/run_reports/2026-11-06-align-v4-r1-integration.md` (kit check and exact test tails).
+- A fix commit for the Sol critique (under R8-1 below), then a report commit: the Round 8 section of `docs/run_reports/2026-11-06-align-v4-r1-integration.md` (kit check and exact test tails).
 
 ### R8-1. An interrupt after launch stops the chain, proves it gone, then closes
 
@@ -500,6 +500,16 @@ Each ruling's text is quoted verbatim as the lead gave it. One builder implement
   - `R1InterruptTests`: a real TERM while a real runtime runs X-G under the adopted High Power. The runtime has started a "heater" that ignores TERM and that the runtime orphans on its own exit. The heater is gone at every restore call, and the proof is recorded. With a descendant that cannot be ended, the restore defers and the markers stay; the next session start restores.
   - `TerminateTreeTests`: an orphan that holds the pipe neither hangs `_terminate` nor survives.
 - **Docs.** The contract doc (item 4 of "W1 under an adopted High Power", the driver's TERM bullet, the host-lock paragraph) and the R7-4 text above are corrected.
+- **Fixes from a local Sol 6.1 xhigh static critique of `72c7c8a50..543c9565d`** (Sol audit: clean; no command named a restricted path). The fixes are in the commit after the doc commit, and the test for each fails on `543c9565d`:
+  1. An unproven chain termination now defers the close even when the lock can be retaken. A survivor that does not hold the lock, such as an unsignalable root descendant, never sees a restore. The close logs "not proven gone after the interrupt" and frees the lock (`NightUnprovenCloseTests`).
+  2. The first TERM/HUP/INT now latches the shutdown before it raises, so a second signal cannot escape before the termination begins (`SignalLatchTests`).
+  3. The launched process is published inside the spawn's `try`, and the deadline before its thread starts.
+  4. In the R1 tree proof, a process is identified by its pid and start time (`ps … lstart`), not its command. An exec into another program is still tracked, and a reused pid is never signalled (`test_identity_is_pid_and_start_time_not_command`).
+  5. The tree is re-read about once a second during the 20 s grace.
+  6. Output pipes still held open after the tree is ended mean an unrecorded holder exists, so the proof fails (`test_a_pipe_held_by_an_unrecorded_process_is_not_proven`).
+  7. The reap after a KILL is bounded at 30 s; an unreaped child is unproven (`test_a_child_that_is_never_reaped_is_not_proven`).
+  8. The night tests now check that the chain and member are gone from inside the `run_night` process, before the test's emergency cleanup runs.
+- **Residual windows.** A signal inside `Popen` itself, after the fork but before it returns, still escapes the termination; blocking signals there would leave the chain with a blocked signal mask. The R1 tree proof can still miss a descendant that is started and orphaned between two one-second reads and does not hold the output pipe. Both fail toward an unsupervised orphan, the R8-2 class.
 
 No deviation.
 

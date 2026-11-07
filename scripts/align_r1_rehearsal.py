@@ -182,13 +182,17 @@ RUNTIME_TERM_GRACE_S = 20.0
 
 # Lead ruling R8-1: after the runtime is reaped, every process of its tree
 # seen while it lived is TERMed, then KILLed, each step bounded, and proven gone.
-PS_TREE = ("/bin/ps", "-A", "-o", "pid=,ppid=,command=")
+# A process is identified by its pid AND its start time (``lstart``), so an
+# exec into another program is still the same process and a reused pid is not
+# (round-8 Sol critique).
+PS_TREE = ("/bin/ps", "-A", "-o", "pid=,ppid=,lstart=,command=")
 TREE_STOP_WAIT_S = 5.0
 TREE_POLL_S = 0.1
+REAP_AFTER_KILL_S = 30.0
 
 
 def _process_table():
-    """``{pid: (ppid, command)}`` of every process, or None when ``ps`` fails."""
+    """``{pid: (ppid, lstart, command)}`` of every process, or None when ``ps`` fails."""
     try:
         rows = subprocess.run(list(PS_TREE), text=True, capture_output=True, check=False, timeout=5)
     except (OSError, subprocess.SubprocessError):
@@ -197,38 +201,38 @@ def _process_table():
         return None
     table = {}
     for row in rows.stdout.splitlines():
-        parts = row.split(None, 2)
-        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
-            table[int(parts[0])] = (int(parts[1]), parts[2] if len(parts) > 2 else "")
+        parts = row.split(None, 7)
+        if len(parts) >= 7 and parts[0].isdigit() and parts[1].isdigit():
+            table[int(parts[0])] = (int(parts[1]), " ".join(parts[2:7]), parts[7] if len(parts) > 7 else "")
     return table
 
 
 def _descendants(table, root_pid):
-    """``{pid: command}`` of every descendant of ``root_pid`` in ``table``."""
+    """``{pid: (lstart, command)}`` of every descendant of ``root_pid`` in ``table``."""
     children = {}
-    for pid, (ppid, _command) in table.items():
+    for pid, (ppid, _start, _command) in table.items():
         children.setdefault(ppid, []).append(pid)
     found, stack = {}, [root_pid]
     while stack:
         for child in children.get(stack.pop(), ()):
             if child not in found and child != root_pid:
-                found[child] = table[child][1]
+                found[child] = table[child][1:]
                 stack.append(child)
     return found
 
 
 def _tree_survivors(tree):
-    """The recorded descendants still alive with the same command (None: no census)."""
+    """The recorded descendants still alive with the same start time (None: no census)."""
     table = _process_table()
     if table is None:
         return None
-    return {pid: command for pid, command in tree.items() if pid in table and table[pid][1] == command}
+    return {pid: ident for pid, ident in tree.items() if pid in table and table[pid][1] == ident[0]}
 
 
 def _stop_tree(tree):
     """TERM, bounded wait, KILL, bounded wait, then the proof: no recorded
-    descendant is alive with its recorded command. Never raises."""
-    outcome = {"descendants": {str(pid): command for pid, command in sorted(tree.items())}}
+    descendant is alive with its recorded start time. Never raises."""
+    outcome = {"descendants": {str(pid): ident[1] for pid, ident in sorted(tree.items())}}
     survivors = _tree_survivors(tree) if tree else {}
     for number in (signal.SIGTERM, signal.SIGKILL):
         if not survivors:
@@ -244,7 +248,7 @@ def _stop_tree(tree):
             if survivors == {} or time.monotonic() >= deadline:
                 break
             time.sleep(TREE_POLL_S)
-    outcome["survivors"] = None if survivors is None else {str(pid): command for pid, command
+    outcome["survivors"] = None if survivors is None else {str(pid): ident[1] for pid, ident
                                                            in sorted(survivors.items())}
     outcome["proven"] = survivors == {}
     return outcome
@@ -255,10 +259,13 @@ def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> dict:
 
     Lead ruling R8-1: the runtime's own children (the heater, powermetrics
     through sudo) are recorded from the process table while the runtime
-    lives (before the TERM, and again before a KILL), and once the runtime is
-    reaped every one still alive is TERMed, then KILLed, and proven gone.
-    Returns the proof (``proven`` False when a census failed or a survivor
-    remains: the guard then defers the restore)."""
+    lives (before the TERM, about once a second during the grace, and before
+    a KILL), and once the runtime is reaped every one still alive is TERMed,
+    then KILLed, and proven gone. Returns the proof; ``proven`` is False when
+    a census failed, a descendant survived, the child was not reaped within
+    REAP_AFTER_KILL_S of its KILL, or its output pipes are still held open
+    after the tree was ended (a holder that was never seen as a descendant).
+    The guard then defers the restore."""
     grace_s = RUNTIME_TERM_GRACE_S if grace_s is None else grace_s
     tree, census_failed = {}, False
 
@@ -272,21 +279,32 @@ def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> dict:
         else:
             tree.update(_descendants(table, process.pid))
     snapshot()
-    drained = False
+    drained = reaped = False
     if process.poll() is None:
         try:
             process.send_signal(signal.SIGTERM)
         except ProcessLookupError:
             pass
-        try:
-            process.communicate(timeout=grace_s)
-            drained = True
-        except subprocess.TimeoutExpired:
+        deadline = time.monotonic() + grace_s
+        while True:
+            try:
+                process.communicate(timeout=max(0.01, min(1.0, deadline - time.monotonic())))
+                drained = True
+                break
+            except subprocess.TimeoutExpired:
+                snapshot()
+                if time.monotonic() >= deadline:
+                    break
+        if not drained and process.poll() is None:
             snapshot()
             process.kill()
-    # KILL bounds this; communicate() alone could wait forever on a pipe that
-    # an orphaned descendant inherited.
-    process.wait()
+    # KILL bounds this, unless the child sits in uninterruptible I/O;
+    # communicate() alone could wait forever on a pipe an orphan inherited.
+    try:
+        process.wait(timeout=REAP_AFTER_KILL_S)
+        reaped = True
+    except subprocess.TimeoutExpired:
+        pass
     proof = _stop_tree(tree)
     if not drained:
         try:
@@ -295,9 +313,11 @@ def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> dict:
             for stream in (process.stdout, process.stderr):
                 if stream is not None:
                     stream.close()
-            proof["pipes_closed_undrained"] = True
+            proof.update(proven=False, pipes_held_open=True)
     if census_failed:
         proof.update(proven=False, census_failed=True)
+    if not reaped:
+        proof.update(proven=False, unreaped=True)
     proof.update(pid=process.pid, returncode=process.returncode, authority="lead ruling R8-1")
     return proof
 

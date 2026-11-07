@@ -1032,7 +1032,12 @@ def _run_chain_once(
             # Lead ruling R8-1: an interrupt (INT, or TERM/HUP through the R7-4
             # handler) after the chain launched stops the chain's group and
             # proves it gone before run_night's close runs.
-            _stop_chain_on_interrupt(launched, night_dir, plan, interrupt)
+            global _CHAIN_INTERRUPT_UNPROVEN
+            outcome = _stop_chain_on_interrupt(launched, night_dir, plan, interrupt)
+            if outcome is not None and not outcome.get("proven"):
+                # Round-8 Sol critique: a survivor that does not hold the lock
+                # (an unsignalable root descendant) must not see a restore.
+                _CHAIN_INTERRUPT_UNPROVEN = outcome
             raise
 
 
@@ -1119,6 +1124,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 start_new_session=True,
                 **launch_options,
             )
+            if launched is not None:
+                launched["process"] = process   # lead ruling R8-1: an interrupt from here stops the group
         except OSError as error:
             if claim_descriptor is not None:
                 launch_error = _complete_chain_launch_failure(claim_descriptor, error)
@@ -1139,8 +1146,6 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
         finally:
             if child_channel is not None:
                 child_channel.close()
-        if launched is not None:
-            launched["process"] = process   # lead ruling R8-1: an interrupt from here stops the group
         awaiting_start = channel is not None
         claimed = claim_descriptor is not None
         pgid = (_complete_chain_start(claim_descriptor, process, night_dir)
@@ -1164,9 +1169,9 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 time.monotonic() + (deadline_epoch_s - float(probes.now_epoch_s()))
             ),
         )
-        deadline.start()
         if launched is not None:
             launched["deadline"] = deadline
+        deadline.start()
 
         def exceeded(outcome: dict[str, Any]) -> tuple[
             int | None, dict[str, Any], int, list[dict[str, Any]], bool
@@ -4165,6 +4170,25 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
 
     global _CHAIN_HOST_LOCK
     _CHAIN_HOST_LOCK = None
+    unproven = _CHAIN_INTERRUPT_UNPROVEN
+    if unproven is not None:
+        # Lead ruling R8-1 (round-8 Sol critique): the chain termination on an
+        # interrupt was not proven, so a process of the night may still live
+        # even if the lock can be retaken; restore nothing, release the lock.
+        record = {"ok": False, "deferred": "the chain's process group was not proven gone after the interrupt "
+                  "(lead ruling R8-1); the marker is left for the dead-man or the next session start",
+                  "chain_termination": unproven}
+        try:
+            _append_log(Path(plan.custody_root), "ac powermode close deferred: "
+                        + json.dumps(record, sort_keys=True, default=str))
+        except Exception:  # noqa: BLE001
+            pass
+        if lock is not None:
+            try:
+                lock.release()
+            except BaseException:  # noqa: BLE001
+                pass
+        return record
     proven, lock_error = False, None
     try:
         proven = bool(lock is not None and lock.retake())
@@ -4267,6 +4291,9 @@ TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
 # Lead ruling R8-1: the running night's ``closing`` hook, so the chain
 # termination on an interrupt swallows further TERM/HUP/INT as the close does.
 _SIGNAL_CLOSING: Callable[[], None] | None = None
+# Lead ruling R8-1 (round-8 Sol critique): the outcome of a chain termination
+# on an interrupt that was not proven; the close then restores nothing.
+_CHAIN_INTERRUPT_UNPROVEN: dict[str, Any] | None = None
 
 
 def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], None]]:
@@ -4274,8 +4301,9 @@ def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], No
     KeyboardInterrupt), so its normal close runs, High Power restore included.
     Once the close has begun (``closing()``), further TERM/HUP are swallowed
     so they cannot interrupt it; lead ruling R8-1 adds SIGINT (when it still
-    has Python's default handler) and calls ``closing()`` as soon as the chain
-    termination on an interrupt begins. Python-level handlers reset to the
+    has Python's default handler), and the first such signal itself latches
+    ``closing`` before it raises, so no later one can cut short the chain
+    termination or the close. Python-level handlers reset to the
     default on exec, so children keep default dispositions. Main thread only.
     Returns ``(closing, restore)``."""
     if threading.current_thread() is not threading.main_thread():
@@ -4285,6 +4313,10 @@ def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], No
     def handler(signum: int, _frame: Any) -> None:
         state["received"].append(signum)
         if not state["closing"]:
+            # Round-8 Sol critique: the first signal latches the shutdown, so
+            # a second one cannot escape the chain termination before it
+            # begins (lead ruling R8-1).
+            state["closing"] = True
             raise KeyboardInterrupt(f"signal {signum}")
 
     previous = {sig: signal.signal(sig, handler) for sig in TERMINATION_SIGNALS}
@@ -4310,11 +4342,12 @@ def run_night(
     courier_bin: Path | None = None,
     dry_arm: bool = False,
 ) -> int:
-    global _CHAIN_HOST_LOCK, _SIGNAL_CLOSING
+    global _CHAIN_HOST_LOCK, _SIGNAL_CLOSING, _CHAIN_INTERRUPT_UNPROVEN
     closers: list[Callable[[], Any]] = []
     stage: dict[str, Any] = {}
     closing, restore_signals = _install_termination_handlers()
     _SIGNAL_CLOSING = closing
+    _CHAIN_INTERRUPT_UNPROVEN = None
     try:
         return _run_night(plan_path, rehearsal=rehearsal, courier_bin=courier_bin, dry_arm=dry_arm,
                           closers=closers, stage=stage)
@@ -4359,6 +4392,7 @@ def run_night(
                 pass
         _CHAIN_HOST_LOCK = None
         _SIGNAL_CLOSING = None
+        _CHAIN_INTERRUPT_UNPROVEN = None
         restore_signals()
 
 
