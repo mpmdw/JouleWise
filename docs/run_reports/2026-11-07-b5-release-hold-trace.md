@@ -353,6 +353,13 @@ split into `no_rule` and `uncompared`.
 | `docs/process_traces/2026-11-07-b5-release-trace/` | the blind extractor and the structure-only probes (`probe_release_hold.py`; round 2 `probe_d5_binding.py`) | | |
 
 - Every new test fails on the unfixed code.
+- Round 2 regression runs (`JW_B5_SYNTHETIC_ONLY=1`, niced):
+  - `test_comparator`, `test_rc_cmp7`-`11`, `test_review_fixes`, `test_input_gate`, `test_comparator_meter`:
+    248 run. The one failure was the expected-check family count (`test_rc_cmp9`), updated for the three new
+    D6 checks.
+  - `test_meter`, `test_round3`, `test_auditfix`, `test_review_probes_meter`, `test_release_trace_20261107` and
+    `test_release_b5` pass after the `test_auditfix` update.
+  - `repin.py --check` passes.
 - Passing:
   - `tests.independent_recompute.{test_meter,test_round3,test_comparator_meter,test_review_fixes,test_review_probes_meter,test_auditfix}`:
     107 run, 9 skipped (`JW_B5_SYNTHETIC_ONLY=1`);
