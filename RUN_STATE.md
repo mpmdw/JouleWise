@@ -1077,6 +1077,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (2) Read Ed's reply on thread `1a198fafa8fc12ba` and any laptop-lead item. If a two-seat classifier consult has run (`/Users/edr/night-archive/r0-smc-cov/consult/`), its proposals are inputs to that decision.
 (3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
 
+- **Consult (about 01:40 PST), two blind seats from the re-run 7 journal:** Sol 6.1 xhigh and Fable 5.1. Proposals and the lead's synthesis are on branch `records/2026-11-07-align-r0-v4-rerun7` (`42e6b973c`, `docs/align/r0/2026-11-07-rerun7/consult/`).
+  - Both seats agree:
+    - reject placeholder series;
+    - take the baseline and noise from the last 60 s of idle;
+    - check settledness at G0's 0.2 degC/min;
+    - fast class tau <= 30 s, with candidate `Tf18`;
+    - add a noise gate on slow keys;
+    - make the receipt read the classifier's per-phase coverage;
+    - this capture cannot give a valid slow pick.
+  - Open choices: the slow class lower bound (30 or 90 s); refusing or flagging an unsettled idle; running SMC first in R0; the slow pick rule.
+- **Ed's reply, 01:34 PST 11-07** (message `1a1b55c3be8c0435`, thread `1a198fafa8fc12ba`), verbatim: "of course continue work on getting this right. are there any signs when working this will lead to any noteworthy research? wb the port of qwen next and other lanes, update? Also sol xhigh claude 5.5 and fable 5.1 should be doing fresh designs"
+  - Applied: three blind fresh-design seats (Sol 6.1 xhigh, Opus 5.5, Fable 5.1), free to discard the current classifier. Brief: `/Users/edr/night-archive/r0-smc-cov/fresh/BRIEF.md`; outputs in `fresh/{sol,opus,fable}/DESIGN.md`. The two amendment-framed proposals above stay on record as inputs.
+  - Ed's two questions are answered on the thread.
+- **Next activation (replaces the pointer above):**
+  - (1) If the three fresh designs exist and are not yet reconciled, reconcile them. Claude-side writes the decision text, and Sol's executed findings are kept. Rulings that change which sensors count go to Ed with the reconciled text. Then build onto #692 or a successor, gate it, merge, and run one R0 in a clean gap.
+  - (2) R0 stays held until then.
+  - (3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
 194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
   - host, host-identity, model-load, generated (0 off-spec turns) and memory (peak 37,025,283,164 bytes against 45e9; swap flat): pass.
