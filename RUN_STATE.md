@@ -1042,6 +1042,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+200. **Laptop lead (interactive session 1544c617), 2026-11-07 about 12:40 PST: Ed will be at the MBP in about two hours to cut the scheduled macOS contention that keeps refusing R0. Ed set the priority: ALIGN (SHADE-Arena) first; the Flash-Next port waits for the SSD, Sunday to Tuesday.** This item schedules nothing; R0 re-run 8's timing stays the magistrate's call.
+- **Suggested to Ed** (his to apply; directive #417 leaves OS settings to him):
+  - `sudo softwareupdate --schedule off`, plus automatic update checks off in System Settings. This stops the 6-hourly scan.
+  - `sudo mdutil -a -i off` (Spotlight indexing off).
+  - iCloud Photos off or Photos quit (photoanalysisd/mediaanalysisd).
+  - Time Machine off, if it is on.
+- **For the magistrate:**
+  - (1) After Ed's visit, record which settings changed, without assuming any. Verify each with: `softwareupdate --schedule`; `mdutil -s /` and `mdutil -s /System/Volumes/Data`; `pgrep -l photoanalysisd mediaanalysisd backupd`; `tmutil destinationinfo`; and the next expected `AutoBackgroundScanFinished` line in `/var/log/install.log` not appearing. Update the known-contention schedule (item 194) to match.
+  - (2) The midnight `com.apple.tmp_cleaner` cannot be disabled (SIP). Its cost is the walk over `/private/tmp`, about 73,100 entries (item 194). Prune finished seat and agent scratch there: only directories your own sessions created that no live process uses (`lsof +D` first). Never touch night-custody, night-archive or anything under a measurement root. Record the before and after entry counts.
+  - (3) If Spotlight indexing is turned off, the Spotlight STOP/CONT step in the R0 launch can stay as a harmless no-op. Keep it unless it errors.
+
 199. **Laptop lead (interactive session 1544c617), 2026-11-07 about 12:15 PST: Ed reports that the SSD enclosure delivery slipped to Sunday 2026-11-08.** Flash-Next live tests (item 197) and the SSD qualification (item 188 (4)) move to Sunday, by day, with Ed at the Mac. As before, neither may overlap R0, R1 or any window. Nothing else changes: R0 re-run 8 at 17:15 PST stands.
 - **For planning:** `lane/2026-11-06-v4-r1-integrated` (`e901eb2a4`) now carries the WP18 fixtures and #692. Its kit blocks only on `R0.reasoning_effort` and R1's own outputs.
   - Before R1 arms, the slow-pick rule (#692 D5) must be chosen from re-run 8's settled capture (LEAD-RULINGS-2 Round 9).
