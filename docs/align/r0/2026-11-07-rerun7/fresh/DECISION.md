@@ -115,3 +115,52 @@ the 1 degC band floor).
   thermometer.
 - With D1 (c), the replay gives Tf18 / TaLP, with alternatives TaRT / TSXR / TVS0, as DECISION.md
   expected.
+
+## Erratum 2 (03:35 PST, lead dispositions of the two cold passes on c0c460fd9)
+
+Both cold passes returned ADMIT_WITH_FIXES (Fable 5.1 and Opus 5.5, blind and executing). Reviews:
+`cold2-fable-REVIEW.md` and `cold2-opus-REVIEW.md`.
+
+- **D1 (d), heat ordering** (Fable F1; the rule is from the Opus fresh design).
+  - The rule: among keys that pass D1 (a)-(c) and resolve, take the one with the shortest cooling tau
+    (lexical ties). Exclude from the picks any key whose rise exceeds that key's rise by more than
+    3 x that key's noise floor.
+  - Derivation: the fastest-responding key is the one closest to the heat source. Under one step, no
+    key farther along the conduction path can rise more than the source does. The 3-floor margin is
+    the resolution bar D4 already uses.
+  - On this capture it removes only TVH3 (rise 64.1 against Tf18's 45.7). D1 (c) stays as a backstop.
+  - Without this rule, a step 15% lighter than the matmul makes TVH3 the fast pick (Fable, executed).
+- **D3, the settle set** (Fable F2, Opus F1).
+  - Fault: waiting on every key that passes D1 (a) and the stale rule includes flicker keys (residual SD
+    3-8 degC) that D1 (b) only removes later. Their 60 s slopes never pass, so idle always hits the
+    1,200 s cap and records settled False.
+  - The new set: keys that pass D1 (a), the stale rule and D1 (b) on the idle data so far, with trailing
+    60 s residual SD <= 0.15 degC. That is the noise at which the 0.2 degC/min slope test is decidable
+    at 3 sigma, the D5 derivation.
+  - If no key qualifies, the phase records `settle_keys: 0` and settled is null (indeterminate), not
+    True (Opus F6).
+- **D6, readings with holes** (Fable F3, Opus F2).
+  - The bar is restated in grid cells: a pick may not have two consecutive empty 1 s cells within a
+    phase. It is checked per phase, so the idle-to-load handshake is not a hole.
+  - It moves into `rank` eligibility, so a key with such a hole loses its role and the next key is
+    picked. The receipt re-checks the same per-phase quantity.
+  - Derivation: the coverage bar is defined on 1 s cells. One missed read leaves one empty cell, which
+    the 99% bar already admits. Two consecutive empty cells mean the reader lost at least 2 s, the U1 (c)
+    window bar.
+  - The seconds bar goes.
+- **Phase-duration check** (Fable F4, Opus F5): a phase that differs from its configured length by more
+  than 1 s is a recorded flag, not a refusal.
+- **An SMC inconclusive does not stop R0** (Opus F3). With SMC first, `inconclusive` from smc is recorded
+  and the host, disk and model checks still run: they do not depend on the selection. `fail` from smc is
+  unchanged.
+- **Labels and numbers** (Fable F5-F7, Opus F4 and the number list):
+  - `design_literal` says it applies the band-hold cap.
+  - The D1 (b) reason is stamped only on keys with a positive rise.
+  - `CLAMP_DISTINCT = 10` gets its derivation (Fable fresh P2: with 10 or more distinct values,
+    quantum << noise, so one value holding 40% is a clamp) or goes.
+  - The vacuous `>= 600 s` check is removed or justified.
+  - The SMC journal estimate is corrected to the measured size per sample (about 53 KB, not 16 KiB),
+    so the disk budget is right.
+- **Deferred to the R1 lane:** aliased and virtual keys (TCMb = TVD0, Tf24 = Tf2D = Tf2E, TVV0). D1 (d)
+  does not remove an exact copy. The R0 picks print their aliases, and R1 must not count aliases as
+  independent thermometers.
