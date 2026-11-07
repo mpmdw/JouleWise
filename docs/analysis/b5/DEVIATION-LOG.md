@@ -197,9 +197,10 @@ of branch `lane/2026-11-06-b5-lean-release`.
 
 ---
 
-## Not adopted for now: DLE-3, DLE-4 and DLE-5 (lead, 2026-11-06)
+## Not adopted for now: CARE drafts DLE-3, DLE-4 and DLE-5 (lead, 2026-11-06)
 
-These are CARE §4's drafts:
+These are CARE §4's drafts. Their numbers are the care audit's draft numbers, not this log's entry numbers; the
+log's own DLE-3 (2026-11-07, below) is a different entry.
 - **DLE-3**: step-1 strict validation by hash binding.
 - **DLE-4**: memoizing or hash-binding the 3b candidate refits.
 - **DLE-5**: dropping the 120 s analysis-path wall deadline.
@@ -207,3 +208,107 @@ These are CARE §4's drafts:
 Under DLE-2 the heavy pipeline is off the critical path. So it keeps its full strict re-derivation, as the audit.
 The PLAN rules these drafts would have changed stand as written. Engineering-only speedups, which change no
 registered number, decision or refusal position, continue on `lane/2026-11-06-b5-under-90`.
+
+---
+
+## Signing statement for DLE-3
+
+DLE-3 carries the following statement verbatim, made by the signer at signing:
+
+> The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
+> preregistration rulings to the lead.
+
+Signer: the block-5 lead (Opus), 2026-11-07. The rulings were made blind and are recorded in the assembly brief of
+branch `lane/2026-11-07-b5-analysis-r3`. Every finding below comes from a structure-only trace: type pairs, counts,
+leaf paths, status and reason words, and code reading. No energy value, interval, outcome word of a real contrast or
+other outcome-bearing content was seen by the tracer, the assembler or the lead.
+
+---
+
+## DLE-3. Analysis version r3: release-hold fixes (D1-D4, D6), floor binding refusal label (D5b), and the D-188 engineering
+
+- **Status.** ADOPTED, 2026-11-07, on `lane/2026-11-07-b5-analysis-r3`. Supersedes the analysis commit
+  `b5/analysis-r2` (`929fc65c9`) for the block-5 dry run and release; the new commit is tagged `b5/analysis-r3`
+  after merge (the cited rebind of the analysis pin: `scripts/release_b5.py` takes the pinned commit as an
+  argument, so the rebind is the tag and the re-run, not a hash in the tree).
+- **Source.** The release-hold blind trace, `docs/run_reports/2026-11-07-b5-release-hold-trace.md` (rounds 1 and 2,
+  branch `lane/2026-11-07-b5-release-trace`). Its probes print only counts and status or reason words; the lead
+  ruled floor-resolution status and reason words structural.
+
+### Changes that change L9 output (not result-equal to r2)
+
+1. **D1, the L9 key bug (plan §8.2).**
+   - **Original rule.** PLAN §8.2 (lines 658-659): "The row also says whether the battery term was available."
+   - **Defect.** `joulewise/b5_analysis/disclosures.py` `machine_member` read `machine.battery_available`. The meter
+     record names the field `battery_term_available` (`joulewise/external/km003c_parse.py`
+     `delta_machine_energy`). Every `machine_member` line printed null for the flag. The L9 test fixture used the same
+     wrong key, which hid it.
+   - **Rows affected.** 346 `battery_term` comparator rows on the r2 dry run (trace §2, class null/bool), plus 2
+     shared with D3. The record itself was right; only the printed line was wrong.
+   - **Change.** Read `battery_term_available`; correct the fixture. Commit `9c51ce2d0`, failing-first test
+     `tests/b5_analysis/test_disclosures.py` `test_T8_T20_B8_meter_all_members`.
+   - **Effect on estimands.** None. The line now prints what the plan registers. No number, decision or refusal
+     position changes.
+2. **D5b, the floor binding refusal label (plan §7.2 step 1).**
+   - **Original rule.** PLAN §7.2 step 1 (lines 419-422) registers `floor_artifact_invalid` as `not_estimable`.
+     PLAN §7.2 step 2 makes `floor_transport_inapplicable` `not_resolvable`, a registered scientific outcome.
+   - **Defect.** `_floor_engine_reasons` (`joulewise/analysis_engine/__init__.py`) mapped every floor-resolution
+     code it did not list to `floor_transport_inapplicable`. That included `artifact_schema_invalid`, the engine
+     wrapper's refusal when the claim-side floor-evidence binding has problems (trace round 2, "D5: what
+     `artifact_schema_invalid` means here"), and the selected-cell and transport-group refusals in
+     `analysis_engine/inputs.py` that use the same word for a cell or group outside the externally verified
+     artifact contract. A binding failure is neither an inapplicable transport nor an outcome.
+   - **Change (lead ruling).** Map `artifact_schema_invalid` to `floor_artifact_invalid`. Every other mapping is
+     unchanged, including the binding codes that ride beside the bare word. Failing-first test
+     `tests/test_analysis_integration.py`
+     `test_floor_binding_refusal_maps_to_floor_artifact_invalid` (resolution reasons, and the claim outcome
+     `not_estimable`).
+   - **Consumer check.** `analyze_claims` is called by `joulewise/cli.py` (`analyze-claims`), the block-5 claim
+     replay in `joulewise/paper_custody.py`, and `joulewise/b5_analysis/phase_timing.py` (timing only).
+     `joulewise/dominance_closeout.py` imports only `AnalysisInputError` and input helpers; `joulewise/twins/engine_twin.py`
+     keeps its own outcome sets and maps no floor resolution. No tracked claim-verdicts record, rehearsal fixture,
+     report table or site page carries `floor_transport_inapplicable` or a refused `artifact_schema_invalid`
+     resolution (the two `docs/paper/fill-rehearsal/*-claim-verdicts.json` records resolve every floor; the
+     `analysis/rpt001-*` records are void placeholders not produced by the engine). No published or frozen result
+     changes. The one real-data output it changes is the unreleased r2 dry run's GAMMA claim verdicts (the 4
+     refused resolutions of trace round 2), which the r3 dry run replaces.
+   - **What D5b does not decide.** Which binding check refused (trace D5, `probe_d5_binding.py`) is still open. If
+     the binder is wrong for registered inputs, that is a further L9 fix; if a floor member genuinely fails
+     registered authentication, it is R3 (PLAN §3.1, "Refusals"). D5b only stops a tooling-class refusal from
+     printing as a scientific `not_resolvable`.
+   - **Step 9b.** Unchanged: its non-issuance follows the refused resolution status, not the reason word.
+
+### Changes that do not change L9 output (result-equal to r2)
+
+3. **Speed, robust and step-3b prefetch engineering under D-188** (DL:12239; merged from
+   `lane/2026-11-07-b5-r3-speed-fix` at `03bc58477`).
+   - **Content.** Parallel pack brackets, issuer staging, sensitivity packs and producer preparation; the ordered
+     bulk source census; L4 bracket-fill storability; the candidate-refit memo and prefetch; Student-t quantile memo;
+     reserved-key location formatting; step checkpoints, `--resume`, serial step retries and closed refusals on a
+     malformed checkpoint; the step-4 speculative-file cleanup, L3 expiry, bracket snapshot normalization and G9
+     sidecar predicate; registered step-11 tooling refusal codes; and fix `70d32a878`, the step-3b prefetch refitting
+     only the rows discovery authenticates (it had refitted 141 rows too many).
+   - **Equivalence evidence.** On real data, the blinded D-188 comparator (`tools/b5_equivalence/compare_b5_results.py`,
+     #643) found the r2 rewrite EQUIVALENT to the r1 reference (RS item 165; the final dry-j against dry-i comparison
+     per the lead). On the full synthetic chain (steps 0-11), the speed-fix head is EQUAL to r2: the same record
+     sha256 `dfd1f5b9...49b7f8` and 1,540 of 1,543 custody files identical, the other three being timing logs
+     (`docs/run_reports/2026-11-07-b5-robust-fullchain.md`).
+   - **Effect on estimands.** None, by D-188's result-equivalence rule.
+4. **Release-tooling fixes, D2, D3, D4 and D6** (merged from `lane/2026-11-07-b5-release-trace` at `36e79f13a`).
+   These change the independent recompute and the comparator (DLE-0, DLE-1 stages (b) and (c)), never L9.
+   - **D2.** `scripts/independent_recompute_b5.py` subtracted idle attempt 1's power where the controller had kept a
+     re-measured baseline; it now reads the kept attempt and flags a missing file (33 members, confirmed 33 of 33 by
+     the probe).
+   - **D3.** The recompute left out two succeeded members whose clock anchor did not resolve; it now re-derives
+     their descriptive row from the controller stamps and the bundle trace (`descriptive_unanchored`).
+   - **D4.** The recompute listed nine members aborted at idle admission as null members; they now go to
+     `no_measured_request`.
+   - **D6.** `scripts/compare_b5_recompute.py` compared BETA's two NEG-8 survivor terms unconditionally; it now
+     compares them only when the record's protocol carries them (condition `neg8_survivor_terms`).
+   - **Effect on estimands.** None. The bars (`configs/analysis/b5/recompute_bars.json`) are unchanged.
+
+- **What follows.** The block-5 dry run re-runs at `b5/analysis-r3` (D1 changes the step-11 disclosure, D5b the
+  step-9 claim verdicts), then DLE-1's release stages run against that dry run. The r2 dry run is not released.
+
+> The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
+> preregistration rulings to the lead.
