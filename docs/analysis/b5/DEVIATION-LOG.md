@@ -310,7 +310,9 @@ other outcome-bearing content was seen by the tracer, the assembler or the lead.
 - **Cited rebinds under this entry.**
   - `joulewise/calibration_bracketing.py` (frozen, seal pin4): edited in place by the under-90 round 2 memo
     (`13af1baa8`). `tests/b5_analysis/test_frozen_files.py` keeps the freeze on the accepted analysis commit's bytes
-    (`EVOLVED_ON_MAIN`, with the citation). `tests/test_whole_window_inverted_corner_clamp.py`
+    (`EVOLVED_ON_MAIN`, with the citation), and now also pins the working-tree bytes of the rebound file
+    (`REBOUND_WORKING_TREE`, sha256 `40fd34bb...a1f2`). A further edit therefore fails until it carries its own
+    cited rebind. `tests/test_whole_window_inverted_corner_clamp.py`
     `FROZEN_FILES_TEST_SHA256` is rebound to the edited `test_frozen_files.py`, and
     `tests/b5_analysis/test_vdl_sol_w2.py` lists `CANDIDATE_PHYSICS_MEMO` as a reviewed memo. Both cite DLE-3.
   - `configs/gates/hazard_refusals.json` lists `calibration_ledger.custody_probe_code`'s raise (`ae558a914`) as
@@ -319,7 +321,30 @@ other outcome-bearing content was seen by the tracer, the assembler or the lead.
     tree. Their pin is the analysis commit (the tag above). Two integration tests that pinned the old D5b label
     now expect `not_estimable` and `floor_artifact_invalid`.
 - **What follows.** The block-5 dry run re-runs at `b5/analysis-r3` (D1 changes the step-11 disclosure, D5b the
-  step-9 claim verdicts), then DLE-1's release stages run against that dry run. The r2 dry run is not released.
+  step-9 claim verdicts). The r2 dry run is not released.
+- **r3 is not releasable until D5 is answered (release condition, binding).**
+  - DLE-1's release stages do not run against an r3 dry run until two things have happened:
+    - the D5 binder cause has been answered, by `probe_d5_binding.py` or an equivalent structure-only probe;
+    - its fix has landed: an L9 fix with a cited rebind if a binder check is wrong for registered inputs, or an
+      R3 producer cure if a floor member genuinely fails registered authentication (PLAN §3.1, §3.2 item 1).
+  - The comparator's D5 rows (`floor_gate_j`, the floor and outcome leaves of the GAMMA contrasts) are not
+    waivable under DLE-1. A hold on them is a hold.
+  - **D5b changes only the label.** A binding refusal now prints `floor_artifact_invalid` (`not_estimable`)
+    instead of `floor_transport_inapplicable` (`not_resolvable`). It does not reclassify the refusal as tooling.
+  - **What the dry run does today with a GAMMA floor-binding refusal** (checked in
+    `joulewise/b5_analysis/dry_run.py`):
+    - step 9 (`analyze-claims`) exits 0 and is `ok`;
+    - step 9b finds the refused resolution (`_first_condition_is_outcome`: status outside `exact`/`transported`)
+      and exits `CLAIM_SIDE_BOUND_NOT_ISSUABLE_EXIT` = 3. That is the D-189 non-stopping `outcome_class` row;
+    - `completed_without_tooling_refusal` stays true, and `_record_exit` returns **3**, the outcome-class exit,
+      not 0;
+    - the same holds before and after D5b.
+  - **Reviewer disagreement, settled.** One review of PR #693 said the driver exits 0; the other said 3. The code
+    gives 3: `_record_exit` returns 3 whenever any step row is `outcome_class`, and step 9b's row is.
+  - **Today's only stop is the release comparator.** Nothing in the dry run marks the refusal as tooling, so the
+    stop is the comparator: the D5 floor rows DISAGREE (L9 null against the recompute's number), and any family
+    disagreement is `comparator_disagreement` in `scripts/release_b5.py`. That stop and this release condition
+    together hold r3. An exit 3 must not be read as §3.2 completion while D5 is open.
 
 > The release event has not happened. The lead has seen no Block 5 energy or outcome value. Ed delegated
 > preregistration rulings to the lead.
