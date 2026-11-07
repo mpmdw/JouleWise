@@ -167,6 +167,18 @@ the Terminal launch example below does not satisfy that headless gate.
    resolving inter-sensor gain/offset spread. Class tau is unchanged and
    printed beside stable reference cooling time. D1(b)'s half-rise test
    applies only to positive rises.
+   Erratum 5 adds flags only: `recovery_onset_gap_s` records the first in-grid
+   recovery read's start minus actual load end. Each row's
+   `reference_crossing_censored` marks an index-zero stable crossing without
+   two valid bracketing readings. `heat_ordering_indeterminate` marks any
+   censored Erratum 3 qualifier, or a gap exceeding the shortest qualifier's
+   stable cooling time. `heat_ordering_wide_exclusion` marks more than one
+   D1(d) exclusion, with `heat_ordering_exclusion_count` printed beside it.
+   Receipt and summary retain these diagnostics without changing picks or
+   refusal. The real capture has a roughly 0.17 s gap and indeterminate false.
+   D5 remains sensitive to the first
+   recovery read: at delays of 2 s or more the replay's slow pick flips to
+   TMVR. Stable-time band hold remains deferred to R1.
    Clamp keys are flagged and excluded from picks only.
    The receipt reads selected classifier rows: per-phase coverage ≥99% at
    500 ms one-cell tolerance, per-phase read errors <1%, and no two consecutive

@@ -550,7 +550,9 @@ def smc_enumeration(repo, output, step=None):
         resolved = resolved and selection["s_fast"] != selection["s_slow"]
         receipt.update(selection=selection, response=classification,
                        **{field: classification[field] for field in (
-                           "heat_ordering_reference", "heat_ordering_reference_rise", "heat_ordering_excluded")},
+                           "heat_ordering_reference", "heat_ordering_reference_rise", "heat_ordering_excluded",
+                           "recovery_onset_gap_s", "heat_ordering_indeterminate",
+                           "heat_ordering_exclusion_count", "heat_ordering_wide_exclusion")},
                        selected_key_aliases=classification["selected_key_aliases"],
                        exponential_fit_diagnostic=diagnostic, source_response=payload["response"])
         receipt["capture_coverage_diagnostic"] = payload["coverage"]

@@ -78,9 +78,10 @@ picks; R1 re-selects using the actual planning-turn step.
   readings above it are not component temperatures on a running machine.
   It excludes the firmware-derived TVH3 channel, which reached 137 °C. A pinned floor
   or ceiling (at least ten distinct idle values, at least 40% on one exact value)
-  is flagged and excluded from picks only. Ten or more distinct values in about
-  300 reads implies sigma ≥about 1.8 quanta, with a non-clamp mode fraction
-  ≤about 0.22, below the 0.40 clamp bar (Fable L3 / Opus N2).
+  is flagged and excluded from picks only. Ten or more distinct values span
+  at least nine quanta. About 300–1,200 Gaussian reads span 5.8–6.6 sigma,
+  implying sigma ≥about 1.55–1.38 quanta and a non-clamp mode fraction
+  ≤about 0.26–0.29, below the 0.40 clamp bar (Erratum 5 correction).
   D1(b) applies only to positive step rises. Erratum 2 adds D1(d), with the
   reference qualified by Erratum 3 and rebuilt by Erratum 4: among resolving
   keys passing D1(a)–(c), with class cooling tau ≤60 s, residual noise ≤1/3 °C
@@ -115,7 +116,8 @@ picks; R1 re-selects using the actual planning-turn step.
   empty evaluations, with the 300 s minimum still enforced. A nonempty
   evaluation or skipped second resets that empty count. The idle half-range
   term is removed: stationary noise's largest one-second jump is about
-  4.9 sigma, exceeding half its approximately 5.5 sigma range. The noise
+  4.36 sigma in 300 reads (4.88 in 1,200), exceeding half its approximately
+  5.77 sigma range (6.57 in 1,200). The noise
   cutoff makes the slope test decidable at three sigma: SD(slope)=0.447×noise,
   so 3×0.447×0.15 ≈0.2 °C/min. Load/recovery remain 900/600 s; the 5 s quiet
   census continues throughout. Fast-role keys with noise in (0.15, 1/3] °C
@@ -200,6 +202,9 @@ load deadline. `opus_overrun_load` extends actual load end without more
 load readings and shifts the entire recovery. Both overrun definitions
 retain the duration flag and pass D6. The Fable slow pick changes because
 the first recovery read changes the unchanged D5 class tau.
+The slow pick also flips from TaLP to TMVR at `recovery_delay:2` and
+remains TMVR at the replayed 5 s and 10 s delays. Using stable cooling
+time for D5 band hold is deferred to R1; D5 is chosen on the first settled capture.
 
 At `scale:1.2`, TVH3 exceeds the existing 150 °C valid-value ceiling during
 the load tail, fails coverage before a rise is available, and remains
@@ -210,7 +215,26 @@ perturbation only TVH3 is excluded by D1(d). The Tf2B load hole is rejected
 by D6; it does not exclude Tf18 from D1(d).
 
 The receipt and summary print the D1(d) reference, its rise and excluded keys,
-and each pick's exact-duplicate aliases, including
+plus Erratum 5's diagnostic flags. `recovery_onset_gap_s` is the first
+in-grid recovery read's start minus actual load end (null without a read).
+Each classifier row records `reference_crossing_censored` when its stable
+crossing is at recovery index zero, without two valid readings to bracket it;
+the summary prints this beside stable cooling time and the receipt retains
+it under `response.ranking`. `heat_ordering_indeterminate` is true when any
+Erratum 3 qualifier has a censored crossing, or the onset gap exceeds the
+shortest qualifier's stable cooling time. `heat_ordering_exclusion_count`
+counts D1(d)'s excluded keys; `heat_ordering_wide_exclusion` is true above
+one exclusion, since the rule was built and replayed to remove the single
+firmware-derived TVH3 channel. These flags never alter selection, classes,
+thresholds, or receipt refusal. The real capture's onset gap is about
+0.17 s and indeterminate is false. Censored keys outside the Erratum 3
+qualifier set do not trigger this definition.
+The 1 Hz crossing bracket supplies the existing resolution, with no new bar.
+Amplified aliases in the reference tie window and small fast keys off the
+main heat path remain R1 concerns, as do legacy idle-overrun reconstruction,
+a count of qualifiers lacking stable times, and bare-legacy rank/receipt parity.
+
+The receipt and summary also print each pick's exact-duplicate aliases, including
 an empty list when none exist. This is reporting only: R0 does not remove
 duplicates, classify virtual keys, or infer derived channels beyond D1(d).
 R1 must not count aliases as independent thermometers.

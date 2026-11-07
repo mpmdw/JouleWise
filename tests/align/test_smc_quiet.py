@@ -133,7 +133,8 @@ class QuietTests(unittest.TestCase):
                           quiet_check=quiet, ctx=ctx, sink=lambda row: None,
                           load_factory=lambda duration: load)
         phase = data['phases'][1]
-        self.assertAlmostEqual(phase['actual_seconds'], 7.6)
+        # Exact arithmetic on the same synthetic clock; allow float noise only.
+        self.assertAlmostEqual(phase['actual_seconds'], 7.6, places=9)
         self.assertEqual(phase['deadline_s']-phase['start_s'], 6)
         row = r0.rank(data)['ranking'][0]
         self.assertEqual(row['phase_max_empty_cells']['load'], 0)

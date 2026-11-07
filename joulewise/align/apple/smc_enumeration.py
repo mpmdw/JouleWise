@@ -60,9 +60,9 @@ REFERENCE_TIE_S = 1.0
 HEAT_ORDER_MARGIN_C = 1.0
 # Fable clamp test: q/(sigma*sqrt(2*pi)) <=~0.40 when sigma >= q;
 CLAMP_FRACTION = .4
-# Fable L3 / Opus N2: >=10 distinct values span >=9q; about 300 reads
-# span ~5 sigma, so sigma >=~1.8q. The non-clamp mode fraction is at most
-# 1/(1.8*sqrt(2*pi)) ~=0.22, below the 0.40 bar.
+# >=10 distinct values span >=9q; 300-1200 Gaussian reads span about
+# 5.8-6.6 sigma, giving sigma >=~1.55q-1.38q and non-clamp mode fractions
+# <=~0.26-0.29, still below the 0.40 bar (Erratum 5 numerical correction).
 CLAMP_DISTINCT = 10
 
 
@@ -381,6 +381,18 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
     phases = {p["phase"]: p for p in capture["phases"]}
     origin = capture["started"]["monotonic_ns"]
     phase_samples = {p: [r for r in capture["samples"] if r.get("phase") == p] for p in phases}
+    # Erratum 5: report the admitted recovery read's start, not the phase
+    # admission stamp. Failed key reads still establish the capture's onset.
+    recovery_starts = []
+    if "recovery" in phases and "load" in phases:
+        bounds = phases["recovery"]
+        begin = origin + round(bounds["start_s"] * 1e9)
+        end = origin + round(min(bounds.get("deadline_s", bounds["end_s"]), bounds["end_s"]) * 1e9)
+        recovery_starts = [s["started"]["monotonic_ns"] for s in phase_samples["recovery"]
+                           if begin <= s["started"]["monotonic_ns"] <= s["finished"]["monotonic_ns"] < end
+                           and s["finished"]["monotonic_ns"]-s["started"]["monotonic_ns"] <= temperature.NS]
+    recovery_onset_gap_s = ((min(recovery_starts)-origin)/1e9 - phases["load"]["end_s"]
+                            if recovery_starts else None)
     rows = []
     series = {}
     for sensor in capture["inventory"]["keys"]:
@@ -388,7 +400,7 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         row = {**sensor, "amplitude": None, "observed_rise": None, "noise": None,
                "noise_floor": None, "idle_distinct_values": 0, "delta_t60": None,
                "t63_s": None, "t63_end_s": None, "class": "record-only",
-               "tau_s": None, "reference_cooling_s": None,
+               "tau_s": None, "reference_cooling_s": None, "reference_crossing_censored": False,
                "amplitude_to_noise": None, "fit_r2": None, "eligible": False,
                "phase_coverage": {}, "phase_read_error_fraction": {}, "phase_medians": {},
                "phase_valid_samples": {}, "phase_seconds": {}, "period_ns": temperature.NS,
@@ -536,6 +548,8 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         # Erratum 4 D1(d): use the already computed load-tail rise, not
         # the first recovery read, and time from the load's actual end.
         stable = _crossing(good["recovery"], baseline + rise/math.e, rising=False) if rise > 0 else None
+        row["reference_crossing_censored"] = bool(
+            rise > 0 and good["recovery"][0][1] <= baseline + rise/math.e)
         row.update(delta_t60=rise60, t63_s=t63, t63_end_s=t63_end, tau_s=tau,
                    reference_cooling_s=stable-phases["load"]["end_s"] if stable is not None else None)
         if rise > 0 and jump > rise/2:  # D1(b): only positive step rises have this resolution limit.
@@ -570,6 +584,18 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
                and r["tau_s"] <= 60 and r["noise"] <= 1/3 and not r["clamped"]
                and r["reference_cooling_s"] is not None]
     shortest = min((r["reference_cooling_s"] for r in sources), default=None)
+    # Flags only: do not filter sources, alter the tie window, or refuse picks.
+    # Erratum 5 lead ruling (05:10 PST): the censoring pool drops the class-tau
+    # <= 60 s gate. A late recovery onset inflates class tau (timed from the
+    # first recovery read) past 60 s, which would remove exactly the keys whose
+    # crossings were censored and leave the flag false in the case it exists for.
+    censor_pool = [r for r in rows if r.get("resolving") and not r["above_junction"]
+                   and r["noise"] <= 1/3 and not r["clamped"]]
+    censor_shortest = min((r["reference_cooling_s"] for r in censor_pool
+                           if r["reference_cooling_s"] is not None), default=None)
+    heat_ordering_indeterminate = (any(r["reference_crossing_censored"] for r in censor_pool)
+        or (censor_shortest is not None and recovery_onset_gap_s is not None
+            and recovery_onset_gap_s > censor_shortest))
     tied = [r for r in sources if r["reference_cooling_s"] <= shortest + REFERENCE_TIE_S]
     source = min(tied, key=lambda r: (-r["observed_rise"], r["key"])) if tied else None
     if source:
@@ -584,6 +610,7 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
     heatsink_candidates = [r["key"] for r in ordered if r["class"] == "heatsink"]
     record_only = [r["key"] for r in ordered if r["class"] == "record-only"]
     bar = proposed["s_fast"] is not None and proposed["s_slow"] is not None
+    excluded = sorted(r["key"] for r in rows if r["heat_ordering_excluded"])
     # Exact aliases are report-only in R0. Compare every recorded value and
     # error (including holes); never reject a copy or infer virtual sensors.
     selected_aliases = {}
@@ -598,7 +625,11 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
             "selected_key_aliases": selected_aliases,
             "heat_ordering_reference": source["key"] if source else None,
             "heat_ordering_reference_rise": source["observed_rise"] if source else None,
-            "heat_ordering_excluded": sorted(r["key"] for r in rows if r["heat_ordering_excluded"]),
+            "heat_ordering_excluded": excluded,
+            "recovery_onset_gap_s": recovery_onset_gap_s,
+            "heat_ordering_indeterminate": heat_ordering_indeterminate,
+            "heat_ordering_exclusion_count": len(excluded),
+            "heat_ordering_wide_exclusion": len(excluded) > 1,
             "alternative_slow_picks": _alternative_picks(ordered, series, phases, proposed, capture),
             "die_candidates": die_candidates, "heatsink_candidates": heatsink_candidates,
             "record_only": record_only, "readability_bar_met": bar, "stage": stage,

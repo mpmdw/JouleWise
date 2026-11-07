@@ -111,7 +111,9 @@ class SmcClassifierV4Tests(unittest.TestCase):
         self.assertAlmostEqual(row['reference_cooling_s'], 30.8*(1+math.log(.82)), delta=1)
         data['phases'][1]['end_s'] += 1.3
         shifted = next(r for r in rank(data)['ranking'] if r['key'] == 'Tf18')
-        self.assertAlmostEqual(shifted['reference_cooling_s'], row['reference_cooling_s']-1.3)
+        # Identical crossing inputs; only exact clock arithmetic changes.
+        # Nine decimal places allow floating-point subtraction noise in seconds.
+        self.assertAlmostEqual(shifted['reference_cooling_s'], row['reference_cooling_s']-1.3, places=9)
         self.assertEqual(shifted['tau_s'], row['tau_s'])  # D4/D5 class tau stays unchanged.
 
     def test_deadline_grid_does_not_extend_an_early_phase_end(self):
@@ -124,6 +126,31 @@ class SmcClassifierV4Tests(unittest.TestCase):
         self.assertEqual(result['selection'], {'s_fast': 'Tf18', 's_slow': 'TaLP'})
         for row in result['ranking']:
             self.assertEqual(row['phase_max_empty_cells']['recovery'], 0)
+
+    def test_erratum5_onset_delay_flags_censoring_without_changing_picks(self):
+        data = source_spread_capture()
+        data['phases'][2]['start_s'] += 25
+        # Retain handshake rows to prove only in-grid recovery reads count.
+        for stage in ('r0', 'r1'):
+            result = rank(data, stage=stage)
+            rows = {r['key']: r for r in result['ranking']}
+            self.assertEqual(result['recovery_onset_gap_s'], 25)
+            self.assertTrue(result['heat_ordering_indeterminate'])
+            self.assertTrue(rows['Tf18']['reference_crossing_censored'])
+            self.assertFalse(rows['TaLP']['reference_crossing_censored'])
+            self.assertEqual(result['selection'], {'s_fast': 'Tf18', 's_slow': 'TaLP'})
+            self.assertEqual(result['status'], 'pass')
+
+    def test_erratum5_wide_exclusion_counts_two_keys_without_refusal(self):
+        data = capture({'TSRC': (3, 25, 18, .02), 'TEX1': (5, 35, 22, .02),
+                        'TEX2': (5, 40, 24, .02), 'THEA': (60, 90, 8, .02)})
+        result = rank(data)
+        self.assertEqual(result['heat_ordering_excluded'], ['TEX1', 'TEX2'])
+        self.assertEqual(result['heat_ordering_exclusion_count'], 2)
+        self.assertTrue(result['heat_ordering_wide_exclusion'])
+        self.assertFalse(result['heat_ordering_indeterminate'])
+        self.assertEqual(result['selection'], {'s_fast': 'TSRC', 's_slow': 'THEA'})
+        self.assertEqual(result['status'], 'pass')
 
     def test_noisy_shortest_tau_cannot_anchor_heat_ordering(self):
         data = capture({'Tf18': (3, 24.7, 45.7, .06),

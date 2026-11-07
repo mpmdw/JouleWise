@@ -380,6 +380,68 @@ class R0HostTest(unittest.TestCase):
                     sample[stamp]['monotonic_ns'] += shift
         self.assertEqual(self.replay_capture(payload, samples)['status'], 'pass')
 
+    def assert_ordering_flags_printed(self, payload, receipt):
+        from scripts.align_smc_enumerate import markdown
+        summary = markdown({**payload, 'response': receipt['response']}, 'synthetic-digest')
+        for name in ('recovery_onset_gap_s', 'heat_ordering_indeterminate',
+                     'heat_ordering_wide_exclusion', 'heat_ordering_exclusion_count'):
+            self.assertEqual(receipt[name], receipt['response'][name])
+            self.assertIn(name + ': ', summary)
+        self.assertIn('reference_crossing_censored', summary)
+        return summary
+
+    def test_erratum5_delayed_onset_is_printed_and_does_not_refuse(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture({'Tf18': 20, 'TaLP': 100}, idle_jitter=.02)
+        payload['coverage']['all_keys'] = {'sample_fraction': 1}
+        payload['phases'][2]['start_s'] += 25
+        receipt = self.replay_capture(payload, samples)
+        self.assertEqual(receipt['status'], 'pass')
+        self.assertTrue(receipt['heat_ordering_indeterminate'])
+        # The analytic fixture reads 0.1 s into each cell, after admission.
+        self.assertAlmostEqual(receipt['recovery_onset_gap_s'], 25.1, places=9)
+        self.assertTrue(next(r for r in receipt['response']['ranking'] if r['key'] == 'Tf18')['reference_crossing_censored'])
+        summary = self.assert_ordering_flags_printed(payload, receipt)
+        self.assertIn('heat_ordering_indeterminate: true', summary)
+        self.assertIn('recovery_onset_gap_s: 25', summary)
+
+    def test_erratum5_two_exclusions_print_count_without_refusal(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture({'TSRC': 20, 'TEX1': 35, 'TEX2': 40, 'THEA': 100}, idle_jitter=.02)
+        payload['coverage']['all_keys'] = {'sample_fraction': 1}
+        for sample in samples:
+            for key, factor in (('TEX1', 2), ('TEX2', 2.5)):
+                sample['values']['sensors'][key] = 40 + factor*(sample['values']['sensors'][key]-40)
+        receipt = self.replay_capture(payload, samples)
+        self.assertEqual(receipt['status'], 'pass')
+        self.assertEqual(receipt['selection'], {'s_fast': 'TSRC', 's_slow': 'THEA'})
+        self.assertEqual(receipt['heat_ordering_excluded'], ['TEX1', 'TEX2'])
+        self.assertTrue(receipt['heat_ordering_wide_exclusion'])
+        self.assertEqual(receipt['heat_ordering_exclusion_count'], 2)
+        summary = self.assert_ordering_flags_printed(payload, receipt)
+        self.assertIn('heat_ordering_wide_exclusion: true', summary)
+        self.assertIn('heat_ordering_exclusion_count: 2', summary)
+
+    @unittest.skipUnless(Path('/Users/edr/night-align/r0-v4-20261107T0810Z/smc/r0.json').is_file(),
+                         'recorded Mac15,9 journal is optional outside the replay bench')
+    def test_erratum5_real_capture_has_uncensored_onset_and_prints_flags(self):
+        # Offline replay of immutable capture bytes, never hardware collection.
+        source = Path('/Users/edr/night-align/r0-v4-20261107T0810Z/smc')
+        payload = json.loads((source/'r0.json').read_text())
+        samples = [json.loads(line) for line in (source/'samples.jsonl').read_text().splitlines()]
+        receipt = self.replay_capture(payload, samples)
+        self.assertEqual(receipt['status'], 'pass')
+        self.assertEqual(receipt['selection'], {'s_fast': 'Tf18', 's_slow': 'TaLP'})
+        # Erratum 5's real gap is reported to two decimal places, not a new gate.
+        self.assertEqual(round(receipt['recovery_onset_gap_s'], 2), .17)
+        self.assertFalse(receipt['heat_ordering_indeterminate'])
+        self.assertFalse(receipt['heat_ordering_wide_exclusion'])
+        self.assertEqual(receipt['heat_ordering_exclusion_count'], 1)
+        rows = {r['key']: r for r in receipt['response']['ranking']}
+        self.assertFalse(rows['Tf18']['reference_crossing_censored'])
+        summary = self.assert_ordering_flags_printed(payload, receipt)
+        self.assertIn('heat_ordering_indeterminate: false', summary)
+
     def test_opus_f2_single_missed_tf18_read_with_unlucky_jitter_passes(self):
         from tests.align.test_r0_step import synthetic_capture
         payload, samples = synthetic_capture({'Tf18': 20, 'TaLP': 100}, idle_jitter=.02)
@@ -407,7 +469,8 @@ class R0HostTest(unittest.TestCase):
         result = self.replay_capture(payload, samples)
         self.assertEqual(result['status'], 'pass')
         self.assertEqual(result['phase_duration_flags'][0]['phase'], 'load')
-        self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.3)
+        # Exact synthetic clock arithmetic; nine places allow only float noise.
+        self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.3, places=9)
 
     def test_opus_exit_overrun_does_not_add_two_empty_load_cells(self):
         from tests.align.test_r0_step import synthetic_capture
@@ -424,7 +487,8 @@ class R0HostTest(unittest.TestCase):
                     sample[stamp]['monotonic_ns'] += 1_600_000_000
         result = self.replay_capture(payload, samples)
         self.assertEqual(result['status'], 'pass')
-        self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.6)
+        # Exact synthetic clock arithmetic; nine places allow only float noise.
+        self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.6, places=9)
         for row in result['selected_key_readability'].values():
             self.assertEqual(row['phase_max_empty_cells']['load'], 0)
             self.assertEqual(row['phase_seconds']['load'], 900)  # Configured D3 load.
