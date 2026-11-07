@@ -233,7 +233,10 @@ class AliasGroupTests(_World):
                   "TVD0": [36.0, 36.5, 37.0]}
         inventory = {"keys": [{"key": key} for key in series], "complete": True}
         ranked = {"rule": "stub", "s_fast": "TC0P", "s_slow": "TG0P", "die_candidates": ["TC0P"],
-                  "heatsink_candidates": ["TG0P"], "record_only": [], "ranking": []}
+                  "heatsink_candidates": ["TG0P"], "record_only": [], "ranking": [],
+                  # R9-1: rank's diagnostics, which the classification record carries.
+                  "heat_ordering_indeterminate": False, "heat_ordering_wide_exclusion": False,
+                  "recovery_onset_gap_s": None, "alternative_slow_picks": {}, "selected_key_aliases": {}}
         with patch("joulewise.align.apple.smc_enumeration.rank", lambda capture, stage: ranked):
             result = rt.classify_step(inventory, self.rows(series), prefill_ns=1 * rt.NS, last_decode_ns=2 * rt.NS,
                                       quiet_s=1, recovery_s=0.5, r0_sensors={"s_fast": "TC0P", "s_slow": "TG0P"})
