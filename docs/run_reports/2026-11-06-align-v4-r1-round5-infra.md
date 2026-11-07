@@ -165,3 +165,32 @@ Then commit:
 A scratch fill on the laptop changed exactly these files. Before committing, `scripts/align_v4_kit.py --check` should then block only on `R0.reasoning_effort` and the R1 leaves.
 
 Return the printed `max_turns` and sha256 per arm. Any refusal means a source does not authenticate (wrong member, seed, turn count or ids): stop and report the message. Do not edit the files.
+
+## Suite tail
+
+All runs were at `367bc0b42` + the test-only `033907f52`. Each used `/private/tmp/jwsol/venv-both/bin/python -B` under `nice -n 19 taskpolicy -b`, one module per process and a per-module `TMPDIR` under `/private/tmp/jwr5-tmp`. Another builder's tests, a blinded analysis and a GPU job ran on the same laptop (load average 8-10).
+
+Align modules, all rc=0, OK:
+
+| Module | Tests | Notes |
+|---|---|---|
+| `test_r1_runtime` | 27 | |
+| `test_r1_runtime_e2e` | 2 | |
+| `test_r1_rehearsal` | 51 | |
+| `test_v4_kit` | 85 | |
+| `test_v4_wp18_fixtures` | 11 | |
+| `test_external_volume` | 23 | |
+| `test_r1_runtime_contract` | 9 | |
+| `test_protocol_v4_doc` | 5 | |
+| `test_v4_w1_plan` | 10 | |
+| `test_v4_prequal` | 33 | skipped=3 |
+| `test_v4_powermode_record` | 9 | |
+| `JW_WP22_FULL=1 test_v4_w1_synthetic` | 18 | expected failures=1, F3 only |
+
+Other modules:
+- `tests.test_b5_plan` (29), `tests.test_bytes_h_session` (36), `tests.test_night_plan_writer` (10) and `tests.test_night_gate` (112) are all OK.
+- `tests.test_run_night`: Ran 305 tests, failures=11. All 11 are the classes this laptop already fails on the base:
+  - the eight installer battery-fixture tests;
+  - three bind-supervision timing tests.
+
+  None reaches the admission or close code. Its 21 power-mode, marker and close tests pass when run on their own.
