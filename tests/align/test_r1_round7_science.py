@@ -84,6 +84,19 @@ class G0TimeoutTests(_World):
             self.assertFalse([c for c in world.calls if "--r1-kind" in c])
             self.assertNotIn(r1.PowerModeGuard.HIGH, world.calls)
 
+    def test_a_runtime_config_that_overrides_the_committed_timeout_refuses_at_t0(self):
+        # Sol critique: the kit re-derives G0_cap_W1 with the committed value.
+        with tempfile.TemporaryDirectory() as td:
+            config = json.loads(r1.runtime_config_path(None).read_text())
+            config["g0_timeout_s"] = 900
+            path = Path(td) / "r1_runtime.json"
+            path.write_text(json.dumps(config))
+            world = FakeWorld()
+            result, registration = self.run_world(td, world, expected=3, runtime=["fake", "--config", str(path)])
+            self.assertIn("differs from the committed", result["error"])
+            self.assertIsNone(registration)
+            self.assertFalse([c for c in world.calls if "--r1-kind" in c])
+
     def test_gate_policies_carry_the_timeout_only_for_its_kinds(self):
         sensors = {"s_fast": "TC0P", "s_slow": "TG0P", "fan_keys": [], "r0_sha256": "a" * 64}
         bands = {"delta_fast_c": 8.0, "delta_slow_c": 1.0}
@@ -172,7 +185,16 @@ class G0CapW1Tests(unittest.TestCase):
             self.assertTrue(first["output_dir"].endswith(r1.STEP_D_NAME + r1.G0_TIMEOUT_SUFFIX))
             for name in (BANK, SPAM_A, SPAM_B, XG, "planning_turn_R_plus_4C"):
                 self.assertIn(name, segments)
-            self.assertTrue(all(row["g0_timeout_s"] == 1200.0 for row in waits))
+            # Every G0-bearing segment is recorded, each with the cap it ran under,
+            # and a release precedes the member it released.
+            for name in ("step_30b", "high_power_A1", "high_power_A1.g0_release"):
+                self.assertIn(name, segments)
+            self.assertLess(segments.index("high_power_A1.g0_release"), segments.index("high_power_A1"))
+            caps = {row["segment"]: row["g0_timeout_s"] for row in waits}
+            self.assertEqual(caps["step_30b"], 600.0)
+            self.assertTrue(all(caps[name] == 1200.0 for name in (BANK, SPAM_A, SPAM_B, XG, r1.STEP_D_NAME)))
+            for kind in ("step-30b", "d-4bit", "g0-release-soak", *contract.HIGH_POWER_KINDS):
+                self.assertIn("g0_wait_s", contract.required_fields(kind, quiet=True), kind)
 
 
 class AliasGroupTests(unittest.TestCase):

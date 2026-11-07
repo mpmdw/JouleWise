@@ -205,6 +205,13 @@ class FakeWorld:
                                    "prefill": 0.0, "tool": 0.0, "tail": 0.0}})
         if kind == "g0-release-soak":
             payload["released"] = self.released
+        if kind in ("step-30b", "d-4bit", "g0-release-soak") or kind.startswith("high-power-aba-"):
+            # R7-2: every G0 wait is recorded; these kinds keep the 600 s cap.
+            payload.update(g0_outcome="released" if kind != "g0-release-soak" or self.released else "timeout",
+                           g0_wait_s=30.0 if kind != "g0-release-soak" or self.released else 600.0,
+                           g0_timeout_s=600.0)
+            if kind == "g0-release-soak":
+                payload["g0"] = {"outcome": payload.pop("g0_outcome")}
         if kind in ("step-30b", "step-d", "x-g", "d-4bit") or kind.startswith(("d-", "high-power-aba-")):
             # Ruling 7: the episode-start AC powermode the member observed.
             payload["ac_powermode"] = {"value": self.mode, "source": "pmset -g custom", "observed_at": "episode_start"}

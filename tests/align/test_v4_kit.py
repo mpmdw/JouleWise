@@ -911,7 +911,9 @@ class Round7KitTests(unittest.TestCase):
                 kit.w1_g0_cap(dict(base, deadman_budget=rows))
 
     def test_missing_or_stale_g0_cap_record_is_refused(self):
-        for field, value in ((None, None), ('value_s', 601), ('x_g_fallback', True), ('r1_g0_timeout_s', 600)):
+        for field, value in ((None, None), ('value_s', 601), ('x_g_fallback', True), ('r1_g0_timeout_s', 600),
+                             ('max_g0_s', 130.0), ('censored', ['D_bank_benign_s1_gated_held']), ('censored', None),
+                             ('waits_s', {}), ('floor_s', 500.0), ('factor', 1.5)):
             inputs, slots = ready_inputs()
             if field is None:
                 del slots['g0_cap_w1']

@@ -538,7 +538,10 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
     if (not isinstance(recorded, dict) or type(recorded.get('value_s')) is not int
             or type(recorded.get('x_g_fallback')) is not bool
             or not finite(recorded.get('r1_g0_timeout_s'))
-            or any(recorded.get(key) != derived[key] for key in ('value_s', 'x_g_fallback', 'r1_g0_timeout_s'))):
+            or any(recorded.get(key) != derived[key] for key in ('value_s', 'x_g_fallback', 'r1_g0_timeout_s',
+                                                                  'waits_s', 'max_g0_s', 'floor_s', 'factor'))
+            or not isinstance(recorded.get('censored'), list)
+            or sorted(map(str, recorded['censored'])) != sorted(derived['censored'])):
         raise ValueError('r1_slots.g0_cap_w1 is missing or stale; must match the re-derivation '
                          f'{derived} (LEAD-RULINGS-2 R7-2, R7-12)')
     if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != derived['value_s']:

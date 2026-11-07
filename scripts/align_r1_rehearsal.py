@@ -1173,16 +1173,17 @@ def g0_wait_record(phases):
     rows = []
 
     def add(row):
-        result = row.get("result")
-        if isinstance(result, dict) and "g0_wait_s" in result:
-            rows.append({"segment": row["name"], "output_dir": row.get("output_dir"),
-                         "g0_outcome": result.get("g0_outcome"), "g0_wait_s": result.get("g0_wait_s"),
-                         "g0_timeout_s": result.get("g0_timeout_s")})
+        # The release (when one preceded the attempt) ran first.
         release = row.get("g0_release")
         if isinstance(release, dict) and "g0_wait_s" in release:
             rows.append({"segment": row["name"] + ".g0_release", "output_dir": None,
                          "g0_outcome": (release.get("g0") or {}).get("outcome"),
                          "g0_wait_s": release.get("g0_wait_s"), "g0_timeout_s": release.get("g0_timeout_s")})
+        result = row.get("result")
+        if isinstance(result, dict) and "g0_wait_s" in result:
+            rows.append({"segment": row["name"], "output_dir": row.get("output_dir"),
+                         "g0_outcome": result.get("g0_outcome"), "g0_wait_s": result.get("g0_wait_s"),
+                         "g0_timeout_s": result.get("g0_timeout_s")})
 
     for row in phases:
         for earlier in row.get("superseded_attempts") or ():
@@ -1377,6 +1378,13 @@ def run(args):
         precool_cap = runtime_precool_cap_s(args.runtime)
         # R7-2: the R1 G0 timeout bounds step-d and the designed start states.
         g0_timeout = runtime_g0_timeout_s(args.runtime)
+        from scripts.align_v4_kit import r1_g0_timeout_s as kit_g0_timeout_s
+        if g0_timeout != kit_g0_timeout_s(ROOT):
+            # One constant (R7-2): the kit re-derives G0_cap_W1 with the
+            # committed config's value, so a runtime config that overrides it
+            # would yield a record the kit refuses after the whole night.
+            raise Refusal(f"R7-2: runtime config {G0_TIMEOUT_KEY} {g0_timeout} differs from the committed "
+                          f"{DEFAULT_RUNTIME_CONFIG} value {kit_g0_timeout_s(ROOT)}")
         args.segment_bounds = segment_bounds(g0_timeout)
         with guard:
             soak_reference = None
