@@ -35,8 +35,9 @@ class NotQuiet(RuntimeError):
 class CpuQuietProbe:
     """Reuse per-process and host-tick accounting outside this process tree.
 
-    First admission measures one second; subsequent calls reuse the previous
-    snapshot, so periodic supervision does not insert a one-second stall.
+    Admission uses the newest retained opening at least 30 seconds old.
+    Startup and gaps longer than that baseline wait for a fresh interval;
+    the long gap is also judged. Host aggregate CPU is journaled only.
     The own tree includes the controlled GPU worker, but no unrelated jobs.
     """
     def __init__(self, *, ctx=None, snapshot=None):
@@ -44,26 +45,71 @@ class CpuQuietProbe:
         self.ctx = ctx if ctx is not None else Context()
         self.snapshot = snapshot or (lambda: contention.take_snapshot(self.ctx))
         self.previous = None
+        self._snapshots = []
         self.previous_over = None
         self.root_identities = {}
 
     def __call__(self):
-        from joulewise.hazards import contention
-        if self.previous is None:
-            self.previous = self.snapshot()
-        remaining = 1 - (self.ctx.clocks.monotonic_ns()-self.previous.finished.monotonic_ns)/1e9
-        if remaining > 0:
+        from joulewise import prewindow
+        previous = self.previous
+        current = self._take_snapshot()
+        if current.error:
+            return self._measure(current, current)
+        if previous is not None and current.midpoint_ns < previous.midpoint_ns:
+            return self._measure(previous, current)
+        dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
+        gap = previous is not None and current.midpoint_ns - previous.midpoint_ns > dwell_ns
+        baseline = current if gap else self._snapshots[0]
+        gap_end = current
+        while current.midpoint_ns - baseline.midpoint_ns < dwell_ns:
+            remaining = (dwell_ns - (current.midpoint_ns - baseline.midpoint_ns)) / 1e9
             self.ctx.clocks.sleep(remaining)
+            last = current
+            current = self._take_snapshot()
+            if current.error or current.midpoint_ns < last.midpoint_ns:
+                return self._measure(last, current)
+        opening_index = max(i for i, snapshot in enumerate(self._snapshots)
+                            if current.midpoint_ns - snapshot.midpoint_ns >= dwell_ns)
+        opening = self._snapshots[opening_index]
+        del self._snapshots[:opening_index]
+        gap_result = self._measure(previous, gap_end) if gap else None
+        result = self._measure(opening, current)
+        if gap_result is not None:
+            result["gap_interval"] = gap_result
+            result["long_interval"] = result["long_interval"] or gap_result["long_interval"]
+            if gap_result["error"]:
+                result.update(error=gap_result["error"], clean=None)
+            elif not gap_result["clean"]:
+                result["clean"] = False
+        return result
+
+    def _take_snapshot(self):
+        from joulewise.hazards import contention
         current = self.snapshot()
-        limit = contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"]
-        contention.pin_roots(self.previous, [os.getpid()], self.root_identities)
         contention.pin_roots(current, [os.getpid()], self.root_identities)
-        result = contention.interval(self.previous, current, tree_roots=[os.getpid()],
-                                     include_kernel_task=True, limit=limit, aggregate_limit=limit,
-                                     previous_over=self.previous_over, root_identities=self.root_identities)
+        self._snapshots.append(current)
         self.previous = current
+        return current
+
+    def _measure(self, opening, current):
+        from joulewise.hazards import contention
+        from joulewise import prewindow
+        limit = contention.DEFAULT_THRESHOLDS["cpu_limit_s_per_s"]
+        result = contention.interval(opening, current, tree_roots=[os.getpid()],
+                                     include_kernel_task=True, limit=limit, aggregate_limit=None,
+                                     previous_over=self.previous_over, root_identities=self.root_identities)
+        regressions = [row for row in result.get("unaccounted", [])
+                       if row["reason"] == "counter regressed"]
+        if result["error"] == contention.REGRESSED_COUNTER_ERROR:
+            result.update(error=None, clean=not result["outside_over_limit"])
+        if result.get("host_error"):
+            result.update(error=f"host CPU unread: {result['host_error']}", clean=None)
         self.previous_over = contention.over_limit(result)
-        return {**result, "cpu_limit_s_per_s": limit, "aggregate_cpu_limit_s_per_s": limit}
+        aggregate = result.get("outside_aggregate_cpu_s_per_s")
+        return {**result, "cpu_limit_s_per_s": limit, "aggregate_cpu_limit_s_per_s": None,
+                "aggregate_above_0_05": aggregate is not None and aggregate > limit,
+                "regressed_counters": regressions,
+                "long_interval": result.get("elapsed_s", 0) > 2 * prewindow.INTERVAL_S}
 
 
 _cpu_quiet = None
