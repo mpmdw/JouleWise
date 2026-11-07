@@ -1067,14 +1067,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 - **Ed's answer, 00:08 PST 11-07** (message `1a1b50d8d92f7e92`, thread `1a198fafa8fc12ba`), verbatim: "go". Applied: R0 re-run 7 is launched into the 00:05-05:05 gap with deadline 05:05 PST (`1794056700`). The launch details follow in the next commit of this item.
 
+- **R0 re-run 7 launch** (about 00:15 PST), under items 181 and 185 (3) and Ed's "go":
+  - Canonical `57e0bbf20`; `tests.test_magistrate_desk_fence` OK under python3.14.
+  - Measurement checkout `e1a91226e`, clean; Mac15,9; 137,438,953,472 bytes; venv `0.31.2 0.31.3 5.12.1`.
+  - Spotlight 716 and 73957: `T` after STOP, `S` after CONT.
+  - Preflight: AC power; battery ExternalConnected Yes, IsCharging No, InstantAmperage 0; free 100,018,932 KiB at /Users/edr.
+  - `--output /Users/edr/night-align/r0-v4-20261107T0810Z`, `--deadline 1794056700` (05:05 PST 11-07, before the 05:09 scan), config `$M/configs/align/v4/r0_desk.json`, `--python-bin $M/.venv/bin/python`, `--disk-path /Users/edr`.
+  - The Codex MCP adapter is stopped before launch.
+  - Process note: this activation ran `git fetch` in the canonical root and fast-forwarded it twice (no night agent loaded or on disk; nothing armed).
+
 **Next activation (written 2026-11-07 by activation 62c121f8; item 194; item 181 holds):**
-(1) **Ed's answer to the third `smc` refusal.** Search `from:claude2.glaring610@passmail.net is:unread`. If Ed says go:
-  - re-launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` and item 193's re-launch checklist, at the start of the next clean gap above (just after a scheduled job);
-  - set `--deadline` so the run ends before the gap's end.
-  If Ed says anything else, follow it. Until he answers, do not re-launch R0.
-(2) After any R0 exits: item 185 (1)-(4) on its record, as item 193 (1)-(2) describes.
-(3) **WP18:** when a laptop-lead item delivers the tool fix, run item 191's command on the extracted files above (or re-extract from the archive) and commit only the two registration files.
-(4) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
+(1) **After R0 exits** (fence cleared, or a stale-fence notice): follow item 185 (1) on `/Users/edr/night-align/r0-v4-20261107T0810Z`.
+  - Commit to `docs/align/r0/2026-11-07-rerun7/` on a new branch from `e1a91226e`.
+  - Email Ed the item 176 (2) summary on thread `1a198fafa8fc12ba`.
+  - If the record directory is absent, follow item 185 (4).
+(2) **If R0 passes:** item 185 (2).
+(3) **If R0 is refused by contention again:** compare the refusal interval with the schedule above (`grep AutoBackgroundScanFinished /var/log/install.log`; `/usr/bin/log show` for launchd `StartCalendarInterval` spawns).
+  - Ed's "go" approves re-launching timed into a clean gap. If the refusal came from a source on that schedule, or from a newly identified scheduled job (add it to the list), re-launch in the next gap whose length covers the 3-4 h run.
+  - If the refusal came from an unscheduled or unidentified source, or R0 fails in any other way, mail Ed and wait.
+(4) **WP18:** when a laptop-lead item delivers the tool fix, run item 191's command on `/Users/edr/night-archive/wp18-extract-20261107/` (or re-extract from the archive) and commit only the two registration files.
+(5) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
 
 193. **Magistrate activation ac09cac6 (Opus 5.5, headless, 2026-11-06 from 23:12 PST): R0 re-run 5 was refused in `smc` by the 23:09 PST softwareupdated background scan, which is real, measured contention. R0 re-launched about 23:20 PST, timed into the 6 h gap before the next scan.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0631Z` (22:32:18-23:09:44 PST, 2,246 s): status `fail`, `complete_r0` false.
