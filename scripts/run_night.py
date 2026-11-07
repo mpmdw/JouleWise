@@ -4818,6 +4818,13 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
             _append_log(custody_root, f"dead-man wall meter cleanup: {json.dumps(reaped, sort_keys=True)}")
 
     probes = make_probes()
+    # Lead ruling R6-7 (round-6 executing review): the dead-man is this night's
+    # last exit when the night job never launched, or when run_night died
+    # without its close (it has no SIGTERM handler). The chain is proved gone
+    # above, so restore the High Power marker this plan's session owns; a
+    # marker another session owns is left alone, and nothing is restored
+    # while a measuring night holds the host night lock. Never raises.
+    _restore_owed_on_exit(plan_path, custody_root, probes, "dead_man")
     probe, census_refusal = agent_census(probes)
     _append_census(night_dir / "censuses.jsonl", probe, census_refusal)
     if census_refusal is not None:

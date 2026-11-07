@@ -229,6 +229,17 @@ def restore_owed(markers, *, runner=None, lock=None, owner=None, reason):
                 return record
             taken = True
         try:
+            if taken:
+                # Round-6 executing review (Sol F9): re-read the markers under
+                # the lock. An install that ran between the check above and
+                # this lock may have replaced the marker with its own session's.
+                present = [m for m in present if os.path.lexists(m)]
+                record["present"] = present
+                if not present:
+                    return record
+                if owner is not None and not any(owned_by(m, **owner) for m in present):
+                    record["action"] = "not_owner"
+                    return record
             restored = restore_automatic(present[0], runner=runner)
             if restored["ok"]:
                 for marker in present[1:]:
