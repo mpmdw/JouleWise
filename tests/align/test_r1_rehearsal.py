@@ -53,12 +53,16 @@ class FakeWorld:
     def __init__(self, fail_kind=None, fail_restore=False, interrupt_kind=None,
                  t_decline=None, busy_once=(), sudo_listing=None, unsettled_soak_once=False,
                  release_c=None, released=True, mount_after=None, journal_gap_kind=None, tail=20.0,
-                 precool_timeout=(), leg_g0_unreleased=(), thermometry_status="pass"):
+                 precool_timeout=(), leg_g0_unreleased=(), thermometry_status="pass",
+                 b_d=8192, slot_changes=None, failed_soak_reads=0):
         self.tail = tail
         self.precool_timeout = set(precool_timeout)
         self.leg_g0_unreleased = set(leg_g0_unreleased)
         self.thermometry_status = thermometry_status
         self.invocations = []     # (kind, output name, AC powermode at the call)
+        self.b_d = b_d
+        self.slot_changes = slot_changes or {}
+        self.failed_soak_reads = failed_soak_reads
         self.mounted = False
         self.mount_after = mount_after
         self.journal_gap_kind = journal_gap_kind
@@ -109,8 +113,10 @@ class FakeWorld:
         if kind == self.fail_kind:
             return completed(argv, code=9, err="synthetic runtime failure")
         slots = {f"S{i}": float(i) for i in range(1, 10)}
-        slots.update(B_D=8192, I_D=101.5, T_dead=1451.018, N_chunk=256,
+        # S5 = S6 = delta_slow and S7 = G_turn, as the runtime derives them.
+        slots.update(S5=1.0, S6=1.0, S7=120.0, B_D=self.b_d, I_D=101.5, T_dead=1451.018, N_chunk=256,
                      t_decline=23.0, **{"class": "heavy"})
+        slots.update(self.slot_changes)
         offset = int(kind.rsplit("-", 1)[-1][:-1]) if kind.startswith("d-planning-turn") else 0
         busy = kind in self.busy_once
         self.busy_once.discard(kind)
@@ -126,10 +132,16 @@ class FakeWorld:
         if kind == "idle":
             slope = 0.5 / 60 if self.unsettled_soak_once else 0.0
             self.unsettled_soak_once = False
-            payload["sensor_series_c"] = {"s_slow": [40.0 + slope * i + (0.05 if i % 2 else -0.05)
-                                                     for i in range(1800)]}
+            # Valid 1 Hz reads with their times; failed reads leave gaps in the
+            # times (the runtime drops them), here inside the last 20 min.
+            times = [float(t) for t in range(1800) if not 1000 <= t < 1000 + self.failed_soak_reads]
+            payload["sensor_series_c"] = {"s_slow": [40.0 + slope * t + (0.05 if int(t) % 2 else -0.05)
+                                                     for t in times]}
+            payload["sensor_series_t_s"] = {"s_slow": times}
+            payload["sensor_series_end_t_s"] = 1799.0
         if kind == "step-d":
             payload["e_D_j_per_token"] = 3.6
+            payload["slot_detail"] = {"r_decode_tok_per_s": 20.0}
         if kind in ("step-30b", "step-d") or kind.startswith(("d-spam", "d-bank")):
             payload["battery_drain_pct_per_h"] = {"step-30b": 4.0, "step-d": 6.0}.get(kind, 7.0)
         if kind == "harvest":
@@ -150,7 +162,7 @@ class FakeWorld:
         if kind.startswith("d-") and "planning" not in kind and kind != "d-4bit":
             payload.update(energy_j={"d-spam-benign-s1-a": 30000.0, "d-spam-benign-s1-b": 30036.0,
                                      "d-bank-benign-s1": 32000.0}[kind],
-                           admitted_turns=3, x7=False,
+                           admitted_turns=3, x7=False, turn_cap_tokens=4096,
                            deadman={"T_dead_s": 1451.018, "phases_s": {
                                "G0": 120.0, "G1": 150.0, "H": 90.0, "decode": 700.0,
                                "prefill": 120.0, "tool": 6.0, "tail": self.tail}})
@@ -294,6 +306,13 @@ class R1Tests(unittest.TestCase):
         self.assertEqual(adopt(None, None, None)["verdict"], "not_adopted")
         self.assertEqual(adopt(20, 40, 27)["verdict"], "inconclusive")
         self.assertEqual(adopt(20, 40, None)["verdict"], "inconclusive")
+        # Round-4 LOWs: ruling 16 reads "A legs infinite, B finite" as not
+        # adopted, and a JSON true is not 1 s of t_decline.
+        self.assertEqual(adopt(None, 30, None),
+                         {"verdict": "not_adopted", "reason": "A legs infinite, B finite"})
+        for bad in ((True, 25, 20), (20, True, 20), (20, 25, False), (20, "25", 20)):
+            with self.subTest(bad=bad), self.assertRaisesRegex(r1.Refusal, "positive or null"):
+                adopt(*bad)
 
     def test_gated_d_runs_are_replay_pair_plus_bank_benign(self):
         kinds = [row[1] for row in r1.phase_plan(False) if row[0].endswith("_gated_held")
@@ -516,7 +535,13 @@ class R1Tests(unittest.TestCase):
                 window = calls[index - 2:index]
                 self.assertEqual(window[0][0], "WAIT", leg)
                 self.assertIn("g0-release-soak", window[1], leg)
-                self.assertEqual(window[0][1], r1.QUIET_SEGMENT_BOUND_S + r1.G0_RELEASE_BOUND_S)
+                # Round-3 LOW-1: the bound comes from the configured values (the
+                # committed runtime config's step deadman, 1,580 s), not an
+                # assumed 1,800 + 600 s. R5-5 runs the legs before step-d, so the
+                # member intercept is the runtime's admissible maximum I_D (1,750 s).
+                self.assertAlmostEqual(window[0][1], 65 + 600 + 1750 + 1.13544 * 1580 + 120)
+            kinds = [c[c.index("--r1-kind") + 1] for c in world.calls if "--r1-kind" in c]
+            self.assertLess(kinds.index("high-power-aba-a2"), kinds.index("step-d"))
             b_calls = [c for c in world.calls if "--r1-kind" in c and "high-power-aba-b" in c]
             self.assertEqual(len(b_calls), 2)
             result = json.loads((Path(td) / "run/r1_result.json").read_text())
@@ -552,6 +577,95 @@ class R1Tests(unittest.TestCase):
                 self.assertEqual(r1.run(self.args(td)), 3)
             result = json.loads((Path(td) / "run/r1_result.json").read_text())
             self.assertIn("contract fields missing: recovery_curve", result["error"])
+
+    def test_step_d_without_an_admissible_budget_refuses_before_any_gated_run(self):
+        # Lead ruling R5-4: a gated D run is never unbudgeted. step-d floors a
+        # small budget to 0; the driver refuses right after step-d (Mac time),
+        # before the cooldown, X-G and the gated runs.
+        for b_d in (0, 512, 41984):
+            with self.subTest(b_d=b_d), tempfile.TemporaryDirectory() as td:
+                world = FakeWorld(b_d=b_d)
+                with patch.object(r1, "_run", world):
+                    self.assertEqual(r1.run(self.args(td)), 3)
+                result = json.loads((Path(td) / "run/r1_result.json").read_text())
+                self.assertIn("step-d.B_D", result["error"])
+                kinds = [c[c.index("--r1-kind") + 1] for c in world.calls if "--r1-kind" in c]
+                self.assertEqual(kinds[-1], "step-d")
+                self.assertEqual(world.mode, 0)
+
+    def test_step_d_with_a_null_slot_refuses_right_after_step_d(self):
+        # Executing review round 4 LOW-9: a no-rise t63 (S2) is null; that
+        # fails R1's thermometry bar at step-d, not after the night.
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld(slot_changes={"S2": None})
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td)), 3)
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            self.assertIn("slot S2 is not finite numeric evidence", result["error"])
+            kinds = [c[c.index("--r1-kind") + 1] for c in world.calls if "--r1-kind" in c]
+            self.assertEqual(kinds[-1], "step-d")
+
+    def test_soak_sd_uses_the_last_1200_seconds_not_samples(self):
+        # Fable cold pass round 4 LOW-2: dropped reads must not stretch the window.
+        times = [float(t) for t in range(1800) if not 700 <= t < 800]
+        values = [50.0 if t < 600 else 40.0 for t in times]
+        out = r1.soak_detrended({"k": values}, {"k": times}, 1799.0)["k"]
+        self.assertEqual(out["mean_c"], 40.0)          # the last 1,200 samples would reach t = 500 (50 C)
+        self.assertEqual(out["window_reads"], 1100)
+        sparse = [t for t in times if not 1000 <= t < 1300]
+        with self.assertRaisesRegex(r1.Refusal, "valid reads in the last 1200 s"):
+            r1.soak_detrended({"k": [40.0] * len(sparse)}, {"k": sparse}, 1799.0)
+        with self.assertRaisesRegex(r1.Refusal, "sensor_series_t_s"):
+            r1.soak_detrended({"k": values}, None, 1799.0)
+        # Sol critique: reads that stop 600 s before the soak ends cannot pass
+        # as the last 20 min (the window ends at the soak's end, not the last read).
+        early = [float(t) for t in range(1200)]
+        with self.assertRaisesRegex(r1.Refusal, "valid reads in the last 1200 s"):
+            r1.soak_detrended({"k": [40.0] * 1200}, {"k": early}, 1799.0)
+        with self.assertRaisesRegex(r1.Refusal, "sensor_series_end_t_s"):
+            r1.soak_detrended({"k": values}, {"k": times}, None)
+        with self.assertRaisesRegex(r1.Refusal, "spans"):
+            r1.soak_detrended({"k": [40.0] * 1300}, {"k": [t / 2 for t in range(1300)]}, 649.5)
+
+    def test_soak_with_failed_reads_end_to_end(self):
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(r1, "_run", FakeWorld(failed_soak_reads=50)):
+                self.assertEqual(r1.run(self.args(td)), 0)
+            result = json.loads((Path(td) / "run/r1_result.json").read_text())
+            soak = next(p for p in result["phases"] if p["name"] == "idle_soak")
+            self.assertEqual(soak["soak_detrended"]["s_slow"]["window_reads"], 1150)
+
+    def test_a_first_signal_during_teardown_still_writes_r1_result(self):
+        # Fable cold pass round 4 LOW-4: after a normal completion, a first
+        # signal inside the driver's finally (here during the last Automatic
+        # restore) must not skip the restore record or r1_result.json.
+        with tempfile.TemporaryDirectory() as td:
+            world = FakeWorld()
+            with patch.object(r1, "_run", world):
+                self.assertEqual(r1.run(self.args(td / Path("a") if False else Path(td) / "a")), 0)
+            restores = world.calls.count(r1.PowerModeGuard.AUTO)
+            world = FakeWorld()
+            seen = {"auto": 0}
+
+            def runner(argv):
+                argv = tuple(str(v) for v in argv)
+                if argv == r1.PowerModeGuard.AUTO:
+                    seen["auto"] += 1
+                    if seen["auto"] == restores:          # the restore in ``finally``
+                        os.kill(os.getpid(), signal.SIGTERM)
+                return world(argv)
+            previous = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+            with patch.object(r1, "_run", runner):
+                rc = r1.run(self.args(Path(td) / "b"))
+            self.assertEqual(rc, 0)
+            self.assertEqual(world.mode, 0)
+            result = json.loads((Path(td) / "b/run/r1_result.json").read_text())
+            self.assertEqual(result["status"], "complete")
+            # The signal neither interrupted the last restore nor became a teardown error.
+            self.assertNotIn("teardown_errors", result)
+            # Restore records: proof at entry, the context exit, and the one in ``finally``.
+            self.assertEqual([r["point"] for r in result["powermode"]].count("restore_automatic"), 3)
+            self.assertEqual({sig: signal.getsignal(sig) for sig in previous}, previous)
 
     def test_signal_burst_cannot_interrupt_the_automatic_restore(self):
         # Executing review 2026-11-06: a second TERM/INT during teardown (an
@@ -907,6 +1021,12 @@ class R1Tests(unittest.TestCase):
                     self.assertEqual(r1.run(self.args(td, synthetic=synthetic)), 0)
                 slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
                 inputs, _ = ready_inputs(101.5, slots["max_r1_tail_s"])
+                # R5-4: the thermal policy is the one R1 measured.
+                inputs["R1"]["thermal_policy"].update(chunk_tokens=slots["slots"]["N_chunk"],
+                                                      delta_slow_c=slots["slots"]["S6"],
+                                                      turn_cap_s=slots["slots"]["S7"])
+                self.assertEqual(slots["budget_fit_inputs"]["turn_cap_tokens"], 4096)
+                self.assertEqual(slots["budget_fit_inputs"]["r_decode_tok_per_s"], 20.0)
                 if synthetic:
                     with self.assertRaisesRegex(ValueError, "source must be"):
                         kit.require_ready(inputs, slots)
@@ -1079,6 +1199,10 @@ class Round5RulingTests(unittest.TestCase):
             from scripts import align_v4_kit as kit
             from tests.align.test_v4_kit import ready_inputs
             inputs, _ = ready_inputs(101.5, registration["max_r1_tail_s"])
+            # R5-4: the thermal policy is the one R1 measured (so only the duty bar refuses).
+            inputs["R1"]["thermal_policy"].update(chunk_tokens=registration["slots"]["N_chunk"],
+                                                  delta_slow_c=registration["slots"]["S6"],
+                                                  turn_cap_s=registration["slots"]["S7"])
             with self.assertRaisesRegex(ValueError, "lead fallback"):
                 kit.require_ready(inputs, registration, synthetic=True)
         with tempfile.TemporaryDirectory() as td:

@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from types import SimpleNamespace
@@ -70,7 +71,8 @@ class ConformanceTests(unittest.TestCase):
 
             segment("pre_calibration_bracket", "calibration-pre", soak=False)
             soak = segment("idle_soak", "idle", "--duration-s", "1300", soak=False)
-            detrended = r1.soak_detrended(soak["sensor_series_c"])
+            detrended = r1.soak_detrended(soak["sensor_series_c"], soak["sensor_series_t_s"],
+                                          soak["sensor_series_end_t_s"])
             r1.write_soak_reference(run, {"name": "idle_soak", "output_dir": str(run / "idle_soak"),
                                           "attempt": 0, "soak_detrended": detrended})
             segment("step_30b", "step-30b")
@@ -509,6 +511,8 @@ class Round5RuntimeTests(unittest.TestCase):
             (run / rt.STEP_D_SEGMENT).mkdir(parents=True)
             (run / rt.STEP_D_SEGMENT / rt.RESULT_NAME).write_text(json.dumps({"kind": "step-d", "slots": {
                 "S7": 30.0, "T_dead": 600.0, "N_chunk": 256, "B_D": 4096}}))
+            # Sol wp15rev F3 (R5-9): consumers read step-d only under its complete custody.
+            rt.write_custody(run / rt.STEP_D_SEGMENT, {"status": "complete"})
             out = run / "D_spam_benign_s1_gated_held_a"
             code, result = call(config, out, "d-spam-benign-s1-a", "--soak-reference", str(soak))
             self.assertEqual(code, 0, custody(out).get("error"))
@@ -556,6 +560,238 @@ class Round5RuntimeTests(unittest.TestCase):
             self.assertEqual(code, 0, custody(out).get("error"))
             self.assertIs(result["released"], True)
             self.assertLess(result["recovery_curve"][-1][0], 10)
+
+class Round5Tests(unittest.TestCase):
+    """Lead rulings R5-4, R5-9 and R5-10 (round-5 infrastructure)."""
+
+    def test_terminal_custody_includes_nested_file_with_same_basename(self):
+        # Sol wp15rev F2: only DIR's own record is excluded, not a nested namesake.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td)
+            nested = out / "runs/member" / rt.CUSTODY_NAME
+            nested.parent.mkdir(parents=True)
+            nested.write_text("nested bundle custody\n")
+            rt.write_custody(out, {"status": "complete"})
+            self.assertEqual(custody(out)["files"][f"runs/member/{rt.CUSTODY_NAME}"], rt.sha256_file(nested))
+            self.assertNotIn(rt.CUSTODY_NAME, custody(out)["files"])
+
+    def test_step_d_consumer_requires_complete_digest_bound_custody(self):
+        # Sol wp15rev F3: B_D/N_chunk/T_dead are read only from the bytes the
+        # step-d runtime's complete custody digested.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            step_dir = root / rt.STEP_D_SEGMENT
+            step_dir.mkdir()
+            result = step_dir / rt.RESULT_NAME
+            result.write_text(json.dumps({"kind": "step-d", "slots": {"T_dead": 10, "B_D": 1024}}))
+            segment = SimpleNamespace(out=root / "consumer", kind="d-spam-benign-s1-a")
+            with self.assertRaisesRegex(rt.Refused, "result and custody"):
+                rt.Segment.step_d_result(segment)
+            rt.write_custody(step_dir, {"status": "complete"})
+            self.assertEqual(rt.Segment.step_d_result(segment)["kind"], "step-d")
+            result.write_text(json.dumps({"kind": "step-d", "slots": {"T_dead": 11, "B_D": 8192}}))
+            with self.assertRaisesRegex(rt.Refused, "complete runtime custody"):
+                rt.Segment.step_d_result(segment)
+            rt.write_custody(step_dir, {"status": "failed"})
+            with self.assertRaisesRegex(rt.Refused, "complete runtime custody"):
+                rt.Segment.step_d_result(segment)
+
+    def test_gated_d_never_runs_unbudgeted(self):
+        # Lead ruling R5-4 / Sol wp15rev F4: B_D 0 used to arm no decode cap.
+        from unittest import mock
+        segment = object.__new__(rt.Segment)
+        segment.kind = "d-spam-benign-s1-a"
+        segment.template = mock.Mock(return_value=({}, {}))
+        segment.run_member = mock.Mock(side_effect=AssertionError("model work before the refusal"))
+        for slots, message in (({"T_dead": float("nan"), "B_D": 1024}, "T_dead"),
+                               ({"T_dead": True, "B_D": 1024}, "T_dead"),
+                               ({"T_dead": -1.0, "B_D": 1024}, "T_dead"),
+                               ({"T_dead": 10.0, "B_D": 0}, "B_D 0 is not an admissible"),
+                               ({"T_dead": 10.0, "B_D": 1025}, "B_D"),
+                               ({"T_dead": 10.0, "B_D": 41984}, "B_D"),
+                               ({"T_dead": 10.0, "B_D": None}, "B_D"),
+                               ({"T_dead": 10.0, "B_D": True}, "B_D")):
+            segment.step_d_result = mock.Mock(return_value={"slots": slots})
+            with self.subTest(slots=slots), self.assertRaisesRegex(rt.Refused, message):
+                segment.k_gated_d()
+        self.assertEqual(rt.gated_budget({"T_dead": 1200.0, "B_D": 8192}), (1200.0, 8192))
+
+    def test_segment_close_survives_a_signal_and_still_stops_the_journals(self):
+        # Sol wp15rev triage: a first TERM (SystemExit) while one session
+        # closes must not strand the others (powermetrics) or the journals.
+        closed, journals = [], []
+
+        class Session:
+            def __init__(self, name, error=None):
+                self.name, self.error = name, error
+
+            def close(self):
+                closed.append(self.name)
+                if self.error is not None:
+                    raise self.error
+        def bare_segment(sessions):
+            segment = object.__new__(rt.Segment)
+            segment.heaters = []
+            segment.inventory_readers, segment._stop_inventory = [], None
+            segment.open_sessions = sessions
+            segment._stop_ticker = lambda: None
+            segment.stop_journals = lambda final=True: journals.append(final)
+            return segment
+        segment = bare_segment([Session("powermetrics"), Session("smc", SystemExit(143))])
+        errors = segment.close()
+        self.assertEqual(closed, ["smc", "powermetrics"])
+        self.assertEqual(journals, [False])
+        self.assertEqual([type(e) for e in errors], [SystemExit])
+        # Round-5 integration: the R5-5 inventory journal stops first; a TERM
+        # there must not strand the sessions (powermetrics) or the journals.
+        closed.clear(), journals.clear()
+        segment = bare_segment([Session("powermetrics"), Session("smc")])
+
+        def interrupted():
+            raise SystemExit(143)
+        segment._stop_inventory = interrupted
+        errors = segment.close()
+        self.assertEqual(closed, ["smc", "powermetrics"])
+        self.assertEqual(journals, [False])
+        self.assertEqual([type(e) for e in errors], [SystemExit])
+
+    def test_step_response_with_no_rise_has_a_null_censored_t63(self):
+        # Executing review round 4 LOW-9: never t63 = 0.0 (a "fast" key).
+        rows = [{"monotonic_ns": t * NS, "sensors": {"K": 40.0 - 0.001 * t}, "errors": {}} for t in range(200)]
+        response = rt.step_response(rows, "K", 100 * NS, 150 * NS)
+        self.assertIsNone(response["t63_s"])
+        self.assertIn("t63_censored", response["flags"])
+        turn = SimpleNamespace(start_ns=100 * NS, first_token_ns=120 * NS, end_ns=520 * NS,
+                               decode_tokens=4000, prefill_tokens=10000)
+        ep = SimpleNamespace(start_ns=100 * NS, end_ns=525 * NS, hardware={"thermal": {"intervals": []}})
+        slots, detail = rt.derive_step_d_slots(
+            ep=ep, turn=turn, wall_s=800.0, responses={"s_fast": response, "s_slow": response},
+            recovery_s=50.0, recovery_censored=False, bands={"delta_fast_c": 1.0, "delta_slow_c": 1.0},
+            t_decline_s=200.0, t_decline_status="declined", d_class="heavy")
+        self.assertIsNone(slots["S2"])
+        self.assertIsNone(detail["classification"]["s_fast_t63_le_5s"])
+        with self.assertRaisesRegex(r1.Refusal, "slot S2 is not finite"):
+            r1.derive_slots({"slots": slots})
+
+    def test_watchdog_runs_its_teardown_then_always_exits(self):
+        # Executing review round 4 LOW-1.
+        exits, order = [], []
+        term = rt.Termination(exit_now=lambda code: (order.append("exit"), exits.append(code)))
+        term.on_timeout = lambda: order.append("teardown")
+        term.expire(143)
+        self.assertEqual((order, exits), (["teardown", "exit"], [143]))
+
+        def broken():
+            raise SystemExit(1)
+        term.on_timeout = broken
+        term.expire(130)
+        self.assertEqual(exits, [143, 130])
+
+    def test_watchdog_teardown_stops_powermetrics_and_writes_the_terminal_record(self):
+        ps = ("1 0 /sbin/launchd\n"
+              "500 1 /usr/bin/python -B scripts/align_r1_runtime.py\n"
+              "501 500 sudo -n /usr/bin/powermetrics --samplers gpu_power -i 100\n"
+              "502 501 /usr/bin/powermetrics --samplers gpu_power -i 100\n"
+              "503 500 /usr/bin/python -c heater\n"
+              "600 1 sudo -n /usr/bin/powermetrics --other-session\n")
+        sent = []
+
+        def kill(pid, sig):
+            if sig == 0:
+                raise ProcessLookupError(pid)        # gone at the first check
+            if pid == 502:
+                raise PermissionError("root process")
+            sent.append((pid, sig))
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td)
+            (out / "load_journal.json").write_text("{}")
+            rt.watchdog_teardown(out, {"kind": "step-d", "status": "aborted", "signal": 15},
+                                 run=lambda argv: SimpleNamespace(stdout=ps), kill=kill, root_pid=500)
+            record = custody(out)
+        self.assertEqual(sent, [(501, signal.SIGTERM)])   # own tree only; EPERM on root ignored
+        self.assertEqual((record["status"], record["watchdog"], record["signal"]), ("aborted", True, 15))
+        self.assertEqual(record["watchdog_powermetrics_signalled"], [501])
+        self.assertIn("load_journal.json", record["files"])
+
+    def test_a_pid_that_left_the_tree_before_signalling_is_not_signalled(self):
+        snapshots = iter(["500 1 runtime\n501 500 sudo -n /usr/bin/powermetrics\n",
+                          "500 1 runtime\n501 1 /usr/bin/powermetrics --someone-else\n"])
+        sent = []
+        stopped = rt.stop_powermetrics_descendants(
+            500, run=lambda argv: SimpleNamespace(stdout=next(snapshots)),
+            kill=lambda pid, sig: sent.append((pid, sig)), wait_s=0)
+        self.assertEqual((stopped, sent), ([], []))
+
+    def test_watchdog_digests_stop_at_the_deadline_inside_a_file(self):
+        # Sol critique: the deadline is checked per block, not only between files.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td)
+            (out / "big.bin").write_bytes(b"x" * (3 << 20))
+            (out / "small.txt").write_text("y")
+            ticks = iter([0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0])
+            from unittest import mock
+            with mock.patch.object(rt.time, "monotonic", lambda: next(ticks, 10.0)):
+                rt.write_custody(out, {"status": "aborted"}, deadline=5.0)
+            files = custody(out)["files"]
+            self.assertEqual(files["big.bin"], "unhashed: watchdog deadline")
+            self.assertEqual(files["small.txt"], "unhashed: watchdog deadline")
+
+    def test_watchdog_has_a_hard_exit_independent_of_its_teardown(self):
+        exits = []
+        term = rt.Termination(exit_now=exits.append, hard_s=0.2)
+        release = threading.Event()
+        term.on_timeout = lambda: release.wait(5)          # a stalled teardown
+        worker = threading.Thread(target=term.expire, args=(143,), daemon=True)
+        worker.start()
+        time.sleep(0.6)
+        self.assertEqual(exits, [143])                      # the hard exit fired while stalled
+        release.set()
+        worker.join(5)
+
+    def test_one_owner_writes_the_terminal_record(self):
+        # Sol critique: once the watchdog published, the normal path never
+        # replaces its record (and vice versa).
+        from unittest import mock
+        captured = []
+
+        class Capture(rt.Termination):
+            def install(self):
+                captured.append(self)
+                return super().install()
+        with tempfile.TemporaryDirectory(dir=TMP) as td, mock.patch.object(rt, "Termination", Capture), \
+                mock.patch.object(rt, "stop_powermetrics_descendants", return_value=[]):
+            out = Path(td) / "g0"
+            real = rt.Segment.run
+
+            def run_then_watchdog(segment):
+                captured[0].on_timeout()                     # the watchdog publishes mid-run
+                return real(segment)
+            with mock.patch.object(rt.Segment, "run", run_then_watchdog):
+                code, _ = call(rs.synthetic_config(Path(td) / "cfg"), out, "calibration-pre")
+            self.assertEqual(custody(out)["watchdog"], True)
+            self.assertEqual(custody(out)["status"], "aborted")
+
+    def test_main_arms_the_watchdog_teardown_once_dir_exists(self):
+        from unittest import mock
+        captured = []
+
+        class Capture(rt.Termination):
+            def install(self):
+                captured.append(self)
+                return super().install()
+        with tempfile.TemporaryDirectory(dir=TMP) as td, mock.patch.object(rt, "Termination", Capture), \
+                mock.patch.object(rt, "stop_powermetrics_descendants", return_value=[]):
+            out = Path(td) / "g0"
+            real = rt.write_custody
+            with mock.patch.object(rt, "write_custody",
+                                   side_effect=lambda o, r, **k: real(o, r, **k) if k else (_ for _ in ()).throw(
+                                       OSError("disk"))):
+                code, _ = call(rs.synthetic_config(Path(td) / "cfg"), out, "g0-release-soak")
+                self.assertEqual(code, rt.EXIT_REFUSED)
+                self.assertFalse((out / rt.CUSTODY_NAME).exists())   # the normal write failed here
+                captured[0].on_timeout()                               # what the watchdog thread runs
+            record = custody(out)
+            self.assertEqual((record["status"], record["watchdog"]), ("aborted", True))
 
 
 if __name__ == "__main__":

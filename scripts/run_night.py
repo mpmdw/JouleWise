@@ -25,7 +25,7 @@ from contextvars import copy_context
 from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 # Keep aligned with pyproject.toml requires-python. The installer reads this literal.
@@ -4022,12 +4022,56 @@ def _refuse_ac_powermode(custody_root: Path, night_dir: Path, plan: NightPlan, c
                              courier_bin_substitution=courier_substitution)
 
 
+def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str, Any]) -> dict[str, Any]:
+    """Lead ruling R5-6: a night admitted under a declared AC powermode 2 (W1
+    under an adopted High Power) restores Automatic when it closes, on every
+    exit path, through the narrow sudo rule; the High Power marker is removed
+    only after the read-back is 0, so a failed restore stays owed to the next
+    night's admission. Never raises; the outcome goes to the custody log."""
+    from joulewise.align.apple import powermode
+
+    def runner(argv):
+        return probes.run(tuple(argv))
+
+    marker = Path(plan.measurement_root) / powermode.R1_HIGH_POWER_MARKER
+    try:
+        record = powermode.restore_automatic(marker, runner=runner)
+    except BaseException as error:  # noqa: BLE001 - the close must not mask the night's result
+        record = {"ok": False, "error": f"{type(error).__name__}: {error}"}
+    try:
+        _append_log(Path(plan.custody_root), "ac powermode close: restore Automatic after a declared powermode 2 "
+                    "night: " + json.dumps(record, sort_keys=True, default=str))
+    except Exception:  # noqa: BLE001
+        pass
+    return record
+
+
 def run_night(
     plan_path: Path,
     *,
     rehearsal: bool = False,
     courier_bin: Path | None = None,
     dry_arm: bool = False,
+) -> int:
+    closers: list[Callable[[], Any]] = []
+    try:
+        return _run_night(plan_path, rehearsal=rehearsal, courier_bin=courier_bin, dry_arm=dry_arm,
+                          closers=closers)
+    finally:
+        for close in closers:
+            try:
+                close()
+            except BaseException:  # noqa: BLE001 - the night's own result stands; the log has the close
+                pass
+
+
+def _run_night(
+    plan_path: Path,
+    *,
+    rehearsal: bool = False,
+    courier_bin: Path | None = None,
+    dry_arm: bool = False,
+    closers: list[Callable[[], Any]],
 ) -> int:
     probes = make_probes()
     bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
@@ -4081,6 +4125,10 @@ def run_night(
     if not powermode_admission["admitted"]:
         return _refuse_ac_powermode(custody_root, night_dir, plan, courier_bin, powermode_admission,
                                     started_epoch_s, started_monotonic_ns)
+    if powermode_admission["expected"] == 2:
+        # Lead ruling R5-6: the host was admitted in High Power; Automatic is
+        # restored when this night closes, whatever its outcome.
+        closers.append(lambda: _close_ac_powermode(plan, probes, powermode_admission))
     _append_log(custody_root, "ac powermode admitted: expected {expected} observed {observed}{restored}".format(
         expected=powermode_admission["expected"], observed=powermode_admission["observed"],
         restored=" (R1 High Power marker restored to Automatic)" if powermode_admission["marker_present"] else ""))

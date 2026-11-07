@@ -37,13 +37,18 @@ I_D = 516.575
 # Shaped like the R1 driver's record, so the kit's evidence binding (executing
 # review MEDIUM-3) is exercised; the synthetic source is admitted only because
 # build_kit asks require_ready for it explicitly.
+SYN_PHASES = {'G0': 60.0, 'G1': 30.0, 'H': 30.0, 'decode': 200.0, 'prefill': 60.0, 'tool': 5.0}
 SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE,
                 'ac_powermode': 0, 'slots_ac_powermode': 0,
                 'thermometry': {'bar': 'pass', 'D': {'die_candidates': [syn.FAST], 'heatsink_candidates': [syn.SLOW],
                                                      'sensor_pick_changed': False}},
-                'max_r1_tail_s': 30.0, 'slots': {'I_D': I_D},
+                'max_r1_tail_s': 30.0,
+                # Lead ruling R5-4: B_D, N_chunk, S5/S6 and S7 bind the inputs below.
+                'slots': {'I_D': I_D, 'B_D': 6144, 'N_chunk': 2048, 'S5': 1.0, 'S6': 1.0, 'S7': 120.0},
                 'high_power': {'verdict': 'not_adopted'}, 'u5': {'verdict': 'pass', 'c': 1.0},
-                'deadman_budget': [{'phases_s': {'tail': 30.0}}, {'phases_s': {'tail': 12.0}}],
+                'deadman_budget': [{'run': name, 'phases_s': dict(SYN_PHASES, tail=tail)}
+                                   for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
+                'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'turn_cap_tokens': 4096},
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
                 'duty_bar': {'pass': True}, 'status_note': 'SYNTHETIC_WP22_DRY_RUN'}
 SYN_INPUTS = {

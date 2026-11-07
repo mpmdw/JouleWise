@@ -62,6 +62,7 @@ CUSTODY_NAME = "runtime_custody.json"
 STEP_D_SEGMENT = "step_D_prefill_10k_decode_4096"
 NS = 1_000_000_000
 TERM_TEARDOWN_S = 15.0       # forced exit, inside the driver's 20 s TERM grace
+WATCHDOG_HARD_S = 4.0        # the watchdog's own teardown: 15 s + 4 s < the 20 s grace
 G0_PREROLL_S = 65            # a G0 judges the slope over the preceding 60 s
 # Protocol v4 :243-251 (LEAD-RULINGS-2 R5-5): around both planning-turn steps
 # (30B and D) R1 journals the last 300 s of quiet before prefill and a fixed
@@ -204,10 +205,16 @@ def resolve(path):
     return path if path.is_absolute() else ROOT / path
 
 
-def sha256_file(path):
+class HashDeadline(Exception):
+    """A watchdog digest ran past its deadline (checked per 1 MiB block)."""
+
+
+def sha256_file(path, deadline=None):
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
+            if deadline is not None and time.monotonic() > deadline:
+                raise HashDeadline(path)
             digest.update(block)
     return digest.hexdigest()
 
@@ -550,7 +557,8 @@ def t_decline(pm_samples, turn):
 def step_response(rows, key, start_ns, end_ns):
     """Rise and cooling of one key around a step: baseline (median of the 60 s
     before the step), peak, delta T, t63 rise from step start, and tau (peak to
-    a 63 % fall). Censored values carry a flag and the observed bound."""
+    a 63 % fall). Censored values carry a flag and the observed bound; with no
+    rise, t63 is null (``t63_censored``)."""
     series = valid_series(rows, key)
     before = [v for t, v in series if start_ns - 60 * NS <= t < start_ns]
     after = [(t, v) for t, v in series if t >= start_ns]
@@ -561,8 +569,10 @@ def step_response(rows, key, start_ns, end_ns):
     rise = peak - base
     flags = []
     if rise <= 0:
-        flags.append("no_rise")
-        t63 = 0.0
+        # Executing review round 4 LOW-9: with no rise there is no 63 % point.
+        # t63 is null and censored, never 0.0 (which would read as a fast key).
+        flags += ["no_rise", "t63_censored"]
+        t63 = None
     else:
         t63 = next((t - start_ns) / NS for t, v in after if v >= base + 0.63 * rise)
     cool = [(t, v) for t, v in after if t >= peak_t]
@@ -634,7 +644,7 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
              "t_decline": t_dec, "class": d_class}
     detail = {
         "S1_S4_keys": {"s_fast": fast["key"], "s_slow": slow["key"]},
-        "classification": {"s_fast_t63_le_5s": fast["t63_s"] <= 5.0,
+        "classification": {"s_fast_t63_le_5s": None if fast["t63_s"] is None else fast["t63_s"] <= 5.0,
                            "s_slow_delta_t_ge_3c": slow["delta_t_c"] >= 3.0,
                            "s_slow_tau_le_300s": slow["tau_s"] <= 300.0},
         "responses": responses, "bands_c": bands, # LEAD-RULINGS-2 R5-7: S6 = delta_slow until the FD 2.6 tuning.
@@ -688,6 +698,27 @@ def s7_for_picks(rows, picks, *, prefill_ns, quiet_s):
             "recovery_censored": censored, "S7": min(300.0, 3.0 * recovery_s)}
 
 
+def gated_budget(slots):
+    """(T_dead, B_D) for a gated D run from the step-d slots (lead ruling R5-4).
+
+    A gated D run is never unbudgeted: B_D must be a multiple of 1,024 in
+    [1024, 40960] (step-d floors a small budget to 0, which used to run the
+    episode with no decode cap) and T_dead finite and positive; otherwise the
+    run refuses (exit 2) before any model work.
+    """
+    try:
+        t_dead = float(slots["T_dead"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise Refused("step-d T_dead is not a finite positive number") from error
+    if isinstance(slots.get("T_dead"), bool) or not math.isfinite(t_dead) or t_dead <= 0:
+        raise Refused("step-d T_dead is not a finite positive number")
+    b_d = slots.get("B_D")
+    if type(b_d) is not int or not 1024 <= b_d <= 40960 or b_d % 1024:
+        raise Refused(f"step-d B_D {b_d!r} is not an admissible decode budget (a multiple of 1024 in "
+                      "[1024, 40960]); a gated D run never runs unbudgeted")
+    return t_dead, b_d
+
+
 def decode_energy(ep):
     from joulewise.align.attribution import attribute_episode
     attributed = attribute_episode(ep, source="powermetrics", channel="gpu_power")
@@ -703,15 +734,35 @@ def decode_energy(ep):
 # --------------------------------------------------------------------------
 class Termination:
     """First TERM/INT/HUP -> SystemExit(128 + signum); later ones are ignored so
-    teardown completes; a watchdog forces the exit after ``timeout_s``."""
+    teardown completes; a watchdog forces the exit after ``timeout_s``.
+
+    Before the forced exit the watchdog runs ``on_timeout`` (executing review
+    round 4 LOW-1: main sets it to stop powermetrics and write the terminal
+    record); a failure there never prevents the exit."""
 
     SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
-    def __init__(self, timeout_s=TERM_TEARDOWN_S, exit_now=os._exit):
-        self.timeout_s, self.exit_now = timeout_s, exit_now
+    def __init__(self, timeout_s=TERM_TEARDOWN_S, exit_now=os._exit, hard_s=WATCHDOG_HARD_S):
+        self.timeout_s, self.exit_now, self.hard_s = timeout_s, exit_now, hard_s
         self.signum = None
         self.previous = {}
         self.watchdog = None
+        self.on_timeout = None
+
+    def expire(self, code):
+        # An independent hard exit: a teardown that stalls (an fsync, a hung
+        # ps) still ends inside the driver's 20 s grace (Sol critique).
+        hard = threading.Timer(self.hard_s, self.exit_now, args=(code,))
+        hard.daemon = True
+        hard.start()
+        try:
+            if self.on_timeout is not None:
+                self.on_timeout()
+        except BaseException:  # noqa: BLE001 - the forced exit must happen
+            pass
+        finally:
+            hard.cancel()
+            self.exit_now(code)
 
     def install(self):
         for sig in self.SIGNALS:
@@ -724,7 +775,7 @@ class Termination:
         self.signum = signum
         for sig in self.SIGNALS:
             signal.signal(sig, signal.SIG_IGN)
-        self.watchdog = threading.Timer(self.timeout_s, self.exit_now, args=(128 + signum,))
+        self.watchdog = threading.Timer(self.timeout_s, self.expire, args=(128 + signum,))
         self.watchdog.daemon = True
         self.watchdog.start()
         raise SystemExit(128 + signum)
@@ -736,18 +787,114 @@ class Termination:
             self.watchdog.cancel()
 
 
-def write_custody(out, record):
-    """Terminal record: digests of every other file in DIR, written last, atomically."""
+WATCHDOG_TMP = CUSTODY_NAME + ".watchdog.tmp"
+
+
+PS_TREE = ("/bin/ps", "-A", "-o", "pid=,ppid=,command=")
+WATCHDOG_STOP_WAIT_S = 2.0
+WATCHDOG_HASH_S = 1.5
+
+
+def stop_powermetrics_descendants(root_pid, *, run=None, kill=os.kill, wait_s=WATCHDOG_STOP_WAIT_S,
+                                  sleep=time.sleep):
+    """Executing review round 4 LOW-1: before the watchdog's forced exit, send
+    TERM to every descendant of ``root_pid`` whose command names powermetrics.
+
+    The adapter starts ``sudo -n powermetrics``; a non-root process cannot
+    signal the root powermetrics, but it can signal its own sudo child, which
+    relays TERM to powermetrics (the adapter's own stop does the same). EPERM
+    on the root process is expected and ignored. Returns the pids signalled.
+    """
+    run = run or (lambda argv: subprocess.run(list(argv), text=True, capture_output=True, check=False, timeout=2))
+
+    def snapshot():
+        try:
+            rows = run(PS_TREE).stdout.splitlines()
+        except Exception:  # noqa: BLE001 - best effort inside the watchdog
+            return {}
+        table = {}
+        for row in rows:
+            parts = row.split(None, 2)
+            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                table[int(parts[0])] = (int(parts[1]), parts[2] if len(parts) > 2 else "")
+        return table
+
+    def tree(table):
+        children = {}
+        for pid, (ppid, _) in table.items():
+            children.setdefault(ppid, []).append(pid)
+        stack, found = [root_pid], {}
+        while stack:
+            for child in children.get(stack.pop(), ()):
+                if "powermetrics" in table[child][1]:
+                    found[child] = table[child]
+                stack.append(child)
+        return found
+    first = tree(snapshot())
+    # Revalidate just before signalling (Sol critique: a pid reaped by the main
+    # teardown after the first snapshot could be reused): signal only a pid
+    # that is still in our tree with the same parent and command.
+    second = tree(snapshot()) if first else {}
+    signalled = []
+    for pid in sorted(first):
+        if second.get(pid) == first[pid]:
+            try:
+                kill(pid, signal.SIGTERM)
+                signalled.append(pid)
+            except OSError:
+                pass
+    deadline = time.monotonic() + wait_s
+    while signalled and time.monotonic() < deadline:
+        alive = []
+        for pid in signalled:
+            try:
+                kill(pid, 0)
+                alive.append(pid)
+            except OSError:
+                pass
+        if not alive:
+            break
+        sleep(0.1)
+    return signalled
+
+
+def watchdog_teardown(out, record, *, run=None, kill=os.kill, root_pid=None):
+    """The forced-exit path's terminal record (LOW-1): stop powermetrics, then
+    write ``runtime_custody.json`` with status aborted and ``watchdog: true``
+    (file digests bounded by a deadline so the exit stays inside the driver's
+    20 s grace)."""
+    stopped = stop_powermetrics_descendants(os.getpid() if root_pid is None else root_pid, run=run, kill=kill)
+    write_custody(out, {**record, "status": "aborted", "watchdog": True, "ended_epoch_s": time.time(),
+                        "watchdog_powermetrics_signalled": stopped,
+                        "error": record.get("error") or "teardown exceeded the watchdog; forced exit"},
+                  deadline=time.monotonic() + WATCHDOG_HASH_S, temporary_name=WATCHDOG_TMP)
+
+
+def write_custody(out, record, *, deadline=None, temporary_name=CUSTODY_NAME + ".tmp"):
+    """Terminal record: digests of every other file in DIR, written last, atomically.
+
+    Only DIR's own terminal record (and its temporaries) is excluded; a file of
+    the same name below DIR is an ordinary file and is digested (Sol wp15rev
+    F2). With ``deadline`` (monotonic s, the 15 s watchdog path) files left
+    when it passes are listed as unhashed instead of digested.
+    """
     out = Path(out)
     files = {}
+    excluded = {out / CUSTODY_NAME, out / (CUSTODY_NAME + ".tmp"), out / WATCHDOG_TMP}
     for path in sorted(out.rglob("*")):
-        if path.is_file() and not path.is_symlink() and path.name not in (CUSTODY_NAME, CUSTODY_NAME + ".tmp"):
+        if path.is_file() and not path.is_symlink() and path not in excluded:
+            name = path.relative_to(out).as_posix()
+            if deadline is not None and time.monotonic() > deadline:
+                files[name] = "unhashed: watchdog deadline"
+                continue
             try:
-                files[path.relative_to(out).as_posix()] = sha256_file(path)
+                files[name] = sha256_file(path, deadline)
+            except HashDeadline:
+                files[name] = "unhashed: watchdog deadline"
             except OSError as error:
-                files[path.relative_to(out).as_posix()] = f"unreadable: {error}"
+                files[name] = f"unreadable: {error}"
     record = {**record, "schema": CUSTODY_SCHEMA, "files": files}
-    temporary = out / (CUSTODY_NAME + ".tmp")
+    temporary = out / temporary_name
     with temporary.open("w", encoding="utf-8") as handle:
         handle.write(json.dumps(record, indent=2, sort_keys=True, default=str) + "\n")
         handle.flush()
@@ -972,25 +1119,33 @@ class Segment:
             sort_keys=True) + "\n")
 
     def close(self):
-        """Idempotent teardown of every collector this segment opened."""
+        """Idempotent teardown of every collector this segment opened.
+
+        Catches BaseException (Sol wp15rev triage): a first TERM (SystemExit)
+        while one session closes must not strand the others (their powermetrics
+        stop included) or skip the load journal; it is returned with the rest.
+        """
         errors = []
         for heater in self.heaters:
             try:
                 heater.stop()
-            except Exception as error:  # noqa: BLE001
+            except BaseException as error:  # noqa: BLE001
                 errors.append(error)
         self.heaters = []
         try:
             self.stop_inventory()
-        except Exception as error:  # noqa: BLE001
+        except BaseException as error:  # noqa: BLE001 - R5-9: a TERM here must not strand the sessions
             errors.append(error)
         while self.open_sessions:
             try:
                 self.open_sessions.pop().close()
-            except Exception as error:  # noqa: BLE001
+            except BaseException as error:  # noqa: BLE001
                 errors.append(error)
         if self._stop_ticker is not None:
-            self.stop_journals(final=False)
+            try:
+                self.stop_journals(final=False)
+            except BaseException as error:  # noqa: BLE001
+                errors.append(error)
         return errors
 
     # Inputs ---------------------------------------------------------------
@@ -1009,13 +1164,24 @@ class Segment:
         return bands_c(self.soak, self.sensors)
 
     def step_d_result(self):
+        """The accepted step-d result, bound to its complete runtime custody
+        (Sol wp15rev F3): its bytes must be the ones the step-d runtime's
+        terminal record digested, so a post-close edit of B_D, N_chunk or
+        T_dead, or a step-d whose custody did not complete, is refused."""
         path = self.out.parent / STEP_D_SEGMENT / RESULT_NAME
+        custody_path = path.parent / CUSTODY_NAME
         try:
-            value = json.loads(path.read_text())
+            raw = path.read_bytes()
+            value = json.loads(raw)
+            custody = json.loads(custody_path.read_bytes())
         except (OSError, ValueError) as error:
-            raise Refused(f"{self.kind} needs the accepted step-d result {path}") from error
-        if value.get("kind") != "step-d" or not isinstance(value.get("slots"), dict):
+            raise Refused(f"{self.kind} needs the accepted step-d result and custody {path}") from error
+        if not isinstance(value, dict) or value.get("kind") != "step-d" or not isinstance(value.get("slots"), dict):
             raise Refused(f"{path} is not an accepted step-d result")
+        expected = (custody.get("files") or {}).get(RESULT_NAME) if isinstance(custody, dict) else None
+        if (custody.get("schema") != CUSTODY_SCHEMA or custody.get("status") != "complete"
+                or expected != hashlib.sha256(raw).hexdigest()):
+            raise Refused(f"{path} is not bound by complete runtime custody")
         return value
 
     def now_ns(self):
@@ -1189,13 +1355,23 @@ class Segment:
         self.idle(managed.session, seconds)
         self.close_session(managed)
         rows = journal_rows(self.out / "sensors" / "align_thermal.jsonl")
-        series, failed = {}, {}
+        series, times, failed = {}, {}, {}
+        t0 = rows[0]["monotonic_ns"] if rows else 0
         for key in (self.sensors["s_fast"], self.sensors["s_slow"]):
             values = valid_series(rows, key)
             series[key] = [v for _, v in values]
+            # Read times let the driver take the last 1,200 s, not samples
+            # (Fable cold pass round 4 LOW-2).
+            times[key] = [(t - t0) / NS for t, _ in values]
             failed[key] = len(rows) - len(values)
-        return {"sensor_series_c": series, "sensor_series_failed_reads": failed,
-                "sensor_series_note": "valid 1 Hz reads in order; a failed read is dropped, never interpolated",
+        # The soak's own end (the last journal row, valid or failed), so the
+        # driver's 20-min window ends where the soak ended, not at the last
+        # valid read (Sol critique of round 5).
+        end = (rows[-1]["monotonic_ns"] - t0) / NS if rows else 0.0
+        return {"sensor_series_c": series, "sensor_series_t_s": times, "sensor_series_end_t_s": end,
+                "sensor_series_failed_reads": failed,
+                "sensor_series_note": ("valid 1 Hz reads in order with their times (s from the first journal "
+                                       "row); a failed read is dropped, never interpolated"),
                 "duration_s": seconds}
 
     def k_idle_until_soak(self):
@@ -1376,13 +1552,11 @@ class Segment:
         key = "d_bank" if self.kind == "d-bank-benign-s1" else "d_spam"
         template, tspec = self.template(key)
         require_effort(tspec, key)
-        t_dead = float(slots["T_dead"])
+        t_dead, b_d = gated_budget(slots)
         spec = dict(tspec)
-        b_d = slots.get("B_D")
         spec.update(deadman_s=t_dead, thermal=self.gated_policy(slots, heavy=True, per_turn=True,
                                                                 chunk_tokens=int(slots["N_chunk"])),
-                    warmup_condition="benign",
-                    max_episode_decode_tokens=(int(b_d) if type(b_d) is int and 1024 <= b_d <= 40960 else None))
+                    warmup_condition="benign", max_episode_decode_tokens=b_d)
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
         # LEAD-RULINGS-2 R5-1: gate against the soak R, as W1 members consume
         # member 5's R; the driver precools to the G0 band of R before the run.
@@ -1398,7 +1572,8 @@ class Segment:
                 "admitted_turns": len(ep.turns), "x7": x7,
                 "deadman": {"T_dead_s": budget.get("deadman_s"), "deadline_ns": budget.get("deadline_ns"),
                             "phases_s": episode_phases(ep)},
-                "B_D": spec["max_episode_decode_tokens"], "bundle": str(member.bundle.relative_to(self.out)),
+                "B_D": spec["max_episode_decode_tokens"], "turn_cap_tokens": spec.get("max_tokens"),
+                "bundle": str(member.bundle.relative_to(self.out)),
                 "member_status": member.status, "failure_reason": member.failure_reason,
                 "episode_flags": list(ep.flags), "ac_powermode": ep.hardware.get("ac_powermode")}
 
@@ -1563,6 +1738,7 @@ def main(argv=None, *, backend_factory=None, stdout=None):
     os.dup2(2, 1)
     previous_stdout, sys.stdout = sys.stdout, sys.stderr
     record = {"kind": args.r1_kind, "status": "refused", "started_epoch_s": time.time()}
+    terminal, owner = threading.Lock(), []
     result, code, segment, backend = None, EXIT_REFUSED, None, None
     created = False
     try:
@@ -1572,6 +1748,21 @@ def main(argv=None, *, backend_factory=None, stdout=None):
             # Never write into another attempt's directory (the driver renames rejected ones).
             raise Refused(f"--output {out} already exists") from error
         created = True
+
+        def on_watchdog():
+            # LOW-1: the forced exit still stops powermetrics and leaves a
+            # terminal record. One writer owns the terminal record (Sol
+            # critique): the watchdog takes ownership only if the normal path
+            # has not, and then the normal path never publishes.
+            if not terminal.acquire(timeout=2.0):
+                return               # the normal path is writing its record now
+            try:
+                if not owner:
+                    owner.append("watchdog")
+                    watchdog_teardown(out, {**record, "signal": term.signum})
+            finally:
+                terminal.release()
+        term.on_timeout = on_watchdog
         config, config_sha256 = load_config(resolve(args.config))
         record["config_sha256"] = config_sha256
         soak = read_soak_reference(args.soak_reference)
@@ -1604,7 +1795,10 @@ def main(argv=None, *, backend_factory=None, stdout=None):
             record["ended_epoch_s"] = time.time()
             if created:
                 try:
-                    write_custody(out, record)
+                    with terminal:
+                        if not owner:
+                            write_custody(out, record)
+                            owner.append("main")
                 except OSError as error:
                     record.setdefault("teardown_errors", []).append(f"custody: {error}")
             os.dup2(saved_fd, 1)

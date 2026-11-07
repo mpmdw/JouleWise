@@ -70,6 +70,9 @@ CONFIG_KEYS = frozenset(DEFAULT_CONFIG)
 
 MOUNT_ARGV = ("/sbin/mount",)
 DISKUTIL = "/usr/sbin/diskutil"
+# Executing review round 4 LOW-3: one transient ``diskutil info`` failure on a
+# mount must not refuse an R1 night; one retry, as the pmset reads have.
+DISKUTIL_RETRIES = 1
 MDUTIL = "/usr/bin/mdutil"
 TMUTIL = "/usr/bin/tmutil"
 TIMEOUT_S = 30
@@ -207,10 +210,17 @@ def census(run: Runner = run_command) -> dict[str, Any]:
             row["reason"] = "not a local disk device"
             external.append(row)
             continue
-        try:
-            info = _diskutil_info(row["device"], run)
-        except (OSError, subprocess.SubprocessError, ValueError) as exc:
-            errors.append(str(exc))
+        info, failures = None, []
+        for _ in range(1 + DISKUTIL_RETRIES):
+            try:
+                info = _diskutil_info(row["device"], run)
+                break
+            except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                failures.append(str(exc))
+        if failures:
+            row["diskutil_failures"] = failures   # a retried transient stays on the record
+        if info is None:
+            errors.append(failures[-1])
             row["class"] = "unmeasured"
             continue
         row["volume_uuid"] = info.get("VolumeUUID")

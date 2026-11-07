@@ -310,6 +310,10 @@ def derive_slots(observations):
 def high_power_adoption(t_a1, t_b, t_a2):
     """Ruling 16 adoption rule; ``None`` means no decline observed (infinite)."""
     inf = math.inf
+    for value in (t_a1, t_b, t_a2):
+        # Round-4 LOW: a JSON true is not 1 s of t_decline.
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise Refusal("high_power.t_decline must be positive or null (infinite)")
     a1, b, a2 = (inf if v is None else float(v) for v in (t_a1, t_b, t_a2))
     for value in (a1, b, a2):
         if math.isnan(value) or value <= 0:
@@ -317,7 +321,9 @@ def high_power_adoption(t_a1, t_b, t_a2):
     if a1 == inf and a2 == inf:
         if b == inf:
             return {"verdict": "not_adopted", "reason": "all legs infinite"}
-        return {"verdict": "inconclusive", "reason": "A legs infinite, B finite"}
+        # Ruling 16 adopts only when B outlasts both A legs; a finite B that
+        # declined while neither Automatic leg did is not an adoption.
+        return {"verdict": "not_adopted", "reason": "A legs infinite, B finite"}
     if (a1 == inf) != (a2 == inf) or abs(a1 - a2) > HIGH_POWER_A_LEG_SPREAD * max(a1, a2):
         return {"verdict": "inconclusive", "reason": "Automatic legs differ by more than 25 %"}
     if b == inf:
@@ -587,23 +593,53 @@ def os_load_verdict(name, result, wall_s=None):
             "wall_s": wall_s, "required_samples": required, "max_gap_s": max_gap}
 
 
-def soak_detrended(series_by_key):
-    """Ruling 8: soak SD on the detrended last 20 min, only if |slope| <= 0.2 C/min."""
+SOAK_TAIL_MIN_RATE = 0.9   # valid reads per second inside the last 1,200 s
+
+
+def soak_detrended(series_by_key, times_by_key, end_t_s=None):
+    """Ruling 8: soak SD on the detrended last 20 min, only if |slope| <= 0.2 C/min.
+
+    The window is the last 1,200 **seconds** of the soak (Fable cold pass
+    round 4 LOW-2), selected by each valid read's time (``sensor_series_t_s``,
+    seconds on the segment clock): failed reads are dropped by the runtime, so
+    the last 1,200 samples would reach further back than 20 min. The window
+    ends at the soak's own end (``sensor_series_end_t_s``, common to every
+    key), not at a key's last valid read, so a sensor that stopped reading
+    near the end cannot substitute an earlier window. The series must span at
+    least 1,200 s and the window must hold at least 0.9 valid reads per
+    second; the slope is fitted against time.
+    """
+    end = _finite_number(end_t_s, "idle_soak.sensor_series_end_t_s")
     if not isinstance(series_by_key, dict) or not series_by_key:
         raise Refusal("idle_soak: runtime omitted per-second sensor series")
+    if not isinstance(times_by_key, dict):
+        raise Refusal("idle_soak: runtime omitted sensor_series_t_s (read times)")
     out = {}
     for key, series in series_by_key.items():
-        if not isinstance(series, list) or len(series) < SOAK_TAIL_S:
-            raise Refusal(f"idle_soak.{key}: fewer than {SOAK_TAIL_S} per-second samples")
-        ys = [_finite_number(v, f"idle_soak.{key}") for v in series[-SOAK_TAIL_S:]]
-        n = len(ys)
-        xbar, ybar = (n - 1) / 2, math.fsum(ys) / n
-        sxx = math.fsum((i - xbar) ** 2 for i in range(n))
-        slope = math.fsum((i - xbar) * (y - ybar) for i, y in enumerate(ys)) / sxx
-        resid = [y - (ybar + slope * (i - xbar)) for i, y in enumerate(ys)]
+        times = times_by_key.get(key)
+        if not isinstance(series, list) or not isinstance(times, list) or len(times) != len(series) or not series:
+            raise Refusal(f"idle_soak.{key}: sensor_series_t_s must give one time per value")
+        ts = [_finite_number(t, f"idle_soak.{key}.t") for t in times]
+        if any(b < a for a, b in zip(ts, ts[1:])):
+            raise Refusal(f"idle_soak.{key}: read times are not nondecreasing")
+        if ts[-1] > end + 1e-9:
+            raise Refusal(f"idle_soak.{key}: a read lies after the soak's end")
+        if end - ts[0] < SOAK_TAIL_S - 1:
+            raise Refusal(f"idle_soak.{key}: the soak spans {end - ts[0]:.1f} s, under {SOAK_TAIL_S} s")
+        start = end - SOAK_TAIL_S
+        window = [(t, _finite_number(v, f"idle_soak.{key}")) for t, v in zip(ts, series) if t > start]
+        if len(window) < SOAK_TAIL_MIN_RATE * SOAK_TAIL_S:
+            raise Refusal(f"idle_soak.{key}: {len(window)} valid reads in the last {SOAK_TAIL_S} s "
+                          f"(needs >= {SOAK_TAIL_MIN_RATE * SOAK_TAIL_S:.0f})")
+        n = len(window)
+        xbar, ybar = math.fsum(t for t, _ in window) / n, math.fsum(y for _, y in window) / n
+        sxx = math.fsum((t - xbar) ** 2 for t, _ in window)
+        slope = math.fsum((t - xbar) * (y - ybar) for t, y in window) / sxx   # C per s
+        resid = [y - (ybar + slope * (t - xbar)) for t, y in window]
         out[key] = {"slope_c_per_min": slope * 60.0, "mean_c": ybar,
                     "settled": abs(slope * 60.0) <= SOAK_MAX_SLOPE_C_PER_MIN,
-                    "detrended_sd_c": math.sqrt(math.fsum(r * r for r in resid) / (n - 2))}
+                    "detrended_sd_c": math.sqrt(math.fsum(r * r for r in resid) / (n - 2)),
+                    "window_s": SOAK_TAIL_S, "window_reads": n}
     return out
 
 
@@ -688,7 +724,7 @@ def _release_against_soak(args, output, label, soak_reference):
 
 
 def _segment(args, output, name, kind, duration, workload_class, record, *, quiet,
-             soak_reference=None, release_first=False, contract_key=None, extra=None):
+             soak_reference=None, release_first=False, contract_key=None, extra=None, bound_s=None):
     """Invoke one runtime segment; quiet segments obey ruling 8 and are redone on load.
 
     Every attempt runs in the canonical ``output/name``; a rejected attempt is
@@ -696,13 +732,16 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
     accepted attempt always owns the canonical directory. A redo of a heavy
     segment (and every attempt when ``release_first``) starts only after a
     G0-style release against the soak, never immediately after the load.
+    ``bound_s``, when given, is the whole attempt's wall bound (release
+    included) for the ruling 8 batch-window wait.
     """
     attempts = []
     target = output / name
     for attempt in range(MAX_SEGMENT_REDOS + 1):
         release_now = release_first or (attempt > 0 and workload_class == "heavy")
-        bound = ((duration or SEGMENT_BOUND_S.get(kind, QUIET_SEGMENT_BOUND_S))
-                 + (G0_RELEASE_BOUND_S if release_now else 0))
+        bound = bound_s if bound_s is not None else (
+            (duration or SEGMENT_BOUND_S.get(kind, QUIET_SEGMENT_BOUND_S))
+            + (G0_RELEASE_BOUND_S if release_now else 0))
         waited = wait_outside_os_batch(bound) if quiet else 0.0
         release = (_release_against_soak(args, output, f"{name}.g0_release{attempt}", soak_reference)
                    if release_now else None)
@@ -720,7 +759,8 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
         verdict = os_load_verdict(name, result, wall_s=(row["ended_ns"] - row["started_ns"]) / 1e9)
         redo_reason = "cpu_load" if verdict["redo"] else None
         if not redo_reason and contract_key == "idle_soak":
-            row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"))
+            row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
+                                                   result.get("sensor_series_end_t_s"))
             if not all(v["settled"] for v in row["soak_detrended"].values()):
                 redo_reason = "soak_slope"
         row.update(os_load=verdict, redo_reason=redo_reason)
@@ -737,6 +777,79 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
 
 
 GATED_NAMES = frozenset(name for name, _ in GATED_D_RUNS)
+STEP_D_NAME = "step_D_prefill_10k_decode_4096"
+DEFAULT_RUNTIME_CONFIG = Path("configs/align/v4/r1_runtime.json")
+# Executing review round 3 LOW-1: an A-B-A leg's batch-window bound comes from
+# the configured values, not an assumed 1,800 + 600 s. The leg is one step
+# member (member law I_D + 1.13544 x the step deadman, which the runtime arms
+# at G0 entry and which covers G0 and the decode) after a G0 release segment
+# (65 s pre-roll + the 600 s G0 cap), plus this margin for the deadman tail and
+# process start-up.
+LEG_BOUND_MARGIN_S = 120
+G0_PREROLL_S = 65
+# Integration of round 5: the legs run before step-d (R5-5), so the member
+# intercept in the bound is the runtime's admissible maximum, not step-d's I_D.
+ABA_LEG_I_D_BOUND_S = 1750
+
+
+def _check_step_d(result):
+    """Right after step-d, not after the night (Mac time): the slots must be
+    finite evidence (LOW-9: a no-rise t63 is null, so it refuses here) and B_D
+    must be a budget the gated D runs can arm (lead ruling R5-4: a gated D
+    never runs unbudgeted; step-d floors a small budget to 0)."""
+    slots = derive_slots(result)
+    b_d = slots["B_D"]
+    if type(b_d) is not int or not 1024 <= b_d <= 40960 or b_d % 1024:
+        raise Refusal(f"step-d.B_D {b_d!r} is not an admissible decode budget (a multiple of 1024 in "
+                      "[1024, 40960]); the gated D runs would run unbudgeted")
+    return slots
+
+
+def runtime_step_deadman_s(runtime_argv):
+    """``step.deadman_s`` of the runtime config the runtime argv names
+    (``--config``), or of the committed default config."""
+    argv = list(runtime_argv or ())
+    path = Path(argv[argv.index("--config") + 1]) if "--config" in argv[:-1] else DEFAULT_RUNTIME_CONFIG
+    path = path if path.is_absolute() else ROOT / path
+    try:
+        value = json.loads(path.read_text())["step"]["deadman_s"]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise Refusal(f"runtime config {path}: no step.deadman_s for the A-B-A leg bound: {error}") from error
+    value = _finite_number(value, "runtime config step.deadman_s")
+    if value <= 0:
+        raise Refusal("runtime config step.deadman_s must be positive")
+    return value
+
+
+def aba_leg_bound_s(runtime_argv):
+    """One A-B-A attempt's wall bound: release segment + one step member.
+
+    R5-5 puts the A-B-A legs before step-d, so step-d's I_D is not yet known
+    when a leg is admitted; the bound uses the largest I_D the runtime admits
+    (``ABA_LEG_I_D_BOUND_S``, step-d refuses I_D >= 1,750 s). A larger bound
+    only waits longer for the ruling 8 batch window, never less.
+    """
+    from scripts.align_v4_kit import DEADMAN_FACTOR
+    return (G0_PREROLL_S + G0_RELEASE_BOUND_S + ABA_LEG_I_D_BOUND_S
+            + DEADMAN_FACTOR * runtime_step_deadman_s(runtime_argv) + LEG_BOUND_MARGIN_S)
+
+
+def budget_fit_inputs(step_d, gated):
+    """What the kit needs to assert ruling 1(f) for the B_D it freezes (lead
+    ruling R5-4): the measured step-d decode rate and the per-turn decode cap
+    the gated D runs armed (an admitted last turn keeps its full cap, FD:263).
+    The G0, hold, prefill and tool seconds are in ``deadman_budget``."""
+    rate = _finite_number(((step_d or {}).get("slot_detail") or {}).get("r_decode_tok_per_s"),
+                          "step-d.slot_detail.r_decode_tok_per_s")
+    caps = {_finite_number(result.get("turn_cap_tokens"), f"{name}.turn_cap_tokens")
+            for name, result in gated.items()}
+    if rate <= 0 or len(caps) != 1 or min(caps) <= 0:
+        raise Refusal("ruling 1(f) inputs: the decode rate must be positive and every gated D run must arm "
+                      "the same positive per-turn decode cap")
+    return {"authority": "CHAIR ruling 1(f); lead ruling R5-4", "r_decode_tok_per_s": rate,
+            "turn_cap_tokens": int(caps.pop()),
+            "rule": ("max G0 + max (G1 + H) + max (prefill + tool) over the gated D runs "
+                     "+ (B_D + turn_cap_tokens) / r_decode <= T_dead (scripts/align_v4_kit.py ruling_1f_fit)")}
 
 
 def _check_gated_t_dead(name, result, step_d):
@@ -911,7 +1024,8 @@ def run(args):
                     _set_powermode(guard, mode, f"{label}.after_set", f"high_power.{label}")
                     results[name], row = _segment(args, output, name, kind, None, "heavy", record, quiet=True,
                                                   soak_reference=soak_reference, release_first=True,
-                                                  extra={"powermode": mode})
+                                                  extra={"powermode": mode},
+                                                  bound_s=aba_leg_bound_s(args.runtime))
                     _check_member_powermode(name, results[name], mode)
                     releases[label] = row["g0_release"]["released"]
                     leg_g0[label] = results[name].get("g0_released")
@@ -941,6 +1055,8 @@ def run(args):
                     _check_member_powermode(name, results[name], series_mode)
                 if name in GATED_NAMES or kind == "x-g":
                     _check_soak_reference_consumed(name, results[name], soak_reference)
+                if name == STEP_D_NAME:
+                    _check_step_d(results[name])
                 if name in GATED_NAMES:
                     _check_gated_t_dead(name, results[name], results.get("step_D_prefill_10k_decode_4096"))
                 if kind == "idle-until-soak":
@@ -988,6 +1104,7 @@ def run(args):
         s6 = {"status": "TODO", "S6_c": slots["S6"], "rule": "S6 = delta_slow (S5) until the FD 2.6 tuning",
               "tied_to": "the gated D runs' median G1 wait (with the hold median, fallback step 1)",
               "authority": "LEAD-RULINGS-2 R5-7", **gate_wait_medians(gated)}
+        fit_inputs = budget_fit_inputs(results[STEP_D_NAME], gated)
         # Ruling 7 + 16: the frozen series AC powermode is the A-B-A outcome.
         ac_powermode = 2 if adoption["verdict"] == "adopt" else 0
         registration = {"schema": SCHEMA, "source": "R1 synthetic rehearsal" if args.synthetic else "R1 hardware rehearsal",
@@ -997,7 +1114,7 @@ def run(args):
                         "high_power": {"t_decline_s": legs, "g0_released": releases, "leg_g0_released": leg_g0,
                                        **adoption},
                         "deadman_budget": deadman, "duty_bar": duty, "l1": l1,
-                        "max_r1_tail_s": max_tail,
+                        "max_r1_tail_s": max_tail, "budget_fit_inputs": fit_inputs,
                         "x_g": {"precool_released": precool["cooldown_after_D"],
                                 "status": "measured" if precool["cooldown_after_D"] else "inconclusive"},
                         "thermometry": thermometry, "s6_tuning": s6,
@@ -1013,9 +1130,20 @@ def run(args):
                       error=f"{type(error).__name__}: {error}")
         return 3 if isinstance(error, Refusal) else 4
     finally:
+        # Fable cold pass round 4 LOW-4: a first signal that arrives in this
+        # teardown (after a normal completion or refusal) must not skip the
+        # restore or r1_result.json. From here on signals are ignored, as
+        # after a first signal, so the sudo restore child inherits SIG_IGN.
+        if not stopping:
+            stopping.append("teardown")
+            for sig in old_handlers:
+                signal.signal(sig, signal.SIG_IGN)
         # A second idempotent attempt covers setup failures before __enter__ and
         # exceptions raised by context teardown itself.
-        guard.restore()
+        try:
+            guard.restore()
+        except BaseException as error:  # noqa: BLE001 - the terminal record must still be written
+            record.setdefault("teardown_errors", []).append(f"restore: {type(error).__name__}: {error}")
         record["powermode"] = guard.records
         try:
             watch.census("terminal")  # recorded, never judged here

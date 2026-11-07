@@ -38,6 +38,14 @@ R1_SLOTS = KIT / 'registration/r1_slots.json'
 W1_PLAN = KIT / 'registration/w1_plan.json'
 SIZING = KIT / 'registration/sizing_b5.json'
 D_PINS = Path('configs/align/v4/qwen38-27b-8bit-hf-pins.json')
+# Lead ruling R5-8: the WP18 token-id fixtures are committed here and are a
+# hard W1 prerequisite (scripts/align_v4_wp18_fixtures.py writes them).
+WP18_FIXTURES = {
+    'X': KIT / 'registration/wp18_x_token_ids.json',
+    'Y': KIT / 'registration/wp18_y_token_ids.json',
+}
+WP18_FIXTURE_SCHEMA = 'joulewise.align_v4.wp18_token_fixture.v1'
+WP18_RUN_IDS = {'X': 'align-pilot-v3-episodes-b-e25', 'Y': 'align-pilot-v3-episodes-b-e18'}
 D_REPO = 'mlx-community/Qwen3.8-27B-8bit'
 D_TAG = 'qwen3.8-27b'
 D_REVISION = '815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9'
@@ -121,7 +129,8 @@ PENDING_REASONS = {
              'recorded pilot-7 turn count), never the configured 12-turn ceiling. '
              'token_fixture_sha256 = SHA-256 of the committed WP18 token-id fixture built from those '
              'two members\' align_turns.jsonl in the pilot 6-7 offload copy and p7-PILOT.json '
-             '(plan WP18; CHAIR ruling 9(d)).'),
+             '(plan WP18; CHAIR ruling 9(d)); scripts/align_v4_wp18_fixtures.py writes both fixtures '
+             '(registration/wp18_x_token_ids.json, wp18_y_token_ids.json) and these leaves.'),
     'R0': 'R0.reasoning_effort stays a placeholder until R0 passes.',
     'R1': ('R1 hardware rehearsal (scripts/align_r1_rehearsal.py): B_D, I_D, T_dead (lead ruling L1) '
            'and the thermal policy.'),
@@ -159,9 +168,11 @@ R1_HARDWARE_SOURCE = 'R1 hardware rehearsal'
 R1_SYNTHETIC_SOURCE = 'R1 synthetic rehearsal'
 HIGH_POWER_VERDICTS = ('adopt', 'not_adopted', 'inconclusive')
 U5_VERDICTS = ('pass', 'fail', 'inconclusive')
-# Council ruling 1(e): steps 1-4 of the named fallback order. A recorded step
-# lets a failed duty bar admit; nothing else does.
-DUTY_FALLBACK_STEPS = (1, 2, 3, 4)
+# Council ruling 1(e): steps 1-3 of the named fallback order. A recorded step
+# lets a failed duty bar admit; nothing else does. Step 4 ("D screen-only;
+# return to council") means D does not run, so it never admits a W1 arm
+# (Fable cold pass round 4 LOW-1).
+DUTY_FALLBACK_STEPS = (1, 2, 3)
 
 
 def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
@@ -228,6 +239,7 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
     if not isinstance(volumes, list) or not volumes or any(
             (row or {}).get('verdict') != 'PASS' for row in volumes):
         raise ValueError('R1 r1_slots must record passing external-volume censuses (ruling 20)')
+    check_r1_budget_and_policy(inputs['R1'], r1_slots)
     duty = r1_slots.get('duty_bar')
     if not isinstance(duty, dict) or type(duty.get('pass')) is not bool:
         raise ValueError('R1 r1_slots must carry the ruling 1(d) duty bar verdict')
@@ -236,6 +248,117 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False):
         if (not isinstance(fallback, dict) or fallback.get('step') not in DUTY_FALLBACK_STEPS
                 or not isinstance(fallback.get('authority'), str) or not fallback['authority'].strip()):
             raise ValueError('R1 duty bar failed and no lead fallback step (ruling 1(e)) is recorded')
+
+
+def _close(a, b):
+    return finite(a) and finite(b) and math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
+
+
+# The R1 driver's three gated D runs (council ruling 1(b)); ruling 1(f) is
+# judged over all three, never a subset.
+GATED_D_RUN_NAMES = ('D_spam_benign_s1_gated_held_a', 'D_spam_benign_s1_gated_held_b',
+                     'D_bank_benign_s1_gated_held')
+GATED_PHASES = ('G0', 'G1', 'H', 'decode', 'prefill', 'tool', 'tail')
+S6_TUNING_CAP_C = 2.0   # council ruling 1(e) step 1: delta_slow capped at 2.0 C
+
+
+def d_turn_cap_tokens(root=ROOT):
+    """The per-turn decode cap every W1 D member inherits (D configs are cloned
+    from anchor 1 at ANCHOR_COMMIT and keep its ``max_tokens``)."""
+    raw = frozen(root, ANCHOR_COMMIT, SOURCE_KIT / 'stages/episodes-a/align-pilot-v3-episodes-a-e01.json')
+    return json.loads(json.loads(raw)['workload_profile']['prompt_text'])['max_tokens']
+
+
+def ruling_1f_fit(r1_slots, b_d, t_dead):
+    """Council ruling 1(f) for a B_D (lead ruling R5-4): the worst case R1
+    measured must fit T_dead.
+
+    worst = max G0 + max (G1 + H) + max (prefill + tool) over the gated D runs
+            + (B_D + turn_cap_tokens) / r_decode
+
+    A turn is admitted while fewer than B_D decode tokens are spent and then
+    keeps its full per-turn cap (FD:263), so B_D + cap bounds the episode
+    decode; r_decode is step-d's measured rate. Returns the arithmetic.
+    """
+    budget = r1_slots.get('deadman_budget')
+    rows = budget if isinstance(budget, list) else []
+    names = [row.get('run') if isinstance(row, dict) else None for row in rows]
+    if sorted(map(str, names)) != sorted(GATED_D_RUN_NAMES):
+        raise ValueError('R1 r1_slots deadman_budget must hold exactly the three gated D runs '
+                         f'{list(GATED_D_RUN_NAMES)} (ruling 1(f)); got {names}')
+    phases = [row.get('phases_s') for row in rows]
+    if not all(isinstance(p, dict) and all(finite(p.get(k)) and p[k] >= 0 for k in GATED_PHASES) for p in phases):
+        raise ValueError('R1 r1_slots deadman_budget must give finite, non-negative '
+                         + ', '.join(GATED_PHASES) + ' seconds per gated run (ruling 1(f))')
+    fit = r1_slots.get('budget_fit_inputs')
+    rate = (fit or {}).get('r_decode_tok_per_s') if isinstance(fit, dict) else None
+    cap = (fit or {}).get('turn_cap_tokens') if isinstance(fit, dict) else None
+    if not finite(rate) or rate <= 0 or type(cap) is not int or cap <= 0:
+        raise ValueError('R1 r1_slots must carry budget_fit_inputs (r_decode_tok_per_s, turn_cap_tokens) '
+                         'for ruling 1(f)')
+    if cap != d_turn_cap_tokens():
+        raise ValueError(f'ruling 1(f): the gated runs armed a {cap}-token turn cap, but W1 D members carry '
+                         f'{d_turn_cap_tokens()}')
+    terms = {'G0_s': max(p['G0'] for p in phases), 'holds_s': max(p['G1'] + p['H'] for p in phases),
+             'prefill_tool_s': max(p['prefill'] + p['tool'] for p in phases),
+             'decode_s': (b_d + cap) / rate}
+    worst = math.fsum(terms.values())
+    return {'B_D': b_d, 'T_dead_s': t_dead, 'terms_s': terms, 'worst_s': worst, 'fits': worst <= t_dead + 1e-6}
+
+
+def max_fitting_b_d(r1_slots, t_dead):
+    """The largest admissible B_D (a multiple of 1024 in [6144, r1_slots B_D])
+    that satisfies ruling 1(f), or None: a sizing aid for the lead."""
+    top = (r1_slots.get('slots') or {}).get('B_D')
+    if type(top) is not int:
+        return None
+    for b_d in range(min(top, 40960) // 1024 * 1024, BUDGET_FLOOR - 1, -1024):
+        if ruling_1f_fit(r1_slots, b_d, t_dead)['fits']:
+            return b_d
+    return None
+
+
+def check_r1_budget_and_policy(r1_inputs, r1_slots):
+    """Lead ruling R5-4 (executing review MEDIUM-2, cold pass MEDIUM-2).
+
+    inputs.R1.B_D may only be lowered from R1's step-d budget (A1's fit rule),
+    the thermal policy must be the one R1 measured (chunk_tokens = N_chunk,
+    delta_slow_c = S6, which is S5 until the lead's FD 2.6 S6 tuning,
+    turn_cap_s = S7), and the frozen B_D must satisfy ruling 1(f) against the
+    frozen T_dead.
+    """
+    slots = r1_slots.get('slots') or {}
+    if not finite(r1_inputs.get('T_dead')) or r1_inputs['T_dead'] <= 0:
+        raise ValueError('R1.T_dead must be finite and positive')
+    top = slots.get('B_D')
+    if type(top) is not int or not 1024 <= top <= 40960 or top % 1024:
+        raise ValueError('R1 r1_slots.slots.B_D must be the step-d decode budget (a multiple of 1024 in '
+                         '[1024, 40960])')
+    if type(r1_inputs['B_D']) is not int or r1_inputs['B_D'] > top:
+        raise ValueError(f'inputs.R1.B_D {r1_inputs["B_D"]!r} exceeds r1_slots.slots.B_D {top} '
+                         '(the fit rule only lowers B_D)')
+    policy = r1_inputs.get('thermal_policy')
+    if not isinstance(policy, dict):
+        raise ValueError('inputs.R1.thermal_policy must be an object')
+    for name, slot in (('chunk_tokens', 'N_chunk'), ('delta_slow_c', 'S6'), ('turn_cap_s', 'S7')):
+        if not _close(policy.get(name), slots.get(slot)):
+            raise ValueError(f'inputs.R1.thermal_policy.{name} {policy.get(name)!r} differs from '
+                             f'r1_slots.slots.{slot} {slots.get(slot)!r}')
+    if not _close(slots.get('S6'), slots.get('S5')):
+        tuning = r1_slots.get('s6_tuning')
+        if (not isinstance(tuning, dict) or not isinstance(tuning.get('authority'), str)
+                or not tuning['authority'].strip() or not _close(tuning.get('from_c'), slots.get('S5'))
+                or not _close(tuning.get('to_c'), slots.get('S6'))):
+            raise ValueError('r1_slots.slots.S6 differs from S5 without a recorded lead S6 tuning '
+                             '(s6_tuning {authority, from_c = S5, to_c = S6})')
+        if slots['S6'] > S6_TUNING_CAP_C + 1e-9:
+            raise ValueError(f'a tuned S6 must stay within the {S6_TUNING_CAP_C} C cap (council ruling 1(e))')
+    fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'])
+    if not fit['fits']:
+        raise ValueError(f'ruling 1(f): B_D {fit["B_D"]} does not fit T_dead {fit["T_dead_s"]:.1f} s: worst '
+                         f'{fit["worst_s"]:.1f} s = ' + ' + '.join(f'{k} {v:.1f}' for k, v in fit['terms_s'].items())
+                         + f'; the largest fitting B_D is {max_fitting_b_d(r1_slots, r1_inputs["T_dead"])}')
+    return fit
 
 
 def require_ready(inputs, r1_slots=None, *, synthetic=False):
@@ -320,7 +443,7 @@ def check_l1_member_fit(i_d, t_dead, max_r1_tail_s):
     return worst
 
 
-def validate_d_identity(wp11, pins):
+def validate_d_identity(wp11, pins, *, pins_raw=None):
     """WP11 binds the exact pinned D weights, independently of the Mac's record.
 
     The artifact inventory is the governed model_artifact_identity file set the
@@ -339,6 +462,14 @@ def validate_d_identity(wp11, pins):
         raise ValueError('WP11 D identity must bind the pinned 8-bit artifact')
     if pins.get('repo') != D_REPO or pins.get('revision') != D_REVISION:
         raise ValueError('D HF pins must name the pinned repo and revision')
+    # Sol w1rev: the local verification receipt names the pins document and,
+    # given its bytes, binds their sha256 (a stale receipt is refused).
+    pin_receipt = verification.get('hf_pins')
+    if (not isinstance(pin_receipt, dict) or pin_receipt.get('path') != D_PINS.as_posix()
+            or pin_receipt.get('repo') != D_REPO or pin_receipt.get('revision') != D_REVISION):
+        raise ValueError('WP11 local verification must identify the D HF pins document')
+    if pins_raw is not None and pin_receipt.get('sha256') != sha(pins_raw):
+        raise ValueError('WP11 local verification HF pins sha256 does not match the committed pins bytes')
     weights = {name: row for name, row in pins['files'].items() if name.endswith('.safetensors')}
     if not weights or any(not valid_digest(row.get('sha256')) for row in weights.values()):
         raise ValueError('D HF pins must carry an LFS sha256 for every weight shard')
@@ -426,15 +557,56 @@ def require_sizing(root=ROOT):
             'scripts/validate_align_v4_w1_plan.py), then regenerate the kit, which derives sizing_b5.json.')
     if not (Path(root) / SIZING).is_file():
         raise ValueError(f'{SIZING} is missing; regenerate the kit from {W1_PLAN}')
+    # Sol w1rev: sizing_b5.json must be derived from the committed W1 plan's bytes.
+    try:
+        sizing = json.loads((Path(root) / SIZING).read_bytes())
+        pinned = sizing['sources']['w1_plan']
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(f'{SIZING} does not carry its W1-plan provenance: {exc}') from exc
+    if not isinstance(pinned, dict) or pinned.get('path') != W1_PLAN.as_posix() \
+            or pinned.get('sha256') != sha(read_w1_plan_bytes(root)):
+        raise ValueError(f'{SIZING} is stale for {W1_PLAN}; regenerate the kit')
+
+
+def validate_wp18_fixtures(inputs, root=ROOT):
+    """Lead ruling R5-8: each filled WP18 digest binds a committed fixture.
+
+    The fixture bytes are historical pilot-7 inputs, not kit output; a bare
+    digest in inputs.json is not evidence that those bytes exist, so W1
+    readiness requires both files, their sha256 and their recorded turn count.
+    """
+    root = Path(root)
+    for name, relative in WP18_FIXTURES.items():
+        path = root / relative
+        if not path.is_file():
+            raise ValueError(f'WP18.{name} token fixture is missing: commit {relative} '
+                             '(scripts/align_v4_wp18_fixtures.py)')
+        raw = path.read_bytes()
+        expected = inputs['WP18'][name]['token_fixture_sha256']
+        if sha(raw) != expected:
+            raise ValueError(f'WP18.{name}.token_fixture_sha256 does not match {relative}: '
+                             f'expected {expected}, observed {sha(raw)}')
+        try:
+            fixture = json.loads(raw)
+        except ValueError as exc:
+            raise ValueError(f'{relative} is not JSON: {exc}') from exc
+        if (not isinstance(fixture, dict) or fixture.get('schema') != WP18_FIXTURE_SCHEMA
+                or fixture.get('arm') != name or fixture.get('run_id') != WP18_RUN_IDS[name]
+                or fixture.get('max_turns') != inputs['WP18'][name]['max_turns']
+                or not isinstance(fixture.get('turns'), list) or len(fixture['turns']) != fixture['max_turns']):
+            raise ValueError(f'{relative} is not the WP18 {name} fixture for {WP18_RUN_IDS[name]} with '
+                             f'max_turns {inputs["WP18"][name]["max_turns"]}')
 
 
 def require_w1_ready(root=ROOT):
-    """Everything W1 prepare/arm needs from the kit: inputs, D identity, R1 sizing."""
+    """Everything W1 prepare/arm needs from the kit: inputs, D identity, R1 sizing, WP18 fixtures."""
     inputs = read_inputs(root)
     if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
-        validate_d_identity(inputs['WP11'], read_d_pins(root))
+        pins_raw = (Path(root) / D_PINS).read_bytes()
+        validate_d_identity(inputs['WP11'], json.loads(pins_raw), pins_raw=pins_raw)
     require_ready(inputs, read_r1_slots(root))
     require_sizing(root)
+    validate_wp18_fixtures(inputs, root)
 
 
 def valid_digest(value):
