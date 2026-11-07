@@ -227,3 +227,36 @@ passes. Reviews: `cold3-fable-REVIEW.md` and `cold3-opus-REVIEW.md`.
   recovery_delay 0.3 and 1.0 s; overrun_load 1.3 and 1.6 s; scale 0.6, 0.85 and 1.2; a missed read of
   Tf2B at recovery 0 and at load 236-237. Record the D1 (d) exclusions for each. Expected: TVH3 only, with
   Tf18 the fast pick or a Tf sibling where a D6 hole removes Tf18.
+
+## Erratum 5 (04:55 PST, lead dispositions of the Erratum 4 delta reviews; flags only, no rule change)
+
+Both delta reviews of e3b4bab55 returned ADMIT_WITH_FIXES: Fable 5.1 and Opus 5.5, blind and executing. All seven
+Erratum 4 faults are gone, the replay table matches, and there are no regressions. Reviews:
+`cold4-fable-REVIEW.md` and `cold4-opus-REVIEW.md`. Nothing below changes which sensors count. Each item records a
+condition under which D1 (d) is blind, so that the run says so.
+
+- **Censored cooling onset** (Opus M1).
+  - Record `recovery_onset_gap_s`: the first in-grid recovery read minus the load phase's actual end.
+  - Mark each row whose stable crossing falls at recovery index 0 (crossing not bracketed by two valid reads) as
+    `reference_crossing_censored`.
+  - Set `heat_ordering_indeterminate: true` when any Erratum 3 qualifier's crossing is censored, or when the
+    onset gap exceeds the fastest qualifier's stable cooling time.
+  - Print it in the receipt and summary. It is a flag, not a refusal: R0 picks are provisional.
+  - Derivation: "crossing bracketed by two valid reads" is the 1 Hz crossing resolution already used for the
+    1 s tie window. No new number.
+  - Real capture: gap 0.17 s; the head is robust to about 23 s.
+- **Wide exclusion** (Fable M1): set `heat_ordering_wide_exclusion: true` when D1 (d) excludes more than one key,
+  and print the count. The rule was built and replayed to remove one firmware-derived channel (TVH3); more
+  than one exclusion means the premise needs a look.
+- **Deferred to the R1 lane:**
+  - (a) An amplified alias of any key in the 1 s tie window can become the reference (Opus L1), and a small
+    fast key off the main heat path can capture it (Fable M1). Neither exists on this capture.
+  - (b) The D5 slow pick is sensitive to the first recovery read: TaLP and TMVR are 3.8 s apart in band hold.
+    The band hold could use the stable cooling time (Fable M2, Opus L2). D5 is chosen on the first settled
+    capture anyway.
+  - (c) Fable L1-L3: legacy idle overrun reconstruction, a count of qualifiers without a stable time, and
+    rank-versus-receipt on bare legacy captures.
+- **Docs and nits:**
+  - Correct the sigma figures in the settle-set and CLAMP derivations.
+  - Add a sentence or row that the slow pick flips to TMVR at a recovery delay of 2 s or more.
+  - State the bar on the three default-places `assertAlmostEqual` calls (exact arithmetic on identical inputs).
