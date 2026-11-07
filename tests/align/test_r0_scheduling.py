@@ -31,17 +31,17 @@ class SchedulingTest(unittest.TestCase):
                 backends.append(self)
 
         def smc(*args):
-            self.assertEqual(len(backends), 1)
-            self.assertTrue(backends[0].closed)
+            self.assertEqual(backends, [])
             return {"status": "pass"}
 
         with tempfile.TemporaryDirectory() as tmp, patch.object(r0_runner, "smc_enumeration", side_effect=smc):
             report = self.run_fake(Path(tmp), list(reversed(r0_runner.CHECKS)), backend_factory=Backend)
         self.assertEqual(report["status"], "pass")
         self.assertEqual([r["check"] for r in report["checks"]], [
-            "host", "disk", "host-identity", "model-load", "load", "template", "generated",
-            "checkpoint", "memory", "smc", "model-load", "ladder", "long-decode", "tool-envelopes"])
-        self.assertEqual(len(backends), 2)
+            "smc", "host", "disk", "host-identity", "model-load", "load", "template", "generated",
+            "checkpoint", "memory", "ladder", "long-decode", "tool-envelopes"])
+        # SMC now precedes every load; the model needs exactly one lifetime.
+        self.assertEqual(len(backends), 1)
         self.assertTrue(all(backend.closed for backend in backends))
 
     def test_each_early_failure_saves_report_and_stops_remaining_phases(self):
@@ -54,7 +54,7 @@ class SchedulingTest(unittest.TestCase):
                  (r0, "generated_rewrites", "generated", "inconclusive"),
                  (r0, "checkpoint_verdict", "checkpoint", "inconclusive"),
                  (r0, "memory_peak", "memory", "fail"),
-                 (r0_runner, "smc_enumeration", "smc", "inconclusive"))
+                 (r0_runner, "smc_enumeration", "smc", "fail"))
         for owner, name, check, status in cases:
             with self.subTest(check=check), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
@@ -71,6 +71,34 @@ class SchedulingTest(unittest.TestCase):
                 self.assertIn("Status: **fail**", (root / "report.md").read_text())
                 self.assertTrue(all("check_seconds" in row for row in report["checks"]))
                 self.assertGreaterEqual(report["total_seconds"], 0)
+
+    def test_opus_f3_smc_inconclusive_still_runs_host_disk_and_models(self):
+        # Opus order.py: the full CHECKS list with default fail-fast must
+        # record inconclusive SMC and continue all independent checks.
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+                r0_runner, 'smc_enumeration', return_value={'status': 'inconclusive'}):
+            report = self.run_fake(Path(tmp))
+        self.assertEqual(report['checks'][0]['status'], 'inconclusive')
+        self.assertNotIn('stopped_after', report)
+        names = [r['check'] for r in report['checks']]
+        for name in ('host', 'disk', 'host-identity', 'model-load', 'load', 'memory', 'ladder', 'long-decode'):
+            self.assertIn(name, names)
+        self.assertEqual(report['status'], 'pass')
+        self.assertFalse(report['complete_r0'])  # injected backend never certifies live R0
+
+    def test_live_desk_label_requires_smc_pass_for_complete_r0(self):
+        class Backend(FakeBackend):
+            pass
+        Backend.__module__ = 'joulewise.align.r0_mlx'
+        for status in ('inconclusive', 'pass'):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp, patch.object(
+                    r0_runner, 'smc_enumeration', return_value={'status': status}):
+                report = self.run_fake(Path(tmp), backend_factory=Backend)
+            self.assertEqual(report['status'], 'pass')
+            self.assertEqual(report['evidence_kind'], 'live_desk')
+            self.assertEqual(report['complete_r0'], status == 'pass')
+            self.assertEqual(report['smc_selection_missing'], status != 'pass')
+            self.assertIn('long-decode', [r['check'] for r in report['checks']])
 
     def test_keep_going_runs_later_checks_after_failure_and_still_fails(self):
         with tempfile.TemporaryDirectory() as tmp, \
@@ -92,7 +120,7 @@ class SchedulingTest(unittest.TestCase):
         load.assert_not_called()
         self.assertEqual(report["status"], "fail")
         names = [row["check"] for row in report["checks"]]
-        self.assertLess(names.index("memory"), names.index("smc"))
+        self.assertLess(names.index("smc"), names.index("memory"))
         self.assertLess(names.index("smc"), names.index("ladder"))
         self.assertTrue(all(row["status"] == "blocked" for row in report["checks"] if row["check"] in {
             "load", "template", "generated", "memory", "ladder", "long-decode"}))
