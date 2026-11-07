@@ -227,6 +227,21 @@ def _close(a, b):
     return finite(a) and finite(b) and math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
 
 
+# The R1 driver's three gated D runs (council ruling 1(b)); ruling 1(f) is
+# judged over all three, never a subset.
+GATED_D_RUN_NAMES = ('D_spam_benign_s1_gated_held_a', 'D_spam_benign_s1_gated_held_b',
+                     'D_bank_benign_s1_gated_held')
+GATED_PHASES = ('G0', 'G1', 'H', 'decode', 'prefill', 'tool', 'tail')
+S6_TUNING_CAP_C = 2.0   # council ruling 1(e) step 1: delta_slow capped at 2.0 C
+
+
+def d_turn_cap_tokens(root=ROOT):
+    """The per-turn decode cap every W1 D member inherits (D configs are cloned
+    from anchor 1 at ANCHOR_COMMIT and keep its ``max_tokens``)."""
+    raw = frozen(root, ANCHOR_COMMIT, SOURCE_KIT / 'stages/episodes-a/align-pilot-v3-episodes-a-e01.json')
+    return json.loads(json.loads(raw)['workload_profile']['prompt_text'])['max_tokens']
+
+
 def ruling_1f_fit(r1_slots, b_d, t_dead):
     """Council ruling 1(f) for a B_D (lead ruling R5-4): the worst case R1
     measured must fit T_dead.
@@ -238,18 +253,25 @@ def ruling_1f_fit(r1_slots, b_d, t_dead):
     keeps its full per-turn cap (FD:263), so B_D + cap bounds the episode
     decode; r_decode is step-d's measured rate. Returns the arithmetic.
     """
-    rows = [row for row in (r1_slots.get('deadman_budget') or []) if isinstance(row, dict)]
+    budget = r1_slots.get('deadman_budget')
+    rows = budget if isinstance(budget, list) else []
+    names = [row.get('run') if isinstance(row, dict) else None for row in rows]
+    if sorted(map(str, names)) != sorted(GATED_D_RUN_NAMES):
+        raise ValueError('R1 r1_slots deadman_budget must hold exactly the three gated D runs '
+                         f'{list(GATED_D_RUN_NAMES)} (ruling 1(f)); got {names}')
     phases = [row.get('phases_s') for row in rows]
-    if not phases or not all(isinstance(p, dict) and all(finite(p.get(k)) for k in
-                                                           ('G0', 'G1', 'H', 'prefill', 'tool')) for p in phases):
-        raise ValueError('R1 r1_slots deadman_budget must give G0, G1, H, prefill and tool seconds per gated run '
-                         '(ruling 1(f))')
+    if not all(isinstance(p, dict) and all(finite(p.get(k)) and p[k] >= 0 for k in GATED_PHASES) for p in phases):
+        raise ValueError('R1 r1_slots deadman_budget must give finite, non-negative '
+                         + ', '.join(GATED_PHASES) + ' seconds per gated run (ruling 1(f))')
     fit = r1_slots.get('budget_fit_inputs')
     rate = (fit or {}).get('r_decode_tok_per_s') if isinstance(fit, dict) else None
     cap = (fit or {}).get('turn_cap_tokens') if isinstance(fit, dict) else None
     if not finite(rate) or rate <= 0 or type(cap) is not int or cap <= 0:
         raise ValueError('R1 r1_slots must carry budget_fit_inputs (r_decode_tok_per_s, turn_cap_tokens) '
                          'for ruling 1(f)')
+    if cap != d_turn_cap_tokens():
+        raise ValueError(f'ruling 1(f): the gated runs armed a {cap}-token turn cap, but W1 D members carry '
+                         f'{d_turn_cap_tokens()}')
     terms = {'G0_s': max(p['G0'] for p in phases), 'holds_s': max(p['G1'] + p['H'] for p in phases),
              'prefill_tool_s': max(p['prefill'] + p['tool'] for p in phases),
              'decode_s': (b_d + cap) / rate}
@@ -295,8 +317,15 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
         if not _close(policy.get(name), slots.get(slot)):
             raise ValueError(f'inputs.R1.thermal_policy.{name} {policy.get(name)!r} differs from '
                              f'r1_slots.slots.{slot} {slots.get(slot)!r}')
-    if not _close(slots.get('S6'), slots.get('S5')) and not isinstance(r1_slots.get('s6_tuning'), dict):
-        raise ValueError('r1_slots.slots.S6 differs from S5 without a recorded lead S6 tuning (s6_tuning)')
+    if not _close(slots.get('S6'), slots.get('S5')):
+        tuning = r1_slots.get('s6_tuning')
+        if (not isinstance(tuning, dict) or not isinstance(tuning.get('authority'), str)
+                or not tuning['authority'].strip() or not _close(tuning.get('from_c'), slots.get('S5'))
+                or not _close(tuning.get('to_c'), slots.get('S6'))):
+            raise ValueError('r1_slots.slots.S6 differs from S5 without a recorded lead S6 tuning '
+                             '(s6_tuning {authority, from_c = S5, to_c = S6})')
+        if slots['S6'] > S6_TUNING_CAP_C + 1e-9:
+            raise ValueError(f'a tuned S6 must stay within the {S6_TUNING_CAP_C} C cap (council ruling 1(e))')
     fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'])
     if not fit['fits']:
         raise ValueError(f'ruling 1(f): B_D {fit["B_D"]} does not fit T_dead {fit["T_dead_s"]:.1f} s: worst '

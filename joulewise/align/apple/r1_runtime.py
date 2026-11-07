@@ -62,6 +62,7 @@ CUSTODY_NAME = "runtime_custody.json"
 STEP_D_SEGMENT = "step_D_prefill_10k_decode_4096"
 NS = 1_000_000_000
 TERM_TEARDOWN_S = 15.0       # forced exit, inside the driver's 20 s TERM grace
+WATCHDOG_HARD_S = 4.0        # the watchdog's own teardown: 15 s + 4 s < the 20 s grace
 G0_PREROLL_S = 65            # a G0 judges the slope over the preceding 60 s
 RECOVERY_CAP_S = 300         # step-d post-decode recovery observation (S4, S7)
 COOLDOWN_CAP_S = 1500        # ruling 1(c)
@@ -119,10 +120,16 @@ def resolve(path):
     return path if path.is_absolute() else ROOT / path
 
 
-def sha256_file(path):
+class HashDeadline(Exception):
+    """A watchdog digest ran past its deadline (checked per 1 MiB block)."""
+
+
+def sha256_file(path, deadline=None):
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
+            if deadline is not None and time.monotonic() > deadline:
+                raise HashDeadline(path)
             digest.update(block)
     return digest.hexdigest()
 
@@ -599,20 +606,26 @@ class Termination:
 
     SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
-    def __init__(self, timeout_s=TERM_TEARDOWN_S, exit_now=os._exit):
-        self.timeout_s, self.exit_now = timeout_s, exit_now
+    def __init__(self, timeout_s=TERM_TEARDOWN_S, exit_now=os._exit, hard_s=WATCHDOG_HARD_S):
+        self.timeout_s, self.exit_now, self.hard_s = timeout_s, exit_now, hard_s
         self.signum = None
         self.previous = {}
         self.watchdog = None
         self.on_timeout = None
 
     def expire(self, code):
+        # An independent hard exit: a teardown that stalls (an fsync, a hung
+        # ps) still ends inside the driver's 20 s grace (Sol critique).
+        hard = threading.Timer(self.hard_s, self.exit_now, args=(code,))
+        hard.daemon = True
+        hard.start()
         try:
             if self.on_timeout is not None:
                 self.on_timeout()
         except BaseException:  # noqa: BLE001 - the forced exit must happen
             pass
         finally:
+            hard.cancel()
             self.exit_now(code)
 
     def install(self):
@@ -657,27 +670,38 @@ def stop_powermetrics_descendants(root_pid, *, run=None, kill=os.kill, wait_s=WA
     on the root process is expected and ignored. Returns the pids signalled.
     """
     run = run or (lambda argv: subprocess.run(list(argv), text=True, capture_output=True, check=False, timeout=2))
-    try:
-        rows = run(PS_TREE).stdout.splitlines()
-    except Exception:  # noqa: BLE001 - best effort inside the watchdog
-        return []
-    children = {}
-    commands = {}
-    for row in rows:
-        parts = row.split(None, 2)
-        if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
-            continue
-        pid, ppid = int(parts[0]), int(parts[1])
-        children.setdefault(ppid, []).append(pid)
-        commands[pid] = parts[2] if len(parts) > 2 else ""
-    stack, descendants = [root_pid], []
-    while stack:
-        for child in children.get(stack.pop(), ()):
-            descendants.append(child)
-            stack.append(child)
+
+    def snapshot():
+        try:
+            rows = run(PS_TREE).stdout.splitlines()
+        except Exception:  # noqa: BLE001 - best effort inside the watchdog
+            return {}
+        table = {}
+        for row in rows:
+            parts = row.split(None, 2)
+            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                table[int(parts[0])] = (int(parts[1]), parts[2] if len(parts) > 2 else "")
+        return table
+
+    def tree(table):
+        children = {}
+        for pid, (ppid, _) in table.items():
+            children.setdefault(ppid, []).append(pid)
+        stack, found = [root_pid], {}
+        while stack:
+            for child in children.get(stack.pop(), ()):
+                if "powermetrics" in table[child][1]:
+                    found[child] = table[child]
+                stack.append(child)
+        return found
+    first = tree(snapshot())
+    # Revalidate just before signalling (Sol critique: a pid reaped by the main
+    # teardown after the first snapshot could be reused): signal only a pid
+    # that is still in our tree with the same parent and command.
+    second = tree(snapshot()) if first else {}
     signalled = []
-    for pid in descendants:
-        if "powermetrics" in commands.get(pid, ""):
+    for pid in sorted(first):
+        if second.get(pid) == first[pid]:
             try:
                 kill(pid, signal.SIGTERM)
                 signalled.append(pid)
@@ -728,7 +752,9 @@ def write_custody(out, record, *, deadline=None, temporary_name=CUSTODY_NAME + "
                 files[name] = "unhashed: watchdog deadline"
                 continue
             try:
-                files[name] = sha256_file(path)
+                files[name] = sha256_file(path, deadline)
+            except HashDeadline:
+                files[name] = "unhashed: watchdog deadline"
             except OSError as error:
                 files[name] = f"unreadable: {error}"
     record = {**record, "schema": CUSTODY_SCHEMA, "files": files}
@@ -1156,7 +1182,12 @@ class Segment:
             # (Fable cold pass round 4 LOW-2).
             times[key] = [(t - t0) / NS for t, _ in values]
             failed[key] = len(rows) - len(values)
-        return {"sensor_series_c": series, "sensor_series_t_s": times, "sensor_series_failed_reads": failed,
+        # The soak's own end (the last journal row, valid or failed), so the
+        # driver's 20-min window ends where the soak ended, not at the last
+        # valid read (Sol critique of round 5).
+        end = (rows[-1]["monotonic_ns"] - t0) / NS if rows else 0.0
+        return {"sensor_series_c": series, "sensor_series_t_s": times, "sensor_series_end_t_s": end,
+                "sensor_series_failed_reads": failed,
                 "sensor_series_note": ("valid 1 Hz reads in order with their times (s from the first journal "
                                        "row); a failed read is dropped, never interpolated"),
                 "duration_s": seconds}
@@ -1439,6 +1470,7 @@ def main(argv=None, *, backend_factory=None, stdout=None):
     os.dup2(2, 1)
     previous_stdout, sys.stdout = sys.stdout, sys.stderr
     record = {"kind": args.r1_kind, "status": "refused", "started_epoch_s": time.time()}
+    terminal, owner = threading.Lock(), []
     result, code, segment, backend = None, EXIT_REFUSED, None, None
     created = False
     try:
@@ -1448,13 +1480,20 @@ def main(argv=None, *, backend_factory=None, stdout=None):
             # Never write into another attempt's directory (the driver renames rejected ones).
             raise Refused(f"--output {out} already exists") from error
         created = True
-        custody_written = []
 
         def on_watchdog():
             # LOW-1: the forced exit still stops powermetrics and leaves a
-            # terminal record, unless the normal one was already written.
-            if not custody_written:
-                watchdog_teardown(out, {**record, "signal": term.signum})
+            # terminal record. One writer owns the terminal record (Sol
+            # critique): the watchdog takes ownership only if the normal path
+            # has not, and then the normal path never publishes.
+            if not terminal.acquire(timeout=2.0):
+                return               # the normal path is writing its record now
+            try:
+                if not owner:
+                    owner.append("watchdog")
+                    watchdog_teardown(out, {**record, "signal": term.signum})
+            finally:
+                terminal.release()
         term.on_timeout = on_watchdog
         config, config_sha256 = load_config(resolve(args.config))
         record["config_sha256"] = config_sha256
@@ -1488,8 +1527,10 @@ def main(argv=None, *, backend_factory=None, stdout=None):
             record["ended_epoch_s"] = time.time()
             if created:
                 try:
-                    write_custody(out, record)
-                    custody_written.append(True)
+                    with terminal:
+                        if not owner:
+                            write_custody(out, record)
+                            owner.append("main")
                 except OSError as error:
                     record.setdefault("teardown_errors", []).append(f"custody: {error}")
             os.dup2(saved_fd, 1)

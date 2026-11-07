@@ -132,6 +132,7 @@ class FakeWorld:
             payload["sensor_series_c"] = {"s_slow": [40.0 + slope * t + (0.05 if int(t) % 2 else -0.05)
                                                      for t in times]}
             payload["sensor_series_t_s"] = {"s_slow": times}
+            payload["sensor_series_end_t_s"] = 1799.0
         if kind == "step-d":
             payload["e_D_j_per_token"] = 3.6
             payload["slot_detail"] = {"r_decode_tok_per_s": 20.0}
@@ -583,16 +584,23 @@ class R1Tests(unittest.TestCase):
         # Fable cold pass round 4 LOW-2: dropped reads must not stretch the window.
         times = [float(t) for t in range(1800) if not 700 <= t < 800]
         values = [50.0 if t < 600 else 40.0 for t in times]
-        out = r1.soak_detrended({"k": values}, {"k": times})["k"]
+        out = r1.soak_detrended({"k": values}, {"k": times}, 1799.0)["k"]
         self.assertEqual(out["mean_c"], 40.0)          # the last 1,200 samples would reach t = 500 (50 C)
         self.assertEqual(out["window_reads"], 1100)
         sparse = [t for t in times if not 1000 <= t < 1300]
         with self.assertRaisesRegex(r1.Refusal, "valid reads in the last 1200 s"):
-            r1.soak_detrended({"k": [40.0] * len(sparse)}, {"k": sparse})
+            r1.soak_detrended({"k": [40.0] * len(sparse)}, {"k": sparse}, 1799.0)
         with self.assertRaisesRegex(r1.Refusal, "sensor_series_t_s"):
-            r1.soak_detrended({"k": values}, None)
+            r1.soak_detrended({"k": values}, None, 1799.0)
+        # Sol critique: reads that stop 600 s before the soak ends cannot pass
+        # as the last 20 min (the window ends at the soak's end, not the last read).
+        early = [float(t) for t in range(1200)]
+        with self.assertRaisesRegex(r1.Refusal, "valid reads in the last 1200 s"):
+            r1.soak_detrended({"k": [40.0] * 1200}, {"k": early}, 1799.0)
+        with self.assertRaisesRegex(r1.Refusal, "sensor_series_end_t_s"):
+            r1.soak_detrended({"k": values}, {"k": times}, None)
         with self.assertRaisesRegex(r1.Refusal, "spans"):
-            r1.soak_detrended({"k": [40.0] * 1300}, {"k": [t / 2 for t in range(1300)]})
+            r1.soak_detrended({"k": [40.0] * 1300}, {"k": [t / 2 for t in range(1300)]}, 649.5)
 
     def test_soak_with_failed_reads_end_to_end(self):
         with tempfile.TemporaryDirectory() as td:

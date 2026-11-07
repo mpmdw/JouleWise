@@ -43,8 +43,8 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                 # Lead ruling R5-4: B_D, N_chunk, S5/S6 and S7 bind the inputs below.
                 'slots': {'I_D': I_D, 'B_D': 6144, 'N_chunk': 2048, 'S5': 1.0, 'S6': 1.0, 'S7': 120.0},
                 'high_power': {'verdict': 'not_adopted'}, 'u5': {'verdict': 'pass', 'c': 1.0},
-                'deadman_budget': [{'phases_s': dict(SYN_PHASES, tail=30.0)},
-                                   {'phases_s': dict(SYN_PHASES, tail=12.0)}],
+                'deadman_budget': [{'run': name, 'phases_s': dict(SYN_PHASES, tail=tail)}
+                                   for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'turn_cap_tokens': 4096},
                 'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
                 'duty_bar': {'pass': True}, 'status_note': 'SYNTHETIC_WP22_DRY_RUN'}

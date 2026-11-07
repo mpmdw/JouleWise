@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from types import SimpleNamespace
@@ -70,7 +71,8 @@ class ConformanceTests(unittest.TestCase):
 
             segment("pre_calibration_bracket", "calibration-pre", soak=False)
             soak = segment("idle_soak", "idle", "--duration-s", "1300", soak=False)
-            detrended = r1.soak_detrended(soak["sensor_series_c"], soak["sensor_series_t_s"])
+            detrended = r1.soak_detrended(soak["sensor_series_c"], soak["sensor_series_t_s"],
+                                          soak["sensor_series_end_t_s"])
             r1.write_soak_reference(run, {"name": "idle_soak", "output_dir": str(run / "idle_soak"),
                                           "attempt": 0, "soak_detrended": detrended})
             segment("step_30b", "step-30b")
@@ -559,6 +561,64 @@ class Round5Tests(unittest.TestCase):
         self.assertEqual((record["status"], record["watchdog"], record["signal"]), ("aborted", True, 15))
         self.assertEqual(record["watchdog_powermetrics_signalled"], [501])
         self.assertIn("load_journal.json", record["files"])
+
+    def test_a_pid_that_left_the_tree_before_signalling_is_not_signalled(self):
+        snapshots = iter(["500 1 runtime\n501 500 sudo -n /usr/bin/powermetrics\n",
+                          "500 1 runtime\n501 1 /usr/bin/powermetrics --someone-else\n"])
+        sent = []
+        stopped = rt.stop_powermetrics_descendants(
+            500, run=lambda argv: SimpleNamespace(stdout=next(snapshots)),
+            kill=lambda pid, sig: sent.append((pid, sig)), wait_s=0)
+        self.assertEqual((stopped, sent), ([], []))
+
+    def test_watchdog_digests_stop_at_the_deadline_inside_a_file(self):
+        # Sol critique: the deadline is checked per block, not only between files.
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td)
+            (out / "big.bin").write_bytes(b"x" * (3 << 20))
+            (out / "small.txt").write_text("y")
+            ticks = iter([0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0])
+            from unittest import mock
+            with mock.patch.object(rt.time, "monotonic", lambda: next(ticks, 10.0)):
+                rt.write_custody(out, {"status": "aborted"}, deadline=5.0)
+            files = custody(out)["files"]
+            self.assertEqual(files["big.bin"], "unhashed: watchdog deadline")
+            self.assertEqual(files["small.txt"], "unhashed: watchdog deadline")
+
+    def test_watchdog_has_a_hard_exit_independent_of_its_teardown(self):
+        exits = []
+        term = rt.Termination(exit_now=exits.append, hard_s=0.2)
+        release = threading.Event()
+        term.on_timeout = lambda: release.wait(5)          # a stalled teardown
+        worker = threading.Thread(target=term.expire, args=(143,), daemon=True)
+        worker.start()
+        time.sleep(0.6)
+        self.assertEqual(exits, [143])                      # the hard exit fired while stalled
+        release.set()
+        worker.join(5)
+
+    def test_one_owner_writes_the_terminal_record(self):
+        # Sol critique: once the watchdog published, the normal path never
+        # replaces its record (and vice versa).
+        from unittest import mock
+        captured = []
+
+        class Capture(rt.Termination):
+            def install(self):
+                captured.append(self)
+                return super().install()
+        with tempfile.TemporaryDirectory(dir=TMP) as td, mock.patch.object(rt, "Termination", Capture), \
+                mock.patch.object(rt, "stop_powermetrics_descendants", return_value=[]):
+            out = Path(td) / "g0"
+            real = rt.Segment.run
+
+            def run_then_watchdog(segment):
+                captured[0].on_timeout()                     # the watchdog publishes mid-run
+                return real(segment)
+            with mock.patch.object(rt.Segment, "run", run_then_watchdog):
+                code, _ = call(rs.synthetic_config(Path(td) / "cfg"), out, "calibration-pre")
+            self.assertEqual(custody(out)["watchdog"], True)
+            self.assertEqual(custody(out)["status"], "aborted")
 
     def test_main_arms_the_watchdog_teardown_once_dir_exists(self):
         from unittest import mock

@@ -407,8 +407,8 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
             'slots': {'I_D': i_d, 'T_dead': 1451.0, 'B_D': 8192, 'N_chunk': 512, 'S5': 1.5, 'S6': 1.5, 'S7': 120.0},
             'high_power': {'verdict': 'adopt' if ac_powermode == 2 else 'not_adopted'},
             'u5': {'verdict': 'pass', 'c': 1.0},
-            'deadman_budget': [{'phases_s': dict(GATED_PHASES, tail=tail)},
-                               {'phases_s': dict(GATED_PHASES, tail=tail / 2)}],
+            'deadman_budget': [{'run': name, 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2)}
+                               for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
             'budget_fit_inputs': {'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 4096},
             'external_volumes': [{'point': 't0', 'verdict': 'PASS'}],
             'duty_bar': {'pass': True}}
@@ -551,8 +551,17 @@ class R1BudgetBindingTests(unittest.TestCase):
         inputs['R1']['thermal_policy']['delta_slow_c'] = 2.0
         with self.assertRaisesRegex(ValueError, 'S6 differs from S5'):
             kit.require_ready(inputs, slots)
+        for bad in ({}, {'authority': 'lead', 'from_c': 1.0, 'to_c': 2.0},
+                    {'authority': ' ', 'from_c': 1.5, 'to_c': 2.0}, {'authority': 'lead', 'from_c': 1.5, 'to_c': 1.9}):
+            slots['s6_tuning'] = bad
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'S6 differs from S5'):
+                kit.require_ready(inputs, slots)
         slots['s6_tuning'] = {'authority': 'lead, FD 2.6 S6 tuning', 'from_c': 1.5, 'to_c': 2.0}
         kit.require_ready(inputs, slots)
+        slots['slots']['S6'] = inputs['R1']['thermal_policy']['delta_slow_c'] = 2.5
+        slots['s6_tuning']['to_c'] = 2.5
+        with self.assertRaisesRegex(ValueError, '2.0 C cap'):
+            kit.require_ready(inputs, slots)
 
     def test_ruling_1f_refuses_a_budget_whose_worst_case_misses_t_dead(self):
         inputs, slots = ready_inputs()             # worst = 120 + 240 + 126 + (8192 + 4096)/20 = 1100.4 s
@@ -570,8 +579,16 @@ class R1BudgetBindingTests(unittest.TestCase):
         kit.require_ready(inputs, slots)
 
     def test_ruling_1f_needs_the_measured_inputs(self):
+        inputs, slots = ready_inputs()
+        three = slots['deadman_budget']
+        negative = deepcopy(three)
+        negative[2]['phases_s']['H'] = -500.0
         for change in (dict(budget_fit_inputs=None), dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0}),
-                       dict(deadman_budget=[{'phases_s': {'tail': 20.0}}])):
+                       dict(deadman_budget=[{'phases_s': {'tail': 20.0}}]),
+                       dict(deadman_budget=three[:2]),                       # the bank run left out
+                       dict(deadman_budget=three[:2] + three[:1]),           # a run counted twice
+                       dict(deadman_budget=negative),
+                       dict(budget_fit_inputs={'r_decode_tok_per_s': 20.0, 'turn_cap_tokens': 1})):
             inputs, slots = ready_inputs()
             slots.update(change)
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, r'ruling 1\(f\)'):
@@ -1068,8 +1085,56 @@ class W1HighPowerTests(unittest.TestCase):
             self.assertFalse(self.called)
             self.assertEqual(self.host.mode, 0)
             self.assertFalse(self.marker.exists())
-            restore = json.loads((Path(tmp) / 's/staging/v4-arm-001.restore.json').read_text())
-            self.assertTrue(restore['ok'])
+            [path] = (Path(tmp) / 's/staging').glob('v4-arm-restore-*.json')
+            self.assertTrue(json.loads(path.read_text())['ok'])
+
+    def test_a_failure_writing_the_arm_record_still_restores_automatic(self):
+        # Sol critique of R5-6: the mode change is protected up to the handoff.
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(session, 'arm_checks', side_effect=OSError('disk full')):
+            with self.assertRaisesRegex(OSError, 'disk full'):
+                self.install(tmp, 2)
+            self.assertEqual(self.host.mode, 0)
+            self.assertFalse(self.marker.exists())
+
+    def test_a_terminal_or_installed_session_never_sets_high_power(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.install(tmp, 2)                       # first arm: host at 2, marker present
+            state = json.loads((Path(tmp) / 's/session.json').read_text())
+            state['install'] = {'exit_code': 0}
+            (Path(tmp) / 's/session.json').write_text(json.dumps(state))
+            sets = self.host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2'))
+            host = self.host
+            measurement = Path(tmp) / 'm'
+            with patch.object(kit, 'require_w1_ready'), patch.object(pilot, 'install'):
+                session.install(Path(tmp) / 's', runner=host, volume_runner=host,
+                                w1_disk_config=W1DiskGateTests.config(self, tmp),
+                                disk_gate=lambda c: {'status': 'pass', 'offloads': []})
+            self.assertEqual(host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2')), sets)
+            custody = Path(tmp) / 'custody'
+            (custody / 'night').mkdir(parents=True)
+            (custody / 'night/result.json').write_text('{}')
+            state['inputs'] = {'custody_root': str(custody)}
+            (Path(tmp) / 's/session.json').write_text(json.dumps(state))
+            with patch.object(kit, 'require_w1_ready'), self.assertRaisesRegex(ValueError, 'session is terminal'):
+                session.install(Path(tmp) / 's', runner=host, volume_runner=host)
+            self.assertEqual(host.calls.count(('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2')), sets)
+
+    def test_an_r1_crash_marker_is_never_taken_for_the_w1_marker(self):
+        from joulewise.align.apple import powermode
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / '.align-r1-high-power'
+            marker.write_text('high-power restoration required\n')      # the R1 chain's text
+            host = FakeArmHost(mode=2)
+            refused = powermode.admit_ac_powermode(2, marker=marker, runner=host)
+            self.assertFalse(refused['admitted'])                        # restored, then 0 != 2
+            self.assertFalse(marker.exists())
+            marker.write_text('high-power restoration required\n')
+            host = FakeArmHost(mode=2, marker=marker)
+            entered = powermode.enter_high_power(marker, runner=host)
+            self.assertTrue(entered['ok'])
+            self.assertTrue(entered['prior_marker_restore']['ok'])       # the owed restore ran first
+            self.assertTrue(powermode.w1_marker(marker))
 
     def test_automatic_series_never_sets_high_power(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1082,7 +1147,7 @@ class W1HighPowerTests(unittest.TestCase):
         from joulewise.align.apple import powermode
         with tempfile.TemporaryDirectory() as tmp:
             marker = Path(tmp) / '.align-r1-high-power'
-            marker.write_text('x')
+            marker.write_text(powermode.W1_MARKER_TAG + '\n')
             host = FakeArmHost(mode=2)
             admitted = powermode.admit_ac_powermode(2, marker=marker, runner=host)
             self.assertTrue(admitted['admitted'])

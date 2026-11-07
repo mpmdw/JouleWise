@@ -4036,7 +4036,7 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
     marker = Path(plan.measurement_root) / powermode.R1_HIGH_POWER_MARKER
     try:
         record = powermode.restore_automatic(marker, runner=runner)
-    except Exception as error:  # noqa: BLE001 - the close must not mask the night's result
+    except BaseException as error:  # noqa: BLE001 - the close must not mask the night's result
         record = {"ok": False, "error": f"{type(error).__name__}: {error}"}
     try:
         _append_log(Path(plan.custody_root), "ac powermode close: restore Automatic after a declared powermode 2 "
@@ -4059,7 +4059,10 @@ def run_night(
                           closers=closers)
     finally:
         for close in closers:
-            close()
+            try:
+                close()
+            except BaseException:  # noqa: BLE001 - the night's own result stands; the log has the close
+                pass
 
 
 def _run_night(

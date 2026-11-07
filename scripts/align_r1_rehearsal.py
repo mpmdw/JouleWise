@@ -500,16 +500,20 @@ def os_load_verdict(name, result, wall_s=None):
 SOAK_TAIL_MIN_RATE = 0.9   # valid reads per second inside the last 1,200 s
 
 
-def soak_detrended(series_by_key, times_by_key):
+def soak_detrended(series_by_key, times_by_key, end_t_s=None):
     """Ruling 8: soak SD on the detrended last 20 min, only if |slope| <= 0.2 C/min.
 
     The window is the last 1,200 **seconds** of the soak (Fable cold pass
     round 4 LOW-2), selected by each valid read's time (``sensor_series_t_s``,
     seconds on the segment clock): failed reads are dropped by the runtime, so
-    the last 1,200 samples would reach further back than 20 min. The series
-    must span at least 1,200 s and the window must hold at least 0.9 valid
-    reads per second; the slope is fitted against time.
+    the last 1,200 samples would reach further back than 20 min. The window
+    ends at the soak's own end (``sensor_series_end_t_s``, common to every
+    key), not at a key's last valid read, so a sensor that stopped reading
+    near the end cannot substitute an earlier window. The series must span at
+    least 1,200 s and the window must hold at least 0.9 valid reads per
+    second; the slope is fitted against time.
     """
+    end = _finite_number(end_t_s, "idle_soak.sensor_series_end_t_s")
     if not isinstance(series_by_key, dict) or not series_by_key:
         raise Refusal("idle_soak: runtime omitted per-second sensor series")
     if not isinstance(times_by_key, dict):
@@ -522,9 +526,11 @@ def soak_detrended(series_by_key, times_by_key):
         ts = [_finite_number(t, f"idle_soak.{key}.t") for t in times]
         if any(b < a for a, b in zip(ts, ts[1:])):
             raise Refusal(f"idle_soak.{key}: read times are not nondecreasing")
-        if ts[-1] - ts[0] < SOAK_TAIL_S - 1:
-            raise Refusal(f"idle_soak.{key}: the soak spans {ts[-1] - ts[0]:.1f} s, under {SOAK_TAIL_S} s")
-        start = ts[-1] - SOAK_TAIL_S
+        if ts[-1] > end + 1e-9:
+            raise Refusal(f"idle_soak.{key}: a read lies after the soak's end")
+        if end - ts[0] < SOAK_TAIL_S - 1:
+            raise Refusal(f"idle_soak.{key}: the soak spans {end - ts[0]:.1f} s, under {SOAK_TAIL_S} s")
+        start = end - SOAK_TAIL_S
         window = [(t, _finite_number(v, f"idle_soak.{key}")) for t, v in zip(ts, series) if t > start]
         if len(window) < SOAK_TAIL_MIN_RATE * SOAK_TAIL_S:
             raise Refusal(f"idle_soak.{key}: {len(window)} valid reads in the last {SOAK_TAIL_S} s "
@@ -656,7 +662,8 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
         verdict = os_load_verdict(name, result, wall_s=(row["ended_ns"] - row["started_ns"]) / 1e9)
         redo_reason = "cpu_load" if verdict["redo"] else None
         if not redo_reason and contract_key == "idle_soak":
-            row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"))
+            row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
+                                                   result.get("sensor_series_end_t_s"))
             if not all(v["settled"] for v in row["soak_detrended"].values()):
                 redo_reason = "soak_slope"
         row.update(os_load=verdict, redo_reason=redo_reason)

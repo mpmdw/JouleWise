@@ -144,11 +144,36 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
     from joulewise.align.apple import powermode
     high = None
-    if (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2:
+    marker = Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER
+    custody_root = (state.get('inputs') or {}).get('custody_root')
+    if custody_root and (Path(custody_root) / 'night/result.json').is_file():
+        # A terminal session has no night left to restore Automatic (Sol
+        # critique of R5-6): never change the power mode for it.
+        raise ValueError('v4 install refused: the session is terminal (night/result.json exists)')
+    already = (state.get('install') or {}).get('exit_code') == 0
+    if (plan.get('runtime_requirements') or {}).get('ac_powermode') == 2 and not already:
         # Lead ruling R5-6: W1 under an adopted High Power. The marker comes
         # first (powermode.enter_high_power), so any later crash leaves the
         # restore owed to the next night that expects Automatic.
-        high = powermode.enter_high_power(Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER, runner=runner)
+        high = powermode.enter_high_power(marker, runner=runner)
+    try:
+        return _arm_and_install(session, state, measurement_root, plan, high, runner=runner,
+                                volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
+                                disk_gate=disk_gate, **kwargs)
+    except BaseException:
+        if high is not None:
+            # The arm did not hand off: leave the host Automatic (R5-6), on
+            # every failure from the mode change on.
+            restore = powermode.restore_automatic(marker, runner=runner)
+            try:
+                pilot.h.write(session / f'staging/v4-arm-restore-{time.time_ns()}.json', restore)
+            except Exception:  # noqa: BLE001 - the restore itself is what matters
+                pass
+        raise
+
+
+def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
+                     w1_disk_config, disk_gate, **kwargs):
     record = arm_checks(measurement_root, plan, runner=runner, volume_runner=volume_runner)
     if high is not None:
         record['high_power_enter'] = high
@@ -169,20 +194,12 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                                                     'ac_powermode': record['ac_powermode'].get('observed'),
                                                     'reasons': record['reasons']})
     pilot.h.write(session / 'session.json', state)
-    try:
-        if not record['admitted']:
-            raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
-        kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
-        receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
-        pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
-        return pilot.install(session_root, **kwargs)
-    except BaseException:
-        if high is not None:
-            # The arm did not hand off: leave the host Automatic (R5-6).
-            restore = powermode.restore_automatic(Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER,
-                                                  runner=runner)
-            pilot.h.write(session / f'staging/v4-arm-{attempt:03d}.restore.json', restore)
-        raise
+    if not record['admitted']:
+        raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
+    kit.arm_powermode_check(plan, record['ac_powermode']['observed'])
+    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
+    pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
+    return pilot.install(session, **kwargs)
 
 
 def main(argv=None):
