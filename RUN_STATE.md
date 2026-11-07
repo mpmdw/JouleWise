@@ -1050,7 +1050,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - smc exited 3 `NotQuiet` after 1,520 s (idle 300 and load 900 complete; recovery at about sample 288 of 600). Over 35.9 s (23:59:28-00:00:04 PST), `find` pid 59251 (started 00:00:00) ran at 0.0786 CPU-s/s and fseventsd at 0.0697, against the 0.05 limit.
   - D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
 - **Cause:** `com.apple.tmp_cleaner` (`/System/Library/LaunchDaemons/com.apple.tmp_cleaner.plist`, `StartCalendarInterval` Hour 0). The unified log shows launchd starting it at 00:00:00.006 on its calendar interval. It runs two `find` walks over `/tmp`. `/private/tmp` holds about 73,100 entries (2.3 GB), mostly seat scratch. The refusal is correct: the contention is real. It is not an R0 defect.
-- **Third consecutive `smc` failure**, each from a different cause outside R0: run 4 (#691 snapshot artefact, fixed), run 5 (softwareupdated scan at 23:09), run 6 (this). Mailed Ed under item 181 on thread `1a198fafa8fc12ba` (message `1a1b50b79ac9516f`, 00:2x PST). It gives the full summary and proposes timing-only re-launches. R0 is **not** re-launched until he answers.
+- **Third consecutive `smc` failure**, each from a different cause outside R0: run 4 (#691 snapshot artefact, fixed), run 5 (softwareupdated scan at 23:09), run 6 (this). Mailed Ed under item 181 on thread `1a198fafa8fc12ba` (message `1a1b50b79ac9516f`, 00:06 PST). It gives the full summary and proposes timing-only re-launches. R0 is **not** re-launched until he answers.
 - **Known scheduled contention (PST):**
   - 00:00 daily: the `/tmp` cleaner.
   - About 05:09, 11:09, 17:09 and 23:09: the softwareupdated scan.
@@ -1064,6 +1064,8 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Diagnosis: in `p7-PILOT.json`, `members[].summary.seed` is the seed *index* (16 for b-e25, 14 for b-e18). The 64-bit episode seed is at `summary.sampler_seed_inputs.episode_seed` (with `expected_episode_seed` equal and `preregistered_episode_seed_matches_bundle` true). The tool compares `summary['seed']` with the 64-bit seed (line 79).
   - In memory, a copy that checks `sampler_seed_inputs.episode_seed == seed` and `summary.seed == seed_index` passed every other check. X: max_turns 12, fixture sha256 `9dac183d…658f`. Y: max_turns 12, fixture sha256 `f17a5a0f…dac`. This is diagnosis only. Nothing was written to the repo, and the branch `lane/2026-11-07-wp18-fixtures` was not pushed.
   - **For the laptop lead:** fix line 79 on the R1 lane and add a test on the real p7 member shape. The magistrate then runs the tool (minutes) and commits the two registration files.
+
+- **Ed's answer, 00:08 PST 11-07** (message `1a1b50d8d92f7e92`, thread `1a198fafa8fc12ba`), verbatim: "go". Applied: R0 re-run 7 is launched into the 00:05-05:05 gap with deadline 05:05 PST (`1794056700`). The launch details follow in the next commit of this item.
 
 **Next activation (written 2026-11-07 by activation 62c121f8; item 194; item 181 holds):**
 (1) **Ed's answer to the third `smc` refusal.** Search `from:claude2.glaring610@passmail.net is:unread`. If Ed says go:
