@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import json
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -36,8 +37,8 @@ class CpuQuietProbe:
     """Reuse per-process and host-tick accounting outside this process tree.
 
     Admission uses the newest retained opening at least 30 seconds old.
-    Startup and gaps longer than that baseline wait for a fresh interval;
-    the long gap is also judged. Host aggregate CPU is journaled only.
+    Only startup waits for that baseline; later calls judge retained data
+    without sleeping, even after gaps. Host aggregate CPU is journaled only.
     The own tree includes the controlled GPU worker, but no unrelated jobs.
     """
     def __init__(self, *, ctx=None, snapshot=None):
@@ -58,9 +59,7 @@ class CpuQuietProbe:
         if previous is not None and current.midpoint_ns < previous.midpoint_ns:
             return self._measure(previous, current)
         dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
-        gap = previous is not None and current.midpoint_ns - previous.midpoint_ns > dwell_ns
-        baseline = current if gap else self._snapshots[0]
-        gap_end = current
+        baseline = self._snapshots[0]
         while current.midpoint_ns - baseline.midpoint_ns < dwell_ns:
             remaining = (dwell_ns - (current.midpoint_ns - baseline.midpoint_ns)) / 1e9
             self.ctx.clocks.sleep(remaining)
@@ -72,23 +71,15 @@ class CpuQuietProbe:
                             if current.midpoint_ns - snapshot.midpoint_ns >= dwell_ns)
         opening = self._snapshots[opening_index]
         del self._snapshots[:opening_index]
-        gap_result = self._measure(previous, gap_end) if gap else None
-        result = self._measure(opening, current)
-        if gap_result is not None:
-            result["gap_interval"] = gap_result
-            result["long_interval"] = result["long_interval"] or gap_result["long_interval"]
-            if gap_result["error"]:
-                result.update(error=gap_result["error"], clean=None)
-            elif not gap_result["clean"]:
-                result["clean"] = False
-        return result
+        return self._measure(opening, current)
 
     def _take_snapshot(self):
         from joulewise.hazards import contention
         current = self.snapshot()
-        contention.pin_roots(current, [os.getpid()], self.root_identities)
-        self._snapshots.append(current)
-        self.previous = current
+        if not current.error:
+            contention.pin_roots(current, [os.getpid()], self.root_identities)
+            self._snapshots.append(current)
+            self.previous = current
         return current
 
     def _measure(self, opening, current):
@@ -98,7 +89,8 @@ class CpuQuietProbe:
         result = contention.interval(opening, current, tree_roots=[os.getpid()],
                                      include_kernel_task=True, limit=limit, aggregate_limit=None,
                                      previous_over=self.previous_over, root_identities=self.root_identities)
-        regressions = [row for row in result.get("unaccounted", [])
+        regressions = [{**row, "contaminant": bool(re.search(prewindow.CONTAMINANTS, row["command"], re.I))}
+                       for row in result.get("unaccounted", [])
                        if row["reason"] == "counter regressed"]
         if result["error"] == contention.REGRESSED_COUNTER_ERROR:
             result.update(error=None, clean=not result["outside_over_limit"])

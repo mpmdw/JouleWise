@@ -72,7 +72,8 @@ class QuietGuard:
                               timeout=contention.PROBE_TIMEOUT_S,
                               env={**os.environ, "LC_ALL": "C"})
             table = self.run(PS_ARGV, capture_output=True, text=True,
-                             timeout=15, env={**os.environ, "LC_ALL": "C"})
+                             timeout=contention.PROBE_TIMEOUT_S,
+                             env={**os.environ, "LC_ALL": "C"})
         except Exception as exc:
             raise Refused(f"census indeterminate: cumulative CPU snapshot: {exc}") from exc
         finished = self._now()
@@ -104,22 +105,23 @@ class QuietGuard:
                 receipt["wall_clock_backwards"] = True
             for identity in previous.rows.keys() & rows.keys():
                 if rows[identity]["cumulative_cpu_seconds"] < previous.rows[identity]["cumulative_cpu_seconds"]:
-                    if rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]:
-                        raise Refused(f"census indeterminate: CPU counter regressed for {identity}")
-                    receipt["cpu_interval"]["regressed_noncontaminant"].append({
+                    regressed = {
                         "pid": identity[0], "start": identity[1],
-                        "command": rows[identity]["command"], "reason": "counter regressed"})
+                        "command": rows[identity]["command"], "reason": "counter regressed",
+                        "contaminant": rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]}
+                    receipt["cpu_interval"]["regressed_counters"].append(regressed)
+                    if not regressed["contaminant"]:
+                        receipt["cpu_interval"]["regressed_noncontaminant"].append(regressed)
         self._snapshots.append(snapshot)
         return snapshot
 
     def _cpu_interval(self, receipt):
-        details = receipt["cpu_interval"] = {"regressed_noncontaminant": []}
-        previous = self._snapshots[-1] if self._snapshots else None
+        details = receipt["cpu_interval"] = {"regressed_counters": [], "regressed_noncontaminant": []}
         current = self._cpu_snapshot(receipt)
         dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
-        gap = previous is not None and current.midpoint_ns - previous.midpoint_ns > dwell_ns
-        baseline = current if gap else self._snapshots[0]
-        gap_end = current
+        # Only first admission can lack a 30 s opening. Later calls, including
+        # those after a gap, judge retained data without stalling decoding.
+        baseline = self._snapshots[0]
         while current.midpoint_ns - baseline.midpoint_ns < dwell_ns:
             remaining = (dwell_ns - (current.midpoint_ns - baseline.midpoint_ns)) / 1e9
             self.sleep(remaining)
@@ -129,12 +131,8 @@ class QuietGuard:
         opening = self._snapshots[opening_index]
         # Retain the newest eligible opening and every more recent snapshot.
         del self._snapshots[:opening_index]
-        busy = []
-        if gap:
-            gap_details = details["gap_interval"] = {"regressed_noncontaminant": []}
-            busy.extend(self._judge_cpu_interval(previous, gap_end, gap_details))
-        busy.extend(self._judge_cpu_interval(opening, current, details))
-        if details["long_interval"] or (gap and gap_details["long_interval"]):
+        busy = self._judge_cpu_interval(opening, current, details)
+        if details["long_interval"]:
             receipt["long_interval"] = True
         return busy
 
@@ -158,13 +156,17 @@ class QuietGuard:
             return (row["pid"], row["start"]) in matches
         regressions = [row for row in measured["unaccounted"] if row["reason"] == "counter regressed"]
         for row in regressions:
-            if not contaminant(row):
-                recorded = details["regressed_noncontaminant"]
+            entry = {**row, "contaminant": contaminant(row)}
+            for key in ("regressed_counters", "regressed_noncontaminant"):
+                if key == "regressed_noncontaminant" and entry["contaminant"]:
+                    continue
+                recorded = details[key]
                 recorded[:] = [entry for entry in recorded
                                if (entry["pid"], entry["start"]) != (row["pid"], row["start"])]
-                recorded.append(row)
-        if measured["error"] and (measured["error"] != contention.REGRESSED_COUNTER_ERROR
-                                  or any(contaminant(row) for row in regressions)):
+                recorded.append(entry)
+        # The module carries prior over-limit evidence into outside_over_limit
+        # via exited_over_limit. An unproven regression alone is disclosure.
+        if measured["error"] and measured["error"] != contention.REGRESSED_COUNTER_ERROR:
             raise Refused(f"census indeterminate: {measured['error']}")
         busy = [row for row in measured["outside_over_limit"] if contaminant(row)]
         self._previous_over = {identity: rate for identity, rate in contention.over_limit(measured).items()

@@ -26,7 +26,7 @@ class QuietTests(unittest.TestCase):
     def test_measured_outside_job_and_missing_host_counter_refuse(self):
         with tempfile.TemporaryDirectory() as tmp:
             # 0.06 = 0.05 + 0.01 is measured per-process contention;
-            # an aggregate of 4 * 0.05 alone is only a journal flag.
+            # an unread host counter remains an instrument error.
             for result in ({"clean": False, "error": None, "max_outside": {"cpu_s_per_s": .06}},
                            {"clean": None, "error": "host CPU unread"}):
                 with self.subTest(result=result), self.assertRaises(r0.NotQuiet):
@@ -207,30 +207,68 @@ class CpuQuietProbeTests(unittest.TestCase):
         self.assertEqual(len(probe._snapshots), 3)
         self.assertEqual(clock.sleeps, [prewindow.INTERVAL_S])
 
-    def test_gap_judges_both_long_and_fresh_intervals(self):
+    def test_gap_contender_is_detected_on_first_wholly_post_gap_window(self):
         # Gap 20 * 30 = 600 s. Recent contention uses 10 * .05 = .5
-        # for its last 30 s, then continues through the new baseline.
-        # Alternatively .06 = .05 + .01 over the gap then stops; either
-        # interval alone must be sufficient to refuse on this call.
+        # for its last 30 s, then continues. At the 30 / 6 = 5 s cadence,
+        # the sixth call after the gap call (t=660) first judges a wholly
+        # post-gap 30 s window, 630 -> 660. Earlier diluted rates stay < .05.
         dwell = prewindow.INTERVAL_S
         end = 21 * dwell
-        for recent in (True, False):
-            with self.subTest(recent=recent):
-                def cpu(t):
-                    if recent:
-                        return max(0, t - (end - dwell)) * .5
-                    return max(0, min(t, end) - dwell) * .06
-                probe, clock, _ = self.make_probe(
-                    lambda t: [(42, 1, -dwell, cpu(t), "outside")], cpu)
-                self.assertTrue(probe()["clean"])
-                clock.advance(20 * dwell)
+        def cpu(t):
+            return max(0, t - (end - dwell)) * .5
+        probe, clock, _ = self.make_probe(
+            lambda t: [(42, 1, -dwell, cpu(t), "outside")], cpu)
+        self.assertTrue(probe()["clean"])
+        with mock.patch.object(clock, "sleep", side_effect=AssertionError("slept after first admission")):
+            clock.advance(20 * dwell)
+            result = probe()
+            gap_end = result["interval"]["monotonic_ns"][1]
+            self.assertTrue(result["clean"])
+            self.assertTrue(result["long_interval"])
+            self.assertEqual(result["elapsed_s"], 20 * dwell)
+            self.assertAlmostEqual(result["max_outside"]["cpu_s_per_s"], .5 / 20,
+                                   delta=contention.PS_TIME_QUANTUM_S / (20 * dwell))
+            for call in range(1, 7):
+                clock.advance(dwell / 6)
                 result = probe()
-                self.assertFalse(result["clean"])
-                self.assertEqual(result["elapsed_s"], dwell)
-                self.assertIs(result["gap_interval"]["clean"], recent)
-                self.assertTrue(result["long_interval"])
-                self.assertEqual(clock.sleeps, [dwell, dwell])
-                self.assertEqual(len(probe._snapshots), 2)
+                self.assertIs(result["clean"], call < 6)
+            self.assertEqual(result["interval"]["monotonic_ns"][0], gap_end)
+            self.assertEqual(result["elapsed_s"], dwell)
+            self.assertAlmostEqual(result["max_outside"]["cpu_s_per_s"], .5,
+                                   delta=contention.PS_TIME_QUANTUM_S / dwell)
+        self.assertEqual(clock.sleeps, [dwell])
+        self.assertEqual(len(probe._snapshots), 7)  # Opening plus six 5 s calls in 30 s.
+
+    def test_gap_contention_refuses_on_the_long_judged_interval(self):
+        # (0.05 + 0.01) * (20 * 30) = 36 CPU-s over the gap itself.
+        dwell = prewindow.INTERVAL_S
+        def cpu(t):
+            return max(0, t - dwell) * .06
+        probe, clock, _ = self.make_probe(
+            lambda t: [(42, 1, -dwell, cpu(t), "outside")], cpu)
+        self.assertTrue(probe()["clean"])
+        with mock.patch.object(clock, "sleep", side_effect=AssertionError("slept after first admission")):
+            clock.advance(20 * dwell)
+            result = probe()
+        self.assertFalse(result["clean"])
+        self.assertTrue(result["long_interval"])
+        self.assertEqual(result["elapsed_s"], 20 * dwell)
+
+    def test_no_sleep_after_first_admission_at_cadence_or_after_gaps(self):
+        dwell = prewindow.INTERVAL_S
+        # Cadence = 30 / 6 = 5 s; gaps = 20 * 30 and 30 + 100 TIME
+        # quanta (600 and 31 s). Follow both gaps with another full cadence.
+        steps = (dwell / 6,) * 6 + (20 * dwell, dwell + 100 * contention.PS_TIME_QUANTUM_S) + (dwell / 6,) * 6
+        probe, clock, _ = self.make_probe(lambda t: [], lambda t: 0)
+        self.assertTrue(probe()["clean"])
+        self.assertEqual(clock.sleeps, [dwell])
+        with mock.patch.object(clock, "sleep", side_effect=AssertionError("slept after first admission")):
+            for step in steps:
+                clock.advance(step)
+                result = probe()
+                self.assertTrue(result["clean"])
+                self.assertGreaterEqual(result["elapsed_s"], dwell)
+        self.assertLessEqual(len(probe._snapshots), 7)  # 30 / 5 intervals plus their opening.
 
     def test_zombie_counter_is_disclosed_and_other_processes_still_judged(self):
         # 500 TIME quanta -> zero for the zombie. Another process uses
@@ -244,6 +282,20 @@ class CpuQuietProbeTests(unittest.TestCase):
                 self.assertIs(result["clean"], clean)
                 self.assertIsNone(result["error"])
                 self.assertEqual([row["pid"] for row in result["regressed_counters"]], [42])
+                self.assertFalse(result["regressed_counters"][0]["contaminant"])
+
+    def test_zombie_regressions_without_prior_over_limit_are_disclosed_for_every_process(self):
+        # TIME 3.00 = 300 quanta -> zero, with no prior judged over-limit
+        # interval. Contaminant status is disclosed but does not change this rule.
+        for name, contaminant in (("mdworker_shared", True), ("Safari", False)):
+            with self.subTest(name=name):
+                probe, _, _ = self.make_probe(
+                    lambda t: [(42, 1, -prewindow.INTERVAL_S, 3 if t == 0 else 0, name)], lambda t: 0)
+                result = probe()
+                self.assertTrue(result["clean"])
+                self.assertIsNone(result["error"])
+                self.assertEqual([(row["pid"], row["contaminant"]) for row in result["regressed_counters"]],
+                                 [(42, contaminant)])
 
     def test_failed_snapshot_and_host_ticks_remain_errors(self):
         # A full 30 s baseline cannot make failed instruments clean.
@@ -259,6 +311,28 @@ class CpuQuietProbeTests(unittest.TestCase):
                 result = probe()
                 self.assertIsNone(result["clean"])
                 self.assertEqual(result["error"], error)
+                self.assertFalse(probe._snapshots)
+                self.assertIsNone(probe.previous)
+
+    def test_failed_startup_closing_snapshot_never_becomes_a_future_opening(self):
+        # Fail the closing read at 30 s, then supervise every 30 / 6 = 5 s
+        # through 2 * 30. The failed snapshot would resurface at t=60 if kept.
+        dwell = prewindow.INTERVAL_S
+        probe, clock, snapshots = self.make_probe(lambda t: [], lambda t: 0)
+        original = probe.snapshot
+        def transient_failure():
+            sample = original()
+            return replace(sample, error="transient ps failure") if len(snapshots) == 2 else sample
+        probe.snapshot = transient_failure
+        self.assertEqual(probe()["error"], "transient ps failure")
+        self.assertEqual(len(probe._snapshots), 1)
+        with mock.patch.object(clock, "sleep", side_effect=AssertionError("retained opening already exists")):
+            for _ in range(6):
+                clock.advance(dwell / 6)
+                result = probe()
+                self.assertTrue(result["clean"])
+                self.assertIsNone(result["error"])
+                self.assertTrue(all(not sample.error for sample in probe._snapshots))
 
     def test_previous_over_limit_exit_and_regression_evidence_is_preserved(self):
         # .06 = .05 + .01 over the first 30 s. Existing previous_over
@@ -276,6 +350,8 @@ class CpuQuietProbeTests(unittest.TestCase):
                 self.assertFalse(result["clean"])
                 self.assertIsNone(result["error"])
                 self.assertEqual(result["exited_over_limit"][0]["pid"], 42)
+                if not exited:
+                    self.assertFalse(result["regressed_counters"][0]["contaminant"])
 
     def test_reused_root_pid_does_not_exempt_replacement(self):
         # Replacement is born one TIME quantum into the 30 s interval
