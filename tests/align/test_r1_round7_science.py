@@ -143,7 +143,7 @@ class G0TimeoutTests(_World):
         self.assertAlmostEqual(value["with_retries_and_one_batch_wait_s"], 90662.94, places=1)
 
 
-class G0CapW1Tests(unittest.TestCase):
+class G0CapW1Tests(_World):
     """R7-2/R7-12: G0_cap_W1 = clamp(ceil(1.25 x max wait), 600 s, 1,200 s)."""
 
     @staticmethod
@@ -210,7 +210,7 @@ class G0CapW1Tests(unittest.TestCase):
                 self.assertIn("g0_wait_s", contract.required_fields(kind, quiet=True), kind)
 
 
-class AliasGroupTests(unittest.TestCase):
+class AliasGroupTests(_World):
     """R7-13: aliased keys are one thermometer; the classification records them."""
 
     @staticmethod

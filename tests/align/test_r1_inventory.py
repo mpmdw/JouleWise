@@ -22,6 +22,9 @@ from tests.align.w1_synthetic import AMBIENT_C, FAST, SLOW, FAN
 PREFILL_NS = 1300 * NS
 LAST_DECODE_NS = 1420 * NS
 R0_SENSORS = {"s_fast": FAST, "s_slow": SLOW}
+# PR #692 D4/D5: the slow role needs 60 s < cooling tau <= 300 s (and band hold
+# tau x ln(rise / 1 C) <= 300 s); a 60 s key is now on the fast side of the boundary.
+SLOW_TAU = 120.0
 
 
 def lean(row):
@@ -40,7 +43,7 @@ def step_capture():
     rows = []
     for t in range(-1, 1022):
         sensors = {FAN: 1200.0, "Ta0P": 40.0}
-        for key, amplitude, tau in ((FAST, 12.0, 3.0), (SLOW, 6.0, 60.0)):
+        for key, amplitude, tau in ((FAST, 12.0, 3.0), (SLOW, 6.0, SLOW_TAU)):
             if t < 300:
                 value = 40.0 + (t % 3 - 1) * 0.01  # three distinct quiet readings
             elif t <= 420:
@@ -73,7 +76,7 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(result["r0_sensors"], R0_SENSORS)
         self.assertEqual(result["journal_rows"], len(rows))
         slow = next(row for row in result["ranking"] if row["key"] == SLOW)
-        self.assertAlmostEqual(slow["tau_s"], 60.0, delta=0.1)
+        self.assertAlmostEqual(slow["tau_s"], SLOW_TAU, delta=0.1)
         self.assertEqual(rows, original)
         digest = result.pop("classification_sha256")
         expected = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":"),
@@ -142,8 +145,9 @@ class ChangedPickRecoveryTests(unittest.TestCase):
         result = s7_for_picks(rows, {"s_fast": FAST, "s_slow": SLOW}, prefill_ns=PREFILL_NS, quiet_s=300)
         self.assertAlmostEqual(result["reference_c"]["s_slow"], 40.0, places=6)
         self.assertEqual(result["band_c"]["s_slow"], 1.0)
-        # Slow peak 6 (1 - e^-2) = 5.19 C decays (tau 60 s) to 1.0 C after ~99 s.
-        self.assertAlmostEqual(result["recovery_s"], 60 * math.log(6 * (1 - math.exp(-2))), delta=1.5)
+        # Slow peak 6 (1 - e^-1) = 3.79 C decays (tau 120 s) to 1.0 C after ~160 s.
+        self.assertAlmostEqual(result["recovery_s"], SLOW_TAU * math.log(6 * (1 - math.exp(-120 / SLOW_TAU))),
+                               delta=1.5)
         self.assertFalse(result["recovery_censored"])
         self.assertAlmostEqual(result["S7"], min(300.0, 3 * result["recovery_s"]))
         short = [r for r in rows if r["started"]["monotonic_ns"] <= 1450 * NS]

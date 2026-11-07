@@ -154,7 +154,11 @@ class KitTests(unittest.TestCase):
             self.assertLessEqual(law['intercept_s'] + 1.13544 * m['spec']['deadman_s'], 1750 + 1e-9)
             planned = {'S': 850, 'G': 1150}[m['role'][-1]]
             self.assertGreaterEqual(m['spec']['deadman_s'], (planned - law['intercept_s']) / 1.13544)
-            self.assertIsNone(m['spec']['max_turns'])  # WP18; never the configured 12-turn fallback.
+            # WP18 (filled from the committed fixtures): the recorded pilot-7
+            # turn count of that arm's fixture, not a configured fallback.
+            fixture = json.loads((ROOT / kit.WP18_FIXTURES[m['role'][0]]).read_text())
+            self.assertEqual(m['spec']['max_turns'], kit.read_inputs(ROOT)['WP18'][m['role'][0]]['max_turns'])
+            self.assertEqual(m['spec']['max_turns'], len(fixture['turns']))
             policy = m['spec']['thermal']
             self.assertIs(policy['heavy'], False)
             self.assertEqual(policy['per_turn'], m['role'].endswith('G'))
@@ -285,13 +289,17 @@ class KitTests(unittest.TestCase):
         self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18.*R0'):
+        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.*R1'):
             kit.generate(ROOT, check=True)
         inputs = kit.read_inputs(ROOT)
         inputs['status'] = 'ready'
+        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
+            kit.require_ready(inputs)
+        self.assertIn('R1.T_dead', self.plan['pending_inputs'])
+        # WP18 is filled; an emptied WP18 leaf still blocks, whatever status says.
+        inputs['WP18']['X']['max_turns'] = None
         with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18.X.max_turns'):
             kit.require_ready(inputs)
-        self.assertIn('WP18.Y.max_turns', self.plan['pending_inputs'])
         with redirect_stderr(io.StringIO()) as err:
             self.assertEqual(kit.main(['--check']), 1)
         self.assertIn('BLOCKED by placeholders', err.getvalue())
@@ -302,9 +310,10 @@ class KitTests(unittest.TestCase):
         pending_owners = {p.split('.')[0] for p in kit.pending_inputs(kit.read_inputs(ROOT))}
         # WP11 (W1-blockers lane) and WP15 (the R1 runtime argv) are supplied;
         # emptying either must still block on its own.
-        self.assertEqual(pending_owners, {'WP18', 'R0', 'R1'})
+        # WP18 is filled from the committed fixtures; it is checked below with the supplied owners.
+        self.assertEqual(pending_owners, {'R0', 'R1'})
         for owner, fields in kit.read_inputs(ROOT).items():
-            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15'}:
+            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18'}:
                 continue
             candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
                          if isinstance(v, dict)}
@@ -1084,7 +1093,7 @@ class SessionParameterTests(unittest.TestCase):
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18'):
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
                 session.prepare(ROOT, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
@@ -1104,7 +1113,7 @@ class SessionParameterTests(unittest.TestCase):
 
     def test_v4_install_refuses_before_shared_installer(self):
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18'):
+            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R0.reasoning_effort'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
 
@@ -1351,7 +1360,8 @@ class PendingMessageTests(unittest.TestCase):
         text = str(caught.exception)
         self.assertNotIn('WP11', text)
         self.assertNotIn('WP15', text)  # the R1 runtime argv is committed in inputs.json
-        for owner in ('WP18', 'R0', 'R1'):
+        self.assertNotIn('WP18', text)  # filled from the committed X/Y token fixtures
+        for owner in ('R0', 'R1'):
             self.assertIn(f'| {owner}: ' + kit.PENDING_REASONS[owner], text)
 
 
@@ -1469,10 +1479,19 @@ class WP18FixtureBindingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'not the WP18 X fixture'):
                 kit.validate_wp18_fixtures(inputs, root)
 
+    def test_committed_wp18_leaves_bind_the_committed_fixtures(self):
+        # WP18 filled from the measurement Mac's fixtures (aaee4b2d2).
+        inputs = kit.read_inputs(ROOT)
+        kit.validate_wp18_fixtures(inputs, ROOT)
+        self.assertEqual({arm: inputs['WP18'][arm]['token_fixture_sha256'] for arm in ('X', 'Y')},
+                         {'X': '9dac183dc113275c799f339f827be3ab1e332f4685b2e4b6b0da9466d6dc658f',
+                          'Y': 'f17a5a0f52921b52d67216e6b0bfa86cb3f96ebd143d6e39a4c210ba81420dac'})
+        self.assertEqual({arm: inputs['WP18'][arm]['max_turns'] for arm in ('X', 'Y')}, {'X': 12, 'Y': 12})
+
     def test_w1_readiness_requires_the_fixtures(self):
         with patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
                 patch.object(kit, 'read_inputs', return_value=ready_inputs()[0]), \
-                self.assertRaisesRegex(ValueError, 'WP18.X token fixture is missing'):
+                self.assertRaisesRegex(ValueError, 'WP18.X.token_fixture_sha256 does not match'):
             kit.require_w1_ready(ROOT)
 
 

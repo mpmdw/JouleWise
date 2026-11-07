@@ -33,7 +33,17 @@ class WP18FixtureTests(unittest.TestCase):
         self.registration = self.root / 'configs/campaigns/align_v4/registration'
         self.registration.mkdir(parents=True)
         self.inputs_path = self.registration / 'inputs.json'
-        self.inputs_raw = (ROOT / 'configs/campaigns/align_v4/registration/inputs.json').read_bytes()
+        # The committed inputs.json has WP18 filled (aaee4b2d2 fixtures); the
+        # tool is tested on the pre-WP18 state: the same bytes with the four
+        # WP18 leaves pending (null).
+        committed = (ROOT / 'configs/campaigns/align_v4/registration/inputs.json').read_text()
+        head, sep, tail = committed.partition('"WP18"')
+        block, rest = tail.split('}\n  }', 1)
+        block = re.sub(r'("max_turns"\s*:\s*)\d+', r'\g<1>null', block)
+        block = re.sub(r'("token_fixture_sha256"\s*:\s*)"[0-9a-f]{64}"', r'\g<1>null', block)
+        self.inputs_raw = (head + sep + block + '}\n  }' + rest).encode('utf-8')
+        assert json.loads(self.inputs_raw)['WP18'] == {arm: {'max_turns': None, 'token_fixture_sha256': None}
+                                                       for arm in ('X', 'Y')}
         self.inputs_path.write_bytes(self.inputs_raw)
         self.paths = {arm: self.directory / f'{arm}-align_turns.jsonl' for arm in IDENTITIES}
         self.pilot_path = self.directory / 'p7-PILOT.json'

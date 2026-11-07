@@ -208,10 +208,17 @@ class ConformanceTests(unittest.TestCase):
                 _, spec = rt.read_template(production["templates"][key])
                 with self.assertRaisesRegex(rt.Refused, "PENDING R0"):
                     rt.require_effort(spec, key)
-            # The kit leaves X-G max_turns pending until WP18; the runtime refuses it.
+            # WP18 is filled (fixtures merged): the production X-G template
+            # carries an integer max_turns. A template whose max_turns is still
+            # pending (the pre-WP18 kit) is refused by the runtime.
+            template, spec = rt.read_template(production["templates"]["x_g"])
+            self.assertEqual(spec["max_turns"], 12)
+            template["workload_profile"]["prompt_text"] = json.dumps(dict(spec, max_turns=None))
+            pending = root / "x_g_pending_wp18.json"
+            pending.write_text(json.dumps(template))
             config = rs.synthetic_config(root / "cfg", )
             data = json.loads(config.read_text())
-            data["templates"]["x_g"] = production["templates"]["x_g"]
+            data["templates"]["x_g"] = str(pending)
             config.write_text(json.dumps(data))
             (root / "r1" / rt.STEP_D_SEGMENT).mkdir(parents=True)
             (root / "r1" / rt.STEP_D_SEGMENT / rt.RESULT_NAME).write_text(json.dumps(
