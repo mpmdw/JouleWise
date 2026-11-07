@@ -542,3 +542,181 @@ Kit: `scripts/align_v4_kit.py --check` reports no drift and exits 1 on the same
 13 placeholders; `validate_align_v4_w1_plan.py` on the committed template still
 refuses its PENDING_R1 placeholders; `git diff a2193446d HEAD --
 configs/campaigns/align_pilot_v3` is empty.
+
+## Round 4 integration (three lanes onto `a2193446d`)
+
+Code and kit integration only: no measurement, no model weights, no v3 kit
+bytes. Three `--no-ff` merges, in this order; each merge message records its
+conflict resolutions.
+
+| Merge | Lane @ head | What landed |
+|---|---|---|
+| `e72cc09fe` (1/3) | `lane/2026-11-06-v4-r1-wp15-runtime@f1864e314` | The WP15 R1 runtime (`joulewise/align/apple/r1_runtime.py`, `scripts/align_r1_runtime.py`, `configs/align/v4/r1_runtime.json`) behind the driver seam; `inputs.WP15.runtime_entrypoint` committed as an argv list; driver TERM → 20 s → KILL grace and the runtime's TERM obligations in the contract (closes cold pass MEDIUM-1); `battery_drain_pct_per_h` and the charge-resume SoC in the contract and `r1_slots.battery` (closes executing review MEDIUM-4); the argv rule written once in the contract (closes cold pass LOW-3). No conflicts. |
+| `1c1a64557` (2/3) | `lane/2026-11-06-v4-r1-round4-fixes@0cdd1071b` | The round-4 fixes and decisions above (host power-mode admission, load-journal completeness, L1 on the record, kit-to-R1 evidence binding, G0-unreleased stop, arm records, ruling 20 census), protocol v4, the SSD census tooling. Conflicts in the contract doc, the driver's registration record, and two test modules: union of both sides (details in the merge message). |
+| `d9c709ee5` (3/3) | `lane/2026-11-06-v4-w1-blockers@b2e60ebda` | W1 readiness: `w1_disk_gate` wired into `align_v4_session.py install` (`--w1-disk-config`), `sizing_b5.json` derived from the R1-filled `registration/w1_plan.json` (`kit.derive_sizing`), WP11 D identity inputs supplied, the R0 load reference (PR #686) and the off-Mac prequal runner. Conflicts in `align_v4_kit.py`, `align_v4_session.py` and `test_v4_kit.py`: union; the install order is `require_w1_ready` → round-4 `arm_checks` (+ `staging/v4-arm-NNN.json`) → `arm_powermode_check` → `w1_disk_check` (+ `staging/w1_disk_gate.json`) → shared installer. |
+
+Generated files (`plan_tree.json`, `registration/identity_pins.json`) were
+regenerated with `scripts/align_v4_kit.py` after merges 2 and 3. Rerunning the
+generator on the final tree changes nothing (`git status` clean); the W1
+template is unchanged.
+
+### Kit check on the integrated head
+
+- `git diff origin/lane/2026-11-05-align-pilot10-benign -- configs/campaigns/align_pilot_v3`
+  is empty, against both the worktree and HEAD.
+- `scripts/align_v4_kit.py --check`: no drift, **exit 1**, blocked on exactly
+  nine leaves (WP11 and WP15 are now supplied, so 13 → 9):
+  - `WP18.X.max_turns`, `WP18.X.token_fixture_sha256`, `WP18.Y.max_turns`,
+    `WP18.Y.token_fixture_sha256`;
+  - `R0.reasoning_effort`;
+  - `R1.B_D`, `R1.I_D`, `R1.T_dead`, `R1.thermal_policy`.
+
+  So `--check` does **not** yet block only on R0 and R1: the four WP18 leaves
+  still block. They are Mac-side (the pilot-7 b-e25 / b-e18
+  `align_turns.jsonl` and `p7-PILOT.json`, lead + magistrate) and cannot be
+  derived off the Mac.
+- Probe (scratch, committed inputs plus synthetic values): with WP18 filled,
+  pending is `R0.reasoning_effort` + the four R1 leaves; with WP18 and R0
+  filled, only the four R1 leaves; with every input filled and the committed
+  `r1_slots.json`, `require_ready` refuses `R1 r1_slots must freeze AC
+  powermode 0 or 2`; with an R1-driver-shaped hardware record it admits. So
+  once WP18 and R0 are supplied the gate is fail-closed only on R1-measured
+  values.
+- `validate_align_v4_w1_plan.py` on the committed template refuses its
+  `PENDING_R1` placeholders (B_D, I_D, T_dead, effort, max_r1_tail_s, the 18
+  `member_s`, the thermal policy, plan_id, window_max_s).
+
+### Suite tail (round 4 integration, code head `d9c709ee5`)
+
+Every run used `/private/tmp/jwsol/venv-both/bin/python` under
+`nice -n 19 taskpolicy -b`, `TMPDIR=/private/tmp/jwr4-tmp/integ`, one module
+per process, three at a time, on a laptop also running a blinded analysis, a
+GPU job and other sessions' tests (load average 15-19, so walls are about 3×
+the earlier run's).
+
+- **Whole `tests/align`, one module per process (113 modules):** every module
+  rc=0, OK; **Ran 1455 tests, skipped=35** in total. Slowest walls:
+  test_moe_calibration 7,570 s, test_moe_review 2,860 s,
+  test_analysis_metadata_baseline 2,676 s, test_r0_mlx_native 1,035 s,
+  test_analysis_budget_pilot 901 s.
+
+  Selected module tails:
+  ```
+  test_r1_rehearsal         Ran 46 tests in 10.694s   OK
+  test_r1_runtime_contract  Ran 9 tests in 0.008s     OK
+  test_r1_runtime           Ran 12 tests in 111.031s  OK
+  test_r1_runtime_e2e       Ran 2 tests in 139.999s   OK
+  test_v4_kit               Ran 66 tests in 23.299s   OK
+  test_v4_w1_plan           Ran 10 tests in 1.514s    OK
+  test_v4_prequal           OK (skipped=3)
+  test_protocol_v4_doc      Ran 5 tests in 1.358s     OK
+  test_r0_mlx               Ran 7 tests in 0.868s     OK
+  test_r0_mlx_native        Ran 1 test in 1031.094s   OK
+  test_v4_w1_synthetic      Ran 18 tests in 6.485s    OK (skipped=14)
+  ```
+- **`JW_WP22_FULL=1 tests.align.test_v4_w1_synthetic`:** Ran 18 tests in
+  238.940s, OK (expected failures=1). Only F3 remains expected; F2 passes.
+- **`tests.test_align_pilot_session`:** Ran 16 tests in 663.745s, OK.
+- **R1 exit-path harness:** the executing review's real-process harness was
+  scratch and is not committed or present; its scenarios are covered by the
+  committed zsh-chain tests in `test_r1_rehearsal` (signal burst restores
+  Automatic, marker survives into the next night, sudo listing, inputs
+  entrypoint), which passed above, and by `test_r1_runtime_e2e`'s TERM test
+  (the runtime closes its custody before exit).
+- Scratch probe of the full synthetic R1 through the runtime on this head:
+  R1 rc 0, `status: complete`, every segment custody closed; the three gated D
+  runs fail with X7 (see "Still open").
+
+### Lead decisions in this round
+
+- Recorded in protocol v4 and above: (a) the 30B JSON-path malformed call is
+  tabulated, not excluded; (b) the refused XML call on D is flagged and
+  tabulated, not excluded (chair ruling 2(d) asks for visibility only); the
+  G0-unreleased stop and its disclosed cost (a G0-timeout X2 member has no
+  capability score); run_night's power-mode admission also covers HAZARD_PACK
+  nights.
+- Integration calls made here: the merged install order above; `require_ready`
+  keeps the round-4 signature `(inputs, r1_slots=None, *, synthetic=False)`;
+  the W1 lane's `observe_powermode` hook is superseded by the round-4
+  admission runner; the registration record is the union (`l1`,
+  `max_r1_tail_s`, `external_volumes`, `battery`).
+
+### Waiting on lead sign-off (from the WP15 builder; not decided here)
+
+- `r1_slots` S1-S4 are finite step-response numbers (fast-key ΔT and t63,
+  slow-key ΔT and τ); the key names and FD 2.6 class checks are in
+  `slot_detail`. Either sign off on that mapping or change the `r1_slots`
+  schema.
+- A censored `t_decline` (S9 = observed decode length, `t_decline_censored`)
+  when no decline occurs; missing PM clock support refuses.
+- S6 = δ_slow until the lead applies the FD 2.6 S6 tuning after the gated
+  runs; the runtime's T_dead is L1's first term and the kit applies
+  `max_r1_tail_s`.
+- The W1 launcher in `collection_plan` `runtime_requirements.launcher` is the
+  R1 runtime argv; confirm that is the intended W1 launcher.
+
+### Review findings closed by the combination
+
+The WP15 lane did not touch the cold pass HIGH-1 or the executing review /
+cold pass MEDIUMs; on the integrated head they are closed by one lane or the
+other:
+
+| Finding | Closed by |
+|---|---|
+| Cold pass HIGH-1 / executing HIGH-3 (powermode 2 survives a crash) | round-4 fixes: run_night admission restores the marker on every night class |
+| Cold pass MEDIUM-1 (driver SIGKILLs the runtime, no TERM duty) | WP15: TERM → 20 s → KILL, runtime TERM obligations in the contract |
+| Cold pass MEDIUM-2 (blind G1 after unreleased G0) | round-4 fixes: `episode.g0_unreleased` stop |
+| Cold pass MEDIUM-3 (JSON malformed / refused XML) | lead decisions (a) and (b) |
+| Cold pass MEDIUM-4 (protocol v4 not on head) | round-4 fixes: protocol v4 merged and reconciled |
+| Cold pass MEDIUM-5 (arm records nothing) | round-4 fixes: `staging/v4-arm-NNN.json` |
+| Cold pass LOW-3 (argv is one executable) | WP15: the argv rule is stated once in the contract |
+| Executing MEDIUM-1, -2, -3, -5 | round-4 fixes (journal completeness, L1 on record, evidence binding, volume census) |
+| Executing MEDIUM-4 (battery outputs) | WP15: `battery_drain_pct_per_h`, `r1_slots.battery` |
+
+So the round-4 "Still open" list above is superseded for cold pass MEDIUM-1,
+executing MEDIUM-4 and cold pass LOW-3.
+
+### Still open after the integration
+
+- On the synthetic world the three gated D runs end in X7 (H ≈ 250 s and
+  decode ≈ 850 s against T_dead 1,262 s), so the synthetic duty bar fails
+  (probe on this head, R1 rc 0). The synthetic world's timings are not
+  hardware, but this is the same shape as WP22 F2 and stays open under
+  ruling 1's duty bar and fallback order until R1 measures it.
+- The designed start states (ruling 6) use a proportional MLX heater child
+  (`ProcessHeater`) that has run only on the synthetic world: it needs a
+  hardware check on the measurement Mac (the driver refuses any release
+  outside the band).
+- `calibration-pre`/`-post` record a read-only host snapshot only; the meter
+  calibration comes from the R1 night plan's scaffold. `harvest` writes a
+  SHA-256 manifest; it does not run `harvest_b6_session`.
+- Executing review LOWs 1-3 (A-B-A leg wait bound assumes 1,800 + 600 s;
+  `t_decline_s: true` accepted as 1 s; "A legs infinite, B finite" reported
+  inconclusive where ruling 16 reads not-adopt).
+- Protocol v4's blind Fable + Opus cold gate before W1 arm is still owed.
+- W1 items: ruling 9 changes in `deciding_experiment`; the count-level
+  full-omission variant; `sizing_b5.json` exists only once the R1-filled
+  `registration/w1_plan.json` is committed (prepare refuses with the
+  FINAL-DESIGN B8 reason until then); install needs `--w1-disk-config`
+  pointing at the Mac's R0 desk config, whose offloads list must name the
+  pilots 8-10 offload receipts (chair ruling 20); the disk gate reruns on every
+  install call (read-only); one live sibling prequal run on the Air for the
+  sibling load check (tested with fakes only); the sibling 0.4669 reference
+  takes upstream `Qwen/Qwen3.5-0.8B` main head `2fc06364` as its basis.
+- `tests.test_run_night`: 12 failures also present on base `a2193446d` on this
+  laptop (eight installer battery-fixture tests, four bind-supervision timing
+  tests), not caused by these lanes.
+
+### What still blocks arming R1
+
+1. **R0 passing on the Mac**: `inputs.R0.reasoning_effort`, and R0's SMC sensor
+   selection in `configs/align/v4/r1_runtime.json` (`"sensors": "PENDING_R0"`);
+   then regenerate the kit. The runtime refuses (exit 2) until both are set.
+2. **WP18 (Mac-side, lead + magistrate)**: the R1 X-G contrast run needs
+   `WP18.X.max_turns` in the generated x-g template (the runtime refuses with
+   "x-g template carries a PENDING WP18 X max_turns"), so WP18 X must be
+   supplied and the kit regenerated before R1, not only before W1.
+3. **Ed-visible items**: the lead sign-offs listed above (S1-S4 mapping, S6,
+   W1 launcher); the R1 night plan (`MEASUREMENT_ROOT`, `NIGHT_DIR`, the two
+   `sudo -n pmset -c powermode 0|2` rules, avoiding 11:45-13:15); the
+   hardware check of the heater start-state loop on the first R1 night.
