@@ -313,7 +313,7 @@ def check_stack(ctx):
 
 def check_r0_config(ctx):
     from joulewise.align.r0_runner import validate_config
-    from joulewise.align.r0_step import step_budget
+    from joulewise.align.r0_host import step_budget  # PR #692 D3: adaptive idle (idle_max_seconds)
     from scripts import align_v4_kit as kit
     from joulewise.align import r0
     raw = (ctx.repo / "configs/align/v4/r0_desk.json").read_bytes()
