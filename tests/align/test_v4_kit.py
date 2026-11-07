@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from joulewise.align.apple import r1_runtime
 from joulewise.align.apple.workload import EpisodeSpec
 from joulewise.b5 import chain
 from joulewise.schemas import BenchmarkConfig
@@ -557,7 +558,9 @@ class R1EvidenceBindingTests(unittest.TestCase):
         changed['thermometry']['lead_verification'] = {'authority': 'LEAD-RULINGS-3 S7 verified'}
         changed['thermometry']['D']['s7_for_r1_picks'] = {
             'S7': slots['slots']['S7'], 'band_c': {'s_fast': slots['slots']['S5_fast'], 's_slow': slots['slots']['S6']},
-            'keys': {'s_fast': 'TC0P', 's_slow': 'TG0P'}}
+            'keys': {'s_fast': 'TC0P', 's_slow': 'TG0P'}, 'rule': r1_runtime.R1_PICK_S7_RULE,
+            'noise_c': {'s_fast': slots['slots']['S5_fast'] / 3, 's_slow': slots['slots']['S6'] / 3},
+            'recovery_s': slots['slots']['S7'] / 3}
         kit.require_ready(inputs, changed)
 
     def test_classification_digest_must_match_the_r1_record(self):
@@ -725,10 +728,40 @@ class R1ChangedPickBindingTests(unittest.TestCase):
         self.slots['thermometry']['D'].update(
             sensor_pick_changed=True, s_fast='TC1P', s_slow='TG1P',
             die_candidates=['TC1P'], heatsink_candidates=['TG1P'],
-            s7_for_r1_picks={'keys': {'s_fast': 'TC1P', 's_slow': 'TG1P'},
+            s7_for_r1_picks={'keys': {'s_fast': 'TC1P', 's_slow': 'TG1P'}, 'rule': r1_runtime.R1_PICK_S7_RULE,
                              'reference_c': {'s_fast': 40.0, 's_slow': 35.0},
+                             'noise_c': {'s_fast': 0.1, 's_slow': 1.25 / 3},
                              'band_c': {'s_fast': 1.0, 's_slow': 1.25},
                              'recovery_s': 20.0, 'recovery_censored': False, 'S7': 60.0})
+
+    def test_kit_rederives_the_r1_pick_bands_and_s7_with_the_runtime_functions(self):
+        # LEAD-RULINGS-2 R9-2: one baseline (the classifier's D2) for the runtime
+        # and the kit; the kit re-derives with r1_runtime.pick_band/pick_s7.
+        kit.require_ready(self.inputs, self.slots)
+        computed = self.slots['thermometry']['D']['s7_for_r1_picks']
+        cases = {
+            'pre-R9-2 rule': dict(rule='reference = quiet-window median; band = max(1.0, 3 SD); '
+                                       'S7 = min(300, 3 x peak-to-band recovery)'),
+            'rule missing': dict(rule=None),
+            'noise missing': dict(noise_c=None),
+            'noise not finite': dict(noise_c={'s_fast': 0.1, 's_slow': float('nan')}),
+            'slow band not 3 x residual SD': dict(noise_c={'s_fast': 0.1, 's_slow': 0.5}),
+            'fast band not the floor': dict(noise_c={'s_fast': 0.5, 's_slow': 1.25 / 3}),
+            'recovery missing': dict(recovery_s=None),
+            'S7 not 3 x recovery': dict(recovery_s=25.0),
+        }
+        for name, change in cases.items():
+            slots = deepcopy(self.slots)
+            slots['thermometry']['D']['s7_for_r1_picks'].update(change)
+            with self.subTest(name), self.assertRaisesRegex(ValueError, r's7_for_r1_picks.*R9-2'):
+                kit.require_ready(self.inputs, slots)
+        # The runtime's own output on a synthetic step journal re-derives exactly.
+        from tests.align.test_r1_inventory import PREFILL_NS, step_capture
+        from tests.align.w1_synthetic import FAST, SLOW
+        _, rows = step_capture()
+        produced = r1_runtime.s7_for_picks(rows, {'s_fast': FAST, 's_slow': SLOW}, prefill_ns=PREFILL_NS, quiet_s=300)
+        kit.rederive_r1_pick_s7(produced, 'r1_slots.thermometry.D.s7_for_r1_picks')
+        self.assertEqual(computed['rule'], produced['rule'])
 
     def test_r1_pick_s6_and_s7_admit_with_lead_verification(self):
         kit.require_ready(self.inputs, self.slots)

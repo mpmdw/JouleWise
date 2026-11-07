@@ -842,12 +842,15 @@ def thermometry_record(name, result):
             "s7_for_r1_picks", "alias_groups", "alias_rule")
     record = {key: block.get(key) for key in keep}
     if isinstance(record.get("s7_for_r1_picks"), dict):
-        # LEAD-RULINGS-2 R6-4: the changed-pick S7's reference R is the quiet
-        # window's median (the soak journal lacks the R1-pick keys): ACCEPTED.
+        # LEAD-RULINGS-2 R6-4: the changed-pick S7's reference R comes from the
+        # quiet window (the soak journal lacks the R1-pick keys): ACCEPTED.
+        # R9-2: on the classifier's D2 baseline (last 60 s; OLS residual SD).
         record["s7_for_r1_picks"] = {
             **record["s7_for_r1_picks"],
-            "reference_rule": "median of the 300 s quiet window before prefill (the soak journal lacks these keys)",
-            "reference_rule_status": "ACCEPTED", "reference_rule_authority": "LEAD-RULINGS-2 R6-4"}
+            "reference_rule": ("median of the last 60 s of the 300 s quiet window before prefill, band "
+                               "max(1.0 C, 3 x that window's OLS residual SD), the classifier's D2 baseline "
+                               "(the soak journal lacks these keys)"),
+            "reference_rule_status": "ACCEPTED", "reference_rule_authority": "LEAD-RULINGS-2 R6-4, R9-2"}
     return record
 
 

@@ -827,24 +827,71 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
     return slots, detail
 
 
+# LEAD-RULINGS-2 R9-2 (protocol WP14(b), PR #692 D2): the changed-pick
+# reference and band come from the classifier's own baseline, the median of
+# the last 60 s of the quiet window and that window's OLS residual SD. The
+# runtime computes them here; the kit re-derives band_c and S7 with
+# pick_band and pick_s7, so the two cannot disagree.
+R1_PICK_S7_RULE = ("reference = median of the last 60 s of the quiet window before prefill; "
+                   "band = max(1.0 C, 3 x that window's OLS residual SD) (PR #692 D2, "
+                   "LEAD-RULINGS-2 R9-2); S7 = min(300 s, 3 x peak-to-band recovery)")
+R1_PICK_MIN_SAMPLES = 5
+
+
+def quiet_baseline(rows, key, *, prefill_ns, quiet_s):
+    """The WP14(a) classifier's D2 baseline for ``key`` on an R1 step journal.
+
+    Same reads, window and statistics as ``smc_enumeration.rank`` on the
+    capture ``classify_step`` builds: valid, bracketed reads of the idle phase
+    (the ``quiet_s`` before prefill) inside its last ``IDLE_WINDOW_S``; the
+    median of those values and ``_idle_stats``'s OLS residual SD."""
+    from joulewise.align.apple import smc_enumeration, thermal
+    origin = prefill_ns - round(quiet_s * NS)
+    end_idle = (prefill_ns - origin) / NS
+    span_end = origin + round(end_idle * 1e9)
+    points = []
+    for row in rows:
+        started, finished = row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"]
+        value = row["values"]["sensors"].get(key)
+        if not (origin <= started < prefill_ns and origin <= started <= finished < span_end
+                and finished - started <= thermal.NS and key not in row["values"]["errors"]
+                and thermal.valid_value(key, value)):
+            continue
+        points.append(((started - origin) / 1e9, value))
+    points.sort()
+    window = [(t, v) for t, v in points if end_idle - smc_enumeration.IDLE_WINDOW_S <= t < end_idle]
+    _, noise = smc_enumeration._idle_stats(window)
+    return {"baseline_c": median(v for _, v in window) if window else None, "noise_c": noise,
+            "samples": len(window)}
+
+
+def pick_band(noise_c):
+    """FD 2.6's band form on the D2 residual SD: max(1.0 C, 3 SD)."""
+    return max(BAND_FLOOR_C, 3.0 * noise_c)
+
+
+def pick_s7(recovery_s):
+    """S7 = min(300 s, 3 x the peak-to-band recovery)."""
+    return min(300.0, 3.0 * recovery_s)
+
+
 def s7_for_picks(rows, picks, *, prefill_ns, quiet_s):
     """Protocol v4 :249-251: when R1 changes R0's picks, S7 recovery is computed
     for the R1 picks from the full-inventory journal (the lead verifies it
     before the W1 freeze). The soak journal holds only R0's keys, so each new
-    key's reference is the median of the quiet window before prefill and its
-    band max(1.0 C, 3 x that window's SD) (FD 2.6's form). S7 = min(300 s,
-    3 x the time from the slow pick's peak to both picks within band)."""
-    from statistics import pstdev
-    out = {"keys": dict(picks), "rule": "reference = quiet-window median; band = max(1.0, 3 SD); "
-                                        "S7 = min(300, 3 x peak-to-band recovery)"}
-    reference, band = {}, {}
+    key's reference and band come from the quiet window before prefill, with
+    the classifier's D2 baseline (R9-2): the last-60 s median and
+    max(1.0 C, 3 x the OLS residual SD). S7 = min(300 s, 3 x the time from the
+    slow pick's peak to both picks within band)."""
+    out = {"keys": dict(picks), "rule": R1_PICK_S7_RULE}
+    reference, noise, band = {}, {}, {}
     for role, key in picks.items():
-        quiet = [r["values"]["sensors"].get(key) for r in rows
-                 if prefill_ns - round(quiet_s * NS) <= r["started"]["monotonic_ns"] < prefill_ns]
-        quiet = [v for v in quiet if _finite(v)]
-        if len(quiet) < 5:
-            return {**out, "S7": None, "reason": f"{key}: fewer than five quiet samples"}
-        reference[role], band[role] = median(quiet), max(BAND_FLOOR_C, 3.0 * pstdev(quiet))
+        base = quiet_baseline(rows, key, prefill_ns=prefill_ns, quiet_s=quiet_s)
+        if base["samples"] < R1_PICK_MIN_SAMPLES or base["noise_c"] is None:
+            return {**out, "S7": None,
+                    "reason": f"{key}: fewer than five valid samples in the last 60 s of the quiet window"}
+        reference[role], noise[role] = base["baseline_c"], base["noise_c"]
+        band[role] = pick_band(noise[role])
     after = [(r["started"]["monotonic_ns"], r["values"]["sensors"]) for r in rows
              if r["started"]["monotonic_ns"] >= prefill_ns]
     slow = [(t, v[picks["s_slow"]]) for t, v in after if _finite(v.get(picks["s_slow"]))]
@@ -856,8 +903,8 @@ def s7_for_picks(rows, picks, *, prefill_ns, quiet_s):
     censored = recovered is None
     end = recovered if not censored else after[-1][0]
     recovery_s = max(1.0, (end - peak_ns) / NS)
-    return {**out, "reference_c": reference, "band_c": band, "recovery_s": recovery_s,
-            "recovery_censored": censored, "S7": min(300.0, 3.0 * recovery_s)}
+    return {**out, "reference_c": reference, "noise_c": noise, "band_c": band, "recovery_s": recovery_s,
+            "recovery_censored": censored, "S7": pick_s7(recovery_s)}
 
 
 def gated_budget(slots):

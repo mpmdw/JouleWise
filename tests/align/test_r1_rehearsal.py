@@ -1553,6 +1553,10 @@ class Round6RulingTests(unittest.TestCase):
             self.assertEqual(picks["S7"], 60.0)
             self.assertEqual(picks["reference_rule_status"], "ACCEPTED")
             self.assertIn("quiet window", picks["reference_rule"])
+            # R9-2: the classifier's D2 baseline, not the whole-window median and raw SD.
+            self.assertIn("last 60 s", picks["reference_rule"])
+            self.assertIn("OLS residual SD", picks["reference_rule"])
+            self.assertEqual(picks["reference_rule_authority"], "LEAD-RULINGS-2 R6-4, R9-2")
 
     def test_a_released_g0_that_decoded_nothing_is_not_a_d_turn_predecessor(self):
         # Sol critique of round 6: G0 released, then no D work (zero decode tokens).

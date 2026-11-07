@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple.sampling import episode_seed, turn_seed
-from joulewise.align.apple import thermal_gates
+from joulewise.align.apple import r1_runtime, thermal_gates
 from joulewise.b5 import chain
 
 KIT = Path('configs/campaigns/align_v4')
@@ -352,6 +352,32 @@ def check_r1_fast_band(r1_inputs, r1_slots):
         raise ValueError(f'inputs.R1.thermal_policy.delta_fast_c must equal {source}')
 
 
+def rederive_r1_pick_s7(computed, source):
+    """LEAD-RULINGS-2 R9-2: re-derive the changed-pick bands and S7 with the
+    runtime's own functions (r1_runtime.pick_band, r1_runtime.pick_s7), on the
+    classifier's D2 baseline (last-60 s quiet median, OLS residual SD). A record
+    computed on another baseline (the pre-R9-2 whole-window median and raw SD)
+    or whose numbers differ from the re-derivation cannot bind W1."""
+    if computed.get('rule') != r1_runtime.R1_PICK_S7_RULE:
+        raise ValueError(f'{source}.rule is not the R9-2 rule (the classifier\'s D2 baseline: last-60 s quiet '
+                         f'median and OLS residual SD); got {computed.get("rule")!r}')
+    noise = computed.get('noise_c') if isinstance(computed.get('noise_c'), dict) else {}
+    band = computed.get('band_c') if isinstance(computed.get('band_c'), dict) else {}
+    for role in ('s_fast', 's_slow'):
+        sd = noise.get(role)
+        if not finite(sd) or sd < 0:
+            raise ValueError(f'{source}.noise_c.{role} must be the finite, non-negative D2 residual SD (R9-2)')
+        if not _close(band.get(role), r1_runtime.pick_band(sd)):
+            raise ValueError(f'{source}.band_c.{role} {band.get(role)!r} differs from the re-derivation '
+                             f'max(1.0, 3 x noise_c.{role}) = {r1_runtime.pick_band(sd)!r} (R9-2)')
+    recovery = computed.get('recovery_s')
+    if not finite(recovery) or recovery < 1.0:
+        raise ValueError(f'{source}.recovery_s must be a finite recovery of at least 1 s (R9-2)')
+    if not _close(computed.get('S7'), r1_runtime.pick_s7(recovery)):
+        raise ValueError(f'{source}.S7 {computed.get("S7")!r} differs from the re-derivation '
+                         f'min(300, 3 x recovery_s) = {r1_runtime.pick_s7(recovery)!r} (R9-2)')
+
+
 def check_duty_bar_consistency(r1_slots):
     """Re-derive FAIL > INCONCLUSIVE > PASS from the driver's per-run bars."""
     rows = r1_slots.get('deadman_budget')
@@ -562,6 +588,7 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots):
         if not finite(s6) or s6 <= 0 or not finite(s7) or s7 <= 0:
             raise ValueError(f'{source}: R1-pick S6/S7 were not computed (finite, positive '
                              'band_c.s_slow and S7 required)')
+        rederive_r1_pick_s7(computed, source)
         # The R1-pick S6/S7 describe the keys they were computed for; the
         # policy must gate on exactly those (Sol critique of round 6).
         keys = computed.get('keys') if isinstance(computed.get('keys'), dict) else {}

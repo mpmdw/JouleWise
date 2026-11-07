@@ -8,11 +8,13 @@ import json
 import math
 import os
 from pathlib import Path
+import statistics
 import tempfile
 import threading
 import unittest
 from unittest.mock import Mock, patch
 
+from joulewise.align.apple import r1_runtime
 from joulewise.align.apple.r1_runtime import (
     InventoryJournal, NS, ProductionBackend, RuntimeFailure, classify_step, s7_for_picks,
 )
@@ -182,6 +184,44 @@ class ChangedPickRecoveryTests(unittest.TestCase):
         self.assertTrue(censored["recovery_censored"])
         quiet_missing = s7_for_picks(rows, {"s_fast": FAST, "s_slow": "TZ9Z"}, prefill_ns=PREFILL_NS, quiet_s=300)
         self.assertIsNone(quiet_missing["S7"])
+
+    def test_reference_and_band_are_the_classifier_d2_baseline(self):
+        # LEAD-RULINGS-2 R9-2 (WP14(b), PR #692 D2): the last 60 s median and
+        # the OLS residual SD, not the whole-300 s median and raw SD. A quiet
+        # drift of 0.6 C/min on the slow key widens the raw SD (about 0.87 C,
+        # band 2.6 C) but not the residual SD (band 1.0 C).
+        from joulewise.align.apple import smc_enumeration
+        inventory, rows = step_capture()
+        for row in rows:
+            t = row["started"]["monotonic_ns"] / NS - 1000
+            if 0 <= t < 300:
+                row["values"]["sensors"][SLOW] += 0.01 * (t - 300)
+        picks = {"s_fast": FAST, "s_slow": SLOW}
+        result = s7_for_picks(rows, picks, prefill_ns=PREFILL_NS, quiet_s=300)
+        self.assertEqual(result["rule"], r1_runtime.R1_PICK_S7_RULE)
+        with patch.object(smc_enumeration, "rank", wraps=smc_enumeration.rank) as rank:
+            classify_step(inventory, rows, prefill_ns=PREFILL_NS, last_decode_ns=LAST_DECODE_NS,
+                          r0_sensors=R0_SENSORS)
+        ranking = {row["key"]: row for row in smc_enumeration.rank(rank.call_args.args[0], stage="r1")["ranking"]}
+        for role, key in picks.items():
+            with self.subTest(role=role):
+                self.assertEqual(result["reference_c"][role], ranking[key]["baseline"])
+                self.assertEqual(result["noise_c"][role], ranking[key]["noise"])
+                self.assertEqual(result["band_c"][role], max(1.0, 3 * ranking[key]["noise"]))
+        self.assertLess(result["noise_c"]["s_slow"], 0.05)
+        self.assertEqual(result["band_c"]["s_slow"], 1.0)
+        self.assertAlmostEqual(result["reference_c"]["s_slow"], 40.0 - 0.3, delta=0.02)
+        self.assertEqual(result["S7"], r1_runtime.pick_s7(result["recovery_s"]))
+        quiet = [r["values"]["sensors"][SLOW] for r in rows if 1000 * NS <= r["started"]["monotonic_ns"] < PREFILL_NS]
+        self.assertGreater(3 * statistics.pstdev(quiet), 2.0)  # the pre-R9-2 band this replaces
+
+    def test_short_last_60s_window_has_no_s7(self):
+        _, rows = step_capture()
+        # Four valid reads in the last 60 s (1240, 1297-1299); the whole 300 s holds 245.
+        thin = [r for r in rows if not 1241 * NS <= r["started"]["monotonic_ns"] < 1297 * NS]
+        result = s7_for_picks(thin, {"s_fast": FAST, "s_slow": SLOW}, prefill_ns=PREFILL_NS, quiet_s=300)
+        self.assertIsNone(result["S7"])
+        self.assertIn("last 60 s of the quiet window", result["reason"])
 
 
 class JournalTests(unittest.TestCase):
