@@ -44,7 +44,8 @@ class QuietGuard:
     include shared defaults and configured extras; missing roots fail closed.
     A refusal is latched even if an endpoint catches the raised exception.
     Contaminant CPU uses cumulative TIME over at least prewindow.INTERVAL_S;
-    the first clean admission waits for that baseline before returning.
+    the first clean admission waits for that baseline before returning, with
+    a mid-baseline snapshot so the daemon's first window is 30 s, not 45 s.
 
     After that admission a daemon thread repeats the census and takes a CPU
     snapshot every SNAPSHOT_CADENCE_S; it only stores what it saw (or the
@@ -56,13 +57,16 @@ class QuietGuard:
     stalled sampler or a window longer than MAX_WINDOW_S refuses.
     """
 
-    # The daemon's cadence, the only place it is set. Judged windows are at
-    # most INTERVAL_S plus one cadence (plus one cycle's probe time).
+    # The daemon's cadence, the only place it is set.
     SNAPSHOT_CADENCE_S = 15.0
     JOIN_TIMEOUT_S = 1.0
-    # Beyond two intervals the sampler has stalled: a longer window would
-    # dilute a contender, so it is indeterminate, never clean.
-    MAX_WINDOW_S = 2 * prewindow.INTERVAL_S
+    # A steady window spans two cycles: INTERVAL_S plus two cycles' probe
+    # time (about 0.1 s measured). The margin absorbs that and moderate
+    # slips; beyond INTERVAL_S + one cadence + margin (50 s) the sampler has
+    # stalled and the window would dilute a contender, so it refuses as
+    # indeterminate, and a check finding no snapshot that recent refuses too.
+    WINDOW_MARGIN_S = 5.0
+    MAX_WINDOW_S = prewindow.INTERVAL_S + SNAPSHOT_CADENCE_S + WINDOW_MARGIN_S
 
     def __init__(self, parents, *, run=subprocess.run, inspect_custody=census,
                  clock=time.monotonic, sleep=time.sleep, wall_clock_ns=None,
@@ -81,13 +85,17 @@ class QuietGuard:
         self._judged_end = 0
         # Per-snapshot disclosures and daemon cycle times, receipted by the
         # next check() on the caller's thread (the daemon never writes receipts).
-        self._pending = {"regressed_counters": [], "wall_clock_backwards": False, "cycles": []}
+        self._pending = self._empty_pending()
         self._snapshot_lock = threading.Lock()
         self._stop_sampler = threading.Event()
         self._sampler = None
         self._background_failure = None
         self.failure = None
         self.receipts = []
+
+    @staticmethod
+    def _empty_pending():
+        return {"regressed_counters": [], "wall_clock_backwards": False, "cycles": [], "census": []}
 
     def _now(self):
         with self._clock_lock:
@@ -206,10 +214,25 @@ class QuietGuard:
     def _background_snapshot(self):
         """One daemon cycle: the census, then a CPU snapshot. Stores, never judges."""
         try:
-            self._census({"resolved_custody_parents": []})
+            seen = {"resolved_custody_parents": []}
+            self._census(seen)
             snapshot = self._cpu_snapshot()
+            # What this cycle's census saw, compactly (#691 receipted it per
+            # check); every verdict here passed, or the cycle would have failed.
+            summary = {
+                "monotonic_s": snapshot.midpoint_ns / 1e9,
+                "resolved_custody_parents": seen["resolved_custody_parents"],
+                "installed_night_agents": seen["installed_night_agents"],
+                "launchctl_exit_code": seen["launchctl"]["exit_code"],
+                "agent_exit_code": seen["agent"]["exit_code"],
+                "agent_hits": len(seen["agent"]["stdout"].strip().splitlines()),
+                "custody_clear": not seen["custody"]["refusals"],
+                "custody_warnings": seen["custody"]["warnings"],
+                "chains": seen["chains"],
+                "pcpu_diagnostic": seen["pcpu_diagnostic"]}
             with self._snapshot_lock:
                 self._pending["cycles"].append(snapshot.midpoint_ns / 1e9)
+                self._pending["census"].append(summary)
         except Exception as exc:
             # Fail closed: the next check() refuses with this reason.
             self._background_failure = f"{type(exc).__name__}: {exc}"
@@ -246,10 +269,10 @@ class QuietGuard:
         busy = []
         with self._snapshot_lock:
             snapshots = list(self._snapshots)
-            pending, self._pending = self._pending, {
-                "regressed_counters": [], "wall_clock_backwards": False, "cycles": []}
+            pending, self._pending = self._pending, self._empty_pending()
         if pending["cycles"]:
             receipt["background_snapshots_monotonic_s"] = pending["cycles"]
+            receipt["background_census"] = pending["census"]
         if pending["wall_clock_backwards"]:
             receipt["wall_clock_backwards"] = True
         opening = None
@@ -261,7 +284,7 @@ class QuietGuard:
                 start = next((i for i in range(end - 1, -1, -1)
                               if snapshots[end].midpoint_ns - snapshots[i].midpoint_ns >= dwell_ns), None)
                 if start is None:
-                    break  # only before the 30 s admission baseline exists
+                    continue  # only the admission's mid-baseline snapshot
                 interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
                 interval_busy = self._judge_cpu_interval(snapshots[start], snapshots[end], interval_details)
                 receipt["cpu_intervals"].append(interval_details)
@@ -273,7 +296,7 @@ class QuietGuard:
                 if interval_details["long_interval"]:
                     raise Refused(
                         f"census indeterminate: judged CPU window of {interval_details['elapsed_s']:.1f} s "
-                        f"exceeds {self.MAX_WINDOW_S} s (background snapshots stalled)")
+                        f"exceeds {self.MAX_WINDOW_S:g} s (background snapshots stalled)")
         finally:
             for row in pending["regressed_counters"]:
                 for key in ("regressed_counters", "regressed_noncontaminant"):
@@ -364,7 +387,12 @@ class QuietGuard:
                 self._census(receipt)
                 if not self._snapshots:
                     first = self._cpu_snapshot()
-                    self.sleep(prewindow.INTERVAL_S)
+                    # A mid-baseline snapshot: the daemon's first window
+                    # (ending one cadence after admission) opens here, so it
+                    # is 30 s, not 45 s (cold MEDIUM-1).
+                    self.sleep(prewindow.INTERVAL_S / 2)
+                    self._cpu_snapshot()
+                    self.sleep(prewindow.INTERVAL_S / 2)
                     self._cpu_snapshot()
                     # Preserve the first forced call's full baseline wait.
                     if self._snapshots[-1].midpoint_ns - first.midpoint_ns < prewindow.INTERVAL_S * 1e9:
@@ -395,12 +423,28 @@ class QuietGuard:
             raise Refused(self.failure) from exc
 
 
-def softwareupdate_scan_forecast(start, deadline, *, log_path=Path("/var/log/install.log")):
+# install.log here is ~35 MB; the largest gap between scan lines seen on
+# the Air (2026-11-07) was 5.95 MB. Read only this tail (cold LOW-4).
+INSTALL_LOG_TAIL_BYTES = 8 * 1024 * 1024
+
+
+def _log_tail(path, limit):
+    with open(path, "rb") as handle:
+        size = handle.seek(0, os.SEEK_END)
+        handle.seek(max(0, size - limit))
+        data = handle.read(limit)
+    if size > limit:
+        data = data.split(b"\n", 1)[1] if b"\n" in data else b""  # drop a partial first line
+    return data.decode("utf-8", errors="replace")
+
+
+def softwareupdate_scan_forecast(start, deadline, *, log_path=Path("/var/log/install.log"),
+                                 tail_bytes=INSTALL_LOG_TAIL_BYTES):
     """Predict six-hour softwareupdated scans; advisory only, never a gate.
 
     macOS softwareupdated scans about every 6 h (one refused an R0 SMC probe
     on 2026-11-06 23:09 PST). From the last AutoBackgroundScanFinished line
-    of install.log, list the predicted scans in [start, deadline] (local
+    in the last ``tail_bytes`` of install.log, list the predicted scans in [start, deadline] (local
     naive datetimes or epoch seconds). Any read or parse problem gives
     status "unknown"; no caller may refuse on this result.
     """
@@ -412,7 +456,7 @@ def softwareupdate_scan_forecast(start, deadline, *, log_path=Path("/var/log/ins
         latest = None
         pattern = re.compile(
             r"(?P<stamp>\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d|[A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d).*AutoBackgroundScanFinished")
-        for line in Path(log_path).read_text(errors="replace").splitlines():
+        for line in _log_tail(log_path, tail_bytes).splitlines():
             match = pattern.search(line)
             if not match:
                 continue
