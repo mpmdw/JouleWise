@@ -18,7 +18,11 @@ RESOLUTION_CODES = {  # joulewise/analysis_engine/inputs.py + __init__.py resolu
     "cell_missing", "cell_stale", "transport_group_incomplete", "cell_not_claim_ready", "artifact_schema_invalid",
     "consumer_term_unknown", "consumer_identity_undeclared", "consumer_identity_set_unauthenticated"}
 SUMMARY_STATUS = {"succeeded", "failed", "partial", "aborted", None}
-ANCHOR_STATUS = {"bounded", "unbounded", "not recorded", None}
+# metadata clock_anchor.status words (uncertainty_evidence.py: bounded; unknown for an unresolved anchor) and the
+# harvest's derived labels (b5/harvest.py ANCHOR_STATUSES).
+ANCHOR_STATUS = {"bounded", "unknown", "unbounded", "invalid", "missing", "not recorded", None}
+# NEG-8 bracket endpoint protocols (whole_window.py).
+PROTOCOLS = {"replicated_endpoints", "replicated_endpoints_with_midpoint", "legacy_single_member_endpoints", "invalid"}
 DECISIONS = {"admit", "abort", "continue", "retry", "admitted", "rejected", None}
 
 
@@ -105,7 +109,12 @@ def main(cmp_path, index_path, custody=None):
         except (OSError, ValueError):
             status = None
         anchor = ((metadata(d).get("uncertainty_evidence") or {}).get("clock_anchor") or {}).get("status")
+        anchor_record = (metadata(d).get("uncertainty_evidence") or {}).get("clock_anchor") or {}
+        stamps = anchor_record.get("clock_stamps") or {}
         c["status_%s/anchor_%s" % (word(status, SUMMARY_STATUS), word(anchor, ANCHOR_STATUS))] += 1
+        c["stamps_%s" % ("both" if {"sampling_started", "sampling_stopped"} <= set(stamps) else "missing")] += 1
+        c["power_trace_csv_%s" % ("present" if os.path.isfile(os.path.join(d, "power_trace.csv")) else "absent")] += 1
+        c["placement_endpoint_%s" % ("present" if "first_sample_end_point_epoch_s" in anchor_record else "absent")] += 1
     out["D3_l9_only_values"] = dict(c)
     # D6: BETA's NEG-8 rescreen bracket: protocol word and which bound terms are finite (presence only).
     if "beta" in packs:
@@ -113,7 +122,7 @@ def main(cmp_path, index_path, custody=None):
         try:
             gross = ((json.load(open(path)).get("bracket") or {}).get("claim_families") or {}).get("gross_energy") or {}
             out["D6_beta_bracket"] = {
-                "protocol": word(gross.get("endpoint_protocol"), {"replicated_endpoints", "planned", "legacy"}),
+                "protocol": word(gross.get("endpoint_protocol"), PROTOCOLS),
                 **{k + "_finite": isinstance(gross.get(k), (int, float)) and math.isfinite(gross[k])
                    for k in ("bound_envelope_j", "bound_prediction_j")}}
         except (OSError, ValueError):

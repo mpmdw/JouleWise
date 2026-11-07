@@ -13,6 +13,112 @@ trees are identical.
 `d271fb476`, and bars sha `2f65bba2…`. Stage (a) verified. The recompute was clean. The comparator disagreed:
 1,001 failing rows in 11 families.
 
+## 0. Round 2 (2026-11-07): probe results and where each defect now stands
+
+The lead ran `probe_release_hold.py` on the dry-j custody, D5 included. The lead ruled that floor-resolution status
+and reason words are structural. Results (counts and words only):
+
+| Probe | Result | Reading |
+|---|---|---|
+| D2, rail differs (33) | attempt-N idle file present 33; metadata attempts 2: 33 | Confirmed: idle re-measurement |
+| D2, rail agrees (313) | attempt-N idle file absent 313; metadata attempts 1: 313 | Confirmed: 33 of 33, 0 of 313 |
+| D4, recompute only (9) | sampling stamps missing 9; admission decision `abort` 9 | Confirmed: aborted at idle admission, before sampling |
+| D3 (2) | summary `succeeded`; anchor word outside the old vocabulary | Settled as (a): see D3 below |
+| D5 (1 claim-verdicts file) | `refused:artifact_schema_invalid` 4 of 4 (2 contrasts × 2 arms) | A binding refusal, not a schema check: see D5 below |
+| D6 (BETA bracket) | neither term finite; protocol outside the old vocabulary | Planned/legacy protocol: see D6 below |
+
+Where each defect stands now:
+
+| Defect | Wrong side | Status on this branch |
+|---|---|---|
+| D1 | L9 | Patch and failing-first test (`9c51ce2d0`); waits for the lead's cited rebind |
+| D2 | recompute | Fixed (`2b13fe615`); confirmed by the probe |
+| D3 | recompute: (a) | Fixed (`3bc24ea58`); `UnanchoredMemberTests` |
+| D4 | recompute | Fixed (`2b13fe615`); confirmed by the probe |
+| D5 | not yet decidable; a binding problem, see below | No fix; the binding probe `probe_d5_binding.py` decides it |
+| D6 | neither producer (comparator mapping) | Fixed (`250f15caf`); `Neg8SurvivorTermTests` |
+
+**D3, settled.**
+- **The anchor word.** The metadata clock-anchor vocabulary is `bounded` or `unknown`. `unknown` is the unresolved
+  anchor written by `uncertainty_evidence.py` `_unresolved_anchor`/`_unresolved_anchor_v3` (`:341-350`, `:765-780`).
+  The v3 form keeps the controller `clock_stamps`. The harvest's derived labels (`b5/harvest.py:325`) add
+  `unbounded`, `invalid`, `missing` and `not recorded`. The probe vocabulary now names all of these.
+- **Recompute behaviour.** `Member` sets `usable` false whenever the status is not `bounded`, and its comparison
+  becomes `not_compared`/`anchor_unbounded` (`independent_recompute_b5.py` `Member.__init__`). `machine_member` then
+  returns the null stub before any stream-coverage check, so (b) is never reached and the cause is (a).
+- **Registered quantity.** For an unresolved anchor the reducer keeps the bundle's recorded trace as its curve
+  (`reduce.py:1157-1168`, `_unresolved_anchor_context` with `curve=None`). ΔE_rail is therefore well defined (REG
+  §5.8). The meter terms need only the controller stamps. Plan §8.2 describes every member, kept or removed.
+  **The recompute is the wrong side.**
+- **Fix.** For a succeeded member whose only reason is `anchor_unbounded`, `unanchored_machine_member` re-derives
+  the request row: the meter terms from the controller stamps, and the rail from the bundle's `power_trace.csv`
+  placement over the measured-run events. The row is marked `status=descriptive_unanchored` and
+  `rail_basis=bundle_power_trace_csv`. It feeds the whole-machine line only; a failed member stays null. The R18
+  rehearsal assertion now follows this rule; it is skipped without its archive and was not run here.
+- **Second probe line.** `probe_release_hold.py` now also prints, for these members, whether the stamps, the trace
+  and a placement endpoint are present. Expected: stamps both, trace present, endpoint absent.
+
+**D5: what `artifact_schema_invalid` means here.** No JSON schema validation is involved:
+
+- **Where the bare word comes from.** Every resolution has empty `source_cell_ids` and null transport ids, so the
+  refusal came from the engine wrapper `analysis_engine/__init__.py:413-455`:
+  - the arm's request was not built (`_floor_request_or_refusal` returned `()`);
+  - the claim-side floor evidence binding has some problem, global or in any cell;
+  - so the wrapper writes `("artifact_schema_invalid", *floor_binding_reason_codes(binding))`.
+
+  Only ten binding codes are surfaced (`inputs.py:594-626`). Every other binding problem collapses into the bare
+  word, which is what the probe saw. The other `artifact_schema_invalid` emitters (`inputs.py:5071-5146`,
+  `5262-5284`) always carry source cell ids, so the structure rules them out.
+- **Why the request comes back empty.** GAMMA's floor dependency is `exact_stack_only`, so
+  `_floor_request_or_refusal` returns `()` unless the exact-stack serving cell is in `binding.bound_cell_ids` with
+  the consumer's stack and identity (`inputs.py:4874-4890`).
+- **Which cells are left out.** `bind_floor_artifact_evidence` (`inputs.py:1983-2478`) leaves a cell out of
+  `bound_cell_ids` on any problem. Global problems are copied into every cell. The checks, per floor-cell member:
+  - root mapping (`_normalize_evidence_roots`);
+  - producer-plan bytes and provenance (`_floor_producer_plans`);
+  - campaign order and ABBA tags (`_campaign_order_binding_problems`; `calibration_abba_*`,
+    `calibration_plan_identity_mismatch`, `component_evidence_root_disagreement`);
+  - salvage dispatch;
+  - strict validation (`validate_bundle`);
+  - source provenance;
+  - telemetry triangle and mock;
+  - `anchor_fallback_member_unusable`;
+  - summary status;
+  - complete-bundle SHA-256 and config SHA-256 against the extraction's record;
+  - the stored floor metric against the bound summary (`rel_tol` 1e-12; for block 5 the summary comes from the
+    floor root's `AuthenticatedConsumptionSession`, not from the bundle file);
+  - single scientific identity and stack identity;
+  - the idle-drift-guard provenance.
+- **What the synthetic chain shows.** The synthetic S10 chain resolves both floors
+  (`tests/b5_analysis/test_chain_fixture.py:487`), so the failing condition depends on the data.
+- **How it is decided.** By the per-cell labels of `probe_d5_binding.py` (section 6).
+  - **If a binder check is wrong for registered inputs, L9 is the wrong side.** Examples: a summary source
+    mismatch between the extractor and the binder's consumption session, or schema drift between the mint and
+    the binder. The fix is an L9 commit with a failing-first test, then a cited rebind.
+  - **If a floor member genuinely fails registered authentication, the producing tooling is wrong: R3.**
+    Examples: bundle bytes that changed after step 4, or order tags that disagree with the plan.
+- **Second L9 finding, valid in both branches.** `_floor_engine_reasons` (`analysis_engine/__init__.py:213-229`)
+  maps every resolution code it does not list, `artifact_schema_invalid` included, to `floor_transport_inapplicable`.
+  That makes the contrast `not_resolvable`, a registered scientific outcome (plan §7.2 step 2), and the dry run
+  then exits 3 as an outcome class.
+  - Plan §3.1 ("Refusals") routes a tooling refusal to R3, and §7.2 step 1 registers `floor_artifact_invalid` as
+    `not_estimable`.
+  - A failure of the evidence binding is neither "transport inapplicable" nor an outcome. So step 9b's
+    outcome-class exit is mislabelled.
+  - Which repair applies (a tooling refusal, or `floor_artifact_invalid`) depends on the binding's cause, so
+    nothing is patched until the probe has answered.
+
+**D6, settled.**
+- **Protocol words.** The NEG-8 endpoint protocols are `replicated_endpoints` (the survivor protocol),
+  `replicated_endpoints_with_midpoint`, `legacy_single_member_endpoints` and `invalid` (`whole_window.py:593`,
+  `:3583-3602`). The two bound terms are written only under `replicated_endpoints` (`:3435-3453`).
+- **Fix.**
+  - The recompute now exposes the record's `recorded_endpoint_protocol`.
+  - The comparator compares the two terms, and the expected-check table requires them, under a new
+    condition `neg8_survivor_terms`. It holds when L9 prints either term, when the protocol is
+    `replicated_endpoints`, or when the recompute names no protocol (the safe side).
+  - The other five terms are compared as before.
+
 ## 1. Verdict on the lead hypothesis: refuted
 
 The hypothesis was that the recompute reuses collection-time clock anchors and window edges while L9 re-derives
@@ -242,7 +348,9 @@ split into `no_rule` and `uncompared`.
 | `scripts/independent_recompute_b5.py`: `idle_attempt_telemetry_name`; `rail_idle_power` reads the kept attempt | D2 | recompute | `test_release_trace_20261107.IdleAttemptTests` (3) |
 | `scripts/independent_recompute_b5.py` `add_machine`: no null member without a measured request (`no_measured_request`) | D4 | recompute | `test_release_trace_20261107.UnmeasuredMemberTests` |
 | `joulewise/b5_analysis/disclosures.py:696`: `battery_term_available`; fixture key in `tests/b5_analysis/test_disclosures.py` | D1 | L9 (bug report and patch; needs a cited rebind) | `test_T8_T20_B8_meter_all_members` |
-| `docs/process_traces/2026-11-07-b5-release-trace/` | the blind extractor and the structure-only probe | | |
+| `scripts/independent_recompute_b5.py`: `unanchored_machine_member`, `measured_request_edges`, `Member.trace_records` (round 2) | D3 | recompute | `test_release_trace_20261107.UnanchoredMemberTests` (2); R18 and `test_auditfix` unusable-anchor assertions updated (the claim comparison still never counts the member) |
+| `scripts/compare_b5_recompute.py`: `NEG8_SURVIVOR_TERMS`, condition `neg8_survivor_terms`; recompute `recorded_endpoint_protocol` (round 2) | D6 | comparator mapping | `Neg8SurvivorTermTests` (3), `test_recompute_reads_the_record_protocol_word` |
+| `docs/process_traces/2026-11-07-b5-release-trace/` | the blind extractor and the structure-only probes (`probe_release_hold.py`; round 2 `probe_d5_binding.py`) | | |
 
 - Every new test fails on the unfixed code.
 - Passing:
@@ -256,7 +364,9 @@ split into `no_rule` and `uncompared`.
 - With the D2 and D4 fixes, the recompute-side rows clear: the 132 D2 rail and ρ rows and their summary rows, and
   the 171 D4 rows.
 - With the L9 D1 patch, after its rebind and a step-11 re-run, the 346 D1 rows clear.
-- D3, D5 and D6 stay until the probe has answered.
+- Round 2: the D3 fix clears its 36 rows and the D6 fix clears its 3 rows. The D3 rows clear only if the
+  re-derived row agrees with the record; the recompute flags `meter_request_mismatch` if it does not.
+- D5 (108 rows) stays until `probe_d5_binding.py` names the binding problem and the lead rules.
 
 ## 6. Probe for the lead (structure only)
 
@@ -280,3 +390,41 @@ Expected results:
 - **D3:** the status and anchor words decide between (a) and (b).
 - **D5:** the reason codes rank its candidates.
 - **D6:** the protocol word, and both terms not finite.
+
+### Round 2 probe commands
+
+Run both from the clean release-check checkout (main at `d271fb476`, whose L9 tree equals `929fc65c9`). The
+vocabularies are extended:
+- anchor words: `unknown`, `invalid`, `missing`;
+- NEG-8 protocol words;
+- for the D3 members: whether the stamps, the trace and a placement endpoint are present.
+
+```bash
+cd /Users/edr/code/CapstoneProject/jw-wt/b5-release-check
+P=<path to this branch's docs/process_traces/2026-11-07-b5-release-trace>
+nice -n 19 taskpolicy -b python3.13 -I "$P/probe_release_hold.py" "$OUT/comparison.json" configs/analysis/b5/analysed_windows.json
+nice -n 19 taskpolicy -b python3.13 -I "$P/probe_d5_binding.py" "$PWD" /Users/edr/jw-b5-custody/dry-j configs/analysis/b5/analysed_windows.json
+```
+
+**What `probe_d5_binding.py` does.**
+- **It replays step 9's input loading:** the same `block5_claim_gate_inputs` and `analyze_claims` arguments that
+  `dry_run.step_9` builds. Paths come from the dry-run record's outputs (`mint/<sha>-aggregate-floor.json`,
+  `finalized/*.finalized.json`, `mint/<sha>-extraction-{alpha,beta}.json`).
+- **It wraps three functions:** `bind_floor_artifact_evidence`, `_floor_request_or_refusal` and
+  `_resolve_contrast_floor`.
+- **It stops** with a `BaseException` once both contrasts' floors are resolved, before any claim artifact is
+  written. The engine's stdout and stderr are discarded.
+- **It prints only:**
+  - global and per-cell binding problem labels with counts (the code word before `:`, a phrase label from the
+    binder's source, or `unclassified:<alphabetic words>` with digits stripped);
+  - each cell's bound flag;
+  - each arm's request kind (`request`, `codes:…` or `empty`);
+  - each contrast's `status:codes`;
+  - the exception class, if any.
+- **It refuses** any output containing a decimal.
+- **Cost:** it strict-validates every floor bundle, as step 9 does, so it takes minutes.
+- **Not run here.** It was smoke-checked for imports and signatures only. The synthetic S10 chain is too heavy to
+  run beside dry-k.
+
+**Expected:** `stopped_before_claims: true`, `scratch_written: false`. The serving cells for the GAMMA arms show
+`bound: false` with the labels that decide D5.
