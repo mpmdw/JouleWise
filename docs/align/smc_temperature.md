@@ -80,9 +80,13 @@ picks; R1 re-selects using the actual planning-turn step.
   or ceiling (at least ten distinct idle values, at least 40% on one exact value)
   is flagged and excluded from picks only. Fable fresh P2 derives ten distinct
   values as quantum much smaller than noise, making 40% exact occupancy a clamp.
-  D1(b) applies only to positive step rises. Erratum 2 adds D1(d): among
-  resolving keys passing D1(a)–(c), choose the shortest cooling tau (lexical
-  ties) as the heat-source reference. Exclude any key whose rise exceeds
+  D1(b) applies only to positive step rises. Erratum 2 adds D1(d), with the
+  reference qualified by Erratum 3: among resolving keys passing D1(a)–(c),
+  with cooling tau ≤60 s, residual noise ≤1/3 °C and no clamp flag, choose
+  the shortest cooling tau (lexical ties) as the heat-source reference.
+  These D4 fast-role gates ensure a real thermometer near the source;
+  a noisy flicker key such as Tp0M cannot anchor the ordering.
+  Exclude any key whose rise exceeds
   that reference's rise by more than three of the reference's noise floors.
   Heat cannot rise farther down a conduction path than at its source; the
   three-floor margin is D4's resolution bar. TVH3 fails this rule even under

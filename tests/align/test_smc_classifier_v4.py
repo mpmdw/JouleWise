@@ -45,6 +45,49 @@ def jittered_capture():
 
 
 class SmcClassifierV4Tests(unittest.TestCase):
+    def test_noisy_shortest_tau_cannot_anchor_heat_ordering(self):
+        data = capture({'Tf18': (3, 24.7, 45.7, .06),
+                        'Tp0M': (3, 5, 30, 1), 'TaLP': (60, 86.2, 20.5, .02)})
+        for stage in ('r0', 'r1'):
+            with self.subTest(stage=stage):
+                result = rank(data, stage=stage)
+                rows = {r['key']: r for r in result['ranking']}
+                flicker = rows['Tp0M']
+                # Passes D1(a)-(c) and resolves, but fails D4's noise bar.
+                # Its smaller rise would incorrectly exclude Tf18 as a source.
+                self.assertTrue(flicker['resolving'])
+                self.assertFalse(flicker['below_ambient'])
+                self.assertFalse(flicker['above_junction'])
+                self.assertFalse(flicker['clamped'])
+                self.assertLessEqual(flicker['max_one_second_change'], flicker['observed_rise']/2)
+                self.assertGreater(flicker['noise'], 1/3)
+                self.assertLess(flicker['tau_s'], rows['Tf18']['tau_s'])
+                self.assertLess(flicker['observed_rise'] + 3*flicker['noise_floor'],
+                                rows['Tf18']['observed_rise'])
+                self.assertEqual(result['heat_ordering_reference'], 'Tf18')
+                self.assertFalse(rows['Tf18']['heat_ordering_excluded'])
+                self.assertEqual(result['selection'], {'s_fast': 'Tf18', 's_slow': 'TaLP'})
+
+    def test_clamped_shortest_tau_cannot_anchor_heat_ordering(self):
+        data = capture({'TDIE': (3, 25, 18, .02), 'TCLP': (3, 5, 12, .02),
+                        'THEA': (60, 90, 8, .02)})
+        for sample in data['samples'][:240]:
+            sample['values']['sensors']['TCLP'] = 30
+        result = rank(data)
+        rows = {r['key']: r for r in result['ranking']}
+        self.assertTrue(rows['TCLP']['clamped'])
+        self.assertTrue(rows['TCLP']['resolving'])
+        self.assertLess(rows['TCLP']['tau_s'], rows['TDIE']['tau_s'])
+        self.assertEqual(result['heat_ordering_reference'], 'TDIE')
+        self.assertEqual(result['selection'], {'s_fast': 'TDIE', 's_slow': 'THEA'})
+
+    def test_slow_role_alone_has_no_heat_ordering_reference(self):
+        result = rank(capture({'THEA': (60, 90, 8, .02)}))
+        self.assertTrue(result['ranking'][0]['resolving'])
+        self.assertGreater(result['ranking'][0]['tau_s'], 60)
+        self.assertIsNone(result['heat_ordering_reference'])
+        self.assertEqual(result['selection'], {'s_fast': None, 's_slow': 'THEA'})
+
     def test_fable_f1_lighter_step_rejects_derived_heat_ordering(self):
         # Fable followups.py: scale each key about its own idle baseline by
         # 0.85 (a 15% lighter step). Replay rises are Tf18=45.7, TVH3=64.1;
@@ -181,7 +224,7 @@ class SmcClassifierV4Tests(unittest.TestCase):
 
     def test_clamp_keeps_class_but_is_excluded_from_picks(self):
         data = capture({'TDIE': (3, 25, 18, .05), 'THEA': (60, 90, 8, .02),
-                        'TCLM': (3, 25, 30, .02)})
+                        'TCLM': (3, 25, 18, .02)})
         for row in data['samples']:
             if row['phase'] == 'idle':
                 t = row['elapsed_s']
@@ -190,6 +233,7 @@ class SmcClassifierV4Tests(unittest.TestCase):
         clamp = next(r for r in result['ranking'] if r['key'] == 'TCLM')
         # Half the 300 idle samples occupy the exact floor, above the
         # derived 40% bar; the other half provide >=10 distinct values.
+        # Match the physical source's rise so D1(d) does not also exclude it.
         self.assertGreaterEqual(clamp['idle_mode_fraction'], .4)
         self.assertTrue(clamp['clamped'])
         self.assertTrue(clamp['eligible'])

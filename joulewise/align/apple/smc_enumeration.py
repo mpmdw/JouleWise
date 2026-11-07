@@ -24,7 +24,8 @@ from joulewise.hazards.base import Context
 
 RULE = ("D1-D6 model-free classifier: reject idle/recovery readings below 10 degC, "
         "any valid reading above 125 degC, one-second jumps > half the step rise, "
-        "and stale idle series; D1(d) excludes rise > fastest resolving key's rise +3 of its noise floors; "
+        "and stale idle series; D1(d) excludes rise > shortest-tau D4-qualified, unclamped key's rise "
+        "+3 of its noise floors; "
         "clamps excluded from picks. "
         "Baseline is the last-60 s idle median; noise is OLS residual SD. Both roles need "
         "rise >=3 degC, rise and positive rise60 >3 noise floors, and tau*ln(rise/1 degC) <=300 s. "
@@ -542,11 +543,15 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         if row["above_junction"]:
             row.update(eligible=False, **{"class": "record-only"},
                        reason="D1(c): valid reading above 125 degC; recorded only")
-    # Erratum 2 D1(d): shortest cooling tau identifies the key closest to
-    # the heat source (lexical ties), among D1(a)-(c) resolving keys. A
-    # conduction-path key cannot rise more than that source; the permitted
-    # 3 source-noise floors are the same resolution margin as D4.
-    sources = [r for r in rows if r["resolving"] and not r["above_junction"]]
+    # Erratum 3 D1(d): the ordering argument needs a real thermometer near
+    # the source. Use the shortest cooling tau (lexical ties) among D4 fast
+    # qualifiers: D1(a)/(b) failures already continued before resolving;
+    # also require D1(c), tau <=60 s, noise <=1/3 degC, and no clamp. A noisy
+    # flicker key such as Tp0M cannot anchor this physical ordering. A key
+    # farther down the conduction path cannot rise more than the source;
+    # the permitted 3 source-noise floors are D4's resolution margin.
+    sources = [r for r in rows if r["resolving"] and not r["above_junction"]
+               and r["tau_s"] <= 60 and r["noise"] <= 1/3 and not r["clamped"]]
     source = min(sources, key=lambda r: (r["tau_s"], r["key"])) if sources else None
     if source:
         limit = source["observed_rise"] + 3*source["noise_floor"]
