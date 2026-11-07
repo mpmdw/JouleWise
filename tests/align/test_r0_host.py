@@ -9,7 +9,7 @@ from unittest.mock import patch
 from joulewise import prewindow
 from joulewise.hazards import contention
 from joulewise.align.r0 import PINS
-from joulewise.align.r0_host import QuietGuard, Refused, disk_census, w1_disk_gate, host_snapshot, host_identity, inventory, smc_enumeration, swap_bytes
+from joulewise.align.r0_host import QuietGuard, Refused, disk_census, w1_disk_gate, host_snapshot, host_identity, inventory, smc_enumeration, swap_bytes, softwareupdate_scan_forecast
 from joulewise.measurement_liveness import Census
 from tests.align.test_r0_checks import config_at
 from tests.align.test_r0_step import write_capture
@@ -364,6 +364,17 @@ class R0HostTest(unittest.TestCase):
             self.assertEqual(result["status"], "inconclusive")
             self.assertIn("SHA-256 mismatch", result["reason"])
 
+    def test_softwareupdate_forecast_is_advisory_and_missing_is_unknown(self):
+        from datetime import datetime
+        start = datetime(2026, 11, 7, 0, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "install.log"
+            log.write_text("2026-11-06 23:09:00 AutoBackgroundScanFinished\n")
+            result = softwareupdate_scan_forecast(start, datetime(2026, 11, 7, 12), log_path=log)
+            self.assertEqual(result["predicted"], ["2026-11-07T05:09:00", "2026-11-07T11:09:00"])
+            self.assertEqual(softwareupdate_scan_forecast(start, start, log_path=log.with_name("missing"))["status"],
+                             "unknown")
+
 
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
@@ -374,7 +385,7 @@ class R0QuietIntervalTest(unittest.TestCase):
     setUp = R0HostTest.setUp
     runner = R0HostTest.runner
 
-    def guard(self, snapshots, *, diagnostic="", clock=None):
+    def guard(self, snapshots, *, diagnostic="", clock=None, driven=True):
         clock = clock or GuardClock()
         samples = iter(snapshots)
         calls = []
@@ -395,7 +406,21 @@ class R0QuietIntervalTest(unittest.TestCase):
                 args = diagnostic(clock()) if callable(diagnostic) else diagnostic
                 return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n" + args, "")
             return self.runner(argv, **kwargs)
-        guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(),
+        class DrivenGuard(QuietGuard):
+            """Drive the daemon's tick deterministically for legacy unit cases."""
+            def check(self, **kwargs):
+                if self._sampler is not None and not self.failure:
+                    self._background_snapshot()
+                return super().check(**kwargs)
+
+            def _cpu_interval(self, receipt):
+                # Direct accounting tests historically represented the next
+                # daemon tick by calling this helper.
+                if self._sampler is not None and receipt == {}:
+                    self._background_snapshot()
+                return super()._cpu_interval(receipt)
+        guard_type = DrivenGuard if driven else QuietGuard
+        guard = guard_type([], run=run, inspect_custody=lambda **kw: Census(),
                            clock=clock, sleep=clock.sleep)
         return guard, clock, calls
 
@@ -425,7 +450,6 @@ class R0QuietIntervalTest(unittest.TestCase):
                     guard.check(force=True)
                 self.assertEqual(len(calls), 3)
                 self.assertFalse(guard.receipts[-1]["busy"])
-                self.assertEqual(guard.receipts[-1]["pcpu_diagnostic"][0][0], pid)
                 entry = guard.receipts[-1]["cpu_interval"]["contaminants"][0]
                 self.assertEqual((entry["pid"], entry["lstart"], entry["name"]),
                                  (pid, " ".join(NEW_START.split()), name))
@@ -490,16 +514,14 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)  # 1 CPU-s / 30.1 s, rather than / 0.1 s.
         # Opening is 0: bracket by 1 s (100 TIME quanta). The next eligible
         # opening is 30.1 = 30 + 10 TIME quanta, bracketed by 30 and 31.
-        self.assertLess(guard.receipts[-1]["cpu_interval"]["start_monotonic_s"], 1)
-        self.assertGreaterEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], 30)
+        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
         clock.now = 45
         guard.check(force=True)
         clock.now = 60.2
         guard.check(force=True)
         opening = guard.receipts[-1]["cpu_interval"]["start_monotonic_s"]
-        self.assertGreater(opening, 30)
-        self.assertLess(opening, 31)
-        self.assertEqual(len(guard._snapshots), 3)
+        self.assertEqual(opening, 30)
+        self.assertEqual(len(guard._snapshots), 5)
         self.assertEqual(len(calls), 5)
 
     def test_reused_pid_counts_new_identity_from_zero(self):
@@ -528,8 +550,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         clock.now = 30.1
         guard.check(force=True)
-        recorded = guard.receipts[-1]["cpu_interval"]["regressed_counters"]
-        self.assertEqual([(row["pid"], row["contaminant"]) for row in recorded], [(42, True)])
+        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
 
     def test_failed_and_unparsable_initial_snapshots_refuse(self):
         for sample in ((1, ""), "", "PID PPID\ninvalid\n", RuntimeError("ps failed")):
@@ -580,8 +601,9 @@ class R0QuietIntervalTest(unittest.TestCase):
         with self.assertRaises(Refused):
             guard.check(force=True)
         clock.now = 60
-        receipt = {}
-        busy = guard._cpu_interval(receipt)
+        guard._background_snapshot()
+        details = {"regressed_counters": [], "regressed_noncontaminant": []}
+        busy = guard._judge_cpu_interval(guard._snapshots[1], guard._snapshots[2], details)
         self.assertEqual(busy[0]["pid"], 42)
         self.assertIn("previous interval", busy[0]["basis"])
         self.assert_rate(busy[0]["cpu_s_per_s"], 0.06, 30)
@@ -627,7 +649,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         clock.now += 10 * contention.PS_TIME_QUANTUM_S
         guard.check(force=True)
-        self.assertEqual(guard.receipts[-1]["cpu_interval"]["regressed_noncontaminant"][0]["pid"], 42)
+        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
 
     def test_zombie_regressions_are_recorded_for_both_contaminant_match_sources(self):
         # 300 TIME quanta = 3.00 CPU-s -> zero, with no prior interval
@@ -656,9 +678,10 @@ class R0QuietIntervalTest(unittest.TestCase):
         with self.assertRaisesRegex(Refused, "mdworker_shared 0.06 CPU-s/s"):
             guard.check(force=True)
         clock.now += prewindow.INTERVAL_S
-        receipt = {}
-        self.assertEqual(guard._cpu_interval(receipt)[0]["pid"], 42)
-        interval = receipt["cpu_interval"]
+        guard._background_snapshot()
+        interval = {"regressed_counters": [], "regressed_noncontaminant": []}
+        self.assertEqual(guard._judge_cpu_interval(
+            guard._snapshots[1], guard._snapshots[2], interval)[0]["pid"], 42)
         self.assertEqual(interval["exited_over_limit"][0]["pid"], 42)
         self.assertTrue(interval["regressed_counters"][0]["contaminant"])
         with self.assertRaises(Refused):
@@ -681,67 +704,64 @@ class R0QuietIntervalTest(unittest.TestCase):
                 recorded = guard.receipts[-1]["cpu_interval"]["regressed_counters"]
                 self.assertEqual([(row["pid"], row["contaminant"]) for row in recorded], [(42, contaminant)])
 
-    def test_gap_contender_is_detected_on_first_wholly_post_gap_window(self):
-        # Gap 600 = 20 * 30 s. A contender at 10 * 0.05 = 0.5 for
-        # its last 30 s has 15 CPU-s, diluted to 0.025 over the gap.
-        # With 15 s calls, the second call after the gap call (t=660)
-        # first judges a wholly post-gap 30 s window, 630 -> 660.
-        def snapshot(cpu):
-            return cpu_table((42, OLD_START, cpu, "mdworker_shared"))
-        guard, clock, calls = self.guard([
-            snapshot("0:00.00"), snapshot("0:00.00"),
-            snapshot("0:15.00"), snapshot("0:22.50"), snapshot("0:30.00")])
+    def test_300_second_caller_gap_does_not_dilute_60_second_contender(self):
+        # Regression: 0.2 CPU-s/s for 60 s used to be divided by a 300 s
+        # caller gap. The daemon snapshots every 15 s, so a 30 s window sees it.
+        counters = [0, 0]
+        for t in range(45, 331, 15):
+            counters.append(min(max(t - 120, 0), 60) * .2)
+        snapshots = [cpu_table((42, OLD_START, f"0:{value:05.2f}", "mdworker_shared"))
+                     for value in counters]
+        guard, clock, calls = self.guard(snapshots, driven=False)
         guard.check(force=True)
-        guard.sleep = lambda seconds: self.fail("slept after first admission")
-        clock.now += 20 * prewindow.INTERVAL_S
-        guard.check(force=True)
-        interval = guard.receipts[-1]["cpu_interval"]
-        self.assert_rate(interval["contaminants"][0]["cpu_s_per_s"], 0.025, 20 * prewindow.INTERVAL_S)
-        self.assertTrue(interval["long_interval"])
-        self.assertTrue(guard.receipts[-1]["long_interval"])
-        clock.now += prewindow.INTERVAL_S / 2
-        guard.check(force=True)  # 22.50 / 615 < 0.05; still uses the pre-gap opening.
-        clock.now += prewindow.INTERVAL_S / 2
-        with self.assertRaisesRegex(Refused, "mdworker_shared 0.5 CPU-s/s"):
+        guard.sleep = lambda seconds: self.fail("caller slept after admission")
+        for t in range(45, 331, 15):
+            clock.now = t
+            guard._background_snapshot()
+        with self.assertRaisesRegex(Refused, "mdworker_shared 0.2 CPU-s/s"):
             guard.check(force=True)
-        self.assertEqual(clock.sleeps, [prewindow.INTERVAL_S])
-        interval = guard.receipts[-1]["cpu_interval"]
-        self.assertEqual(interval["elapsed_s"], prewindow.INTERVAL_S)
-        self.assertEqual(len(guard._snapshots), 3)
-        self.assertEqual(calls[-1] - calls[-2], prewindow.INTERVAL_S / 2)
-        with self.assertRaises(Refused):
-            guard.check(force=True)
+        self.assertLessEqual(max(row["elapsed_s"] for row in guard.receipts[-1]["cpu_intervals"]), 30)
+        self.assertEqual(len(calls), len(snapshots))
 
-    def test_gap_contention_refuses_on_the_long_judged_interval(self):
-        # (0.05 + 0.01) * (20 * 30) = 36 CPU-s across the gap;
-        # the long judged interval alone must refuse without another sleep.
-        def snapshot(cpu):
-            return cpu_table((42, OLD_START, cpu, "mdworker_shared"))
-        guard, clock, _ = self.guard([
-            snapshot("0:00.00"), snapshot("0:00.00"),
-            snapshot("0:36.00")])
+    def test_calls_29_seconds_apart_cannot_make_a_58_second_window(self):
+        snapshots = [cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
+                     cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
+                     cpu_table((42, OLD_START, "0:02.00", "mdworker_shared")),
+                     cpu_table((42, OLD_START, "0:02.00", "mdworker_shared"))]
+        guard, clock, calls = self.guard(snapshots, driven=False)
         guard.check(force=True)
-        guard.sleep = lambda seconds: self.fail("slept after first admission")
-        clock.now += 20 * prewindow.INTERVAL_S
-        with self.assertRaisesRegex(Refused, "mdworker_shared 0.06 CPU-s/s"):
+        clock.now = 45
+        guard._background_snapshot()
+        clock.now = 59
+        guard.check(force=True)
+        self.assertFalse(guard.receipts[-1]["cpu_intervals"])
+        clock.now = 60
+        guard._background_snapshot()
+        clock.now = 88
+        with self.assertRaisesRegex(Refused, "mdworker_shared"):
             guard.check(force=True)
-        self.assertTrue(guard.receipts[-1]["cpu_interval"]["long_interval"])
+        self.assertEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], 30)
+        self.assertEqual(len(calls), 4)  # checks themselves ran no ps
 
-    def test_no_sleep_after_first_admission_at_cadence_or_after_gaps(self):
-        dwell = prewindow.INTERVAL_S
-        # Guard cadence = 30 / 2; gaps = 20 * 30 and 30 + 100 TIME
-        # quanta (600 and 31 s). Eight snapshots include the startup pair.
-        steps = (dwell / 2, dwell / 2, 20 * dwell,
-                 dwell + 100 * contention.PS_TIME_QUANTUM_S, dwell / 2, dwell / 2)
-        guard, clock, calls = self.guard([cpu_table()] * (2 + len(steps)))
+    def test_no_sleep_or_ps_on_caller_after_first_admission(self):
+        guard, clock, calls = self.guard([cpu_table(), cpu_table(), cpu_table()], driven=False)
         guard.check(force=True)
-        self.assertEqual(clock.sleeps, [dwell])
-        guard.sleep = lambda seconds: self.fail("slept after first admission")
-        for step in steps:
-            clock.now += step
-            guard.check()
-            self.assertGreaterEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], dwell)
-        self.assertEqual(len(calls), 2 + len(steps))
+        guard.sleep = lambda seconds: self.fail("caller slept after admission")
+        clock.now = 45
+        guard._background_snapshot()
+        before = len(calls)
+        clock.now = 46
+        guard.check(force=True)
+        self.assertEqual(len(calls), before)
+
+    def test_background_snapshot_failure_refuses_next_check_and_stops(self):
+        guard, clock, _ = self.guard([cpu_table(), cpu_table(), RuntimeError("ps failed")], driven=False)
+        guard.check(force=True)
+        clock.now = 45
+        guard._background_snapshot()
+        with self.assertRaisesRegex(Refused, "background cumulative CPU snapshot"):
+            guard.check(force=True)
+        self.assertTrue(guard._stop_sampler.is_set())
 
     def test_both_cpu_snapshot_tables_use_the_module_probe_timeout(self):
         guard, _, _ = self.guard([cpu_table(), cpu_table()])
@@ -757,6 +777,37 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertEqual(kwargs["timeout"], contention.PROBE_TIMEOUT_S)
                 self.assertEqual(calls[i + 1][0], prewindow.PS_ARGV)
                 self.assertEqual(calls[i + 1][1]["timeout"], contention.PROBE_TIMEOUT_S)
+
+    def test_args_ps_time_does_not_stretch_cpu_denominator(self):
+        clock = GuardClock()
+        samples = iter([cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
+                        cpu_table((42, OLD_START, "0:01.80", "mdworker_shared"))])
+        args_calls = 0
+        def run(argv, **kwargs):
+            nonlocal args_calls
+            if argv == contention.PS_ARGV:
+                return subprocess.CompletedProcess(argv, 0, next(samples), "")
+            if argv == prewindow.PS_ARGV:
+                args_calls += 1
+                if args_calls == 3:
+                    clock.now += 5
+                return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n", "")
+            return self.runner(argv, **kwargs)
+        guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(), clock=clock,
+                           sleep=clock.sleep, host_reader=None)
+        with self.assertRaisesRegex(Refused, "0.06 CPU-s/s"):
+            guard.check(force=True)
+        self.assertEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], 30)
+
+    def test_host_aggregate_is_flagged_but_never_judged(self):
+        hosts = iter([[[0, 0, 0, 0]], [[300, 0, 2700, 0]]])
+        guard, _, _ = self.guard([cpu_table(), cpu_table()])
+        guard.host_reader = lambda: next(hosts)
+        guard.check(force=True)
+        interval = guard.receipts[-1]["cpu_interval"]
+        self.assertAlmostEqual(interval["outside_aggregate_cpu_s_per_s"], .1)
+        self.assertTrue(interval["aggregate_above_0_05"])
+        self.assertFalse(guard.receipts[-1]["busy"])
 
     def test_args_only_contaminant_born_during_startup_is_judged(self):
         from datetime import datetime
@@ -789,6 +840,17 @@ class R0QuietIntervalTest(unittest.TestCase):
         entry = guard.receipts[-1]["cpu_interval"]["contaminants"][0]
         self.assertEqual(entry["matched_on"], ["ucomm"])
         self.assert_rate(entry["cpu_s_per_s"], 0.04, prewindow.INTERVAL_S)
+
+    def test_large_backwards_wall_step_charges_new_process_from_zero(self):
+        guard, _, _ = self.guard([
+            cpu_table(), cpu_table((42, OLD_START, "0:01.80", "mdworker_shared"))])
+        wall = 2_000_000_000_000_000_000
+        with patch("joulewise.align.r0_host.time.time_ns",
+                   side_effect=[wall, wall, wall - 2_000_000_000, wall - 2_000_000_000]):
+            with self.assertRaisesRegex(Refused, "mdworker_shared 0.06 CPU-s/s"):
+                guard.check(force=True)
+        self.assertNotIn("missed by the first snapshot",
+                         [row["reason"] for row in guard.receipts[-1]["cpu_interval"]["unaccounted"]])
 
 
 if __name__ == "__main__":

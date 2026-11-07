@@ -732,6 +732,7 @@ def markdown(report):
     lines = ["# ALIGN R0 desk checks", "", f"Status: **{report['status']}**. Selection data; no R1/hardware-control claim.",
              f"Complete R0: **{report.get('complete_r0', False)}**. Evidence: {report.get('evidence_kind', 'unspecified')}.",
              f"Total wall duration: {report.get('total_seconds', 0):.3f} seconds.",
+             f"Software update scan forecast (advisory): `{json.dumps(report.get('softwareupdate_scan_forecast', {'status': 'unknown'}), sort_keys=True)}`.",
              "", "| Check | Model | Status | Wall seconds |", "|---|---|---|---|"]
     for row in report["checks"]:
         lines.append(f"| {row['check']} | {row.get('model', 'host')} | {row['status']} | {row.get('check_seconds', 0):.3f} |")

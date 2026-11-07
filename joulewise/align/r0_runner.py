@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
 import json
@@ -16,6 +16,7 @@ from joulewise.align import r0
 from joulewise.align.r0_step import ProfileRefused, profile_config, step_budget
 from joulewise.align.r0_host import (
     QuietGuard, Refused, command, disk_census, host_snapshot, host_identity, inventory, smc_enumeration,
+    softwareupdate_scan_forecast,
 )
 
 CHECKS = ("host", "disk", "load", "template", "generated", "memory", "smc", "ladder", "long-decode")
@@ -126,6 +127,9 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
+    forecast_start = datetime.now()
+    report["softwareupdate_scan_forecast"] = softwareupdate_scan_forecast(
+        forecast_start, forecast_start + timedelta(seconds=per_check_timeout))
     def receipt(name, model, fn, *, incremental=False):
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}
@@ -267,6 +271,9 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     except Exception as exc:
         report.update(status="fail", error=f"{type(exc).__name__}: {exc}")
     finally:
+        close_guard = getattr(guard, "close", None)
+        if close_guard is not None:
+            close_guard()
         report["decisions_pending_lead_action"] = [
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
             for row in report["checks"] if row["status"] in {"required", "fallback"}]

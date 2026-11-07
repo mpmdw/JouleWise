@@ -408,6 +408,7 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         # cannot give a new process reusing its PID tree membership.
         tree.update(identity for identity in snapshot.rows if identity[0] in pids)
     wall_start_s = before.started.wall_ns / 1e9
+    wall_stepped_back = after.started.wall_ns < before.finished.wall_ns - 1_000_000_000
     outside: list[dict[str, Any]] = []
     unaccounted: list[dict[str, Any]] = []
     exited_over: list[dict[str, Any]] = []
@@ -418,7 +419,8 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     for identity in sorted(set(before.rows) | set(after.rows)):
         first, final = before.rows.get(identity), after.rows.get(identity)
         row = final or first
-        if final is None or (first is None and row["start_epoch_s"] < wall_start_s - 1):
+        if final is None or (first is None and not wall_stepped_back
+                             and row["start_epoch_s"] < wall_start_s - 1):
             unaccounted.append({"pid": row["pid"], "command": row["command"],
                                 "start": row["start_identity"],
                                 "reason": "exited" if final is None else "missed by the first snapshot"})

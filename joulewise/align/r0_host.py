@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timedelta
 import hashlib
 import json
 import math
@@ -10,6 +11,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import threading
 import time
 from types import SimpleNamespace
 
@@ -45,38 +47,63 @@ class QuietGuard:
     the first clean admission waits for that baseline before returning.
     """
 
+    SNAPSHOT_CADENCE_S = 15.0
+    JOIN_TIMEOUT_S = 1.0
+
     def __init__(self, parents, *, run=subprocess.run, inspect_custody=census,
-                 clock=time.monotonic, sleep=time.sleep):
+                 clock=time.monotonic, sleep=time.sleep, wall_clock_ns=None,
+                 host_reader=contention.read_host_cpu):
         self.parents = [Path(p) for p in parents]
         self.run, self.inspect_custody, self.clock = run, inspect_custody, clock
         self.sleep = sleep
+        self.wall_clock_ns = wall_clock_ns or (lambda: time.time_ns())
+        self.host_reader = host_reader
         self.last = float("-inf")
         self._clock_last = float("-inf")
+        self._clock_lock = threading.Lock()
         self._snapshots = []
-        self._previous_over = {}
+        # Evidence is advanced after every judged window, not every check.
+        self._previous_judged_over = {}
+        self._judged_snapshot = 0
+        self._snapshot_lock = threading.Lock()
+        self._stop_sampler = threading.Event()
+        self._sampler = None
+        self._snapshot_failure = None
         self.failure = None
         self.receipts = []
 
     def _now(self):
-        now = self.clock()
-        if not math.isfinite(now) or now < self._clock_last:
-            raise Refused("census indeterminate: monotonic clock went backwards or is invalid")
-        self._clock_last = now
-        return now
+        with self._clock_lock:
+            now = self.clock()
+            if not math.isfinite(now) or now < self._clock_last:
+                raise Refused("census indeterminate: monotonic clock went backwards or is invalid")
+            self._clock_last = now
+            return now
 
-    def _cpu_snapshot(self, receipt):
+    def _cpu_snapshot(self, receipt=None):
+        receipt = receipt if receipt is not None else {}
+        receipt.setdefault("cpu_interval", {"regressed_counters": [], "regressed_noncontaminant": []})
         started = self._now()
-        wall = time.time_ns()
+        wall = self.wall_clock_ns()
+        host = host_error = None
+        if self.host_reader is not None:
+            try:
+                host = [list(cpu) for cpu in self.host_reader()]
+            except Exception as exc:
+                host_error = f"{type(exc).__name__}: {exc}"
         try:
             result = self.run(contention.PS_ARGV, capture_output=True, text=True,
                               timeout=contention.PROBE_TIMEOUT_S,
                               env={**os.environ, "LC_ALL": "C"})
+            # The accounting snapshot ends here. The args census is metadata
+            # and must not stretch the CPU-rate denominator (S4).
+            finished = self._now()
+            finished_wall = self.wall_clock_ns()
             table = self.run(PS_ARGV, capture_output=True, text=True,
                              timeout=contention.PROBE_TIMEOUT_S,
                              env={**os.environ, "LC_ALL": "C"})
         except Exception as exc:
             raise Refused(f"census indeterminate: cumulative CPU snapshot: {exc}") from exc
-        finished = self._now()
         if result.returncode:
             raise Refused(f"census indeterminate: cumulative CPU snapshot exit {result.returncode}")
         if table.returncode:
@@ -96,7 +123,8 @@ class QuietGuard:
             row["contaminant"] = bool(row["contaminant_matches"])
         snapshot = contention.Snapshot(
             Stamp(wall, int(started * 1e9), int(started * 1e9)),
-            Stamp(time.time_ns(), int(finished * 1e9), int(finished * 1e9)), rows, None)
+            Stamp(finished_wall, int(finished * 1e9), int(finished * 1e9)), rows, None,
+            host=host, host_error=host_error)
         if snapshot.finished.wall_ns < wall:
             receipt["wall_clock_backwards"] = True
         if self._snapshots:
@@ -112,41 +140,86 @@ class QuietGuard:
                     receipt["cpu_interval"]["regressed_counters"].append(regressed)
                     if not regressed["contaminant"]:
                         receipt["cpu_interval"]["regressed_noncontaminant"].append(regressed)
-        self._snapshots.append(snapshot)
+        with self._snapshot_lock:
+            self._snapshots.append(snapshot)
         return snapshot
 
+    def _background_snapshot(self):
+        try:
+            self._cpu_snapshot()
+        except Exception as exc:
+            self._snapshot_failure = str(exc)
+            self._stop_sampler.set()
+
+    def _sampler_main(self):
+        while not self._stop_sampler.wait(self.SNAPSHOT_CADENCE_S):
+            self._background_snapshot()
+            if self._snapshot_failure:
+                return
+
+    def _start_sampler(self):
+        if self._sampler is None:
+            self._sampler = threading.Thread(target=self._sampler_main,
+                                             name="joulewise-quiet-snapshots", daemon=True)
+            self._sampler.start()
+
+    def close(self):
+        self._stop_sampler.set()
+        sampler = self._sampler
+        if sampler is not None and sampler is not threading.current_thread():
+            sampler.join(self.JOIN_TIMEOUT_S)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close()
+
     def _cpu_interval(self, receipt):
-        details = receipt["cpu_interval"] = {"regressed_counters": [], "regressed_noncontaminant": []}
-        current = self._cpu_snapshot(receipt)
+        details = {"regressed_counters": [], "regressed_noncontaminant": []}
+        receipt["cpu_intervals"] = []
         dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
-        # Only first admission can lack a 30 s opening. Later calls, including
-        # those after a gap, judge retained data without stalling decoding.
-        baseline = self._snapshots[0]
-        while current.midpoint_ns - baseline.midpoint_ns < dwell_ns:
-            remaining = (dwell_ns - (current.midpoint_ns - baseline.midpoint_ns)) / 1e9
-            self.sleep(remaining)
-            current = self._cpu_snapshot(receipt)
-        opening_index = max(i for i, snapshot in enumerate(self._snapshots)
-                            if current.midpoint_ns - snapshot.midpoint_ns >= dwell_ns)
-        opening = self._snapshots[opening_index]
-        # Retain the newest eligible opening and every more recent snapshot.
-        del self._snapshots[:opening_index]
-        busy = self._judge_cpu_interval(opening, current, details)
-        if details["long_interval"]:
-            receipt["long_interval"] = True
+        busy = []
+        while True:
+            with self._snapshot_lock:
+                snapshots = list(self._snapshots)
+            opening_index = self._judged_snapshot
+            if opening_index >= len(snapshots):
+                break
+            end_index = next((i for i in range(opening_index + 1, len(snapshots))
+                              if snapshots[i].midpoint_ns - snapshots[opening_index].midpoint_ns >= dwell_ns), None)
+            if end_index is None:
+                break
+            interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
+            interval_busy = self._judge_cpu_interval(snapshots[opening_index], snapshots[end_index], interval_details)
+            receipt["cpu_intervals"].append(interval_details)
+            details = interval_details
+            busy.extend(interval_busy)
+            self._judged_snapshot = end_index
+            if interval_busy:
+                break
+        receipt["cpu_interval"] = details
+        receipt["host_aggregate_cpu"] = [
+            {key: interval[key] for key in
+             ("outside_aggregate_cpu_s_per_s", "aggregate_above_0_05")}
+            for interval in receipt["cpu_intervals"]]
+        receipt["busy"] = busy
         return busy
 
     def _judge_cpu_interval(self, opening, current, details):
         limit = prewindow.CPU_LIMIT_PERCENT / 100
         measured = contention.interval(opening, current, tree_roots=(),
                                        include_kernel_task=True, limit=limit,
-                                       previous_over=self._previous_over)
+                                       previous_over=self._previous_judged_over)
         details.update({
             "start_monotonic_s": opening.midpoint_ns / 1e9,
             "end_monotonic_s": current.midpoint_ns / 1e9,
             "elapsed_s": measured["elapsed_s"], "contaminants": [],
             "unaccounted": measured["unaccounted"],
             "long_interval": measured["elapsed_s"] > 2 * prewindow.INTERVAL_S})
+        aggregate = measured["outside_aggregate_cpu_s_per_s"]
+        details["outside_aggregate_cpu_s_per_s"] = aggregate
+        details["aggregate_above_0_05"] = aggregate is not None and aggregate > limit
         matches = {}
         for snapshot in (opening, current):
             for identity, row in snapshot.rows.items():
@@ -169,8 +242,11 @@ class QuietGuard:
         if measured["error"] and measured["error"] != contention.REGRESSED_COUNTER_ERROR:
             raise Refused(f"census indeterminate: {measured['error']}")
         busy = [row for row in measured["outside_over_limit"] if contaminant(row)]
-        self._previous_over = {identity: rate for identity, rate in contention.over_limit(measured).items()
-                               if identity in matches}
+        # Dwell evidence belongs to the immediately previous *judged* window;
+        # caller checks that form no window must not clear or replace it.
+        self._previous_judged_over = {
+            identity: rate for identity, rate in contention.over_limit(measured).items()
+            if identity in matches}
         for row in measured["outside_listed"]:
             if contaminant(row) and row["cpu_s_per_s"] > contention.REPORT_FLOOR_CPU_S_PER_S:
                 details["contaminants"].append({
@@ -187,11 +263,24 @@ class QuietGuard:
             raise Refused(self.failure)
         receipt = {"resolved_custody_parents": []}
         try:
+            if self._snapshot_failure:
+                raise Refused(f"census indeterminate: background cumulative CPU snapshot: {self._snapshot_failure}")
             now = self._now()
             if not force and now - self.last < 15:
                 return
             receipt["monotonic_s"] = now
             self.receipts.append(receipt)
+            # Admission completed: the caller only consumes stored daemon
+            # snapshots. It never sleeps or launches either ps command.
+            if self._sampler is not None:
+                busy = self._cpu_interval(receipt)
+                if busy:
+                    names = ", ".join(
+                        f"{row['pid']} {row['command']} {row['cpu_s_per_s']:.6g} CPU-s/s"
+                        for row in busy)
+                    raise Refused(f"contaminating CPU contention: {names}")
+                self.last = self._now()
+                return
             extra = json.loads(os.environ.get(ADDITIONAL_PARENTS_ENV, "[]"))
             if not isinstance(extra, list) or any(not isinstance(p, str) or not p for p in extra):
                 raise Refused("additional custody parents must be a JSON array of paths")
@@ -238,6 +327,13 @@ class QuietGuard:
                            pcpu_diagnostic=diagnostic, chains=chains)
             if refusal or not custody.clear or chains:
                 raise Refused(f"machine occupied or census indeterminate: {receipt}")
+            if not self._snapshots:
+                first = self._cpu_snapshot(receipt)
+                self.sleep(prewindow.INTERVAL_S)
+                self._cpu_snapshot(receipt)
+                # Preserve the first forced call's full baseline wait.
+                if self._snapshots[-1].midpoint_ns - first.midpoint_ns < prewindow.INTERVAL_S * 1e9:
+                    raise Refused("census indeterminate: initial CPU baseline shorter than 30 s")
             busy = self._cpu_interval(receipt)
             receipt["busy"] = busy
             if busy:
@@ -245,12 +341,49 @@ class QuietGuard:
                                   for row in busy)
                 raise Refused(f"contaminating CPU contention: {names}")
             self.last = self._now()
+            self._start_sampler()
         except Exception as exc:
             if not any(item is receipt for item in self.receipts):
                 self.receipts.append(receipt)
             self.failure = str(exc)
             receipt["refusal"] = self.failure
+            self.close()
             raise Refused(self.failure) from exc
+
+
+def softwareupdate_scan_forecast(start, deadline, *, log_path=Path("/var/log/install.log")):
+    """Predict six-hour softwareupdated scans; advisory only, never a gate."""
+    try:
+        start = start if isinstance(start, datetime) else datetime.fromtimestamp(start)
+        deadline = deadline if isinstance(deadline, datetime) else datetime.fromtimestamp(deadline)
+        if deadline < start:
+            raise ValueError("deadline precedes start")
+        latest = None
+        pattern = re.compile(
+            r"(?P<stamp>\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d|[A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d).*AutoBackgroundScanFinished")
+        for line in Path(log_path).read_text(errors="replace").splitlines():
+            match = pattern.search(line)
+            if not match:
+                continue
+            stamp = match.group("stamp")
+            parsed = (datetime.strptime(stamp.replace("T", " "), "%Y-%m-%d %H:%M:%S")
+                      if stamp[0].isdigit() else
+                      datetime.strptime(f"{start.year} {stamp}", "%Y %b %d %H:%M:%S"))
+            if latest is None or parsed > latest:
+                latest = parsed
+        if latest is None:
+            return {"status": "unknown", "predicted": []}
+        predicted = []
+        next_scan = latest + timedelta(hours=6)
+        while next_scan < start:
+            next_scan += timedelta(hours=6)
+        while next_scan <= deadline:
+            predicted.append(next_scan.isoformat())
+            next_scan += timedelta(hours=6)
+        return {"status": "forecast", "last_finished": latest.isoformat(),
+                "cadence_hours": 6, "predicted": predicted}
+    except (OSError, ValueError, TypeError, OverflowError):
+        return {"status": "unknown", "predicted": []}
 
 
 def _hub_blob(path, hub_root):
