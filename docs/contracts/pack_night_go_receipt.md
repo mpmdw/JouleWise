@@ -9,9 +9,9 @@ magistrate synthesis 2026-09-08 (Ed may veto).
 The ruling of record is
 [`13-magistrate-synthesis.md`](../process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/13-magistrate-synthesis.md).
 Its six decisions select the judge's
-[`10-coldgate-fable-ruling.md`](../process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/10-coldgate-fable-ruling.md)
+[`10-coldgate-fable-ruling.md`](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/10-coldgate-fable-ruling.md)
 text and the expressly adopted amendments from
-[`11-coldgate-opus-refutation.md`](../process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/11-coldgate-opus-refutation.md).
+[`11-coldgate-opus-refutation.md`](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/11-coldgate-opus-refutation.md).
 Those sources and the magistrate's wire rulings in §§8 and 10 govern; this
 draft does not adopt the refuter's rejected schema name or environment route. The
 **magistrate** is the designated lead who adjudicates implementation questions;
@@ -306,7 +306,7 @@ The two ruled GO refusal codes are:
 
 Before either code emits, complete **R-8**, the launch-reason registration rule
 in the [stage-1
-ruling](../process_traces/2026-09-02-hands-free-week/11a-exhibit-ruling-unattended-stage1.md),
+ruling](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-02-hands-free-week/11a-exhibit-ruling-unattended-stage1.md),
 through its three registration steps: (1) add both to
 `LAUNCH_LINEAGE_REASON_CODES` in `joulewise/arm_readiness.py`; (2) document each
 exact spelling in `docs/contracts/d078_reason_registry_amendment.md`; (3)
@@ -314,7 +314,7 @@ install its emission site and a regression that demonstrates the refusal. These
 are launch-family codes, not additions to the frozen readiness-row registry or
 `REASON_CODE_COVERAGE` (the existing readiness-reason coverage set). The route
 is stage-1 R-8 and [`seat-opus-unattended-design.md`
-§Q2](../process_traces/2026-09-01-unattended/seat-opus-unattended-design.md)
+§Q2](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-01-unattended/seat-opus-unattended-design.md)
 (lines 101–115). This draft does not itself register or emit them.
 
 The consumption schema becomes `joulewise.arm_readiness_launch_consumption.v3`.
@@ -984,8 +984,8 @@ MAGISTRATE RULING (interactive, 2026-09-08 ~11:00 PDT; within the cold gate's
 envelope). The following B1–B5, S1–S6 and N1–N2 text is retained from
 the seat brief (with third-pass F4/F5/F9 editorial corrections and F2 superseding
 S3 below) in response to the
-[Opus contract refutation](../process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/15-opus-contract-refutation-go-receipt.md).
-The second citation is [seat brief 86](../process_traces/2026-09-08-handoff-redo/86-brief-d176-install-astra.md).
+[Opus contract refutation](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/15-opus-contract-refutation-go-receipt.md).
+The second citation is [seat brief 86](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/86-brief-d176-install-astra.md).
 It amends the earlier wire lists; the operative tables, clause map and seat
 scopes incorporate these changes without reopening the adopted outcomes.
 

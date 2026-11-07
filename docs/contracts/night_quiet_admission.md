@@ -54,7 +54,7 @@ the full sampler floor; the native smoke below measures it again with census.
 These calculations assume full-budget duration and a linear power model;
 core mix and cancellation in the experiment's contrast must be measured.
 **This is why the cutoff must be measured, not computed.** The numerical
-examples authorize nothing. Evidence: [the executed harvest record](../process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md),
+examples authorize nothing. Evidence: [the executed harvest record](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md),
 findings 1–2, and [D-078 clause 11](../decision_log.md).
 
 ## Sealed policy and version dispatch

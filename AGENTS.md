@@ -107,9 +107,13 @@ changes.
 - Use the narrowest safe sandbox and request approval for actions that need
   more access.
 - For code changes, run the relevant focused checks and the canonical suite:
-  `python3 -m unittest discover -s tests`. Docs-only or tooling-only work may
-  use targeted checks when the run report explains why the full suite was not
-  needed.
+  `python3 scripts/shard_tests.py --workers 8 --split` (parallel shards; a
+  sequential `python3 -m unittest discover -s tests` takes about 3.2 h, so do
+  not use it). For a fast pre-push signal use
+  `python3 scripts/quick_suite.py --tier quick --workers 4`; CI runs the full
+  suite in shards on every PR that changes code (see `CANONICAL.md`).
+  Docs-only or tooling-only work may use targeted checks when the run report
+  explains why the full suite was not needed.
 - If installed Codex skills, plugins, MCP tools, browser/image tools, goals, or
   multi-agent capabilities materially help the assigned task, use them under
   their own instructions and the same repository safety rules. Do not install,

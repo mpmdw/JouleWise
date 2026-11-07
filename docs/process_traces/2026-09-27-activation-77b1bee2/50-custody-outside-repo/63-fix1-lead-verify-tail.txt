@@ -1,4 +1,0 @@
-Ran 270 tests in 305.999s
-
-OK (skipped=1)
-rc=0

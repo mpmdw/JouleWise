@@ -3,14 +3,16 @@
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;
-policy lives in `docs/decision_log.md`. The three dated restart docs
-`docs/legacy/process_traces/RESUME-2026-07-26.md`, `RESUME-2026-07-27.md`, and
-`RESUME-2026-07-28.md` are now point-in-time session records only — each
-carries a superseded banner, and everything still current in them is
-folded in below. Do not create another dated restart doc; update this
-file instead.
+policy lives in `docs/decision_log.md`. Do not create a dated restart doc;
+update this file instead.
 
-**▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
+**Current pointer: read the top numbered item first.** That is the
+highest-numbered item; from item 168 on, items run newest first and start
+right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
+the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
+says how to get back files removed from `main` in the 2026-11-06 prune.
+
+**Block-5 history: the magistrate's hand-off of 2026-10-10 08:40 PDT (activation cbe4230e).** It was the step list for block-5 collection, which closed on 2026-10-12 (item 31). The numbered items below grew from it; the current state is the top numbered item, not this block.
 
 What happened. BETA attempt 1 (`v5-b5-beta-a1-20261010T0742Z`) ran its whole chain; the pinned harvest gave it one window-removing code, `neg8.screen_failed` (`harvest.json` sha256 `f0d72323b67d075db29a5c136d087222284a6d4651d130549f9dbd5a82d6ec7d`). No physical measurement removed it. One end reference (a short run of a fixed small workload, used to check that the machine did not drift between a window's start and end) was aborted at run time; the chain ran its spare; the spare left no result directory; and the sealed program that writes the window's verdict then recorded none of the window's stage lists as its source. The registered harvest rule re-runs the drift check only on the references that verdict names, so the check was never run, although two start and two end references survive, which is enough. Records: `docs/process_traces/2026-10-block5/seal2-beta-a1-window.md`, `seal2-beta-a1-consult.md`.
 
@@ -1039,6 +1041,15 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
   - Phase 2: prune per TRIM_REPORT section 6, as reviewed PRs grouped by area. Each PR cites the tag that preserves the code.
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
+
+190. **Laptop lead (interactive session 359dce51, Opus 5.5, through a delegate), 2026-11-06 about 17:45 PST: kit delivery. The hard repo prune (PR #690) is merged into `main` at this PR's merge (the sha follows in a one-line commit).** This item schedules nothing.
+- **What it did:** removed 8,111 stale files from `main` (13,031 files / 376 MB to 4,924 / about 186 MB; 8,109 in the reviewed prune plus the two `normalized_compare.py` copies below): process traces, legacy docs, old run reports and reviews, stale campaign configs, and dead or superseded code with its tests. Nothing was rewritten out of history. Run report: `docs/run_reports/2026-11-06-repo-prune.md`.
+- **Getting a file back:** tag `archive/pre-prune-2026-11-06` (and the branch of the same name) at `eeea6d5cf`, the last `main` before the prune. `docs/ARCHIVE.md` gives the commands.
+- **Tool map:** `CANONICAL.md` names the one current tool or document per job. Check it before building anything.
+- **Measurement kit:** it lives on `lane/2026-11-05-align-pilot10-benign` (head `165e12872`), as before. The prune touched no kit entry point: the executing review applied the prune to the lane tree and ran every kit, session, R0 and R1 entry point (`--help` rc 0, plus a dry kit build byte-identical to the unpruned tree; `docs/run_reports/2026-11-06-repo-prune-executing-review.md` §3). The R0 launcher `scripts/launch_align_r0.py` and `scripts/run_align_r0_launchagent.sh` stay on `main`. The lane changes since the review (#687, #689) touch no removed path.
+- **Magistrate:** pull `main` into the canonical checkout (`git pull --ff-only`) when no run is reading it.
+- **Also in the PR:** the suite instructions in `AGENTS.md`, `README.md` and "Start Here" step 8 now say `python3 scripts/shard_tests.py --workers 8 --split` instead of a sequential `unittest discover` (about 3.2 h); this file's header points here instead of the removed `RESUME-*` docs and the 2026-10-10 hand-off; `tools/normalized_compare.py` (superseded by `scripts/compare_b5_recompute.py`) is deleted with its R1 original and test.
+- **Evidence:** executing review and a Sol 6.1 critic passed; CI and the gate ledger green on the final head (PR #690 conversation).
 
 189. **Magistrate activation 08e39e3b (Opus 5.5, headless, 2026-11-06 from 18:07 PST): R0 re-run 4 passed load, generated and memory, then was refused at the start of `smc` by the census (a Spotlight `mdworker_shared` 0.6 s old at 6.0 % decayed `%CPU`). No unchanged re-run: R0's guard is being switched to direct CPU-seconds-per-second measurement.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0149Z` (17:50:10-18:05:15 PST, 905 s): load pass (NLL 11.0368 vs 11.0642), generated pass, memory pass (peak 37,025,381,468 bytes vs 45e9; swap flat), smc refused; ladder and long-decode not run. D pins PASS. Fence cleared, LaunchAgent gone, Spotlight `S`, photoanalysisd 13374 still `T`.
@@ -7528,7 +7539,9 @@ Before starting substantial work:
    `docs/risk_register.md` if starting a phase or a hardware-dependent task.
 6. Check the last 2-3 commits with `git log --oneline --decorate -3`.
 7. Check `git status --short --branch`.
-8. Run `python3 -m unittest discover -s tests` unless the task is docs-only.
+8. Unless the task is docs-only, run the suite in parallel shards:
+   `python3 scripts/shard_tests.py --workers 8 --split` (not a sequential
+   `unittest discover`, which takes about 3.2 h; CI runs it on every code PR).
 9. Do not commit local deletions or unrelated changes unless the user asks.
 10. Heartbeat rule (`docs/milestones.md`): if >14 days passed with no run
     report and no recorded break, start with a milestones + risk review.
