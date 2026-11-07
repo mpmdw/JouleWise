@@ -1042,6 +1042,38 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
+- **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
+  - host, host-identity, model-load, generated (0 off-spec turns) and memory (peak 37,025,283,164 bytes against 45e9; swap flat): pass.
+  - load: pass. NLL 11.0368 against the reference 11.0642, delta -0.027.
+  - checkpoint: not required.
+  - smc exited 3 `NotQuiet` after 1,520 s (idle 300 and load 900 complete; recovery at about sample 288 of 600). Over 35.9 s (23:59:28-00:00:04 PST), `find` pid 59251 (started 00:00:00) ran at 0.0786 CPU-s/s and fseventsd at 0.0697, against the 0.05 limit.
+  - D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
+- **Cause:** `com.apple.tmp_cleaner` (`/System/Library/LaunchDaemons/com.apple.tmp_cleaner.plist`, `StartCalendarInterval` Hour 0). The unified log shows launchd starting it at 00:00:00.006 on its calendar interval. It runs two `find` walks over `/tmp`. `/private/tmp` holds about 73,100 entries (2.3 GB), mostly seat scratch. The refusal is correct: the contention is real. It is not an R0 defect.
+- **Third consecutive `smc` failure**, each from a different cause outside R0: run 4 (#691 snapshot artefact, fixed), run 5 (softwareupdated scan at 23:09), run 6 (this). Mailed Ed under item 181 on thread `1a198fafa8fc12ba` (message `1a1b50b79ac9516f`, 00:2x PST). It gives the full summary and proposes timing-only re-launches. R0 is **not** re-launched until he answers.
+- **Known scheduled contention (PST):**
+  - 00:00 daily: the `/tmp` cleaner.
+  - About 05:09, 11:09, 17:09 and 23:09: the softwareupdated scan.
+  - About 05:40, not at a fixed time: XProtect (item 14).
+  - About 12:53: the daily maintenance batch (item 17).
+  - Clean gaps: about 00:05-05:05, 06:15-11:05, 13:15-17:05 and 17:15-23:05.
+- Record: branch `records/2026-11-07-align-r0-v4-rerun6` (`744d17a51`, `docs/align/r0/2026-11-07-rerun6/`: report.json sha256 `e48721ce…c37c`, report.md, NOTE.md, D-pin output, SMC journal sha256 `6d8eded0…c5a`).
+- **WP18 (item 191): tool defect, reported, not hand-edited.**
+  - Sources: the pilot-7 archive (`pilot-v6-20261104T164323Z.tar.zst`). Its sha256 matched the offload record `7fdaeb22…c212`. Both `align_turns.jsonl` files were extracted to `/Users/edr/night-archive/wp18-extract-20261107/` and matched the archive manifest (b-e25 `b71f393e…f364`, b-e18 `f657ddd7…b01e`). `--pilot` was `/Users/edr/night-archive/seats-cf1baad2/pilots/p7-PILOT.json`, whose `runs_root` is that pilot.
+  - `scripts/align_v4_wp18_fixtures.py` at `998ee2ab0` refused, with and without `--check`: "X align-pilot-v3-episodes-b-e25: summary seed must equal 7655467588542005630".
+  - Diagnosis: in `p7-PILOT.json`, `members[].summary.seed` is the seed *index* (16 for b-e25, 14 for b-e18). The 64-bit episode seed is at `summary.sampler_seed_inputs.episode_seed` (with `expected_episode_seed` equal and `preregistered_episode_seed_matches_bundle` true). The tool compares `summary['seed']` with the 64-bit seed (line 79).
+  - In memory, a copy that checks `sampler_seed_inputs.episode_seed == seed` and `summary.seed == seed_index` passed every other check. X: max_turns 12, fixture sha256 `9dac183d…658f`. Y: max_turns 12, fixture sha256 `f17a5a0f…dac`. This is diagnosis only. Nothing was written to the repo, and the branch `lane/2026-11-07-wp18-fixtures` was not pushed.
+  - **For the laptop lead:** fix line 79 on the R1 lane and add a test on the real p7 member shape. The magistrate then runs the tool (minutes) and commits the two registration files.
+
+**Next activation (written 2026-11-07 by activation 62c121f8; item 194; item 181 holds):**
+(1) **Ed's answer to the third `smc` refusal.** Search `from:claude2.glaring610@passmail.net is:unread`. If Ed says go:
+  - re-launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` and item 193's re-launch checklist, at the start of the next clean gap above (just after a scheduled job);
+  - set `--deadline` so the run ends before the gap's end.
+  If Ed says anything else, follow it. Until he answers, do not re-launch R0.
+(2) After any R0 exits: item 185 (1)-(4) on its record, as item 193 (1)-(2) describes.
+(3) **WP18:** when a laptop-lead item delivers the tool fix, run item 191's command on the extracted files above (or re-extract from the archive) and commit only the two registration files.
+(4) Items 188 (3)-(4) still hold: photoanalysisd stays held; the SSD qualification needs Ed present.
+
 193. **Magistrate activation ac09cac6 (Opus 5.5, headless, 2026-11-06 from 23:12 PST): R0 re-run 5 was refused in `smc` by the 23:09 PST softwareupdated background scan, which is real, measured contention. R0 re-launched about 23:20 PST, timed into the 6 h gap before the next scan.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0631Z` (22:32:18-23:09:44 PST, 2,246 s): status `fail`, `complete_r0` false.
   - Passed: host, host-identity, model-load, generated (no off-spec echo) and memory (peak 37,024,627,804 bytes against 45e9; swap flat).
