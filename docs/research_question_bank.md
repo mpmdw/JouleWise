@@ -1136,7 +1136,7 @@ paper is published, and the entire Tier 1 mechanism bank is answered.
 The questions below spend those answers on second-order predictions and
 interventions. They do not reopen the shape grid, KV-growth curve, content
 sentinel, session-composition study, variance study, or basic model ladder.
-This premise is not a change to today's [coverage map](research_question_coverage-2026-09-04.md),
+This premise is not a change to today's [coverage map](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/research_question_coverage-2026-09-04.md),
 [claims status](../CLAIMS_STATUS.md), or [current paper](paper/draft-v2-skeleton.md).
 `RQ-D-A01`–`RQ-D-A16` are bank-local proposal identifiers, not new canonical
 registry rows or promoted campaigns. Each extension names its existing owner.
@@ -1173,7 +1173,7 @@ using pinned 4-bit MLX conversions. Sparse points include
 (16B total/2.4B active, MLA), and
 [Qwen3.5-122B-A10B](https://huggingface.co/Qwen/Qwen3.5-122B-A10B)
 (Gated DeltaNet/full-attention hybrid plus MoE). The latter's
-[local smoke](run_reports/2026-07-07-flagship-qwen35-122b.md) already established
+[local smoke](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/run_reports/2026-07-07-flagship-qwen35-122b.md) already established
 load/generation feasibility at about 68.9 GB peak; its historical energy
 numbers remain barred from claim use. Qwen3-4B is only an approximate
 active-size comparator for A3B; its architecture and training remain different.
@@ -1233,8 +1233,8 @@ hidden inside a window estimate. Keep the north star's 3× projected-floor
 screen and reserve 20–25% of the week for refusals. At 4–5 windows/day,
 one week offers 28–35 windows, not enough for this entire portfolio.
 
-The [north star](strategy/HORIZONS.md) supplies the mechanism agenda.
-As the [fence audit](strategy/2026-08-06-impressiveness-roadmap.md) explains,
+The [north star](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/strategy/HORIZONS.md) supplies the mechanism agenda.
+As the [fence audit](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/strategy/2026-08-06-impressiveness-roadmap.md) explains,
 D-041 owns benchmark interop and correctness quarantine; D-070/D-075 and
 the AXI contracts own mechanism observability and attribution limits.
 These candidates do not amend either fence. Every proposed runtime change,

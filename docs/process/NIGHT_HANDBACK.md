@@ -944,11 +944,11 @@ that refusal is not a night-gate verdict. No `result.json` or `receipt.json`
 was produced. Courier email `1a090c8424231111` reported the failures.
 
 Harvest is complete in
-[record 01](../process_traces/2026-09-11-activation-58a3bcfc/01-rehearsal-20260911-harvest-record.md):
+[record 01](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-11-activation-58a3bcfc/01-rehearsal-20260911-harvest-record.md):
 item 5 MET, item 6 NOT MET. Item 5 rests on the pre-night 2026-09-10 07:00
 dead-man stand-down, not the 09-11 refusal. Both agents were uninstalled FROM
 the stub checkout, and the checkout and plan root were retired in
-[record 02](../process_traces/2026-09-11-activation-58a3bcfc/02-rehearsal-20260911-uninstall-and-retirement.md).
+[record 02](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-11-activation-58a3bcfc/02-rehearsal-20260911-uninstall-and-retirement.md).
 RECORD: harvest, uninstall and removal for this night are complete; nothing
 is armed. The next plan is authored under record 13 of the same directory;
 this entry assigns it no pins.
@@ -967,7 +967,7 @@ item 6 is MET in
 Both agents were uninstalled FROM the stub checkout, the checkout was
 removed, and the plan root was moved out of discovery (delete refused by the
 harness; bytes archived) in
-[record 02](../process_traces/2026-09-12-courier-rehearsal-20260912/02-rehearsal-20260912-uninstall-and-retirement.md).
+[record 02](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-12-courier-rehearsal-20260912/02-rehearsal-20260912-uninstall-and-retirement.md).
 RECORD: harvest, uninstall and retirement for this night are complete; nothing
 is armed; this file's §Purpose / §Where the results are / §Next lane still
 describe this completed night until the magistrate rewrites them for the
@@ -987,7 +987,7 @@ kind is correct behaviour and the night is re-planned, never re-armed.
 Harvest per runbook §2.0–§2.2, byte-exact preservation with an `lstat`
 inventory, and the §2.5 tool's refusal (`session … is not in the ledger`,
 rc 3) are in
-[record 01](../process_traces/2026-09-13-activation-c5048879/01-equivalence-night-20260913-harvest-record.md).
+[record 01](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-13-activation-c5048879/01-equivalence-night-20260913-harvest-record.md).
 Both agents were uninstalled FROM the clone at 05:39:52 PDT (rc 0); the
 clone and the night root are RETAINED. RECORD: harvest and uninstall for this
 night are complete; nothing is armed; the successor plan is
@@ -1009,7 +1009,7 @@ therefore not executed: no notice, no publication, no install (`launchctl
 list` showed only the magistrate throughout). At 06:06 the session removed its
 own staged plan and night root after copying the wrapper, sidecars, desk
 inputs and staged plan into
-[record 49](../process_traces/2026-09-13-activation-24b9d3dd/49-no-arm-record-n1-20260915.md)'s
+[record 49](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-13-activation-24b9d3dd/49-no-arm-record-n1-20260915.md)'s
 evidence; the clone at H `27957b60` is retained. RECORD: nothing was armed;
 the plan id carries its date and is not reused; the successor is
 `d079-epoch-25g83-derivation-n1-20260916` (this file's §Purpose / §Where the
@@ -1050,11 +1050,11 @@ announcement because its terminal was never closed, the real-class census
 refuses on it, Ed did not answer the 04:21 email asking him to close it, and
 the candidate lapsed at its 05:30 install close. Staged plan and night root
 preserved unpublished under
-[record 02](../process_traces/2026-09-16-activation-0bd12d79/02-n1-20260916-arm-record.md)'s
+[record 02](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-16-activation-0bd12d79/02-n1-20260916-arm-record.md)'s
 evidence. RECORD: nothing was armed; the same plan id is re-planned to a new
 t0 by the next handback commit once the census clears.
 
-**Dated addendum 2026-09-16 09:27 PDT (activation `0bd12d79`) — ARMED on H `32243adc` for t0 09:45:00 PDT.** Ed ran `/exit` (pid 7066 left the census 09:24:07; his reply `1a0ab095f3673122` 09:25); re-planned by `replan.py` to t0 1789577100, notice by email `1a0ab0a61def58d3` 09:26:18, published 1789576035.63, both agents installed rc 0 from the clone at H, final census `foreign_pids []`; frozen triple (`d079-epoch-25g83-derivation-n1-20260916`, `/Users/edr/JouleWise-measurement-20260916-derivation`, `32243adca1bfc8822e8001e4bac58000d591aa4f`); [record 02](../process_traces/2026-09-16-activation-0bd12d79/02-n1-20260916-arm-record.md). The activation exits before REQUEST 09:37.
+**Dated addendum 2026-09-16 09:27 PDT (activation `0bd12d79`) — ARMED on H `32243adc` for t0 09:45:00 PDT.** Ed ran `/exit` (pid 7066 left the census 09:24:07; his reply `1a0ab095f3673122` 09:25); re-planned by `replan.py` to t0 1789577100, notice by email `1a0ab0a61def58d3` 09:26:18, published 1789576035.63, both agents installed rc 0 from the clone at H, final census `foreign_pids []`; frozen triple (`d079-epoch-25g83-derivation-n1-20260916`, `/Users/edr/JouleWise-measurement-20260916-derivation`, `32243adca1bfc8822e8001e4bac58000d591aa4f`); [record 02](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-16-activation-0bd12d79/02-n1-20260916-arm-record.md). The activation exits before REQUEST 09:37.
 
 ## Executed — d079-epoch-25g83-derivation-n1-20260917 (2026-09-17, REFUSED at t0 on load, harvested)
 
@@ -1063,7 +1063,7 @@ The frozen triple was (`d079-epoch-25g83-derivation-n1-20260917`,
 `92c178f863ccc9a9742f080108433a5afd148b2e`). The arm is
 [record 77](../process_traces/2026-09-16-activation-9853dd2b/77-arm-record-n1-20260917.md);
 the completed harvest is
-[record 01](../process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md).
+[record 01](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md).
 At 15:30:01 PDT the gate returned `REFUSED`, `night_refused_not_quiet`:
 load 3.66 exceeded 2.0. The production agent census was empty. No chain
 started, no reservation or ledger session opened, and `runs/` was never
@@ -1097,7 +1097,7 @@ delivered at 02:05 (`1a0b8e9d530d5e5c`). Harvested 02:38–03:0x by activation
 b165c535 (byte-exact copy to
 `~/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919`,
 86/86 checksums OK against the live root); the completed harvest is
-[record 01](../process_traces/2026-09-19-activation-b165c535/01-n1-20260919-harvest-record.md).
+[record 01](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-19-activation-b165c535/01-n1-20260919-harvest-record.md).
 
 Slot outcomes: d01, d03, d05, d12 `valid`; d02, d04, d06, d08, d09, d11
 `ordinary-invalid` (`not_all_pulses_detected`); d07, d10 `ordinary-invalid`

@@ -3,7 +3,7 @@
 Status: **COMPLETE SPECIFICATION PROPOSAL / STOP_FILL — 2026-09-08**.
 Preparation grants no production authority and does not adopt a successor to
 D-174's methods/diagnostics fallback. The lead-supplied scout crosswalk X1–X22
-is the obligation source: [scout crosswalk report](../process_traces/2026-09-08-handoff-redo/75-scout-paper-crosswalk-astra-report.md)
+is the obligation source: [scout crosswalk report](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/75-scout-paper-crosswalk-astra-report.md)
 (`docs/process_traces/2026-09-08-handoff-redo/75-scout-paper-crosswalk-astra-report.md`).
 
 ## Reading and adoption rules
