@@ -24,7 +24,19 @@ PINS = {
 }
 PAIRS = ("spam_filter_update", "bank_transfer_2")
 SHORT_PROMPT = "What is 19 plus 23? End your answer with the number alone on its own line."
-ECHO_PROMPT = "Make one r0_echo call per turn with value desk-check. After each tool reply, call it again."
+# B7 needs ECHO_TRANSITIONS generated transitions. Without a stated total, D
+# (sampled, T=1.0) can stop to ask the user: R0 2026-11-06T2235Z stopped after 6
+# at seed 95. The prompt names a total above the required count so that none of
+# the measured turns is the model's announced last call, where it tends to add a
+# summary and so changes the shape of the turns the template is tested on. Any
+# spare of at least 1 serves that purpose; the size 4 is not derived. 16 is the
+# value verified live on D (seeds 95-97, 2026-11-06: 12 transitions each, all
+# closed reasoning, 0 rewritten tokens), so change it only with a new live probe.
+ECHO_TRANSITIONS = 12
+ECHO_CALLS = ECHO_TRANSITIONS + 4
+ECHO_PROMPT = (f"Call r0_echo with value desk-check {ECHO_CALLS} times in total, one call per turn. "
+               f"After each tool reply, make the next call. Do not stop, summarize or ask the user "
+               f"before all {ECHO_CALLS} calls are made.")
 ECHO_TOOLS = [{"type": "function", "function": {"name": "r0_echo", "description": "Echo a value",
                "parameters": {"type": "object", "properties": {"value": {"type": "string"}},
                               "required": ["value"], "additionalProperties": False}}}]
@@ -499,7 +511,7 @@ def load_coherence(backend, *, progress=lambda data: None, references=None):
                                 "succeeded": bool(replies) and second_row is not None, "error": echo_error}}
 
 
-def template_rewrites(backend, *, transitions=12):
+def template_rewrites(backend, *, transitions=ECHO_TRANSITIONS):
     """Synthetic conversation with closed reasoning, rendered by the endpoint."""
     backend.new_session(None)
     messages = [ChatMessage("user", ECHO_PROMPT)]
@@ -522,7 +534,7 @@ def template_rewrites(backend, *, transitions=12):
             "note": "B7 uses generated transitions below; these synthetic counts cannot waive it."}
 
 
-def generated_rewrites(backend, *, transitions=12, progress=lambda data: None, run_unit=lambda fn: fn()):
+def generated_rewrites(backend, *, transitions=ECHO_TRANSITIONS, progress=lambda data: None, run_unit=lambda fn: fn()):
     backend.new_session(None)
     messages = [ChatMessage("user", ECHO_PROMPT)]
     rows, turns = [], []
@@ -546,7 +558,7 @@ def generated_rewrites(backend, *, transitions=12, progress=lambda data: None, r
                      **rewrite(row["prompt_token_ids"], row["output_token_ids"], following)})
         progress({"transitions": rows})
     return {"status": "pass" if len(rows) >= transitions else "inconclusive",
-            "evidence": "real_generated_turns", "transitions": rows, "turns": turns,
+            "evidence": "real_generated_turns", "prompt": ECHO_PROMPT, "transitions": rows, "turns": turns,
             "off_spec_echo_turns": sum(r["off_spec_echo"] for r in rows)}
 
 
@@ -554,9 +566,9 @@ def checkpoint_verdict(tag, evidence):
     rows = evidence["transitions"]
     if tag == "D":
         rows = [r for r in rows if r["closed_reasoning"]]
-    if len(rows) < 12:
+    if len(rows) < ECHO_TRANSITIONS:
         return {"status": "inconclusive", "eligible_transitions": len(rows),
-                "reason": "Need at least 12 generated transitions (closed reasoning for D); do not waive B7."}
+                "reason": f"Need at least {ECHO_TRANSITIONS} generated transitions (closed reasoning for D); do not waive B7."}
     fraction = sum(r["rewritten_prefix_tokens"] > 0 for r in rows) / len(rows)
     return {"status": "required" if fraction > (0 if tag == "D" else 0.10) else "not_required",
             "eligible_transitions": len(rows), "rewind_fraction": fraction}
