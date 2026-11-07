@@ -230,6 +230,16 @@ class PowerModeGuard(AbstractContextManager):
                                      "reason": "the host night lock could not be retaken; a child of this run "
                                                "may still hold it (lead ruling R7-5); markers kept"})
                 return False
+            from joulewise.align.apple import powermode
+            if self.host_marker is not None and powermode.w1_marker(self.host_marker):
+                # Round-7 Sol critique: a W1 session installed its own High
+                # Power span between the release and the retake; never undo it.
+                self.deferred = True
+                self.armed = False
+                self.records.append({"point": "restore_deferred",
+                                     "reason": "a W1 session's marker holds the host path after the retake; "
+                                               "its High Power span is not this run's"})
+                return False
         result = self.runner(self.AUTO)
         self.records.append({"point": "restore_automatic", "exit_code": result.returncode,
                              "stdout": result.stdout, "stderr": result.stderr})

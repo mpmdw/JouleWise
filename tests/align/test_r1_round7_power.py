@@ -46,7 +46,7 @@ def load_tests(loader, tests, pattern):
     NightDriverTests fixture, not its tests)."""
     suite = unittest.TestSuite()
     for case in (LockInheritanceTests, NightLockTreeTests, R1GuardTests, HostStateDirTests,
-                 NightSignalTests, HostLockErrorTests):
+                 NightSignalTests, HostLockErrorTests, CritiqueFixTests, R1GuardOwnershipTests):
         names = sorted(name for name in vars(case) if name.startswith("test_"))
         suite.addTests(case(name) for name in names)
     return suite
@@ -451,3 +451,100 @@ class HostLockErrorTests(rn.NightDriverTests):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CritiqueFixTests(rn.NightDriverTests):
+    """Fixes from the round-7 local Sol critique (F3 to F6)."""
+
+    def _declare_two(self, *, own_marker=True):
+        mapping = json.loads(self.plan_path.read_text())
+        mapping["ac_powermode"] = 2
+        self.plan_path.write_text(json.dumps(mapping))
+        host = self._power_host(2)
+        marker = Path(powermode.host_marker_path())
+        if own_marker:
+            powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG,
+                                        owner={"custody_root": self.custody, "plan_path": self.plan_path})
+        return host, marker
+
+    def test_f3_a_signal_in_the_initial_census_runs_the_restore_path(self):
+        host, marker = self._declare_two()
+        with mock.patch.object(self.driver, "agent_census", side_effect=KeyboardInterrupt("signal 15")):
+            with self.assertRaises(KeyboardInterrupt):
+                self._run_night()
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+
+    def test_f3_a_signal_between_admission_and_the_close_registration_restores_and_frees_the_lock(self):
+        host, marker = self._declare_two()
+        real_admit = self.driver._admit_ac_powermode
+
+        class Interrupting(dict):
+            def __getitem__(self, key):
+                if key == "expected":
+                    raise KeyboardInterrupt("signal 15")
+                return dict.__getitem__(self, key)
+
+        with mock.patch.object(self.driver, "_admit_ac_powermode",
+                               side_effect=lambda *a, **k: Interrupting(real_admit(*a, **k))):
+            with self.assertRaises(KeyboardInterrupt):
+                self._run_night()
+        self.assertEqual(host.mode, 0)
+        self.assertFalse(marker.exists())
+        free = powermode.HostLock(role="probe")
+        self.assertTrue(free.acquire())
+        free.release()
+
+    def test_f4_the_close_never_restores_another_sessions_span_installed_before_the_retake(self):
+        host, marker = self._declare_two()
+        other = self.root / "retry" / "custody"
+        real_spawn = self._popen_recorder()[1]
+
+        def spawn(argv, *args, **kwargs):
+            # A later session's install (which needs the lock, so it can only
+            # land once the night's tree is gone) replaces the marker.
+            powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG, owner={"custody_root": other})
+            return real_spawn(argv, *args, **kwargs)
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn):
+            self.assertEqual(self.driver.run_night(self.plan_path), 0)
+        self.assertNotIn("restore", host.calls)
+        self.assertEqual(host.mode, 2)
+        self.assertTrue(powermode.owned_by(marker, custody_root=other))
+        self.assertIn("belongs to another session", (self.custody / "night.log").read_text())
+
+    def test_f5_a_lock_on_the_launcher_handoff_slot_is_moved_without_dropping_it(self):
+        lock = powermode.HostLock(role="night")
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+        old = lock.fd
+        [fd] = lock.pass_fds(reserved=(old,))
+        self.assertNotEqual(fd, old)
+        self.assertGreater(fd, old)
+        with self.assertRaises(OSError):
+            os.fstat(old)
+        self.assertFalse(powermode.HostLock(role="probe").acquire())   # still locked through the moved fd
+
+    def test_f6_a_flock_error_other_than_contention_is_raised_not_read_as_a_holder(self):
+        import fcntl
+        lock = powermode.HostLock(role="night")
+        with mock.patch.object(fcntl, "flock", side_effect=OSError(errno.EACCES, "Permission denied")):
+            with self.assertRaises(OSError):
+                lock.acquire()
+        self.assertFalse(lock.held)
+
+
+class R1GuardOwnershipTests(HostStateCase):
+    def test_f4_the_r1_guard_never_restores_a_w1_span_installed_before_the_retake(self):
+        world = rehearsal_tests.FakeWorld()
+        lock = powermode.HostLock(role="R1 driver")
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+        guard = r1.PowerModeGuard(world, self.tmp / ".align-r1-high-power", self.marker, lock=lock)
+        guard.__enter__()
+        guard.high()
+        powermode.write_host_marker(self.marker, tag=powermode.W1_MARKER_TAG,
+                                    owner={"custody_root": str(self.tmp / "w1/custody")})
+        calls = len(world.calls)
+        self.assertFalse(guard.restore())
+        self.assertNotIn(r1.PowerModeGuard.AUTO, world.calls[calls:])
+        self.assertTrue(powermode.w1_marker(self.marker))

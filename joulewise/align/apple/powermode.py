@@ -215,7 +215,9 @@ class HostLock:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except OSError as error:
-                if error.errno not in (errno.EWOULDBLOCK, errno.EAGAIN, errno.EACCES):
+                # Lead ruling R7-11: only EWOULDBLOCK/EAGAIN means another
+                # holder; any other error (EACCES included) is raised.
+                if error.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
                     os.close(fd)
                     raise
                 if monotonic() >= deadline:
@@ -251,10 +253,20 @@ class HostLock:
         self.release()
         return self.acquire()
 
-    def pass_fds(self):
+    def pass_fds(self, reserved=()):
         """The descriptor to hand to the night's chain (``pass_fds``) so the
-        lock lives as long as the night's process tree (R7-5)."""
-        return () if self.fd is None else (self.fd,)
+        lock lives as long as the night's process tree (R7-5). A descriptor
+        on a ``reserved`` slot (the measurement launcher's handoff FD 198) is
+        first moved: ``dup`` shares the open file description, so the lock
+        is unaffected."""
+        if self.fd is None:
+            return ()
+        while self.fd in reserved:
+            import fcntl
+            moved = fcntl.fcntl(self.fd, fcntl.F_DUPFD_CLOEXEC, max(reserved) + 1)
+            os.close(self.fd)
+            self.fd = moved
+        return (self.fd,)
 
 
 def restore_owed(markers, *, runner=None, lock=None, owner=None, reason):

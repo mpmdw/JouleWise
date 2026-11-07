@@ -26,14 +26,17 @@ class CloseDeferralTests(unittest.TestCase):
             [sys.executable, '-B', '-m', 'unittest',
              f'{__name__}.CloseSignalChild.test_close'],
             cwd=REPO, env=dict(os.environ, **{CHILD_CASE: case}),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             readable, _, _ = select.select([child.stdout], [], [], 10)
             self.assertTrue(readable, 'child did not start its close')
             self.assertEqual(child.stdout.readline().strip(), 'close-started')
             sent = time.monotonic()
             child.send_signal(signal.SIGTERM)
-            stdout, stderr = child.communicate(timeout=10)
+            # The quick close returns only after this line arrives, so the
+            # TERM is always held during the close (round-7 Sol critique F8:
+            # a fixed sleep raced the parent's scheduling).
+            stdout, stderr = child.communicate(input='signalled\n', timeout=10)
             self.assertEqual(child.returncode, 0, stderr)
             return sent, [json.loads(line) for line in stdout.splitlines()]
         finally:
@@ -79,7 +82,10 @@ class CloseSignalChild(unittest.TestCase):
         class Managed:
             def close(self):
                 print('close-started', flush=True)
-                time.sleep(6.0 if case == 'blocked' else 0.4)
+                if case == 'blocked':
+                    time.sleep(6.0)
+                else:
+                    sys.stdin.readline()
                 record('closed')
 
         original = signal.signal(signal.SIGTERM, handler)
