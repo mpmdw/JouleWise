@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import unittest
 
 from joulewise.b5_analysis.windows import ROOT, SealPins
@@ -20,6 +21,14 @@ B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
 # and the 2026-10-30 frozen-components rule): the run-scoped candidate-physics memo
 # (_verified_candidate_bound); every value it returns is the frozen refit's own.
 EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py"})
+# A cited rebind moves the pin, it does not remove it (DLE-3, docs/analysis/b5/DEVIATION-LOG.md;
+# PR #693 review M2/M1). The analysis executes these files, so beside the seal pin4 check on the
+# accepted commit's bytes, the working tree is pinned to the rebound bytes: a further edit fails
+# here until it carries its own cited rebind.
+REBOUND_WORKING_TREE = {
+    # b5 under-90 round 2 (13af1baa8), the candidate-physics memo; DLE-3.
+    "joulewise/calibration_bracketing.py": "40fd34bb82b8a0a57ece79ef23e507482a5ea79dd0c6cc001c5e3ea0cfe2a1f2",
+}
 PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
                  "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/")
 
@@ -47,6 +56,18 @@ def _bytes(root, path):
                           check=True, capture_output=True).stdout
 
 
+def rebound_mismatches(root=ROOT):
+    result = []
+    for path, digest in REBOUND_WORKING_TREE.items():
+        try:
+            same = hashlib.sha256((root / path).read_bytes()).hexdigest() == digest
+        except OSError:
+            same = False
+        if not same:
+            result.append(path)
+    return result
+
+
 def frozen_mismatches(root=ROOT):
     result = []
     for path, digest in frozen_digests().items():
@@ -62,6 +83,16 @@ def frozen_mismatches(root=ROOT):
 class FrozenFilesTests(unittest.TestCase):
     def test_frozen_files(self):
         self.assertEqual(frozen_mismatches(), [])
+
+    def test_rebound_files_keep_their_rebound_bytes(self):
+        self.assertEqual(rebound_mismatches(), [])
+        self.assertTrue(set(REBOUND_WORKING_TREE) <= EVOLVED_ON_MAIN)
+        with tempfile.TemporaryDirectory() as temporary:
+            for path in REBOUND_WORKING_TREE:
+                edited = Path(temporary) / path
+                edited.parent.mkdir(parents=True, exist_ok=True)
+                edited.write_bytes((ROOT / path).read_bytes() + b"\n")   # one byte appended
+            self.assertEqual(rebound_mismatches(Path(temporary)), sorted(REBOUND_WORKING_TREE))
 
     def test_seal_pins_match_every_printed_value(self):
         value = json.loads((ROOT / "configs/analysis/b5/seal_pins.json").read_bytes())
