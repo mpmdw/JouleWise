@@ -1042,6 +1042,31 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+196. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 03:00 PST: (A) a lead ruling that R0's thermometry is evaluated offline from re-run 7's journal, so R0's remaining checks run now without waiting for the classifier; (B) the WP18 tool fix is delivered.** This item schedules nothing; when R0 runs is the magistrate's call.
+- **(A) Ruling R0-L1: R0 does not wait for the classifier.**
+  - **Authority.** `docs/align/pilot_protocol_v4.md` §WP14(a) on `lane/2026-11-06-v4-r1-integrated` says R0's picks are **PROVISIONAL**, and that the lead evaluates R0's thermometry bar offline from its authenticated journal, which "is not a rerun". R1 makes the final sensor selection on D's 10k-prefill + 4,096-decode planning step, from its own full-inventory capture, with the same classifier. So the classifier amendment has to land before R1 arms. It does not have to land before R0's other checks.
+  - **(1) Thermometry.** The SMC capture of re-run 7 is the R0 thermometry evidence: journal sha256 `16aa5307…4984`, 305 clean quiet observations, 1,800 readings of 403 keys, zero read errors. When the classifier amendment is decided, built and merged, the magistrate evaluates it offline on that journal, and records the picks and the bar as PROVISIONAL. No live SMC re-run is needed. A re-run is wanted only if the amended classifier finds the capture itself inadequate (for example, an unsettled idle that its rule refuses rather than flags).
+  - **(2) Remaining checks, now.** In the next clean gap, run R0 on the same measurement checkout `e1a91226e` and the same config, with `--checks host,disk,load,template,generated,memory,ladder,long-decode`. That is every check except `smc`; host, disk, load, generated and memory repeat because they are cheap and re-establish the run's own gates. The run's `complete_r0` will read false, because it is a subset by construction.
+    - This removes the most contention-sensitive step: the scheduled scans and cleaners have refused only inside `smc`.
+    - `ladder` and `long-decode` do not consume the SMC picks (`r0_runner.execute`: `smc` runs unloaded and returns nothing to the model checks).
+  - **(3) Composition.** R0 is complete when all of these hold: the step (2) run passes every non-`smc` check; re-run 7's capture is valid; and the offline thermometry bar is evaluated. Record the composition in the R0 record as a NOTE, citing both reports' sha256 and this item.
+  - **(4) Unchanged.** The classifier reconciliation (the three fresh designs, Ed's request) continues as item 195 sets out. Rulings that change which sensors count still go to Ed. The amendment is required before R1 arms, not for (2).
+  - **(5) Lead input to the reconciliation.** These are the protocol's requirements on `s_fast` and `s_slow`, not a design:
+    - `s_slow` drives the G0 band (`S_slow ≤ R + δ_slow`, released at 0.2 °C/min settledness) and the G1 turn bands. R is the slow and fast medians over the last 60 s of idle before warmup (WP14(b)).
+    - `s_fast` drives the G1 fast band (`δ_fast_c`).
+    - Both must be keys that respond to D's GPU+CPU decode load. A fixed placeholder series cannot gate; reject it.
+    - `s_slow` needs a resolved cooling τ long enough that G0 measures heat soak, not die noise. Its rise has to clear its own noise by a clear margin.
+    - R1 re-selects on a much heavier step than R0's 900 s load, so R0's picks only need to be plausible enough to configure R1's gated runs.
+- **(B) WP18 tool fix (item 191, item 194's diagnosis).**
+  - The fix is on `lane/2026-11-06-v4-r1-integrated@97714c644` (round 6, R6-8 / Sol F7). The summary seed may be the member's seed index (16 for X, 14 for Y) or the derived episode seed. The rows' `generation.sampler.per_turn_seed` must now equal the seed law value for each turn, and each row's `turn` must equal its row index.
+  - Run item 191's command from a checkout of `97714c644`, against `/Users/edr/night-archive/wp18-extract-20261107/` and `p7-PILOT.json`. Commit only `configs/campaigns/align_v4/registration/wp18_{x,y}_token_ids.json`, on a new branch `lane/2026-11-07-wp18-fixtures` from `97714c644`, and push it. The laptop lead integrates it.
+  - If it refuses on the per-turn-seed or turn-index check, send the exact message and edit nothing.
+  - The fixture sha256 values from your in-memory copy (X `9dac183d…658f`, Y `f17a5a0f…dac`) should reproduce.
+- **For information (no action now):**
+  - ALIGN R1 round 6 is integrated and reviewed on `lane/2026-11-06-v4-r1-integrated` (`97714c644`): no blocker, no HIGH. A round-7 fix pass is building on the laptop, and the R1 kit delivery will come as its own item.
+  - The background-sampler lane for the R0 quiet guard (item 192, required before W1) is building in Codex cloud, based on `lane/2026-11-05-align-pilot10-benign`.
+  - Analysis: the blinded D-188 comparator found r2 EQUIVALENT to r1 on real data. Analysis r3 (with the release-trace fixes) is being assembled for a real dry run on the laptop.
+
 195. **Magistrate activation a9031916 (Opus 5.5, headless, 2026-11-07 from 01:02 PST): R0 re-run 7 ran the whole SMC capture with no contention refusal, but the selection was inconclusive because a 100 ms coverage tolerance discarded about half of the real readings. Fix lane `fix/2026-11-07-r0-smc-coverage-cell` is building; R0 re-launches in the 06:15-11:05 PST gap after its gates.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0810Z` (08:11:31Z-08:57:59Z, 2,789 s): status `fail`, `complete_r0` false, `stopped_after` smc `inconclusive`. Ladder and long-decode did not run.
   - host, host-identity, model-load, load (NLL 11.0368), generated (0 off-spec), memory (peak 37,025,053,788 against 45e9): pass. Checkpoint not required. D pins PASS. Spotlight resumed. photoanalysisd 13374 and mediaanalysisd 21331 are still held.
@@ -1057,6 +1082,60 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (2) Then re-launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` and item 194's launch steps, in a clean gap long enough for 3-4 h: 06:15-11:05, 13:15-17:05 or 17:15-23:05 PST. Deadline before the gap's end.
 (3) After R0 exits: item 185 (1) on the new record, then 194 (3) for contention.
 (4) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
+- **Update about 02:25 PST: the fix lane's cold passes are in. R0 is HELD; the re-launch planned for the 06:15 gap is withdrawn.**
+  - #692 (draft, base `lane/2026-11-05-align-pilot10-benign`, head `3c0b71b24`, Sol 6.1 builder): Fable 5.1 and Opus 5.5 ran blind executing cold passes. Both returned ADMIT_WITH_FIXES: the diff is correct and no capture that `collect()` can produce passes falsely. Dispositions: https://github.com/mpmdw/JouleWise/pull/692#issuecomment-6705062492. Reviews: `/Users/edr/night-archive/r0-smc-cov/{fable,opus}/REVIEW.md`.
+  - **Fable F1:** the R0 host receipt (`r0_host.py:484-491`) re-checks the picks against the capture-wide coverage block that `scripts/align_smc_enumerate.py:130` writes at 100 ms. On the real payload it stays inconclusive (36/1800). A capture-wide grid at 500 ms gives 0.906, because the phases sit on different sub-second offsets. The receipt must read `rank`'s per-phase coverage.
+  - **Opus HIGH, re-executed by the lead on the raw journal:** with the coverage fixed, the picks are artifacts.
+    - All 16 die keys are `Tg*` GPU keys reading a fixed -2.75 degC on 286 of 300 idle samples (power-gated placeholder), and they drop back to it two samples into recovery.
+    - TaRT was still cooling through idle (34.0 to 30.6 degC); its 50-60 s rise is 0.06 degC against a noise floor of 1.14.
+    - The real CPU-cluster keys TCMb, TCDX and TCMz (t63 18-26 s, tau 16-27 s) fall between the die class (t63 <= 5 s) and the heatsink class (tau > 30 s), so they are record-only.
+  - **Disposition:** #692 stays draft and unmerged. Merging it with the receipt fix alone would turn a wrong-reason inconclusive into a pass with physically wrong picks. The classifier needs a design decision, a result the design does not cover (item 185 (3)), so it goes to Ed and the laptop lead:
+    - rejecting placeholder series;
+    - a settled-idle criterion (the idle phase follows the memory check's load);
+    - classes that fit Mac15,9's sensors, or a different load step;
+    - what W1 thermal control needs from `s_fast` and `s_slow`.
+  - Reviewer harness note: agent tool calls do not keep a standalone `cd`, so plain `-m unittest` imported the custody checkout. Use `python -P` or `PYTHONSAFEPATH=1`.
+
+**Next activation (replaces item 195's pointer above; written 2026-11-07 about 02:25 PST by activation a9031916):**
+(1) Do not re-launch R0 until a classifier amendment covering the Opus HIGH and Fable F1 is decided, built (onto #692 or a successor), gated and merged. A re-run on the current lane is inconclusive for a known reason and costs 3-4 h of quiet Mac.
+(2) Read Ed's reply on thread `1a198fafa8fc12ba` and any laptop-lead item. If a two-seat classifier consult has run (`/Users/edr/night-archive/r0-smc-cov/consult/`), its proposals are inputs to that decision.
+(3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
+- **Consult (about 01:40 PST), two blind seats from the re-run 7 journal:** Sol 6.1 xhigh and Fable 5.1. Proposals and the lead's synthesis are on branch `records/2026-11-07-align-r0-v4-rerun7` (`42e6b973c`, `docs/align/r0/2026-11-07-rerun7/consult/`).
+  - Both seats agree:
+    - reject placeholder series;
+    - take the baseline and noise from the last 60 s of idle;
+    - check settledness at G0's 0.2 degC/min;
+    - fast class tau <= 30 s, with candidate `Tf18`;
+    - add a noise gate on slow keys;
+    - make the receipt read the classifier's per-phase coverage;
+    - this capture cannot give a valid slow pick.
+  - Open choices: the slow class lower bound (30 or 90 s); refusing or flagging an unsettled idle; running SMC first in R0; the slow pick rule.
+- **Ed's reply, 01:34 PST 11-07** (message `1a1b55c3be8c0435`, thread `1a198fafa8fc12ba`), verbatim: "of course continue work on getting this right. are there any signs when working this will lead to any noteworthy research? wb the port of qwen next and other lanes, update? Also sol xhigh claude 5.5 and fable 5.1 should be doing fresh designs"
+  - Applied: three blind fresh-design seats (Sol 6.1 xhigh, Opus 5.5, Fable 5.1), free to discard the current classifier. Brief: `/Users/edr/night-archive/r0-smc-cov/fresh/BRIEF.md`; outputs in `fresh/{sol,opus,fable}/DESIGN.md`. The two amendment-framed proposals above stay on record as inputs.
+  - Ed's two questions are answered on the thread.
+- **Next activation (replaces the pointer above):**
+  - (1) If the three fresh designs exist and are not yet reconciled, reconcile them. Claude-side writes the decision text, and Sol's executed findings are kept. Rulings that change which sensors count go to Ed with the reconciled text. Then build onto #692 or a successor, gate it, merge, and run one R0 in a clean gap.
+  - (2) R0 stays held until then.
+  - (3) WP18 (item 191) and items 188 (3)-(4) are unchanged.
+
+- **Fresh designs reconciled (02:23 PST); build launched (02:45 PST).**
+  - Three blind fresh designs (Sol 6.1 xhigh, Opus 5.5, Fable 5.1) and the lead's reconciled decision D1-D6 are on branch `records/2026-11-07-align-r0-v4-rerun7` (`9fc7f06cc`, `docs/align/r0/2026-11-07-rerun7/fresh/DECISION.md`).
+  - Agreed by all three:
+    - D1: placeholder rejection (any reading below 10 degC; a one-second jump larger than half the step).
+    - D2: baseline from the last 60 s of idle.
+    - D3: SMC first in R0, with an adaptive idle to G0's 0.2 degC/min, capped at 1,200 s; an unsettled key is flagged, not refused.
+    - D4: a fast role of tau <= 60 s; pick on this capture Tf18.
+    - D6: the receipt reads per-phase coverage.
+  - D5 (the slow pick) is provisional: Fable's band-hold rule (TaLP), printed beside the Opus pick (TSXR) and the Sol pick (TVS0). It is chosen on the first settled R0.
+  - Ed was mailed the decision with a NO-window to 02:45 (message `1a1b588e66e248f9`). No reply came.
+  - Build: Sol 6.1 xhigh onto #692, brief `/Users/edr/night-archive/r0-smc-cov/build2/BRIEF.md`, report `build2/build-report.md`.
+  - R1-lane findings for the laptop lead are in DECISION.md "Not built here" (G0 600 s cap vs 840-1,040 s settle; G1 279 s; R1 cooldowns).
+- **Next activation (replaces the pointer above):**
+  - (1) If the build report exists, commit it if uncommitted and run blind Fable and Opus executing cold passes (Agent tool; `python -B -P`), then CI. Disposition, merge into `lane/2026-11-05-align-pilot10-benign`, and fast-forward `$M`.
+  - (2) Stop the Codex MCP adapter, then launch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` in a clean gap long enough for 4-4.5 h (the adaptive idle adds up to 15 min).
+  - (3) WP18 and items 188 (3)-(4) are unchanged.
 
 194. **Magistrate activation 62c121f8 (Opus 5.5, headless, 2026-11-07 from 00:02 PST): R0 re-run 6 was refused in `smc` at 00:00 PST by macOS's daily `/tmp` cleaner. That is the third `smc` refusal in a row, so it went to Ed under item 181, and R0 waits for his answer. The WP18 fixture tool (item 191) refused on a tool defect; nothing was committed from it.** No pending notices, no unread mail from Ed, no new directive.
 - **Run** `/Users/edr/night-align/r0-v4-20261107T0720Z` (07:18:54Z-08:00:04Z, 2,470 s): status `fail`, `complete_r0` false.
