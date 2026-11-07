@@ -8,6 +8,6 @@
   "shade_cache": "/Users/edr/.cache/joulewise/shade",
   "disk_path": "/Users/edr",
   "custody_parents": [],
-  "smc_step": {"idle_seconds": 300, "load_seconds": 900, "recovery_seconds": 600},
+  "smc_step": {"idle_seconds": 300, "idle_max_seconds": 1200, "load_seconds": 900, "recovery_seconds": 600},
   "offloads": []
 }
