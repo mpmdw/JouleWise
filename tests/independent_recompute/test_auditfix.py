@@ -395,8 +395,18 @@ class AuditFixTests(unittest.TestCase):
                     "compared_runs": 68, "not_compared_runs": 1, "not_compared_by_reason": {reason: 1}})
                 self.assertEqual(out["members"]["ALPHA"][rid]["E_j"], {})
                 machine = out["disclosures"]["whole_machine"]["windows"]["ALPHA"]["members"][rid]["phases"]["request"]
-                self.assertIsNone(machine["delta_J"])
-                self.assertEqual(machine["recorded_comparison"], {"status": "not_compared", "matches": None, "reason": reason})
+                if state == "failed":
+                    self.assertIsNone(machine["delta_J"])
+                    self.assertEqual(machine["recorded_comparison"],
+                                     {"status": "not_compared", "matches": None, "reason": reason})
+                else:
+                    # 2026-11-07 release trace (D3): the claim comparison above still never counts the member,
+                    # but PLAN 8.2's whole-machine line describes it from its stamps and recorded trace, and
+                    # that descriptive row is checked against the harvest record.
+                    self.assertEqual((machine["status"], machine["reason"], machine["rail_basis"]),
+                                     ("descriptive_unanchored", reason, "bundle_power_trace_csv"))
+                    self.assertEqual(machine["recorded_comparison"],
+                                     {"status": "compared", "matches": True, "mismatched_fields": []})
 
     def test_missing_plist_never_passes_machine_comparison_even_in_diagnostic_mode(self):
         archive, rid, _, _ = self.machine_archive()
