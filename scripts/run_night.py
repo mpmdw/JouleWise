@@ -1049,6 +1049,11 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
         if child_channel is not None:
             environment[start_fd_env] = str(child_channel.fileno())
             launch_options["pass_fds"] = (child_channel.fileno(),)
+        if _CHAIN_HOST_LOCK is not None and _CHAIN_HOST_LOCK.held:
+            # Lead ruling R7-5: the chain inherits the host night lock, so the
+            # lock lives as long as the night's process tree, not run_night.
+            launch_options["pass_fds"] = tuple(launch_options.get("pass_fds", ())) + _CHAIN_HOST_LOCK.pass_fds(
+                reserved=(LAUNCHER_HANDOFF_FD,))
         try:
             process = t0_rehearsal.observed_popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
@@ -4009,19 +4014,32 @@ def _admit_ac_powermode(plan: NightPlan, probes: Probes, lock: Any = None,
         return probes.run(tuple(argv))
 
     expected = night_gate.DEFAULT_AC_POWERMODE if plan.ac_powermode is None else plan.ac_powermode
-    markers = _power_markers(plan)
+    markers = None
     try:
+        markers = _power_markers(plan)
         record = powermode.admit_ac_powermode(expected, markers=markers, runner=runner, lock=lock,
                                               owner={"custody_root": plan.custody_root, "plan_path": plan_path})
     except Exception as error:  # noqa: BLE001 - admission evidence, never a crash
-        record = {"expected": expected, "observed": None, "marker": markers[0], "marker_present": None,
+        record = {"expected": expected, "observed": None, "marker": markers[0] if markers else None,
+                  "marker_present": None,
                   "admitted": False, "reason": f"admission failed: {type(error).__name__}: {error}"}
     record["plan_declared"] = plan.ac_powermode
+    record["host_state_dir"] = _host_state_dir_record()
     return record
 
 
+def _host_state_dir_record() -> str:
+    """Lead ruling R7-10: the host state directory this night used, for its
+    admission record and custody log (or why it could not be used)."""
+    from joulewise.align.apple import powermode
+    try:
+        return powermode.host_state_dir()
+    except Exception as error:  # noqa: BLE001 - a record, the refusal is elsewhere
+        return f"refused: {type(error).__name__}: {error}"
+
+
 def _restore_owed_on_exit(plan_path: Path, custody_root: str | Path | None, probes: Probes,
-                          reason: str) -> dict[str, Any]:
+                          reason: str, lock: Any = None) -> dict[str, Any]:
     """Lead ruling R6-7: a night that exits without measuring (malformed plan,
     rerun, J4 launch_abandoned) restores Automatic for the host-level W1 High
     Power marker it owns, so an armed W1 session never leaves the host at 2.
@@ -4034,8 +4052,13 @@ def _restore_owed_on_exit(plan_path: Path, custody_root: str | Path | None, prob
     def runner(argv):
         return probes.run(tuple(argv))
 
-    record = powermode.restore_owed([powermode.host_marker_path()], runner=runner, reason=reason,
-                                    owner={"custody_root": custody_root, "plan_path": plan_path})
+    try:
+        markers = [powermode.host_marker_path()]
+    except Exception as error:  # noqa: BLE001 - never raises (R7-10 refusal of an override)
+        record = {"reason": reason, "action": "error", "error": f"{type(error).__name__}: {error}"}
+    else:
+        record = powermode.restore_owed(markers, runner=runner, reason=reason, lock=lock,
+                                        owner={"custody_root": custody_root, "plan_path": plan_path})
     if record.get("action") not in (None, "none") and custody_root is not None:
         try:
             _append_log(Path(custody_root), f"ac powermode exit restore ({reason}): "
@@ -4046,13 +4069,16 @@ def _restore_owed_on_exit(plan_path: Path, custody_root: str | Path | None, prob
 
 
 def _refuse_ac_powermode(custody_root: Path, night_dir: Path, plan: NightPlan, courier_bin: Path | None,
-                         admission: Mapping[str, Any], started_epoch_s: float, started_monotonic_ns: int) -> int:
-    """The HIGH-3 refusal: record it, deliver the notice, never launch."""
+                         admission: Mapping[str, Any], started_epoch_s: float, started_monotonic_ns: int,
+                         code: str = "refused_ac_powermode") -> int:
+    """The HIGH-3 refusal: record it, deliver the notice, never launch.
+    ``code`` is ``refused_host_lock_error`` when the host night lock failed
+    for a reason other than another holder (lead ruling R7-11)."""
     _append_log(custody_root, "ac powermode admission refused: " + str(admission["reason"]))
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(courier_bin, plan=plan)
     _record_courier_substitution(custody_root, courier_substitution)
     _write_standard_refusal_result(
-        custody_root, night_dir, plan, _CODES["refused_ac_powermode"],
+        custody_root, night_dir, plan, _CODES[code],
         str(admission["reason"]), started_epoch_s, started_monotonic_ns, evidence=dict(admission))
     return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED, resolved_courier,
                              courier_error=courier_error, deadman_epoch_s=deadman_epoch(plan),
@@ -4067,14 +4093,48 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
     (R6-7) is removed only after the read-back is 0, so a failed restore stays
     owed to the next session start or night admission, which see the same
     host-level marker. The host night lock is released last. Never raises;
-    the outcome goes to the custody log."""
+    the outcome goes to the custody log.
+
+    Lead ruling R7-5: the chain inherited the lock, so the close restores
+    only after it has itself retaken the lock on a fresh descriptor, which
+    proves no process of the night still holds it. If it cannot, it leaves
+    the marker (and the restore) to the dead-man or the next session start."""
     from joulewise.align.apple import powermode
 
     def runner(argv):
         return probes.run(tuple(argv))
 
+    global _CHAIN_HOST_LOCK
+    _CHAIN_HOST_LOCK = None
+    proven, lock_error = False, None
     try:
-        markers = [m for m in _power_markers(plan) if os.path.lexists(m)] or [powermode.host_marker_path()]
+        proven = bool(lock is not None and lock.retake())
+    except BaseException as error:  # noqa: BLE001 - not proven; never restore then
+        lock_error = f"{type(error).__name__}: {error}"
+    if not proven:
+        record = {"ok": False, "deferred": "the host night lock could not be retaken: a process of this night "
+                  "may still hold it (lead ruling R7-5); the marker is left for the dead-man or the next "
+                  "session start", "lock_error": lock_error}
+        try:
+            _append_log(Path(plan.custody_root), "ac powermode close deferred: "
+                        + json.dumps(record, sort_keys=True, default=str))
+        except Exception:  # noqa: BLE001
+            pass
+        return record
+    try:
+        host_marker = powermode.host_marker_path()
+        if (os.path.lexists(host_marker) and powermode.w1_marker(host_marker)
+                and not powermode.owned_by(host_marker, custody_root=plan.custody_root)):
+            # Round-7 Sol critique: between the release and the retake another
+            # session may have installed its own High Power span. Its marker
+            # is not this night's; leave the mode and the marker to it.
+            record = {"ok": False, "action": "not_owner", "marker": host_marker,
+                      "owner": powermode.marker_owner(host_marker)}
+            _append_log(Path(plan.custody_root), "ac powermode close: the host marker belongs to another "
+                        "session after the retake; nothing restored: " + json.dumps(record, sort_keys=True,
+                                                                                    default=str))
+            return record
+        markers = [m for m in _power_markers(plan) if os.path.lexists(m)] or [host_marker]
         record = powermode.restore_automatic(markers[0], runner=runner)
         if record.get("ok"):
             for marker in markers[1:]:
@@ -4096,33 +4156,77 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
     return record
 
 
-def _own_high_power_marker(plan: NightPlan, plan_path: Path, admission: dict[str, Any]) -> None:
+def _own_high_power_marker(plan: NightPlan, plan_path: Path, admission: dict[str, Any]) -> bool:
     """R6-7 (round-6 Sol critique): a night measuring under High Power always
     leaves a host-level obligation, so a SIGKILL of it is restored by the
-    next session start or admission even if no marker was present."""
+    next session start or admission even if no marker was present. False
+    when that marker could not be written: lead ruling R7-11 refuses the
+    night before it measures."""
     from joulewise.align.apple import powermode
-    if any(os.path.lexists(m) for m in _power_markers(plan)):
-        return
     try:
+        if any(os.path.lexists(m) for m in _power_markers(plan)):
+            return True
         powermode.write_host_marker(powermode.host_marker_path(), tag=powermode.W1_MARKER_TAG,
                                     owner={"custody_root": plan.custody_root, "plan_path": plan_path,
                                            "writer": "run_night admission"})
         admission["marker_written_at_admission"] = True
-    except OSError as error:
+        return True
+    except Exception as error:  # noqa: BLE001 - OSError, or a refused host state override (R7-10)
         admission["marker_written_at_admission"] = f"failed: {type(error).__name__}: {error}"
+        return False
 
 
-def _take_host_lock(plan: NightPlan) -> Any:
+def _take_host_lock(plan: NightPlan) -> tuple[Any, str | None]:
     """R6-7: a night admitted under High Power measures holding the host night
-    lock (waiting out a session install that holds it); a lock it cannot
-    take (another measuring night, or no lock file) is a refusal."""
+    lock (waiting out a session install that holds it). Lead ruling R7-11:
+    returns ``(lock, error)``. ``error`` None with the lock not held means
+    another night holds it (EWOULDBLOCK after the wait); ``error`` names any
+    other failure (an OSError of the lock file, a refused host state
+    override), which has its own refusal code and runs the restore path."""
     from joulewise.align.apple import powermode
-    lock = powermode.HostLock(role=f"night:{plan.plan_id}")
     try:
+        lock = powermode.HostLock(role=f"night:{plan.plan_id}")
         lock.acquire(wait_s=powermode.NIGHT_LOCK_WAIT_S)
-    except OSError:
-        pass
-    return lock
+    except Exception as error:  # noqa: BLE001 - OSError or HostStateOverrideRefused
+        return None, f"{type(error).__name__}: {error}"
+    return lock, None
+
+
+# Lead ruling R7-5: the host night lock of the night being run, handed to its
+# chain (pass_fds) so the lock lives as long as the night's process tree.
+_CHAIN_HOST_LOCK: Any = None
+# The measurement launcher's one-use capability slot (``_launcher_barrier``);
+# the lock is never passed on it, or the launcher's dup2 would drop it.
+LAUNCHER_HANDOFF_FD = 198
+# Lead ruling R7-4: TERM and HUP end run_night through its normal close.
+TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+
+
+def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], None]]:
+    """Lead ruling R7-4: SIGTERM and SIGHUP unwind run_night like SIGINT (a
+    KeyboardInterrupt), so its normal close runs, High Power restore included.
+    Once the close has begun (``closing()``), further TERM/HUP are swallowed
+    so they cannot interrupt it. Python-level handlers reset to the default
+    on exec, so children keep default dispositions. Main thread only.
+    Returns ``(closing, restore)``."""
+    if threading.current_thread() is not threading.main_thread():
+        return (lambda: None), (lambda: None)
+    state = {"closing": False, "received": []}
+
+    def handler(signum: int, _frame: Any) -> None:
+        state["received"].append(signum)
+        if not state["closing"]:
+            raise KeyboardInterrupt(f"signal {signum}")
+
+    previous = {sig: signal.signal(sig, handler) for sig in TERMINATION_SIGNALS}
+
+    def closing() -> None:
+        state["closing"] = True
+
+    def restore() -> None:
+        for sig, old in previous.items():
+            signal.signal(sig, old)
+    return closing, restore
 
 
 def run_night(
@@ -4132,16 +4236,48 @@ def run_night(
     courier_bin: Path | None = None,
     dry_arm: bool = False,
 ) -> int:
+    global _CHAIN_HOST_LOCK
     closers: list[Callable[[], Any]] = []
+    stage: dict[str, Any] = {}
+    closing, restore_signals = _install_termination_handlers()
     try:
         return _run_night(plan_path, rehearsal=rehearsal, courier_bin=courier_bin, dry_arm=dry_arm,
-                          closers=closers)
+                          closers=closers, stage=stage)
+    except BaseException:
+        closing()
+        if "plan_path" not in stage:
+            # Round-7 Sol critique: a signal or exception before the plan
+            # parse (the initial agent census) restores what this plan's
+            # session owns, matched as the malformed-plan exit matches it.
+            try:
+                fallback_custody = _fallback_plan(plan_path).custody_root
+            except Exception:  # noqa: BLE001
+                fallback_custody = None
+            try:
+                _restore_owed_on_exit(Path(plan_path).absolute(), fallback_custody, make_probes(),
+                                      "exception_before_admission")
+            except Exception:  # noqa: BLE001 - never masks the night's own exception
+                pass
+        elif not stage.get("admission_reached"):
+            # Lead ruling R7-11: an exception (or a TERM/HUP/INT) between the
+            # plan parse and the admission runs the restore path.
+            lock = stage.get("lock")
+            try:
+                _restore_owed_on_exit(stage["plan_path"], stage["custody_root"], stage["probes"],
+                                      "exception_before_admission", lock=lock)
+            finally:
+                if lock is not None:
+                    lock.release()
+        raise
     finally:
+        closing()
         for close in closers:
             try:
                 close()
             except BaseException:  # noqa: BLE001 - the night's own result stands; the log has the close
                 pass
+        _CHAIN_HOST_LOCK = None
+        restore_signals()
 
 
 def _run_night(
@@ -4151,7 +4287,10 @@ def _run_night(
     courier_bin: Path | None = None,
     dry_arm: bool = False,
     closers: list[Callable[[], Any]],
+    stage: dict[str, Any] | None = None,
 ) -> int:
+    global _CHAIN_HOST_LOCK
+    stage = {} if stage is None else stage
     probes = make_probes()
     bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
     initial_probe, initial_refusal = agent_census(probes)
@@ -4183,6 +4322,7 @@ def _run_night(
                                      (initial_probe, initial_refusal), seams=_hazard_seams())
 
     custody_root = Path(plan.custody_root)
+    stage.update(plan_path=plan_path, custody_root=custody_root, probes=probes)
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
     existing = _existing_record(night_dir, plan)
@@ -4211,10 +4351,24 @@ def _run_night(
     # which the generic low-power gate admits. Refuse unless the AC powermode
     # equals the plan's declared value (default 0), after restoring Automatic
     # when the R1 marker under MEASUREMENT_ROOT says a restore is owed.
-    host_lock = _take_host_lock(plan) if plan.ac_powermode == 2 else None
+    host_lock, lock_error = _take_host_lock(plan) if plan.ac_powermode == 2 else (None, None)
+    stage["lock"] = host_lock
+    if lock_error is not None:
+        # Lead ruling R7-11: not another holder but a lock that cannot be
+        # used at all: its own refusal code, and the restore path runs.
+        stage["admission_reached"] = True
+        powermode_admission = {"expected": plan.ac_powermode, "observed": None, "marker_present": None,
+                               "plan_declared": plan.ac_powermode, "admitted": False,
+                               "host_state_dir": _host_state_dir_record(),
+                               "reason": f"the host night lock is unavailable: {lock_error} (lead ruling R7-11)"}
+        powermode_admission["exit_restore"] = _restore_owed_on_exit(plan_path, custody_root, probes,
+                                                                    "host_lock_error")
+        return _refuse_ac_powermode(custody_root, night_dir, plan, courier_bin, powermode_admission,
+                                    started_epoch_s, started_monotonic_ns, code="refused_host_lock_error")
     if host_lock is not None and not host_lock.held:
         powermode_admission = {"expected": plan.ac_powermode, "observed": None, "marker_present": None,
                                "plan_declared": plan.ac_powermode, "admitted": False,
+                               "host_state_dir": _host_state_dir_record(),
                                "reason": "another night holds the host night lock (lead ruling R6-7)"}
     else:
         powermode_admission = _admit_ac_powermode(plan, probes, lock=host_lock, plan_path=plan_path)
@@ -4237,9 +4391,23 @@ def _run_night(
         # restored when this night closes, whatever its outcome. R6-7: the
         # night holds the host night lock until then.
         closers.append(lambda: _close_ac_powermode(plan, probes, powermode_admission, host_lock))
-        _own_high_power_marker(plan, plan_path, powermode_admission)
-    _append_log(custody_root, "ac powermode admitted: expected {expected} observed {observed}{restored}".format(
+        stage["admission_reached"] = True   # R7-11: the close owns the restore from here
+        if not _own_high_power_marker(plan, plan_path, powermode_admission):
+            # Lead ruling R7-11: no host-level obligation means a SIGKILL of
+            # this night would leave 2 with no marker; refuse before measuring
+            # (the close above restores Automatic).
+            powermode_admission["admitted"] = False
+            powermode_admission["reason"] = ("the host-level High Power marker could not be written after a "
+                                             "plan-2 admission: " + str(powermode_admission[
+                                                 "marker_written_at_admission"]) + " (lead ruling R7-11)")
+            return _refuse_ac_powermode(custody_root, night_dir, plan, courier_bin, powermode_admission,
+                                        started_epoch_s, started_monotonic_ns)
+        _CHAIN_HOST_LOCK = host_lock
+    stage["admission_reached"] = True
+    _append_log(custody_root, "ac powermode admitted: expected {expected} observed {observed}{restored}; "
+                "host state dir {host}".format(
         expected=powermode_admission["expected"], observed=powermode_admission["observed"],
+        host=powermode_admission.get("host_state_dir"),
         restored=" (R1 High Power marker restored to Automatic)" if powermode_admission["marker_present"] else ""))
     if plan.receipt_class == night_gate.HAZARD_PACK:
         if rehearsal:
@@ -4820,7 +4988,8 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     probes = make_probes()
     # Lead ruling R6-7 (round-6 executing review): the dead-man is this night's
     # last exit when the night job never launched, or when run_night died
-    # without its close (it has no SIGTERM handler). The chain is proved gone
+    # without its close (SIGKILL, power loss; TERM/HUP run the close since
+    # R7-4, which may itself defer to here under R7-5). The chain is proved gone
     # above, so restore the High Power marker this plan's session owns; a
     # marker another session owns is left alone, and nothing is restored
     # while a measuring night holds the host night lock. Never raises.
@@ -5474,4 +5643,6 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.dont_write_bytecode = True
+    from joulewise.align.apple import powermode as _powermode
+    _powermode.mark_production_entry("run_night")   # lead ruling R7-10
     raise SystemExit(main())

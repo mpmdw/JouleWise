@@ -106,6 +106,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_courier_running` | The result-delivery process is still running. |
 | `night_courier_unavailable` | The driver's delivery executable is unavailable; not a failed notice send. |
 | `night_refused_ac_powermode` | The host's AC-profile powermode (pmset -g custom) is not the plan's declared value (default 0, Automatic), or could not be observed, after any R1 High Power marker restore (executing review HIGH-3, 2026-11-06). Restore the mode and confirm it by hand; never an auto-retry cause. |
+| `night_refused_host_lock_error` | The host night lock of a night declaring AC powermode 2 could not be used for a reason other than another night holding it (an OSError of the lock file, or a refused host state directory override); the restore path ran (lead ruling R7-11, 2026-11-07). Fix the host state directory and restore the mode by hand if it reads 2; never an auto-retry cause. |
 | `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
 | `night_record_exists` | A write-once night record proves invocation already occurred. |
 | `night_calibration_refused` | The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause. |

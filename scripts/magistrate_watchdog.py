@@ -3196,4 +3196,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from joulewise.align.apple import powermode as _powermode
+    _powermode.mark_production_entry("magistrate_watchdog")   # lead ruling R7-10
     raise SystemExit(main())

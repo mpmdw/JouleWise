@@ -294,6 +294,7 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
         "night_plan_overruns_deadman",   # t0 + window_max_s + courier deadline is not before the dead-man hour
         "night_record_exists",            # a write-once record proves this night was already invoked
         "night_refused_ac_powermode",     # AC-profile powermode is not the plan's (default 0), after any R1 High Power marker restore (HIGH-3, 2026-11-06)
+        "night_refused_host_lock_error",  # a plan-2 night's host night lock failed for a reason other than another holder (R7-11, 2026-11-07)
         "night_window_exceeded",  # driver wall-clock deadline: chain terminated after the exclusive window end plus shutdown grace
         NON_OBSERVER_EXCLUSION,  # two consecutive envelopes lost to a busy non-observer process; the chain ends (cold gate 10, 2026-09-23, Q2)
     }
