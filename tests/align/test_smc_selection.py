@@ -52,6 +52,23 @@ class SelectionTests(unittest.TestCase):
         self.assertFalse(rows["TFLT"]["eligible"])
         self.assertGreaterEqual(rows["TQST"]["noise_floor"], .05)
 
+    def test_summary_prints_pick_aliases_and_receipt_cell_quantity(self):
+        data = capture({'TDIE': (3, 25, 18, .02), 'TCOP': (3, 25, 18, .02),
+                        'THEA': (60, 90, 8, .02)})
+        result = r0.rank(data)
+        summary = cli.markdown({'response': result, 'inventory': data['inventory'],
+                                'coverage': {'all_keys': {'sample_fraction': 1}}}, 'a'*64)
+        self.assertIn('Exact-duplicate aliases of picks (report only)', summary)
+        self.assertIn('"TCOP": ["TDIE"]', summary)
+        self.assertIn('"THEA": []', summary)
+        self.assertIn('Max consecutive empty cells per phase (receipt)', summary)
+        self.assertNotIn('total phase time >=600', summary)
+        self.assertIn('band hold <=300 s', summary)
+        # A single different reported value breaks exact identity, even if
+        # both keys remain eligible and their role is unchanged.
+        data['samples'][700]['values']['sensors']['TDIE'] += .02
+        self.assertEqual(r0.rank(data)['selected_key_aliases']['TCOP'], [])
+
     def test_role_pick_order_and_lexical_ties(self):
         # Fast ranks by rise. Slow ranks by tau*ln(rise/1 degC), not tau.
         rows = [{"key": "TFAS", "class": "die", "observed_rise": 18},
@@ -86,8 +103,10 @@ class SelectionTests(unittest.TestCase):
     def test_one_percent_read_errors_are_rejected_but_less_is_accepted(self):
         for failures in (5, 6):
             data = capture()
-            for row in data["samples"][400:400+failures]:
-                row["values"]["errors"]["TDIE"] = "read failed"
+            # Isolated missed cells exercise the error-fraction bar alone;
+            # consecutive misses now independently fail Erratum 2 D6.
+            for i in range(failures):
+                data["samples"][400+2*i]["values"]["errors"]["TDIE"] = "read failed"
             result = r0.rank(data, stage="r1")
             with self.subTest(failures=failures):
                 self.assertEqual(result["s_fast"], "TDIE" if failures == 5 else None)
@@ -117,8 +136,8 @@ class SelectionTests(unittest.TestCase):
 
     def test_allowed_missing_initial_cooling_reads_do_not_shift_tau(self):
         data = capture({"THEA": (90, 90, 8, .001)})
-        for row in data["samples"][900:905]:
-            row["values"]["errors"]["THEA"] = "read failed"
+        # Erratum 2 allows one empty cell, including a phase's leading cell.
+        data["samples"][900]["values"]["errors"]["THEA"] = "read failed"
         result = r0.rank(data, stage="r1")
         self.assertEqual(result["s_slow"], "THEA")
         # A missing prefix moves the reference peak/time, leaving tau at 90 s.

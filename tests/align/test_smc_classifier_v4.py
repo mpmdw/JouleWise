@@ -45,6 +45,82 @@ def jittered_capture():
 
 
 class SmcClassifierV4Tests(unittest.TestCase):
+    def test_fable_f1_lighter_step_rejects_derived_heat_ordering(self):
+        # Fable followups.py: scale each key about its own idle baseline by
+        # 0.85 (a 15% lighter step). Replay rises are Tf18=45.7, TVH3=64.1;
+        # cooling taus 24.7/33.3 s put the physical source first.
+        data = capture({'Tf18': (3, 24.7, 45.7, .06),
+                        'TVH3': (5, 33.3, 64.1, .06), 'TaLP': (60, 86.2, 20.5, .02)})
+        for sample in data['samples']:
+            for key, value in sample['values']['sensors'].items():
+                sample['values']['sensors'][key] = 30 + .85*(value-30)
+        for stage in ('r0', 'r1'):
+            result = rank(data, stage=stage)
+            self.assertEqual(result['selection'], {'s_fast': 'Tf18', 's_slow': 'TaLP'})
+            derived = next(r for r in result['ranking'] if r['key'] == 'TVH3')
+            self.assertFalse(derived['above_junction'])
+            self.assertIn('D1(d)', derived['reason'])
+            self.assertFalse(derived['eligible'])
+
+    def test_heat_ordering_uses_source_noise_margin_and_lexical_tau_ties(self):
+        data = capture({'TSRC': (3, 25, 18, .02), 'TCMP': (5, 35, 18, .02)})
+        original = rank(data)
+        source = next(r for r in original['ranking'] if r['key'] == 'TSRC')
+        compare = next(r for r in original['ranking'] if r['key'] == 'TCMP')
+        # D1(d)'s tolerance is three floors of the source, not the candidate.
+        margin = 3*source['noise_floor']
+        for extra, excluded in ((margin/2, False), (2*margin, True)):
+            import copy
+            variant = copy.deepcopy(data)
+            offset = source['observed_rise']-compare['observed_rise']+extra
+            for sample in variant['samples']:
+                if sample['phase'] == 'load' and sample['elapsed_s'] >= 840:
+                    # Final 10% of the 600 s load is the full-rise statistic.
+                    sample['values']['sensors']['TCMP'] += offset
+            result = rank(variant)
+            row = next(r for r in result['ranking'] if r['key'] == 'TCMP')
+            self.assertEqual(row['heat_ordering_excluded'], excluded)
+        # Exact copies have equal tau, so lexical order picks the reference;
+        # reporting aliases does not remove a selectable copy.
+        data = capture({'TB00': (3, 25, 18, .02), 'TA00': (3, 25, 18, .02),
+                        'THEA': (60, 90, 8, .02)})
+        result = rank(data)
+        self.assertEqual(result['heat_ordering_reference'], 'TA00')
+        self.assertEqual(result['selected_key_aliases'], {'TA00': ['TB00'], 'THEA': []})
+        self.assertTrue(next(r for r in result['ranking'] if r['key'] == 'TB00')['eligible'])
+
+    def test_two_empty_cells_drop_the_key_and_next_key_supplies_role(self):
+        data = capture({'Tf18': (3, 25, 18, .02), 'Tf2B': (3, 25, 17, .02),
+                        'TaLP': (60, 90, 8, .02)})
+        # Two missed cells /600 load cells =99.67% and <1% errors; only
+        # the new consecutive-empty-cell bar can reject Tf18 here.
+        for sample in data['samples'][700:702]:
+            sample['values']['errors']['Tf18'] = 'miss'
+        for stage in ('r0', 'r1'):
+            result = rank(data, stage=stage)
+            self.assertEqual(result['selection'], {'s_fast': 'Tf2B', 's_slow': 'TaLP'})
+            row = next(r for r in result['ranking'] if r['key'] == 'Tf18')
+            self.assertEqual(row['phase_max_empty_cells']['load'], 2)
+            self.assertIn('D6', row['reason'])
+
+    def test_phase_edge_holes_are_not_hidden_by_first_success(self):
+        for start in (900, 1498):
+            data = capture({'TDIE': (3, 25, 18, .02), 'THEA': (60, 90, 8, .02)})
+            # Two adjacent missing recovery cells, at either edge; 598/600
+            # exceeds 99%, but the U1(c) cell-run bar still excludes the key.
+            for sample in data['samples'][start:start+2]:
+                sample['values']['errors']['TDIE'] = 'miss'
+            result = rank(data)
+            self.assertIsNone(result['s_fast'])
+            row = next(r for r in result['ranking'] if r['key'] == 'TDIE')
+            self.assertEqual(row['phase_max_empty_cells']['recovery'], 2)
+
+    def test_nonpositive_rise_has_no_d1b_reason(self):
+        data = capture({'TDIP': (20, 25, -1, .02)})
+        row = rank(data)['ranking'][0]
+        self.assertLess(row['observed_rise'], 0)
+        self.assertNotIn('D1(b)', row['reason'])
+
     def test_derived_137_degree_key_is_record_only_in_both_stages(self):
         data = capture({'TDIE': (3, 25, 18, .05), 'THEA': (60, 90, 8, .02),
                         'TDRV': (10, 25, 107, .02)})
@@ -62,6 +138,7 @@ class SmcClassifierV4Tests(unittest.TestCase):
                 self.assertFalse(derived['eligible'])
                 self.assertEqual(derived['class'], 'record-only')
                 self.assertIn('D1(c)', derived['reason'])
+                self.assertIn('D1(d)', derived['reason'])
                 self.assertEqual(result['selection'], {'s_fast': 'TDIE', 's_slow': 'THEA'})
 
     def test_junction_ceiling_is_strict_and_ignores_failed_readings(self):

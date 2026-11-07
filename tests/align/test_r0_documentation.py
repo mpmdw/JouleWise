@@ -16,6 +16,16 @@ class DocumentationTest(unittest.TestCase):
         for term in ('D1–D6', 'OLS residuals', '0.15', '500 ms', 'diagnostic only', '125 °C', 'Erratum 1'):
             self.assertIn(term, sensors)
 
+    def test_erratum2_handoff_names_selection_settle_and_readability_changes(self):
+        for name in ('r0_desk_runbook.md', 'smc_temperature.md'):
+            doc = (ROOT/'docs/align'/name).read_text()
+            for term in ('Erratum 2', 'D1(d)', 'settle_keys', 'settled: null',
+                         'phase_max_empty_cells', 'exact-duplicate', '53,038'):
+                # Sensor guide states the measured journal estimate in the runbook.
+                if name == 'smc_temperature.md' and term == '53,038':
+                    continue
+                self.assertIn(term, doc)
+
     def test_report_distinguishes_original_counts_and_unverified_ci(self):
         report = (ROOT / "docs/run_reports/2026-11-05-align-r0-desk.md").read_text()
         for term in ("31 new R0 tests", "9 pre-existing endpoint tests", "CI was not green",

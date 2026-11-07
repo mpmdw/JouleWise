@@ -20,7 +20,10 @@ from joulewise.align.r0_host import (
 
 CHECKS = ("host", "disk", "load", "template", "generated", "memory", "smc", "ladder", "long-decode")
 ACCEPTED_OUTCOMES = {"checkpoint": {"required", "not_required"}, "ladder": {"pass", "fallback"},
-                     "template": {"diagnostic"}, "disk": {"diagnostic"}}
+                     "template": {"diagnostic"}, "disk": {"diagnostic"},
+                     # Erratum 2: SMC selection is independent of host,
+                     # disk and model checks. Record inconclusive and proceed.
+                     "smc": {"pass", "inconclusive"}}
 REPO = Path(__file__).resolve().parents[2]
 LOAD_REFERENCE_NOTE = "docs/align/v4/R0-LOAD-REFERENCE-NOTE.md"
 LOAD_REFERENCE_BASIS = ("lead ruling 2026-11-06 under RUN_STATE items 181/183 (Ed: approve changes "

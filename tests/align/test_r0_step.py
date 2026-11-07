@@ -67,10 +67,12 @@ class StepTest(unittest.TestCase):
         # D3's cap is 1200 s (measured settle median ~930, maximum 1038).
         self.assertEqual(config["smc_step"], {**DEFAULT_PROFILE, "idle_max_seconds": 1200})
         # Maximum idle 1200 +load 900 +recovery 600 =2700 s; the existing
-        # timeout adds 600 s and the journal estimate uses 16 KiB per 1 Hz slot.
+        # timeout adds 600 s. Measured journal 95,467,641 /1,800 slots
+        # gives 53,037.58 bytes/slot, rounded up to 53,038 for planning.
         self.assertEqual(step_budget()["capture_seconds"], 2700)
         self.assertEqual(step_budget()["timeout_seconds"], 3300)
-        self.assertEqual(step_budget()["journal_bytes_estimate"], 2700 * 16_384)
+        self.assertEqual(step_budget()["journal_bytes_per_slot_estimate"], 53_038)
+        self.assertEqual(step_budget()["journal_bytes_estimate"], 2700 * 53_038)
 
     def test_short_configured_load_refuses_with_code_before_any_capture(self):
         for load in (60, 120, 600, 899):
@@ -125,10 +127,11 @@ class StepTest(unittest.TestCase):
             self.assertEqual(smc.call_args.args[2], profile)
             saved = json.loads((root / "report.json").read_text())
             # 1500 maximum idle +1200 load +700 recovery =3400 s,
-            # plus the existing 600 s timeout margin; 16 KiB per 1 Hz slot.
+            # plus the existing 600 s timeout margin; measured bytes/slot
+            # ceil(95,467,641 /1,800) =53,038.
             self.assertEqual(saved["smc_step_budget"]["capture_seconds"], 3400)
             self.assertEqual(saved["smc_step_budget"]["timeout_seconds"], 4000)
-            self.assertEqual(saved["smc_step_budget"]["journal_bytes_estimate"], 3400 * 16_384)
+            self.assertEqual(saved["smc_step_budget"]["journal_bytes_estimate"], 3400 * 53_038)
 
     def test_cli_short_profile_refuses_before_guard_construction(self):
         with tempfile.TemporaryDirectory() as tmp:

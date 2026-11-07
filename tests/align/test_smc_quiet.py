@@ -18,7 +18,7 @@ from tests.hazards.fakes import FakeClocks
 
 
 class QuietTests(unittest.TestCase):
-    def adaptive_capture(self, cooling, maximum):
+    def adaptive_capture(self, cooling, maximum, other=lambda t: 0.0):
         clock = FakeClocks(read_cost_ns=0)
         ctx = base.Context(clocks=clock)
         origin = clock.monotonic_ns()
@@ -28,7 +28,7 @@ class QuietTests(unittest.TestCase):
                     {'key': key, 'unit': 'degC', 'data_type': 'flt '} for key in ('TDIE', 'TGAT')]}
             def read(self, selected):
                 t = (clock.monotonic_ns()-origin)/1e9
-                return {'values': {key: cooling(t) if key == 'TDIE' else 0.0 for key in selected}, 'errors': {}}
+                return {'values': {key: cooling(t) if key == 'TDIE' else other(t) for key in selected}, 'errors': {}}
         quiet_times = []
         def quiet():
             quiet_times.append((clock.monotonic_ns()-origin)/1e9)
@@ -38,6 +38,46 @@ class QuietTests(unittest.TestCase):
                             quiet_check=quiet, ctx=ctx, sink=lambda row: None,
                             load_factory=lambda duration: load)
         return result, quiet_times, load
+
+    def test_fable_f2_opus_f1_flicker_does_not_hold_idle_to_cap(self):
+        # collect_fakes.py/d3_fakes.py: flat physical key plus SD~6 degC
+        # flicker. A 7 degC sinusoid has SD~5; its slope is undecidable at
+        # the D5 0.15 degC noise bar and it must not prolong the 300 s idle.
+        result, _, _ = self.adaptive_capture(lambda t: 48+.03*math.sin(t/5), 1200,
+                                             other=lambda t: 50+7*math.sin(t))
+        idle = result['phases'][0]
+        self.assertEqual(idle['actual_seconds'], 300)
+        self.assertTrue(idle['settled'])
+        self.assertEqual(idle['settle_keys'], 1)
+        self.assertNotIn('TGAT', idle['baseline_slopes_c_min'])
+
+    def test_empty_settle_set_is_indeterminate(self):
+        result, _, _ = self.adaptive_capture(lambda t: 30.0, 1200)
+        idle = result['phases'][0]
+        self.assertEqual(idle['actual_seconds'], 300)
+        self.assertIsNone(idle['settled'])
+        self.assertEqual(idle['settle_keys'], 0)
+        self.assertEqual(idle['settle_consecutive'], 0)
+
+    def test_settle_set_checks_idle_half_range_even_below_noise_limit(self):
+        # .1*sin(1.7*t) has SD~.071 (<.15), but a one-second jump can
+        # exceed .15, larger than half its .2 degC idle range (D1(b)).
+        result, _, _ = self.adaptive_capture(lambda t: 48+.03*math.sin(t/5), 1200,
+                                             other=lambda t: 50+.1*math.sin(1.7*t))
+        idle = result['phases'][0]
+        self.assertEqual(idle['actual_seconds'], 300)
+        self.assertEqual(idle['settle_keys'], 1)
+        self.assertNotIn('TGAT', idle['baseline_slopes_c_min'])
+
+    def test_settle_set_checks_noise_even_when_idle_jumps_are_resolved(self):
+        # A smooth 7*sin(t/10) oscillation has residual noise >>.15, but
+        # one-second jumps <=.7 are well below half its 14 degC idle range.
+        result, _, _ = self.adaptive_capture(lambda t: 48+.03*math.sin(t/5), 1200,
+                                             other=lambda t: 50+7*math.sin(t/10))
+        idle = result['phases'][0]
+        self.assertEqual(idle['actual_seconds'], 300)
+        self.assertEqual(idle['settle_keys'], 1)
+        self.assertNotIn('TGAT', idle['baseline_slopes_c_min'])
 
     def test_adaptive_idle_extends_until_ten_settled_evaluations(self):
         # Cooling at -1 degC/min until t=330, then flat with small noise.

@@ -353,6 +353,82 @@ class R0HostTest(unittest.TestCase):
             # Maximum idle 1200 +load 1200 +recovery 700 +existing margin 600.
             self.assertEqual(call.call_args.kwargs["timeout"], 3700)
 
+    def replay_capture(self, payload, samples):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            raw = ('\n'.join(json.dumps(r) for r in samples)+'\n').encode()
+            payload.update(samples_journal='samples.jsonl', samples_sha256=hashlib.sha256(raw).hexdigest())
+            (output/'samples.jsonl').write_bytes(raw)
+            (output/'r0.json').write_text(json.dumps(payload))
+            with patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+                return smc_enumeration(Path(__file__).resolve().parents[2], output)
+
+    def test_fable_f3_handshake_shift_is_not_a_sampling_hole(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture(**WP14A_STEP)
+        # receipt_variants.py: +0.75 s MLX handshake makes the cross-phase
+        # interval >2 s with the last idle midpoint shifted 0.3 s earlier.
+        shift = 750_000_000
+        for stamp in ('started', 'finished'):
+            samples[299][stamp]['monotonic_ns'] -= 300_000_000
+        for phase in payload['phases'][1:]:
+            phase['start_s'] += shift/1e9
+            phase['end_s'] += shift/1e9
+        for sample in samples:
+            if sample['phase'] != 'idle':
+                for stamp in ('started', 'finished'):
+                    sample[stamp]['monotonic_ns'] += shift
+        self.assertEqual(self.replay_capture(payload, samples)['status'], 'pass')
+
+    def test_opus_f2_single_missed_tf18_read_with_unlucky_jitter_passes(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture({'Tf18': 20, 'TaLP': 100}, idle_jitter=.02)
+        # holes.py B: one failed read out of 900 (<1%) with predecessor
+        # early and successor 150 ms late gives a 2.15 s midpoint interval.
+        samples[700]['values']['errors']['Tf18'] = 'synthetic missed read'
+        for stamp in ('started', 'finished'):
+            samples[701][stamp]['monotonic_ns'] += 150_000_000
+        result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['selection']['s_fast'], 'Tf18')
+
+    def test_fable_f4_load_end_overrun_is_a_flag(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture(**WP14A_STEP)
+        # receipt_variants.py: +1.3 s quiet-probe latency at load end;
+        # one trailing empty cell still clears 99% coverage (900/901).
+        payload['phases'][1]['end_s'] += 1.3
+        for field in ('start_s', 'end_s'):
+            payload['phases'][2][field] += 1.3
+        for sample in samples:
+            if sample['phase'] == 'recovery':
+                for stamp in ('started', 'finished'):
+                    sample[stamp]['monotonic_ns'] += 1_300_000_000
+        result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['phase_duration_flags'][0]['phase'], 'load')
+        self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.3)
+
+    def test_receipt_prints_exact_aliases_of_each_selected_key(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture({'TC0P': 20, 'TCOP': 20, 'TH0P': 100}, idle_jitter=.02)
+        result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['selected_key_aliases'], {'TC0P': ['TCOP'], 'TH0P': []})
+
+    def test_receipt_rechecks_consecutive_empty_cells(self):
+        from joulewise.align.apple.smc_enumeration import rank
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture(**WP14A_STEP)
+        classification = rank({**payload, 'samples': samples})
+        # Keep the classifier's selection/pass result but forge two empty
+        # load cells: the independent receipt must still refuse that pick.
+        next(r for r in classification['ranking'] if r['key'] == 'TC0P')['phase_max_empty_cells']['load'] = 2
+        with patch('joulewise.align.r0_host.classify_smc', return_value=classification):
+            result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'inconclusive')
+        self.assertFalse(result['readability_bar_met'])
+
     def test_smc_journal_mismatch_never_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -392,16 +468,14 @@ class R0HostTest(unittest.TestCase):
                 (output/'r0.json').write_text(json.dumps(data))
                 with patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, '', '')):
                     result = smc_enumeration(Path(__file__).resolve().parents[2], output)
-                self.assertEqual(result['selection'], {'s_fast': 'TDIE', 's_slow': 'THEA'})
+                self.assertEqual(result['selection'], {'s_fast': None, 's_slow': None} if hole else
+                                 {'s_fast': 'TDIE', 's_slow': 'THEA'})
                 self.assertEqual(result['status'], 'inconclusive' if hole else 'pass')
-                for row in result['selected_key_readability'].values():
-                    # One missing tick out of 900 load ticks remains above
-                    # D6's 99% bar; only the separate 2 s interval bar refuses.
+                for row in result['response']['ranking']:
+                    # Midpoint shifted across the half-cell boundary leaves
+                    # two adjacent empty cells, while coverage remains >99%.
                     self.assertGreaterEqual(min(row['phase_coverage'].values()), .99)
-                    if hole:
-                        self.assertEqual(row['max_interval_ns'], 2_500_000_000)
-                    else:
-                        self.assertLessEqual(row['max_interval_ns'], 2_000_000_000)
+                    self.assertEqual(row['phase_max_empty_cells']['load'], 2 if hole else 0)
 
 
 class R0QuietIntervalTest(unittest.TestCase):

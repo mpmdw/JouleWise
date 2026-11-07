@@ -249,8 +249,14 @@ class Coverage:
             points = sorted({self.start_ns, end_ns, *(t for t in times if self.start_ns <= t <= end_ns)})
             intervals = list(zip(points, points[1:]))
             gaps = [[a, b] for a, b in intervals if b-a > NS+self.tolerance_ns]
+            # Erratum 2 D6: one empty 1 s cell is admitted by the 99% bar;
+            # two consecutive empty cells lose U1(c)'s 2 s reader window.
+            # Include leading/trailing cells, but never another phase's grid.
+            occupied = [first-1, *sorted(ticks), last]
+            empty_run = max(0, max((b-a-1 for a, b in zip(occupied, occupied[1:])), default=0))
             return {"expected_samples": expected, "valid_samples": len(ticks),
                     "sample_fraction": len(ticks)/expected if expected else None,
+                    "max_consecutive_empty_cells": empty_run,
                     "gaps_ns": gaps, "max_interval_ns": max((b-a for a, b in intervals), default=0)}
         return {"clock": "monotonic_ns", "period_ns": NS, "tolerance_ns": self.tolerance_ns,
                 "sampling_grid_ns": grid,

@@ -40,10 +40,15 @@ def profile_config(value=None):
 def step_budget(value=None):
     profile = profile_config(value)
     # Budget the maximum capture; fixed_budget retains the existing +600 s
-    # execution margin and 16 KiB per one-Hz slot journal planning estimate.
+    # execution margin. Erratum 2: measured journal 95,467,641 bytes /1,800
+    # one-Hz slots =53,037.58 bytes/slot; ceil to a whole byte for planning.
     maximum = {k: v for k, v in profile.items() if k != "idle_max_seconds"}
     maximum["idle_seconds"] = profile["idle_max_seconds"]
-    return {**fixed_budget(maximum), "profile": profile}
+    budget = fixed_budget(maximum)
+    per_slot = math.ceil(95_467_641 / 1800)
+    return {**budget, "profile": profile, "journal_bytes_per_slot_estimate": per_slot,
+            "journal_bytes_estimate": budget["capture_seconds"] * per_slot,
+            "journal_estimate_note": "Measured 95,467,641 bytes /1,800 slots, rounded up; verify after enumeration."}
 
 
 class Refused(RuntimeError):
@@ -503,21 +508,25 @@ def smc_enumeration(repo, output, step=None):
         if [p["phase"] for p in phases] != ["idle", "load", "recovery"]:
             raise ValueError("SMC step phases must be idle, load, recovery")
         previous = 0
+        duration_flags = []
         for phase in phases:
             begin, end = phase["start_s"], phase["end_s"]
             if (type(begin) not in (int, float) or type(end) not in (int, float)
                     or not math.isfinite(begin) or not math.isfinite(end) or begin < previous or end <= begin):
                 raise ValueError("invalid SMC phase bounds")
             duration = end-begin
-            # Actual stamps can cross a deadline by a read/clock quantum;
-            # one sampling period is the capture's maximum read bracket.
+            # Erratum 2: deviation >one 1 Hz period is a bookkeeping flag,
+            # never a refusal; quiet probes can overrun a phase deadline.
+            # Adaptive idle is compared to its configured [minimum, cap].
             if phase["phase"] == "idle":
-                valid_duration = profile["idle_seconds"] <= duration <= profile["idle_max_seconds"]+1
+                deviation = duration - min(max(duration, profile["idle_seconds"]), profile["idle_max_seconds"])
             else:
-                valid_duration = abs(duration-profile[phase["phase"]+"_seconds"]) <= 1
-            if not valid_duration:
-                raise ValueError("SMC observed phase durations do not match configured adaptive profile")
+                deviation = duration-profile[phase["phase"]+"_seconds"]
+            if abs(deviation) > 1:
+                duration_flags.append({"phase": phase["phase"], "actual_seconds": duration,
+                                       "deviation_seconds": deviation})
             previous = end
+        receipt["phase_duration_flags"] = duration_flags
         # The old load-fit block is diagnostic only. It expects exact fixed
         # lengths; use this capture's actual phase lengths, never the idle cap.
         diagnostic_profile = {p["phase"]+"_seconds": p["end_s"]-p["start_s"] for p in phases}
@@ -531,31 +540,32 @@ def smc_enumeration(repo, output, step=None):
         resolved = all(isinstance(v, str) and re.fullmatch(r"T[!-~]{3}", v) for v in selection.values())
         resolved = resolved and selection["s_fast"] != selection["s_slow"]
         receipt.update(selection=selection, response=classification,
+                       selected_key_aliases=classification["selected_key_aliases"],
                        exponential_fit_diagnostic=diagnostic, source_response=payload["response"])
         receipt["capture_coverage_diagnostic"] = payload["coverage"]
         by_key = {row["key"]: row for row in classification["ranking"]}
         selected_rows = {key: by_key[key] for key in selection.values() if key in by_key}
         receipt["selected_key_readability"] = {key: {field: row[field] for field in (
             "phase_coverage", "phase_read_error_fraction", "phase_seconds", "phase_valid_samples",
-            "period_ns", "max_interval_ns", "baseline_unsettled", "baseline_slope_c_min")}
+            "phase_max_empty_cells", "period_ns", "max_interval_ns", "baseline_unsettled", "baseline_slope_c_min")}
             for key, row in selected_rows.items()}
         # Keep the capture's nominal one-Hz period assertion; the capture-wide
         # occupancy fraction itself is diagnostic and never refuses a pick.
         readable = (resolved and classification["readability_bar_met"]
                     and payload["coverage"]["period_ns"] == 1_000_000_000)
         for row in selected_rows.values():
-            # D6: per-phase one-second-cell occupancy >=99%, <1% read errors;
-            # >=600 s is §2.6's ten-minute readability interval, <=2 s is U1(c).
+            # Erratum 2 D6: per-phase one-second-cell occupancy >=99%, <1%
+            # read errors, no two adjacent empty cells (U1(c)'s 2 s window).
+            # The old total >=600 s bar was vacuous under this step profile.
             readable = (readable and row["period_ns"] == 1_000_000_000
                         and all(v >= .99 for v in row["phase_coverage"].values())
                         and all(v < .01 for v in row["phase_read_error_fraction"].values())
-                        and sum(row["phase_seconds"].values()) >= 600
-                        and row["max_interval_ns"] is not None and row["max_interval_ns"] <= 2_000_000_000)
+                        and all(v < 2 for v in row["phase_max_empty_cells"].values()))
         receipt["readability_bar_met"] = bool(readable)
         if not resolved:
             receipt["reason"] = "SMC die/heatsink selection unresolved"
         elif not readable:
-            receipt["reason"] = "SMC selected-key coverage does not meet 1 Hz / >=99% per phase / <1% errors / 10 min / <=2 s intervals"
+            receipt["reason"] = "SMC selected-key coverage does not meet 1 Hz / >=99% per phase / <1% errors / no consecutive empty cells"
         else:
             receipt["status"] = "pass"
             receipt["reason"] = "WP14(a) model-free classifier and readability bars met; picks PROVISIONAL"

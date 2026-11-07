@@ -13,6 +13,22 @@ def rows(seconds, jitter_ms=8):
              "finished": {"monotonic_ns": i*NS+70_000_000}} for i in range(seconds)]
 
 class CoverageTests(unittest.TestCase):
+    def test_empty_cell_runs_include_edges_duplicates_and_half_period_ties(self):
+        # Six one-second cells; missing one is allowed, a run of two is not.
+        for missing, longest in (((0,), 1), ((5,), 1), ((0, 1), 2), ((4, 5), 2),
+                                 ((2, 3), 2), ((1, 3), 1), (tuple(range(6)), 6)):
+            counter = thermal.Coverage(0, ['TDIE'], tolerance_ns=NS//2)
+            for tick in range(6):
+                for _ in range(2):  # duplicates never close empty cells
+                    counter.observe(tick*NS, tick*NS, VALUES if tick not in missing else
+                                    {'sensors': {}, 'errors': {'TDIE': 'miss'}})
+            self.assertEqual(counter.report(6*NS)['per_key']['TDIE']['max_consecutive_empty_cells'], longest)
+        counter = thermal.Coverage(0, ['TDIE'], tolerance_ns=NS//2)
+        counter.observe(0, 0, {'sensors': {}, 'errors': {}})
+        counter.observe(NS//2, NS//2, VALUES)  # rounds to cell 1
+        self.assertEqual(counter.report(3*NS)['all_keys']['max_consecutive_empty_cells'], 1)
+        self.assertEqual(counter.report(0)['all_keys']['max_consecutive_empty_cells'], 0)
+
     def test_default_and_explicit_tolerances(self):
         default = thermal.Coverage(0, ["TDIE"])
         # Preserve the existing default: one tenth of the one-second period.

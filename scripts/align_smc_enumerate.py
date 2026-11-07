@@ -29,7 +29,7 @@ def markdown(report, digest):
              "Authority: `docs/align/council-2026-11-05/FINAL-DESIGN.md` §2.6 and V8 "
              "on `origin/lane/2026-11-05-align-window-council` (with Amendment 1).",
              "", result["rule"], "",
-             "| Key | Unit | Type | Baseline | Load median | Residual noise | Phase coverage (receipt) | Read errors (receipt) | Max interval s | Idle slope C/min | Unsettled | Result |",
+             "| Key | Unit | Type | Baseline | Load median | Residual noise | Phase coverage (receipt) | Read errors (receipt) | Max consecutive empty cells per phase (receipt) | Idle slope C/min | Unsettled | Result |",
              "|---|---|---|---:|---:|---:|---|---|---:|---:|---|---|"]
     def number(v):
         return "—" if v is None else f"{v:.5g}"
@@ -39,20 +39,21 @@ def markdown(report, digest):
                  number(row.get("baseline")), number(medians.get("load")), number(row["noise"]),
                  ", ".join(f"{p}: {v:.5g}" for p, v in row["phase_coverage"].items()),
                  ", ".join(f"{p}: {v:.5g}" for p, v in row["phase_read_error_fraction"].items()),
-                 number(row["max_interval_ns"]/1e9 if row["max_interval_ns"] is not None else None),
+                 ", ".join(f"{p}: {v}" for p, v in row["phase_max_empty_cells"].items()),
                  number(row["baseline_slope_c_min"]), str(row["baseline_unsettled"]), row["reason"]]
         lines.append("| " + " | ".join(cells) + " |")
     lines += ["", f"Picks: fast `{result['s_fast']}`, slow `{result['s_slow']}`.",
+              f"Exact-duplicate aliases of picks (report only): `{json.dumps(result['selected_key_aliases'], sort_keys=True)}`.",
               f"Alternative slow picks (diagnostic): `{json.dumps(result['alternative_slow_picks'], sort_keys=True)}`.",
               f"Baseline-unsettled keys: {sum(r['baseline_unsettled'] for r in result['ranking'])}."]
     for phase in report.get("phases", []):
-        lines.append(f"{phase['phase']}: {phase['end_s']-phase['start_s']:.3f} s; settled: {phase.get('settled', 'n/a')}.")
+        lines.append(f"{phase['phase']}: {phase['end_s']-phase['start_s']:.3f} s; settled: {phase.get('settled', 'n/a')}; settle_keys: {phase.get('settle_keys', 'n/a')}.")
     lines += ["", "Unsupported sensor types (retained, not silently dropped):"]
     for key, evidence in sorted(report["inventory"].get("unsupported_types", {}).items()):
         lines.append(f"- `{key}`: `{evidence.get('data_type')}`; {evidence['error']}")
     lines += ["", f"R0 JSON SHA-256: `{digest}`.",
               f"Capture-wide sample fraction (diagnostic only): {report['coverage']['all_keys']['sample_fraction']}",
-              "Receipt reads the per-key phase coverage/errors above, total phase time >=600 s, and max interval <=2 s.",
+              "Receipt reads the per-key phase coverage/errors and consecutive empty cells above; two empty cells in one phase refuse a pick. Phase-duration deviations >1 s are flags.",
               "", "Review per-key errors/coverage and raw step data in the JSON/journal. "
               "Thermometry and sensor identity remain pending R1; no thermal-control claim is authorized."]
     return "\n".join(lines) + "\n"

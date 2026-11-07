@@ -54,7 +54,7 @@ class SchedulingTest(unittest.TestCase):
                  (r0, "generated_rewrites", "generated", "inconclusive"),
                  (r0, "checkpoint_verdict", "checkpoint", "inconclusive"),
                  (r0, "memory_peak", "memory", "fail"),
-                 (r0_runner, "smc_enumeration", "smc", "inconclusive"))
+                 (r0_runner, "smc_enumeration", "smc", "fail"))
         for owner, name, check, status in cases:
             with self.subTest(check=check), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
@@ -71,6 +71,20 @@ class SchedulingTest(unittest.TestCase):
                 self.assertIn("Status: **fail**", (root / "report.md").read_text())
                 self.assertTrue(all("check_seconds" in row for row in report["checks"]))
                 self.assertGreaterEqual(report["total_seconds"], 0)
+
+    def test_opus_f3_smc_inconclusive_still_runs_host_disk_and_models(self):
+        # Opus order.py: the full CHECKS list with default fail-fast must
+        # record inconclusive SMC and continue all independent checks.
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+                r0_runner, 'smc_enumeration', return_value={'status': 'inconclusive'}):
+            report = self.run_fake(Path(tmp))
+        self.assertEqual(report['checks'][0]['status'], 'inconclusive')
+        self.assertNotIn('stopped_after', report)
+        names = [r['check'] for r in report['checks']]
+        for name in ('host', 'disk', 'host-identity', 'model-load', 'load', 'memory', 'ladder', 'long-decode'):
+            self.assertIn(name, names)
+        self.assertEqual(report['status'], 'pass')
+        self.assertFalse(report['complete_r0'])  # injected backend never certifies live R0
 
     def test_keep_going_runs_later_checks_after_failure_and_still_fails(self):
         with tempfile.TemporaryDirectory() as tmp, \

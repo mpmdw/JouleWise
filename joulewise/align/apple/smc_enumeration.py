@@ -24,12 +24,14 @@ from joulewise.hazards.base import Context
 
 RULE = ("D1-D6 model-free classifier: reject idle/recovery readings below 10 degC, "
         "any valid reading above 125 degC, one-second jumps > half the step rise, "
-        "and stale idle series; clamps excluded from picks. "
+        "and stale idle series; D1(d) excludes rise > fastest resolving key's rise +3 of its noise floors; "
+        "clamps excluded from picks. "
         "Baseline is the last-60 s idle median; noise is OLS residual SD. Both roles need "
         "rise >=3 degC, rise and positive rise60 >3 noise floors, and tau*ln(rise/1 degC) <=300 s. "
         "Fast (legacy die): cooling tau <=60 s, noise <=1/3 degC, largest rise. "
         "Slow (legacy heatsink): 60 < tau <=300 s, noise <=0.15 degC, longest band hold. "
-        "Lexical ties. Each phase needs >=99% one-second-cell coverage and <1% read errors. "
+        "Lexical ties. Each phase needs >=99% one-second-cell coverage, <1% read errors, "
+        "and no two consecutive empty cells. "
         "Unsettled baselines are flagged, not refused; R0 picks remain PROVISIONAL.")
 
 # D2/D3: the reference and G0 slope both use a trailing 60 s window.
@@ -37,6 +39,9 @@ IDLE_WINDOW_S = 60
 # D3: G0's settled bar and ten consecutive one-second evaluations.
 SETTLE_SLOPE_C_MIN = .2
 SETTLE_COUNT = 10
+# Erratum 2 D3/D5: SD(slope)=0.447*noise over 60 one-Hz samples;
+# 3 sigma <=0.2 degC/min requires residual SD <=0.15 degC.
+SETTLE_NOISE_C = .15
 # D3: measured settle times median ~930 s, maximum 1,038 s after the GPU step.
 IDLE_MAX_S = 1200
 # D1(a): Apple's minimum operating ambient; a powered part cannot be colder.
@@ -47,8 +52,9 @@ MIN_IDLE_C = 10
 # key TCMz at 112 degC; the firmware-derived TVH3 reached 137 degC.
 MAX_COMPONENT_C = 125
 # Fable clamp test: q/(sigma*sqrt(2*pi)) <=~0.40 when sigma >= q;
-# >=10 distinct values excludes coarse-quantum channels from this test.
 CLAMP_FRACTION = .4
+# Fable fresh P2: >=10 distinct values makes quantum << noise, so an
+# exact value holding >=40% of idle is a clamp rather than quantization.
 CLAMP_DISTINCT = 10
 
 
@@ -250,10 +256,11 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
             idle_points = {s["key"]: deque() for s in inventory["keys"] if s["unit"] == "degC"}
             distinct = {k: set() for k in idle_points}
             below_floor = set()
+            idle_min, idle_max, idle_jump, idle_previous = {}, {}, {}, {}
             next_evaluation = origin + IDLE_WINDOW_S * temperature.NS
             consecutive = 0
             slopes = {}
-            settled = False
+            settled = None
             due = origin
             while True:
                 now = ctx.clocks.monotonic_ns()
@@ -267,13 +274,23 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                         while points and points[0][0] < (now-origin)/1e9 - IDLE_WINDOW_S:
                             points.popleft()
                         if key not in below_floor and len(distinct[key]) >= 3:  # unchanged stale rule
-                            slopes[key] = _idle_stats(points)[0]
-                    passed = all(s is not None and abs(s) <= SETTLE_SLOPE_C_MIN for s in slopes.values())
+                            # Erratum 2 D3: use D1(b) on idle so far: the
+                            # observed idle range supplies the available rise.
+                            # A jump >half that range is unresolved at 1 Hz
+                            # (tau <1/ln(2)=1.44 s), as in D1(b) after the step.
+                            slope, noise = _idle_stats(points)
+                            if (idle_jump.get(key, 0) <= (idle_max[key]-idle_min[key])/2
+                                    and noise is not None and noise <= SETTLE_NOISE_C):
+                                slopes[key] = slope
+                    passed = bool(slopes) and all(s is not None and abs(s) <= SETTLE_SLOPE_C_MIN
+                                                 for s in slopes.values())
                     consecutive = consecutive + 1 if passed else 0
-                    settled = consecutive >= SETTLE_COUNT
+                    settled = consecutive >= SETTLE_COUNT if slopes else None
                     next_evaluation = origin + ((now-origin)//temperature.NS + 1)*temperature.NS
                     if now >= origin + idle_s * temperature.NS and settled:
                         break
+                    if now >= origin + idle_s * temperature.NS and not slopes:
+                        break  # no decidable key: record indeterminate, not success
                 if now >= end:
                     break
                 if now < due:
@@ -298,6 +315,11 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                                 and finished.monotonic_ns - started.monotonic_ns <= temperature.NS):
                             points.append(((started.monotonic_ns-origin)/1e9, value))
                             distinct[key].add(value)
+                            idle_min[key] = min(idle_min.get(key, value), value)
+                            idle_max[key] = max(idle_max.get(key, value), value)
+                            if key in idle_previous:
+                                idle_jump[key] = max(idle_jump.get(key, 0), abs(value-idle_previous[key]))
+                            idle_previous[key] = value
                             if value < MIN_IDLE_C:
                                 below_floor.add(key)
                 due += temperature.NS
@@ -314,7 +336,8 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                           actual_seconds=(actual_end-origin)/1e9)
             if adaptive:
                 record.update(settled=settled, idle_max_seconds=idle_max_s,
-                              settle_consecutive=consecutive, baseline_slopes_c_min=slopes)
+                              settle_keys=len(slopes), settle_consecutive=consecutive,
+                              baseline_slopes_c_min=slopes)
             if load is not None:
                 load.check()
                 load.stop()
@@ -362,9 +385,11 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
                "tau_s": None, "amplitude_to_noise": None, "fit_r2": None, "eligible": False,
                "phase_coverage": {}, "phase_read_error_fraction": {}, "phase_medians": {},
                "phase_valid_samples": {}, "phase_seconds": {}, "period_ns": temperature.NS,
+               "phase_max_empty_cells": {},
                "max_interval_ns": None, "baseline": None, "baseline_slope_c_min": None,
                "baseline_unsettled": False, "clamped": False, "idle_mode_fraction": None,
                "below_ambient": False, "above_junction": False,
+               "heat_ordering_excluded": False, "resolving": False,
                "max_one_second_change": None, "t_band_s": None,
                "reason": "quality gate not evaluated"}
         rows.append(row)
@@ -388,20 +413,28 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
                 value = sample["values"]["sensors"].get(key)
                 started = sample["started"]["monotonic_ns"]
                 finished = sample["finished"]["monotonic_ns"]
+                bracket_valid = (span_start <= started <= finished < span_end
+                                 and finished-started <= temperature.NS)
+                if bracket_valid:
+                    # Failed key reads still establish this phase's grid;
+                    # a key's first success must not move its empty cells.
+                    counter.observe(started, finished, sample["values"])
                 if (phase in {"idle", "recovery"} and key not in sample["values"]["errors"]
                         and type(value) in (int, float) and math.isfinite(value) and value < MIN_IDLE_C):
                     row["below_ambient"] = True
-                valid = (key not in sample["values"]["errors"] and temperature.valid_value(key, value)
-                         and span_start <= started <= finished < span_end
-                         and finished - started <= temperature.NS)
+                valid = (bracket_valid and key not in sample["values"]["errors"]
+                         and temperature.valid_value(key, value))
                 if valid:
                     if sensor["unit"] == "degC" and value > MAX_COMPONENT_C:
                         row["above_junction"] = True
                     good[phase].append(((started - origin) / 1e9, value))
-                    counter.observe(started, finished, sample["values"])
                 else:
                     failures += 1
-            row["phase_coverage"][phase] = counter.report(span_end)["all_keys"]["sample_fraction"] or 0
+            coverage = counter.report(span_end)["all_keys"]
+            row["phase_coverage"][phase] = coverage["sample_fraction"] or 0
+            row["phase_max_empty_cells"][phase] = coverage["max_consecutive_empty_cells"]
+            # Actual intervals survive as a diagnostic only; D6 is in cells.
+            row["max_interval_ns"] = max(row["max_interval_ns"] or 0, coverage["max_interval_ns"])
             row["phase_read_error_fraction"][phase] = failures / len(phase_rows) if phase_rows else 1
             row["phase_valid_samples"][phase] = len(good[phase])
             row["phase_seconds"][phase] = bounds["end_s"] - bounds["start_s"]
@@ -410,19 +443,6 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         idle = [v for _, v in good.get("idle", [])]
         row["idle_distinct_values"] = len(set(idle))
         series[key] = good
-        # U1(c)/D6 uses actual intervals between valid read midpoints, also
-        # retaining phase edges as Coverage.report does. No grid gap proxy.
-        stamps = sorted((r["started"]["monotonic_ns"] + r["finished"]["monotonic_ns"]) // 2
-                        for p in phases for r in phase_samples[p]
-                        if key not in r["values"]["errors"]
-                        and temperature.valid_value(key, r["values"]["sensors"].get(key))
-                        and origin + round(phases[p]["start_s"]*1e9) <= r["started"]["monotonic_ns"]
-                        <= r["finished"]["monotonic_ns"] < origin + round(phases[p]["end_s"]*1e9)
-                        and r["finished"]["monotonic_ns"] - r["started"]["monotonic_ns"] <= temperature.NS)
-        if stamps:
-            edges = [origin + round(min(p["start_s"] for p in phases.values())*1e9), *stamps,
-                     origin + round(max(p["end_s"] for p in phases.values())*1e9)]
-            row["max_interval_ns"] = max(b-a for a, b in zip(edges, edges[1:]))
         if "idle" in phases:
             end_idle = phases["idle"]["end_s"]
             window = [(t, v) for t, v in good["idle"] if end_idle-IDLE_WINDOW_S <= t < end_idle]
@@ -444,14 +464,17 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         if row["below_ambient"]:
             row["reason"] = "D1(a): idle/recovery reading below 10 degC; recorded only"
             continue
-        if row["above_junction"]:
-            row["reason"] = "D1(c): valid reading above 125 degC; recorded only"
-            continue
         # D6/U1(c): >=99% one-second cells, strictly <1% failed reads.
         # Retain the classifier's five-observation minimum for a crossing.
         if any(len(good[p]) < 5 or row["phase_coverage"][p] < .99 or
                row["phase_read_error_fraction"][p] >= .01 for p in phases):
             row["reason"] = "insufficient phase coverage or >=1% read errors"
+            continue
+        # Erratum 2 D6: a single missed 1 s cell is allowed; two adjacent
+        # empty cells mean the U1(c) 2 s reader window was lost. Rank here
+        # so another key can supply the role before the receipt re-check.
+        if any(v >= 2 for v in row["phase_max_empty_cells"].values()):
+            row["reason"] = "D6: two consecutive empty one-second cells in a phase"
             continue
         if len(set(idle)) < 3:
             row["reason"] = "constant/stale idle series (need >=3 distinct values)"
@@ -494,12 +517,13 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
             # initial reads move that reference, not the physical decay time.
             tau -= cooling[0][0]
         row.update(delta_t60=rise60, t63_s=t63, t63_end_s=t63_end, tau_s=tau)
-        if jump > rise/2:  # D1(b): half-rise resolution limit, derived above.
+        if rise > 0 and jump > rise/2:  # D1(b): only positive step rises have this resolution limit.
             row["reason"] = "D1(b): one-second change exceeds half the step rise; recorded only"
             continue
         # D4/D5: 3.0 = 3 x the 1 degC band floor. Three noise floors resolve
         # both the full rise and the positive 50-60 s early response (airflow dips fail).
         resolving = rise >= 3.0 and rise > 3*floor and rise60 > 3*floor and tau is not None
+        row["resolving"] = resolving
         # D4/D5 clarification: the first-order return to the 1 degC band
         # must fit G1/H's 300 s turn-cap ceiling, for both roles.
         row["t_band_s"] = tau*math.log(rise/1.0) if tau is not None and rise > 0 else None
@@ -515,13 +539,40 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
                          "not in a resolving/releasable D4/D5 role; recorded only")
         if row["clamped"]:
             row["reason"] += "; pinned floor/ceiling clamp: excluded from picks only"
+        if row["above_junction"]:
+            row.update(eligible=False, **{"class": "record-only"},
+                       reason="D1(c): valid reading above 125 degC; recorded only")
+    # Erratum 2 D1(d): shortest cooling tau identifies the key closest to
+    # the heat source (lexical ties), among D1(a)-(c) resolving keys. A
+    # conduction-path key cannot rise more than that source; the permitted
+    # 3 source-noise floors are the same resolution margin as D4.
+    sources = [r for r in rows if r["resolving"] and not r["above_junction"]]
+    source = min(sources, key=lambda r: (r["tau_s"], r["key"])) if sources else None
+    if source:
+        limit = source["observed_rise"] + 3*source["noise_floor"]
+        for row in rows:
+            if row["observed_rise"] is not None and row["observed_rise"] > limit:
+                row.update(heat_ordering_excluded=True, eligible=False, **{"class": "record-only"})
+                row["reason"] += f"; D1(d): rise exceeds {source['key']} rise +3 source noise floors"
     ordered = sorted(rows, key=lambda r: (-(r["observed_rise"] or 0), r["key"]))
     proposed = select_keys(ordered)
     die_candidates = [r["key"] for r in ordered if r["class"] == "die"]
     heatsink_candidates = [r["key"] for r in ordered if r["class"] == "heatsink"]
     record_only = [r["key"] for r in ordered if r["class"] == "record-only"]
     bar = proposed["s_fast"] is not None and proposed["s_slow"] is not None
+    # Exact aliases are report-only in R0. Compare every recorded value and
+    # error (including holes); never reject a copy or infer virtual sensors.
+    selected_aliases = {}
+    for key in proposed.values():
+        if key is not None:
+            signature = [(s["values"]["sensors"].get(key), s["values"]["errors"].get(key))
+                         for s in capture["samples"]]
+            selected_aliases[key] = sorted(r["key"] for r in rows if r["key"] != key and r["unit"] == "degC"
+                and signature == [(s["values"]["sensors"].get(r["key"]), s["values"]["errors"].get(r["key"]))
+                                   for s in capture["samples"]])
     return {"rule": RULE, "ranking": ordered, **proposed, "selection": dict(proposed),
+            "selected_key_aliases": selected_aliases,
+            "heat_ordering_reference": source["key"] if source else None,
             "alternative_slow_picks": _alternative_picks(ordered, series, phases, proposed, capture),
             "die_candidates": die_candidates, "heatsink_candidates": heatsink_candidates,
             "record_only": record_only, "readability_bar_met": bar, "stage": stage,
@@ -541,13 +592,14 @@ def _alternative_picks(rows, series, phases, proposed, capture):
         return {"key": key, "reason": reason, **extra}
     slow = [r for r in rows if r["class"] == "heatsink" and not r["clamped"]]
     alternatives = {"design_literal": result(pick(slow, lambda r: r["tau_s"]),
-                                             "longest tau among D5 slow candidates; lexical ties")}
+                                             "longest tau among D5 slow candidates with band hold <=300 s; lexical ties")}
     if set(phases) != {"idle", "load", "recovery"} or not proposed["s_fast"]:
         alternatives.update({name: result(None, "requires three phases and a resolved D4 fast pick")
                              for name in ("opus", "sol")})
         return alternatives
     bank = [r for r in rows if r["unit"] == "degC" and not r["below_ambient"]
             and not r["above_junction"] and not r["clamped"]
+            and not r["heat_ordering_excluded"]
             and r["tau_s"] is not None and r["noise_floor"] is not None
             and r["observed_rise"] >= 3.0 and r["observed_rise"] > 3*r["noise_floor"]
             and r["delta_t60"] > 3*r["noise_floor"] and r["idle_distinct_values"] >= 3
@@ -563,8 +615,10 @@ def _alternative_picks(rows, series, phases, proposed, capture):
     scores = {}
     for r in bank:
         good = series[r["key"]]
-        # Opus V4: first-difference SD/sqrt(2), final 240 s idle and
-        # final 300 s recovery; q^2/12 is uniform quantization variance.
+        # Opus V4: first-difference SD/sqrt(2); 240 s idle =four 60 s
+        # slope windows, 300 s recovery =five windows (the G1/H cap).
+        # q^2/12 is uniform quantization variance. V6's 120 s drift window
+        # below spans two slope windows to compare baseline drift over tau.
         segments = [[v for t, v in good[p] if t >= phases[p]["end_s"]-span]
                     for p, span in (("idle", 240), ("recovery", 300))]
         differences = [b-a for values in segments for a, b in zip(values, values[1:])]
