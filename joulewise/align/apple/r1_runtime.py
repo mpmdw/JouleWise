@@ -147,7 +147,9 @@ def close_managed_session(managed, after=None):
     the process. A signal that arrives meanwhile is
     re-raised to the previous handler once the close has finished (or
     failed), or at the bound so the teardown watchdog can arm even if the
-    close blocks. Python handlers run on the main thread, so the deferral swaps
+    close blocks. When the deferred handler is the runtime's ``Termination``,
+    its teardown watchdog is armed as soon as the first signal is held (lead
+    ruling R8-3). Python handlers run on the main thread, so the deferral swaps
     the handlers there (whichever thread the kernel delivers to); off the
     main thread the close runs as before. ``after`` runs once the close has
     returned, before held signals are delivered if the bound has not expired."""
@@ -186,6 +188,12 @@ def close_managed_session(managed, after=None):
     def hold(signum, _frame):
         nonlocal timer
         pending.append(signum)
+        if len(pending) == 1:
+            # Lead ruling R8-3: the runtime's teardown watchdog arms when the
+            # first signal is held, not when the deferral ends.
+            owner = getattr(previous.get(signum), "__self__", None)
+            if isinstance(owner, Termination):
+                owner.arm(signum)
         if expired:
             # Only the main thread can restore Python signal handlers. The
             # timer's wakeup replays pending signals here, never in the timer.
@@ -886,6 +894,7 @@ class Termination:
     def __init__(self, timeout_s=TERM_TEARDOWN_S, exit_now=os._exit, hard_s=WATCHDOG_HARD_S):
         self.timeout_s, self.exit_now, self.hard_s = timeout_s, exit_now, hard_s
         self.signum = None
+        self.armed_signum = None
         self.previous = {}
         self.watchdog = None
         self.on_timeout = None
@@ -910,15 +919,27 @@ class Termination:
             self.previous[sig] = signal.signal(sig, self.handler)
         return self
 
+    def arm(self, signum):
+        """Start the teardown watchdog for ``signum`` once (idempotent).
+
+        Lead ruling R8-3: ``close_managed_session`` calls this when it holds
+        the first signal, so the forced exit counts from the signal's arrival,
+        not from the end of the (up to 10 s) deferral, and lands inside the
+        driver's 20 s grace."""
+        if self.watchdog is not None:
+            return
+        self.armed_signum = signum
+        self.watchdog = threading.Timer(self.timeout_s, self.expire, args=(128 + signum,))
+        self.watchdog.daemon = True
+        self.watchdog.start()
+
     def handler(self, signum, _frame):
         if self.signum is not None:
             return
         self.signum = signum
         for sig in self.SIGNALS:
             signal.signal(sig, signal.SIG_IGN)
-        self.watchdog = threading.Timer(self.timeout_s, self.expire, args=(128 + signum,))
-        self.watchdog.daemon = True
-        self.watchdog.start()
+        self.arm(signum)
         raise SystemExit(128 + signum)
 
     def restore(self):
@@ -1955,7 +1976,7 @@ def main(argv=None, *, backend_factory=None, stdout=None):
             try:
                 if not owner:
                     owner.append("watchdog")
-                    watchdog_teardown(out, {**record, "signal": term.signum})
+                    watchdog_teardown(out, {**record, "signal": term.signum or term.armed_signum})
             finally:
                 terminal.release()
         term.on_timeout = on_watchdog

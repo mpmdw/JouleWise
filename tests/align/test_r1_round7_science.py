@@ -115,19 +115,26 @@ class G0TimeoutTests(_World):
             self.assertEqual(segment.armed_g0_cap_s, expected or thermal_gates.G0_CAP_DEFAULT_S, kind)
 
     def test_step_d_and_the_designed_states_are_bounded_with_the_timeout(self):
-        self.assertEqual(r1.segment_bounds(1200), {
-            "step-30b": 3300, "step-d": 3900,
-            **{f"d-planning-turn-r-plus-{o}c": 3900 for o in (0, 2, 4)}})
-        self.assertEqual(r1.segment_bounds(600)["step-d"], 3300)
+        # R7-2 timeout, and (R8-4) the re-armed member's start-up and close:
+        # 1,750 + 1.13544 x 1,580 + 120 = 3,663.9952 s around the deadman.
+        member = 1750 + 1.13544 * 1580 + 120
+        table = r1.segment_bounds(1200, 1580)
+        self.assertEqual(table["step-30b"], 3300)
+        self.assertAlmostEqual(table["step-d"], member + 1200 + 300 + 600)
+        for o in (0, 2, 4):
+            self.assertAlmostEqual(table[f"d-planning-turn-r-plus-{o}c"], member + 900 + 1200)
+        self.assertAlmostEqual(r1.segment_bounds(600, 1580)["step-d"], member + 600 + 300 + 600)
 
-    def test_night_worst_case_with_the_round7_caps(self):
-        # R7-2: +600 s on step-d and on each designed state (4 x 600 = 2,400 s).
+    def test_night_worst_case_with_the_round8_bounds(self):
+        # R7-2: +600 s on step-d and each designed state; R8-4: + (3,663.9952
+        # - 1,800) s more on each of the four (4 x 1,863.9952 = 7,455.98 s).
         value = r1.night_worst_case_s(["fake-runtime"])
         self.assertEqual(value["g0_timeout_s"], 1200)
-        self.assertAlmostEqual(value["no_redo_s"], 46886.98, places=1)
-        self.assertAlmostEqual(value["with_one_batch_wait_s"], 52286.98, places=1)
-        self.assertAlmostEqual(value["r6_2_retry_max_s"], 4 * (1500 + 3900))
-        self.assertAlmostEqual(value["with_retries_and_one_batch_wait_s"], 73886.98, places=1)
+        self.assertEqual(value["redo_release_s"], 665)
+        self.assertAlmostEqual(value["no_redo_s"], 54342.97, places=1)
+        self.assertAlmostEqual(value["with_one_batch_wait_s"], 59742.97, places=1)
+        self.assertAlmostEqual(value["r6_2_retry_max_s"], 4 * (1500 + 5763.9952))
+        self.assertAlmostEqual(value["with_retries_and_one_batch_wait_s"], 88798.95, places=1)
 
 
 class G0CapW1Tests(unittest.TestCase):

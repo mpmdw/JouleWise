@@ -1020,19 +1020,74 @@ def _run_chain_once(
                 child_channel.close()
                 child_channel = replacement
             channel.setblocking(False)
-        return _run_chain_once_impl(chain_path, plan, probes, night_dir,
-            claim_descriptor, command=command, abort_on_census=abort_on_census,
-            shutdown_monotonic=shutdown_monotonic, channel=channel,
-            child_channel=child_channel, start_fd_env=start_fd_env, extra_env=extra_env,
-            supervise=supervise, census_group_on_exit=census_group_on_exit,
-            census=census, append_census=append_census)
+        launched: dict[str, Any] = {}
+        try:
+            return _run_chain_once_impl(chain_path, plan, probes, night_dir,
+                claim_descriptor, command=command, abort_on_census=abort_on_census,
+                shutdown_monotonic=shutdown_monotonic, channel=channel,
+                child_channel=child_channel, start_fd_env=start_fd_env, extra_env=extra_env,
+                supervise=supervise, census_group_on_exit=census_group_on_exit,
+                census=census, append_census=append_census, launched=launched)
+        except KeyboardInterrupt as interrupt:
+            # Lead ruling R8-1: an interrupt (INT, or TERM/HUP through the R7-4
+            # handler) after the chain launched stops the chain's group and
+            # proves it gone before run_night's close runs.
+            _stop_chain_on_interrupt(launched, night_dir, plan, interrupt)
+            raise
+
+
+def _stop_chain_on_interrupt(launched: Mapping[str, Any], night_dir: Path, plan: NightPlan,
+                             interrupt: BaseException) -> dict[str, Any] | None:
+    """Lead ruling R8-1 (round-7 exec MEDIUM-3 = cold MEDIUM-1, option A).
+
+    The chain holds the host night lock (R7-5), so a close that ran while it
+    still measured could not retake the lock and deferred the restore, and
+    the chain measured on with no supervisor and no window deadline. On an
+    interrupt after launch the chain's process group is terminated exactly as
+    the window-deadline path does it (TERM, bounded wait, KILL, a re-signalled
+    group census) and proven gone; ``chain.exited`` is recorded for a claimed
+    chain, ``chain.unkilled`` when the proof fails. The normal close then
+    retakes the lock and restores (or, unproven, defers as R7-5 says).
+    Further TERM/HUP/INT are swallowed so they cannot cut the termination
+    short. Returns the outcome (None when no chain was launched); never
+    raises past the caller's interrupt."""
+    process = launched.get("process")
+    if process is None:
+        return None
+    if _SIGNAL_CLOSING is not None:
+        _SIGNAL_CLOSING()
+    outcome: dict[str, Any] = {"trigger": str(interrupt) or type(interrupt).__name__, "pgid": process.pid,
+                               "authority": "lead ruling R8-1"}
+    try:
+        deadline = launched.get("deadline")
+        fired = deadline.cancel() if deadline is not None else None
+        if fired is not None:
+            outcome.update(proven=bool(fired["proven"]), by="window_deadline")
+        else:
+            evidence: dict[str, Any] = {}
+            claimed = (night_dir / "chain.started").exists()
+            proven = _terminate_process_group(process, night_dir if claimed else None, pgid=process.pid,
+                                              evidence=evidence, pending_dir=night_dir)
+            outcome.update(proven=proven, by="interrupt", group_census=list(evidence.get("group_census", [])))
+            if not proven and not (night_dir / "chain.unkilled").exists():
+                _write_json(night_dir / "chain.unkilled",
+                            {"pgid": process.pid, "epoch_s": time.time(),
+                             "group_census": outcome["group_census"], "trigger": outcome["trigger"]})
+    except BaseException as error:  # noqa: BLE001 - the interrupt stands; the close decides on the lock
+        outcome.update(proven=False, error=f"{type(error).__name__}: {error}")
+    try:
+        _append_log(Path(plan.custody_root), "chain terminated on interrupt (lead ruling R8-1): "
+                    + json.dumps(outcome, sort_keys=True, default=str))
+    except Exception:  # noqa: BLE001
+        pass
+    return outcome
 
 
 def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                          *, command, abort_on_census, shutdown_monotonic,
                          channel, child_channel, start_fd_env, extra_env=None,
                          supervise=None, census_group_on_exit=False, census=None,
-                         append_census=None):
+                         append_census=None, launched=None):
 
     census_path = night_dir / "censuses.jsonl"
     stdout_path = night_dir / "chain.stdout.log"
@@ -1084,6 +1139,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
         finally:
             if child_channel is not None:
                 child_channel.close()
+        if launched is not None:
+            launched["process"] = process   # lead ruling R8-1: an interrupt from here stops the group
         awaiting_start = channel is not None
         claimed = claim_descriptor is not None
         pgid = (_complete_chain_start(claim_descriptor, process, night_dir)
@@ -1108,6 +1165,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             ),
         )
         deadline.start()
+        if launched is not None:
+            launched["deadline"] = deadline
 
         def exceeded(outcome: dict[str, Any]) -> tuple[
             int | None, dict[str, Any], int, list[dict[str, Any]], bool
@@ -4205,14 +4264,19 @@ _CHAIN_HOST_LOCK: Any = None
 LAUNCHER_HANDOFF_FD = 198
 # Lead ruling R7-4: TERM and HUP end run_night through its normal close.
 TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+# Lead ruling R8-1: the running night's ``closing`` hook, so the chain
+# termination on an interrupt swallows further TERM/HUP/INT as the close does.
+_SIGNAL_CLOSING: Callable[[], None] | None = None
 
 
 def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], None]]:
     """Lead ruling R7-4: SIGTERM and SIGHUP unwind run_night like SIGINT (a
     KeyboardInterrupt), so its normal close runs, High Power restore included.
     Once the close has begun (``closing()``), further TERM/HUP are swallowed
-    so they cannot interrupt it. Python-level handlers reset to the default
-    on exec, so children keep default dispositions. Main thread only.
+    so they cannot interrupt it; lead ruling R8-1 adds SIGINT (when it still
+    has Python's default handler) and calls ``closing()`` as soon as the chain
+    termination on an interrupt begins. Python-level handlers reset to the
+    default on exec, so children keep default dispositions. Main thread only.
     Returns ``(closing, restore)``."""
     if threading.current_thread() is not threading.main_thread():
         return (lambda: None), (lambda: None)
@@ -4224,6 +4288,11 @@ def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], No
             raise KeyboardInterrupt(f"signal {signum}")
 
     previous = {sig: signal.signal(sig, handler) for sig in TERMINATION_SIGNALS}
+    if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
+        # Lead ruling R8-1: SIGINT keeps its KeyboardInterrupt, but like
+        # TERM/HUP it can no longer cut short the chain termination or the
+        # close once they have begun.
+        previous[signal.SIGINT] = signal.signal(signal.SIGINT, handler)
 
     def closing() -> None:
         state["closing"] = True
@@ -4241,16 +4310,23 @@ def run_night(
     courier_bin: Path | None = None,
     dry_arm: bool = False,
 ) -> int:
-    global _CHAIN_HOST_LOCK
+    global _CHAIN_HOST_LOCK, _SIGNAL_CLOSING
     closers: list[Callable[[], Any]] = []
     stage: dict[str, Any] = {}
     closing, restore_signals = _install_termination_handlers()
+    _SIGNAL_CLOSING = closing
     try:
         return _run_night(plan_path, rehearsal=rehearsal, courier_bin=courier_bin, dry_arm=dry_arm,
                           closers=closers, stage=stage)
     except BaseException:
         closing()
-        if "plan_path" not in stage:
+        if dry_arm:
+            # Lead ruling R8-5 (round-7 cold LOW-1): --dry-arm is a desk
+            # control that never changes the mode; an interrupt or exception
+            # in it only exits, and never restores an armed session's High
+            # Power (its marker and its mode are left exactly as they were).
+            pass
+        elif "plan_path" not in stage:
             # Round-7 Sol critique: a signal or exception before the plan
             # parse (the initial agent census) restores what this plan's
             # session owns, matched as the malformed-plan exit matches it.
@@ -4282,6 +4358,7 @@ def run_night(
             except BaseException:  # noqa: BLE001 - the night's own result stands; the log has the close
                 pass
         _CHAIN_HOST_LOCK = None
+        _SIGNAL_CLOSING = None
         restore_signals()
 
 

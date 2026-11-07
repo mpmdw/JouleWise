@@ -123,13 +123,32 @@ W1_G0_CAP_RUNS = ("D_bank_benign_s1_gated_held", "D_spam_benign_s1_gated_held_a"
                   "D_spam_benign_s1_gated_held_b", "X_G_contrast")
 
 
-def segment_bounds(g0_timeout_s):
+def rearmed_member_bound_s(step_deadman_s):
+    """LEAD-RULINGS-2 R8-4 (round-7 science Sol MEDIUM-1): the wall of a step
+    member whose deadman R5-2 re-arms after its G0 (and quiet or preheat),
+    without those pre-deadman phases: the member's start-up and close (the
+    member law's intercept, at the largest I_D the runtime admits,
+    ``ABA_LEG_I_D_BOUND_S``, since step-d's own I_D is what step-d measures),
+    plus 1.13544 x the re-armed step deadman, plus the margin for the deadman
+    tail and process start-up -- the A-B-A leg law (round-3 LOW-1)."""
+    from scripts.align_v4_kit import DEADMAN_FACTOR
+    return ABA_LEG_I_D_BOUND_S + DEADMAN_FACTOR * step_deadman_s + LEG_BOUND_MARGIN_S
+
+
+def segment_bounds(g0_timeout_s, step_deadman_s):
     """Ruling 8 batch-window bounds of the quiet model segments, with the R1
-    G0 timeout (R7-2) for step-d and the designed start states."""
+    G0 timeout (R7-2) for step-d and the designed start states.
+
+    R8-4: step-d and the designed start states are bounded by their re-armed
+    member (start-up and close around the re-armed deadman,
+    ``rearmed_member_bound_s``) plus their pre-deadman phases (G0 timeout and
+    the 300 s quiet, or the 900 s preheat cap and the G0 timeout) and, for
+    step-d, the 600 s recovery. Step-30b keeps its round-5 bound."""
+    member = rearmed_member_bound_s(step_deadman_s)
     return {"step-30b": QUIET_SEGMENT_BOUND_S + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
-            "step-d": QUIET_SEGMENT_BOUND_S + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
-            **{f"d-planning-turn-r-plus-{int(o)}c": QUIET_SEGMENT_BOUND_S + PLANNING_PREHEAT_CAP_S
-               + g0_timeout_s for o in PLANNING_START_OFFSETS_C}}
+            "step-d": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
+            **{f"d-planning-turn-r-plus-{int(o)}c": member + PLANNING_PREHEAT_CAP_S + g0_timeout_s
+               for o in PLANNING_START_OFFSETS_C}}
 CPU_BUSY_CORES_LIMIT = 0.5
 CPU_BUSY_SUSTAINED_S = 60
 MAX_SEGMENT_REDOS = 2
@@ -161,9 +180,99 @@ class Refusal(RuntimeError):
 RUNTIME_TERM_GRACE_S = 20.0
 
 
-def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> None:
-    """TERM, wait at most ``grace_s`` (default RUNTIME_TERM_GRACE_S), then KILL."""
+# Lead ruling R8-1: after the runtime is reaped, every process of its tree
+# seen while it lived is TERMed, then KILLed, each step bounded, and proven gone.
+PS_TREE = ("/bin/ps", "-A", "-o", "pid=,ppid=,command=")
+TREE_STOP_WAIT_S = 5.0
+TREE_POLL_S = 0.1
+
+
+def _process_table():
+    """``{pid: (ppid, command)}`` of every process, or None when ``ps`` fails."""
+    try:
+        rows = subprocess.run(list(PS_TREE), text=True, capture_output=True, check=False, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if rows.returncode != 0:
+        return None
+    table = {}
+    for row in rows.stdout.splitlines():
+        parts = row.split(None, 2)
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            table[int(parts[0])] = (int(parts[1]), parts[2] if len(parts) > 2 else "")
+    return table
+
+
+def _descendants(table, root_pid):
+    """``{pid: command}`` of every descendant of ``root_pid`` in ``table``."""
+    children = {}
+    for pid, (ppid, _command) in table.items():
+        children.setdefault(ppid, []).append(pid)
+    found, stack = {}, [root_pid]
+    while stack:
+        for child in children.get(stack.pop(), ()):
+            if child not in found and child != root_pid:
+                found[child] = table[child][1]
+                stack.append(child)
+    return found
+
+
+def _tree_survivors(tree):
+    """The recorded descendants still alive with the same command (None: no census)."""
+    table = _process_table()
+    if table is None:
+        return None
+    return {pid: command for pid, command in tree.items() if pid in table and table[pid][1] == command}
+
+
+def _stop_tree(tree):
+    """TERM, bounded wait, KILL, bounded wait, then the proof: no recorded
+    descendant is alive with its recorded command. Never raises."""
+    outcome = {"descendants": {str(pid): command for pid, command in sorted(tree.items())}}
+    survivors = _tree_survivors(tree) if tree else {}
+    for number in (signal.SIGTERM, signal.SIGKILL):
+        if not survivors:
+            break
+        for pid in survivors:
+            try:
+                os.kill(pid, number)
+            except OSError:
+                pass
+        deadline = time.monotonic() + TREE_STOP_WAIT_S
+        while True:
+            survivors = _tree_survivors(survivors)
+            if survivors == {} or time.monotonic() >= deadline:
+                break
+            time.sleep(TREE_POLL_S)
+    outcome["survivors"] = None if survivors is None else {str(pid): command for pid, command
+                                                           in sorted(survivors.items())}
+    outcome["proven"] = survivors == {}
+    return outcome
+
+
+def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> dict:
+    """TERM, wait at most ``grace_s`` (default RUNTIME_TERM_GRACE_S), then KILL.
+
+    Lead ruling R8-1: the runtime's own children (the heater, powermetrics
+    through sudo) are recorded from the process table while the runtime
+    lives (before the TERM, and again before a KILL), and once the runtime is
+    reaped every one still alive is TERMed, then KILLed, and proven gone.
+    Returns the proof (``proven`` False when a census failed or a survivor
+    remains: the guard then defers the restore)."""
     grace_s = RUNTIME_TERM_GRACE_S if grace_s is None else grace_s
+    tree, census_failed = {}, False
+
+    def snapshot():
+        nonlocal census_failed
+        if process.poll() is not None:
+            return
+        table = _process_table()
+        if table is None:
+            census_failed = True
+        else:
+            tree.update(_descendants(table, process.pid))
+    snapshot()
+    drained = False
     if process.poll() is None:
         try:
             process.send_signal(signal.SIGTERM)
@@ -171,16 +280,36 @@ def _terminate(process: subprocess.Popen, grace_s: float | None = None) -> None:
             pass
         try:
             process.communicate(timeout=grace_s)
-            return
+            drained = True
         except subprocess.TimeoutExpired:
+            snapshot()
             process.kill()
-    process.communicate()
+    # KILL bounds this; communicate() alone could wait forever on a pipe that
+    # an orphaned descendant inherited.
+    process.wait()
+    proof = _stop_tree(tree)
+    if not drained:
+        try:
+            process.communicate(timeout=TREE_STOP_WAIT_S)
+        except subprocess.TimeoutExpired:
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            proof["pipes_closed_undrained"] = True
+    if census_failed:
+        proof.update(proven=False, census_failed=True)
+    proof.update(pid=process.pid, returncode=process.returncode, authority="lead ruling R8-1")
+    return proof
 
 
 # Lead ruling R7-5: while the driver holds the host night lock, every child it
 # starts (the runtime above all) inherits the lock's descriptor, so the lock
 # lives as long as the R1 process tree, not the driver alone.
 _CHILD_HOST_LOCK = None
+# Lead ruling R8-1: the proof of every child terminated on an interrupt; an
+# unproven one makes the guard defer the restore (R7-5's rule: never restore
+# under a live process of this run).
+_CHILD_TERMINATIONS: list = []
 
 
 def _run(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
@@ -193,7 +322,12 @@ def _run(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
     try:
         stdout, stderr = process.communicate()
     except BaseException:
-        _terminate(process)
+        try:
+            proof = _terminate(process)
+        except BaseException as error:  # noqa: BLE001 - unproven; the original exception stands
+            proof = {"pid": process.pid, "proven": False, "error": f"{type(error).__name__}: {error}",
+                     "authority": "lead ruling R8-1"}
+        _CHILD_TERMINATIONS.append({"argv": [str(a) for a in argv][:6], **proof})
         raise
     return subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
 
@@ -232,6 +366,18 @@ class PowerModeGuard(AbstractContextManager):
 
     def restore(self):
         # Do not condition this on setup completion: every possible exit tries 0.
+        unproven = [t for t in _CHILD_TERMINATIONS if not t.get("proven")]
+        if self.armed and unproven:
+            # Lead ruling R8-1: a child this run terminated on an interrupt
+            # (the runtime or one of its descendants) is not proven gone; no
+            # restore runs under it. The markers stay for the dead-man or the
+            # next session start.
+            self.deferred = True
+            self.armed = False
+            self.records.append({"point": "restore_deferred", "unproven": unproven,
+                                 "reason": "a child this run terminated on an interrupt could not be proven gone "
+                                           "(lead ruling R8-1); markers kept"})
+            return False
         if self.lock is not None and self.armed:
             # Lead ruling R7-5: the close of an armed guard (children may have
             # run) first retakes the host night lock on a fresh descriptor;
@@ -680,6 +826,18 @@ def thermometry_record(name, result):
     return record
 
 
+def picks_aliased(classification):
+    """LEAD-RULINGS-2 R8-6: True when the classification's two picks are one
+    key or sit in one of its ``alias_groups`` (R7-13). A missing or malformed
+    group list is the kit's refusal, not this bar's."""
+    fast, slow = classification.get("s_fast"), classification.get("s_slow")
+    if fast is None or slow is None:
+        return False
+    groups = classification.get("alias_groups")
+    return fast == slow or any(isinstance(group, list) and fast in group and slow in group
+                               for group in (groups if isinstance(groups, list) else ()))
+
+
 def _sustained_busy(samples):
     run_length = 0
     for value in samples:
@@ -878,10 +1036,12 @@ def _segment(args, output, name, kind, duration, workload_class, record, *, quie
     for attempt in range(MAX_SEGMENT_REDOS + 1):
         release_now = release_first or (attempt > 0 and workload_class == "heavy")
         if bound_s is None and duration is None and getattr(args, "segment_bounds", None) is None:
-            args.segment_bounds = segment_bounds(runtime_g0_timeout_s(args.runtime))
+            args.segment_bounds = segment_bounds(runtime_g0_timeout_s(args.runtime),
+                                                 runtime_step_deadman_s(args.runtime))
+        # R8-4: a release segment is its 65 s pre-roll plus its 600 s G0 cap.
         bound = bound_s if bound_s is not None else (
             (duration or (args.segment_bounds or {}).get(kind, QUIET_SEGMENT_BOUND_S))
-            + (G0_RELEASE_BOUND_S if release_now else 0))
+            + (release_segment_bound_s() if release_now else 0))
         waited = wait_outside_os_batch(bound) if quiet else 0.0
         release = (_release_against_soak(args, output, _fresh_name(output, f"{name}.g0_release", attempt),
                                          soak_reference)
@@ -933,6 +1093,12 @@ G0_PREROLL_S = 65
 # Integration of round 5: the legs run before step-d (R5-5), so the member
 # intercept in the bound is the runtime's admissible maximum, not step-d's I_D.
 ABA_LEG_I_D_BOUND_S = 1750
+
+
+def release_segment_bound_s():
+    """R8-4: a G0 release against the soak (before a heavy redo or a leg) is
+    the runtime's 65 s pre-roll plus the 600 s G0 cap."""
+    return G0_PREROLL_S + G0_RELEASE_BOUND_S
 
 
 def _check_step_d(result):
@@ -1113,7 +1279,7 @@ def aba_leg_bound_s(runtime_argv):
     only waits longer for the ruling 8 batch window, never less.
     """
     from scripts.align_v4_kit import DEADMAN_FACTOR
-    return (G0_PREROLL_S + G0_RELEASE_BOUND_S + ABA_LEG_I_D_BOUND_S
+    return (release_segment_bound_s() + ABA_LEG_I_D_BOUND_S
             + DEADMAN_FACTOR * runtime_step_deadman_s(runtime_argv) + LEG_BOUND_MARGIN_S)
 
 
@@ -1131,11 +1297,13 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
     ``r6_2_retry_max_s`` is the all-caps cost of the one R6-2 retry (precool +
     segment again) that each G0-inconclusive-capable segment may take.
     Round 7: step-d and the designed start states are bounded with the R7-2
-    G0 timeout (the runtime config's g0_timeout_s)."""
+    G0 timeout (the runtime config's g0_timeout_s). Round 8 (R8-4): they also
+    carry their re-armed member's start-up and close, and a redo's release
+    is ``release_segment_bound_s()`` (``redo_release_s``)."""
     rows = []
     precool_cap_s = runtime_precool_cap_s(runtime_argv)
     g0_timeout = runtime_g0_timeout_s(runtime_argv)
-    bounds = segment_bounds(g0_timeout)
+    bounds = segment_bounds(g0_timeout, runtime_step_deadman_s(runtime_argv))
     retry_s = 0.0
     for name, kind, duration, _class in phase_plan(include_4bit, precool_cap_s=precool_cap_s):
         if kind in contract.HIGH_POWER_KINDS:
@@ -1153,7 +1321,7 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
     total = math.fsum(row["bound_s"] for row in rows)
     wait = float((h1 * 60 + m1 - h0 * 60 - m0) * 60)
     return {"segments": rows, "no_redo_s": total, "precool_cap_s": precool_cap_s, "g0_timeout_s": g0_timeout,
-            "batch_window_wait_max_s": wait, "with_one_batch_wait_s": total + wait,
+            "redo_release_s": release_segment_bound_s(), "batch_window_wait_max_s": wait, "with_one_batch_wait_s": total + wait,
             "r6_2_retry_max_s": retry_s, "with_retries_and_one_batch_wait_s": total + retry_s + wait}
 
 
@@ -1397,6 +1565,7 @@ def run(args):
     record["host_state_dir"] = powermode.host_state_dir()   # lead ruling R7-10
     staged_registration = None
     old_handlers = {}
+    _CHILD_TERMINATIONS.clear()   # R8-1: this run's own terminations only
 
     stopping = []
 
@@ -1442,7 +1611,7 @@ def run(args):
             # would yield a record the kit refuses after the whole night.
             raise Refusal(f"R7-2: runtime config {G0_TIMEOUT_KEY} {g0_timeout} differs from the committed "
                           f"{DEFAULT_RUNTIME_CONFIG} value {kit_g0_timeout_s(ROOT)}")
-        args.segment_bounds = segment_bounds(g0_timeout)
+        args.segment_bounds = segment_bounds(g0_timeout, runtime_step_deadman_s(args.runtime))
         with guard:
             soak_reference = None
             legs, releases, leg_g0, adoption, series_mode = {}, {}, {}, None, None
@@ -1597,6 +1766,14 @@ def run(args):
         # Either null pick fails R1's thermometry bar (D only; the 30B is record-only).
         thermometry["bar"] = thermometry_d["status"] if thermometry_d else "inconclusive"
         thermometry["flags"] = list((thermometry_d or {}).get("flags") or [])
+        if thermometry_d and picks_aliased(thermometry_d):
+            # LEAD-RULINGS-2 R8-6 (round-7 cold LOW-3): two picks that are one
+            # sensor (R7-13) are not two thermometers; the bar fails at R1, not
+            # only at the kit after the night.
+            thermometry["bar"] = "fail"
+            thermometry["bar_reason"] = ("s_fast and s_slow are one key or in one alias group "
+                                         "(LEAD-RULINGS-2 R7-13, R8-6)")
+            thermometry["flags"].append("r1.picks_aliased")
         # Ruling 7 + 16: the frozen series AC powermode is the A-B-A outcome.
         ac_powermode = 2 if adoption["verdict"] == "adopt" else 0
         registration = {"schema": SCHEMA, "source": "R1 synthetic rehearsal" if args.synthetic else "R1 hardware rehearsal",
@@ -1658,6 +1835,8 @@ def run(args):
         except BaseException as error:  # noqa: BLE001 - the terminal record must still be written
             record.setdefault("teardown_errors", []).append(f"restore: {type(error).__name__}: {error}")
         record["powermode"] = guard.records
+        if _CHILD_TERMINATIONS:
+            record["child_terminations"] = list(_CHILD_TERMINATIONS)   # lead ruling R8-1
         try:
             watch.census("terminal")  # recorded, never judged here
         except Exception as error:  # noqa: BLE001 - the terminal record must still be written
