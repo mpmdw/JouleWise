@@ -44,7 +44,87 @@ def jittered_capture():
                        for phase, begin, end in phases], "samples": samples}
 
 
+def source_spread_capture():
+    """Two-pole die cooling reproduces the cold3 first-read sensitivity."""
+    # Cold3 rises: Tf18 45.68, Tf2B 45.63; a lower-gain sibling spans
+    # the measured 0.46 C co-located spread. Ts0h's rise is 38.5 C.
+    data = capture({'Tf18': (3, 30.8, 45.68, .02),
+                    'Tf2B': (3, 30.3, 45.63, .02),
+                    'Tf1B': (3, 30.5, 45.22, .02),
+                    'Ts0h': (3, 27.6, 38.5, .02),
+                    'TVH3': (5, 33.3, 64.1, .02),
+                    'TaLP': (60, 86.2, 20.5, .02)})
+    for phase in data['phases']:
+        phase['deadline_s'] = phase['end_s']
+    for sample in data['samples']:
+        if sample['phase'] == 'recovery':
+            t = sample['elapsed_s'] - 900  # 300 idle +600 load in capture().
+            for key, slow, rise in [('Tf18', 30.8, 45.68), ('Tf2B', 30.3, 45.63),
+                                    ('Tf1B', 30.5, 45.22)]:
+                # 18% with 0.7 s decay gives the measured ~6 C first-second
+                # drop; the remaining 82% cools near 31 s. Stable crossing
+                # is slow*(1+ln(.82)) ~=24.2-24.7 s, within a 1 Hz tie.
+                sample['values']['sensors'][key] = 30 + rise*(
+                    .18*math.exp(-t/.7) + .82*math.exp(-t/slow))
+    return data
+
+
 class SmcClassifierV4Tests(unittest.TestCase):
+    def test_erratum4_reference_survives_delay_overrun_and_reference_holes(self):
+        # Required cold3 perturbations: one-cell recovery delay, +1.3 s
+        # exit latency, first reference read lost, and two adjacent load
+        # cells 236-237 lost. All are below the 1% per-phase error bar.
+        for case in ('recovery_delay', 'overrun_load', 'miss_first', 'hole2'):
+            data = source_spread_capture()
+            if case == 'recovery_delay':
+                data['phases'][2]['start_s'] += 1.0  # One 1 Hz cell.
+                data['samples'] = [s for s in data['samples']
+                                   if s['phase'] != 'recovery' or s['elapsed_s'] >= 901]
+            elif case == 'overrun_load':
+                data['phases'][1]['end_s'] += 1.3  # Cold3 load exit latency.
+                data['phases'][2]['start_s'] += 1.3
+                for s in data['samples']:
+                    if s['phase'] == 'recovery' and s['elapsed_s'] < 901.3:
+                        s['phase'] = 'load'
+            else:
+                phase, indices = ('recovery', (0,)) if case == 'miss_first' else ('load', (236, 237))
+                samples = [s for s in data['samples'] if s['phase'] == phase]
+                for i in indices:
+                    samples[i]['values']['errors']['Tf2B'] = 'cold3 missed read'
+            for stage in ('r0', 'r1'):
+                with self.subTest(case=case, stage=stage):
+                    result = rank(data, stage=stage)
+                    self.assertEqual(result['selection'], {'s_fast': 'Tf18', 's_slow': 'TaLP'})
+                    self.assertEqual([r['key'] for r in result['ranking']
+                                      if r['heat_ordering_excluded']], ['TVH3'])
+                    self.assertEqual(result['heat_ordering_reference'], 'Tf18')
+                    if case == 'hole2':
+                        row = next(r for r in result['ranking'] if r['key'] == 'Tf2B')
+                        self.assertIn('D6', row['reason'])
+
+    def test_reference_stable_crossing_uses_load_rise_and_actual_load_end(self):
+        data = source_spread_capture()
+        result = rank(data)
+        row = next(r for r in result['ranking'] if r['key'] == 'Tf18')
+        # 30.8*(1+ln(.82)) is the slow-pole crossing (the 0.7 s pole
+        # has decayed); allow one sampling period for interpolation/noise.
+        self.assertAlmostEqual(row['reference_cooling_s'], 30.8*(1+math.log(.82)), delta=1)
+        data['phases'][1]['end_s'] += 1.3
+        shifted = next(r for r in rank(data)['ranking'] if r['key'] == 'Tf18')
+        self.assertAlmostEqual(shifted['reference_cooling_s'], row['reference_cooling_s']-1.3)
+        self.assertEqual(shifted['tau_s'], row['tau_s'])  # D4/D5 class tau stays unchanged.
+
+    def test_deadline_grid_does_not_extend_an_early_phase_end(self):
+        data = source_spread_capture()
+        # Fable overrun_load:1.6 moves recovery admission but leaves its end
+        # unchanged, shortening it by 1.6 s. That is a duration flag, not
+        # two imaginary reader cells after the actual phase has ended.
+        data['phases'][2]['deadline_s'] += 1.6
+        result = rank(data)
+        self.assertEqual(result['selection'], {'s_fast': 'Tf18', 's_slow': 'TaLP'})
+        for row in result['ranking']:
+            self.assertEqual(row['phase_max_empty_cells']['recovery'], 0)
+
     def test_noisy_shortest_tau_cannot_anchor_heat_ordering(self):
         data = capture({'Tf18': (3, 24.7, 45.7, .06),
                         'Tp0M': (3, 5, 30, 1), 'TaLP': (60, 86.2, 20.5, .02)})
@@ -105,13 +185,14 @@ class SmcClassifierV4Tests(unittest.TestCase):
             self.assertIn('D1(d)', derived['reason'])
             self.assertFalse(derived['eligible'])
 
-    def test_heat_ordering_uses_source_noise_margin_and_lexical_tau_ties(self):
+    def test_heat_ordering_uses_band_margin_and_lexical_rise_ties(self):
         data = capture({'TSRC': (3, 25, 18, .02), 'TCMP': (5, 35, 18, .02)})
         original = rank(data)
         source = next(r for r in original['ranking'] if r['key'] == 'TSRC')
         compare = next(r for r in original['ranking'] if r['key'] == 'TCMP')
-        # D1(d)'s tolerance is three floors of the source, not the candidate.
-        margin = 3*source['noise_floor']
+        # Erratum 4: 1 C is the gate band floor, resolving sensor gain/offset
+        # spread rather than one sensor's residual noise.
+        margin = 1.0
         for extra, excluded in ((margin/2, False), (2*margin, True)):
             import copy
             variant = copy.deepcopy(data)

@@ -35,14 +35,19 @@ the Terminal launch example below does not satisfy that headless gate.
 
    `smc_step` configures `idle_seconds`, `idle_max_seconds`, `load_seconds`,
    `recovery_seconds`; omitted fields default to 300/1200/900/600. Idle extends
-   until every temperature key passing D1(a), the stale rule and D1(b) on idle
-   so far (half the observed idle range), with trailing residual SD ≤0.15 °C, has absolute
+   until every temperature key passing D1(a) and the stale rule,
+   with trailing residual SD ≤0.15 °C, has absolute
    trailing-60 s OLS slope ≤0.2 °C/min for ten consecutive one-second
    evaluations. At the cap, capture proceeds with per-key baseline flags.
    The noise limit follows 3×0.447×0.15 ≈0.2 °C/min over 60 one-Hz samples.
    The idle phase records its actual length, `settle_keys` and whether it settled.
-   No qualifying keys means `settle_keys: 0`, `settled: null`, and idle ends at
-   its minimum. A load below 900 s refuses before
+   No qualifying keys means `settle_keys: 0`, `settled: null`; idle ends only
+   after ten consecutive empty evaluations, with the minimum still enforced.
+   Erratum 4 removes the idle half-range test because it rejects stationary
+   noise; the 0.15 °C noise limit already removes flicker. Fast-role keys
+   with noise in (0.15, 1/3] °C are not waited on: the slope test is undecidable
+   at three sigma, and rank retains their `baseline_unsettled` flags.
+   A load below 900 s refuses before
    host/model/capture work with `smc_step.load_below_tau_upper_bound`. The fixed
    slow tau upper bound is 900 s; equality is allowed for load duration only.
 
@@ -110,6 +115,8 @@ the Terminal launch example below does not satisfy that headless gate.
    dependent checks, and census refusals always stop. Diagnostic template/disk
    results, checkpoint `required` and ladder `fallback` do not trigger a stop;
    an SMC `inconclusive` is recorded and host, disk and model checks continue.
+   It records `smc_selection_missing: true` and `complete_r0: false`;
+   completing R0 requires SMC `pass` (Erratum 4).
    Other inconclusive checks and SMC `fail` still stop the run.
    A subset does not complete R0. The timeout is 7,200 s per long-decode
    **attempt**, ladder **episode**, generated **turn**, or other check. D's
@@ -150,21 +157,29 @@ the Terminal launch example below does not satisfy that headless gate.
    within 300 s. Below-ambient placeholders, unresolved jumps, and any key
    with a valid reading above 125 °C cannot count (D1(c), Erratum 1: silicon's
    absolute-maximum junction rating; the derived TVH3 reached 137 °C).
-   Erratum 2 D1(d) also excludes rise exceeding the fastest resolving D1(a)–(c)
-   key's rise by more than three of that source's noise floors: a conduction
-   path cannot heat more than its source, and D4 already uses three floors
-   for resolution. D1(b)'s half-rise test applies only to positive rises.
+   Erratum 2 D1(d), qualified by Erratum 3 and rebuilt by Erratum 4, uses
+   resolving D1(a)–(c) keys with class tau ≤60 s, noise ≤1/3 °C and no clamp.
+   Reference cooling time is the first baseline + load-tail rise/e crossing,
+   timed from actual load end. Take the largest rise among qualifiers within
+   1 s of the shortest stable cooling time (1 Hz crossing resolution), lexical
+   ties. Exclude rises more than 1.0 °C above that reference rise: a conduction
+   path cannot heat more than its source, and 1.0 °C is the gate band floor
+   resolving inter-sensor gain/offset spread. Class tau is unchanged and
+   printed beside stable reference cooling time. D1(b)'s half-rise test
+   applies only to positive rises.
    Clamp keys are flagged and excluded from picks only.
    The receipt reads selected classifier rows: per-phase coverage ≥99% at
    500 ms one-cell tolerance, per-phase read errors <1%, and no two consecutive
    empty one-second cells within a phase (`phase_max_empty_cells < 2`). One
    missed cell is admitted by the 99% bar; two lose U1(c)'s two-second reader
    window. Rank excludes unreadable keys before picking a replacement.
-   Handshake time between phases is outside those grids. Phase-duration
+   Cells end at the configured deadline (the ending evaluation for adaptive
+   idle); handshake and exit-overrun time are outside those grids. Phase-duration
    deviations >1 s (one sampling period) outside the configured length or
    adaptive idle range are flags, not refusals. Capture-wide coverage and the old
    exponential fit are diagnostics. `summary.md` prints these receipt inputs,
-   baseline flags/slopes, actual idle duration, each pick's exact-duplicate
+   baseline flags/slopes, actual idle duration, D1(d)'s reference, reference rise
+   and excluded keys, each pick's exact-duplicate
    aliases (report only), and alternative slow picks. `design_literal` means
    longest tau with band hold ≤300 s (G1/H's cap).
    R0's role selections and sensor locations remain PROVISIONAL; the first

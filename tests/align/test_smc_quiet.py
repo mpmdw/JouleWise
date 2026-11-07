@@ -2,6 +2,7 @@
 from dataclasses import replace
 import math
 import os
+import random
 import tempfile
 import unittest
 from pathlib import Path
@@ -59,15 +60,84 @@ class QuietTests(unittest.TestCase):
         self.assertEqual(idle['settle_keys'], 0)
         self.assertEqual(idle['settle_consecutive'], 0)
 
-    def test_settle_set_checks_idle_half_range_even_below_noise_limit(self):
+    def test_settle_set_keeps_stationary_noise_below_noise_limit(self):
         # .1*sin(1.7*t) has SD~.071 (<.15), but a one-second jump can
         # exceed .15, larger than half its .2 degC idle range (D1(b)).
         result, _, _ = self.adaptive_capture(lambda t: 48+.03*math.sin(t/5), 1200,
                                              other=lambda t: 50+.1*math.sin(1.7*t))
         idle = result['phases'][0]
         self.assertEqual(idle['actual_seconds'], 300)
-        self.assertEqual(idle['settle_keys'], 1)
-        self.assertNotIn('TGAT', idle['baseline_slopes_c_min'])
+        self.assertEqual(idle['settle_keys'], 2)
+        self.assertIn('TGAT', idle['baseline_slopes_c_min'])
+
+    def test_twenty_stationary_gaussian_keys_are_decidable(self):
+        # Opus d3.py quiet:0.05:20 keys, seed 11, sigma .05 C (one third
+        # of D3's .15 C noise limit). Half-range rejects stationary noise.
+        rng = random.Random(11)
+        keys = [f'TQ{i:02d}' for i in range(20)]
+        class Reader:
+            def enumerate_sensors(self):
+                return {'complete': True, 'errors': {}, 'keys': [
+                    {'key': k, 'unit': 'degC', 'data_type': 'flt '} for k in keys]}
+            def read(self, selected):
+                return {'values': {k: 40+i+rng.gauss(0, .05)
+                                   for i, k in enumerate(selected)}, 'errors': {}}
+        ctx = base.Context(clocks=FakeClocks(read_cost_ns=0))
+        result = r0.collect(Reader(), seconds=60, idle_s=300, idle_max_s=1200,
+                            load_s=1, recovery_s=1, gpu_step=True,
+                            quiet_check=lambda: None, ctx=ctx, sink=lambda row: None,
+                            load_factory=lambda duration: mock.Mock())
+        idle = result['phases'][0]
+        self.assertEqual(idle['settle_keys'], len(keys))
+        self.assertTrue(idle['settled'])
+        self.assertEqual(idle['actual_seconds'], 300)  # Default D3 minimum.
+
+    def test_empty_set_needs_ten_consecutive_evaluations(self):
+        original = r0._idle_stats
+        def transient(points):
+            t = points[-1][0] + 1  # Evaluation precedes the current tick's read.
+            slope, noise = original(points)
+            # Lose the sole decidable key at t=300..304, restore it for one
+            # evaluation, then lose it at 306..315 (ten confirmations).
+            return (slope, 1.0) if 300 <= t <= 304 or t >= 306 else (1.0, noise)
+        with mock.patch.object(r0, '_idle_stats', side_effect=transient):
+            result, _, _ = self.adaptive_capture(lambda t: 48+.03*math.sin(t/5), 1200)
+        idle = result['phases'][0]
+        self.assertEqual(idle['actual_seconds'], 315)
+        self.assertEqual(idle['settle_empty_consecutive'], 10)
+        self.assertIsNone(idle['settled'])
+
+    def test_collector_records_deadline_before_exit_census_overrun(self):
+        clock = FakeClocks(read_cost_ns=0)
+        ctx = base.Context(clocks=clock)
+        origin = clock.monotonic_ns()
+        active = [None]
+        class Reader:
+            def enumerate_sensors(self):
+                return {'complete': True, 'errors': {}, 'keys': [
+                    {'key': 'TDIE', 'unit': 'degC', 'data_type': 'flt '}]}
+            def read(self, selected):
+                t = (clock.monotonic_ns()-origin)/1e9
+                return {'values': {'TDIE': 48+.03*math.sin(t/5)}, 'errors': {}}
+        load = mock.Mock()
+        load.start.side_effect = lambda: active.__setitem__(0, clock.monotonic_ns())
+        load.stop.side_effect = lambda: active.__setitem__(0, None)
+        def quiet():
+            if active[0] is not None and clock.monotonic_ns()-active[0] >= 5*r0.temperature.NS:
+                clock.advance(2.6)
+        # A 6 s fake load's final tick is t=5 s, the normal census cadence.
+        # A 2.6 s census then ends at t=7.6: +1.6 s exit overrun, with all
+        # six configured cells present. One recovery tick isolates this grid.
+        data = r0.collect(Reader(), seconds=60, idle_s=300, idle_max_s=300,
+                          load_s=6, recovery_s=1, gpu_step=True,
+                          quiet_check=quiet, ctx=ctx, sink=lambda row: None,
+                          load_factory=lambda duration: load)
+        phase = data['phases'][1]
+        self.assertAlmostEqual(phase['actual_seconds'], 7.6)
+        self.assertEqual(phase['deadline_s']-phase['start_s'], 6)
+        row = r0.rank(data)['ranking'][0]
+        self.assertEqual(row['phase_max_empty_cells']['load'], 0)
+        self.assertEqual(row['phase_coverage']['load'], 1)
 
     def test_settle_set_checks_noise_even_when_idle_jumps_are_resolved(self):
         # A smooth 7*sin(t/10) oscillation has residual noise >>.15, but

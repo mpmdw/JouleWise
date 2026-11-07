@@ -409,6 +409,28 @@ class R0HostTest(unittest.TestCase):
         self.assertEqual(result['phase_duration_flags'][0]['phase'], 'load')
         self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.3)
 
+    def test_opus_exit_overrun_does_not_add_two_empty_load_cells(self):
+        from tests.align.test_r0_step import synthetic_capture
+        payload, samples = synthetic_capture(**WP14A_STEP)
+        # Opus h.py overrun:load:1.6 extends the end without extra reads.
+        # Nearest-cell rounding adds two empty cells at +1.6 s (>1.5 s),
+        # falsely failing D6 even though every configured load cell exists.
+        payload['phases'][1]['end_s'] += 1.6
+        for field in ('start_s', 'end_s'):
+            payload['phases'][2][field] += 1.6
+        for sample in samples:
+            if sample['phase'] == 'recovery':
+                for stamp in ('started', 'finished'):
+                    sample[stamp]['monotonic_ns'] += 1_600_000_000
+        result = self.replay_capture(payload, samples)
+        self.assertEqual(result['status'], 'pass')
+        self.assertAlmostEqual(result['phase_duration_flags'][0]['deviation_seconds'], 1.6)
+        for row in result['selected_key_readability'].values():
+            self.assertEqual(row['phase_max_empty_cells']['load'], 0)
+            self.assertEqual(row['phase_seconds']['load'], 900)  # Configured D3 load.
+        for field in ('heat_ordering_reference', 'heat_ordering_reference_rise', 'heat_ordering_excluded'):
+            self.assertEqual(result[field], result['response'][field])
+
     def test_receipt_prints_exact_aliases_of_each_selected_key(self):
         from tests.align.test_r0_step import synthetic_capture
         payload, samples = synthetic_capture({'TC0P': 20, 'TCOP': 20, 'TH0P': 100}, idle_jitter=.02)

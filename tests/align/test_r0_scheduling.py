@@ -86,6 +86,20 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(report['status'], 'pass')
         self.assertFalse(report['complete_r0'])  # injected backend never certifies live R0
 
+    def test_live_desk_label_requires_smc_pass_for_complete_r0(self):
+        class Backend(FakeBackend):
+            pass
+        Backend.__module__ = 'joulewise.align.r0_mlx'
+        for status in ('inconclusive', 'pass'):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp, patch.object(
+                    r0_runner, 'smc_enumeration', return_value={'status': status}):
+                report = self.run_fake(Path(tmp), backend_factory=Backend)
+            self.assertEqual(report['status'], 'pass')
+            self.assertEqual(report['evidence_kind'], 'live_desk')
+            self.assertEqual(report['complete_r0'], status == 'pass')
+            self.assertEqual(report['smc_selection_missing'], status != 'pass')
+            self.assertIn('long-decode', [r['check'] for r in report['checks']])
+
     def test_keep_going_runs_later_checks_after_failure_and_still_fails(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(r0, "template_rewrites", side_effect=ValueError("synthetic failure")):

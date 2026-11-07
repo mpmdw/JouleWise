@@ -62,6 +62,11 @@ class SelectionTests(unittest.TestCase):
         self.assertIn('"TCOP": ["TDIE"]', summary)
         self.assertIn('"THEA": []', summary)
         self.assertIn('Max consecutive empty cells per phase (receipt)', summary)
+        self.assertIn('D1(d) reference `TCOP`', summary)
+        self.assertIn('reference rise', summary)
+        self.assertIn('excluded keys: `[]`', summary)
+        self.assertIn('Class cooling tau s', summary)
+        self.assertIn('Stable reference cooling s', summary)
         self.assertNotIn('total phase time >=600', summary)
         self.assertIn('band hold <=300 s', summary)
         # A single different reported value breaks exact identity, even if

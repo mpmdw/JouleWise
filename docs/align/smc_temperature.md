@@ -78,18 +78,25 @@ picks; R1 re-selects using the actual planning-turn step.
   readings above it are not component temperatures on a running machine.
   It excludes the firmware-derived TVH3 channel, which reached 137 °C. A pinned floor
   or ceiling (at least ten distinct idle values, at least 40% on one exact value)
-  is flagged and excluded from picks only. Fable fresh P2 derives ten distinct
-  values as quantum much smaller than noise, making 40% exact occupancy a clamp.
+  is flagged and excluded from picks only. Ten or more distinct values in about
+  300 reads implies sigma ≥about 1.8 quanta, with a non-clamp mode fraction
+  ≤about 0.22, below the 0.40 clamp bar (Fable L3 / Opus N2).
   D1(b) applies only to positive step rises. Erratum 2 adds D1(d), with the
-  reference qualified by Erratum 3: among resolving keys passing D1(a)–(c),
-  with cooling tau ≤60 s, residual noise ≤1/3 °C and no clamp flag, choose
-  the shortest cooling tau (lexical ties) as the heat-source reference.
+  reference qualified by Erratum 3 and rebuilt by Erratum 4: among resolving
+  keys passing D1(a)–(c), with class cooling tau ≤60 s, residual noise ≤1/3 °C
+  and no clamp flag, measure the first crossing of baseline + load-tail rise/e
+  from the load phase's actual end. Neither this stable threshold nor its
+  time origin depends on the first recovery read.
+  Among qualifiers within 1 s of the shortest stable cooling time, choose
+  the largest rise (lexical ties) as the heat-source reference. The 1 s tie
+  window is the crossing resolution at 1 Hz.
   These D4 fast-role gates ensure a real thermometer near the source;
   a noisy flicker key such as Tp0M cannot anchor the ordering.
-  Exclude any key whose rise exceeds
-  that reference's rise by more than three of the reference's noise floors.
+  Exclude any key whose rise exceeds that reference's rise by more than 1.0 °C.
   Heat cannot rise farther down a conduction path than at its source; the
-  three-floor margin is D4's resolution bar. TVH3 fails this rule even under
+  1.0 °C band floor is the smallest temperature difference the gates resolve.
+  It covers the measured 0.46 °C gain/offset spread among co-located Tf keys;
+  three noise floors measured one sensor's noise instead. TVH3 fails even under
   a 15% lighter step where D1(c) no longer catches it. All channels remain recorded.
 - D2: baseline is the median of the last 60 s of idle; noise is the SD of
   OLS residuals over that same window. At least three distinct values over
@@ -97,23 +104,31 @@ picks; R1 re-selects using the actual planning-turn step.
   max(residual SD, sensor quantum, 0.05 °C).
 - D3: the SMC step runs first, before the disk weights hash or model load.
   Idle lasts at least 300 s and extends until every temperature key passing
-  D1(a), the stale rule and D1(b) on idle so far (half the observed idle range),
+  D1(a) and the stale rule,
   with trailing-60 s residual SD ≤0.15 °C, has absolute OLS slope ≤0.2 °C/min
   for ten consecutive one-second evaluations. The default cap is 1,200 s
   (measured settle median about 930 s, maximum 1,038 s). At the cap capture
   proceeds. Each key carries `baseline_unsettled` and `baseline_slope_c_min`;
   these are flags, never a refusal. Phase records contain actual duration
   and whether idle settled. With no qualifying keys, `settle_keys` is zero
-  and `settled: null` (indeterminate); idle ends at its minimum. The noise
+  and `settled: null` (indeterminate); idle ends only after ten consecutive
+  empty evaluations, with the 300 s minimum still enforced. A nonempty
+  evaluation or skipped second resets that empty count. The idle half-range
+  term is removed: stationary noise's largest one-second jump is about
+  4.9 sigma, exceeding half its approximately 5.5 sigma range. The noise
   cutoff makes the slope test decidable at three sigma: SD(slope)=0.447×noise,
   so 3×0.447×0.15 ≈0.2 °C/min. Load/recovery remain 900/600 s; the 5 s quiet
-  census continues throughout.
+  census continues throughout. Fast-role keys with noise in (0.15, 1/3] °C
+  are not waited on because their slope test is undecidable at three sigma;
+  rank still records their `baseline_unsettled` flag. The decidable-drift
+  alternative is deferred to R1.
 - D4/D5: both roles need rise ≥3.0 °C (three 1 °C bands), full rise and
   positive 50–60 s rise greater than three noise floors, and band return
   tau × ln(rise / 1 °C) ≤300 s (G1/H's turn cap). Cooling tau is the first
   1/e crossing relative to the first observed recovery reading/time;
-  heating t63 remains diagnostic. Crossings interpolate timestamps between
-  valid readings, without fitting an exponential.
+  this class tau is unchanged by Erratum 4 and printed beside the separate
+  stable reference cooling time. Heating t63 remains diagnostic. Crossings
+  interpolate timestamps between valid readings, without fitting an exponential.
 - Fast: cooling tau ≤60 s (one slope window), residual noise ≤1/3 °C
   (three SD inside a 1 °C band), largest rise. Slow: 60 < tau ≤300 s,
   noise ≤0.15 °C (three slope SD ≤0.2 °C/min since SD(slope)=0.447×noise),
@@ -127,7 +142,14 @@ picks; R1 re-selects using the actual planning-turn step.
   within any phase. One missed cell is admitted by the 99% bar; two adjacent
   empty cells lose U1(c)'s two-second reader window. Rank applies the same
   bar before selection, so another key can supply a role. The idle-to-load
-  handshake spans separate grids and is never a hole. It retains the 1 Hz period,
+  handshake spans separate grids and is never a hole. Cells end at the
+  configured phase deadline, or the evaluation that ends adaptive idle;
+  exit overrun is outside the reader grid. New captures retain `deadline_s`
+  beside actual `end_s`; the receipt reconstructs legacy fixed deadlines
+  from the configured profile and legacy adaptive idle from its actual end.
+  An earlier actual phase end also ends its reader grid; duration deviations
+  still use actual ends.
+  It retains the 1 Hz period,
   distinct-key and journal SHA-256 checks. The capture-wide 100 ms coverage
   block is diagnostic only. `summary.md` prints the per-key quantities
   the receipt reads, baseline flags, slopes and actual idle duration.
@@ -136,7 +158,59 @@ picks; R1 re-selects using the actual planning-turn step.
   ordered phase bounds remain required. The vacuous total-time ≥600 s
   check and the elapsed-seconds gap bar are retired.
 
-The receipt and summary print each pick's exact-duplicate aliases, including
+### Erratum 4 recorded-journal replays
+
+<!-- Derivations for every numeric table cell: perturbation magnitudes and
+indices are the Erratum 4 acceptance cases, applied with cold3/fable/harness.py.
+Reference rise is rank.heat_ordering_reference_rise, rounded to two decimals:
+median(valid final 10% of load) minus median(valid last 60 s of idle).
+The unscaled reference rise is 45.67562675476074 C; multiplying excursions
+by .6/.85/1.2 gives 27.40537605285644/38.824282741546625/54.81075210571288 C.
+Overrun tail bounds change the median to 45.670000076293945 C.
+On the original journal, stable times are Tf2B 24.248078848970863 s and
+Tf18 24.63169390416192 s: their 0.383615055191057 s separation lies inside
+one 1 Hz cell, so the larger Tf18 rise supplies the reference.
+The raw journal has 1,800 rows (300 idle +900 load +600 recovery); SHA-256:
+16aa5307ffc24f55bc20d66823e8c9375d84da6ac723fa77b23d024f66244984.
+-->
+
+Offline replay of `/Users/edr/night-align/r0-v4-20261107T0810Z/smc`;
+no new hardware capture. Each case passes through the real receipt with a
+scratch copy and rehashed journal; only the capture subprocess is replaced
+by a no-op. All references in the table are `Tf18`.
+
+| Case | Fast | Slow | D1(d) reference rise °C | D1(d) excluded keys | Receipt |
+|---|---|---|---:|---|---|
+| `real` | Tf18 | TaLP | 45.68 | TVH3 | pass |
+| `recovery_delay:0.3` | Tf18 | TaLP | 45.68 | TVH3 | pass |
+| `recovery_delay:1.0` | Tf18 | TaLP | 45.68 | TVH3 | pass |
+| `overrun_load:1.3` | Tf18 | TMVR | 45.67 | TVH3 | pass |
+| `overrun_load:1.6` | Tf18 | TMVR | 45.67 | TVH3 | pass |
+| `scale:0.6` | Tf18 | TVS2 | 27.41 | TVH3 | pass |
+| `scale:0.85` | Tf18 | TaLP | 38.82 | TVH3 | pass |
+| `scale:1.2` | Tf18 | TaLP | 54.81 | none (TVH3 fails earlier) | pass |
+| `miss1:Tf2B:recovery:0` | Tf18 | TaLP | 45.68 | TVH3 | pass |
+| `hole2:Tf2B:load:236` | Tf18 | TaLP | 45.68 | TVH3 | pass |
+| `opus_overrun_load:1.6` | Tf18 | TaLP | 45.67 | TVH3 | pass |
+
+`recovery_delay` moves recovery admission and drops intervening reads.
+Fable's `overrun_load` extends actual load end, relabels intervening recovery
+reads as load, and shortens recovery; the reader grid still ends at the
+load deadline. `opus_overrun_load` extends actual load end without more
+load readings and shifts the entire recovery. Both overrun definitions
+retain the duration flag and pass D6. The Fable slow pick changes because
+the first recovery read changes the unchanged D5 class tau.
+
+At `scale:1.2`, TVH3 exceeds the existing 150 °C valid-value ceiling during
+the load tail, fails coverage before a rise is available, and remains
+record-only (`above_junction: true`). Thus the literal D1(d) exclusion list
+is empty, rather than the expected TVH3-only list; no validity bar is
+relaxed to stamp a redundant exclusion. At every other scale and timing
+perturbation only TVH3 is excluded by D1(d). The Tf2B load hole is rejected
+by D6; it does not exclude Tf18 from D1(d).
+
+The receipt and summary print the D1(d) reference, its rise and excluded keys,
+and each pick's exact-duplicate aliases, including
 an empty list when none exist. This is reporting only: R0 does not remove
 duplicates, classify virtual keys, or infer derived channels beyond D1(d).
 R1 must not count aliases as independent thermometers.

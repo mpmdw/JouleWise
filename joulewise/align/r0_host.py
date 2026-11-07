@@ -535,11 +535,22 @@ def smc_enumeration(repo, output, step=None):
                 k: round(v) for k, v in diagnostic_profile.items()})
         except ValueError as exc:
             diagnostic = {"status": "unavailable", "reason": str(exc)}
-        classification = classify_smc({**payload, "samples": samples}, stage="r0")
+        # Erratum 4: a legacy journal has only actual ends. Reconstruct fixed
+        # deadlines from the invoked profile, and adaptive idle from its
+        # deciding evaluation (recorded by new collectors), bounded by its cap.
+        grid_phases = []
+        for phase in phases:
+            name, begin = phase["phase"], phase["start_s"]
+            deadline = (min(phase.get("deadline_s", phase["end_s"]), begin+profile["idle_max_seconds"])
+                        if name == "idle" else begin+profile[name+"_seconds"])
+            grid_phases.append({**phase, "deadline_s": deadline})
+        classification = classify_smc({**payload, "phases": grid_phases, "samples": samples}, stage="r0")
         selection = {name: classification[name] for name in ("s_fast", "s_slow")}
         resolved = all(isinstance(v, str) and re.fullmatch(r"T[!-~]{3}", v) for v in selection.values())
         resolved = resolved and selection["s_fast"] != selection["s_slow"]
         receipt.update(selection=selection, response=classification,
+                       **{field: classification[field] for field in (
+                           "heat_ordering_reference", "heat_ordering_reference_rise", "heat_ordering_excluded")},
                        selected_key_aliases=classification["selected_key_aliases"],
                        exponential_fit_diagnostic=diagnostic, source_response=payload["response"])
         receipt["capture_coverage_diagnostic"] = payload["coverage"]

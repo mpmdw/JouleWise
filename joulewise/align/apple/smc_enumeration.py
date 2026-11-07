@@ -24,8 +24,9 @@ from joulewise.hazards.base import Context
 
 RULE = ("D1-D6 model-free classifier: reject idle/recovery readings below 10 degC, "
         "any valid reading above 125 degC, one-second jumps > half the step rise, "
-        "and stale idle series; D1(d) excludes rise > shortest-tau D4-qualified, unclamped key's rise "
-        "+3 of its noise floors; "
+        "and stale idle series; D1(d) uses the largest rise among D4-qualified, unclamped keys "
+        "within 1 s of the shortest stable cooling time (load-tail rise/e, from actual load end), "
+        "and excludes rise > that reference rise +1.0 degC; "
         "clamps excluded from picks. "
         "Baseline is the last-60 s idle median; noise is OLS residual SD. Both roles need "
         "rise >=3 degC, rise and positive rise60 >3 noise floors, and tau*ln(rise/1 degC) <=300 s. "
@@ -52,10 +53,16 @@ MIN_IDLE_C = 10
 # The composite max-die TCMb peaked at 85.5 degC, the hottest plausible real
 # key TCMz at 112 degC; the firmware-derived TVH3 reached 137 degC.
 MAX_COMPONENT_C = 125
+# Erratum 4 D1(d): crossings at 1 Hz resolve time only to one second.
+REFERENCE_TIE_S = 1.0
+# The 1 C gate band floor resolves inter-sensor gain/offset spread; three
+# noise floors describe one sensor, not the measured 0.46 C Tf-family spread.
+HEAT_ORDER_MARGIN_C = 1.0
 # Fable clamp test: q/(sigma*sqrt(2*pi)) <=~0.40 when sigma >= q;
 CLAMP_FRACTION = .4
-# Fable fresh P2: >=10 distinct values makes quantum << noise, so an
-# exact value holding >=40% of idle is a clamp rather than quantization.
+# Fable L3 / Opus N2: >=10 distinct values span >=9q; about 300 reads
+# span ~5 sigma, so sigma >=~1.8q. The non-clamp mode fraction is at most
+# 1/(1.8*sqrt(2*pi)) ~=0.22, below the 0.40 bar.
 CLAMP_DISTINCT = 10
 
 
@@ -257,9 +264,9 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
             idle_points = {s["key"]: deque() for s in inventory["keys"] if s["unit"] == "degC"}
             distinct = {k: set() for k in idle_points}
             below_floor = set()
-            idle_min, idle_max, idle_jump, idle_previous = {}, {}, {}, {}
             next_evaluation = origin + IDLE_WINDOW_S * temperature.NS
             consecutive = 0
+            empty_consecutive = 0
             slopes = {}
             settled = None
             due = origin
@@ -270,27 +277,28 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                     # a skipped interval cannot manufacture consecutive successes.
                     if now - next_evaluation >= temperature.NS:
                         consecutive = 0
+                        empty_consecutive = 0
                     slopes = {}
                     for key, points in idle_points.items():
                         while points and points[0][0] < (now-origin)/1e9 - IDLE_WINDOW_S:
                             points.popleft()
                         if key not in below_floor and len(distinct[key]) >= 3:  # unchanged stale rule
-                            # Erratum 2 D3: use D1(b) on idle so far: the
-                            # observed idle range supplies the available rise.
-                            # A jump >half that range is unresolved at 1 Hz
-                            # (tau <1/ln(2)=1.44 s), as in D1(b) after the step.
+                            # Erratum 4: half the idle range rejects stationary
+                            # noise; the .15 C decidability bar removes flicker.
                             slope, noise = _idle_stats(points)
-                            if (idle_jump.get(key, 0) <= (idle_max[key]-idle_min[key])/2
-                                    and noise is not None and noise <= SETTLE_NOISE_C):
+                            if noise is not None and noise <= SETTLE_NOISE_C:
                                 slopes[key] = slope
                     passed = bool(slopes) and all(s is not None and abs(s) <= SETTLE_SLOPE_C_MIN
                                                  for s in slopes.values())
                     consecutive = consecutive + 1 if passed else 0
+                    empty_consecutive = empty_consecutive + 1 if not slopes else 0
                     settled = consecutive >= SETTLE_COUNT if slopes else None
                     next_evaluation = origin + ((now-origin)//temperature.NS + 1)*temperature.NS
                     if now >= origin + idle_s * temperature.NS and settled:
+                        end = min(end, now)  # Adaptive grid ends at the deciding evaluation.
                         break
-                    if now >= origin + idle_s * temperature.NS and not slopes:
+                    if now >= origin + idle_s * temperature.NS and empty_consecutive >= SETTLE_COUNT:
+                        end = min(end, now)  # G0's ten confirmations, also for an empty set.
                         break  # no decidable key: record indeterminate, not success
                 if now >= end:
                     break
@@ -316,11 +324,6 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                                 and finished.monotonic_ns - started.monotonic_ns <= temperature.NS):
                             points.append(((started.monotonic_ns-origin)/1e9, value))
                             distinct[key].add(value)
-                            idle_min[key] = min(idle_min.get(key, value), value)
-                            idle_max[key] = max(idle_max.get(key, value), value)
-                            if key in idle_previous:
-                                idle_jump[key] = max(idle_jump.get(key, 0), abs(value-idle_previous[key]))
-                            idle_previous[key] = value
                             if value < MIN_IDLE_C:
                                 below_floor.add(key)
                 due += temperature.NS
@@ -334,10 +337,12 @@ def collect(reader: Any, *, seconds: int, idle_s: int, load_s: int, recovery_s: 
                     next_check = ctx.clocks.monotonic_ns() + 5 * temperature.NS
             actual_end = ctx.clocks.monotonic_ns()
             record.update(end_s=(actual_end-start.monotonic_ns)/1e9,
-                          actual_seconds=(actual_end-origin)/1e9)
+                          actual_seconds=(actual_end-origin)/1e9,
+                          deadline_s=(end-start.monotonic_ns)/1e9)
             if adaptive:
                 record.update(settled=settled, idle_max_seconds=idle_max_s,
                               settle_keys=len(slopes), settle_consecutive=consecutive,
+                              settle_empty_consecutive=empty_consecutive,
                               baseline_slopes_c_min=slopes)
             if load is not None:
                 load.check()
@@ -383,7 +388,8 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         row = {**sensor, "amplitude": None, "observed_rise": None, "noise": None,
                "noise_floor": None, "idle_distinct_values": 0, "delta_t60": None,
                "t63_s": None, "t63_end_s": None, "class": "record-only",
-               "tau_s": None, "amplitude_to_noise": None, "fit_r2": None, "eligible": False,
+               "tau_s": None, "reference_cooling_s": None,
+               "amplitude_to_noise": None, "fit_r2": None, "eligible": False,
                "phase_coverage": {}, "phase_read_error_fraction": {}, "phase_medians": {},
                "phase_valid_samples": {}, "phase_seconds": {}, "period_ns": temperature.NS,
                "phase_max_empty_cells": {},
@@ -398,7 +404,12 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         for phase, bounds in phases.items():
             phase_rows = phase_samples[phase]
             span_start = origin + round(bounds["start_s"] * 1e9)
-            span_end = origin + round(bounds["end_s"] * 1e9)
+            # Erratum 4: exit latency is outside the configured reader grid.
+            # collect records its deadline; legacy receipts supply it from
+            # the configured profile. An early actual end also ends the grid;
+            # bare historical captures retain end_s.
+            grid_end = min(bounds.get("deadline_s", bounds["end_s"]), bounds["end_s"])
+            span_end = origin + round(grid_end * 1e9)
             # The bar protects one valid reading in each 1 s cell: a cell
             # owns stamps within half a period of its centre. NS // 2 assigns
             # each reading to exactly one cell; an equidistant stamp uses the
@@ -410,24 +421,29 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
             # records/2026-11-07-align-r0-v4-rerun7:docs/align/r0/2026-11-07-rerun7/NOTE.md).
             counter = temperature.Coverage(span_start, [key], tolerance_ns=temperature.NS // 2)
             failures = 0
+            attempts = 0
             for sample in phase_rows:
                 value = sample["values"]["sensors"].get(key)
                 started = sample["started"]["monotonic_ns"]
                 finished = sample["finished"]["monotonic_ns"]
+                if (sensor["unit"] == "degC" and key not in sample["values"]["errors"]
+                        and temperature.valid_value(key, value) and value > MAX_COMPONENT_C):
+                    row["above_junction"] = True  # D1(c) still covers the whole capture.
+                if (phase in {"idle", "recovery"} and key not in sample["values"]["errors"]
+                        and type(value) in (int, float) and math.isfinite(value) and value < MIN_IDLE_C):
+                    row["below_ambient"] = True
+                if not span_start <= started < span_end:
+                    continue  # Handshake/exit reads do not add grid errors or cells.
+                attempts += 1
                 bracket_valid = (span_start <= started <= finished < span_end
                                  and finished-started <= temperature.NS)
                 if bracket_valid:
                     # Failed key reads still establish this phase's grid;
                     # a key's first success must not move its empty cells.
                     counter.observe(started, finished, sample["values"])
-                if (phase in {"idle", "recovery"} and key not in sample["values"]["errors"]
-                        and type(value) in (int, float) and math.isfinite(value) and value < MIN_IDLE_C):
-                    row["below_ambient"] = True
                 valid = (bracket_valid and key not in sample["values"]["errors"]
                          and temperature.valid_value(key, value))
                 if valid:
-                    if sensor["unit"] == "degC" and value > MAX_COMPONENT_C:
-                        row["above_junction"] = True
                     good[phase].append(((started - origin) / 1e9, value))
                 else:
                     failures += 1
@@ -436,9 +452,9 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
             row["phase_max_empty_cells"][phase] = coverage["max_consecutive_empty_cells"]
             # Actual intervals survive as a diagnostic only; D6 is in cells.
             row["max_interval_ns"] = max(row["max_interval_ns"] or 0, coverage["max_interval_ns"])
-            row["phase_read_error_fraction"][phase] = failures / len(phase_rows) if phase_rows else 1
+            row["phase_read_error_fraction"][phase] = failures / attempts if attempts else 1
             row["phase_valid_samples"][phase] = len(good[phase])
-            row["phase_seconds"][phase] = bounds["end_s"] - bounds["start_s"]
+            row["phase_seconds"][phase] = grid_end - bounds["start_s"]
             good[phase].sort()
             row["phase_medians"][phase] = statistics.median(v for _, v in good[phase]) if good[phase] else None
         idle = [v for _, v in good.get("idle", [])]
@@ -514,10 +530,14 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         peak = cooling[0][1] - baseline
         tau = _crossing(cooling, baseline + peak/math.e, rising=False) if peak > 0 else None
         if tau is not None:
-            # The reference peak is the first observed recovery value. Missing
-            # initial reads move that reference, not the physical decay time.
+            # Class tau retains its first observed recovery peak/time;
+            # the D1(d) reference below uses the stable load-tail threshold.
             tau -= cooling[0][0]
-        row.update(delta_t60=rise60, t63_s=t63, t63_end_s=t63_end, tau_s=tau)
+        # Erratum 4 D1(d): use the already computed load-tail rise, not
+        # the first recovery read, and time from the load's actual end.
+        stable = _crossing(good["recovery"], baseline + rise/math.e, rising=False) if rise > 0 else None
+        row.update(delta_t60=rise60, t63_s=t63, t63_end_s=t63_end, tau_s=tau,
+                   reference_cooling_s=stable-phases["load"]["end_s"] if stable is not None else None)
         if rise > 0 and jump > rise/2:  # D1(b): only positive step rises have this resolution limit.
             row["reason"] = "D1(b): one-second change exceeds half the step rise; recorded only"
             continue
@@ -543,22 +563,21 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
         if row["above_junction"]:
             row.update(eligible=False, **{"class": "record-only"},
                        reason="D1(c): valid reading above 125 degC; recorded only")
-    # Erratum 3 D1(d): the ordering argument needs a real thermometer near
-    # the source. Use the shortest cooling tau (lexical ties) among D4 fast
-    # qualifiers: D1(a)/(b) failures already continued before resolving;
-    # also require D1(c), tau <=60 s, noise <=1/3 degC, and no clamp. A noisy
-    # flicker key such as Tp0M cannot anchor this physical ordering. A key
-    # farther down the conduction path cannot rise more than the source;
-    # the permitted 3 source-noise floors are D4's resolution margin.
+    # Errata 3/4 D1(d): retain the D4 reference gates, then take the largest
+    # rise within one 1 Hz crossing-resolution window of the shortest stable
+    # cooling time. Lexical ties in rise. Class tau remains unchanged.
     sources = [r for r in rows if r["resolving"] and not r["above_junction"]
-               and r["tau_s"] <= 60 and r["noise"] <= 1/3 and not r["clamped"]]
-    source = min(sources, key=lambda r: (r["tau_s"], r["key"])) if sources else None
+               and r["tau_s"] <= 60 and r["noise"] <= 1/3 and not r["clamped"]
+               and r["reference_cooling_s"] is not None]
+    shortest = min((r["reference_cooling_s"] for r in sources), default=None)
+    tied = [r for r in sources if r["reference_cooling_s"] <= shortest + REFERENCE_TIE_S]
+    source = min(tied, key=lambda r: (-r["observed_rise"], r["key"])) if tied else None
     if source:
-        limit = source["observed_rise"] + 3*source["noise_floor"]
+        limit = source["observed_rise"] + HEAT_ORDER_MARGIN_C
         for row in rows:
             if row["observed_rise"] is not None and row["observed_rise"] > limit:
                 row.update(heat_ordering_excluded=True, eligible=False, **{"class": "record-only"})
-                row["reason"] += f"; D1(d): rise exceeds {source['key']} rise +3 source noise floors"
+                row["reason"] += f"; D1(d): rise exceeds {source['key']} reference rise +1.0 degC"
     ordered = sorted(rows, key=lambda r: (-(r["observed_rise"] or 0), r["key"]))
     proposed = select_keys(ordered)
     die_candidates = [r["key"] for r in ordered if r["class"] == "die"]
@@ -578,6 +597,8 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
     return {"rule": RULE, "ranking": ordered, **proposed, "selection": dict(proposed),
             "selected_key_aliases": selected_aliases,
             "heat_ordering_reference": source["key"] if source else None,
+            "heat_ordering_reference_rise": source["observed_rise"] if source else None,
+            "heat_ordering_excluded": sorted(r["key"] for r in rows if r["heat_ordering_excluded"]),
             "alternative_slow_picks": _alternative_picks(ordered, series, phases, proposed, capture),
             "die_candidates": die_candidates, "heatsink_candidates": heatsink_candidates,
             "record_only": record_only, "readability_bar_met": bar, "stage": stage,

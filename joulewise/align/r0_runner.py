@@ -180,6 +180,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             row.update(status="fail", error=f"{type(exc).__name__}: {exc}")
         finally:
             progress({})
+        if name == "smc":
+            report["smc_selection_missing"] = row["status"] != "pass"
         if not keep_going and row["status"] not in ACCEPTED_OUTCOMES.get(name, {"pass"}):
             report["stopped_after"] = {"check": name, "model": model, "outcome": row["status"]}
             raise _StopChecks
@@ -255,7 +257,9 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         bad = [r for r in report["checks"] if r["status"] not in ACCEPTED_OUTCOMES.get(r["check"], {"pass"})]
         report["status"] = "fail" if bad else "pass"
         report["complete_r0"] = (set(checks) == set(CHECKS) and set(models) == {"D"}
-                                  and not bad and report["evidence_kind"] == "live_desk")
+                                  and not bad and report["evidence_kind"] == "live_desk"
+                                  and any(r["check"] == "smc" and r["status"] == "pass"
+                                          for r in report["checks"]))
     except _StopChecks:
         report["status"] = "fail"
     except ProfileRefused as exc:

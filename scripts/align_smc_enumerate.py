@@ -29,20 +29,23 @@ def markdown(report, digest):
              "Authority: `docs/align/council-2026-11-05/FINAL-DESIGN.md` §2.6 and V8 "
              "on `origin/lane/2026-11-05-align-window-council` (with Amendment 1).",
              "", result["rule"], "",
-             "| Key | Unit | Type | Baseline | Load median | Residual noise | Phase coverage (receipt) | Read errors (receipt) | Max consecutive empty cells per phase (receipt) | Idle slope C/min | Unsettled | Result |",
-             "|---|---|---|---:|---:|---:|---|---|---:|---:|---|---|"]
+             "| Key | Unit | Type | Baseline | Load median | Residual noise | Class cooling tau s | Stable reference cooling s | Phase coverage (receipt) | Read errors (receipt) | Max consecutive empty cells per phase (receipt) | Idle slope C/min | Unsettled | Result |",
+             "|---|---|---|---:|---:|---:|---:|---:|---|---|---:|---:|---|---|"]
     def number(v):
         return "—" if v is None else f"{v:.5g}"
     for row in result["ranking"]:
         medians = row.get("phase_medians", {})
         cells = [row["key"], row["unit"], row.get("data_type", "unknown"),
                  number(row.get("baseline")), number(medians.get("load")), number(row["noise"]),
+                 number(row["tau_s"]), number(row["reference_cooling_s"]),
                  ", ".join(f"{p}: {v:.5g}" for p, v in row["phase_coverage"].items()),
                  ", ".join(f"{p}: {v:.5g}" for p, v in row["phase_read_error_fraction"].items()),
                  ", ".join(f"{p}: {v}" for p, v in row["phase_max_empty_cells"].items()),
                  number(row["baseline_slope_c_min"]), str(row["baseline_unsettled"]), row["reason"]]
         lines.append("| " + " | ".join(cells) + " |")
     lines += ["", f"Picks: fast `{result['s_fast']}`, slow `{result['s_slow']}`.",
+              f"D1(d) reference `{result['heat_ordering_reference']}`; reference rise {number(result['heat_ordering_reference_rise'])} degC; "
+              f"excluded keys: `{json.dumps(result['heat_ordering_excluded'])}`.",
               f"Exact-duplicate aliases of picks (report only): `{json.dumps(result['selected_key_aliases'], sort_keys=True)}`.",
               f"Alternative slow picks (diagnostic): `{json.dumps(result['alternative_slow_picks'], sort_keys=True)}`.",
               f"Baseline-unsettled keys: {sum(r['baseline_unsettled'] for r in result['ranking'])}."]
