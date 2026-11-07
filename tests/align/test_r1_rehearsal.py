@@ -1183,12 +1183,13 @@ class Round5RulingTests(unittest.TestCase):
             # Round-5 executing review: R5-2 put the G0 and the steps' 300 s
             # quiet outside the deadman, so they join the bound. R7-2: step-d
             # and the designed states arm the 1,200 s R1 G0 timeout.
-            self.assertEqual(bounds.count(3300), 1)   # 30B step: 1,800 + 600 G0 + 300 quiet + 600 recovery
+            # D8-3: 30B step: the re-armed member 3,663.9952 + 600 G0 + 300 quiet + 600 recovery
+            self.assertEqual(sum(1 for b in bounds if abs(b - 5163.9952) < 1e-6), 1)
             # R8-4: the re-armed member 1,750 + 1.13544 x 1,580 + 120, then D
             # step + 1,200 + 300 + 600; states + 900 + 1,200.
             self.assertEqual(sum(1 for b in bounds if abs(b - 5763.9952) < 1e-6), 1 + 3)
         table = r1.segment_bounds(r1.runtime_g0_timeout_s(None), r1.runtime_step_deadman_s(None))
-        self.assertEqual(table["step-30b"], 3300)
+        self.assertAlmostEqual(table["step-30b"], 5163.9952)
         self.assertAlmostEqual(table["step-d"], 5763.9952)
         self.assertAlmostEqual(table["d-planning-turn-r-plus-4c"], 5763.9952)
         # Each bound covers the runtime's own caps around the re-armed deadman.
@@ -1197,6 +1198,8 @@ class Round5RulingTests(unittest.TestCase):
         deadman = rt.DEADMAN_FACTOR * r1.runtime_step_deadman_s(None)
         g0_cap = rt.g0_timeout_s(json.loads(r1.runtime_config_path(None).read_text()))
         self.assertGreaterEqual(table["step-d"], g0_cap + rt.STEP_QUIET_S + deadman + rt.RECOVERY_CAP_S)
+        self.assertGreaterEqual(table["step-30b"], thermal_gates.G0_CAP_DEFAULT_S + rt.STEP_QUIET_S + deadman
+                                + rt.RECOVERY_CAP_S)
         self.assertGreaterEqual(table["d-planning-turn-r-plus-0c"], rt.PREHEAT_CAP_S + g0_cap + deadman)
         self.assertGreaterEqual(table["step-30b"], thermal_gates.G0_CAP_DEFAULT_S + rt.STEP_QUIET_S + deadman
                                 + rt.RECOVERY_CAP_S)

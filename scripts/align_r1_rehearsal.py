@@ -143,9 +143,14 @@ def segment_bounds(g0_timeout_s, step_deadman_s):
     member (start-up and close around the re-armed deadman,
     ``rearmed_member_bound_s``) plus their pre-deadman phases (G0 timeout and
     the 300 s quiet, or the 900 s preheat cap and the G0 timeout) and, for
-    step-d, the 600 s recovery. Step-30b keeps its round-5 bound."""
+    step-d, the 600 s recovery.
+
+    Round-8 disposition D8-3 (R1 round-8 exec LOW-2): step-30b's deadman is
+    re-armed after its G0 and quiet too, so it takes the same construction:
+    the re-armed member plus its pre-deadman phases (the 600 s G0 cap it keeps
+    under R7-2, the 300 s quiet) and the 600 s recovery."""
     member = rearmed_member_bound_s(step_deadman_s)
-    return {"step-30b": QUIET_SEGMENT_BOUND_S + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
+    return {"step-30b": member + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
             "step-d": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
             **{f"d-planning-turn-r-plus-{int(o)}c": member + PLANNING_PREHEAT_CAP_S + g0_timeout_s
                for o in PLANNING_START_OFFSETS_C}}
@@ -1319,7 +1324,8 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
     Round 7: step-d and the designed start states are bounded with the R7-2
     G0 timeout (the runtime config's g0_timeout_s). Round 8 (R8-4): they also
     carry their re-armed member's start-up and close, and a redo's release
-    is ``release_segment_bound_s()`` (``redo_release_s``)."""
+    is ``release_segment_bound_s()`` (``redo_release_s``); D8-3 extends the
+    re-armed member bound to step-30b."""
     rows = []
     precool_cap_s = runtime_precool_cap_s(runtime_argv)
     g0_timeout = runtime_g0_timeout_s(runtime_argv)

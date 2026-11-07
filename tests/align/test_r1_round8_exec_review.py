@@ -10,11 +10,11 @@ power mode). See docs/align/reviews/2026-11-07-r1-round8-executing-review.md.
   night lock never sees a restore (the group proof passes, the retake fails).
 * A second and third signal while the R1 driver is ending a runtime that
   ignores TERM does not cut the KILL, the tree proof or the restore short.
-* Two open findings are pinned as expected failures (flip them when fixed):
-  MEDIUM-1 (a signal swallowed by ``_qualification_observe`` latches the
-  shutdown, so later signals are lost too) and MEDIUM-2 (a non-interrupt
-  chain termination that is not proven still restores when the lock can be
-  retaken).
+* Two findings were pinned as expected failures and are fixed by the round-8
+  dispositions (LEAD-RULINGS-2): MEDIUM-1 (a signal swallowed by
+  ``_qualification_observe`` latched the shutdown, so later signals were lost
+  too; D8-1) and MEDIUM-2 (a non-interrupt chain termination that was not
+  proven still restored when the lock could be retaken; D8-2).
 """
 import json
 import os
@@ -229,13 +229,17 @@ class R1RepeatedSignalTests(unittest.TestCase):
 
 
 class SwallowedSignalLatchTests(unittest.TestCase):
-    """MEDIUM-1 (open): the round-8 latch sets ``closing`` before the
-    KeyboardInterrupt is raised. ``_qualification_observe`` (the s1 HID
-    observation inside the chain loop) catches BaseException, so a first
-    signal landing there is swallowed and every later TERM/HUP/INT is then
-    swallowed by the latch: the night can no longer be interrupted."""
+    """MEDIUM-1 (fixed by round-8 disposition D8-1): the round-8 latch sets
+    ``closing`` before the KeyboardInterrupt is raised. ``_qualification_observe``
+    (the s1 HID observation inside the chain loop) caught BaseException, so a
+    first signal landing there was swallowed and every later TERM/HUP/INT was
+    then swallowed by the latch: the night could no longer be interrupted.
+    D8-1: the observation records its fault and re-raises KeyboardInterrupt
+    and SystemExit, so the first signal reaches run_night's R8-1 handling.
+    (The original body called the observation outside ``assertRaises``,
+    expecting the swallow; with the fix the first signal itself escapes, and
+    the latch rightly swallows any later one.)"""
 
-    @unittest.expectedFailure
     def test_a_signal_after_a_swallowed_one_still_interrupts(self):
         from scripts import run_night
         _closing, restore = run_night._install_termination_handlers()
@@ -244,20 +248,30 @@ class SwallowedSignalLatchTests(unittest.TestCase):
             def observation():
                 os.kill(os.getpid(), signal.SIGTERM)
                 time.sleep(1)
-            run_night._qualification_observe(Path(tmp), "hid", observation)    # swallowed
             with self.assertRaises(KeyboardInterrupt):
-                os.kill(os.getpid(), signal.SIGTERM)
-                time.sleep(1)
+                run_night._qualification_observe(Path(tmp), "hid", observation)    # no longer swallowed
+            faults = [json.loads(line) for line in (Path(tmp) / "producer-faults.jsonl").read_text().splitlines()]
+            self.assertEqual([(f["producer"], f["status"]) for f in faults], [("hid", "REFUSED")])  # still recorded
+
+    def test_system_exit_is_not_an_observation_failure(self):
+        from scripts import run_night
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
+            def observation():
+                raise SystemExit(3)
+            with self.assertRaises(SystemExit):
+                run_night._qualification_observe(Path(tmp), "hid", observation)
+            self.assertIsNone(run_night._qualification_observe(Path(tmp), "hid", lambda: 1 / 0))
 
 
 class NightUnprovenNonInterruptCloseTests(rn.NightDriverTests):
-    """MEDIUM-2 (open): the round-8 Sol fix defers the close when an
-    interrupt's chain termination is unproven, but a census-abort (or window
-    deadline, or supervision stop) termination that is unproven still
-    restores whenever the lock can be retaken, i.e. under exactly the
-    survivor the fix names (one that does not hold the lock)."""
+    """MEDIUM-2 (fixed by round-8 disposition D8-2): the round-8 Sol fix
+    deferred the close only when an interrupt's chain termination was
+    unproven; a census-abort (or window deadline, or supervision stop)
+    termination that was unproven still restored whenever the lock could be
+    retaken, i.e. under exactly the survivor the fix names (one that does not
+    hold the lock). D8-2: _run_night sets _CHAIN_TERMINATION_UNPROVEN on every
+    unproven path and the close defers."""
 
-    @unittest.expectedFailure
     def test_an_unproven_census_abort_restores_nothing(self):
         mapping = json.loads(self.plan_path.read_text())
         mapping["ac_powermode"] = 2
@@ -278,6 +292,32 @@ class NightUnprovenNonInterruptCloseTests(rn.NightDriverTests):
         self.assertTrue((self.custody / "night/chain.unkilled").exists())
         self.assertNotIn("restore", host.calls)
         self.assertEqual(host.mode, 2)
+        self.assertTrue(marker.exists())                    # left for the dead-man / next session start
+        log = (self.custody / "night.log").read_text()
+        self.assertIn("not proven gone after the chain stop", log)
+        probe = powermode.HostLock(role="probe")            # the close freed the lock
+        self.assertTrue(probe.acquire())
+        probe.release()
+        self.assertIsNone(self.driver._CHAIN_TERMINATION_UNPROVEN)
+
+    def test_an_exception_escaping_the_chain_wait_restores_nothing(self):
+        # D8-2, "any path": a non-interrupt exception out of the chain wait
+        # never terminated the chain, so its termination is unproven.
+        mapping = json.loads(self.plan_path.read_text())
+        mapping["ac_powermode"] = 2
+        self.plan_path.write_text(json.dumps(mapping))
+        host = self._power_host(2)
+        marker = Path(powermode.host_marker_path())
+        powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG, owner={"custody_root": self.custody})
+        with mock.patch.object(self.driver, "_run_chain_once", side_effect=RuntimeError("chain wait broke")), \
+                self.assertRaises(RuntimeError):
+            self.driver.run_night(self.plan_path)
+        self.assertNotIn("restore", host.calls)
+        self.assertEqual(host.mode, 2)
+        self.assertTrue(marker.exists())
+        log = (self.custody / "night.log").read_text()
+        self.assertIn("exception escaping the chain wait (RuntimeError: chain wait broke)", log)
+        self.assertIsNone(self.driver._CHAIN_TERMINATION_UNPROVEN)
 
 
 if __name__ == "__main__":

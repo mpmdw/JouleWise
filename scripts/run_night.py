@@ -1032,12 +1032,9 @@ def _run_chain_once(
             # Lead ruling R8-1: an interrupt (INT, or TERM/HUP through the R7-4
             # handler) after the chain launched stops the chain's group and
             # proves it gone before run_night's close runs.
-            global _CHAIN_INTERRUPT_UNPROVEN
-            outcome = _stop_chain_on_interrupt(launched, night_dir, plan, interrupt)
-            if outcome is not None and not outcome.get("proven"):
-                # Round-8 Sol critique: a survivor that does not hold the lock
-                # (an unsignalable root descendant) must not see a restore.
-                _CHAIN_INTERRUPT_UNPROVEN = outcome
+            # Round-8 disposition D8-2: the outcome travels on the interrupt;
+            # _run_night sets _CHAIN_TERMINATION_UNPROVEN from it when unproven.
+            interrupt.chain_termination = _stop_chain_on_interrupt(launched, night_dir, plan, interrupt)
             raise
 
 
@@ -2574,16 +2571,23 @@ def arm_only(context_path: Path) -> dict[str, Any]:
 
 
 def _qualification_observe(night, producer, operation):
-    """Observation failures never become driver refusals or change chain rc."""
+    """Observation failures never become driver refusals or change chain rc.
+
+    Round-8 disposition D8-1 (R1 round-8 exec MEDIUM-1): an interrupt
+    (KeyboardInterrupt, which the R7-4/R8-1 handler raises for TERM/HUP/INT)
+    or a SystemExit is not an observation failure. The fault is recorded and
+    the exception re-raised, so the R8-1 latch sees the first signal."""
     try:
         return operation()
-    except BaseException:
+    except BaseException as error:
         try:
             t0_rehearsal.append_observation(night / "producer-faults.jsonl", {
                 "schema_version": "joulewise.v5_qualification_producer_fault.v1",
                 "producer": producer, "status": "REFUSED"})
         except BaseException:
             pass
+        if isinstance(error, (KeyboardInterrupt, SystemExit)):
+            raise
         return None
 
 
@@ -4170,14 +4174,20 @@ def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str,
 
     global _CHAIN_HOST_LOCK
     _CHAIN_HOST_LOCK = None
-    unproven = _CHAIN_INTERRUPT_UNPROVEN
+    unproven = _CHAIN_TERMINATION_UNPROVEN
     if unproven is not None:
-        # Lead ruling R8-1 (round-8 Sol critique): the chain termination on an
-        # interrupt was not proven, so a process of the night may still live
-        # even if the lock can be retaken; restore nothing, release the lock.
-        record = {"ok": False, "deferred": "the chain's process group was not proven gone after the interrupt "
-                  "(lead ruling R8-1); the marker is left for the dead-man or the next session start",
-                  "chain_termination": unproven}
+        # Lead ruling R8-1 (round-8 Sol critique) and round-8 disposition D8-2:
+        # the chain's termination was not proven on some path (an interrupt, a
+        # census abort, a supervision stop or the window deadline), so a
+        # process of the night may still live even if the lock can be
+        # retaken; restore nothing, release the lock.
+        path = unproven.get("path")
+        cause = ("interrupt" if path == "interrupt"
+                 else f"exception escaping the chain wait ({unproven.get('error')})" if path == "exception"
+                 else f"chain stop (abort reason {unproven.get('abort_reason')})")
+        record = {"ok": False, "deferred": f"the chain's process group was not proven gone after the {cause} "
+                  "(lead ruling R8-1); round-8 disposition D8-2: the marker is left for the dead-man or the "
+                  "next session start", "chain_termination": unproven}
         try:
             _append_log(Path(plan.custody_root), "ac powermode close deferred: "
                         + json.dumps(record, sort_keys=True, default=str))
@@ -4291,9 +4301,11 @@ TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
 # Lead ruling R8-1: the running night's ``closing`` hook, so the chain
 # termination on an interrupt swallows further TERM/HUP/INT as the close does.
 _SIGNAL_CLOSING: Callable[[], None] | None = None
-# Lead ruling R8-1 (round-8 Sol critique): the outcome of a chain termination
-# on an interrupt that was not proven; the close then restores nothing.
-_CHAIN_INTERRUPT_UNPROVEN: dict[str, Any] | None = None
+# Lead ruling R8-1 (round-8 Sol critique) and round-8 disposition D8-2: set
+# by _run_night when the chain's termination is unproven on any path (an
+# interrupt, a census abort, a supervision stop, the window deadline, or an
+# exception escaping the chain wait); the close then restores nothing.
+_CHAIN_TERMINATION_UNPROVEN: dict[str, Any] | None = None
 
 
 def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], None]]:
@@ -4342,12 +4354,12 @@ def run_night(
     courier_bin: Path | None = None,
     dry_arm: bool = False,
 ) -> int:
-    global _CHAIN_HOST_LOCK, _SIGNAL_CLOSING, _CHAIN_INTERRUPT_UNPROVEN
+    global _CHAIN_HOST_LOCK, _SIGNAL_CLOSING, _CHAIN_TERMINATION_UNPROVEN
     closers: list[Callable[[], Any]] = []
     stage: dict[str, Any] = {}
     closing, restore_signals = _install_termination_handlers()
     _SIGNAL_CLOSING = closing
-    _CHAIN_INTERRUPT_UNPROVEN = None
+    _CHAIN_TERMINATION_UNPROVEN = None
     try:
         return _run_night(plan_path, rehearsal=rehearsal, courier_bin=courier_bin, dry_arm=dry_arm,
                           closers=closers, stage=stage)
@@ -4392,7 +4404,7 @@ def run_night(
                 pass
         _CHAIN_HOST_LOCK = None
         _SIGNAL_CLOSING = None
-        _CHAIN_INTERRUPT_UNPROVEN = None
+        _CHAIN_TERMINATION_UNPROVEN = None
         restore_signals()
 
 
@@ -4805,21 +4817,42 @@ def _run_night(
             courier_bin_substitution=courier_substitution,
         )
 
-    chain_exit_code, abort, census_count, census_hits, termination_proven = (
-        _run_chain_once(
-            chain_path,
-            plan,
-            probes,
-            night_dir,
-            claim_descriptor,
-            command=command,
-            abort_on_census=not rehearsal_effective,
-            **({"extra_env": pack_env} if is_pack else {}),
-            **({"shutdown_monotonic": bind_start_monotonic + (
-                plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
-               if plan.quiet_admission is not None else {}),
+    global _CHAIN_TERMINATION_UNPROVEN
+    try:
+        chain_exit_code, abort, census_count, census_hits, termination_proven = (
+            _run_chain_once(
+                chain_path,
+                plan,
+                probes,
+                night_dir,
+                claim_descriptor,
+                command=command,
+                abort_on_census=not rehearsal_effective,
+                **({"extra_env": pack_env} if is_pack else {}),
+                **({"shutdown_monotonic": bind_start_monotonic + (
+                    plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
+                   if plan.quiet_admission is not None else {}),
+            )
         )
-    )
+    except BaseException as error:
+        # Round-8 disposition D8-2 (R1 round-8 exec MEDIUM-2): an interrupt's
+        # unproven chain termination defers the close (R8-1 Sol fix 1). Any
+        # other exception escaping the chain wait never terminated the chain,
+        # so its termination is unproven too.
+        if isinstance(error, KeyboardInterrupt):
+            outcome = getattr(error, "chain_termination", None)
+            if outcome is not None and not outcome.get("proven"):
+                _CHAIN_TERMINATION_UNPROVEN = dict(outcome, path="interrupt")
+        else:
+            _CHAIN_TERMINATION_UNPROVEN = {"path": "exception", "proven": False,
+                                           "error": f"{type(error).__name__}: {error}"}
+        raise
+    if not termination_proven:
+        # D8-2: so does an unproven census-abort, supervision-stop or
+        # window-deadline termination; a survivor that does not hold the lock
+        # must never see a restore.
+        _CHAIN_TERMINATION_UNPROVEN = {"path": "return", "proven": False, "chain_exit_code": chain_exit_code,
+                                       "abort_reason": None if abort is None else abort.get("reason")}
 
     if is_pack and prepared["authorization_record"]["purpose"] == "G2B_SHAKEDOWN":
         def lifecycle_operation():

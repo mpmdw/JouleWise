@@ -343,7 +343,7 @@ class NightUnprovenCloseTests(rn.NightDriverTests):
         probe = powermode.HostLock(role="probe")            # the close freed the lock
         self.assertTrue(probe.acquire())
         probe.release()
-        self.assertIsNone(self.driver._CHAIN_INTERRUPT_UNPROVEN)   # cleared for the next night
+        self.assertIsNone(self.driver._CHAIN_TERMINATION_UNPROVEN)   # cleared for the next night
 
 
 class SignalLatchTests(unittest.TestCase):
