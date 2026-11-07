@@ -195,15 +195,18 @@ class Sidecar:
 class Coverage:
     """Successful nominal ticks on the sampling grid, not the caller's span.
 
-    A 100 ms tolerance admits scheduler/read jitter. Partial edge cells are
-    excluded (boundaries within that tolerance snap to the grid). Duplicates
+    The default 100 ms tolerance admits scheduler/read jitter. Partial edge
+    cells are excluded (boundaries within that tolerance snap to the grid). Duplicates
     count once; calls lasting over one period never fill ticks. Separately,
     actual sample midpoints, including both span edges, bound the longest
     interval. No temperature value is interpolated or carried across a gap.
     """
     tolerance_ns = NS // 10
 
-    def __init__(self, start_ns: int, selected: Sequence[str]):
+    def __init__(self, start_ns: int, selected: Sequence[str], *, tolerance_ns: int = tolerance_ns):
+        if type(tolerance_ns) is not int or not 0 < tolerance_ns <= NS // 2:
+            raise ValueError("coverage tolerance must be an integer in (0, NS // 2]")
+        self.tolerance_ns = tolerance_ns
         self.start_ns = start_ns
         self.grid_ns = None
         self.times: dict[str, set[int]] = {k: set() for k in selected}

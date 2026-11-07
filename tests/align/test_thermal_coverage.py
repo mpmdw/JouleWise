@@ -13,6 +13,43 @@ def rows(seconds, jitter_ms=8):
              "finished": {"monotonic_ns": i*NS+70_000_000}} for i in range(seconds)]
 
 class CoverageTests(unittest.TestCase):
+    def test_default_and_explicit_tolerances(self):
+        default = thermal.Coverage(0, ["TDIE"])
+        # Preserve the existing default: one tenth of the one-second period.
+        self.assertEqual(default.tolerance_ns, NS // 10)
+        self.assertEqual(default.report(NS)["tolerance_ns"], NS // 10)
+        for tolerance in (1, NS // 10, NS // 2):
+            with self.subTest(tolerance=tolerance):
+                self.assertEqual(thermal.Coverage(0, ["TDIE"], tolerance_ns=tolerance)
+                                 .report(NS)["tolerance_ns"], tolerance)
+        for invalid in (0, -1, NS // 2 + 1, .1, "100000000", None, True):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                thermal.Coverage(0, ["TDIE"], tolerance_ns=invalid)
+
+    def test_half_period_duplicates_and_ties_count_once(self):
+        counter = thermal.Coverage(0, ["TDIE"], tolerance_ns=NS // 2)
+        counter.observe(0, 0, VALUES)
+        counter.observe(NS, NS, VALUES)
+        counter.observe(NS + NS // 10, NS + NS // 5, VALUES)
+        # Exactly half a period rounds forward to tick 1, already occupied.
+        counter.observe(NS // 2, NS // 2, VALUES)
+        result = counter.report(3 * NS)["all_keys"]
+        # [0, 3 s) owns three ticks; the distinct stamps occupy only 0 and 1.
+        self.assertEqual(result["expected_samples"], 3)
+        self.assertEqual(result["valid_samples"], 2)
+        self.assertEqual(result["sample_fraction"], 2 / 3)
+        # A call exceeding the one-second period must not fill the empty cell.
+        counter.observe(2 * NS, 3 * NS + 1, VALUES)
+        self.assertEqual(counter.report(3 * NS)["all_keys"]["valid_samples"], 2)
+
+        tie = thermal.Coverage(0, ["TDIE"], tolerance_ns=NS // 2)
+        tie.observe(0, 0, {"sensors": {}, "errors": {}})  # Establish grid only.
+        tie.observe(NS // 2, NS // 2, VALUES)
+        # The half-period tie belongs to tick 1: outside [0, 1 s),
+        # inside [0, 2 s), and counted exactly once.
+        self.assertEqual(tie.report(NS)["all_keys"]["valid_samples"], 0)
+        self.assertEqual(tie.report(2 * NS)["all_keys"]["valid_samples"], 1)
+
     def test_regular_jittered_samples_pass_at_every_span_phase(self):
         for jitter in (8, 30, 60):
             readings = rows(1810, jitter)

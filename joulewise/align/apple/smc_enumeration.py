@@ -286,7 +286,15 @@ def rank(capture: Mapping[str, Any], *, stage: str = "r0") -> dict[str, Any]:
             phase_rows = [r for r in capture["samples"] if r["phase"] == phase]
             span_start = origin + round(bounds["start_s"] * 1e9)
             span_end = origin + round(bounds["end_s"] * 1e9)
-            counter = temperature.Coverage(span_start, [key])
+            # The bar protects one valid reading in each 1 s cell: a cell
+            # owns stamps within half a period of its centre. NS // 2 assigns
+            # each reading to exactly one cell; an equidistant stamp uses the
+            # existing deterministic nearest() tie-break and counts once.
+            # Duplicates count once; reads over one period never fill a tick.
+            # Fits use actual stamps; no temperature samples are interpolated.
+            # The old 100 ms had no derivation and refused measured jitter up
+            # to ~150 ms (RUN_STATE item 195; r0/2026-11-07-rerun7/NOTE.md).
+            counter = temperature.Coverage(span_start, [key], tolerance_ns=temperature.NS // 2)
             failures = 0
             for sample in phase_rows:
                 value = sample["values"]["sensors"].get(key)
