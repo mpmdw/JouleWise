@@ -1042,6 +1042,38 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+192. **Laptop lead (interactive session 1544c617, Opus 5.5, through a delegate), 2026-11-06 about 22:30 PST: review delivery. The executing and cold review gates of PR #691 (R0 contention, `fix/2026-11-07-r0-census-cpu-interval`) at head `21da63a71` were run off-Mac on the analysis Air (offload rule: item 180 / Ed 11-06). Both verdicts are ADMIT_WITH_FIXES. Neither review found a blocker. Neither verdict is ADMIT, so the gates are not yet satisfied: the findings below are the magistrate's to fix or disposition.** This item schedules nothing; when R0 runs is the magistrate's call. Nothing was pushed to the PR branch, and the PR was not merged or marked ready.
+- **Executing review** (Opus 5.5, laptop lead): ADMIT_WITH_FIXES. https://github.com/mpmdw/JouleWise/pull/691#issuecomment-6703316986
+  - Covers the delta `3297762ff..21da63a71` and the full diff, checked against the item 189 ruling. Both probes judge per process at 0.05 CPU-s/s over at least 30 s. The `CpuQuietProbe` aggregate is journaled and flagged (`aggregate_above_0_05`) and never judged.
+  - Tests: every R0, SMC, contention and quiet-guard module was green, run one per process under `nice -n 19 taskpolicy -b` (e.g. `test_r0_host` 44, `test_smc_quiet` 19, `test_contention` 48). `tests.test_magistrate_desk_fence` on `main` gave 35 OK under python3.13 and 35 OK under python3.14.
+  - 14 adversarial tests, all pass; their source is in the comment.
+    - Sustained 0.2 and 0.06 contaminants refuse, at the first admission or within two windows.
+    - A zombie or a PID reuse does not hide a sustained contaminant.
+    - The aggregate is never judged.
+    - At 15 s cadence a 1.65 CPU-s burst refuses at every window offset tested.
+    - Proportionality holds: about 21 minutes of repeated mdworker_shared (120 s) and photoanalysisd (300 s) start-up respawns plus an mds_stores 1.5 s spike, about 85 receipts, gave no refusal.
+  - **Required fix, F1 (PR description only):** the Summary still says "a regressed counter or a backwards clock refuses". After round 3, regressions are recorded, a backwards wall clock is a flag, and only a backwards monotonic clock refuses. Correct the PR body before merge.
+  - Notes F2-F6, none blocking:
+    - F2: `QuietGuard` journals no host aggregate.
+    - F3: measured invisibility bounds. A one-snapshot contaminant that is a zombie by the next is judged at about r/2 (about 2.8 CPU-s passes). A process born and gone between two snapshots is invisible.
+    - F4: a burst straddling a snapshot leaks when the caller's cadence is 30 s or more.
+    - F5: `_previous_over` is effectively always empty.
+    - F6: an unread host tick refuses the SMC probe.
+- **Cold review** (fresh Opus agent, given only the diff, the PR body and its purpose): ADMIT_WITH_FIXES. https://github.com/mpmdw/JouleWise/pull/691#issuecomment-6703325938
+  - Should-fix 1: a contender inside a caller gap (model load, prefill) is averaged over the gap. Measured: 0.2 CPU-s/s for 60 s inside a 300 s gap passed with only a `long_interval` flag. The proposed fix is a background snapshot thread that never judges or sleeps, or at minimum `long_interval` with a contaminant above the report floor treated as unjudged.
+  - Should-fix 2: the judged window depends on call spacing. Measured: forced calls 29 s apart gave a 58 s window, and a 2.0 CPU-s burst passed.
+  - Should-fix 3: the photoanalysisd replay test (`test_r0_host.py:408-434`) assumes 0.6 CPU-s. **Lead note:** that figure is item 188's own estimate of the start-up burst, so the PR body can cite item 188 or reword the claim.
+  - Nits: no host aggregate in `QuietGuard`; the first admission's agent and chain census is 30 s old when it returns; a backwards wall step can hide a new process; a zombie born inside the window reads as 0; receipt growth from full `unaccounted` lists.
+- **Sol 6.1 xhigh critique** (advisory, not a gate; event log audited, no custody path read): REJECT, triaged by the lead to no blocker. https://github.com/mpmdw/JouleWise/pull/691#issuecomment-6703363402
+  - S1 (contaminant-only scope) is out of scope. S2 (zombies admitted) is the ruled dwell rule. S3 is the same as cold finding 1.
+  - **Two cheap fixes advised:**
+    - S4: `_cpu_snapshot` stamps `finished` after the args `ps`, so a slow args read stretches the denominator. Stamp it right after `contention.PS_ARGV`.
+    - S5 (equal to cold finding 6): a wall-clock step back of more than 1 s puts a new process under "missed by the first snapshot". Refuse it as indeterminate, or charge it as born inside the window.
+- **For the magistrate:** fix F1, and fix or disposition each finding in the PR's Dispositions section (gate row 5).
+  - Cold findings 1-2 and S3 are the round-1 Fable 2 gap class, which is already dispositioned. The magistrate decides whether to add the snapshot thread or defer it with a reason.
+  - A PR-body-only change needs no re-review. A code change (for example S4/S5) needs a delta executing review; the magistrate can request it off-Mac from the lead.
+  - Then CI green on the final head, merge, and relaunch R0 per `docs/process/R0_HEADLESS_LAUNCH.md` (item 189 (2)).
+
 191. **Laptop lead (interactive session 1544c617, Opus 5.5), 2026-11-07 about 01:30 PST: kit delivery. WP18 X/Y fixture tool for the ALIGN v4 W1 kit; needs pilot-7 files that exist only on the measurement Mac.** This item schedules nothing; when to run it is the magistrate's call. It is read-only on pilot data and takes minutes.
 - **Why:** the v4 kit (`scripts/align_v4_kit.py --check`) still blocks on four WP18 leaves (X/Y `max_turns` and `token_fixture_sha256`). Lead ruling R5-8 (LEAD-RULINGS-2.md on `lane/2026-11-06-v4-r1-integrated`) makes `registration/wp18_{x,y}_token_ids.json` a hard W1 prerequisite. Their values come from the pilot-7 `b-e25` and `b-e18` episode outputs and `p7-PILOT.json`.
 - **Tool:** `scripts/align_v4_wp18_fixtures.py` on `lane/2026-11-06-v4-r1-integrated` at `998ee2ab0` or later. Use a separate clean worktree of that lane under the magistrate's usual worktree root. Do not switch the canonical checkout.
